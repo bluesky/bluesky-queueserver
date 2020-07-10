@@ -225,17 +225,76 @@ At start up:
 3. where to publish data to
 4. where to update the scan_id
 
-While running:
+While running (which should be hand-shake interactions):
 
 1. "the next plan"
-2. interruptions
+2. interruptions / resumptions
+3. changes to the loaded plans / devices
+
+Information that this worker needs to expose
+............................................
+
+Everything that needs to be exposed from this process should be
+published via one of the channels that are passed in at startup.  We
+do not want to burden this worker with significant
+non-run-the-event-loop work both to avoid the risk of slowing down
+data acquisition and because we expect these workers to be transient
+and spawned by the web server.  We do not want to have to coordinate
+communication with any other entities (they should instead subscribe to
+the location where the information is published instead)
 
 
 Web server
 ~~~~~~~~~~
 
 This is where the business logic of the remote operation lives.  This process
-will be responsible for sorting out who the user is, what
+will be responsible for sorting out who the user is, what they are allowed to do,
+managing the queue of things that need to be done, etc.
+
+This process will take commands from the user like
+
+- add this plan to the queue
+- re-order / remove things from the queue
+- update persistent meta-data (to go onto all plans)
+- interruptions to currently running scan
+- start / end / steal exclusive control
+- update the devices / plans available to the RE
+
+This process will need to manage the RE worker process so that it can be
+(re) launched with the right profile / configuration loaded and it can be
+interrupted.
+
+This process will need to expose back to the user
+
+- the current RE state (or where to get it)
+- recently taken data (or where to get it)
+- the current state of the queue
+- if the current session is "live" and has control of the beamline
+- the persistent meta-data
+
+This should be developed in line with standard REST API conventions to star with
+and possibly a graphql API in the future.
+
+
+Client
+~~~~~~
+
+The clients can be anything that can post/get json to a https endpoint
+and understands the protocols the sever exposes.  Possible clients are:
+
+- httpi / curl
+- a Python cli tool built around a "restor"
+- a PyQt application tool built around a "restor"
+- a web application
+- an autonomous agent
+- Java base GUIs
+- ...
+
+We expect there to be wide range of client that interact with server
+of varying levels of complexity.  If we get the web server correct we
+will be able to develop the clients independently.
+
+
 
 
 Open work
@@ -256,11 +315,12 @@ Server
 ~~~~~~
 
 0. add logic to server to spawn RE worker with state based on current user
-   a. what plans
-   b. what devices
-   c. where to publish documents to
-   d. where to publish RE state to
-   e. nanny process to restart etc
+  a. what plans
+  b. what devices
+  c. where to publish documents to
+  d. where to publish RE state to
+  e. nanny process to restart etc
+1. harden / document protocol between server and
 1. add ability to publish the list of plans and devices available to a given user
 2. make queue mutable other than addition
 3. authentication + session logic
@@ -268,7 +328,18 @@ Server
 5. put the queue in a persistent data structure
 6. per-user persistent meta-data
 
-Web page / front end
-~~~~~~~~~~~~~~~~~~~~
+front end
+~~~~~~~~~
 
 0. exist 🤷
+1. CLI that mimics the current experience
+2. QT application
+3. Web application
+4. Autonomous agents
+
+
+RunEngine
+~~~~~~~~~
+
+1. killers vs suspenders
+2. handling pause / resume / stop / abort / halt in client-server model

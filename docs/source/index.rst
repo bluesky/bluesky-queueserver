@@ -51,9 +51,9 @@ Components of Remote Acquisition
 
 There are three distinct tasks in involved in data acquisition
 
-1. monitoring the beamline status
+1. monitoring the beamline status (at least 0.5Hz update rate)
 2. invoking the acquisition to collect the data
-3. reviewing the just collected data
+3. reviewing / processing / interacting with the just collected data
 
 that each have different requirements for interactivity / multi-tenant
 / authentication / latency and need to be addressed independently as

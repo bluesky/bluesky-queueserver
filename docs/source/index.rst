@@ -341,5 +341,5 @@ front end
 RunEngine
 ~~~~~~~~~
 
-1. killers vs suspenders
+1. Extending suspenders with "killers" that can abort/stop rather than pause
 2. handling pause / resume / stop / abort / halt in client-server model

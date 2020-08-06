@@ -39,7 +39,7 @@ systematically address the permission issue.
 One possible solution is to use some sort of remote desktop
 application (VNC, NoMachine, ...) or SSH access to the beamline machines.
 While this may be sufficient for simple beamline operations, there are
-performance concerns if widely used, would require addition
+performance concerns if widely used, it would require additional
 infrastructure to make sure that multiple groups do not try to use the
 beamline at the same time, and it gives remote users completely
 unrestricted access to the beamline machines.
@@ -49,7 +49,7 @@ unrestricted access to the beamline machines.
 Components of Remote Acquisition
 --------------------------------
 
-There are three distinct tasks in involved in data acquisition
+There are three distinct tasks involved in data acquisition
 
 1. monitoring the beamline status (at least 0.5Hz update rate)
 2. invoking the acquisition to collect the data
@@ -126,7 +126,7 @@ At each scale we depend on the lower level.
 In line with standard security practice we want to provide users with
 the minimum level of access that will let them achieve what they need
 to.  To that end we are going to focus on providing remote access at
-the level of plans.
+the procedure leve (4), i.e. the level of bluesky plans.
 
 Because bluesky has the concept of specifying what you want to do
 (calling the plan and passing it ophyd objects to get a generator)
@@ -152,7 +152,7 @@ Review Data
 
 The proposed method for accessing "prompt" data is an externally accessible
 jupyterhub instance.  We can also use the same processing nodes to manage data
-export to a format of the users choice.
+export to a format of the user's choice.
 
 
 .. _design

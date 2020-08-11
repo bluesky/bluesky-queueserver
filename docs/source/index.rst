@@ -28,13 +28,13 @@ Remote and multi-tenant data acquisition
 
 In the traditional modes of experimental data collection the user
 physically comes to the beamline.  The user has sole control of the
-beamline during their (enforced by their physical presence at the
-beamline!) which greatly reduces or makes moot many locking,
+beamline during their beamtime (enforced by their physical presence at
+the beamline!) which greatly reduces or makes moot many locking,
 coordination, and security issues.  The physical presences at a
 beamline work station also causes a blurring of several distinct tasks
 that are being done simultaneously.  The urgent move to more remote
-experimental data collection means we need to pull apart these tasks and
-systematically address the permission issue.
+experimental data collection means we need to pull apart these tasks
+and systematically address the permission issue.
 
 One possible solution is to use some sort of remote desktop
 application (VNC, NoMachine, ...) or SSH access to the beamline machines.

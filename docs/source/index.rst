@@ -315,11 +315,11 @@ Server
 ~~~~~~
 
 0. add logic to server to spawn RE worker with state based on current user
-  a. what plans
-  b. what devices
-  c. where to publish documents to
-  d. where to publish RE state to
-  e. nanny process to restart etc
+ a. what plans
+ b. what devices
+ c. where to publish documents to
+ d. where to publish RE state to
+ e. nanny process to restart etc
 1. harden / document protocol between server and
 1. add ability to publish the list of plans and devices available to a given user
 2. make queue mutable other than addition

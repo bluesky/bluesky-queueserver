@@ -2,11 +2,14 @@
 bluesky-queueserver
 ===================
 
-.. image:: https://img.shields.io/travis/tacaswell/bluesky-queueserver.svg
-        :target: https://travis-ci.org/tacaswell/bluesky-queueserver
+.. image:: https://img.shields.io/travis/bluesky/bluesky-queueserver.svg
+        :target: https://travis-ci.org/bluesky/bluesky-queueserver
 
 .. image:: https://img.shields.io/pypi/v/bluesky-queueserver.svg
         :target: https://pypi.python.org/pypi/bluesky-queueserver
+
+.. image:: https://img.shields.io/codecov/c/github/bluesky/bluesky-queueserve
+        :target: https://codecov.io/gh/bluesky/bluesky-queueserve
 
 
 Server for queueing plans

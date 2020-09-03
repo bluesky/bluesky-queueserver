@@ -155,7 +155,7 @@ jupyterhub instance.  We can also use the same processing nodes to manage data
 export to a format of the user's choice.
 
 
-.. _design
+.. _design:
 
 
 bluesky-queueserver design
@@ -184,8 +184,10 @@ High-level design
 
 ::
 
-   RE worker <--queue--> web server <--|edge-of-campus|--> web page <-> user
-
+   RE worker <----> api server <--|edge-of-campus|--> client (web page) <-> user
+                       |
+                       |-- databases (sample + admin)
+                       |-- queue
 
 
 
@@ -282,64 +284,14 @@ Client
 The clients can be anything that can post/get json to a https endpoint
 and understands the protocols the sever exposes.  Possible clients are:
 
-- httpi / curl
-- a Python cli tool built around a "restor"
-- a PyQt application tool built around a "restor"
-- a web application
-- an autonomous agent
-- Java base GUIs
-- ...
+* httpi / curl
+* a Python cli tool built around a "restor"
+* a PyQt application tool built around a "restor"
+* a web application
+* an autonomous agent
+* Java base GUIs
+* ...
 
 We expect there to be wide range of client that interact with server
 of varying levels of complexity.  If we get the web server correct we
 will be able to develop the clients independently.
-
-
-
-
-Open work
----------
-
-RE worker
-~~~~~~~~~
-
-1. use logging hooks to publish state
-2. harden the json -> plan + object code
-3. develop way to describe the allowed plans and devices
-4. happi integration
-5. ability to add additional plans / devices
-6. ability to send a Python module of plans / devices to add
-7. re-think communication methods
-
-Server
-~~~~~~
-
-0. add logic to server to spawn RE worker with state based on current user
-  a. what plans
-  b. what devices
-  c. where to publish documents to
-  d. where to publish RE state to
-  e. nanny process to restart etc
-1. harden / document protocol between server and
-1. add ability to publish the list of plans and devices available to a given user
-2. make queue mutable other than addition
-3. authentication + session logic
-4. business logic to de-conflict usage
-5. put the queue in a persistent data structure
-6. per-user persistent meta-data
-
-front end
-~~~~~~~~~
-
-0. exist 🤷
-1. CLI that mimics the current experience
-2. QT application
-3. Web application
-4. Autonomous agents
-
-
-RunEngine
-~~~~~~~~~
-
-1. Extending suspenders with "killers" that can abort/stop rather than pause
-2. handling pause / resume / stop / abort / halt in client-server model

@@ -3,6 +3,9 @@ source =
     bluesky_queueserver
 [report]
 omit =
+    */tests/*
+    */_tests/*
+    .docs/*
     */python?.?/*
     */site-packages/nose/*
     # ignore _version.py and versioneer.py

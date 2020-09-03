@@ -1,7 +1,4 @@
 language: python
-python:
-  - 3.7
-  - 3.8
 
 env:
   global:
@@ -13,6 +10,29 @@ cache:
     - $HOME/.cache/pip
     - $HOME/.ccache  # https://github.com/travis-ci/travis-ci/issues/5853
 
+global:
+  - BUILD_DOCS=false
+  - SUBMIT_CODECOV=false
+  - FLAKE_8=false
+
+jobs:
+  fast_finish: true
+  include:
+    - python: 3.8  # This build will run only 'flake8'
+      env: FLAKE_8=true
+    - python: 3.7
+    - python: 3.8
+      env: BUILD_DOCS=true SUBMIT_CODECOV=true
+
+before_install:
+  - if [ $FLAKE_8 == 'true' ]; then
+      pip install flake8;
+      flake8 .;
+      let res=$?;
+      echo "The project code was verified with 'flake8'. Exit code ($res).";
+      exit $res;
+    fi
+
 install:
   # Install this package and the packages listed in requirements.txt.
   - pip install .
@@ -22,9 +42,12 @@ install:
 script:
   - coverage run -m pytest  # Run the tests and check for test coverage.
   - coverage report -m  # Generate test coverage report.
-  - codecov  # Upload the report to codecov.
-  - flake8  # Enforce code style ('relaxed' line length limit is set in .flake8 config file).
   - set -e
-  - make -C docs html  # Build the documentation.
-  - pip install doctr
-  - doctr deploy --built-docs docs/build/html .
+  - if [ BUILD_DOCS == 'true' ]; then
+      make -C docs html;
+      pip install doctr;
+      doctr deploy --built-docs docs/build/html .;
+    fi
+
+after_success:
+  - if [ $SUBMIT_CODECOV == 'true' ]; then codecov; fi;

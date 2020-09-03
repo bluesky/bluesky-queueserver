@@ -15,7 +15,7 @@ bluesky-queueserver
 Server for queueing plans
 
 * Free software: 3-clause BSD license
-* Documentation: (COMING SOON!) https://bluesky.github.io/bluesky-queueserver.
+* Documentation: https://bluesky.github.io/bluesky-queueserver.
 
 Features
 --------

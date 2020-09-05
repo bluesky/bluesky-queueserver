@@ -81,21 +81,20 @@ class RunEngineWorker(Process):
                 pass
 
     def _conn_received(self, msg):
-        print(f"Message is in the loop: {msg}")
-
         type, value = msg["type"], msg["value"]
 
         if type == "command" and value == "quit":
             # Stop the loop in main thread
-            print(f"Existing ...")
+            logger.info(f"Closing RE Worker")
             self._exit_event.set()
             self._exit_loop_event.set()
 
         if type == "plan":
-            logger.info("Starting a plan")
             plan_name = value["name"]
             args = value["args"]
             kwargs = value["kwargs"]
+
+            logger.info(f"Starting a plan {plan_name}")
 
             def ref_from_name(v):
                 if isinstance(v, str):
@@ -152,16 +151,12 @@ class RunEngineWorker(Process):
         # Now make the main thread busy
         self._execute_in_main_thread()
 
-        print("Exited main thread")
         # Wait for the coroutine to exit
         future.result()
-        print("Future completed")
 
         self._thread_conn.join()
-        print("Thread joined")
 
         del self._RE
-        print("Run engine deleted")
 
     def _execute_plan(self, plan):
         logger.info("Starting execution of a plan")

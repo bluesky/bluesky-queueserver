@@ -1,42 +1,49 @@
 from aiohttp import web
 from multiprocessing import Process, Pipe
 import threading
+import time as ttime
 
 from ophyd.sim import det1, det2
 from bluesky.plans import count
 
 from .worker import RunEngineWorker
 
+import logging
+logger = logging.getLogger(__name__)
+
 re_worker, server_conn, worker_conn = None, None, None
 environment_exists = False
 
+thread_conn = None
+
+queue_plans = []
+
+
+#   http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]]}'
+#   http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
 
 
 async def hello(request):
-    queue = request.app["queue"]
-
-    return web.Response(text=f"Hello, world.  There are {len(queue)} plans enqueed")
+    return web.Response(text=f"Hello, world.  There are {len(queue_plans)} plans enqueed")
 
 
 async def queue_view_handler(request):
-    out = {"queue": request.app["queue"]}
+    out = {"queue": queue_plans}
     return web.json_response(out)
 
 
 async def addto_queue_handler(request):
-    queue = request.app["queue"]
     data = await request.json()
     # TODO validate inputs!
     plan = data["plan"]
-    location = data.get("location", len(queue))
-    queue.insert(location, plan)
+    location = data.get("location", len(queue_plans))
+    queue_plans.insert(location, plan)
     return web.json_response(data)
 
 
 async def pop_from_queue_handler(request):
-    queue = request.app["queue"]
-    if len(queue):
-        plan = queue.pop()
+    if len(queue_plans):
+        plan = queue_plans.pop()  # Pops from the back of the queue
         return web.json_response(plan)
     else:
         return web.json_response({"plan": "sleep", "args": [10]})
@@ -56,24 +63,31 @@ def stop_re_worker():
 
 
 def run_task():
-    plan_name = "count"
-    args = [["det1", "det2"]]
-    kwargs = {"num": 5, "delay": [1, 2, 3, 4]}
+    if queue_plans:
+        print(f"Starting new plan: {len(queue_plans)} plans are left in the queue")
+        new_plan = queue_plans.pop(0)
 
-    msg = {"type": "plan",
-           "value": {"name": plan_name,
-                     "args": args,
-                     "kwargs": kwargs
-                    }
-          }
+        plan_name = new_plan["name"]
+        args = new_plan["args"] if "args" in new_plan else []
+        kwargs = new_plan["kwargs"] if "kwargs" in new_plan else {}
 
-    print(f"Sending emssage 'run_task' ...")
-    server_conn.send(msg)
+        msg = {"type": "plan",
+               "value": {"name": plan_name,
+                         "args": args,
+                         "kwargs": kwargs
+                        }
+              }
+
+        print(f"Sending message 'run_task' ...")
+        server_conn.send(msg)
+        return True
+    else:
+        print(f"Queue is empty")
+        return False
 
 
 async def start_environment(request):
     global environment_exists
-    queue = request.app["queue"]
     if not environment_exists:
         start_re_worker()
         environment_exists = True
@@ -85,7 +99,6 @@ async def start_environment(request):
 
 async def close_environment(request):
     global environment_exists
-    queue = request.app["queue"]
     if environment_exists:
         stop_re_worker()
         environment_exists = False
@@ -97,7 +110,6 @@ async def close_environment(request):
 
 async def process_queue(request):
     global environment_exists
-    queue = request.app["queue"]
     if environment_exists:
         run_task()
         success, msg = True, ""
@@ -120,9 +132,30 @@ def setup_routes(app):
     )
 
 
+def receive_packet_thread():
+    while True:
+        ttime.sleep(0.1)
+        if server_conn.poll():
+            try:
+                print(f"Waiting for message")
+                msg = server_conn.recv()
+                run_task()
+                #self._loop.call_soon_threadsafe(self._conn_received, msg)
+                print(f"Server: message received {msg}")
+            except Exception as ex:
+                logger.error(f"Server: Exception occurred while waiting for packet: {ex}")
+                break
+
+
 def init_func(argv):
-    global server_conn, worker_conn
+    global server_conn, worker_conn, thread_conn
     server_conn, worker_conn = Pipe()
+
+    # Start the thread as 'daemon', because there is no place to join it in the current configuration
+    thread_conn = threading.Thread(target=receive_packet_thread,
+                                   name="RE Server Comm",
+                                   daemon=True)
+    thread_conn.start()
 
     app = web.Application()
     app["queue"] = []

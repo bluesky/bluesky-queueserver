@@ -4,6 +4,7 @@ import asyncio
 import queue
 import time as ttime
 from functools import partial
+from collections.abc import Iterable
 
 from bluesky import RunEngine
 from bluesky.run_engine import get_bluesky_event_loop, _ensure_event_loop_running
@@ -15,8 +16,9 @@ from ophyd.log import config_ophyd_logging
 
 # from databroker import Broker
 
-from ophyd.sim import det1, det2
-from bluesky.plans import count
+# The following plans/devices must be imported (otherwise plan parsing wouldn't work)
+from ophyd.sim import det1, det2, motor
+from bluesky.plans import count, scan
 
 import logging
 logger = logging.getLogger(__name__)
@@ -48,9 +50,7 @@ class RunEngineWorker(Process):
 
         self._RE = None
 
-        # Start thread that receives packets from the pip 'conn
-        self._conn_recv_buffer = []
-
+        # The thread that receives packets from the pipe 'self._conn'
         self._thread_conn = None
 
     def _receive_packet_thread(self):
@@ -106,12 +106,17 @@ class RunEngineWorker(Process):
                 return v
 
             # Replace names with references
-            plan_name = ref_from_name(plan_name)
-            args = [[ref_from_name(_) for _ in arg] for arg in args]
-            kwargs = {"num": 5, "delay": [1, 2, 3, 4]}
+            plan_name_parsed = ref_from_name(plan_name)
+            args_parsed = []
+            for arg in args:
+                if isinstance(arg, Iterable) and not isinstance(arg, str):
+                    arg_parsed = [ref_from_name(_) for _ in arg]
+                else:
+                    arg_parsed = ref_from_name(arg)
+                args_parsed.append(arg_parsed)
 
             def plan():
-                yield from plan_name(*args, **kwargs)
+                yield from plan_name_parsed(*args_parsed, **kwargs)
 
             func = partial(self._execute_plan, plan)
             self._callback_queue.put(func)
@@ -160,5 +165,8 @@ class RunEngineWorker(Process):
 
     def _execute_plan(self, plan):
         logger.info("Starting execution of a plan")
-        self._RE(plan())
+        uids = self._RE(plan())
+        msg = {"type": "report",
+               "value": {"uids": uids}}
+        self._conn.send(msg)
         logger.info("Finished execution of a plan")

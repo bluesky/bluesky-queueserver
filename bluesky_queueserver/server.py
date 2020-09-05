@@ -1,5 +1,5 @@
 from aiohttp import web
-from multiprocessing import Process, Pipe
+from multiprocessing import Pipe
 import threading
 import time as ttime
 import asyncio
@@ -33,32 +33,10 @@ class RunEngineServer:
         self._start_conn_thread()
 
     def get_loop(self):
+        """
+        Returns the asyncio loop.
+        """
         return self._loop
-
-    async def _hello(self, request):
-        return web.Response(text=f"Hello, world. "
-                                 f"There are {len(self._queue_plans)} plans enqueed")
-
-    async def _queue_view_handler(self, request):
-        print(f"Queue_view called")
-        out = {"queue": self._queue_plans}
-        return web.json_response(out)
-
-    async def _add_to_queue_handler(self, request):
-        data = await request.json()
-        # TODO: validate inputs!
-        plan = data["plan"]
-        location = data.get("location", len(self._queue_plans))
-        self._queue_plans.insert(location, plan)
-        return web.json_response(data)
-
-    async def _pop_from_queue_handler(self, request):
-        """Pop the last item from the queue"""
-        if self._queue_plans:
-            plan = self._queue_plans.pop()  # Pops from the back of the queue
-            return web.json_response(plan)
-        else:
-            return web.json_response({})  # No items
 
     def _start_conn_pipes(self):
         self._server_conn, self._worker_conn = Pipe()
@@ -69,16 +47,34 @@ class RunEngineServer:
                                              daemon=True)
         self._thread_conn.start()
 
+    # ======================================================================
+    #   Functions that implement functionality of the server
+
     def _start_re_worker(self):
+        """
+        Creates worker process.
+        """
         self._re_worker = RunEngineWorker(conn=self._worker_conn)
         self._re_worker.start()
 
     def _stop_re_worker(self):
+        """
+        Stops and destroys the worker process. The process is not simply killed,
+        but instead let to exit gracefully. Separate function could be added that could
+        kill the process or it could be killed after significant timeout (process is not
+        responding).
+        """
         msg = {"type": "command", "value": "quit"}
         self._server_conn.send(msg)
         self._re_worker.join()
 
     def _run_task(self):
+        """
+        Upload the plan to the worker process for execution.
+        Plan in the queue is represented as a dictionary with the keys "name" (plan name),
+        "args" (list of args), "kwargs" (list of kwargs). Only the plan name is mandatory.
+        Names of plans and devices are strings.
+        """
         if self._queue_plans:
             logger.info(f"Starting new plan: {len(self._queue_plans)} plans are left in the queue")
             new_plan = self._queue_plans.pop(0)
@@ -91,14 +87,17 @@ class RunEngineServer:
                    "value": {"name": plan_name,
                              "args": args,
                              "kwargs": kwargs
-                            }
-                  }
+                             }
+                   }
 
             self._server_conn.send(msg)
             return True
         else:
             logger.info("Queue is empty")
             return False
+
+    # =======================================================================
+    #   Functions for communication with the worker process
 
     def _receive_packet_thread(self):
         while True:
@@ -118,7 +117,46 @@ class RunEngineServer:
             logger.info(f"Successfully finished execution of the plan (run UIDs: {uids})")
             self._run_task()
 
-    async def _start_environment(self, request):
+    # =========================================================================
+    #    REST API handlers
+
+    async def _hello_handler(self, request):
+        """May be called to get some response from the server"""
+        return web.Response(text=f"Hello, world. "
+                                 f"There are {len(self._queue_plans)} plans enqueed")
+
+    async def _queue_view_handler(self, request):
+        """
+        Returns the contents of the current queue
+        """
+        out = {"queue": self._queue_plans}
+        return web.json_response(out)
+
+    async def _add_to_queue_handler(self, request):
+        """
+        Adds new plan to the end of the queue
+        """
+        data = await request.json()
+        # TODO: validate inputs!
+        plan = data["plan"]
+        location = data.get("location", len(self._queue_plans))
+        self._queue_plans.insert(location, plan)
+        return web.json_response(data)
+
+    async def _pop_from_queue_handler(self, request):
+        """
+        Pop the last item from back of the queue
+        """
+        if self._queue_plans:
+            plan = self._queue_plans.pop()  # Pops from the back of the queue
+            return web.json_response(plan)
+        else:
+            return web.json_response({})  # No items
+
+    async def _create_environment_handler(self, request):
+        """
+        Creates RE environment: creates RE Worker process, starts and configures Run Engine.
+        """
         if not self._environment_exists:
             self._start_re_worker()
             self._environment_exists = True
@@ -127,7 +165,11 @@ class RunEngineServer:
             success, msg = False, "Environment already exists."
         return web.json_response({"success": success, "msg": msg})
 
-    async def _close_environment(self, request):
+    async def _close_environment_handler(self, request):
+        """
+        Deletes RE environment. In the current 'demo' prototype the environment will be deleted
+        only after RE completes the current scan.
+        """
         if self._environment_exists:
             self._stop_re_worker()
             self._environment_exists = False
@@ -136,7 +178,11 @@ class RunEngineServer:
             success, msg = False, "Environment does not exist."
         return web.json_response({"success": success, "msg": msg})
 
-    async def _process_queue(self, request):
+    async def _process_queue_handler(self, request):
+        """
+        Start execution of the loaded queue. Additional runs can be added to the queue while
+        it is executed. If the queue is empty, then nothing will happen.
+        """
         if self._environment_exists:
             self._run_task()
             success, msg = True, ""
@@ -145,15 +191,18 @@ class RunEngineServer:
         return web.json_response({"success": success, "msg": msg})
 
     def setup_routes(self, app):
+        """
+        Setup routes to handler for web.Application
+        """
         app.add_routes(
             [
-                web.get("/", self._hello),
+                web.get("/", self._hello_handler),
                 web.get("/queue_view", self._queue_view_handler),
                 web.post("/add_to_queue", self._add_to_queue_handler),
                 web.post("/pop_from_queue", self._pop_from_queue_handler),
-                web.post("/start_environment", self._start_environment),
-                web.post("/close_environment", self._close_environment),
-                web.post("/process_queue", self._process_queue),
+                web.post("/create_environment", self._create_environment_handler),
+                web.post("/close_environment", self._close_environment_handler),
+                web.post("/process_queue", self._process_queue_handler),
             ]
         )
 

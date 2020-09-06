@@ -1,7 +1,6 @@
 from aiohttp import web
 from multiprocessing import Pipe
 import threading
-import time as ttime
 import asyncio
 
 from .worker import RunEngineWorker
@@ -101,8 +100,7 @@ class RunEngineServer:
 
     def _receive_packet_thread(self):
         while True:
-            ttime.sleep(0.1)
-            if self._server_conn.poll():
+            if self._server_conn.poll(0.1):
                 try:
                     msg = self._server_conn.recv()
                     self._loop.call_soon_threadsafe(self._conn_received, msg)

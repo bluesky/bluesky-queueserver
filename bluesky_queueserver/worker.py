@@ -64,10 +64,9 @@ class RunEngineWorker(Process):
         of the communication Pipe.
         """
         while True:
-            ttime.sleep(0.1)
             if self._exit_event.is_set():
                 break
-            if self._conn.poll():
+            if self._conn.poll(0.1):
                 try:
                     msg = self._conn.recv()
                     self._loop.call_soon_threadsafe(self._conn_received, msg)

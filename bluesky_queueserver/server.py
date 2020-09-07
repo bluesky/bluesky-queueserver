@@ -8,10 +8,17 @@ from .worker import RunEngineWorker
 import logging
 logger = logging.getLogger(__name__)
 
-#  Plans that can be used to test the server
-#  http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]]}'
-#  http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'  # noqa: 501
-#  http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
+"""
+#  The following plans that can be used to test the server
+
+http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]]}'
+
+# This is the slowly running plan (convenient to test pausing)
+http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]],
+"kwargs":{"num":10, "delay":1}}'
+
+http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
+"""
 
 
 class RunEngineServer:
@@ -59,10 +66,9 @@ class RunEngineServer:
 
     def _stop_re_worker(self):
         """
-        Stops and destroys the worker process. The process is not simply killed,
-        but instead let to exit gracefully. Separate function could be added that could
-        kill the process or it could be killed after significant timeout (process is not
-        responding).
+        Closes Run Engine execution environment (destroys the worker process). Running plan needs
+        to be stopped before the environment can be closed. Separate function could be added that could
+        kill unresponsive process that can not be closed gracefully.
         """
         msg = {"type": "command", "value": "quit"}
         self._server_conn.send(msg)
@@ -97,10 +103,17 @@ class RunEngineServer:
             return False
 
     def _pause_run_engine(self, option):
+        """
+        Pause execution of a running plan. Run Engine must be in 'running' state in order for
+        the request to pause to be accepted by RE Worker.
+        """
         msg = {"type": "command", "value": "pause", "option": option}
         self._server_conn.send(msg)
 
     def _continue_run_engine(self, option):
+        """
+        Continue handling of a paused plan.
+        """
         msg = {"type": "command", "value": "continue", "option": option}
         self._server_conn.send(msg)
 
@@ -112,6 +125,7 @@ class RunEngineServer:
             if self._server_conn.poll(0.1):
                 try:
                     msg = self._server_conn.recv()
+                    # Messages should be handled in the event loop
                     self._loop.call_soon_threadsafe(self._conn_received, msg)
                 except Exception as ex:
                     logger.error(f"Server: Exception occurred while waiting for packet: {ex}")
@@ -126,7 +140,10 @@ class RunEngineServer:
             result = value["result"]
             logger.info(f"Report received from RE Worker:\nsuccess={success}\n{result}\n)")
             if completed and success:
-                # Executed plan is removed from the queue only after it is successfully completed
+                # Executed plan is removed from the queue only after it is successfully completed.
+                # If a plan was not completed or not successful (exception was raised), then
+                # execution of the queue is stopped. It can be restarted later (failed or
+                # interrupted plan will still be in the queue.
                 self._queue_plans.pop(0)
                 self._run_task()
 
@@ -141,13 +158,15 @@ class RunEngineServer:
     #    REST API handlers
 
     async def _hello_handler(self, request):
-        """May be called to get some response from the server"""
+        """
+        May be called to get response from the server. Returns the number of plans in the queue.
+        """
         return web.Response(text=f"Hello, world. "
                                  f"There are {len(self._queue_plans)} plans enqueed")
 
     async def _queue_view_handler(self, request):
         """
-        Returns the contents of the current queue
+        Returns the contents of the current queue.
         """
         out = {"queue": self._queue_plans}
         return web.json_response(out)

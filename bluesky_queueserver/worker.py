@@ -31,7 +31,7 @@ mpl_logger.setLevel(logging.WARNING)
 
 class RunEngineWorker(Process):
     """
-    The class implementing BlueskyWorker thread.
+    The class implementing Run Engine Worker thread.
 
     Parameters
     ----------
@@ -79,12 +79,13 @@ class RunEngineWorker(Process):
 
         Parameters
         ----------
-        plan_func: function
-            Reference to a function that implements a Bluesky plan
-        plan_args: list
-            List of the plan arguments
-        plan_kwargs: dict
-            Dictionary of the plan kwargs.
+        plan: function
+            Reference to a function that calls Run Engine. Run Engine may be called to execute,
+            resume, abort, stop or halt the plan. The function should not accept any arguments.
+        is_resuming: bool
+            A flag indicates if the plan is going to be resumed (executed). It is True if
+            'plan' starts a new plan or resumes paused plan. It is False if paused plan is
+            aborted, stopped or halted.
         """
         logger.debug("Starting execution of a task")
         try:
@@ -100,9 +101,18 @@ class RunEngineWorker(Process):
 
     def _load_new_plan(self, plan_name, plan_args, plan_kwargs):
         """
-        Loads a new plan into `self._execution_queue`. The plan is
-        later picked up by the function running in the main thread and
-        executed by the Run Engine.
+        Loads a new plan into `self._execution_queue`. The plan plan name and
+        device names are represented as strings. Parsing of the plan in this
+        function replaces string representation with references.
+
+        Parameters
+        ----------
+        plan_name: str
+            name of the plan, represented as a string
+        plan_args: list
+            plan args, devices are represented as strings
+        plan_kwargs: dict
+            plan kwargs
         """
         logger.info(f"Starting a plan {plan_name}")
 
@@ -148,6 +158,12 @@ class RunEngineWorker(Process):
     def _continue_plan(self, option):
         """
         Continue/stop execution of a plan after it was paused.
+
+        Parameters
+        ----------
+        option: str
+            Option on how to proceed with previously paused plan. The values are
+            "resume", "abort", "stop", "halt".
         """
         logger.info(f"Continue plan execution with the option '{option}'")
 
@@ -180,11 +196,14 @@ class RunEngineWorker(Process):
         """
         type, value = msg["type"], msg["value"]
 
+        # The default acknowledge message (will be sent to `self._conn` if
+        #   the message is not recognized.
         msg_ack = {"type": "acknowledge",
                    "value": {"status": "unrecognized",
                              "msg": msg,  # Send back the message
                              "result": ""}}
 
+        # Exit the main thread and close the environment
         if type == "command" and value == "quit":
             # Stop the loop in main thread
             logger.info("Closing RE Worker environment")
@@ -204,6 +223,7 @@ class RunEngineWorker(Process):
                 msg_ack["value"]["result"] = "Can not close the environment with running Run Engine. " \
                                              "Stop the running plan and try again."
 
+        # Execute a plan
         if type == "plan":
             logger.info("Starting a plan")
             # TODO: refine the criteria of acceptance of the new plan.
@@ -235,6 +255,7 @@ class RunEngineWorker(Process):
                     "This may indicate a serious issue with the plan queue execution mechanism.\n" \
                     "Please report the issue to developers."
 
+        # Pause a running plan
         if type == "command" and value == "pause":
             # Stop the loop in main thread
             logger.info("Pausing Run Engine")
@@ -278,6 +299,7 @@ class RunEngineWorker(Process):
                     "Run engine can be paused only in 'running' state. " \
                     f"Current state: '{self._RE._state}'"
 
+        # Continue the previously paused plan (resume, abort, stop or halt)
         if type == "command" and value == "continue":
             # Continue execution of the plan
             if self._RE.state == 'paused':
@@ -307,7 +329,8 @@ class RunEngineWorker(Process):
         """
         # This function blocks the main thread
         while True:
-            ttime.sleep(1)  # Polling once per second should be fine for now.
+            # Polling once per second. This is fast enough for slowly executed plans.
+            ttime.sleep(1)
             # Exit the thread if the Event is set (necessary to gracefully close the process)
             if self._exit_event.is_set():
                 break

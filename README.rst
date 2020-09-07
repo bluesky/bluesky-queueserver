@@ -21,9 +21,13 @@ Features
 --------
 
 This is demo version of the server that supports creation and closing of Run Engine execution environment, adding
-and removing items from the queue, checking the queue status and execution of the queue. There is no error
-handling implemented yet, so the server process will probably freeze if an error occurs. In this case the shell
-running the server may need to be closed and a new shell opened.
+and removing items from the queue, checking the queue status and execution of the queue, pausing (immediate and
+deferred), resuming, aborting, stopping and halting plans, collection of data to 'temp' database.
+
+The demo has limited data handling implemented. While it is relatively stable while testing the example
+commands, the shell may still freeze (e.g. if Ctrl-C is pressed while the RE environment is not closed).
+In this case the best way is to close the shell and start a new one (simply killing the process will not
+help).
 
 The server can be started from a shell as follows::
 
@@ -94,4 +98,24 @@ Resuming, aborting, stopping or halting of currently executed plan::
 There is minimal user protection features implemented that will prevent execution of
 the commands that are not supported in current state of the server. Error messages are printed
 in the terminal that is running the server along with output of Run Engine.
+
+There is demo of data collection capability. The instance of the QueueServer is keeping a reference
+to an instance of 'temp' Databroker, which is passed to the RE Worker at the time of creation and
+used to collect documents from Run Engine. Data from all plans executed during QueueServer session
+are accumulated in the 'temp' database. The table that contains Run IDs and UIDs of the runs in
+the databased can be printed on the screen by sending the command::
+
+  http POST 0.0.0.0:8080/print_db_uids
+
+The table will be printed in the QueueServer terminal::
+
+    ===================================================================
+                 The contents of 'temp' database.
+    -------------------------------------------------------------------
+    Run ID: 1   UID: bd621328-ffcf-409f-a668-0c303c0d287f
+    Run ID: 2   UID: e85f2f40-44e9-4097-be50-c27f42c4e201
+    Run ID: 3   UID: 1dec536d-3397-43c1-91a3-2af323452bfe
+    -------------------------------------------------------------------
+      Total of 3 runs were found in 'temp' database.
+    ===================================================================
 

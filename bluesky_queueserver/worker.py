@@ -38,7 +38,7 @@ class RunEngineWorker(Process):
     conn
         The end of bidirectional (input/output) pipe.
     """
-    def __init__(self, *, conn):
+    def __init__(self, *, conn, db):
 
         super().__init__(name="RE Worker")
 
@@ -56,6 +56,8 @@ class RunEngineWorker(Process):
 
         # Thread used for to send the second sigint after short timeout
         self._thread_sigint = None
+
+        self._db = db
 
     def _receive_packet_thread(self):
         """
@@ -355,7 +357,7 @@ class RunEngineWorker(Process):
         self._RE.subscribe(bec)
 
         # db = Broker.named('temp')
-        # self._RE.subscribe(db.insert)
+        self._RE.subscribe(self._db.insert)
 
         self._execution_queue = queue.Queue()
 

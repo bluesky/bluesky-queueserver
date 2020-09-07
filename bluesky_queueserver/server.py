@@ -5,8 +5,14 @@ import asyncio
 
 from .worker import RunEngineWorker
 
+from databroker import Broker
+
 import logging
 logger = logging.getLogger(__name__)
+
+db_logger = logging.getLogger("databroker")
+db_logger.setLevel("INFO")
+
 
 """
 #  The following plans that can be used to test the server
@@ -39,6 +45,13 @@ class RunEngineServer:
         self._start_conn_pipes()
         self._start_conn_thread()
 
+        # Create Databroker instance. This reference is passed to RE Worker process.
+        # The experimental data can later be retrieved from the database.
+        # This subscription mechanism is strictly for the demo, since using reference
+        # to the databroker in several processes may not be a good idea. Here it is assumed
+        # that only one process access Databroker at a time.
+        self._db = Broker.named('temp')
+
     def get_loop(self):
         """
         Returns the asyncio loop.
@@ -61,7 +74,9 @@ class RunEngineServer:
         """
         Creates worker process.
         """
-        self._re_worker = RunEngineWorker(conn=self._worker_conn)
+        # Passing reference to Databroker to a different process may be a terrible idea.
+        # This is here strictly for the demo.
+        self._re_worker = RunEngineWorker(conn=self._worker_conn, db=self._db)
         self._re_worker.start()
 
     def _stop_re_worker(self):
@@ -116,6 +131,27 @@ class RunEngineServer:
         """
         msg = {"type": "command", "value": "continue", "option": option}
         self._server_conn.send(msg)
+
+    def _print_db_uids(self):
+        """
+        Prints the UIDs of the scans in 'temp' database. Just for the demo.
+        Not part of future API.
+        """
+        print("\n===================================================================")
+        print("             The contents of 'temp' database.")
+        print("-------------------------------------------------------------------")
+        n_runs = 0
+        for run_id in range(1, 100000):
+            try:
+                hdr = self._db[run_id]
+                uid = hdr.start["uid"]
+                n_runs += 1
+                print(f"Run ID: {run_id}   UID: {uid}")
+            except Exception:
+                break
+        print("-------------------------------------------------------------------")
+        print(f"  Total of {n_runs} runs were found in 'temp' database.")
+        print("===================================================================\n")
 
     # =======================================================================
     #   Functions for communication with the worker process
@@ -265,6 +301,14 @@ class RunEngineServer:
                                   f"Available options: {available_options}"
         return web.json_response({"success": success, "msg": msg})
 
+    def _print_db_uids_handler(self, request):
+        """
+        Prints the UIDs of the scans in 'temp' database. Just for the demo.
+        Not part of future API.
+        """
+        self._print_db_uids()
+        return web.json_response({"success": True, "msg": ""})
+
     def setup_routes(self, app):
         """
         Setup routes to handler for web.Application
@@ -280,6 +324,7 @@ class RunEngineServer:
                 web.post("/process_queue", self._process_queue_handler),
                 web.post("/re_continue", self._re_continue_handler),
                 web.post("/re_pause", self._re_pause_handler),
+                web.post("/print_db_uids", self._print_db_uids_handler),
             ]
         )
 

@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 #  Plans that can be used to test the server
 #  http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]]}'
+#  http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'  # noqa: 501
 #  http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
 
 
@@ -76,7 +77,7 @@ class RunEngineServer:
         """
         if self._queue_plans:
             logger.info(f"Starting new plan: {len(self._queue_plans)} plans are left in the queue")
-            new_plan = self._queue_plans.pop(0)
+            new_plan = self._queue_plans[0]
 
             plan_name = new_plan["name"]
             args = new_plan["args"] if "args" in new_plan else []
@@ -95,6 +96,14 @@ class RunEngineServer:
             logger.info("Queue is empty")
             return False
 
+    def _pause_run_engine(self, option):
+        msg = {"type": "command", "value": "pause", "option": option}
+        self._server_conn.send(msg)
+
+    def _continue_run_engine(self, option):
+        msg = {"type": "command", "value": "continue", "option": option}
+        self._server_conn.send(msg)
+
     # =======================================================================
     #   Functions for communication with the worker process
 
@@ -110,10 +119,23 @@ class RunEngineServer:
 
     def _conn_received(self, msg):
         type, value = msg["type"], msg["value"]
+
         if type == "report":
-            uids = value["uids"]
-            logger.info(f"Successfully finished execution of the plan (run UIDs: {uids})")
-            self._run_task()
+            completed = value["completed"]
+            success = value["success"]
+            result = value["result"]
+            logger.info(f"Report received from RE Worker:\nsuccess={success}\n{result}\n)")
+            if completed and success:
+                # Executed plan is removed from the queue only after it is successfully completed
+                self._queue_plans.pop(0)
+                self._run_task()
+
+        if type == "acknowledge":
+            status = value["status"]
+            result = value["result"]
+            msg_original = value["msg"]
+            logger.info("Acknownegement received from RE Worker:\n"
+                        f"Status: '{status}'\nResult: '{result}'\nMessage: {msg_original}")
 
     # =========================================================================
     #    REST API handlers
@@ -188,6 +210,42 @@ class RunEngineServer:
             success, msg = False, "Environment does not exist. Can not start the task."
         return web.json_response({"success": success, "msg": msg})
 
+    async def _re_pause_handler(self, request):
+        """
+        Pause Run Engine
+        """
+        data = await request.json()
+        option = data["option"]
+        available_options = ("deferred", "immediate")
+        if option in available_options:
+            if self._environment_exists:
+                self._pause_run_engine(option)
+                success, msg = True, ""
+            else:
+                success, msg = False, "Environment does not exist. Can not pause Run Engine."
+        else:
+            success, msg = False, f"Option '{option}' is not supported. " \
+                                  f"Available options: {available_options}"
+        return web.json_response({"success": success, "msg": msg})
+
+    async def _re_continue_handler(self, request):
+        """
+        Control Run Engine in the paused state
+        """
+        data = await request.json()
+        option = data["option"]
+        available_options = ("resume", "abort", "stop", "halt")
+        if option in available_options:
+            if self._environment_exists:
+                self._continue_run_engine(option)
+                success, msg = True, ""
+            else:
+                success, msg = False, "Environment does not exist. Can not pause Run Engine."
+        else:
+            success, msg = False, f"Option '{option}' is not supported. " \
+                                  f"Available options: {available_options}"
+        return web.json_response({"success": success, "msg": msg})
+
     def setup_routes(self, app):
         """
         Setup routes to handler for web.Application
@@ -201,6 +259,8 @@ class RunEngineServer:
                 web.post("/create_environment", self._create_environment_handler),
                 web.post("/close_environment", self._close_environment_handler),
                 web.post("/process_queue", self._process_queue_handler),
+                web.post("/re_continue", self._re_continue_handler),
+                web.post("/re_pause", self._re_pause_handler),
             ]
         )
 

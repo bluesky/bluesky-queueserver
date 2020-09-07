@@ -36,7 +36,10 @@ The server is controlled from a different shell. Add plans to the queue::
 
 The names of the plans and devices are strings. The strings are converted to references to plans and
 devices in the worker process. In this demo the server can recognize only 'det1', 'det2', 'motor' devices
-and 'count' and 'scan' plans.
+and 'count' and 'scan' plans. If items are added to the running queue and they
+are executed as part of the queue. If execution of the queue is finished before an item is added, then
+execution has to be started again (execution is stopped once an attempt is made to fetch an element
+from an empty queue).
 
 The last item can be removed from the back of the queue::
 
@@ -56,18 +59,39 @@ closed::
 
   http POST 0.0.0.0:8080/create_environment
 
-Execution of the plans in the queue is started as follows::
+Execute the plans in the queue::
 
   http POST 0.0.0.0:8080/process_queue
+
+Request to execute an empty queue is a valid operation that does nothing.
 
 Environment may be closed as follows::
 
   http POST 0.0.0.0:8080/close_environment
 
-There is minimal user protection: the environment can not be created twice, the queue processing can not be
-started before the the environment is created and the environment can not be closed twice or closed before
-it is created (those mistakes are very easy to make). Also, processing an empty queue is a valid operation that
-does nothing, additional items can be added at any time. If items are added to the running queue and they
-are executed as part of the queue. If execution of the queue is finished before an item is added, then
-execution has to be started again (execution is stopped once an attempt is made to fetch an element
-from an empty queue).
+While a plan in a queue is executed, operation Run Engine can be paused. In the unlikely event
+if the request to pause is received while RunEngine is transitioning between two plans, the request
+may be rejected by the RE Worker. In this case it needs to be repeated. If Run Engine is in the paused
+state, plan execution can be resumed, aborted, stopped or halted. If the plan is aborted, stopped
+or halted, it is not removed from the plan queue (it remains the first in the queue) and execution
+of the queue is stopped. Execution of the queue may be started again if needed.
+
+Immediate pausing of the Run Engine (returns to the last checkpoint in the plan)::
+
+  http POST 0.0.0.0:8080/re_pause option="immediate"
+
+Deferred pausing of the Run Engine (plan is executed until the next checkpoint)::
+
+  http POST 0.0.0.0:8080/re_pause option="deferred"
+
+Resuming, aborting, stopping or halting of currently executed plan::
+
+  http POST 0.0.0.0:8080/re_continue option="resume"
+  http POST 0.0.0.0:8080/re_continue option="abort"
+  http POST 0.0.0.0:8080/re_continue option="stop"
+  http POST 0.0.0.0:8080/re_continue option="halt"
+
+There is minimal user protection features implemented that will prevent execution of
+the commands that are not supported in current state of the server. Error messages are printed
+in the terminal that is running the server along with output of Run Engine.
+

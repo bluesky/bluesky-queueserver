@@ -1,12 +1,12 @@
 from multiprocessing import Process
 import threading
-import asyncio
 import queue
 import time as ttime
+import os
+import signal
 from collections.abc import Iterable
 
 from bluesky import RunEngine
-from bluesky.run_engine import get_bluesky_event_loop, _ensure_event_loop_running
 
 from bluesky.callbacks.best_effort import BestEffortCallback
 from bluesky.log import config_bluesky_logging
@@ -45,18 +45,17 @@ class RunEngineWorker(Process):
         # The end of bidirectional Pipe assigned to the worker (for communication with the server)
         self._conn = conn
 
-        self._loop = None
-        self._th = None  # The thread in which the loop is running
-        self._exit_loop_event = None  # Reference to the asyncio.Event
-
         self._exit_event = threading.Event()
-        self._plan_execution_queue = None
+        self._execution_queue = None
 
         # Reference to Bluesky Run Engine
         self._RE = None
 
         # The thread that receives packets from the pipe 'self._conn'
         self._thread_conn = None
+
+        # Thread used for to send the second sigint after short timeout
+        self._thread_sigint = None
 
     def _receive_packet_thread(self):
         """
@@ -69,12 +68,12 @@ class RunEngineWorker(Process):
             if self._conn.poll(0.1):
                 try:
                     msg = self._conn.recv()
-                    self._loop.call_soon_threadsafe(self._conn_received, msg)
+                    self._conn_received(msg)
                 except Exception as ex:
                     logger.error(f"Exception occurred while waiting for packet: {ex}")
                     break
 
-    def _execute_plan(self, plan_func, plan_args, plan_kwargs):
+    def _execute_plan(self, plan, is_resuming):
         """
         Start Run Engine to execute a plan
 
@@ -87,20 +86,21 @@ class RunEngineWorker(Process):
         plan_kwargs: dict
             Dictionary of the plan kwargs.
         """
-        logger.debug("Starting execution of a plan")
-
-        uids = self._RE(plan_func(*plan_args, **plan_kwargs))
-
-        # Very minimalistic report (for the demo).
-        msg = {"type": "report",
-               "value": {"uids": uids}}
+        logger.debug("Starting execution of a task")
+        try:
+            result = plan()
+            msg = {"type": "report",
+                   "value": {"completed": is_resuming, "success": True, "result": result}}
+        except BaseException as ex:
+            msg = {"type": "report",
+                   "value": {"completed": False, "success": False, "result": str(ex)}}
 
         self._conn.send(msg)
-        logger.debug("Finished execution of a plan")
+        logger.debug("Finished execution of a task")
 
     def _load_new_plan(self, plan_name, plan_args, plan_kwargs):
         """
-        Loads a new plan into `self._plan_execution_queue`. The plan is
+        Loads a new plan into `self._execution_queue`. The plan is
         later picked up by the function running in the main thread and
         executed by the Run Engine.
         """
@@ -127,8 +127,52 @@ class RunEngineWorker(Process):
             plan_args_parsed.append(arg_parsed)
 
         # We are not parsing 'kwargs' at this time
-        plan = (plan_func, plan_args_parsed, plan_kwargs)
-        self._plan_execution_queue.put(plan)
+        def get_plan(plan_func, plan_args, plan_kwargs):
+            def plan():
+                if self._RE._state == 'panicked':
+                    raise RuntimeError("Run Engine is in the 'panicked' state. "
+                                       "You need to recreate the environment before you can run plans.")
+                elif self._RE._state != 'idle':
+                    raise RuntimeError(f"Run Engine is in '{self._RE._state}' state. "
+                                       "Stop or finish any running plan.")
+                else:
+                    result = self._RE(plan_func(*plan_args, **plan_kwargs))
+                return result
+            return plan
+
+        plan = get_plan(plan_func, plan_args_parsed, plan_kwargs)
+        # 'is_resuming' is true (we start a new plan that is supposedly runs to completion
+        #   as opposed to aborting/stopping/halting a plan)
+        self._execution_queue.put((plan, True))
+
+    def _continue_plan(self, option):
+        """
+        Continue/stop execution of a plan after it was paused.
+        """
+        logger.info(f"Continue plan execution with the option '{option}'")
+
+        available_options = ("resume", "abort", "stop", "halt")
+
+        # We are not parsing 'kwargs' at this time
+        def get_plan(option, available_options):
+            def plan():
+                if self._RE._state == 'panicked':
+                    raise RuntimeError("Run Engine is in the 'panicked' state. "
+                                       "You need to recreate the environment before you can run plans.")
+                elif self._RE._state != 'paused':
+                    raise RuntimeError(f"Run Engine is in '{self._RE._state}' state. "
+                                       f"Only 'paused' plan can be continued.")
+                elif option not in available_options:
+                    raise RuntimeError(f"Option '{option}' is not supported. "
+                                       f"Supported options: {available_options}")
+                else:
+                    result = getattr(self._RE, option)()
+                return result
+            return plan
+
+        plan = get_plan(option, available_options)
+        is_resuming = (option == "resume")
+        self._execution_queue.put((plan, is_resuming))
 
     def _conn_received(self, msg):
         """
@@ -136,24 +180,129 @@ class RunEngineWorker(Process):
         """
         type, value = msg["type"], msg["value"]
 
+        msg_ack = {"type": "acknowledge",
+                   "value": {"status": "unrecognized",
+                             "msg": msg,  # Send back the message
+                             "result": ""}}
+
         if type == "command" and value == "quit":
             # Stop the loop in main thread
-            logger.info("Closing RE Worker")
-            self._exit_event.set()
-            self._exit_loop_event.set()
+            logger.info("Closing RE Worker environment")
+            # TODO: probably the criteria on when the environment could be more precise.
+            #       For now simply assume that we can not close the environment in which
+            #       Run Engine is running using this method. Different method that kills
+            #       the worker process is needed.
+            if self._RE._state != "running":
+                try:
+                    self._exit_event.set()
+                    msg_ack["value"]["status"] = "accepted"
+                except Exception as ex:
+                    msg_ack["value"]["status"] = "error"
+                    msg_ack["value"]["result"] = str(ex)
+            else:
+                msg_ack["value"]["status"] = "rejected"
+                msg_ack["value"]["result"] = "Can not close the environment with running Run Engine. " \
+                                             "Stop the running plan and try again."
 
         if type == "plan":
-            plan_name = value["name"]
-            plan_args = value["args"]
-            plan_kwargs = value["kwargs"]
-            self._load_new_plan(plan_name, plan_args, plan_kwargs)
+            logger.info("Starting a plan")
+            # TODO: refine the criteria of acceptance of the new plan.
+            invalid_state = 0
+            if not self._execution_queue.empty():
+                invalid_state = 1
+            elif self._RE._state == 'running':
+                invalid_state = 2
+
+            if not invalid_state:  # == 0
+                try:
+                    plan_name = value["name"]
+                    plan_args = value["args"]
+                    plan_kwargs = value["kwargs"]
+                    self._load_new_plan(plan_name, plan_args, plan_kwargs)
+                    msg_ack["value"]["status"] = "accepted"
+                except Exception as ex:
+                    msg_ack["value"]["status"] = "error"
+                    msg_ack["value"]["result"] = str(ex)
+            else:
+                msg_ack["value"]["status"] = "rejected"
+                msg_list = ["the execution queue is not empty", "another plan is running"]
+                try:
+                    s = msg_list[invalid_state - 1]
+                except Exception:
+                    s = "UNDETERMINED CONDITION IS PRESENT"  # Shouldn't ever be printed
+                msg_ack["value"]["result"] = \
+                    f"Trying to run a plan (start Run Engine) while {s}.\n" \
+                    "This may indicate a serious issue with the plan queue execution mechanism.\n" \
+                    "Please report the issue to developers."
+
+        if type == "command" and value == "pause":
+            # Stop the loop in main thread
+            logger.info("Pausing Run Engine")
+            pausing_options = ("deferred", "immediate")
+            if self._RE._state == 'running':
+                try:
+                    option = msg["option"]
+                    if option not in pausing_options:
+                        raise RuntimeError(f"Option '{option}' is not supported. "
+                                           f"Available options: {pausing_options}")
+                    pid = os.getpid()
+
+                    def send_sigint():
+                        try:
+                            os.kill(pid, signal.SIGINT)
+                        except Exception:
+                            pass
+
+                    def send_second_sigint():
+                        ttime.sleep(0.05)
+                        send_sigint()
+
+                    send_sigint()  # 1st SIGINT
+                    # TODO: I am not sure that this is a good way to initiate immediate pause.
+                    #       It seems to work in this prototype, but it needs to be well understood
+                    #       before it can be used in production.
+                    if option == "immediate":
+                        # Run it in a separate thread. So that the function could return immediately.
+                        self._thread_sigint = threading.Thread(target=send_second_sigint,
+                                                               name="RE Worker 2nd SIGINT",
+                                                               daemon=True)
+                        self._thread_sigint.start()
+
+                    msg_ack["value"]["status"] = "accepted"
+                except Exception as ex:
+                    msg_ack["value"]["status"] = "error"
+                    msg_ack["value"]["result"] = str(ex)
+            else:
+                msg_ack["value"]["status"] = "rejected"
+                msg_ack["value"]["result"] = \
+                    "Run engine can be paused only in 'running' state. " \
+                    f"Current state: '{self._RE._state}'"
+
+        if type == "command" and value == "continue":
+            # Continue execution of the plan
+            if self._RE.state == 'paused':
+                try:
+                    option = msg["option"]
+                    logger.info(f"Run Engine: {option}")
+                    self._continue_plan(option)
+                    msg_ack["value"]["status"] = "accepted"
+                except Exception as ex:
+                    msg_ack["value"]["status"] = "error"
+                    msg_ack["value"]["result"] = str(ex)
+            else:
+                msg_ack["value"]["status"] = "rejected"
+                msg_ack["value"]["result"] = \
+                    "Run Engine must be in 'paused' state to continue. " \
+                    f"The state is '{self._RE._state}'"
+
+        self._conn.send(msg_ack)
 
     # ------------------------------------------------------------
 
     def _execute_in_main_thread(self):
         """
         Run this function to block the main thread. The function is polling
-        `self._plan_execution_queue` and executes the plans that are in the queue.
+        `self._execution_queue` and executes the plans that are in the queue.
         If the queue is empty, then the thread remains idle.
         """
         # This function blocks the main thread
@@ -163,23 +312,10 @@ class RunEngineWorker(Process):
             if self._exit_event.is_set():
                 break
             try:
-                plan_func, plan_args, plan_kwargs = self._plan_execution_queue.get(False)
-                self._execute_plan(plan_func, plan_args, plan_kwargs)
+                plan, is_resuming = self._execution_queue.get(False)
+                self._execute_plan(plan, is_resuming)
             except queue.Empty:
                 pass
-
-    async def _wait_for_exit(self):
-        """
-        The function waits for `self._exit_loop_event` to be set. Waiting for
-        the result of the returned futures ensures that all functions in the loop complete
-        before the process is destroyed.
-        """
-        # Create the event (must be created from the loop)
-        self._exit_loop_event = asyncio.Event()
-
-        # Wait for the event to be set somewhere else (as a response to command from
-        #   the server)
-        await self._exit_loop_event.wait()
 
     # ------------------------------------------------------------
 
@@ -190,10 +326,6 @@ class RunEngineWorker(Process):
         """
         self._exit_event.clear()
 
-        if not self._loop:
-            self._loop = get_bluesky_event_loop()
-            self._th = _ensure_event_loop_running(self._loop)
-
         self._RE = RunEngine({})
 
         bec = BestEffortCallback()
@@ -202,9 +334,7 @@ class RunEngineWorker(Process):
         # db = Broker.named('temp')
         # self._RE.subscribe(db.insert)
 
-        future = asyncio.run_coroutine_threadsafe(self._wait_for_exit(), self._loop)
-
-        self._plan_execution_queue = queue.Queue()
+        self._execution_queue = queue.Queue()
 
         self._thread_conn = threading.Thread(target=self._receive_packet_thread,
                                              name="RE Worker Receive")
@@ -212,9 +342,6 @@ class RunEngineWorker(Process):
 
         # Now make the main thread busy
         self._execute_in_main_thread()
-
-        # Wait for the coroutine to exit
-        future.result()
 
         self._thread_conn.join()
 

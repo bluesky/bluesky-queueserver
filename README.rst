@@ -20,36 +20,102 @@ Server for queueing plans
 Features
 --------
 
-A minimal example.
+This is demo version of the server that supports creation and closing of Run Engine execution environment, adding
+and removing items from the queue, checking the queue status and execution of the queue, pausing (immediate and
+deferred), resuming, aborting, stopping and halting plans, collection of data to 'temp' database.
 
-From a shell::
+The demo has limited data handling implemented. While it is relatively stable while testing the example
+commands, the shell may still freeze (e.g. if Ctrl-C is pressed while the RE environment is not closed).
+In this case the best way is to close the shell and start a new one (simply killing the process will not
+help).
+
+The server can be started from a shell as follows::
 
   python -m aiohttp.web -H 0.0.0.0 -P 8080 bluesky_queueserver.server:init_func
 
+The server is controlled from a different shell. Add plans to the queue::
 
-From Python ::
+  http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]]}'
+  http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
 
-  from ophyd.sim import motor, det
-  from bluesky.plans import count, scan
-  from bluesky_queueserver.plan import configure_plan
-  from bluesky import RunEngine
+The names of the plans and devices are strings. The strings are converted to references to plans and
+devices in the worker process. In this demo the server can recognize only 'det1', 'det2', 'motor' devices
+and 'count' and 'scan' plans. If items are added to the running queue and they
+are executed as part of the queue. If execution of the queue is finished before an item is added, then
+execution has to be started again (execution is stopped once an attempt is made to fetch an element
+from an empty queue).
 
+The last item can be removed from the back of the queue::
 
-  devices = {d.name: d for d in [motor, det]}
-  plans = {'count': count, 'scan': scan}
-  url = 'http://0.0.0.0:8080'
+  http POST 0.0.0.0:8080/pop_from_queue
 
-  plan = configure_plan(devices, plans, url)
+The number of entries in the queue may be checked as follows::
 
-  RE = RunEngine()
-  # be _very_ verbose
-  RE.msg_hook = print
-  RE.subscribe(print)
+  http GET 0.0.0.0:8080
 
-  RE(plan())
+The contents of the queue can be retrieved as follows::
 
+  http GET 0.0.0.0:8080/queue_view
 
-From a different shell::
+Before the queue can be executed, the worker environment must be created and initialized. This operation
+creates a new execution environment for Bluesky Run Engine and used to execute plans until it explicitly
+closed::
 
-   http POST 0.0.0.0:8080/add_to_queue plan:='{"plan":"count", "args":[["det"]]}'
-   http POST 0.0.0.0:8080/add_to_queue plan:='{"plan":"scan", "args":[["det"], "motor", -1, 1, 10]}'
+  http POST 0.0.0.0:8080/create_environment
+
+Execute the plans in the queue::
+
+  http POST 0.0.0.0:8080/process_queue
+
+Request to execute an empty queue is a valid operation that does nothing.
+
+Environment may be closed as follows::
+
+  http POST 0.0.0.0:8080/close_environment
+
+While a plan in a queue is executed, operation Run Engine can be paused. In the unlikely event
+if the request to pause is received while RunEngine is transitioning between two plans, the request
+may be rejected by the RE Worker. In this case it needs to be repeated. If Run Engine is in the paused
+state, plan execution can be resumed, aborted, stopped or halted. If the plan is aborted, stopped
+or halted, it is not removed from the plan queue (it remains the first in the queue) and execution
+of the queue is stopped. Execution of the queue may be started again if needed.
+
+Immediate pausing of the Run Engine (returns to the last checkpoint in the plan)::
+
+  http POST 0.0.0.0:8080/re_pause option="immediate"
+
+Deferred pausing of the Run Engine (plan is executed until the next checkpoint)::
+
+  http POST 0.0.0.0:8080/re_pause option="deferred"
+
+Resuming, aborting, stopping or halting of currently executed plan::
+
+  http POST 0.0.0.0:8080/re_continue option="resume"
+  http POST 0.0.0.0:8080/re_continue option="abort"
+  http POST 0.0.0.0:8080/re_continue option="stop"
+  http POST 0.0.0.0:8080/re_continue option="halt"
+
+There is minimal user protection features implemented that will prevent execution of
+the commands that are not supported in current state of the server. Error messages are printed
+in the terminal that is running the server along with output of Run Engine.
+
+There is demo of data collection capability. The instance of the QueueServer is keeping a reference
+to an instance of 'temp' Databroker, which is passed to the RE Worker at the time of creation and
+used to collect documents from Run Engine. Data from all plans executed during QueueServer session
+are accumulated in the 'temp' database. The table that contains Run IDs and UIDs of the runs in
+the databased can be printed on the screen by sending the command::
+
+  http POST 0.0.0.0:8080/print_db_uids
+
+The table will be printed in the QueueServer terminal::
+
+    ===================================================================
+                 The contents of 'temp' database.
+    -------------------------------------------------------------------
+    Run ID: 1   UID: bd621328-ffcf-409f-a668-0c303c0d287f
+    Run ID: 2   UID: e85f2f40-44e9-4097-be50-c27f42c4e201
+    Run ID: 3   UID: 1dec536d-3397-43c1-91a3-2af323452bfe
+    -------------------------------------------------------------------
+      Total of 3 runs were found in 'temp' database.
+    ===================================================================
+

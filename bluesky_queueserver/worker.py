@@ -19,6 +19,8 @@ from bluesky.plans import count, scan  # noqa: F401
 
 import logging
 logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 config_bluesky_logging(level='INFO')
 config_ophyd_logging(level='INFO')
@@ -40,7 +42,7 @@ class RunEngineWorker(Process):
 
         super().__init__(name="RE Worker")
 
-        # The end of bidirectional Pipe assigned to the worker (for communication with the server)
+        # The end of bidirectional Pipe assigned to the worker (for communication with Manager process)
         self._conn = conn
 
         self._exit_event = threading.Event()
@@ -111,7 +113,7 @@ class RunEngineWorker(Process):
         plan_kwargs: dict
             plan kwargs
         """
-        logger.info(f"Starting a plan {plan_name}")
+        logger.info(f"Starting a plan '{plan_name}'.")
 
         def ref_from_name(v):
             if isinstance(v, str):
@@ -222,7 +224,7 @@ class RunEngineWorker(Process):
 
         # Execute a plan
         if type == "plan":
-            logger.info("Starting a plan")
+            logger.info("Starting execution of a plan")
             # TODO: refine the criteria of acceptance of the new plan.
             invalid_state = 0
             if not self._execution_queue.empty():

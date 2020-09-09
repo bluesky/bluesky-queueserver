@@ -38,6 +38,10 @@ The server is controlled from a different shell. Add plans to the queue::
   http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]]}'
   http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
 
+The following plan runs for 10 seconds. It is convenient for testing pausing/resuming/stopping the plan::
+
+  http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
+
 The names of the plans and devices are strings. The strings are converted to references to plans and
 devices in the worker process. In this demo the server can recognize only 'det1', 'det2', 'motor' devices
 and 'count' and 'scan' plans. If items are added to the running queue and they

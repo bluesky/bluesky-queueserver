@@ -2,8 +2,6 @@ from multiprocessing import Process
 import threading
 import queue
 import time as ttime
-import os
-import signal
 from collections.abc import Iterable
 
 from bluesky import RunEngine
@@ -53,9 +51,6 @@ class RunEngineWorker(Process):
 
         # The thread that receives packets from the pipe 'self._conn'
         self._thread_conn = None
-
-        # Thread used for to send the second sigint after short timeout
-        self._thread_sigint = None
 
         self._db = db
 
@@ -262,35 +257,17 @@ class RunEngineWorker(Process):
             # Stop the loop in main thread
             logger.info("Pausing Run Engine")
             pausing_options = ("deferred", "immediate")
+            # TODO: the question is whether it is possible or should be allowed to pause a plan in
+            #       any other state than 'running'???
             if self._RE._state == 'running':
                 try:
                     option = msg["option"]
                     if option not in pausing_options:
                         raise RuntimeError(f"Option '{option}' is not supported. "
                                            f"Available options: {pausing_options}")
-                    pid = os.getpid()
 
-                    def send_sigint():
-                        try:
-                            os.kill(pid, signal.SIGINT)
-                        except Exception:
-                            pass
-
-                    def send_second_sigint():
-                        ttime.sleep(0.05)
-                        send_sigint()
-
-                    send_sigint()  # 1st SIGINT
-                    # TODO: I am not sure that this is a good way to initiate immediate pause.
-                    #       It seems to work in this prototype, but it needs to be well understood
-                    #       before it can be used in production.
-                    if option == "immediate":
-                        # Run it in a separate thread. So that the function could return immediately.
-                        self._thread_sigint = threading.Thread(target=send_second_sigint,
-                                                               name="RE Worker 2nd SIGINT",
-                                                               daemon=True)
-                        self._thread_sigint.start()
-
+                    defer = {'deferred': True, 'immediate': False}[option]
+                    self._RE.request_pause(defer=defer)
                     msg_ack["value"]["status"] = "accepted"
                 except Exception as ex:
                     msg_ack["value"]["status"] = "error"

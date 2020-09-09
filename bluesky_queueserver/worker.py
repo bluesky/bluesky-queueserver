@@ -266,7 +266,7 @@ class RunEngineWorker(Process):
                         raise RuntimeError(f"Option '{option}' is not supported. "
                                            f"Available options: {pausing_options}")
 
-                    defer = (option == "deferred")
+                    defer = {'deferred': True, 'immediate': False}[option]
                     self._RE.request_pause(defer=defer)
                     msg_ack["value"]["status"] = "accepted"
                 except Exception as ex:

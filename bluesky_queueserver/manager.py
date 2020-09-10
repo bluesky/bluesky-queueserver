@@ -222,7 +222,7 @@ class RunEngineManager:
             self._queue_plans.append(plan)
         else:
             plan = {}
-        return {}
+        return plan
 
     async def _pop_from_queue_handler(self, request):
         """

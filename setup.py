@@ -32,7 +32,6 @@ with open(path.join(here, 'requirements.txt')) as requirements_file:
     requirements = [line for line in requirements_file.read().splitlines()
                     if not line.startswith('#')]
 
-
 setup(
     name='bluesky-queueserver',
     version=versioneer.get_version(),
@@ -46,7 +45,7 @@ setup(
     packages=find_packages(exclude=['docs', 'tests']),
     entry_points={
         'console_scripts': [
-            # 'command = some.module:some_function',
+            'qserver = bluesky_queueserver.qserver_cli:qserver'
         ],
     },
     include_package_data=True,

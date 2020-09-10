@@ -36,6 +36,12 @@ and then kill the processes::
 
   $ kill -9 <pid>
 
+Installation of QueueServer from source::
+
+  pip install -e .
+
+This also sets up an entry point for the 'qserver' CLI tool.
+
 The RE Manager and Web Server are running as two separate applications. To run the demo you will need to open
 three shells: the first for RE Manager, the second for Web Server and the third to send HTTP requests to
 the server.
@@ -138,3 +144,56 @@ The table will be printed in the RE Manager terminal::
       Total of 3 runs were found in 'temp' database.
     ===================================================================
 
+The 'qserver' CLI tool can be started from a separate shell. Display help options::
+
+  qserver -h
+
+Run 'ping' command (get status from RE Manager)::
+
+  qserver -c ping
+
+Run 'qserver' in the monitoring mode (send 'ping' request to RE Manager every second)::
+
+  qserver -c monitor
+
+Add a new plan to the queue::
+
+  qserver -c add_to_queue -v '{"name":"count", "args":[["det1", "det2"]]}'
+  qserver -c add_to_queue -v '{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
+  qserver -c add_to_queue -v '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
+
+View the contents of the queue::
+
+  qserver -c queue_view
+
+Pop the last element from queue::
+
+  qserver -c pop_from_queue
+
+Create new RE environment::
+
+  qserver -c create_environment
+
+Execute the plan queue::
+
+  qserver -c process_queue
+
+Close and destroy RE environment::
+
+  qserver -c close_environment
+
+Pause the Run Engine (and the queue)::
+
+  qserver -c re_pause -v immediate
+  qserver -c re_pause -v deferred
+
+Countinue paused plan::
+
+  qserver -c re_continue -v resume
+  qserver -c re_continue -v abort
+  qserver -c re_continue -v stop
+  qserver -c re_continue -v halt
+
+Print UIDs in 'temp' Databroker::
+
+  qserver -c print_db_uids

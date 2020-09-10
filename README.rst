@@ -152,6 +152,11 @@ Run 'ping' command (get status from RE Manager)::
 
   qserver -c ping
 
+Current default address of RE Manager is set to tcp://localhost:5555, but different
+address may be passed as a parameter::
+
+  qserver -c ping -a "tcp://localhost:5555"
+
 Run 'qserver' in the monitoring mode (send 'ping' request to RE Manager every second)::
 
   qserver -c monitor

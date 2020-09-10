@@ -33,11 +33,15 @@ http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"scan", "args":[["det1", "det
 
 class CliClient:
 
-    def __init__(self):
+    def __init__(self, *, address=None):
         # ZeroMQ communication
         self._ctx = zmq.asyncio.Context()
         self._zmq_socket = None
-        self._zmq_server_address = "tcp://localhost:5555"
+
+        if address is None:
+            self._zmq_server_address = "tcp://localhost:5555"
+        else:
+            self._zmq_server_address = address
 
         # The attributes for storing output command and received input
         self._msg_command_out = ""
@@ -153,7 +157,7 @@ def qserver():
     parser.add_argument('--value', '-v', dest="value", action='store', default=None,
                         help="Arguments that are sent with the command. Currently the arguments "
                              "must be represented as a string that contains a python dictionary.")
-    parser.add_argument('--address', '-a', action='store',
+    parser.add_argument('--address', '-a', dest="address", action='store', default=None,
                         help="Address of the server (e.g. 'tcp://localhost:5555', quoted string)")
 
     args = parser.parse_args()
@@ -181,7 +185,7 @@ def qserver():
         command = "ping"
         print("Running QSever monitor. Press Ctrl-C to exit ...")
 
-    re_server = CliClient()
+    re_server = CliClient(address=args.address)
     try:
         while True:
             re_server.set_msg_out(command, value)

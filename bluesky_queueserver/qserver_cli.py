@@ -1,10 +1,11 @@
 import asyncio
+
 import ast
 import time as ttime
 from datetime import datetime
 import pprint
 import re
-
+import sys
 import zmq
 import zmq.asyncio
 import argparse
@@ -167,7 +168,7 @@ def qserver():
     if command not in supported_commands:
         print(f"Command '{command}' is not supported. Please enter a valid command.\n"
               f"Call 'qserver' with the option '-h' to see full list of supported commands.")
-        return
+        sys.exit(1)
 
     # Value is a string representing a python dictionary. We need to convert it into a dictionary.
     #   Also don't evaluate the expression that is a non-quoted string with alphanumeric characters.
@@ -177,7 +178,7 @@ def qserver():
         except Exception as ex:
             print(f"Failed to parse value {value}: {str(ex)}. "
                   f"The value must be a valid Python dictionary")
-            return
+            sys.exit(1)
 
     # 'ping' command will be sent to RE Manager periodically if 'monitor' command is entered
     monitor_on = (command == "monitor")

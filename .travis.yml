@@ -1,5 +1,8 @@
 language: python
 
+services:
+  - redis-server
+
 env:
   global:
     # Doctr deploy key for bluesky/bluesky-queueserver
@@ -42,12 +45,26 @@ install:
 script:
   - coverage run -m pytest  # Run the tests and check for test coverage.
   - coverage report -m  # Generate test coverage report.
+  - python -m bluesky_queueserver.manager &
+  - qserver -c add_to_queue -v '{"name":"count", "args":[["det1", "det2"]]}'
+  - qserver -c add_to_queue -v '{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
+  -    qserver -c add_to_queue -v '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
+  - qserver -c queue_view
+  - qserver -c pop_from_queue
+  - qserver -c process_queue
+  - qserver -c add_to_queue -v '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
+  - qserver -c process_queue
+  - qserver -c re_pause -v immediate
+  - qserver -c re_continue -v resume
+  - qserver -c add_to_queue -v '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
+  - qserver -c process_queue
   - set -e
   - if [ BUILD_DOCS == 'true' ]; then
       make -C docs html;
       pip install doctr;
       doctr deploy --built-docs docs/build/html .;
     fi
+
 
 after_success:
   # - if [ $SUBMIT_CODECOV == 'true' ]; then codecov; fi;

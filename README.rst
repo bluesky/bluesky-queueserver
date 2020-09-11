@@ -48,7 +48,7 @@ the server.
 
 In the first shell start RE Manager::
 
-  python -m bluesky_queueserver.manager
+  python -m bluesky_queueserver.start_manager
 
 The Web Server should be started from the second shell as follows::
 

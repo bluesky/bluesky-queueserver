@@ -7,10 +7,6 @@ from collections.abc import Iterable
 from bluesky import RunEngine
 
 from bluesky.callbacks.best_effort import BestEffortCallback
-from bluesky.log import config_bluesky_logging
-
-from ophyd.log import config_ophyd_logging
-
 from databroker import Broker
 
 # The following plans/devices must be imported (otherwise plan parsing wouldn't work)
@@ -22,8 +18,8 @@ logger = logging.getLogger(__name__)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-config_bluesky_logging(level='INFO')
-config_ophyd_logging(level='INFO')
+logging.getLogger('bluesky').setLevel('WARNING')
+logging.getLogger('ophyd').setLevel('WARNING')
 
 mpl_logger = logging.getLogger("matplotlib")
 mpl_logger.setLevel(logging.WARNING)

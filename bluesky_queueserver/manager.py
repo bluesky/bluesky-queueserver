@@ -406,7 +406,7 @@ class RunEngineManager(Process):
     async def _kill_manager_handler(self, request):
         # This is expected to block the event loop forever
         while True:
-            ttime.sleep(3000)  # Reasonable large time
+            ttime.sleep(10)
 
     async def _zmq_execute(self, msg):
         command = msg["command"]

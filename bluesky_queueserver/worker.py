@@ -67,7 +67,7 @@ class RunEngineWorker(Process):
                     msg = self._conn.recv()
                     self._conn_received(msg)
                 except Exception as ex:
-                    logger.error(f"Exception occurred while waiting for packet: {ex}")
+                    logger.exception("Exception occurred while waiting for packet: %s" % str(ex))
                     break
 
     def _execute_plan(self, plan, is_resuming):

@@ -2,6 +2,7 @@
 aiohttp
 aioredis
 bluesky
+databroker
 ophyd
 pyzmq
 requests

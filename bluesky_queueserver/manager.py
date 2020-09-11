@@ -1,4 +1,6 @@
 import asyncio
+import json
+import aioredis
 import zmq
 import zmq.asyncio
 from multiprocessing import Pipe
@@ -41,8 +43,6 @@ class RunEngineManager:
 
         self._thread_conn = None
 
-        self._queue_plans = []
-
         self._loop = None
 
         self._start_conn_pipes()
@@ -52,6 +52,7 @@ class RunEngineManager:
         self._ctx = zmq.asyncio.Context()
         self._zmq_socket = None
         self._ip_zmq_server = "tcp://*:5555"
+        self._r_worker = None
 
         # Create Databroker instance. This reference is passed to RE Worker process.
         # The experimental data can later be retrieved from the database.
@@ -91,16 +92,19 @@ class RunEngineManager:
         self._manager_conn.send(msg)
         self._re_worker.join()
 
-    def _run_task(self):
+    async def _run_task(self):
         """
         Upload the plan to the worker process for execution.
         Plan in the queue is represented as a dictionary with the keys "name" (plan name),
         "args" (list of args), "kwargs" (list of kwargs). Only the plan name is mandatory.
         Names of plans and devices are strings.
         """
-        if self._queue_plans:
-            logger.info(f"Starting new plan: {len(self._queue_plans)} plans are left in the queue")
-            new_plan = self._queue_plans[0]
+        new_plan = await self._r_pool.lpop('plan_queue')
+        if new_plan is not None:
+            await self._r_pool.set('running_plan', json.dumps(new_plan))
+            new_plan = json.loads(new_plan)
+            pending_plans = await self._r_pool.llen('plan_queue')
+            logger.info(f"Starting new plan: {pending_plans} plans are left in the queue")
 
             plan_name = new_plan["name"]
             args = new_plan["args"] if "args" in new_plan else []
@@ -171,28 +175,30 @@ class RunEngineManager:
                     break
 
     def _conn_received(self, msg):
-        type, value = msg["type"], msg["value"]
+        async def process_message(msg):
+            type, value = msg["type"], msg["value"]
 
-        if type == "report":
-            completed = value["completed"]
-            success = value["success"]
-            result = value["result"]
-            logger.info(f"Report received from RE Worker:\nsuccess={success}\n{result}\n)")
-            if completed and success:
-                # Executed plan is removed from the queue only after it is successfully completed.
-                # If a plan was not completed or not successful (exception was raised), then
-                # execution of the queue is stopped. It can be restarted later (failed or
-                # interrupted plan will still be in the queue.
-                self._queue_plans.pop(0)
-                self._run_task()
+            if type == "report":
+                completed = value["completed"]
+                success = value["success"]
+                result = value["result"]
+                logger.info(f"Report received from RE Worker:\nsuccess={success}\n{result}\n)")
+                if completed and success:
+                    # Executed plan is removed from the queue only after it is successfully completed.
+                    # If a plan was not completed or not successful (exception was raised), then
+                    # execution of the queue is stopped. It can be restarted later (failed or
+                    # interrupted plan will still be in the queue.
+                    await self._r_pool.set('running_plan', '')
+                    await self._run_task()
 
-        if type == "acknowledge":
-            status = value["status"]
-            result = value["result"]
-            msg_original = value["msg"]
-            logger.info("Acknownegement received from RE Worker:\n"
-                        f"Status: '{status}'\nResult: '{result}'\nMessage: {msg_original}")
+            if type == "acknowledge":
+                status = value["status"]
+                result = value["result"]
+                msg_original = value["msg"]
+                logger.info("Acknownegement received from RE Worker:\n"
+                            f"Status: '{status}'\nResult:' {result}'\nMessage: {msg_original}")
 
+        asyncio.create_task(process_message(msg))
     # =========================================================================
     #    REST API handlers
 
@@ -201,7 +207,8 @@ class RunEngineManager:
         May be called to get response from the Manager. Returns the number of plans in the queue.
         """
         logger.info("Processing 'Hello' request.")
-        msg = {"msg": f"Hello, world! There are {len(self._queue_plans)} plans enqueed."}
+        pending_plans = await self._r_pool.llen('plan_queue')
+        msg = {"msg": f"Hello, world! There are {pending_plans} plans enqueed."}
         return msg
 
     async def _queue_view_handler(self, request):
@@ -209,7 +216,9 @@ class RunEngineManager:
          Returns the contents of the current queue.
          """
         logger.info("Returning current queue.")
-        return {"queue": self._queue_plans}
+        all_plans = await self._r_pool.lrange('plan_queue', 0, -1)
+
+        return {"queue": [json.loads(_) for _ in all_plans]}
 
     async def _add_to_queue_handler(self, request):
         """
@@ -219,7 +228,7 @@ class RunEngineManager:
         logger.info(f"Adding new plan to the queue: {request}")
         if "plan" in request:
             plan = request["plan"]
-            self._queue_plans.append(plan)
+            await self._r_pool.rpush('plan_queue', json.dumps(plan))
         else:
             plan = {}
         return plan
@@ -229,9 +238,9 @@ class RunEngineManager:
         Pop the last item from back of the queue
         """
         logger.info("Popping the last item from the queue.")
-        if self._queue_plans:
-            plan = self._queue_plans.pop()  # Pops from the back of the queue
-            return plan
+        plan = await self._r_pool.rpop('plan_queue')
+        if plan is not None:
+            return json.loads(plan)
         else:
             return {}  # No items
 
@@ -269,7 +278,7 @@ class RunEngineManager:
         """
         logger.info("Starting queue processing.")
         if self._environment_exists:
-            self._run_task()
+            await self._run_task()
             success, msg = True, ""
         else:
             success, msg = False, "Environment does not exist. Can not start the task."
@@ -358,6 +367,9 @@ class RunEngineManager:
         This function is supposed to be executed by asyncio.run() to start the manager.
         """
         self._loop = asyncio.get_running_loop()
+        self._r_pool = await aioredis.create_redis_pool(
+            'redis://localhost', encoding='utf8'
+        )
 
         logger.info("Starting ZeroMQ server")
         self._zmq_socket = self._ctx.socket(zmq.REP)

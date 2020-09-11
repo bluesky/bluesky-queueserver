@@ -5,6 +5,7 @@ import zmq
 import zmq.asyncio
 from multiprocessing import Process
 import threading
+import time as ttime
 
 from .worker import DB
 
@@ -405,7 +406,7 @@ class RunEngineManager(Process):
     async def _kill_manager_handler(self, request):
         # This is expected to block the event loop forever
         while True:
-            pass
+            ttime.sleep(3000)  # Reasonable large time
 
     async def _zmq_execute(self, msg):
         command = msg["command"]

@@ -72,6 +72,7 @@ class CliClient:
             "re_pause": "re_pause",
             "re_continue": "re_continue",
             "print_db_uids": "print_db_uids",
+            "kill_manager": "kill_manager"
         }
         return command_dict
 

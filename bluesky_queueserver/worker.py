@@ -11,7 +11,7 @@ from bluesky.log import config_bluesky_logging
 
 from ophyd.log import config_ophyd_logging
 
-# from databroker import Broker
+from databroker import Broker
 
 # The following plans/devices must be imported (otherwise plan parsing wouldn't work)
 from ophyd.sim import det1, det2, motor  # noqa: F401
@@ -28,6 +28,8 @@ config_ophyd_logging(level='INFO')
 mpl_logger = logging.getLogger("matplotlib")
 mpl_logger.setLevel(logging.WARNING)
 
+DB = [Broker.named('temp')]
+
 
 class RunEngineWorker(Process):
     """
@@ -38,9 +40,9 @@ class RunEngineWorker(Process):
     conn
         The end of bidirectional (input/output) pipe.
     """
-    def __init__(self, *, conn, db):
+    def __init__(self, *, conn):
 
-        super().__init__(name="RE Worker")
+        super().__init__(name="RE Worker Process")
 
         # The end of bidirectional Pipe assigned to the worker (for communication with Manager process)
         self._conn = conn
@@ -54,7 +56,7 @@ class RunEngineWorker(Process):
         # The thread that receives packets from the pipe 'self._conn'
         self._thread_conn = None
 
-        self._db = db
+        self._db = DB[0]
 
     def _receive_packet_thread(self):
         """
@@ -90,10 +92,12 @@ class RunEngineWorker(Process):
         try:
             result = plan()
             msg = {"type": "report",
-                   "value": {"completed": is_resuming, "success": True, "result": result}}
+                   "value": {"action": "plan_exit", "completed": is_resuming,
+                             "success": True, "result": result}}
         except BaseException as ex:
             msg = {"type": "report",
-                   "value": {"completed": False, "success": False, "result": str(ex)}}
+                   "value": {"action": "plan_exit", "completed": False,
+                             "success": False, "result": str(ex)}}
 
         self._conn.send(msg)
         logger.debug("Finished execution of a task")
@@ -344,9 +348,19 @@ class RunEngineWorker(Process):
                                              name="RE Worker Receive")
         self._thread_conn.start()
 
+        # Environment is initialized: send a report
+        msg = {"type": "report",
+               "value": {"action": "environment_created"}}
+        self._conn.send(msg)
+
         # Now make the main thread busy
         self._execute_in_main_thread()
 
         self._thread_conn.join()
 
         del self._RE
+
+        # Finally send a report
+        msg = {"type": "report",
+               "value": {"action": "environment_closed"}}
+        self._conn.send(msg)

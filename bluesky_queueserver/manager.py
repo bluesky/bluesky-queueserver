@@ -3,12 +3,10 @@ import json
 import aioredis
 import zmq
 import zmq.asyncio
-from multiprocessing import Pipe
+from multiprocessing import Process
 import threading
 
-from .worker import RunEngineWorker
-
-from databroker import Broker
+from .worker import DB
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
@@ -17,7 +15,6 @@ logger.setLevel(logging.DEBUG)
 
 db_logger = logging.getLogger("databroker")
 db_logger.setLevel(logging.INFO)
-
 
 """
 #  The following plans that can be used to test the syste
@@ -32,65 +29,107 @@ http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"scan", "args":[["det1", "det
 """
 
 
-class RunEngineManager:
+class RunEngineManager(Process):
 
-    def __init__(self):
+    def __init__(self, *, conn_watchdog, conn_worker):
+        super().__init__(name="RE Manager Process")
         self._re_worker = None
-        self._manager_conn = None
-        self._worker_conn = None
+
+        self._watchdog_conn = conn_watchdog
+        self._worker_conn = conn_worker
 
         self._environment_exists = False
 
-        self._thread_conn = None
+        # Threads must be started in the 'run' function so that they run in the correct process.
+        self._thread_conn_worker = None
+        self._thread_conn_watchdog = None
 
         self._loop = None
-
-        self._start_conn_pipes()
-        self._start_conn_thread()
 
         # Communication with the server using ZMQ
         self._ctx = zmq.asyncio.Context()
         self._zmq_socket = None
         self._ip_zmq_server = "tcp://*:5555"
-        self._r_worker = None
 
-        # Create Databroker instance. This reference is passed to RE Worker process.
-        # The experimental data can later be retrieved from the database.
-        # This subscription mechanism is strictly for the demo, since using reference
-        # to the databroker in several processes may not be a good idea. Here it is assumed
-        # that only one process access Databroker at a time.
-        self._db = Broker.named('temp')
+        self._r_pool = None
 
-    def _start_conn_pipes(self):
-        self._manager_conn, self._worker_conn = Pipe()
+        self._heartbeat_generator_task = None  # Task for heartbeat generator
 
-    def _start_conn_thread(self):
-        self._thread_conn = threading.Thread(target=self._receive_packet_thread,
-                                             name="RE Server Comm",
-                                             daemon=True)
-        self._thread_conn.start()
+        self._event_worker_created = None
+        self._event_worker_closed = None
+        self._fut_is_worker_alive = None
+
+    def _start_conn_threads(self):
+        self._thread_conn_watchdog = threading.Thread(target=self._receive_packet_watchdog_thread,
+                                                      name="RE QServer Comm1",
+                                                      daemon=True)
+        self._thread_conn_watchdog.start()
+        self._thread_conn_worker = threading.Thread(target=self._receive_packet_worker_thread,
+                                                    name="RE QServer Comm2",
+                                                    daemon=True)
+        self._thread_conn_worker.start()
+
+    async def _heartbeat_generator(self):
+        """
+        Heartbeat generator for Watchdog (indicates that the loop is running)
+        """
+        t_period = 0.5
+        msg = {"type": "notification", "value": "alive"}
+        while True:
+            await asyncio.sleep(t_period)
+            self._watchdog_conn.send(msg)
 
     # ======================================================================
     #   Functions that implement functionality of the server
 
-    def _start_re_worker(self):
+    async def _start_re_worker(self):
         """
         Creates worker process.
         """
-        # Passing reference to Databroker to a different process may be not a great idea.
-        # This is here strictly for the demo.
-        self._re_worker = RunEngineWorker(conn=self._worker_conn, db=self._db)
-        self._re_worker.start()
+        self._event_worker_created = asyncio.Event()
 
-    def _stop_re_worker(self):
+        msg = {"type": "command", "value": "start_re_worker"}
+        self._watchdog_conn.send(msg)
+
+        logger.debug("Waiting for RE worker to start ...")
+        await self._event_worker_created.wait()
+        logger.debug("Worker started successfully.")
+
+    async def _started_re_worker(self):
+        # Report from RE Worker received: environment was created successfully.
+        self._event_worker_created.set()
+
+    async def _stop_re_worker(self):
         """
-        Closes Run Engine execution environment (destroys the worker process). Running plan needs
-        to be stopped before the environment can be closed. Separate function could be added that could
-        kill unresponsive process that can not be closed gracefully.
+        Closes Run Engine execution environment in orderly way. Running plan needs
+        to be stopped before the environment can be closed.
         """
+        self._event_worker_closed = asyncio.Event()
+
         msg = {"type": "command", "value": "quit"}
-        self._manager_conn.send(msg)
-        self._re_worker.join()
+        self._worker_conn.send(msg)
+
+        logger.debug("Waiting for RE Worker to close ...")
+        await self._event_worker_closed.wait()
+        logger.debug("RE Worker to closed")
+
+        msg = {"type": "command", "value": "join_re_worker"}
+        self._watchdog_conn.send(msg)
+
+    async def _stopped_re_worker(self):
+        # Report from RE Worker received: environment was closed successfully.
+        self._event_worker_closed.set()
+
+    async def _is_worker_alive(self):
+        self._fut_is_worker_alive = self._loop.create_future()
+
+        msg = {"type": "request", "value": "is_worker_alive"}
+        self._watchdog_conn.send(msg)
+
+        return await self._fut_is_worker_alive
+
+    async def _is_worker_alive_received(self, is_alive):
+        self._fut_is_worker_alive.set_result(is_alive)
 
     async def _run_task(self):
         """
@@ -99,12 +138,13 @@ class RunEngineManager:
         "args" (list of args), "kwargs" (list of kwargs). Only the plan name is mandatory.
         Names of plans and devices are strings.
         """
+        n_pending_plans = await self._r_pool.llen('plan_queue')
+        logger.info(f"Starting a new plan: {n_pending_plans} plans are left in the queue")
+
         new_plan = await self._r_pool.lpop('plan_queue')
         if new_plan is not None:
             await self._r_pool.set('running_plan', json.dumps(new_plan))
             new_plan = json.loads(new_plan)
-            pending_plans = await self._r_pool.llen('plan_queue')
-            logger.info(f"Starting new plan: {pending_plans} plans are left in the queue")
 
             plan_name = new_plan["name"]
             args = new_plan["args"] if "args" in new_plan else []
@@ -117,7 +157,7 @@ class RunEngineManager:
                              }
                    }
 
-            self._manager_conn.send(msg)
+            self._worker_conn.send(msg)
             return True
         else:
             logger.info("Queue is empty")
@@ -129,14 +169,14 @@ class RunEngineManager:
         the request to pause to be accepted by RE Worker.
         """
         msg = {"type": "command", "value": "pause", "option": option}
-        self._manager_conn.send(msg)
+        self._worker_conn.send(msg)
 
     def _continue_run_engine(self, option):
         """
         Continue handling of a paused plan.
         """
         msg = {"type": "command", "value": "continue", "option": option}
-        self._manager_conn.send(msg)
+        self._worker_conn.send(msg)
 
     def _print_db_uids(self):
         """
@@ -147,9 +187,10 @@ class RunEngineManager:
         print("             The contents of 'temp' database.")
         print("-------------------------------------------------------------------")
         n_runs = 0
+        db_instance = DB[0]
         for run_id in range(1, 100000):
             try:
-                hdr = self._db[run_id]
+                hdr = db_instance[run_id]
                 uid = hdr.start["uid"]
                 n_runs += 1
                 print(f"Run ID: {run_id}   UID: {uid}")
@@ -162,34 +203,53 @@ class RunEngineManager:
     # =======================================================================
     #   Functions for communication with the worker process
 
-    def _receive_packet_thread(self):
+    def _receive_packet_watchdog_thread(self):
         while True:
-            if self._manager_conn.poll(0.1):
+            if self._watchdog_conn.poll(0.1):
                 try:
-                    msg = self._manager_conn.recv()
-                    logger.debug(f"Message received from RE Worker: {msg}")
+                    msg = self._watchdog_conn.recv()
+                    logger.debug(f"Message Watchdog->Manager received: '{msg}'")
                     # Messages should be handled in the event loop
-                    self._loop.call_soon_threadsafe(self._conn_received, msg)
+                    self._loop.call_soon_threadsafe(self._conn_watchdog_received, msg)
                 except Exception as ex:
                     logger.error(f"Exception occurred while waiting for packet: {ex}")
                     break
 
-    def _conn_received(self, msg):
+    def _receive_packet_worker_thread(self):
+        while True:
+            if self._worker_conn.poll(0.1):
+                try:
+                    msg = self._worker_conn.recv()
+                    logger.debug(f"Message received from RE Worker: {msg}")
+                    # Messages should be handled in the event loop
+                    self._loop.call_soon_threadsafe(self._conn_worker_received, msg)
+                except Exception as ex:
+                    logger.error(f"Exception occurred while waiting for packet: {ex}")
+                    break
+
+    def _conn_worker_received(self, msg):
         async def process_message(msg):
             type, value = msg["type"], msg["value"]
 
             if type == "report":
-                completed = value["completed"]
-                success = value["success"]
-                result = value["result"]
-                logger.info(f"Report received from RE Worker:\nsuccess={success}\n{result}\n)")
-                if completed and success:
-                    # Executed plan is removed from the queue only after it is successfully completed.
-                    # If a plan was not completed or not successful (exception was raised), then
-                    # execution of the queue is stopped. It can be restarted later (failed or
-                    # interrupted plan will still be in the queue.
-                    await self._r_pool.set('running_plan', '')
-                    await self._run_task()
+                action = value["action"]
+                if action == "plan_exit":
+                    completed = value["completed"]
+                    success = value["success"]
+                    result = value["result"]
+                    logger.info(f"Report received from RE Worker:\nsuccess={success}\n{result}\n)")
+                    if completed and success:
+                        # Executed plan is removed from the queue only after it is successfully completed.
+                        # If a plan was not completed or not successful (exception was raised), then
+                        # execution of the queue is stopped. It can be restarted later (failed or
+                        # interrupted plan will still be in the queue.
+                        await self._r_pool.set('running_plan', '')
+                        await self._run_task()
+
+                elif action == "environment_created":
+                    await self._started_re_worker()
+                elif action == "environment_closed":
+                    await self._stopped_re_worker()
 
             if type == "acknowledge":
                 status = value["status"]
@@ -199,6 +259,19 @@ class RunEngineManager:
                             f"Status: '{status}'\nResult:' {result}'\nMessage: {msg_original}")
 
         asyncio.create_task(process_message(msg))
+
+    def _conn_watchdog_received(self, msg):
+        async def process_message(msg):
+            type, value = msg["type"], msg["value"]
+            if type == "result":
+                request = value["request"]
+                if request == "is_worker_alive":
+                    await self._is_worker_alive_received(value["result"])
+            if type == "report":
+                logger.info(f"Report Watchdog->Re Manager was received: {msg}")
+
+        asyncio.create_task(process_message(msg))
+
     # =========================================================================
     #    REST API handlers
 
@@ -250,7 +323,7 @@ class RunEngineManager:
         """
         logger.info("Creating the new RE environment.")
         if not self._environment_exists:
-            self._start_re_worker()
+            await self._start_re_worker()
             self._environment_exists = True
             success, msg = True, ""
         else:
@@ -264,7 +337,7 @@ class RunEngineManager:
         """
         logger.info("Closing current RE environment.")
         if self._environment_exists:
-            self._stop_re_worker()
+            await self._stop_re_worker()
             self._environment_exists = False
             success, msg = True, ""
         else:
@@ -329,6 +402,11 @@ class RunEngineManager:
         self._print_db_uids()
         return {"success": True, "msg": ""}
 
+    async def _kill_manager_handler(self, request):
+        # This is expected to block the event loop forever
+        while True:
+            pass
+
     async def _zmq_execute(self, msg):
         command = msg["command"]
         value = msg["value"]
@@ -343,6 +421,7 @@ class RunEngineManager:
             "re_pause": "_re_pause_handler",
             "re_continue": "_re_continue_handler",
             "print_db_uids": "_print_db_uids_handler",
+            "kill_manager": "_kill_manager_handler",
         }
 
         try:
@@ -367,9 +446,17 @@ class RunEngineManager:
         This function is supposed to be executed by asyncio.run() to start the manager.
         """
         self._loop = asyncio.get_running_loop()
+
+        self._start_conn_threads()
+
+        # Set the environment state based on whether the worker process is alive (request Watchdog)
+        self._environment_exists = await self._is_worker_alive()
+
+        # Start heartbeat generator
+        self._heartbeat_generator_task = asyncio.ensure_future(self._heartbeat_generator(), loop=self._loop)
+
         self._r_pool = await aioredis.create_redis_pool(
-            'redis://localhost', encoding='utf8'
-        )
+            'redis://localhost', encoding='utf8')
 
         logger.info("Starting ZeroMQ server")
         self._zmq_socket = self._ctx.socket(zmq.REP)
@@ -387,10 +474,19 @@ class RunEngineManager:
             logger.info(f"ZeroMQ server sending response: {msg_out}")
             await self._zmq_send(msg_out)
 
+    # ------------------------------------------------------------
 
-if __name__ == "__main__":
-    re_manager = RunEngineManager()
-    try:
-        asyncio.run(re_manager.zmq_server_comm())
-    except KeyboardInterrupt:
-        logger.info("The application was stopped")
+    def run(self):
+        """
+        Overrides the `run()` function of the `multiprocessing.Process` class. Called
+        by the `start` method.
+        """
+        logger.info("Starting RE Manager process")
+        try:
+            asyncio.run(self.zmq_server_comm())
+        except Exception as ex:
+            logger.info("Exiting RE Manager with exception %s" % str(ex))
+        except KeyboardInterrupt:
+            # TODO: RE Manager must be orderly closed before Watchdog module is stopped.
+            #   Right now it is just killed by SIGINT.
+            logger.info("RE Manager Process was stopped by SIGINT. Handling of Ctrl-C has to be revised!!!")

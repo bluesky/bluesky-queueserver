@@ -20,20 +20,41 @@ Server for queueing plans
 Features
 --------
 
-This is demo version of the server that supports creation and closing of Run Engine execution environment, adding
+This is demo version of the QueueServer that supports creation and closing of Run Engine execution environment, adding
 and removing items from the queue, checking the queue status and execution of the queue, pausing (immediate and
-deferred), resuming, aborting, stopping and halting plans, collection of data to 'temp' database.
+deferred), resuming, aborting, stopping and halting plans, collection of data to 'temp' Databroker.
 
-The demo has limited data handling implemented. While it is relatively stable while testing the example
-commands, the shell may still freeze (e.g. if Ctrl-C is pressed while the RE environment is not closed).
-In this case the best way is to close the shell and start a new one (simply killing the process will not
-help).
+Implementation of error handling is very limited. The modules are relatively stable when running the commands
+presented below, the shell may still freeze if the sequence of operations is violated (e.g. if the Manager
+application is closed using Ctrl-C is pressed before the RE environment is not closed). In this case
+some sockets will remain open and prevent the Manager from restarting. To close the sockets (we are interested
+sockets on ports 5555 and 8080), find PIDs of the processes::
 
-The server can be started from a shell as follows::
+  $ sudo netstat -ltnp
+
+and then kill the processes::
+
+  $ kill -9 <pid>
+
+Installation of QueueServer from source::
+
+  pip install -e .
+
+This also sets up an entry point for the 'qserver' CLI tool.
+
+The RE Manager and Web Server are running as two separate applications. To run the demo you will need to open
+three shells: the first for RE Manager, the second for Web Server and the third to send HTTP requests to
+the server.
+
+In the first shell start RE Manager::
+
+  python -m bluesky_queueserver.manager
+
+The Web Server should be started from the second shell as follows::
 
   python -m aiohttp.web -H 0.0.0.0 -P 8080 bluesky_queueserver.server:init_func
 
-The server is controlled from a different shell. Add plans to the queue::
+Use the third shell to send REST API requests to the server. Add plans to the queue::
 
   http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]]}'
   http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
@@ -111,7 +132,7 @@ the databased can be printed on the screen by sending the command::
 
   http POST 0.0.0.0:8080/print_db_uids
 
-The table will be printed in the QueueServer terminal::
+The table will be printed in the RE Manager terminal::
 
     ===================================================================
                  The contents of 'temp' database.
@@ -123,3 +144,61 @@ The table will be printed in the QueueServer terminal::
       Total of 3 runs were found in 'temp' database.
     ===================================================================
 
+The 'qserver' CLI tool can be started from a separate shell. Display help options::
+
+  qserver -h
+
+Run 'ping' command (get status from RE Manager)::
+
+  qserver -c ping
+
+Current default address of RE Manager is set to tcp://localhost:5555, but different
+address may be passed as a parameter::
+
+  qserver -c ping -a "tcp://localhost:5555"
+
+Run 'qserver' in the monitoring mode (send 'ping' request to RE Manager every second)::
+
+  qserver -c monitor
+
+Add a new plan to the queue::
+
+  qserver -c add_to_queue -v '{"name":"count", "args":[["det1", "det2"]]}'
+  qserver -c add_to_queue -v '{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
+  qserver -c add_to_queue -v '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
+
+View the contents of the queue::
+
+  qserver -c queue_view
+
+Pop the last element from queue::
+
+  qserver -c pop_from_queue
+
+Create new RE environment::
+
+  qserver -c create_environment
+
+Execute the plan queue::
+
+  qserver -c process_queue
+
+Close and destroy RE environment::
+
+  qserver -c close_environment
+
+Pause the Run Engine (and the queue)::
+
+  qserver -c re_pause -v immediate
+  qserver -c re_pause -v deferred
+
+Countinue paused plan::
+
+  qserver -c re_continue -v resume
+  qserver -c re_continue -v abort
+  qserver -c re_continue -v stop
+  qserver -c re_continue -v halt
+
+Print UIDs in 'temp' Databroker::
+
+  qserver -c print_db_uids

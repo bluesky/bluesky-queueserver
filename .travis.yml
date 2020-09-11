@@ -1,5 +1,8 @@
 language: python
 
+services:
+  - redis-server
+
 env:
   global:
     # Doctr deploy key for bluesky/bluesky-queueserver

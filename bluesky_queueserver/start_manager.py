@@ -1,6 +1,7 @@
 from multiprocessing import Pipe
 import threading
 import time as ttime
+import pprint
 
 from .worker import RunEngineWorker
 from .manager import RunEngineManager
@@ -58,7 +59,7 @@ class WatchdogProcess:
                 self._register_heartbeat()
 
         if type == "command":
-            logger.debug(f"Command received from RE Manager: {msg}")
+            logger.debug("Command received from RE Manager: %s" % pprint.pformat(msg))
             if value == "start_re_worker":
                 self._start_re_worker()
                 msg_out = {"type": "report", "value": {"msg": msg, "success": True}}

@@ -6,6 +6,7 @@ import zmq.asyncio
 from multiprocessing import Process
 import threading
 import time as ttime
+import pprint
 
 from .worker import DB
 
@@ -140,7 +141,7 @@ class RunEngineManager(Process):
         Names of plans and devices are strings.
         """
         n_pending_plans = await self._r_pool.llen('plan_queue')
-        logger.info(f"Starting a new plan: {n_pending_plans} plans are left in the queue")
+        logger.info("Starting a new plan: %d plans are left in the queue" % n_pending_plans)
 
         new_plan = await self._r_pool.lpop('plan_queue')
         if new_plan is not None:
@@ -209,11 +210,11 @@ class RunEngineManager(Process):
             if self._watchdog_conn.poll(0.1):
                 try:
                     msg = self._watchdog_conn.recv()
-                    logger.debug(f"Message Watchdog->Manager received: '{msg}'")
+                    logger.debug("Message Watchdog->Manager received: '%s'" % pprint.pformat(msg))
                     # Messages should be handled in the event loop
                     self._loop.call_soon_threadsafe(self._conn_watchdog_received, msg)
                 except Exception as ex:
-                    logger.error(f"Exception occurred while waiting for packet: {ex}")
+                    logger.exception("Exception occurred while waiting for packet: %s" % str(ex))
                     break
 
     def _receive_packet_worker_thread(self):
@@ -221,11 +222,11 @@ class RunEngineManager(Process):
             if self._worker_conn.poll(0.1):
                 try:
                     msg = self._worker_conn.recv()
-                    logger.debug(f"Message received from RE Worker: {msg}")
+                    logger.debug("Message received from RE Worker: %s" % pprint.pformat(msg))
                     # Messages should be handled in the event loop
                     self._loop.call_soon_threadsafe(self._conn_worker_received, msg)
                 except Exception as ex:
-                    logger.error(f"Exception occurred while waiting for packet: {ex}")
+                    logger.error("Exception occurred while waiting for packet: %s" % str(ex))
                     break
 
     def _conn_worker_received(self, msg):
@@ -238,7 +239,8 @@ class RunEngineManager(Process):
                     completed = value["completed"]
                     success = value["success"]
                     result = value["result"]
-                    logger.info(f"Report received from RE Worker:\nsuccess={success}\n{result}\n)")
+                    logger.info("Report received from RE Worker:\nsuccess=%s\n%s\n)" %
+                                (str(success), str(result)))
                     if completed and success:
                         # Executed plan is removed from the queue only after it is successfully completed.
                         # If a plan was not completed or not successful (exception was raised), then
@@ -257,7 +259,8 @@ class RunEngineManager(Process):
                 result = value["result"]
                 msg_original = value["msg"]
                 logger.info("Acknownegement received from RE Worker:\n"
-                            f"Status: '{status}'\nResult:' {result}'\nMessage: {msg_original}")
+                            "Status: '%s'\nResult: '%s'\nMessage: %s"
+                            % (str(status), str(result), pprint.pformat(msg_original)))
 
         asyncio.create_task(process_message(msg))
 
@@ -269,7 +272,7 @@ class RunEngineManager(Process):
                 if request == "is_worker_alive":
                     await self._is_worker_alive_received(value["result"])
             if type == "report":
-                logger.info(f"Report Watchdog->Re Manager was received: {msg}")
+                logger.info("Report Watchdog->Re Manager was received: %s" % pprint.pformat(msg))
 
         asyncio.create_task(process_message(msg))
 
@@ -299,7 +302,7 @@ class RunEngineManager(Process):
         Adds new plan to the end of the queue
         """
         # TODO: validate inputs!
-        logger.info(f"Adding new plan to the queue: {request}")
+        logger.info("Adding new plan to the queue: %s" % pprint.pformat(request))
         if "plan" in request:
             plan = request["plan"]
             await self._r_pool.rpush('plan_queue', json.dumps(plan))
@@ -462,17 +465,17 @@ class RunEngineManager(Process):
         logger.info("Starting ZeroMQ server")
         self._zmq_socket = self._ctx.socket(zmq.REP)
         self._zmq_socket.bind(self._ip_zmq_server)
-        logger.info(f"ZeroMQ server is waiting on {self._ip_zmq_server}")
+        logger.info("ZeroMQ server is waiting on %s" % str(self._ip_zmq_server))
 
         while True:
             #  Wait for next request from client
             msg_in = await self._zmq_receive()
-            logger.info(f"ZeroMQ server received request: {msg_in}")
+            logger.info("ZeroMQ server received request: %s" % pprint.pformat(msg_in))
 
             msg_out = await self._zmq_execute(msg_in)
 
             #  Send reply back to client
-            logger.info(f"ZeroMQ server sending response: {msg_out}")
+            logger.info("ZeroMQ server sending response: %s" % pprint.pformat(msg_out))
             await self._zmq_send(msg_out)
 
     # ------------------------------------------------------------
@@ -486,7 +489,7 @@ class RunEngineManager(Process):
         try:
             asyncio.run(self.zmq_server_comm())
         except Exception as ex:
-            logger.info("Exiting RE Manager with exception %s" % str(ex))
+            logger.exception("Exiting RE Manager with exception %s" % str(ex))
         except KeyboardInterrupt:
             # TODO: RE Manager must be orderly closed before Watchdog module is stopped.
             #   Right now it is just killed by SIGINT.

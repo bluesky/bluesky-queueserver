@@ -1,3 +1,7 @@
 # List required packages in this file, one per line.
 aiohttp
+aioredis
 bluesky
+ophyd
+pyzmq
+requests

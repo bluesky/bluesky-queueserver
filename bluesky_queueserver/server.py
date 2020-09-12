@@ -3,15 +3,8 @@ import asyncio
 import zmq
 import zmq.asyncio
 
-
 import logging
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
-db_logger = logging.getLogger("databroker")
-db_logger.setLevel("INFO")
-
 
 """
 #  The following plans that can be used to test the server
@@ -195,6 +188,10 @@ class WebServer:
 
 
 def init_func(argv):
+
+    logging.basicConfig(level=logging.WARNING)
+    logging.getLogger('bluesky_queueserver').setLevel("DEBUG")
+
     re_server = WebServer()
 
     app = web.Application(loop=re_server.get_loop())

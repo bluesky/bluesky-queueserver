@@ -15,14 +15,6 @@ from bluesky.plans import count, scan  # noqa: F401
 
 import logging
 logger = logging.getLogger(__name__)
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
-logging.getLogger('bluesky').setLevel('WARNING')
-logging.getLogger('ophyd').setLevel('WARNING')
-
-mpl_logger = logging.getLogger("matplotlib")
-mpl_logger.setLevel(logging.WARNING)
 
 DB = [Broker.named('temp')]
 

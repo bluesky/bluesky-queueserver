@@ -7,9 +7,7 @@ from .worker import RunEngineWorker
 from .manager import RunEngineManager
 
 import logging
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 
 class WatchdogProcess:
@@ -157,6 +155,10 @@ class WatchdogProcess:
 
 
 if __name__ == "__main__":
+
+    logging.basicConfig(level=logging.WARNING)
+    logging.getLogger('bluesky_queueserver').setLevel("DEBUG")
+
     wp = WatchdogProcess()
     try:
         wp.run()

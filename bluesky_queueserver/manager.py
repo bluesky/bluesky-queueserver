@@ -11,12 +11,8 @@ import pprint
 from .worker import DB
 
 import logging
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
-db_logger = logging.getLogger("databroker")
-db_logger.setLevel(logging.INFO)
+logger = logging.getLogger(__name__)
 
 """
 #  The following plans that can be used to test the syste

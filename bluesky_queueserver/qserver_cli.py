@@ -13,9 +13,7 @@ import argparse
 import bluesky_queueserver
 
 import logging
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 qserver_version = bluesky_queueserver.__version__
 
@@ -148,6 +146,10 @@ class CliClient:
 
 
 def qserver():
+
+    logging.basicConfig(level=logging.WARNING)
+    logging.getLogger('bluesky_queueserver').setLevel("CRITICAL")
+
     supported_commands = list(CliClient.get_supported_commands().keys())
     # Add the command 'monitor' to the list. This command is not sent to RE Manager.
     supported_commands = ["monitor"] + supported_commands

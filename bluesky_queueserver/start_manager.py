@@ -87,7 +87,7 @@ class WatchdogProcess:
         process without waiting for initialization.
         """
         logger.info("Starting RE Worker ...")
-        self._re_worker = RunEngineWorker(conn=self._manager_conn)
+        self._re_worker = RunEngineWorker(conn=self._manager_conn, name="RE Worker Process")
         self._re_worker.start()
 
     def _join_re_worker(self):
@@ -131,7 +131,8 @@ class WatchdogProcess:
     def _start_re_manager(self):
         self._init_watchdog_state()
         self._re_manager = RunEngineManager(conn_watchdog=self._manager_to_watchdog_conn,
-                                            conn_worker=self._worker_conn)
+                                            conn_worker=self._worker_conn,
+                                            name="RE Manager Process")
         self._re_manager.start()
 
     def run(self):

@@ -32,9 +32,26 @@ http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"scan", "args":[["det1", "det
 
 
 class RunEngineManager(Process):
+    """
+    The class implementing Run Engine Worker thread.
 
-    def __init__(self, *, conn_watchdog, conn_worker):
-        super().__init__(name="RE Manager Process")
+    Parameters
+    ----------
+    conn_watchdog: multiprocessing.Connection
+        One end of bidirectional (input/output) for communication to Watchdog process.
+    conn_worker: multiprocessing.Connection
+        One end of bidirectional (input/output) for communication to RE Worker process.
+    args, kwargs
+        `args` and `kwargs` of the `multiprocessing.Process`
+    """
+    def __init__(self, *args, conn_watchdog=None, conn_worker=None, **kwargs):
+
+        if conn_watchdog is None:
+            raise RuntimeError("Parameter 'conn_watchdog' is not specified or None.")
+        if conn_worker is None:
+            raise RuntimeError("Parameter 'conn_worker' is not specified or None.")
+
+        super().__init__(*args, **kwargs)
         self._re_worker = None
 
         self._watchdog_conn = conn_watchdog

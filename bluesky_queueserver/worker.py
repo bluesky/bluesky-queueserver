@@ -33,12 +33,17 @@ class RunEngineWorker(Process):
 
     Parameters
     ----------
-    conn
-        The end of bidirectional (input/output) pipe.
+    conn: multiprocessing.Connection
+        One end of bidirectional (input/output) pipe. The other end is used by RE Manager.
+    args, kwargs
+        `args` and `kwargs` of the `multiprocessing.Process`
     """
-    def __init__(self, *, conn):
+    def __init__(self, *args, conn=None, **kwargs):
 
-        super().__init__(name="RE Worker Process")
+        if conn is None:
+            raise RuntimeError("Parameter 'conn' is not specified or None.")
+
+        super().__init__(*args, **kwargs)
 
         # The end of bidirectional Pipe assigned to the worker (for communication with Manager process)
         self._conn = conn

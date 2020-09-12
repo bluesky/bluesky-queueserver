@@ -66,7 +66,7 @@ class WebServer:
             #   if there is no reply after timeout. The server still needs to be restarted
             #   if it was disconnected, since there is not mechanism to reestablish
             #   connection.
-            logger.exception(f"ZeroMQ communication failed: %s" % str(ex))
+            logger.exception("ZeroMQ communication failed: %s" % str(ex))
             msg = {}
         return msg
 

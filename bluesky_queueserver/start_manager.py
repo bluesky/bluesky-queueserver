@@ -48,7 +48,7 @@ class WatchdogProcess:
                     # Messages should be handled in the event loop
                     self._conn_received(msg)
                 except Exception as ex:
-                    logger.error("Exception occurred while waiting for packet: %s" % str(ex))
+                    logger.exception("Exception occurred while waiting for packet: %s" % str(ex))
                     break
 
     def _conn_received(self, msg):

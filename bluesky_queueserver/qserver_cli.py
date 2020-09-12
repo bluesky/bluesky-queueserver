@@ -13,9 +13,9 @@ import argparse
 import bluesky_queueserver
 
 import logging
-# logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.CRITICAL)
+logger.setLevel(logging.DEBUG)
 
 qserver_version = bluesky_queueserver.__version__
 
@@ -107,7 +107,7 @@ class CliClient:
 
         try:
             await self._zmq_open_connection(self._zmq_server_address)
-            logger.info(f"Connected to ZeroMQ server '{self._zmq_server_address}'")
+            logger.info("Connected to ZeroMQ server '%s'" % self._zmq_server_address)
             self._msg_in = await self._send_command(command=self._msg_command_out,
                                                     value=self._msg_value_out)
             self._msg_err_in = ""
@@ -118,7 +118,7 @@ class CliClient:
             self._zmq_socket.close()
 
         if self._msg_err_in:
-            logger.warning(f"Communication with RE Manager failed: {self._msg_err_in}")
+            logger.warning("Communication with RE Manager failed: %s" % str(self._msg_err_in))
 
     async def _send_command(self, *, command, value=None):
         msg_out = self._create_msg(command=command, value=value)

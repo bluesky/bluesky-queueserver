@@ -66,7 +66,7 @@ class WebServer:
             #   if there is no reply after timeout. The server still needs to be restarted
             #   if it was disconnected, since there is not mechanism to reestablish
             #   connection.
-            logger.error(f"ZeroMQ communication failed: {str(ex)}")
+            logger.exception(f"ZeroMQ communication failed: %s" % str(ex))
             msg = {}
         return msg
 
@@ -81,7 +81,7 @@ class WebServer:
         self._zmq_socket.RCVTIMEO = 2000  # Timeout for 'recv' operation
 
         self._zmq_socket.connect(self._zmq_server_address)
-        logger.info(f"Connected to ZeroMQ server '{self._zmq_server_address}'")
+        logger.info("Connected to ZeroMQ server '%s'" % str(self._zmq_server_address))
 
         # The event must be set somewhere else
         await self._event_zmq_stop.wait()

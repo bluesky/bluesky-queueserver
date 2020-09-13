@@ -171,17 +171,19 @@ class RunEngineManager(Process):
 
         new_plan = await self._r_pool.lpop('plan_queue')
         if new_plan is not None:
-            await self._r_pool.set('running_plan', json.dumps(new_plan))
             new_plan = json.loads(new_plan)
+            await self._r_pool.set('running_plan', json.dumps(new_plan))
 
             plan_name = new_plan["name"]
             args = new_plan["args"] if "args" in new_plan else []
             kwargs = new_plan["kwargs"] if "kwargs" in new_plan else {}
+            plan_uid = new_plan["plan_uid"]
 
             msg = {"type": "plan",
                    "value": {"name": plan_name,
                              "args": args,
-                             "kwargs": kwargs
+                             "kwargs": kwargs,
+                             "plan_uid": plan_uid
                              }
                    }
 

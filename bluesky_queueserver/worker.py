@@ -43,6 +43,10 @@ class RunEngineWorker(Process):
         self._exit_event = threading.Event()
         self._execution_queue = None
 
+        # Dictionary that contains parameters of currently executed plan or None if no plan is
+        #   currently executed. Plan is considered as being executed if it is paused.
+        self._running_plan = None
+
         # Reference to Bluesky Run Engine
         self._RE = None
 
@@ -87,15 +91,19 @@ class RunEngineWorker(Process):
             msg = {"type": "report",
                    "value": {"action": "plan_exit", "completed": is_resuming,
                              "success": True, "result": result}}
+            if not self._RE._state == "paused":
+                self._running_plan = None
         except BaseException as ex:
             msg = {"type": "report",
                    "value": {"action": "plan_exit", "completed": False,
                              "success": False, "result": str(ex)}}
+            # It is assumed that the plan crashed and execution can not be continued
+            self._running_plan = None
 
         self._conn.send(msg)
         logger.debug("Finished execution of a task")
 
-    def _load_new_plan(self, plan_name, plan_args, plan_kwargs):
+    def _load_new_plan(self, plan):
         """
         Loads a new plan into `self._execution_queue`. The plan plan name and
         device names are represented as strings. Parsing of the plan in this
@@ -110,6 +118,13 @@ class RunEngineWorker(Process):
         plan_kwargs: dict
             plan kwargs
         """
+        # Save reference to the currently executed plan
+        self._running_plan = plan
+
+        plan_name = plan["name"]
+        plan_args = plan["args"]
+        plan_kwargs = plan["kwargs"]
+
         logger.info(f"Starting a plan '{plan_name}'.")
 
         def ref_from_name(v):
@@ -192,110 +207,117 @@ class RunEngineWorker(Process):
         """
         type, value = msg["type"], msg["value"]
 
-        # The default acknowledge message (will be sent to `self._conn` if
-        #   the message is not recognized.
-        msg_ack = {"type": "acknowledge",
-                   "value": {"status": "unrecognized",
-                             "msg": msg,  # Send back the message
-                             "result": ""}}
+        if type == "request":
+            if value == "status":
+                plan_uid = self._running_plan["plan_uid"] if self._running_plan else None
+                msg_out = {"type": "result",
+                           "contains": "status",
+                           "value": {"running_plan_uid": plan_uid}}  # Status contains 1 value for now
+                self._conn.send(msg_out)
 
-        # Exit the main thread and close the environment
-        if type == "command" and value == "quit":
-            # Stop the loop in main thread
-            logger.info("Closing RE Worker environment")
-            # TODO: probably the criteria on when the environment could be more precise.
-            #       For now simply assume that we can not close the environment in which
-            #       Run Engine is running using this method. Different method that kills
-            #       the worker process is needed.
-            if self._RE._state != "running":
-                try:
-                    self._exit_event.set()
-                    msg_ack["value"]["status"] = "accepted"
-                except Exception as ex:
-                    msg_ack["value"]["status"] = "error"
-                    msg_ack["value"]["result"] = str(ex)
-            else:
-                msg_ack["value"]["status"] = "rejected"
-                msg_ack["value"]["result"] = "Can not close the environment with running Run Engine. " \
-                                             "Stop the running plan and try again."
+        else:
+            # The default acknowledge message (will be sent to `self._conn` if
+            #   the message is not recognized.
+            msg_ack = {"type": "acknowledge",
+                       "value": {"status": "unrecognized",
+                                 "msg": msg,  # Send back the message
+                                 "result": ""}}
 
-        # Execute a plan
-        if type == "plan":
-            logger.info("Starting execution of a plan")
-            # TODO: refine the criteria of acceptance of the new plan.
-            invalid_state = 0
-            if not self._execution_queue.empty():
-                invalid_state = 1
-            elif self._RE._state == 'running':
-                invalid_state = 2
+            # Exit the main thread and close the environment
+            if type == "command" and value == "quit":
+                # Stop the loop in main thread
+                logger.info("Closing RE Worker environment")
+                # TODO: probably the criteria on when the environment could be more precise.
+                #       For now simply assume that we can not close the environment in which
+                #       Run Engine is running using this method. Different method that kills
+                #       the worker process is needed.
+                if self._RE._state != "running":
+                    try:
+                        self._exit_event.set()
+                        msg_ack["value"]["status"] = "accepted"
+                    except Exception as ex:
+                        msg_ack["value"]["status"] = "error"
+                        msg_ack["value"]["result"] = str(ex)
+                else:
+                    msg_ack["value"]["status"] = "rejected"
+                    msg_ack["value"]["result"] = "Can not close the environment with running Run Engine. " \
+                                                 "Stop the running plan and try again."
 
-            if not invalid_state:  # == 0
-                try:
-                    plan_name = value["name"]
-                    plan_args = value["args"]
-                    plan_kwargs = value["kwargs"]
-                    self._load_new_plan(plan_name, plan_args, plan_kwargs)
-                    msg_ack["value"]["status"] = "accepted"
-                except Exception as ex:
-                    msg_ack["value"]["status"] = "error"
-                    msg_ack["value"]["result"] = str(ex)
-            else:
-                msg_ack["value"]["status"] = "rejected"
-                msg_list = ["the execution queue is not empty", "another plan is running"]
-                try:
-                    s = msg_list[invalid_state - 1]
-                except Exception:
-                    s = "UNDETERMINED CONDITION IS PRESENT"  # Shouldn't ever be printed
-                msg_ack["value"]["result"] = \
-                    f"Trying to run a plan (start Run Engine) while {s}.\n" \
-                    "This may indicate a serious issue with the plan queue execution mechanism.\n" \
-                    "Please report the issue to developers."
+            # Execute a plan
+            if type == "plan":
+                logger.info("Starting execution of a plan")
+                # TODO: refine the criteria of acceptance of the new plan.
+                invalid_state = 0
+                if not self._execution_queue.empty():
+                    invalid_state = 1
+                elif self._RE._state == 'running':
+                    invalid_state = 2
 
-        # Pause a running plan
-        if type == "command" and value == "pause":
-            # Stop the loop in main thread
-            logger.info("Pausing Run Engine")
-            pausing_options = ("deferred", "immediate")
-            # TODO: the question is whether it is possible or should be allowed to pause a plan in
-            #       any other state than 'running'???
-            if self._RE._state == 'running':
-                try:
-                    option = msg["option"]
-                    if option not in pausing_options:
-                        raise RuntimeError(f"Option '{option}' is not supported. "
-                                           f"Available options: {pausing_options}")
+                if not invalid_state:  # == 0
+                    try:
+                        # Value is a dictionary with plan parameters
+                        self._load_new_plan(value)
+                        msg_ack["value"]["status"] = "accepted"
+                    except Exception as ex:
+                        msg_ack["value"]["status"] = "error"
+                        msg_ack["value"]["result"] = str(ex)
+                else:
+                    msg_ack["value"]["status"] = "rejected"
+                    msg_list = ["the execution queue is not empty", "another plan is running"]
+                    try:
+                        s = msg_list[invalid_state - 1]
+                    except Exception:
+                        s = "UNDETERMINED CONDITION IS PRESENT"  # Shouldn't ever be printed
+                    msg_ack["value"]["result"] = \
+                        f"Trying to run a plan (start Run Engine) while {s}.\n" \
+                        "This may indicate a serious issue with the plan queue execution mechanism.\n" \
+                        "Please report the issue to developers."
 
-                    defer = {'deferred': True, 'immediate': False}[option]
-                    self._RE.request_pause(defer=defer)
-                    msg_ack["value"]["status"] = "accepted"
-                except Exception as ex:
-                    msg_ack["value"]["status"] = "error"
-                    msg_ack["value"]["result"] = str(ex)
-            else:
-                msg_ack["value"]["status"] = "rejected"
-                msg_ack["value"]["result"] = \
-                    "Run engine can be paused only in 'running' state. " \
-                    f"Current state: '{self._RE._state}'"
+            # Pause a running plan
+            if type == "command" and value == "pause":
+                # Stop the loop in main thread
+                logger.info("Pausing Run Engine")
+                pausing_options = ("deferred", "immediate")
+                # TODO: the question is whether it is possible or should be allowed to pause a plan in
+                #       any other state than 'running'???
+                if self._RE._state == 'running':
+                    try:
+                        option = msg["option"]
+                        if option not in pausing_options:
+                            raise RuntimeError(f"Option '{option}' is not supported. "
+                                               f"Available options: {pausing_options}")
 
-        # Continue the previously paused plan (resume, abort, stop or halt)
-        if type == "command" and value == "continue":
-            # Continue execution of the plan
-            if self._RE.state == 'paused':
-                try:
-                    option = msg["option"]
-                    logger.info(f"Run Engine: {option}")
-                    self._continue_plan(option)
-                    msg_ack["value"]["status"] = "accepted"
-                except Exception as ex:
-                    msg_ack["value"]["status"] = "error"
-                    msg_ack["value"]["result"] = str(ex)
-            else:
-                msg_ack["value"]["status"] = "rejected"
-                msg_ack["value"]["result"] = \
-                    "Run Engine must be in 'paused' state to continue. " \
-                    f"The state is '{self._RE._state}'"
+                        defer = {'deferred': True, 'immediate': False}[option]
+                        self._RE.request_pause(defer=defer)
+                        msg_ack["value"]["status"] = "accepted"
+                    except Exception as ex:
+                        msg_ack["value"]["status"] = "error"
+                        msg_ack["value"]["result"] = str(ex)
+                else:
+                    msg_ack["value"]["status"] = "rejected"
+                    msg_ack["value"]["result"] = \
+                        "Run engine can be paused only in 'running' state. " \
+                        f"Current state: '{self._RE._state}'"
 
-        self._conn.send(msg_ack)
+            # Continue the previously paused plan (resume, abort, stop or halt)
+            if type == "command" and value == "continue":
+                # Continue execution of the plan
+                if self._RE.state == 'paused':
+                    try:
+                        option = msg["option"]
+                        logger.info(f"Run Engine: {option}")
+                        self._continue_plan(option)
+                        msg_ack["value"]["status"] = "accepted"
+                    except Exception as ex:
+                        msg_ack["value"]["status"] = "error"
+                        msg_ack["value"]["result"] = str(ex)
+                else:
+                    msg_ack["value"]["status"] = "rejected"
+                    msg_ack["value"]["result"] = \
+                        "Run Engine must be in 'paused' state to continue. " \
+                        f"The state is '{self._RE._state}'"
+
+            self._conn.send(msg_ack)
 
     # ------------------------------------------------------------
 

@@ -89,16 +89,37 @@ class RunEngineWorker(Process):
         try:
             result = plan()
             msg = {"type": "report",
-                   "value": {"action": "plan_exit", "completed": is_resuming,
-                             "success": True, "result": result}}
-            if not self._RE._state == "paused":
-                self._running_plan = None
+                   "value": {"action": "plan_exit",
+                             "success": True,
+                             "result": result,
+                             "err_msg": ""}}
+            if is_resuming:
+                msg["value"]["plan_state"] = "completed"
+            else:
+                msg["value"]["plan_state"] = "stopped"  # Here we don't distinguish between stop/abort/halt
+
+            self._running_plan = None
+
         except BaseException as ex:
             msg = {"type": "report",
-                   "value": {"action": "plan_exit", "completed": False,
-                             "success": False, "result": str(ex)}}
-            # It is assumed that the plan crashed and execution can not be continued
-            self._running_plan = None
+                   "value": {"action": "plan_exit",
+                             "result": "",
+                             "err_msg": str(ex)}}
+
+            if self._RE._state == "paused":
+                # Run Engine was paused
+                msg["value"]["plan_state"] = "paused"
+                msg["value"]["success"] = True
+            else:
+                # RE crashed. Plan execution can not be resumed. (Environment may have to be restarted.)
+                # TODO: clarify how this situation must be handled. Also additional error handling
+                #       may be required
+                msg["value"]["plan_state"] = "error"
+                msg["value"]["success"] = False
+                self._running_plan = None
+
+        # Include RE state
+        msg["value"]["re_state"] = str(self._RE._state)
 
         self._conn.send(msg)
         logger.debug("Finished execution of a task")
@@ -212,7 +233,10 @@ class RunEngineWorker(Process):
                 plan_uid = self._running_plan["plan_uid"] if self._running_plan else None
                 msg_out = {"type": "result",
                            "contains": "status",
-                           "value": {"running_plan_uid": plan_uid}}  # Status contains 1 value for now
+                           "value": {"running_plan_uid": plan_uid,
+                                     "re_state": str(self._RE._state),
+                                     }
+                           }
                 self._conn.send(msg_out)
 
         else:

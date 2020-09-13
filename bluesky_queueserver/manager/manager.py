@@ -97,6 +97,36 @@ class RunEngineManager(Process):
             self._watchdog_conn.send(msg)
 
     # ======================================================================
+    #          Communication with Redis
+
+    async def _set_running_plan_info(self, plan):
+        """
+        Write info on the currently running to Redis
+        """
+        await self._r_pool.set("running_plan", json.dumps(plan))
+
+    async def _get_running_plan_info(self):
+        """
+        Read info on the currently running plan from Redis
+        """
+        return json.loads(await self._r_pool.get("running_plan"))
+
+    async def _clear_running_plan_info(self):
+        """
+        Clear info on the currently running plan in Redis.
+        """
+        await self._set_running_plan_info({})
+
+    async def _init_running_plan_info(self):
+        """
+        Initialize running plan info: create Redis entry that hold empty plan ({})
+        a record doesn't exist.
+        """
+        # Create entry 'running_plan' in the pool if it does not exist yet
+        if not await self._get_running_plan_info():
+            await self._clear_running_plan_info()
+
+    # ======================================================================
     #   Functions that implement functionality of the server
 
     async def _start_re_worker(self):
@@ -172,7 +202,7 @@ class RunEngineManager(Process):
         new_plan = await self._r_pool.lpop('plan_queue')
         if new_plan is not None:
             new_plan = json.loads(new_plan)
-            await self._r_pool.set('running_plan', json.dumps(new_plan))
+            await self._set_running_plan_info(new_plan)
 
             plan_name = new_plan["name"]
             args = new_plan["args"] if "args" in new_plan else []
@@ -264,26 +294,35 @@ class RunEngineManager(Process):
             if type == "report":
                 action = value["action"]
                 if action == "plan_exit":
-                    completed = value["completed"]
+
+                    plan_state = value["plan_state"]
                     success = value["success"]
                     result = value["result"]
-                    logger.info("Report received from RE Worker:\nsuccess=%s\n%s\n)" %
-                                (str(success), str(result)))
-                    if completed and success:
+                    err_msg = value["err_msg"]
+
+                    msg_display = result if result else err_msg
+                    logger.info("Report received from RE Worker:\n"
+                                "plan_state=%s\n"
+                                "success=%s\n%s\n)" %
+                                (plan_state, str(success), str(msg_display)))
+
+                    if plan_state == "completed":
                         # Executed plan is removed from the queue only after it is successfully completed.
                         # If a plan was not completed or not successful (exception was raised), then
                         # execution of the queue is stopped. It can be restarted later (failed or
                         # interrupted plan will still be in the queue.
-                        await self._r_pool.set("running_plan", json.dumps({}))
+                        await self._clear_running_plan_info()
                         await self._run_task()
-                    elif not completed and success:
+                    elif plan_state in ("stopped", "error"):
                         # Paused plan was stopped/aborted/halted
-                        p = json.loads(await self._r_pool.get("running_plan"))
-                        await self._r_pool.lpush('plan_queue', p)
-                        await self._r_pool.set("running_plan", json.dumps({}))
-                    elif not completed and not success:
-                        # The plan was paused
+                        p = await self._get_running_plan_info()
+                        await self._r_pool.lpush('plan_queue', json.dumps(p))
+                        await self._clear_running_plan_info()
+                    elif plan_state == "paused":
+                        # The plan was paused (nothing should be done)
                         pass
+                    else:
+                        logger.error("Unknown plan state %s was returned by RE Worker." % plan_state)
 
                 elif action == "environment_created":
                     await self._started_re_worker()
@@ -507,8 +546,7 @@ class RunEngineManager(Process):
             'redis://localhost', encoding='utf8')
 
         # Create entry 'running_plan' in the pool if it does not exist yet
-        if not await self._r_pool.get('running_plan'):
-            await self._r_pool.set("running_plan", json.dumps({}))
+        await self._init_running_plan_info()
 
         # Set the environment state based on whether the worker process is alive (request Watchdog)
         self._environment_exists = await self._is_worker_alive()
@@ -520,10 +558,10 @@ class RunEngineManager(Process):
             if not plan_uid_running:
                 # Plan is not being executed (even if it was executed when the manager
                 #   process was stopped.
-                await self._r_pool.set("running_plan", json.dumps({}))
+                await self._clear_running_plan_info()
             else:
                 # Plan is running. Check if it is the same plan as in redis.
-                plan_stored = json.loads(await self._r_pool.get('running_plan'))
+                plan_stored = await self._get_running_plan_info()
                 plan_uid_stored = plan_stored["plan_uid"]
                 if plan_uid_stored != plan_uid_running:
                     # Guess is that the environment may still work, so restart is

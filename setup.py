@@ -45,7 +45,8 @@ setup(
     packages=find_packages(exclude=['docs', 'tests']),
     entry_points={
         'console_scripts': [
-            'qserver = bluesky_queueserver.qserver_cli:qserver'
+            'qserver = bluesky_queueserver.manager.qserver_cli:qserver',
+            'start-re-manager = bluesky_queueserver.manager.start_manager:start_manager',
         ],
     },
     include_package_data=True,

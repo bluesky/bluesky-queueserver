@@ -154,7 +154,7 @@ class WatchdogProcess:
                 self._start_re_manager()
 
 
-if __name__ == "__main__":
+def start_manager():
 
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger('bluesky_queueserver').setLevel("DEBUG")

@@ -45,7 +45,7 @@ install:
 script:
   - coverage run -m pytest  # Run the tests and check for test coverage.
   - coverage report -m  # Generate test coverage report.
-  - python -m bluesky_queueserver.start_manager &
+  - start-re-manager &
   - qserver -c add_to_queue -v '{"name":"count", "args":[["det1", "det2"]]}'
   - qserver -c add_to_queue -v '{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
   -    qserver -c add_to_queue -v '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
@@ -56,6 +56,7 @@ script:
   - qserver -c process_queue
   - qserver -c re_pause -v immediate
   - qserver -c re_continue -v resume
+  - qserver -c add_to_queue -v '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
   - qserver -c add_to_queue -v '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
   - qserver -c process_queue
   - set -e

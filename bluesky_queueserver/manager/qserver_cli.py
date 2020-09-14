@@ -64,13 +64,15 @@ class CliClient:
             "queue_view": "queue_view",
             "add_to_queue": "add_to_queue",
             "pop_from_queue": "pop_from_queue",
+            "clear_queue": "clear_queue",
             "create_environment": "create_environment",
             "close_environment": "close_environment",
             "process_queue": "process_queue",
             "re_pause": "re_pause",
             "re_continue": "re_continue",
             "print_db_uids": "print_db_uids",
-            "kill_manager": "kill_manager"
+            "stop_manager": "stop_manager",
+            "kill_manager": "kill_manager",
         }
         return command_dict
 

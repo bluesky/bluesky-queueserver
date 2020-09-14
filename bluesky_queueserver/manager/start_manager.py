@@ -26,6 +26,8 @@ class WatchdogProcess:
         self._watchdog_state = 0  # State is currently just time since last notification
         self._watchdog_state_lock = threading.Lock()
 
+        self._manager_is_stopping = False  # Set True to stop the server
+
     def _create_conn_pipes(self):
         # Manager to worker
         self._manager_conn, self._worker_conn = Pipe()
@@ -72,6 +74,10 @@ class WatchdogProcess:
                 self._kill_re_worker()
                 msg_out = {"type": "report", "value": {"msg": msg, "success": True}}
                 self._watchdog_to_manager_conn.send(msg_out)
+
+            if value == "manager_stopping":
+                # Manager informed that it is stopping and should not be restarted
+                self._manager_is_stopping = True
 
         if type == "request":
             if value == "is_worker_alive":
@@ -139,7 +145,7 @@ class WatchdogProcess:
             # Primitive implementation of the loop that restarts the process.
             self._re_manager.join(0.1)  # Small timeout
 
-            if not self._re_manager.is_alive():
+            if self._manager_is_stopping and not self._re_manager.is_alive():
                 break  # Exit if the program was actually stopped (process joined)
 
             with self._watchdog_state_lock:
@@ -148,7 +154,7 @@ class WatchdogProcess:
             # Interval is used to protect the system from restarting in case of clock issues.
             # It may be a better idea to implement a ticker in a separate thread to act as
             #   a clock to be completely independent from system clock.
-            if (time_passed > 5.0) and (time_passed < 15.0):
+            if (time_passed > 5.0) and (time_passed < 15.0) and not self._manager_is_stopping:
                 logger.error("Timeout detected by Watchdog. RE Manager malfunctioned and must be restarted.")
                 self._re_manager.kill()
                 self._start_re_manager()

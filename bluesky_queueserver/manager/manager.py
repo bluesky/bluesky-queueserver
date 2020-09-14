@@ -54,6 +54,8 @@ class RunEngineManager(Process):
         self._watchdog_conn = conn_watchdog
         self._worker_conn = conn_worker
 
+        self._manager_stopping = False  # Set True to exit manager (by _stop_manager_handler)
+
         self._environment_exists = False
 
         # Threads must be started in the 'run' function so that they run in the correct process.
@@ -151,17 +153,23 @@ class RunEngineManager(Process):
         Closes Run Engine execution environment in orderly way. Running plan needs
         to be stopped before the environment can be closed.
         """
-        self._event_worker_closed = asyncio.Event()
+        if self._environment_exists:
+            self._event_worker_closed = asyncio.Event()
 
-        msg = {"type": "command", "value": "quit"}
-        self._worker_conn.send(msg)
+            msg = {"type": "command", "value": "quit"}
+            self._worker_conn.send(msg)
 
-        logger.debug("Waiting for RE Worker to close ...")
-        await self._event_worker_closed.wait()
-        logger.debug("RE Worker to closed")
+            logger.debug("Waiting for RE Worker to close ...")
+            await self._event_worker_closed.wait()
+            logger.debug("RE Worker to closed")
 
-        msg = {"type": "command", "value": "join_re_worker"}
-        self._watchdog_conn.send(msg)
+            msg = {"type": "command", "value": "join_re_worker"}
+            self._watchdog_conn.send(msg)
+
+            self._environment_exists = False
+            return True
+        else:
+            return False
 
     async def _stopped_re_worker(self):
         # Report from RE Worker received: environment was closed successfully.
@@ -367,8 +375,10 @@ class RunEngineManager(Process):
         May be called to get response from the Manager. Returns the number of plans in the queue.
         """
         logger.info("Processing 'Hello' request.")
-        pending_plans = await self._r_pool.llen('plan_queue')
-        msg = {"msg": f"Hello, world! There are {pending_plans} plans enqueed."}
+        n_pending_plans = await self._r_pool.llen('plan_queue')
+        msg = {"msg": "RE Manager",
+               "n_plans": n_pending_plans,
+               "is_plan_running": bool(await self._get_running_plan_info())}
         return msg
 
     async def _queue_view_handler(self, request):
@@ -407,6 +417,17 @@ class RunEngineManager(Process):
         else:
             return {}  # No items
 
+    async def _clear_queue_handler(self, request):
+        """
+        Remove all entries from the plan queue (does not affect currently executed run)
+        """
+        logger.info("Clearing the queue")
+        while True:
+            plan = await self._r_pool.rpop('plan_queue')
+            if plan is None:
+                break
+        return {"success": True, "msg": "Plan queue is now empty."}
+
     async def _create_environment_handler(self, request):
         """
         Creates RE environment: creates RE Worker process, starts and configures Run Engine.
@@ -426,12 +447,8 @@ class RunEngineManager(Process):
         only after RE completes the current scan.
         """
         logger.info("Closing current RE environment.")
-        if self._environment_exists:
-            await self._stop_re_worker()
-            self._environment_exists = False
-            success, msg = True, ""
-        else:
-            success, msg = False, "Environment does not exist."
+        success = await self._stop_re_worker()
+        msg = "" if success else "Environment does not exist."
         return {"success": success, "msg": msg}
 
     async def _process_queue_handler(self, request):
@@ -492,6 +509,11 @@ class RunEngineManager(Process):
         self._print_db_uids()
         return {"success": True, "msg": ""}
 
+    async def _stop_manager_handler(self, request):
+        # This is expected to block the event loop forever
+        self._manager_stopping = True
+        return {"success": True, "msg": "Initiated sequence of stopping RE Manager."}
+
     async def _kill_manager_handler(self, request):
         # This is expected to block the event loop forever
         while True:
@@ -505,12 +527,14 @@ class RunEngineManager(Process):
             "queue_view": "_queue_view_handler",
             "add_to_queue": "_add_to_queue_handler",
             "pop_from_queue": "_pop_from_queue_handler",
+            "clear_queue": "_clear_queue_handler",
             "create_environment": "_create_environment_handler",
             "close_environment": "_close_environment_handler",
             "process_queue": "_process_queue_handler",
             "re_pause": "_re_pause_handler",
             "re_continue": "_re_continue_handler",
             "print_db_uids": "_print_db_uids_handler",
+            "stop_manager": "_stop_manager_handler",
             "kill_manager": "_kill_manager_handler",
         }
 
@@ -572,6 +596,9 @@ class RunEngineManager(Process):
                         "instead of '%s'.\n"
                         "RE execution environment may need to be closed and created again \n"
                         "to restore data integrity." % (plan_uid_running, plan_uid_stored))
+        else:
+            # Environment does not exist, so there is no running plan
+            await self._clear_running_plan_info()
 
         logger.info("Starting ZeroMQ server")
         self._zmq_socket = self._ctx.socket(zmq.REP)
@@ -588,6 +615,13 @@ class RunEngineManager(Process):
             #  Send reply back to client
             logger.info("ZeroMQ server sending response: %s" % pprint.pformat(msg_out))
             await self._zmq_send(msg_out)
+
+            if self._manager_stopping:
+                await self._stop_re_worker()  # Quitting RE Manager
+                self._watchdog_conn.send({"type": "command", "value": "manager_stopping"})
+                self._zmq_socket.close()
+                logger.info("RE Manager was stopped by ZMQ command.")
+                break
 
     # ------------------------------------------------------------
 

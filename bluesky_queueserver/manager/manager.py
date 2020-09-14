@@ -119,13 +119,20 @@ class RunEngineManager(Process):
         """
         await self._set_running_plan_info({})
 
+    async def _exists_running_plan_info(self):
+        """
+        Check if plan exists in the ppol
+        """
+        return await self._r_pool.exists("running_plan")
+
     async def _init_running_plan_info(self):
         """
         Initialize running plan info: create Redis entry that hold empty plan ({})
         a record doesn't exist.
         """
         # Create entry 'running_plan' in the pool if it does not exist yet
-        if not await self._get_running_plan_info():
+        if (not await self._exists_running_plan_info()) \
+                or (not await self._get_running_plan_info()):
             await self._clear_running_plan_info()
 
     # ======================================================================
@@ -568,6 +575,9 @@ class RunEngineManager(Process):
 
         self._r_pool = await aioredis.create_redis_pool(
             'redis://localhost', encoding='utf8')
+
+        await self._r_pool.delete("running_plan")
+        await self._r_pool.delete("plan_queue")
 
         # Create entry 'running_plan' in the pool if it does not exist yet
         await self._init_running_plan_info()

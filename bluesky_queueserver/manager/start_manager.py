@@ -36,7 +36,7 @@ class WatchdogProcess:
 
     def _start_conn_thread(self):
         self._thread_conn = threading.Thread(target=self._receive_packet_thread,
-                                             name="RE Server Comm",
+                                             name="RE Watchdog Comm",
                                              daemon=True)
         self._thread_conn.start()
 

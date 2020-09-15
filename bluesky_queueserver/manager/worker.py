@@ -3,8 +3,10 @@ import threading
 import queue
 import time as ttime
 from collections.abc import Iterable
+import asyncio
 
 from bluesky import RunEngine
+from bluesky.run_engine import get_bluesky_event_loop
 
 from bluesky.callbacks.best_effort import BestEffortCallback
 from databroker import Broker
@@ -40,7 +42,7 @@ class RunEngineWorker(Process):
         # The end of bidirectional Pipe assigned to the worker (for communication with Manager process)
         self._conn = conn
 
-        self._exit_event = threading.Event()
+        self._exit_event = None
         self._execution_queue = None
 
         # Dictionary that contains parameters of currently executed plan or None if no plan is
@@ -371,7 +373,13 @@ class RunEngineWorker(Process):
         Overrides the `run()` function of the `multiprocessing.Process` class. Called
         by the `start` method.
         """
-        self._exit_event.clear()
+        self._exit_event = threading.Event()
+
+        # TODO: TC - Do you think that the following code may be included in RE.__init__()
+        #   (for Python 3.8 and above)
+        # Setting the default event loop is needed to make the code work with Python 3.8.
+        loop = get_bluesky_event_loop()
+        asyncio.set_event_loop(loop)
 
         self._RE = RunEngine({})
 

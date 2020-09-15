@@ -175,6 +175,10 @@ Pop the last element from queue::
 
   qserver -c pop_from_queue
 
+Remove all entries from the plan queue::
+
+  qserver -c clear_queue
+
 Create new RE environment::
 
   qserver -c create_environment
@@ -202,3 +206,14 @@ Countinue paused plan::
 Print UIDs in 'temp' Databroker::
 
   qserver -c print_db_uids
+
+Close RE Manager in orderly way. No plans should be running at the moment when the command is issued::
+
+  qserver -c stop_manager
+
+Kill Manager process. Permanently blocks the event loop of Manager process and triggers its restart.
+The command is intended to be used in testing procedures (it will be more difficult to send this
+command in the production version, but Manager process should restart without causing any issues
+to running plans)::
+
+  qserver -c kill_manager

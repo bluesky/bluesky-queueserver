@@ -65,7 +65,7 @@ class RunEngineManager(Process):
         self._loop = None
 
         # Communication with the server using ZMQ
-        self._ctx = zmq.asyncio.Context()
+        self._ctx = None
         self._zmq_socket = None
         self._ip_zmq_server = "tcp://*:5555"
 
@@ -566,6 +566,8 @@ class RunEngineManager(Process):
         """
         This function is supposed to be executed by asyncio.run() to start the manager.
         """
+        self._ctx = zmq.asyncio.Context()
+
         self._loop = asyncio.get_running_loop()
 
         self._start_conn_threads()
@@ -576,8 +578,10 @@ class RunEngineManager(Process):
         self._r_pool = await aioredis.create_redis_pool(
             'redis://localhost', encoding='utf8')
 
-        await self._r_pool.delete("running_plan")
-        await self._r_pool.delete("plan_queue")
+        # It may be useful to have an API that would delete all used entries in Redis pool
+        #   The following code may go into this new API.
+        # await self._r_pool.delete("running_plan")
+        # await self._r_pool.delete("plan_queue")
 
         # Create entry 'running_plan' in the pool if it does not exist yet
         await self._init_running_plan_info()

@@ -74,7 +74,7 @@ def tests_qserver_cli_and_manager(re_manager):
     subprocess.call(["qserver", "-c", "create_environment"])
     subprocess.call(["qserver", "-c", "process_queue"])
 
-    assert wait_for_processing_to_finish(300), "Timeout while waiting for process to finish"
+    assert wait_for_processing_to_finish(60), "Timeout while waiting for process to finish"
 
     # Queue is expected to be empty (processed). Load one more plan.
     subprocess.call(["qserver", "-c", "add_to_queue", "-v",
@@ -92,7 +92,7 @@ def tests_qserver_cli_and_manager(re_manager):
     ttime.sleep(2)  # Need some time to finish the current plan step
     subprocess.call(["qserver", "-c", "re_continue", "-v", "resume"])
 
-    assert wait_for_processing_to_finish(300), "Timeout while waiting for process to finish"
+    assert wait_for_processing_to_finish(60), "Timeout while waiting for process to finish"
 
     subprocess.call(["qserver", "-c", "add_to_queue", "-v",
                      "{'name':'count', 'args':[['det1', 'det2']]}"])
@@ -104,6 +104,6 @@ def tests_qserver_cli_and_manager(re_manager):
 
     subprocess.call(["qserver", "-c", "process_queue"])
 
-    assert wait_for_processing_to_finish(300), "Timeout while waiting for process to finish"
+    assert wait_for_processing_to_finish(60), "Timeout while waiting for process to finish"
 
     subprocess.call(["qserver", "-c", "close_environment"])

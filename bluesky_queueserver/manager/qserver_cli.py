@@ -13,9 +13,7 @@ import argparse
 import bluesky_queueserver
 
 import logging
-# logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.CRITICAL)
 
 qserver_version = bluesky_queueserver.__version__
 
@@ -66,12 +64,15 @@ class CliClient:
             "queue_view": "queue_view",
             "add_to_queue": "add_to_queue",
             "pop_from_queue": "pop_from_queue",
+            "clear_queue": "clear_queue",
             "create_environment": "create_environment",
             "close_environment": "close_environment",
             "process_queue": "process_queue",
             "re_pause": "re_pause",
             "re_continue": "re_continue",
             "print_db_uids": "print_db_uids",
+            "stop_manager": "stop_manager",
+            "kill_manager": "kill_manager",
         }
         return command_dict
 
@@ -106,7 +107,7 @@ class CliClient:
 
         try:
             await self._zmq_open_connection(self._zmq_server_address)
-            logger.info(f"Connected to ZeroMQ server '{self._zmq_server_address}'")
+            logger.info("Connected to ZeroMQ server '%s'" % self._zmq_server_address)
             self._msg_in = await self._send_command(command=self._msg_command_out,
                                                     value=self._msg_value_out)
             self._msg_err_in = ""
@@ -117,7 +118,7 @@ class CliClient:
             self._zmq_socket.close()
 
         if self._msg_err_in:
-            logger.warning(f"Communication with RE Manager failed: {self._msg_err_in}")
+            logger.warning("Communication with RE Manager failed: %s" % str(self._msg_err_in))
 
     async def _send_command(self, *, command, value=None):
         msg_out = self._create_msg(command=command, value=value)
@@ -147,6 +148,10 @@ class CliClient:
 
 
 def qserver():
+
+    logging.basicConfig(level=logging.WARNING)
+    logging.getLogger('bluesky_queueserver').setLevel("CRITICAL")
+
     supported_commands = list(CliClient.get_supported_commands().keys())
     # Add the command 'monitor' to the list. This command is not sent to RE Manager.
     supported_commands = ["monitor"] + supported_commands

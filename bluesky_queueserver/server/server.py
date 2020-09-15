@@ -3,15 +3,8 @@ import asyncio
 import zmq
 import zmq.asyncio
 
-
 import logging
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
-db_logger = logging.getLogger("databroker")
-db_logger.setLevel("INFO")
-
 
 """
 #  The following plans that can be used to test the server
@@ -66,7 +59,7 @@ class WebServer:
             #   if there is no reply after timeout. The server still needs to be restarted
             #   if it was disconnected, since there is not mechanism to reestablish
             #   connection.
-            logger.error(f"ZeroMQ communication failed: {str(ex)}")
+            logger.exception("ZeroMQ communication failed: %s" % str(ex))
             msg = {}
         return msg
 
@@ -81,7 +74,7 @@ class WebServer:
         self._zmq_socket.RCVTIMEO = 2000  # Timeout for 'recv' operation
 
         self._zmq_socket.connect(self._zmq_server_address)
-        logger.info(f"Connected to ZeroMQ server '{self._zmq_server_address}'")
+        logger.info("Connected to ZeroMQ server '%s'" % str(self._zmq_server_address))
 
         # The event must be set somewhere else
         await self._event_zmq_stop.wait()
@@ -195,6 +188,10 @@ class WebServer:
 
 
 def init_func(argv):
+
+    logging.basicConfig(level=logging.WARNING)
+    logging.getLogger('bluesky_queueserver').setLevel("DEBUG")
+
     re_server = WebServer()
 
     app = web.Application(loop=re_server.get_loop())

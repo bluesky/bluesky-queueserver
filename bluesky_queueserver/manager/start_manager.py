@@ -2,6 +2,8 @@ from multiprocessing import Pipe
 import threading
 import time as ttime
 import pprint
+import json
+from jsonrpc import JSONRPCResponseManager, dispatcher
 
 from .worker import RunEngineWorker
 from .manager import RunEngineManager
@@ -48,42 +50,20 @@ class WatchdogProcess:
                     # Messages should be handled in the event loop
                     self._conn_received(msg)
                 except Exception as ex:
-                    logger.exception("Exception occurred while waiting for packet: %s" % str(ex))
+                    logger.exception("Exception occurred while waiting for packet: %s", str(ex))
                     break
 
     def _conn_received(self, msg):
-        type, value = msg["type"], msg["value"]
 
-        if type == "notification":
-            if value == "alive":
-                self._register_heartbeat()
+        # We don't want to print 'heartbeat' messages
+        msg_json = json.loads(msg)
+        if not isinstance(msg_json, dict) or (msg_json["method"] != "heartbeat"):
+            logger.debug("Command received RE Manager->Watchdog: %s", pprint.pformat(msg_json))
 
-        if type == "command":
-            logger.debug("Command received from RE Manager: %s" % pprint.pformat(msg))
-            if value == "start_re_worker":
-                self._start_re_worker()
-                msg_out = {"type": "report", "value": {"msg": msg, "success": True}}
-                self._watchdog_to_manager_conn.send(msg_out)
-
-            if value == "join_re_worker":
-                success = self._join_re_worker()
-                msg_out = {"type": "report", "value": {"msg": msg, "success": success}}
-                self._watchdog_to_manager_conn.send(msg_out)
-
-            if value == "kill_re_worker":
-                self._kill_re_worker()
-                msg_out = {"type": "report", "value": {"msg": msg, "success": True}}
-                self._watchdog_to_manager_conn.send(msg_out)
-
-            if value == "manager_stopping":
-                # Manager informed that it is stopping and should not be restarted
-                self._manager_is_stopping = True
-
-        if type == "request":
-            if value == "is_worker_alive":
-                result = self._is_worker_alive()
-                msg_out = {"type": "result", "value": {"request": value, "result": result}}
-                self._watchdog_to_manager_conn.send(msg_out)
+        response = JSONRPCResponseManager.handle(msg, dispatcher)
+        if response:
+            response = response.json
+            self._watchdog_to_manager_conn.send(response)
 
     def _start_re_worker(self):
         """
@@ -91,18 +71,24 @@ class WatchdogProcess:
         process without waiting for initialization.
         """
         logger.info("Starting RE Worker ...")
-        self._re_worker = RunEngineWorker(conn=self._manager_conn, name="RE Worker Process")
-        self._re_worker.start()
+        try:
+            self._re_worker = RunEngineWorker(conn=self._manager_conn, name="RE Worker Process")
+            self._re_worker.start()
+            success, err_msg = True, ""
+        except Exception as ex:
+            success, err_msg = False, str(ex)
+        return {"success": success, "err_msg": err_msg}
 
-    def _join_re_worker(self):
+    def _join_re_worker(self, *, timeout=0.5):
         """
         Join RE Worker process after it was orderly closed by RE Manager. Watchdog module doesn't
         communicate with the worker process directly. This is responsibility of the RE Manager.
         But RE Manager doesn't hold reference to RE Worker, so it needs to be joined here.
         """
         logger.info("Joining RE Worker ...")
-        self._re_worker.join(0.5)  # Try to join with timeout
-        return not self._re_worker.is_alive()  # Return success
+        self._re_worker.join(timeout)  # Try to join with timeout
+        success = not self._re_worker.is_alive()  # Return success
+        return {"success": success}
 
     def _kill_re_worker(self):
         """
@@ -112,16 +98,7 @@ class WatchdogProcess:
         # TODO: kill() or terminate()???
         logger.info("Killing RE Worker ...")
         self._re_worker.kill()
-
-    def _init_watchdog_state(self):
-        with self._watchdog_state_lock:
-            self._watchdog_state = ttime.time()
-
-    def _register_heartbeat(self):
-        """
-        Heartbeat is received. Update the state.
-        """
-        self._init_watchdog_state()
+        return {"success": True}
 
     def _is_worker_alive(self):
         """
@@ -130,7 +107,24 @@ class WatchdogProcess:
         is_alive = False
         if hasattr(self._re_worker, "is_alive"):
             is_alive = self._re_worker.is_alive()
-        return is_alive
+        return {"worker_alive": is_alive}
+
+    def _manager_stopping(self):
+        """
+        Manager informed that it is stopping and should not be restarted.
+        """
+        self._manager_is_stopping = True
+
+    def _init_watchdog_state(self):
+        with self._watchdog_state_lock:
+            self._watchdog_state = ttime.time()
+
+    def _register_heartbeat(self, *, value):
+        """
+        Heartbeat is received. Update the state.
+        """
+        if value == "alive":
+            self._init_watchdog_state()
 
     def _start_re_manager(self):
         self._init_watchdog_state()
@@ -140,6 +134,16 @@ class WatchdogProcess:
         self._re_manager.start()
 
     def run(self):
+
+        # Requests
+        dispatcher.add_method(self._start_re_worker, "start_re_worker")
+        dispatcher.add_method(self._join_re_worker, "join_re_worker")
+        dispatcher.add_method(self._kill_re_worker, "kill_re_worker")
+        dispatcher.add_method(self._manager_stopping, "manager_stopping")
+        # Notifications
+        dispatcher.add_method(self._is_worker_alive, "is_worker_alive")
+        dispatcher.add_method(self._register_heartbeat, "heartbeat")
+
         self._start_re_manager()
         while True:
             # Primitive implementation of the loop that restarts the process.

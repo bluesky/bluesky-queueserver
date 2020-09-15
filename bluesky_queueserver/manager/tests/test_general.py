@@ -25,7 +25,7 @@ def re_manager():
         assert False, "RE Manager failed to stop"
 
 
-def tests_qserver_cli_and_manager(re_manager):
+def test_qserver_cli_and_manager(re_manager):
     # TODO: Redis pool should be cleaned before each test. Now it's only one tests,
     #   so it is not important, but cleaning should be implemented.
 

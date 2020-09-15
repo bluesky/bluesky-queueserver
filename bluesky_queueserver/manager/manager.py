@@ -41,12 +41,14 @@ class RunEngineManager(Process):
     args, kwargs
         `args` and `kwargs` of the `multiprocessing.Process`
     """
-    def __init__(self, *args, conn_watchdog=None, conn_worker=None, **kwargs):
+    def __init__(self, *args, conn_watchdog, conn_worker, **kwargs):
 
-        if conn_watchdog is None:
-            raise RuntimeError("Parameter 'conn_watchdog' is not specified or None.")
-        if conn_worker is None:
-            raise RuntimeError("Parameter 'conn_worker' is not specified or None.")
+        if not conn_watchdog:
+            raise RuntimeError("Value of the parameter 'conn_watchdog' is invalid: %s.",
+                               str(conn_watchdog))
+        if not conn_worker:
+            raise RuntimeError("Value of the parameter 'conn_worker' is invalid: %s.",
+                               str(conn_worker))
 
         super().__init__(*args, **kwargs)
         self._re_worker = None
@@ -75,8 +77,10 @@ class RunEngineManager(Process):
 
         self._event_worker_created = None
         self._event_worker_closed = None
-        self._fut_is_worker_alive = None
         self._fut_worker_status = None
+
+        self._fut_watchdog_comm = None  # Future for waiting for messages from watchdog
+        self._event_watchdog_comm = None  # Event which is set when message is expected from watchdog
 
     def _start_conn_threads(self):
         self._thread_conn_watchdog = threading.Thread(target=self._receive_packet_watchdog_thread,
@@ -93,10 +97,9 @@ class RunEngineManager(Process):
         Heartbeat generator for Watchdog (indicates that the loop is running)
         """
         t_period = 0.5
-        msg = {"type": "notification", "value": "alive"}
         while True:
             await asyncio.sleep(t_period)
-            self._watchdog_conn.send(msg)
+            await self._watchdog_send_heartbeat()
 
     # ======================================================================
     #          Communication with Redis
@@ -144,12 +147,15 @@ class RunEngineManager(Process):
         """
         self._event_worker_created = asyncio.Event()
 
-        msg = {"type": "command", "value": "start_re_worker"}
-        self._watchdog_conn.send(msg)
-
-        logger.debug("Waiting for RE worker to start ...")
-        await self._event_worker_created.wait()
-        logger.debug("Worker started successfully.")
+        try:
+            success = await self._watchdog_start_re_worker(timeout=0.5)
+            if not success:
+                raise RuntimeError("Failed to create Worker process")
+            logger.debug("Waiting for RE worker to start ...")
+            await self._event_worker_created.wait()
+            logger.debug("Worker started successfully.")
+        except Exception as ex:
+            logger.exception("Failed to start_Worker: %s", str(ex))
 
     async def _started_re_worker(self):
         # Report from RE Worker received: environment was created successfully.
@@ -160,6 +166,7 @@ class RunEngineManager(Process):
         Closes Run Engine execution environment in orderly way. Running plan needs
         to be stopped before the environment can be closed.
         """
+        success = True
         if self._environment_exists:
             self._event_worker_closed = asyncio.Event()
 
@@ -170,13 +177,16 @@ class RunEngineManager(Process):
             await self._event_worker_closed.wait()
             logger.debug("RE Worker to closed")
 
-            msg = {"type": "command", "value": "join_re_worker"}
-            self._watchdog_conn.send(msg)
-
+            if not await self._watchdog_join_re_worker(timeout=0.5):
+                success = False
+                # TODO: this error should probably be handled differently than this,
+                #   since it may indicate that the worker process is stalled.
+                logger.error("Failed to properly join the worker process. "
+                             "The process may not be properly closed.")
             self._environment_exists = False
-            return True
         else:
-            return False
+            success = False
+        return success
 
     async def _stopped_re_worker(self):
         # Report from RE Worker received: environment was closed successfully.
@@ -185,13 +195,7 @@ class RunEngineManager(Process):
     async def _is_worker_alive(self):
         self._fut_is_worker_alive = self._loop.create_future()
 
-        msg = {"type": "request", "value": "is_worker_alive"}
-        self._watchdog_conn.send(msg)
-
-        return await self._fut_is_worker_alive
-
-    async def _is_worker_alive_received(self, is_alive):
-        self._fut_is_worker_alive.set_result(is_alive)
+        return await self._watchdog_is_worker_alive()
 
     async def _worker_status_request(self):
         self._fut_worker_status = self._loop.create_future()
@@ -212,7 +216,7 @@ class RunEngineManager(Process):
         Names of plans and devices are strings.
         """
         n_pending_plans = await self._r_pool.llen('plan_queue')
-        logger.info("Starting a new plan: %d plans are left in the queue" % n_pending_plans)
+        logger.info("Starting a new plan: %d plans are left in the queue", n_pending_plans)
 
         new_plan = await self._r_pool.lpop('plan_queue')
         if new_plan is not None:
@@ -283,11 +287,11 @@ class RunEngineManager(Process):
             if self._watchdog_conn.poll(0.1):
                 try:
                     msg = self._watchdog_conn.recv()
-                    logger.debug("Message Watchdog->Manager received: '%s'" % pprint.pformat(msg))
+                    logger.debug("Message Watchdog->Manager received: '%s'", pprint.pformat(msg))
                     # Messages should be handled in the event loop
                     self._loop.call_soon_threadsafe(self._conn_watchdog_received, msg)
                 except Exception as ex:
-                    logger.exception("Exception occurred while waiting for packet: %s" % str(ex))
+                    logger.exception("Exception occurred while waiting for packet: %s", str(ex))
                     break
 
     def _receive_packet_worker_thread(self):
@@ -295,11 +299,11 @@ class RunEngineManager(Process):
             if self._worker_conn.poll(0.1):
                 try:
                     msg = self._worker_conn.recv()
-                    logger.debug("Message received from RE Worker: %s" % pprint.pformat(msg))
+                    logger.debug("Message received from RE Worker: %s", pprint.pformat(msg))
                     # Messages should be handled in the event loop
                     self._loop.call_soon_threadsafe(self._conn_worker_received, msg)
                 except Exception as ex:
-                    logger.error("Exception occurred while waiting for packet: %s" % str(ex))
+                    logger.error("Exception occurred while waiting for packet: %s", str(ex))
                     break
 
     def _conn_worker_received(self, msg):
@@ -318,8 +322,8 @@ class RunEngineManager(Process):
                     msg_display = result if result else err_msg
                     logger.info("Report received from RE Worker:\n"
                                 "plan_state=%s\n"
-                                "success=%s\n%s\n)" %
-                                (plan_state, str(success), str(msg_display)))
+                                "success=%s\n%s\n)",
+                                plan_state, str(success), str(msg_display))
 
                     if plan_state == "completed":
                         # Executed plan is removed from the queue only after it is successfully completed.
@@ -337,7 +341,7 @@ class RunEngineManager(Process):
                         # The plan was paused (nothing should be done)
                         pass
                     else:
-                        logger.error("Unknown plan state %s was returned by RE Worker." % plan_state)
+                        logger.error("Unknown plan state %s was returned by RE Worker.", plan_state)
 
                 elif action == "environment_created":
                     await self._started_re_worker()
@@ -349,30 +353,24 @@ class RunEngineManager(Process):
                 result = value["result"]
                 msg_original = value["msg"]
                 logger.info("Acknownegement received from RE Worker:\n"
-                            "Status: '%s'\nResult: '%s'\nMessage: %s"
-                            % (str(status), str(result), pprint.pformat(msg_original)))
+                            "Status: '%s'\nResult: '%s'\nMessage: %s",
+                            str(status), str(result), pprint.pformat(msg_original))
 
             elif type == "result":
                 contains = msg["contains"]
                 logger.info("Result received from RE Worker:\n"
-                            "Contains: '%s'\n Value: '%s'"
-                            % (str(contains), pprint.pformat(value)))
+                            "Contains: '%s'\n Value: '%s'",
+                            str(contains), pprint.pformat(value))
                 if contains == "status":
                     await self._worker_status_received(value)
 
         asyncio.create_task(process_message(msg))
 
-    def _conn_watchdog_received(self, msg):
-        async def process_message(msg):
-            type, value = msg["type"], msg["value"]
-            if type == "result":
-                request = value["request"]
-                if request == "is_worker_alive":
-                    await self._is_worker_alive_received(value["result"])
-            if type == "report":
-                logger.info("Report Watchdog->Re Manager was received: %s" % pprint.pformat(msg))
+    def _conn_watchdog_received(self, response):
+        async def process_message(response):
+            await self._watchdog_response(response)
 
-        asyncio.create_task(process_message(msg))
+        asyncio.create_task(process_message(response))
 
     # =========================================================================
     #    REST API handlers
@@ -402,7 +400,7 @@ class RunEngineManager(Process):
         Adds new plan to the end of the queue
         """
         # TODO: validate inputs!
-        logger.info("Adding new plan to the queue: %s" % pprint.pformat(request))
+        logger.info("Adding new plan to the queue: %s", pprint.pformat(request))
         if "plan" in request:
             plan = request["plan"]
             # Create Plan UID (used internally by QServer, user is not expected to see it)
@@ -571,6 +569,7 @@ class RunEngineManager(Process):
         self._loop = asyncio.get_running_loop()
 
         self._start_conn_threads()
+        self._event_watchdog_comm = asyncio.Event()  # Create the event on the loop
 
         # Start heartbeat generator
         self._heartbeat_generator_task = asyncio.ensure_future(self._heartbeat_generator(), loop=self._loop)
@@ -609,7 +608,7 @@ class RunEngineManager(Process):
                         "UID of currently running plan is '%s', "
                         "instead of '%s'.\n"
                         "RE execution environment may need to be closed and created again \n"
-                        "to restore data integrity." % (plan_uid_running, plan_uid_stored))
+                        "to restore data integrity.", plan_uid_running, plan_uid_stored)
         else:
             # Environment does not exist, so there is no running plan
             await self._clear_running_plan_info()
@@ -617,25 +616,119 @@ class RunEngineManager(Process):
         logger.info("Starting ZeroMQ server")
         self._zmq_socket = self._ctx.socket(zmq.REP)
         self._zmq_socket.bind(self._ip_zmq_server)
-        logger.info("ZeroMQ server is waiting on %s" % str(self._ip_zmq_server))
+        logger.info("ZeroMQ server is waiting on %s", str(self._ip_zmq_server))
 
         while True:
             #  Wait for next request from client
             msg_in = await self._zmq_receive()
-            logger.info("ZeroMQ server received request: %s" % pprint.pformat(msg_in))
+            logger.info("ZeroMQ server received request: %s", pprint.pformat(msg_in))
 
             msg_out = await self._zmq_execute(msg_in)
 
             #  Send reply back to client
-            logger.info("ZeroMQ server sending response: %s" % pprint.pformat(msg_out))
+            logger.info("ZeroMQ server sending response: %s", pprint.pformat(msg_out))
             await self._zmq_send(msg_out)
 
             if self._manager_stopping:
                 await self._stop_re_worker()  # Quitting RE Manager
-                self._watchdog_conn.send({"type": "command", "value": "manager_stopping"})
+                await self._watchdog_manager_stopping()
                 self._zmq_socket.close()
                 logger.info("RE Manager was stopped by ZMQ command.")
                 break
+
+    # ------------------------------------------------------------
+    # Communication with Watchdog process
+
+    async def _watchdog_send(self, method, notification=False, **kwargs):
+        msg = {"method": method, "jsonrpc": "2.0"}
+
+        # Don't include parameters if there are none
+        if kwargs:
+            msg["params"] = kwargs
+
+        # Don't include 'id' if this is notification
+        if not notification:
+            msg["id"] = str(uuid.uuid4())
+
+        if not notification:
+            self._fut_watchdog_comm = self._loop.create_future()
+            self._event_watchdog_comm.set()  # We don't expect response if this is not a notification
+
+        msg_json = json.dumps(msg)
+        self._watchdog_conn.send(msg_json)
+
+        # No response is expected if this is a notification
+        if not notification:
+            response = await self._fut_watchdog_comm
+            if "id" in response:
+                if response["id"] != msg["id"]:
+                    logger.error("Response Watchdog->RE Manager contains incorrect ID: %s. Expected %s",
+                                 response["id"], msg["id"])
+                del response["id"]
+            else:
+                logger.error("Response Watchdog->RE Manager contains no id: %s", pprint.pformat(response))
+        else:
+            response = None
+
+        self._event_watchdog_comm.clear()  # Clear before the exit as well
+        return response
+
+    async def _watchdog_response(self, response):
+        """
+        Set the fututure with the results
+        """
+        response = json.loads(response)
+
+        if self._event_watchdog_comm.is_set():
+            self._event_watchdog_comm.clear()  # Clear once the message received
+            self._fut_watchdog_comm.set_result(response)
+        else:
+            logger.error("Unsolicited message received Watchdog->Re Manager: %s. Message is ignored",
+                         pprint.pformat(response))
+
+    async def _watchdog_start_re_worker(self, timeout=0.5):
+        """
+        Initiate the startup of the RE Worker. Returned 'success==True' means that the process
+        was created successfully and RE environment initialization is started.
+        """
+        response = await self._watchdog_send("start_re_worker")
+        return response["result"]["success"]
+
+    async def _watchdog_join_re_worker(self, timeout=0.5):
+        """
+        Request Watchdog to join RE Worker process. The sequence of orderly closing of the process
+        needs to be initiated before attempting to join the process.
+        """
+        response = await self._watchdog_send("join_re_worker", timeout=timeout)
+        return response["result"]["success"]
+
+    async def _watchdog_kill_re_worker(self):
+        """
+        Request Watchdog to kill RE Worker process (justified only if the process is not responsive).
+        """
+        response = await self._watchdog_send("kill_re_worker")
+        return response["result"]["success"]
+
+    async def _watchdog_is_worker_alive(self):
+        """
+        Check if RE Worker process is alive.
+        """
+        response = await self._watchdog_send("is_worker_alive")
+        return response["result"]["worker_alive"]
+
+    async def _watchdog_manager_stopping(self):
+        """
+        Inform Watchdog process that the manager is intentionally being stopped and
+        it should not be restarted.
+        """
+        await self._watchdog_send("manager_stopping", notification=True)
+
+    async def _watchdog_send_heartbeat(self):
+        """
+        Send (periodic) heartbeat signal to Watchdog.
+        """
+        await self._watchdog_send("heartbeat", notification=True,
+                                  value="alive")
 
     # ------------------------------------------------------------
 
@@ -648,7 +741,7 @@ class RunEngineManager(Process):
         try:
             asyncio.run(self.zmq_server_comm())
         except Exception as ex:
-            logger.exception("Exiting RE Manager with exception %s" % str(ex))
+            logger.exception("Exiting RE Manager with exception %s", str(ex))
         except KeyboardInterrupt:
             # TODO: RE Manager must be orderly closed before Watchdog module is stopped.
             #   Right now it is just killed by SIGINT.

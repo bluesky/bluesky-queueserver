@@ -70,7 +70,7 @@ class RunEngineWorker(Process):
                     msg = self._conn.recv()
                     self._conn_received(msg)
                 except Exception as ex:
-                    logger.exception("Exception occurred while waiting for packet: %s" % str(ex))
+                    logger.exception("Exception occurred while waiting for packet: %s", str(ex))
                     break
 
     def _execute_plan(self, plan, is_resuming):
@@ -148,7 +148,7 @@ class RunEngineWorker(Process):
         plan_args = plan["args"]
         plan_kwargs = plan["kwargs"]
 
-        logger.info(f"Starting a plan '{plan_name}'.")
+        logger.info("Starting a plan '%s'.", plan_name)
 
         def ref_from_name(v):
             if isinstance(v, str):
@@ -199,7 +199,7 @@ class RunEngineWorker(Process):
             Option on how to proceed with previously paused plan. The values are
             "resume", "abort", "stop", "halt".
         """
-        logger.info(f"Continue plan execution with the option '{option}'")
+        logger.info("Continue plan execution with the option '%s'", option)
 
         available_options = ("resume", "abort", "stop", "halt")
 
@@ -331,7 +331,7 @@ class RunEngineWorker(Process):
                 if self._RE.state == 'paused':
                     try:
                         option = msg["option"]
-                        logger.info(f"Run Engine: {option}")
+                        logger.info("Run Engine: %s", option)
                         self._continue_plan(option)
                         msg_ack["value"]["status"] = "accepted"
                     except Exception as ex:

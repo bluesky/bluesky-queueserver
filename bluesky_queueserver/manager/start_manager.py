@@ -13,31 +13,41 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class WatchdogProcess:
-    def __init__(self):
-        self._re_manager = None
-        self._re_worker = None
+class PipeConnection:
 
+    def __init__(self, conn):
+        self._conn = conn
         self._dispatcher = Dispatcher()  # json-rpc dispatcher
+        self._stop_thread = False  # Set True to exit the thead
 
-        # Create pipes used for connections of the modules
-        self._manager_conn = None  # Worker -> Manager
-        self._worker_conn = None  # Manager -> Worker
-        self._watchdog_to_manager_conn = None  # Watchdog -> Manager
-        self._manager_to_watchdog_conn = None  # Manager -> Watchdog
-        self._create_conn_pipes()
+    def start(self):
+        """
+        Start processing of the pipe messages
+        """
         self._start_conn_thread()
 
-        self._watchdog_state = 0  # State is currently just time since last notification
-        self._watchdog_state_lock = threading.Lock()
+    def stop(self):
+        """
+        Stop processing of the pipe messages (and exit the tread)
+        """
+        self._stop_thread = True
 
-        self._manager_is_stopping = False  # Set True to stop the server
+    def __del__(self):
+        self.stop()
 
-    def _create_conn_pipes(self):
-        # Manager to worker
-        self._manager_conn, self._worker_conn = Pipe()
-        # Watchdog to manager
-        self._watchdog_to_manager_conn, self._manager_to_watchdog_conn = Pipe()
+    def add_method(self, handler, name=None):
+        """
+        Add method to json-rpc dispatcher.
+
+        Parameters
+        ----------
+        handler: callable
+            Reference to a handler handler
+        name: str, optional
+            Name to register (default is the handler name)
+        """
+        # Add method to json-rpc dispatcher
+        self._dispatcher.add_method(handler, name)
 
     def _start_conn_thread(self):
         self._thread_conn = threading.Thread(target=self._receive_conn_thread,
@@ -47,14 +57,16 @@ class WatchdogProcess:
 
     def _receive_conn_thread(self):
         while True:
-            if self._watchdog_to_manager_conn.poll(0.1):
+            if self._conn.poll(0.1):
                 try:
-                    msg = self._watchdog_to_manager_conn.recv()
+                    msg = self._conn.recv()
                     # Messages should be handled in the event loop
                     self._conn_received(msg)
                 except Exception as ex:
                     logger.exception("Exception occurred while waiting for "
                                      "RE Manager-> Watchdog message: %s", str(ex))
+                    break
+                if self._stop_thread:  # Exit thread
                     break
 
     def _conn_received(self, msg):
@@ -68,7 +80,34 @@ class WatchdogProcess:
         response = JSONRPCResponseManager.handle(msg, self._dispatcher)
         if response:
             response = response.json
-            self._watchdog_to_manager_conn.send(response)
+            self._conn.send(response)
+
+
+class WatchdogProcess:
+    def __init__(self):
+        self._re_manager = None
+        self._re_worker = None
+
+        # Create pipes used for connections of the modules
+        self._manager_conn = None  # Worker -> Manager
+        self._worker_conn = None  # Manager -> Worker
+        self._watchdog_to_manager_conn = None  # Watchdog -> Manager
+        self._manager_to_watchdog_conn = None  # Manager -> Watchdog
+        self._create_conn_pipes()
+
+        # Class that supports communication over the pipe
+        self._comm_to_manager = PipeConnection(conn=self._watchdog_to_manager_conn)
+
+        self._watchdog_state = 0  # State is currently just time since last notification
+        self._watchdog_state_lock = threading.Lock()
+
+        self._manager_is_stopping = False  # Set True to stop the server
+
+    def _create_conn_pipes(self):
+        # Manager to worker
+        self._manager_conn, self._worker_conn = Pipe()
+        # Watchdog to manager
+        self._watchdog_to_manager_conn, self._manager_to_watchdog_conn = Pipe()
 
     # ======================================================================
     #             Handlers for messages from RE Manager
@@ -146,13 +185,15 @@ class WatchdogProcess:
     def run(self):
 
         # Requests
-        self._dispatcher.add_method(self._start_re_worker_handler, "start_re_worker")
-        self._dispatcher.add_method(self._join_re_worker_handler, "join_re_worker")
-        self._dispatcher.add_method(self._kill_re_worker_handler, "kill_re_worker")
-        self._dispatcher.add_method(self._manager_stopping_handler, "manager_stopping")
+        self._comm_to_manager.add_method(self._start_re_worker_handler, "start_re_worker")
+        self._comm_to_manager.add_method(self._join_re_worker_handler, "join_re_worker")
+        self._comm_to_manager.add_method(self._kill_re_worker_handler, "kill_re_worker")
+        self._comm_to_manager.add_method(self._manager_stopping_handler, "manager_stopping")
         # Notifications
-        self._dispatcher.add_method(self._is_worker_alive_handler, "is_worker_alive")
-        self._dispatcher.add_method(self._register_heartbeat_handler, "heartbeat")
+        self._comm_to_manager.add_method(self._is_worker_alive_handler, "is_worker_alive")
+        self._comm_to_manager.add_method(self._register_heartbeat_handler, "heartbeat")
+
+        self._comm_to_manager.start()
 
         self._start_re_manager()
         while True:
@@ -172,6 +213,8 @@ class WatchdogProcess:
                 logger.error("Timeout detected by Watchdog. RE Manager malfunctioned and must be restarted.")
                 self._re_manager.kill()
                 self._start_re_manager()
+
+        self._comm_to_manager.stop()
 
 
 def start_manager():

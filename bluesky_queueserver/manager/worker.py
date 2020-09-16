@@ -4,6 +4,11 @@ import queue
 import time as ttime
 from collections.abc import Iterable
 import asyncio
+from functools import partial
+import logging
+
+import msgpack
+import msgpack_numpy as mpn
 
 from bluesky import RunEngine
 from bluesky.run_engine import get_bluesky_event_loop
@@ -14,8 +19,9 @@ from databroker import Broker
 # The following plans/devices must be imported (otherwise plan parsing wouldn't work)
 from ophyd.sim import det1, det2, motor  # noqa: F401
 from bluesky.plans import count, scan  # noqa: F401
+from bluesky_kafka import Publisher as kafkaPublisher
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 DB = [Broker.named('temp')]
@@ -32,7 +38,7 @@ class RunEngineWorker(Process):
     args, kwargs
         `args` and `kwargs` of the `multiprocessing.Process`
     """
-    def __init__(self, *args, conn, **kwargs):
+    def __init__(self, *args, conn, config=None, **kwargs):
 
         if not conn:
             raise RuntimeError("Invalid value of parameter 'conn': %S.", str(conn))
@@ -56,6 +62,7 @@ class RunEngineWorker(Process):
         self._thread_conn = None
 
         self._db = DB[0]
+        self.config = config or {}
 
     def _receive_packet_thread(self):
         """
@@ -373,6 +380,7 @@ class RunEngineWorker(Process):
         Overrides the `run()` function of the `multiprocessing.Process` class. Called
         by the `start` method.
         """
+
         self._exit_event = threading.Event()
 
         # TODO: TC - Do you think that the following code may be included in RE.__init__()
@@ -387,6 +395,21 @@ class RunEngineWorker(Process):
         self._RE.subscribe(bec)
 
         # db = Broker.named('temp')
+
+        if 'kafka' in self.config:
+            kafka_publisher = kafkaPublisher(
+                topic=self.config['kafka']['topic'],
+                bootstrap_servers=self.config['kafka']['bootstrap'],
+                key="kafka-unit-test-key",
+                # work with a single broker
+                producer_config={
+                    "acks": 1,
+                    "enable.idempotence": False,
+                    "request.timeout.ms": 5000,
+                },
+                serializer=partial(msgpack.dumps, default=mpn.encode),
+            )
+            self._RE.subscribe(kafka_publisher)
         self._RE.subscribe(self._db.insert)
 
         self._execution_queue = queue.Queue()

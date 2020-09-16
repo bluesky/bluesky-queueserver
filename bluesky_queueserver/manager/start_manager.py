@@ -3,7 +3,8 @@ import threading
 import time as ttime
 import pprint
 import json
-from jsonrpc import JSONRPCResponseManager, dispatcher
+from jsonrpc import JSONRPCResponseManager
+from jsonrpc.dispatcher import Dispatcher
 
 from .worker import RunEngineWorker
 from .manager import RunEngineManager
@@ -16,6 +17,8 @@ class WatchdogProcess:
     def __init__(self):
         self._re_manager = None
         self._re_worker = None
+
+        self._dispatcher = Dispatcher()  # json-rpc dispatcher
 
         # Create pipes used for connections of the modules
         self._manager_conn = None  # Worker -> Manager
@@ -62,7 +65,7 @@ class WatchdogProcess:
             if not isinstance(msg_json, dict) or (msg_json["method"] != "heartbeat"):
                 logger.debug("Command received RE Manager->Watchdog: %s", pprint.pformat(msg_json))
 
-        response = JSONRPCResponseManager.handle(msg, dispatcher)
+        response = JSONRPCResponseManager.handle(msg, self._dispatcher)
         if response:
             response = response.json
             self._watchdog_to_manager_conn.send(response)
@@ -143,13 +146,13 @@ class WatchdogProcess:
     def run(self):
 
         # Requests
-        dispatcher.add_method(self._start_re_worker_handler, "start_re_worker")
-        dispatcher.add_method(self._join_re_worker_handler, "join_re_worker")
-        dispatcher.add_method(self._kill_re_worker_handler, "kill_re_worker")
-        dispatcher.add_method(self._manager_stopping_handler, "manager_stopping")
+        self._dispatcher.add_method(self._start_re_worker_handler, "start_re_worker")
+        self._dispatcher.add_method(self._join_re_worker_handler, "join_re_worker")
+        self._dispatcher.add_method(self._kill_re_worker_handler, "kill_re_worker")
+        self._dispatcher.add_method(self._manager_stopping_handler, "manager_stopping")
         # Notifications
-        dispatcher.add_method(self._is_worker_alive_handler, "is_worker_alive")
-        dispatcher.add_method(self._register_heartbeat_handler, "heartbeat")
+        self._dispatcher.add_method(self._is_worker_alive_handler, "is_worker_alive")
+        self._dispatcher.add_method(self._register_heartbeat_handler, "heartbeat")
 
         self._start_re_manager()
         while True:

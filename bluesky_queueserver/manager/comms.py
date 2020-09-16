@@ -61,7 +61,7 @@ class PipeJsonRpcReceive:
         Parameters
         ----------
         handler: callable
-            Reference to a handler handler
+            Reference to a handler
         name: str, optional
             Name to register (default is the handler name)
         """

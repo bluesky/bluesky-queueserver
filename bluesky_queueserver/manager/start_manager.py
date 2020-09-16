@@ -13,8 +13,32 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class PipeConnection:
+class PipeJsonRpcReceive:
+    """
+    The class contains functions for receiving and processing JSON RPC messages received on
+    communication pipe.
 
+    Parameters
+    ----------
+    conn: multiprocessing.Connection
+        Reference to bidirectional end of a pipe (multiprocessing.Pipe)
+
+    Examples
+    --------
+
+    .. code-block:: python
+
+        conn1, conn2 = multiprocessing.Pipe()
+        pc = PipeJsonRPC(conn=conn1)
+
+        def func():
+            print("Testing")
+
+        pc.add_handler(func, "some_method")
+        pc.start()   # Wait and process commands
+        # The function 'func' is called when the message with method=="some_method" is received
+        pc.stop()  # Stop before exit to stop the thread.
+    """
     def __init__(self, conn):
         self._conn = conn
         self._dispatcher = Dispatcher()  # json-rpc dispatcher
@@ -96,7 +120,7 @@ class WatchdogProcess:
         self._create_conn_pipes()
 
         # Class that supports communication over the pipe
-        self._comm_to_manager = PipeConnection(conn=self._watchdog_to_manager_conn)
+        self._comm_to_manager = PipeJsonRpcReceive(conn=self._watchdog_to_manager_conn)
 
         self._watchdog_state = 0  # State is currently just time since last notification
         self._watchdog_state_lock = threading.Lock()

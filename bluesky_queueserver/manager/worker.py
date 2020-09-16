@@ -32,10 +32,10 @@ class RunEngineWorker(Process):
     args, kwargs
         `args` and `kwargs` of the `multiprocessing.Process`
     """
-    def __init__(self, *args, conn=None, **kwargs):
+    def __init__(self, *args, conn, **kwargs):
 
-        if conn is None:
-            raise RuntimeError("Parameter 'conn' is not specified or None.")
+        if not conn:
+            raise RuntimeError("Invalid value of parameter 'conn': %S.", str(conn))
 
         super().__init__(*args, **kwargs)
 

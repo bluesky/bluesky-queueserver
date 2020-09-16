@@ -32,7 +32,7 @@ class WatchdogProcess:
         self._watchdog_state_lock = threading.Lock()
 
         self._manager_is_stopping = False  # Set True to stop the server
-        self.config = config
+        self._config = config
 
     def _create_conn_pipes(self):
         # Manager to worker

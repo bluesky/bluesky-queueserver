@@ -37,12 +37,12 @@ class WatchdogProcess:
         self._watchdog_to_manager_conn, self._manager_to_watchdog_conn = Pipe()
 
     def _start_conn_thread(self):
-        self._thread_conn = threading.Thread(target=self._receive_packet_thread,
+        self._thread_conn = threading.Thread(target=self._receive_conn_thread,
                                              name="RE Watchdog Comm",
                                              daemon=True)
         self._thread_conn.start()
 
-    def _receive_packet_thread(self):
+    def _receive_conn_thread(self):
         while True:
             if self._watchdog_to_manager_conn.poll(0.1):
                 try:
@@ -50,7 +50,8 @@ class WatchdogProcess:
                     # Messages should be handled in the event loop
                     self._conn_received(msg)
                 except Exception as ex:
-                    logger.exception("Exception occurred while waiting for packet: %s", str(ex))
+                    logger.exception("Exception occurred while waiting for "
+                                     "RE Manager-> Watchdog message: %s", str(ex))
                     break
 
     def _conn_received(self, msg):
@@ -66,7 +67,10 @@ class WatchdogProcess:
             response = response.json
             self._watchdog_to_manager_conn.send(response)
 
-    def _start_re_worker(self):
+    # ======================================================================
+    #             Handlers for messages from RE Manager
+
+    def _start_re_worker_handler(self):
         """
         Creates worker process. This is a quick operation, because it starts RE Worker
         process without waiting for initialization.
@@ -80,7 +84,7 @@ class WatchdogProcess:
             success, err_msg = False, str(ex)
         return {"success": success, "err_msg": err_msg}
 
-    def _join_re_worker(self, *, timeout=0.5):
+    def _join_re_worker_handler(self, *, timeout=0.5):
         """
         Join RE Worker process after it was orderly closed by RE Manager. Watchdog module doesn't
         communicate with the worker process directly. This is responsibility of the RE Manager.
@@ -91,7 +95,7 @@ class WatchdogProcess:
         success = not self._re_worker.is_alive()  # Return success
         return {"success": success}
 
-    def _kill_re_worker(self):
+    def _kill_re_worker_handler(self):
         """
         Kill RE Worker by request from RE Manager. This is done only if RE Worker is non-responsive
         and can not be orderly stopped.
@@ -101,7 +105,7 @@ class WatchdogProcess:
         self._re_worker.kill()
         return {"success": True}
 
-    def _is_worker_alive(self):
+    def _is_worker_alive_handler(self):
         """
         Checks if RE Worker process is in running state. It doesn't mean that it is responsive.
         """
@@ -110,7 +114,7 @@ class WatchdogProcess:
             is_alive = self._re_worker.is_alive()
         return {"worker_alive": is_alive}
 
-    def _manager_stopping(self):
+    def _manager_stopping_handler(self):
         """
         Manager informed that it is stopping and should not be restarted.
         """
@@ -120,12 +124,14 @@ class WatchdogProcess:
         with self._watchdog_state_lock:
             self._watchdog_state = ttime.time()
 
-    def _register_heartbeat(self, *, value):
+    def _register_heartbeat_handler(self, *, value):
         """
         Heartbeat is received. Update the state.
         """
         if value == "alive":
             self._init_watchdog_state()
+
+    # ======================================================================
 
     def _start_re_manager(self):
         self._init_watchdog_state()
@@ -137,13 +143,13 @@ class WatchdogProcess:
     def run(self):
 
         # Requests
-        dispatcher.add_method(self._start_re_worker, "start_re_worker")
-        dispatcher.add_method(self._join_re_worker, "join_re_worker")
-        dispatcher.add_method(self._kill_re_worker, "kill_re_worker")
-        dispatcher.add_method(self._manager_stopping, "manager_stopping")
+        dispatcher.add_method(self._start_re_worker_handler, "start_re_worker")
+        dispatcher.add_method(self._join_re_worker_handler, "join_re_worker")
+        dispatcher.add_method(self._kill_re_worker_handler, "kill_re_worker")
+        dispatcher.add_method(self._manager_stopping_handler, "manager_stopping")
         # Notifications
-        dispatcher.add_method(self._is_worker_alive, "is_worker_alive")
-        dispatcher.add_method(self._register_heartbeat, "heartbeat")
+        dispatcher.add_method(self._is_worker_alive_handler, "is_worker_alive")
+        dispatcher.add_method(self._register_heartbeat_handler, "heartbeat")
 
         self._start_re_manager()
         while True:

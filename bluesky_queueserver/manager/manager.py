@@ -143,7 +143,7 @@ class RunEngineManager(Process):
             await self._clear_running_plan_info()
 
     # ======================================================================
-    #   Functions that implement functionality of the server
+    #          Functions that implement functionality of the server
 
     async def _start_re_worker(self):
         """
@@ -281,8 +281,8 @@ class RunEngineManager(Process):
         print(f"  Total of {n_runs} runs were found in 'temp' database.")
         print("===================================================================\n")
 
-    # =======================================================================
-    #   Functions for communication with the worker process
+    # ================================================================================
+    #         Functions for communication with the worker process (via Pipe)
 
     def _receive_packet_watchdog_thread(self):
         while True:
@@ -373,9 +373,9 @@ class RunEngineManager(Process):
         asyncio.create_task(self._watchdog_response(response))
 
     # =========================================================================
-    #    REST API handlers
+    #                        ZMQ message handlers
 
-    async def _hello_handler(self, request):
+    async def _ping_handler(self, request):
         """
         May be called to get response from the Manager. Returns the number of plans in the queue.
         """
@@ -528,7 +528,7 @@ class RunEngineManager(Process):
         command = msg["command"]
         value = msg["value"]
         handler_dict = {
-            "": "_hello_handler",
+            "": "_ping_handler",
             "queue_view": "_queue_view_handler",
             "add_to_queue": "_add_to_queue_handler",
             "pop_from_queue": "_pop_from_queue_handler",
@@ -552,6 +552,9 @@ class RunEngineManager(Process):
         except AttributeError:
             result = {"success": False, "msg": f"Handler for the command '{command}' is not implemented"}
         return result
+
+    # ======================================================================
+    #          Functions that support communication via 0MQ
 
     async def _zmq_receive(self):
         msg_in = await self._zmq_socket.recv_json()
@@ -637,8 +640,8 @@ class RunEngineManager(Process):
                 logger.info("RE Manager was stopped by ZMQ command.")
                 break
 
-    # ------------------------------------------------------------
-    # Communication with Watchdog process
+    # ======================================================================
+    #            Support of communication with Watchdog process
 
     async def _watchdog_send(self, method, notification=False, **kwargs):
         """
@@ -685,7 +688,6 @@ class RunEngineManager(Process):
             finally:
                 self._event_watchdog_comm.clear()  # Clear before the exit as well
 
-
     async def _watchdog_response(self, response):
         """
         Set the fututure with the results
@@ -696,6 +698,9 @@ class RunEngineManager(Process):
         else:
             logger.error("Unsolicited message received Watchdog->Re Manager: %s. Message is ignored",
                          pprint.pformat(response))
+
+    # ===============================================================================
+    #         Functions that send commands/request data from Watchdog process
 
     async def _watchdog_start_re_worker(self, timeout=0.5):
         """
@@ -757,7 +762,7 @@ class RunEngineManager(Process):
         await self._watchdog_send("heartbeat", notification=True,
                                   value="alive")
 
-    # ------------------------------------------------------------
+    # ======================================================================
 
     def run(self):
         """

@@ -25,7 +25,7 @@ def re_manager():
         assert False, "RE Manager failed to stop"
 
 
-def tests_qserver_cli_and_manager(re_manager):
+def test_qserver_cli_and_manager(re_manager):
     # TODO: Redis pool should be cleaned before each test. Now it's only one tests,
     #   so it is not important, but cleaning should be implemented.
 
@@ -35,18 +35,26 @@ def tests_qserver_cli_and_manager(re_manager):
         re_server.set_msg_out(command, value)
         asyncio.run(re_server.zmq_single_request())
         msg, _ = re_server.get_msg_in()
+        if msg is None:
+            raise TimeoutError("Timeout occured while monitoring RE Manager state")
         n_plans, is_plan_running = msg["n_plans"], msg["is_plan_running"]
         return n_plans, is_plan_running
 
     def wait_for_processing_to_finish(time):
-        """Wait until queue is processed"""
-        dt = 1  # Period for checking the queue status
-        n_attempts = int(time/dt)  # Number of attempts
-        for n in range(n_attempts):
+        """
+        Wait until queue is processed. Note: processing of TimeoutError is needed for
+        monitoring RE Manager while it is restarted.
+        """
+        dt = 0.5  # Period for checking the queue status
+        time_stop = ttime.time() + time
+        while ttime.time() < time_stop:
             ttime.sleep(dt/2)
-            n_plans, is_plan_running = get_queue_status()
-            if (n_plans == 0) and not is_plan_running:
-                return True
+            try:
+                n_plans, is_plan_running = get_queue_status()
+                if (n_plans == 0) and not is_plan_running:
+                    return True
+            except TimeoutError:
+                pass
             ttime.sleep(dt/2)
         return False
 
@@ -103,7 +111,22 @@ def tests_qserver_cli_and_manager(re_manager):
     assert n_plans == 2, "Incorrect number of plans in the queue"
 
     subprocess.call(["qserver", "-c", "process_queue"])
+    assert wait_for_processing_to_finish(60), "Timeout while waiting for process to finish"
 
+    # Test 'killing' the manager during running plan. Load long plan and two short ones.
+    #   The tests checks if execution of the queue is continued uninterrupted after
+    #   the manager restart
+    subprocess.call(["qserver", "-c", "add_to_queue", "-v",
+                     "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num':10, 'delay':1}}"])
+    subprocess.call(["qserver", "-c", "add_to_queue", "-v",
+                     "{'name':'count', 'args':[['det1', 'det2']]}"])
+    subprocess.call(["qserver", "-c", "add_to_queue", "-v",
+                     "{'name':'count', 'args':[['det1', 'det2']]}"])
+    n_plans, is_plan_running = get_queue_status()
+    assert n_plans == 3, "Incorrect number of plans in the queue"
+    subprocess.call(["qserver", "-c", "process_queue"])
+    ttime.sleep(1)
+    subprocess.call(["qserver", "-c", "kill_manager"])
     assert wait_for_processing_to_finish(60), "Timeout while waiting for process to finish"
 
     subprocess.call(["qserver", "-c", "close_environment"])

@@ -6,3 +6,4 @@ databroker
 ophyd
 pyzmq
 requests
+json-rpc

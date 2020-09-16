@@ -286,7 +286,8 @@ class RunEngineManager(Process):
         while True:
             if self._watchdog_conn.poll(0.1):
                 try:
-                    msg = self._watchdog_conn.recv()
+                    msg_json = self._watchdog_conn.recv()
+                    msg = json.loads(msg_json)
                     logger.debug("Message Watchdog->Manager received: '%s'", pprint.pformat(msg))
                     # Messages should be handled in the event loop
                     self._loop.call_soon_threadsafe(self._conn_watchdog_received, msg)
@@ -303,7 +304,7 @@ class RunEngineManager(Process):
                     # Messages should be handled in the event loop
                     self._loop.call_soon_threadsafe(self._conn_worker_received, msg)
                 except Exception as ex:
-                    logger.error("Exception occurred while waiting for packet: %s", str(ex))
+                    logger.exception("Exception occurred while waiting for packet: %s", str(ex))
                     break
 
     def _conn_worker_received(self, msg):
@@ -367,10 +368,7 @@ class RunEngineManager(Process):
         asyncio.create_task(process_message(msg))
 
     def _conn_watchdog_received(self, response):
-        async def process_message(response):
-            await self._watchdog_response(response)
-
-        asyncio.create_task(process_message(response))
+        asyncio.create_task(self._watchdog_response(response))
 
     # =========================================================================
     #    REST API handlers
@@ -677,8 +675,6 @@ class RunEngineManager(Process):
         """
         Set the fututure with the results
         """
-        response = json.loads(response)
-
         if self._event_watchdog_comm.is_set():
             self._event_watchdog_comm.clear()  # Clear once the message received
             self._fut_watchdog_comm.set_result(response)

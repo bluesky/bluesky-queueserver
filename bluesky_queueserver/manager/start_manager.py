@@ -55,10 +55,11 @@ class WatchdogProcess:
 
     def _conn_received(self, msg):
 
-        # We don't want to print 'heartbeat' messages
-        msg_json = json.loads(msg)
-        if not isinstance(msg_json, dict) or (msg_json["method"] != "heartbeat"):
-            logger.debug("Command received RE Manager->Watchdog: %s", pprint.pformat(msg_json))
+        if logger.level < 11:  # Print output only if logging level is DEBUG (10) or less
+            msg_json = json.loads(msg)
+            # We don't want to print 'heartbeat' messages
+            if not isinstance(msg_json, dict) or (msg_json["method"] != "heartbeat"):
+                logger.debug("Command received RE Manager->Watchdog: %s", pprint.pformat(msg_json))
 
         response = JSONRPCResponseManager.handle(msg, dispatcher)
         if response:

@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class WatchdogProcess:
-    def __init__(self, config):
+    def __init__(self, *, re_env_config=None):
         self._re_manager = None
         self._re_worker = None
 
@@ -32,7 +32,9 @@ class WatchdogProcess:
         self._watchdog_state_lock = threading.Lock()
 
         self._manager_is_stopping = False  # Set True to stop the server
-        self._config = config
+
+        # Configuration of the RE environment (passed to RE Worker)
+        self._re_env_config = re_env_config
 
     def _create_conn_pipes(self):
         # Manager to worker
@@ -51,7 +53,7 @@ class WatchdogProcess:
         logger.info("Starting RE Worker ...")
         try:
             self._re_worker = RunEngineWorker(
-                conn=self._manager_conn, name="RE Worker Process", config=self.config,
+                conn=self._manager_conn, name="RE Worker Process", env_config=self._re_env_config,
             )
             self._re_worker.start()
             success, err_msg = True, ""
@@ -169,7 +171,7 @@ def start_manager():
         config['kafka'] = {}
         config['kafka']['topic'] = args.kafka_topic
         config['kafka']['bootstrap'] = args.kafka_server
-    wp = WatchdogProcess(config=config)
+    wp = WatchdogProcess(re_env_config=config)
     try:
         wp.run()
     except KeyboardInterrupt:

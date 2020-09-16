@@ -38,7 +38,7 @@ class RunEngineWorker(Process):
     args, kwargs
         `args` and `kwargs` of the `multiprocessing.Process`
     """
-    def __init__(self, *args, conn, config=None, **kwargs):
+    def __init__(self, *args, conn, env_config=None, **kwargs):
 
         if not conn:
             raise RuntimeError("Invalid value of parameter 'conn': %S.", str(conn))
@@ -62,7 +62,7 @@ class RunEngineWorker(Process):
         self._thread_conn = None
 
         self._db = DB[0]
-        self.config = config or {}
+        self._env_config = env_config or {}
 
     def _receive_packet_thread(self):
         """
@@ -396,10 +396,10 @@ class RunEngineWorker(Process):
 
         # db = Broker.named('temp')
 
-        if 'kafka' in self.config:
+        if 'kafka' in self._env_config:
             kafka_publisher = kafkaPublisher(
-                topic=self.config['kafka']['topic'],
-                bootstrap_servers=self.config['kafka']['bootstrap'],
+                topic=self._env_config['kafka']['topic'],
+                bootstrap_servers=self._env_config['kafka']['bootstrap'],
                 key="kafka-unit-test-key",
                 # work with a single broker
                 producer_config={
@@ -410,6 +410,7 @@ class RunEngineWorker(Process):
                 serializer=partial(msgpack.dumps, default=mpn.encode),
             )
             self._RE.subscribe(kafka_publisher)
+
         self._RE.subscribe(self._db.insert)
 
         self._execution_queue = queue.Queue()

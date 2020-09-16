@@ -2,7 +2,10 @@
 aiohttp
 aioredis
 bluesky
+bluesky-kafka
 databroker
+msgpack
+msgpack_numpy
 ophyd
 pyzmq
 requests

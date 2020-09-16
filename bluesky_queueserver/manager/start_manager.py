@@ -1,3 +1,4 @@
+import argparse
 from multiprocessing import Pipe
 import threading
 import time as ttime
@@ -6,12 +7,14 @@ from .worker import RunEngineWorker
 from .manager import RunEngineManager
 from .comms import PipeJsonRpcReceive
 
+from .. import __version__
+
 import logging
 logger = logging.getLogger(__name__)
 
 
 class WatchdogProcess:
-    def __init__(self):
+    def __init__(self, config):
         self._re_manager = None
         self._re_worker = None
 
@@ -29,6 +32,7 @@ class WatchdogProcess:
         self._watchdog_state_lock = threading.Lock()
 
         self._manager_is_stopping = False  # Set True to stop the server
+        self._config = config
 
     def _create_conn_pipes(self):
         # Manager to worker
@@ -46,7 +50,9 @@ class WatchdogProcess:
         """
         logger.info("Starting RE Worker ...")
         try:
-            self._re_worker = RunEngineWorker(conn=self._manager_conn, name="RE Worker Process")
+            self._re_worker = RunEngineWorker(
+                conn=self._manager_conn, name="RE Worker Process", config=self.config,
+            )
             self._re_worker.start()
             success, err_msg = True, ""
         except Exception as ex:
@@ -145,11 +151,25 @@ class WatchdogProcess:
 
 
 def start_manager():
-
+    parser = argparse.ArgumentParser(
+        description="Start a RE Manager",
+        epilog=f"blueksy-queueserver version {__version__}",
+    )
+    parser.add_argument("--kafka_topic", type=str, help="The kafka topic to publish to.", )
+    parser.add_argument(
+        "--kafka_server", type=str, help="bootstrap server to connect to.",
+        default="127.0.0.1:9092"
+    )
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger('bluesky_queueserver').setLevel("DEBUG")
 
-    wp = WatchdogProcess()
+    args = parser.parse_args()
+    config = {}
+    if args.kafka_topic is not None:
+        config['kafka'] = {}
+        config['kafka']['topic'] = args.kafka_topic
+        config['kafka']['bootstrap'] = args.kafka_server
+    wp = WatchdogProcess(config=config)
     try:
         wp.run()
     except KeyboardInterrupt:

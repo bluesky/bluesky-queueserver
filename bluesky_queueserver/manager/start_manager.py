@@ -152,7 +152,7 @@ class WatchdogProcess:
 
 def start_manager():
     parser = argparse.ArgumentParser(
-        description="Start a RE queueserver and worker processes",
+        description="Start a RE Manager",
         epilog=f"blueksy-queueserver version {__version__}",
     )
     parser.add_argument("--kafka_topic", type=str, help="The kafka topic to publish to.", )

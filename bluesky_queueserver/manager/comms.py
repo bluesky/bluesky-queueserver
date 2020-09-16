@@ -39,6 +39,8 @@ class PipeJsonRpcReceive:
         self._dispatcher = Dispatcher()  # json-rpc dispatcher
         self._stop_thread = False  # Set True to exit the thread
 
+        self._conn_polling_timeout = 0.1  # in sec.
+
     def start(self):
         """
         Start processing of the pipe messages
@@ -76,7 +78,7 @@ class PipeJsonRpcReceive:
 
     def _receive_conn_thread(self):
         while True:
-            if self._conn.poll(0.1):
+            if self._conn.poll(self._conn_polling_timeout):
                 try:
                     msg = self._conn.recv()
                     # Messages should be handled in the event loop

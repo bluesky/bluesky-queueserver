@@ -690,7 +690,7 @@ class RunEngineManager(Process):
 
     async def _watchdog_response(self, response):
         """
-        Set the fututure with the results
+        Set the future with the results
         """
         if self._event_watchdog_comm.is_set():
             self._event_watchdog_comm.clear()  # Clear once the message received

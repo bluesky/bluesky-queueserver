@@ -37,7 +37,7 @@ class PipeJsonRpcReceive:
     def __init__(self, conn):
         self._conn = conn
         self._dispatcher = Dispatcher()  # json-rpc dispatcher
-        self._stop_thread = False  # Set True to exit the thead
+        self._stop_thread = False  # Set True to exit the thread
 
     def start(self):
         """

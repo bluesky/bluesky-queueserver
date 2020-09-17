@@ -1,5 +1,4 @@
 import pytest
-import random
 import time as ttime
 import json
 import multiprocessing

@@ -14,7 +14,13 @@ logger = logging.getLogger(__name__)
 
 
 class WatchdogProcess:
-    def __init__(self, *, re_env_config=None):
+    def __init__(self, *, re_env_config=None,
+                 cls_run_engine_worker=RunEngineWorker,
+                 cls_run_engine_manager=RunEngineManager):
+
+        self._cls_run_engine_worker = cls_run_engine_worker
+        self._cls_run_engine_manager = cls_run_engine_manager
+
         self._re_manager = None
         self._re_worker = None
 
@@ -32,6 +38,7 @@ class WatchdogProcess:
         self._watchdog_state_lock = threading.Lock()
 
         self._manager_is_stopping = False  # Set True to stop the server
+        self._heartbeat_timeout = 5  # Time to wait before restarting RE Manager
 
         # Configuration of the RE environment (passed to RE Worker)
         self._re_env_config = re_env_config
@@ -52,7 +59,7 @@ class WatchdogProcess:
         """
         logger.info("Starting RE Worker ...")
         try:
-            self._re_worker = RunEngineWorker(
+            self._re_worker = self._cls_run_engine_worker(
                 conn=self._manager_conn, name="RE Worker Process", env_config=self._re_env_config,
             )
             self._re_worker.start()
@@ -80,6 +87,7 @@ class WatchdogProcess:
         # TODO: kill() or terminate()???
         logger.info("Killing RE Worker ...")
         self._re_worker.kill()
+        self._re_worker.join()  # Not really necessary, but helps with unit testing.
         return {"success": True}
 
     def _is_worker_alive_handler(self):
@@ -112,9 +120,9 @@ class WatchdogProcess:
 
     def _start_re_manager(self):
         self._init_watchdog_state()
-        self._re_manager = RunEngineManager(conn_watchdog=self._manager_to_watchdog_conn,
-                                            conn_worker=self._worker_conn,
-                                            name="RE Manager Process")
+        self._re_manager = self._cls_run_engine_manager(conn_watchdog=self._manager_to_watchdog_conn,
+                                                        conn_worker=self._worker_conn,
+                                                        name="RE Manager Process")
         self._re_manager.start()
 
     def run(self):
@@ -123,9 +131,9 @@ class WatchdogProcess:
         self._comm_to_manager.add_method(self._start_re_worker_handler, "start_re_worker")
         self._comm_to_manager.add_method(self._join_re_worker_handler, "join_re_worker")
         self._comm_to_manager.add_method(self._kill_re_worker_handler, "kill_re_worker")
-        self._comm_to_manager.add_method(self._manager_stopping_handler, "manager_stopping")
-        # Notifications
         self._comm_to_manager.add_method(self._is_worker_alive_handler, "is_worker_alive")
+        # Notifications
+        self._comm_to_manager.add_method(self._manager_stopping_handler, "manager_stopping")
         self._comm_to_manager.add_method(self._register_heartbeat_handler, "heartbeat")
 
         self._comm_to_manager.start()
@@ -144,7 +152,8 @@ class WatchdogProcess:
             # Interval is used to protect the system from restarting in case of clock issues.
             # It may be a better idea to implement a ticker in a separate thread to act as
             #   a clock to be completely independent from system clock.
-            if (time_passed > 5.0) and (time_passed < 15.0) and not self._manager_is_stopping:
+            t_min, t_max = self._heartbeat_timeout, self._heartbeat_timeout + 10.0
+            if (time_passed >= t_min) and (time_passed <= t_max) and not self._manager_is_stopping:
                 logger.error("Timeout detected by Watchdog. RE Manager malfunctioned and must be restarted.")
                 self._re_manager.kill()
                 self._start_re_manager()
@@ -171,6 +180,7 @@ def start_manager():
         config['kafka'] = {}
         config['kafka']['topic'] = args.kafka_topic
         config['kafka']['bootstrap'] = args.kafka_server
+
     wp = WatchdogProcess(re_env_config=config)
     try:
         wp.run()

@@ -1,9 +1,9 @@
 import pytest
-import random
 import time as ttime
 import json
 import multiprocessing
 from bluesky_queueserver.manager.comms import PipeJsonRpcReceive
+from bluesky_queueserver.tests.common import format_jsonrpc_msg
 
 
 def test_PipeJsonRpcReceive_1():
@@ -66,23 +66,16 @@ def test_PipeJsonRpcReceive_2(method, params, result, notification):
     pc.add_method(some_class.method_handler4, "method4")
     pc.start()
 
-    request = {"method": method, "jsonrpc": "2.0"}
-    if params:
-        request["params"] = params
-
     for n in range(3):
         value_nonlocal = None
 
-        if not notification:
-            msg_id = random.randint(0, 1000)  # Generate some message ID
-            request["id"] = msg_id
-
+        request = format_jsonrpc_msg(method, params, notification=notification)
         conn1.send(json.dumps(request))
         if conn1.poll(timeout=0.5):  # Set timeout large enough
             if not notification:
                 response = conn1.recv()
                 response = json.loads(response)
-                assert response["id"] == msg_id, "Response ID does not match message ID."
+                assert response["id"] == request["id"], "Response ID does not match message ID."
                 assert "result" in response, \
                     f"Key 'result' is not contained in response: {response}"
                 assert response["result"] == result, \
@@ -120,17 +113,17 @@ def test_PipeJsonRpcReceive_3():
     pc.start()
 
     # Non-existing method ('Method not found' error)
-    request = [{"id": 2, "jsonrpc": "2.0", "method": "method3", "params": {"value": 7}},
-               {"jsonrpc": "2.0", "method": "method4", "params": {"value": 3}},  # Notification
-               {"id": 3, "jsonrpc": "2.0", "method": "method4", "params": {"value": 9}}]
+    request = [format_jsonrpc_msg("method3", {"value": 7}),
+               format_jsonrpc_msg("method4", {"value": 3}, notification=True),
+               format_jsonrpc_msg("method4", {"value": 9})]
     conn1.send(json.dumps(request))
 
     if conn1.poll(timeout=0.5):  # Set timeout large enough
         response = conn1.recv()
         response = json.loads(response)
         assert len(response) == 2, "Unexpected number of response messages"
-        assert response[0]["id"] == 2, "Response ID does not match message ID."
-        assert response[1]["id"] == 3, "Response ID does not match message ID."
+        assert response[0]["id"] == request[0]["id"], "Response ID does not match message ID."
+        assert response[1]["id"] == request[2]["id"], "Response ID does not match message ID."
         assert response[0]["result"] == 22, "Response ID does not match message ID."
         assert response[1]["result"] == 16, "Response ID does not match message ID."
     else:
@@ -153,7 +146,7 @@ def test_PipeJsonRpcReceive_4_failing():
 
     # ------- Incorrect argument (arg list instead of required kwargs) -------
     #   Returns 'Server Error' (-32000)
-    request = {"id": 0, "jsonrpc": "2.0", "method": "method3", "params": [5]}
+    request = format_jsonrpc_msg("method3", [5])
     conn1.send(json.dumps(request))
 
     if conn1.poll(timeout=0.5):  # Set timeout large enough
@@ -165,7 +158,9 @@ def test_PipeJsonRpcReceive_4_failing():
         assert False, "Timeout occurred while waiting for response."
 
     # ------- Incorrect argument (incorrect argument type) -------
-    request = {"id": 1, "jsonrpc": "2.0", "method": "method3", "params": {"value": "abc"}}
+    # 'json-prc' doesn't check parameter types. Instead the handler will crash if the argument
+    #   type is not suitable.
+    request = format_jsonrpc_msg("method3", {"value": "abc"})
     conn1.send(json.dumps(request))
 
     if conn1.poll(timeout=0.5):
@@ -177,7 +172,7 @@ def test_PipeJsonRpcReceive_4_failing():
         assert False, "Timeout occurred while waiting for response."
 
     # ------- Incorrect argument (extra argument) -------
-    request = {"id": 1, "jsonrpc": "2.0", "method": "method3", "params": {"value": 5, "unknown": 10}}
+    request = format_jsonrpc_msg("method3", {"value": 5, "unknown": 10})
     conn1.send(json.dumps(request))
 
     if conn1.poll(timeout=0.5):
@@ -188,7 +183,7 @@ def test_PipeJsonRpcReceive_4_failing():
         assert False, "Timeout occurred while waiting for response."
 
     # ------- Non-existing method ('Method not found' error) -------
-    request = {"id": 1, "jsonrpc": "2.0", "method": "method_handler3", "params": {"value": 5}}
+    request = format_jsonrpc_msg("method_handler3", {"value": 5})
     conn1.send(json.dumps(request))
 
     if conn1.poll(timeout=0.5):
@@ -208,6 +203,8 @@ def test_PipeJsonRpcReceive_5_failing():
     built-in exception processing should be used to process exceptions within handlers.
     It may be better to catch and process all exceptions produced by the custom code and
     leave built-in processing for exceptions that happen while calling the function.
+
+    EXCEPTIONS SHOULD BE PROCESSED INSIDE THE HANDLER!!!
     """
     def method_handler5():
         raise RuntimeError("Function crashed ...")
@@ -217,8 +214,7 @@ def test_PipeJsonRpcReceive_5_failing():
     pc.add_method(method_handler5, "method5")
     pc.start()
 
-    # Non-existing method ('Method not found' error)
-    request = {"id": 2, "jsonrpc": "2.0", "method": "method5"}
+    request = format_jsonrpc_msg("method5")
     conn1.send(json.dumps(request))
 
     if conn1.poll(timeout=0.5):  # Set timeout large enough
@@ -239,7 +235,7 @@ def test_PipeJsonRpcReceive_6_failing():
     Care must be taken to write handles that execute quickly. Timeouts must be handled
     explicitly within the handlers.
 
-    ONLY QUICKLY EXECUTED HANDLERS MAY BE USED!!!
+    ONLY INSTANTLY EXECUTED HANDLERS MAY BE USED!!!
     """
     def method_handler6():
         ttime.sleep(3)  # Longer than 'poll' timeout
@@ -250,7 +246,8 @@ def test_PipeJsonRpcReceive_6_failing():
     pc.start()
 
     # Non-existing method ('Method not found' error)
-    request = {"id": 2, "jsonrpc": "2.0", "method": "method6"}
+    request = format_jsonrpc_msg("method6")
+
     conn1.send(json.dumps(request))
 
     if conn1.poll(timeout=0.5):  # Set timeout large enough

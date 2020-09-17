@@ -87,6 +87,7 @@ class WatchdogProcess:
         # TODO: kill() or terminate()???
         logger.info("Killing RE Worker ...")
         self._re_worker.kill()
+        self._re_worker.join()  # Not really necessary, but helps with unit testing.
         return {"success": True}
 
     def _is_worker_alive_handler(self):

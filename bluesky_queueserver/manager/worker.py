@@ -2,11 +2,9 @@ from multiprocessing import Process
 import threading
 import queue
 import time as ttime
-from collections.abc import Iterable
 import asyncio
 from functools import partial
 import logging
-import os
 
 import msgpack
 import msgpack_numpy as mpn
@@ -19,7 +17,8 @@ from databroker import Broker
 
 from bluesky_kafka import Publisher as kafkaPublisher
 
-from .profile_ops import load_profile_collection, plans_from_nspace, devices_from_nspace
+from .profile_ops import (load_profile_collection, plans_from_nspace,
+                          devices_from_nspace, parse_plan)
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +133,7 @@ class RunEngineWorker(Process):
         self._conn.send(msg)
         logger.debug("Finished execution of a task")
 
-    def _load_new_plan(self, plan):
+    def _load_new_plan(self, plan_info):
         """
         Loads a new plan into `self._execution_queue`. The plan plan name and
         device names are represented as strings. Parsing of the plan in this
@@ -150,56 +149,42 @@ class RunEngineWorker(Process):
             plan kwargs
         """
         # Save reference to the currently executed plan
-        self._running_plan = plan
+        self._running_plan = plan_info
 
-        plan_name = plan["name"]
-        plan_args = plan["args"]
-        plan_kwargs = plan["kwargs"]
+        logger.info("Starting a plan '%s'.", plan_info["name"])
 
-        logger.info("Starting a plan '%s'.", plan_name)
+        try:
+            plan_parsed = parse_plan(plan_info, allowed_plans=self._allowed_plans,
+                                     allowed_devices=self._allowed_devices)
 
-        def ref_from_name(v, allowed_items):
-            if isinstance(v, str):
-                if v in allowed_items:
-                    v = allowed_items[v]
-            return v
+            plan_func = plan_parsed["name"]
+            plan_args_parsed = plan_parsed["args"]
+            plan_kwargs_parsed = plan_parsed["kwargs"]
 
-        def process_argument(v, allowed_items):
-            if isinstance(v, str):
-                v = ref_from_name(v, allowed_items)
-            elif isinstance(v, dict):
-                for key, value in v.copy().items():
-                    v[key] = process_argument(value, allowed_items)
-            elif isinstance(v, Iterable):
-                v_original = v
-                v = list()
-                for item in v_original:
-                    v.append(process_argument(item, allowed_items))
-            return v
+            def get_plan(plan_func, plan_args, plan_kwargs):
+                def plan():
+                    if self._RE._state == 'panicked':
+                        raise RuntimeError("Run Engine is in the 'panicked' state. "
+                                           "You need to recreate the environment before you can run plans.")
+                    elif self._RE._state != 'idle':
+                        raise RuntimeError(f"Run Engine is in '{self._RE._state}' state. "
+                                           "Stop or finish any running plan.")
+                    else:
+                        result = self._RE(plan_func(*plan_args, **plan_kwargs))
+                    return result
+                return plan
 
-        # TODO: should we allow plan names as arguments
-        allowed_items = self._allowed_devices
-        plan_func = process_argument(plan_name, self._allowed_plans)
-        plan_args_parsed = process_argument(plan_args, allowed_items)
-        plan_kwargs_parsed = process_argument(plan_kwargs, allowed_items)
+            plan = get_plan(plan_func, plan_args_parsed, plan_kwargs_parsed)
+            # 'is_resuming' is true (we start a new plan that is supposedly runs to completion
+            #   as opposed to aborting/stopping/halting a plan)
+        except Exception as ex:
+            # We want the exception to be raised in the main thread (plan execution)
+            def get_plan(err_msg):
+                def plan():
+                    raise Exception(err_msg)
+                return plan()
+            plan = get_plan(str(ex))
 
-        # We are not parsing 'kwargs' at this time
-        def get_plan(plan_func, plan_args, plan_kwargs):
-            def plan():
-                if self._RE._state == 'panicked':
-                    raise RuntimeError("Run Engine is in the 'panicked' state. "
-                                       "You need to recreate the environment before you can run plans.")
-                elif self._RE._state != 'idle':
-                    raise RuntimeError(f"Run Engine is in '{self._RE._state}' state. "
-                                       "Stop or finish any running plan.")
-                else:
-                    result = self._RE(plan_func(*plan_args, **plan_kwargs))
-                return result
-            return plan
-
-        plan = get_plan(plan_func, plan_args_parsed, plan_kwargs_parsed)
-        # 'is_resuming' is true (we start a new plan that is supposedly runs to completion
-        #   as opposed to aborting/stopping/halting a plan)
         self._execution_queue.put((plan, True))
 
     def _continue_plan(self, option):
@@ -395,18 +380,24 @@ class RunEngineWorker(Process):
         loop = get_bluesky_event_loop()
         asyncio.set_event_loop(loop)
 
-        # Load profile collection
-        # TODO: error processing while reading the profile collection
-        #   - failed to load the profile collection
-        path = os.path.realpath(__file__)
-        path = path[:-1] if path[-1] in "/\\" else path  # Remove slash/backslash from the end
-        path = os.path.split(path)[0]  # Remove file name
-        path = os.path.split(path)[0]  # Remove bottom dir name
-        path = os.path.join(path, "profile_collection_sim")
-        logger.info(f"Loading beamline profiles located at '%s'", path)
-        self._re_namespace = load_profile_collection(path)
-        self._allowed_plans = plans_from_nspace(self._re_namespace)
-        self._allowed_devices = devices_from_nspace(self._re_namespace)
+        def init_namespace():
+            self._re_namespace, self._allowed_plans, self._allowed_devices = {}, {}, {}
+
+        if "profile_collection_path" not in self._env_config:
+            logger.warning("Path to profile collection was not specified. "
+                           "No profile collection will be loaded.")
+            init_namespace()
+        else:
+            path = self._env_config["profile_collection_path"]
+            logger.info("Loading beamline profiles located at '%s'", path)
+            try:
+                self._re_namespace = load_profile_collection(path)
+                self._allowed_plans = plans_from_nspace(self._re_namespace)
+                self._allowed_devices = devices_from_nspace(self._re_namespace)
+                logger.info("Loading of the beamline profiles completed successfully")
+            except Exception as ex:
+                logger.exception("Error wile loading profile collection: %s", str(ex))
+                init_namespace()
 
         self._RE = RunEngine({})
 

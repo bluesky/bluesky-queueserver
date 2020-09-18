@@ -1,8 +1,22 @@
 import os
 import glob
 import runpy
+from collections.abc import Iterable
 
 import ophyd
+
+
+def get_default_profile_collection_dir():
+    """
+    Returns the path to the default profile collection that is distributed with the package.
+    The function does not guarantee that the directory exists.
+    """
+    pc_path = os.path.realpath(__file__)
+    pc_path = pc_path[:-1] if pc_path[-1] in "/\\" else pc_path  # Remove slash/backslash from the end
+    pc_path = os.path.split(pc_path)[0]  # Remove file name
+    pc_path = os.path.split(pc_path)[0]  # Remove bottom dir name
+    pc_path = os.path.join(pc_path, "profile_collection_sim")
+    return pc_path
 
 
 def load_profile_collection(path):
@@ -83,3 +97,78 @@ def devices_from_nspace(nspace):
         if isinstance(item[1], ophyd.Device):
             devices[item[0]] = item[1]
     return devices
+
+
+def parse_plan(plan, *, allowed_plans, allowed_devices):
+    """
+    Parse the plan: replace the device names (str) in the plan specification by
+    references to ophyd objects; replace plan name by the reference to the plan.
+
+    Parameters
+    ----------
+    plan: dict
+        Plan specification. Keys: `name` (str) - plan name, `args` - plan args,
+        `kwargs` - plan kwargs.
+    allowed_plans: dict(str, callable)
+        Dictionary of allowed plans.
+    allowed_devices: dict(str, ophyd.Device)
+        Dictionary of allowed devices
+
+    Returns
+    -------
+    dict
+        Parsed plan specification that contains references to plans and Ophyd devices.
+
+    Raises
+    ------
+    RuntimeError
+        Raised in case parsing was not successful.
+    """
+
+    success = True
+    err_msg = ""
+
+    plan_name = plan["name"]
+    plan_args = plan["args"] if "args" in plan else []
+    plan_kwargs = plan["kwargs"] if "kwargs" in plan else {}
+
+    def ref_from_name(v, allowed_items):
+        if isinstance(v, str):
+            if v in allowed_items:
+                v = allowed_items[v]
+        return v
+
+    def process_argument(v, allowed_items):
+        # Recursively process lists (iterables) and dictionaries
+        if isinstance(v, str):
+            v = ref_from_name(v, allowed_items)
+        elif isinstance(v, dict):
+            for key, value in v.copy().items():
+                v[key] = process_argument(value, allowed_items)
+        elif isinstance(v, Iterable):
+            v_original = v
+            v = list()
+            for item in v_original:
+                v.append(process_argument(item, allowed_items))
+        return v
+
+    # TODO: should we allow plan names as arguments?
+    allowed_items = allowed_devices
+
+    plan_func = process_argument(plan_name, allowed_plans)
+    if isinstance(plan_func, str):
+        success = False
+        err_msg = f"Plan '{plan_name}' is not allowed or does not exist."
+
+    plan_args_parsed = process_argument(plan_args, allowed_items)
+    plan_kwargs_parsed = process_argument(plan_kwargs, allowed_items)
+
+    if not success:
+        raise RuntimeError("Error while parsing the plan: %s", err_msg)
+
+    plan_parsed = {
+        "name": plan_func,
+        "args": plan_args_parsed,
+        "kwargs": plan_kwargs_parsed
+    }
+    return plan_parsed

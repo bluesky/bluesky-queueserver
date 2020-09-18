@@ -42,9 +42,10 @@ install:
   # Install extra requirements for running tests and building docs.
   - pip install -r requirements-dev.txt
   - pip install scikit-image
+  - pip list
 
 script:
-  - coverage run -m pytest  # Run the tests and check for test coverage.
+  - coverage run -m pytest -v  # Run the tests and check for test coverage.
   - coverage report -m  # Generate test coverage report.
   - set -e
   - if [ BUILD_DOCS == 'true' ]; then

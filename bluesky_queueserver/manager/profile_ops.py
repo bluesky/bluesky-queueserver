@@ -2,6 +2,7 @@ import os
 import glob
 import runpy
 from collections.abc import Iterable
+import pkg_resources
 
 import ophyd
 
@@ -11,11 +12,7 @@ def get_default_profile_collection_dir():
     Returns the path to the default profile collection that is distributed with the package.
     The function does not guarantee that the directory exists.
     """
-    pc_path = os.path.realpath(__file__)
-    pc_path = pc_path[:-1] if pc_path[-1] in "/\\" else pc_path  # Remove slash/backslash from the end
-    pc_path = os.path.split(pc_path)[0]  # Remove file name
-    pc_path = os.path.split(pc_path)[0]  # Remove bottom dir name
-    pc_path = os.path.join(pc_path, "profile_collection_sim")
+    pc_path = pkg_resources.resource_filename('bluesky_queueserver', 'profile_collection_sim/')
     return pc_path
 
 

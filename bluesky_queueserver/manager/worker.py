@@ -6,6 +6,7 @@ from collections.abc import Iterable
 import asyncio
 from functools import partial
 import logging
+import os
 
 import msgpack
 import msgpack_numpy as mpn
@@ -16,11 +17,9 @@ from bluesky.run_engine import get_bluesky_event_loop
 from bluesky.callbacks.best_effort import BestEffortCallback
 from databroker import Broker
 
-# The following plans/devices must be imported (otherwise plan parsing wouldn't work)
-from ophyd.sim import det1, det2, motor  # noqa: F401
-from bluesky.plans import count, scan  # noqa: F401
 from bluesky_kafka import Publisher as kafkaPublisher
 
+from .profile_ops import load_profile_collection, plans_from_nspace, devices_from_nspace
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +62,8 @@ class RunEngineWorker(Process):
 
         self._db = DB[0]
         self._env_config = env_config or {}
+
+        self._re_namespace, self._allowed_plans, self._allowed_devices = {}, {}, {}
 
     def _receive_packet_thread(self):
         """
@@ -157,25 +158,30 @@ class RunEngineWorker(Process):
 
         logger.info("Starting a plan '%s'.", plan_name)
 
-        def ref_from_name(v):
+        def ref_from_name(v, allowed_items):
             if isinstance(v, str):
-                try:
-                    v = globals()[v]
-                except KeyError:
-                    pass
+                if v in allowed_items:
+                    v = allowed_items[v]
             return v
 
-        # The following is some primitive parsing of the plan that replaces names
-        #   with references. No error handling is implemented, so it is better if
-        #   the submitted plans contain no errors.
-        plan_func = ref_from_name(plan_name)
-        plan_args_parsed = []
-        for arg in plan_args:
-            if isinstance(arg, Iterable) and not isinstance(arg, str):
-                arg_parsed = [ref_from_name(_) for _ in arg]
-            else:
-                arg_parsed = ref_from_name(arg)
-            plan_args_parsed.append(arg_parsed)
+        def process_argument(v, allowed_items):
+            if isinstance(v, str):
+                v = ref_from_name(v, allowed_items)
+            elif isinstance(v, dict):
+                for key, value in v.copy().items():
+                    v[key] = process_argument(value, allowed_items)
+            elif isinstance(v, Iterable):
+                v_original = v
+                v = list()
+                for item in v_original:
+                    v.append(process_argument(item, allowed_items))
+            return v
+
+        # TODO: should we allow plan names as arguments
+        allowed_items = self._allowed_devices
+        plan_func = process_argument(plan_name, self._allowed_plans)
+        plan_args_parsed = process_argument(plan_args, allowed_items)
+        plan_kwargs_parsed = process_argument(plan_kwargs, allowed_items)
 
         # We are not parsing 'kwargs' at this time
         def get_plan(plan_func, plan_args, plan_kwargs):
@@ -191,7 +197,7 @@ class RunEngineWorker(Process):
                 return result
             return plan
 
-        plan = get_plan(plan_func, plan_args_parsed, plan_kwargs)
+        plan = get_plan(plan_func, plan_args_parsed, plan_kwargs_parsed)
         # 'is_resuming' is true (we start a new plan that is supposedly runs to completion
         #   as opposed to aborting/stopping/halting a plan)
         self._execution_queue.put((plan, True))
@@ -388,6 +394,19 @@ class RunEngineWorker(Process):
         # Setting the default event loop is needed to make the code work with Python 3.8.
         loop = get_bluesky_event_loop()
         asyncio.set_event_loop(loop)
+
+        # Load profile collection
+        # TODO: error processing while reading the profile collection
+        #   - failed to load the profile collection
+        path = os.path.realpath(__file__)
+        path = path[:-1] if path[-1] in "/\\" else path  # Remove slash/backslash from the end
+        path = os.path.split(path)[0]  # Remove file name
+        path = os.path.split(path)[0]  # Remove bottom dir name
+        path = os.path.join(path, "profile_collection_sim")
+        logger.info(f"Loading beamline profiles located at '%s'", path)
+        self._re_namespace = load_profile_collection(path)
+        self._allowed_plans = plans_from_nspace(self._re_namespace)
+        self._allowed_devices = devices_from_nspace(self._re_namespace)
 
         self._RE = RunEngine({})
 

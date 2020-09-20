@@ -116,8 +116,8 @@ class PipeJsonRpcReceive:
                     logger.exception("Exception occurred while waiting for "
                                      "RE Manager-> Watchdog message: %s", str(ex))
                     break
-                if not self._thread_running:  # Exit thread
-                    break
+            if not self._thread_running:  # Exit thread
+                break
 
     def _conn_received(self, msg):
 
@@ -271,5 +271,5 @@ class PipeJsonRpcSendAsync:
                 except Exception as ex:
                     logger.exception("Exception occurred while waiting for packet: %s", str(ex))
                     break
-                if not self._thread_running:  # Exit thread
-                    break
+            if not self._thread_running:  # Exit thread
+                break

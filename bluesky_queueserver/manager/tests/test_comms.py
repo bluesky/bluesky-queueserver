@@ -2,17 +2,47 @@ import pytest
 import time as ttime
 import json
 import multiprocessing
-from bluesky_queueserver.manager.comms import PipeJsonRpcReceive
+import threading
+import asyncio
+from bluesky_queueserver.manager.comms import PipeJsonRpcReceive, PipeJsonRpcSendAsync
 from bluesky_queueserver.tests.common import format_jsonrpc_msg
 
+
+def count_threads_with_name(name):
+    """
+    Returns the number of currently existing threads with the given name
+    """
+    n_count = 0
+    for th in threading.enumerate():
+        if th.name == name:
+            n_count += 1
+    return n_count
+
+
+# =======================================================================
+#                       Class PipeJsonRpcReceive
 
 def test_PipeJsonRpcReceive_1():
     """
     Create, start and stop `PipeJsonRpcReceive` object
     """
     conn1, conn2 = multiprocessing.Pipe()
-    pc = PipeJsonRpcReceive(conn=conn2)
+    new_name = "Unusual Thread Name"
+
+    assert count_threads_with_name(new_name) == 0, "No threads are expected to exist"
+
+    pc = PipeJsonRpcReceive(conn=conn2, name=new_name)
     pc.start()
+    assert count_threads_with_name(new_name) == 1, "One thread is expected to exist"
+
+    pc.start()  # Expected to do nothing
+
+    pc.stop()
+    ttime.sleep(0.15)  # Wait until the thread stops (0.1s polling period)
+    assert count_threads_with_name(new_name) == 0, "No threads are expected to exist"
+
+    pc.start()  # Restart
+    assert count_threads_with_name(new_name) == 1, "One thread is expected to exist"
     pc.stop()
 
 
@@ -255,4 +285,216 @@ def test_PipeJsonRpcReceive_6_failing():
     else:
         pass
 
+    pc.stop()
+
+
+# =======================================================================
+#                       Class PipeJsonRpcSendAsync
+
+def test_PipeJsonRpcSendAsync_1():
+    """
+    Create, start and stop `PipeJsonRpcReceive` object
+    """
+    conn1, conn2 = multiprocessing.Pipe()
+    new_name = "Unusual Thread Name"
+
+    async def object_start_stop():
+        assert count_threads_with_name(new_name) == 0, "No threads are expected to exist"
+
+        pc = PipeJsonRpcSendAsync(conn=conn1, name=new_name)
+        pc.start()
+        assert count_threads_with_name(new_name) == 1, "One thread is expected to exist"
+
+        pc.start()  # Expected to do nothing
+
+        pc.stop()
+        ttime.sleep(0.15)  # Wait until the thread stops (0.1s polling period)
+        assert count_threads_with_name(new_name) == 0, "No threads are expected to exist"
+
+        pc.start()  # Restart
+        assert count_threads_with_name(new_name) == 1, "One thread is expected to exist"
+        pc.stop()
+
+    asyncio.run(object_start_stop())
+
+
+@pytest.mark.parametrize("method, params, result, notification", [
+    ("method_handler1", [], 5, False),
+    ("method_handler1", [], 5, True),
+    ("method1", [], 5, False),
+    ("method2", [5], 15, False),
+    ("method2", {"value": 5}, 15, False),
+    ("method2", {}, 12, False),
+    ("method3", {"value": 5}, 20, False),
+    ("method3", {}, 18, False),
+    ("method4", {"value": 5}, 20, False),
+    ("method4", {}, 19, False),
+])
+def test_PipeJsonRpcSendAsync_2(method, params, result, notification):
+    """
+    Test of basic functionality. Here we don't test for timeout case (it raises an exception).
+    """
+    value_nonlocal = None
+
+    def method_handler1():
+        nonlocal value_nonlocal
+        value_nonlocal = "function_was_called"
+        return 5
+
+    def method_handler2(value=2):
+        nonlocal value_nonlocal
+        value_nonlocal = "function_was_called"
+        return value + 10
+
+    def method_handler3(*, value=3):
+        nonlocal value_nonlocal
+        value_nonlocal = "function_was_called"
+        return value + 15
+
+    class SomeClass:
+        def method_handler4(self, *, value=4):
+            nonlocal value_nonlocal
+            value_nonlocal = "function_was_called"
+            return value + 15
+
+    some_class = SomeClass()
+
+    conn1, conn2 = multiprocessing.Pipe()
+    pc = PipeJsonRpcReceive(conn=conn2, name="comm-server")
+    pc.add_method(method_handler1)  # No name is specified, default name is "method_handler1"
+    pc.add_method(method_handler1, "method1")
+    pc.add_method(method_handler2, "method2")
+    pc.add_method(method_handler3, "method3")
+    pc.add_method(some_class.method_handler4, "method4")
+    pc.start()
+
+    async def send_messages():
+        nonlocal value_nonlocal
+
+        p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client")
+        p_send.start()
+
+        for n in range(3):
+            value_nonlocal = None
+
+            response = await p_send.send_msg(method, params, notification=notification)
+            if not notification:
+                assert "result" in response, \
+                    f"Key 'result' is not contained in response: {response}"
+                assert response["result"] == result, \
+                    f"Result does not match the expected: {response}"
+                assert value_nonlocal == "function_was_called", "Non-local variable has incorrect value"
+            elif response is not None:
+                assert False, "Response was received for notification."
+
+        p_send.stop()
+
+    asyncio.run(send_messages())
+    pc.stop()
+
+
+def test_PipeJsonRpcSendAsync_3():
+    """
+    Put multiple messages to the loop at once. The should be processed one by one.
+    """
+    n_calls = 0
+    lock = threading.Lock()
+
+    def method_handler1():
+        nonlocal n_calls
+        with lock:
+            n_calls += 1
+            n_return = n_calls
+        ttime.sleep(0.1)
+        return n_return
+
+    conn1, conn2 = multiprocessing.Pipe()
+    pc = PipeJsonRpcReceive(conn=conn2, name="comm-server")
+    pc.add_method(method_handler1, "method1")
+    pc.start()
+
+    async def send_messages():
+        p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client")
+        p_send.start()
+
+        # Submit multiple messages at once. Messages should stay at the event loop
+        #   and be processed one by one.
+        futs = []
+        for n in range(5):
+            futs.append(asyncio.ensure_future(p_send.send_msg("method1")))
+
+        for n, fut in enumerate(futs):
+            await asyncio.wait_for(fut, timeout=5.0)  # Timeout is in case of failure
+            response = fut.result()
+            assert response["result"] == n + 1, "Incorrect returned value"
+
+        p_send.stop()
+
+    asyncio.run(send_messages())
+    pc.stop()
+
+
+def test_PipeJsonRpcSendAsync_4():
+    """
+    Message timeout.
+    """
+    def method_handler1():
+        ttime.sleep(1)
+
+    conn1, conn2 = multiprocessing.Pipe()
+    pc = PipeJsonRpcReceive(conn=conn2, name="comm-server")
+    pc.add_method(method_handler1, "method1")
+    pc.start()
+
+    async def send_messages():
+        p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client")
+        p_send.start()
+
+        # Submit multiple messages at once. Messages should stay at the event loop
+        #   and be processed one by one.
+        with pytest.raises(asyncio.TimeoutError):
+            await p_send.send_msg("method1", timeout=0.5)
+
+        p_send.stop()
+
+    asyncio.run(send_messages())
+    pc.stop()
+
+
+def test_PipeJsonRpcSendAsync_5():
+    """
+    Specia test case.
+    Two messages: the first message times out, the second message is send before the response
+    from the first message is received. Verify that the result returned in response to the
+    second message is received. (We discard the result of the message that is timed out.)
+    """
+    def method_handler1():
+        ttime.sleep(0.7)
+        return 39
+
+    def method_handler2():
+        ttime.sleep(0.2)
+        return 56
+
+    conn1, conn2 = multiprocessing.Pipe()
+    pc = PipeJsonRpcReceive(conn=conn2, name="comm-server")
+    pc.add_method(method_handler1, "method1")
+    pc.add_method(method_handler2, "method2")
+    pc.start()
+
+    async def send_messages():
+        p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client")
+        p_send.start()
+
+        # Submit multiple messages at once. Messages should stay at the event loop
+        #   and be processed one by one.
+        with pytest.raises(asyncio.TimeoutError):
+            await p_send.send_msg("method1", timeout=0.5)
+
+        response = await p_send.send_msg("method2", timeout=0.5)
+        assert response["result"] == 56, "Incorrect result received"
+
+        p_send.stop()
+
+    asyncio.run(send_messages())
     pc.stop()

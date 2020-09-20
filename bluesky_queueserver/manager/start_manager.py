@@ -2,10 +2,12 @@ import argparse
 from multiprocessing import Pipe
 import threading
 import time as ttime
+import os
 
 from .worker import RunEngineWorker
 from .manager import RunEngineManager
 from .comms import PipeJsonRpcReceive
+from .profile_ops import get_default_profile_collection_dir
 
 from .. import __version__
 
@@ -167,10 +169,11 @@ def start_manager():
         epilog=f"blueksy-queueserver version {__version__}",
     )
     parser.add_argument("--kafka_topic", type=str, help="The kafka topic to publish to.", )
-    parser.add_argument(
-        "--kafka_server", type=str, help="bootstrap server to connect to.",
-        default="127.0.0.1:9092"
-    )
+    parser.add_argument("--kafka_server", type=str, help="Bootstrap server to connect to.",
+                        default="127.0.0.1:9092")
+    parser.add_argument("--profile_collection", "-p", dest="profile_collection_path",
+                        type=str, help="Path to directory that contains profile collection.", )
+
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger('bluesky_queueserver').setLevel("DEBUG")
 
@@ -180,6 +183,22 @@ def start_manager():
         config['kafka'] = {}
         config['kafka']['topic'] = args.kafka_topic
         config['kafka']['bootstrap'] = args.kafka_server
+
+    if args.profile_collection_path:
+        pc_path = args.profile_collection_path
+        pc_path = os.path.abspath(os.path.expanduser(pc_path))
+        if not os.path.exists(pc_path):
+            logger.error("Profile collection directory '%s' does not exist", pc_path)
+            return 1
+        if not os.path.isdir(pc_path):
+            logger.error("Path to profile collection '%s' is not a directory", pc_path)
+            return 1
+    else:
+        # The default collection is the collection of simulated Ophyd devices
+        #   and built-in Bluesky plans
+        pc_path = get_default_profile_collection_dir()
+
+    config["profile_collection_path"] = pc_path
 
     wp = WatchdogProcess(re_env_config=config)
     try:

@@ -62,7 +62,7 @@ class PipeJsonRpcReceive:
     def __init__(self, conn, *, name="RE QServer Comm",):
         self._conn = conn
         self._dispatcher = Dispatcher()  # json-rpc dispatcher
-        self._stop_thread = True  # Set True to exit the thread
+        self._thread_running = False  # Set True to exit the thread
 
         self._thread_name = name
 
@@ -78,7 +78,7 @@ class PipeJsonRpcReceive:
         """
         Stop processing of the pipe messages (and exit the tread)
         """
-        self._stop_thread = True
+        self._thread_running = False
 
     def __del__(self):
         self.stop()
@@ -98,11 +98,12 @@ class PipeJsonRpcReceive:
         self._dispatcher.add_method(handler, name)
 
     def _start_conn_thread(self):
-        self._stop_thread = False
-        self._thread_conn = threading.Thread(target=self._receive_conn_thread,
-                                             name=self._thread_name,
-                                             daemon=True)
-        self._thread_conn.start()
+        if not self._thread_running:
+            self._thread_running = True
+            self._thread_conn = threading.Thread(target=self._receive_conn_thread,
+                                                 name=self._thread_name,
+                                                 daemon=True)
+            self._thread_conn.start()
 
     def _receive_conn_thread(self):
         while True:
@@ -115,7 +116,7 @@ class PipeJsonRpcReceive:
                     logger.exception("Exception occurred while waiting for "
                                      "RE Manager-> Watchdog message: %s", str(ex))
                     break
-                if self._stop_thread:  # Exit thread
+                if not self._thread_running:  # Exit thread
                     break
 
     def _conn_received(self, msg):
@@ -167,9 +168,9 @@ class PipeJsonRpcSendAsync:
 
         # Polling timeout for the pipe. The data will be read from the pipe instantly once it is available.
         #   The timeout determines how long it would take to stop the thread when needed.
-        self._pipe_polling_timeout = 0.1
+        self._conn_polling_timeout = 0.1
 
-        self._stop_thread = True  # Set True to exit the thread
+        self._thread_running = False  # True - thread is running
 
         # Expected ID of the received message. The ID must be the same as the ID of the sent message.
         #   Ignore all message that don't have matching ID or no ID.
@@ -185,18 +186,19 @@ class PipeJsonRpcSendAsync:
         """
         Stop processing of the pipe messages (and exit the tread)
         """
-        self._stop_thread = True
+        self._thread_running = False
 
     def __del__(self):
         self.stop()
 
     def _start_conn_thread(self):
         # Start 'receive' thread
-        self._stop_thread = False
-        self._pipe_receive_thread = threading.Thread(target=self._pipe_receive,
-                                                     name=self._thread_name,
-                                                     daemon=True)
-        self._pipe_receive_thread.start()
+        if not self._thread_running:
+            self._thread_running = True
+            self._pipe_receive_thread = threading.Thread(target=self._pipe_receive,
+                                                         name=self._thread_name,
+                                                         daemon=True)
+            self._pipe_receive_thread.start()
 
     async def send_msg(self, method, params=None, *, notification=False, timeout=None):
         """
@@ -238,7 +240,7 @@ class PipeJsonRpcSendAsync:
         """
         if self._event_comm.is_set():
             if "id" in response:
-                if response["id"] != self._expected_msg_id["id"]:
+                if response["id"] != self._expected_msg_id:
                     # Incorrect ID: ignore the message.
                     logger.error("Response Watchdog->RE Manager contains incorrect ID: %s. Expected %s.\n"
                                  "Message: %s",
@@ -259,7 +261,7 @@ class PipeJsonRpcSendAsync:
 
     def _pipe_receive(self):
         while True:
-            if self._conn.poll(self._pipe_polling_timeout):
+            if self._conn.poll(self._conn_polling_timeout):
                 try:
                     msg_json = self._conn.recv()
                     msg = json.loads(msg_json)
@@ -268,4 +270,6 @@ class PipeJsonRpcSendAsync:
                     self._loop.call_soon_threadsafe(self._conn_received, msg)
                 except Exception as ex:
                     logger.exception("Exception occurred while waiting for packet: %s", str(ex))
+                    break
+                if not self._thread_running:  # Exit thread
                     break

@@ -156,7 +156,9 @@ class PipeJsonRpcSendAsync:
     """
     The class contains functions for supporting asyncio-based client for JSON RPC comminucation
     using interprocess communication pipe. The class object must be created on the loop (from one of
-    `async` functions).
+    `async` functions). This implementation allows calls only to one method at a time. Multiple
+    `send_msg` requests may be put on the loop, but the next message is never sent before
+    the response to the previous message is received or timeout occurred.
 
     Parameters
     ----------

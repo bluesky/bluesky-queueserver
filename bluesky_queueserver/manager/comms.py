@@ -356,7 +356,9 @@ class PipeJsonRpcSendAsync:
                         if "data" in response["error"]:
                             # Server Error (issue with execution of the method)
                             err_type = response["error"]["data"]["type"]
-                            err_msg = response["error"]["data"]["message"]
+                            # Message: "Server error: <message text>"
+                            err_msg = response["error"]["message"] + ": " + \
+                                response["error"]["data"]["message"]
                         else:
                             # Other json-rpc errors
                             err_type = "CommJsonRpcError"

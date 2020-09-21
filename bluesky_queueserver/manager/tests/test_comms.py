@@ -21,6 +21,52 @@ def count_threads_with_name(name):
 
 
 # =======================================================================
+#                       Class CommJsonRpcError
+
+def test_CommJsonRpcError_1():
+    """
+    Basic test for `CommJsonRpcError` class.
+    """
+    err_msg, err_code, err_type = "Some error occured", 25, "RuntimeError"
+    ex = CommJsonRpcError(err_msg, err_code, err_type)
+
+    assert ex.message == err_msg, "Message set incorrectly"
+    assert ex.error_code == err_code, "Error code set incorrectly"
+    assert ex.error_type == err_type, "Error type set incorrectly"
+
+
+def test_CommJsonRpcError_2():
+    """
+    Basic test for `CommJsonRpcError` class.
+    """
+    err_msg, err_code, err_type = "Some error occured", 25, "RuntimeError"
+    ex = CommJsonRpcError(err_msg, err_code, err_type)
+
+    s = str(ex)
+    assert err_msg in s, "Error message is not found in printed error message"
+    assert str(err_code) in s, "Error code is not found in printed error message"
+    assert err_type in s, "Error type is not found in printed error message"
+
+    repr = f"CommJsonRpcError('{err_msg}',{err_code},'{err_type}')"
+    assert ex.__repr__() == repr, "Error representation is printed incorrectly"
+
+
+def test_CommJsonRpcError_3_fail():
+    """
+    `CommJsonRpcError` class. Failing cases
+    """
+    err_msg, err_code, err_type = "Some error occured", 25, "RuntimeError"
+    ex = CommJsonRpcError(err_msg, err_code, err_type)
+
+    with pytest.raises(RuntimeError, match="Attempt to set read-only attribute"):
+        ex.message = err_msg
+    with pytest.raises(RuntimeError, match="Attempt to set read-only attribute"):
+        ex.error_code = err_code
+    with pytest.raises(RuntimeError, match="Attempt to set read-only attribute"):
+        ex.error_type = err_type
+
+
+# =======================================================================
 #                       Class PipeJsonRpcReceive
 
 def test_PipeJsonRpcReceive_1():

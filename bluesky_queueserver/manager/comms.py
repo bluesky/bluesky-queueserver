@@ -248,7 +248,6 @@ class PipeJsonRpcSendAsync:
         self._thread_name = name
 
         self._fut_comm = None  # Future for waiting for messages from watchdog
-        self._event_comm = asyncio.Event()  # Event which is set when message is expected from watchdog
         # Lock that prevents sending of the next message before response
         #   to the previous message is received.
         self._lock_comm = asyncio.Lock()
@@ -335,7 +334,6 @@ class PipeJsonRpcSendAsync:
             try:
                 if not notification:
                     self._fut_comm = self._loop.create_future()
-                    self._event_comm.set()  # We don't expect response if this is not a notification
 
                 msg_json = json.dumps(msg)
                 self._conn.send(msg_json)
@@ -344,8 +342,7 @@ class PipeJsonRpcSendAsync:
                 if not notification:
                     self._expected_msg_id = msg["id"]
                     # Waiting for the future may raise 'asyncio.TimeoutError'
-                    await asyncio.wait_for(self._fut_comm,
-                                           timeout=timeout)
+                    await asyncio.wait_for(self._fut_comm, timeout=timeout)
                     response = self._fut_comm.result()
 
                     if "result" in response:
@@ -375,16 +372,16 @@ class PipeJsonRpcSendAsync:
             except asyncio.TimeoutError:
                 raise CommTimeoutError(f"Timeout while waiting for response to message: \n"
                                        f"{pprint.pformat(msg)}")
-
             finally:
-                self._event_comm.clear()  # Clear before the exit as well
+                self._fut_comm = None
+                self._expected_msg_id = None
 
     async def _response_received(self, response):
         """
         Set the future with the results. Ignore all messages with unexpected or missing IDs.
         Also ignore all unexpected messages.
         """
-        if self._event_comm.is_set():
+        if self._expected_msg_id is not None:
             if "id" in response:
                 if response["id"] != self._expected_msg_id:
                     # Incorrect ID: ignore the message.
@@ -393,7 +390,6 @@ class PipeJsonRpcSendAsync:
                                  response["id"], self._expected_msg_id["id"], pprint.pformat(response))
                 else:
                     # Accept the message. Otherwise wait for timeout
-                    self._event_comm.clear()  # Clear once the message received
                     self._fut_comm.set_result(response)
             else:
                 # Missing ID: ignore the message

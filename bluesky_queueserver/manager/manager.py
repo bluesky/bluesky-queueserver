@@ -10,6 +10,7 @@ import pprint
 import uuid
 
 from .worker import DB
+from .comms import PipeJsonRpcSendAsync, CommTimeoutError
 
 import logging
 
@@ -62,7 +63,6 @@ class RunEngineManager(Process):
 
         # Threads must be started in the 'run' function so that they run in the correct process.
         self._thread_conn_worker = None
-        self._thread_conn_watchdog = None
 
         self._loop = None
 
@@ -79,18 +79,11 @@ class RunEngineManager(Process):
         self._event_worker_closed = None
         self._fut_worker_status = None
 
-        self._fut_watchdog_comm = None  # Future for waiting for messages from watchdog
-        self._event_watchdog_comm = None  # Event which is set when message is expected from watchdog
-        # Lock that prevents sending of the next message before response
-        #   to the previous message is received
-        self._lock_watchdog_comm = None
-        self._timeout_watchdog_comm = 0.5  # Timeout (time to wait for response to a message)
+        # The object of PipeJsonRpcSendAsync. Communciation with Watchdog module.
+        #    The object must be created on the loop.
+        self._comm_to_watchdog = None
 
     def _start_conn_threads(self):
-        self._thread_conn_watchdog = threading.Thread(target=self._receive_packet_watchdog_thread,
-                                                      name="RE QServer Comm1",
-                                                      daemon=True)
-        self._thread_conn_watchdog.start()
         self._thread_conn_worker = threading.Thread(target=self._receive_packet_worker_thread,
                                                     name="RE QServer Comm2",
                                                     daemon=True)
@@ -152,7 +145,7 @@ class RunEngineManager(Process):
         self._event_worker_created = asyncio.Event()
 
         try:
-            success = await self._watchdog_start_re_worker(timeout=0.5)
+            success = await self._watchdog_start_re_worker()
             if not success:
                 raise RuntimeError("Failed to create Worker process")
             logger.debug("Waiting for RE worker to start ...")
@@ -181,7 +174,7 @@ class RunEngineManager(Process):
             await self._event_worker_closed.wait()
             logger.debug("RE Worker to closed")
 
-            if not await self._watchdog_join_re_worker(timeout=0.5):
+            if not await self._watchdog_join_re_worker(timeout_join=0.5):
                 success = False
                 # TODO: this error should probably be handled differently than this,
                 #   since it may indicate that the worker process is stalled.
@@ -283,20 +276,6 @@ class RunEngineManager(Process):
 
     # ================================================================================
     #         Functions for communication with the worker process (via Pipe)
-
-    def _receive_packet_watchdog_thread(self):
-        while True:
-            if self._watchdog_conn.poll(0.1):
-                try:
-                    msg_json = self._watchdog_conn.recv()
-                    msg = json.loads(msg_json)
-                    logger.debug("Message Watchdog->Manager received: '%s'", pprint.pformat(msg))
-                    # Messages should be handled in the event loop
-                    self._loop.call_soon_threadsafe(self._conn_watchdog_received, msg)
-                except Exception as ex:
-                    logger.exception("Exception occurred while waiting for packet: %s", str(ex))
-                    break
-
     def _receive_packet_worker_thread(self):
         while True:
             if self._worker_conn.poll(0.1):
@@ -368,9 +347,6 @@ class RunEngineManager(Process):
                     await self._worker_status_received(value)
 
         asyncio.create_task(process_message(msg))
-
-    def _conn_watchdog_received(self, response):
-        asyncio.create_task(self._watchdog_response(response))
 
     # =========================================================================
     #                        ZMQ message handlers
@@ -571,9 +547,11 @@ class RunEngineManager(Process):
 
         self._loop = asyncio.get_running_loop()
 
+        self._comm_to_watchdog = PipeJsonRpcSendAsync(conn=self._watchdog_conn,
+                                                      name="RE Manager-Watchdog Comm")
+        self._comm_to_watchdog.start()
+
         self._start_conn_threads()
-        self._event_watchdog_comm = asyncio.Event()  # Create the event on the loop
-        self._lock_watchdog_comm = asyncio.Lock()
 
         # Start heartbeat generator
         self._heartbeat_generator_task = asyncio.ensure_future(self._heartbeat_generator(), loop=self._loop)
@@ -636,93 +614,36 @@ class RunEngineManager(Process):
             if self._manager_stopping:
                 await self._stop_re_worker()  # Quitting RE Manager
                 await self._watchdog_manager_stopping()
+                self._comm_to_watchdog.close()
                 self._zmq_socket.close()
                 logger.info("RE Manager was stopped by ZMQ command.")
                 break
 
-    # ======================================================================
-    #            Support of communication with Watchdog process
-
-    async def _watchdog_send(self, method, notification=False, **kwargs):
-        """
-        The function will raise `asyncio.TimeoutError` in case of communication timeout
-        """
-        # The lock protects from sending the next message
-        #   before response to the previous message is received.
-        async with self._lock_watchdog_comm:
-            msg = {"method": method, "jsonrpc": "2.0"}
-
-            # Don't include parameters if there are none
-            if kwargs:
-                msg["params"] = kwargs
-
-            # Don't include 'id' if this is notification
-            if not notification:
-                msg["id"] = str(uuid.uuid4())
-
-            try:
-                if not notification:
-                    self._fut_watchdog_comm = self._loop.create_future()
-                    self._event_watchdog_comm.set()  # We don't expect response if this is not a notification
-
-                msg_json = json.dumps(msg)
-                self._watchdog_conn.send(msg_json)
-
-                # No response is expected if this is a notification
-                if not notification:
-                    # Waiting for the future may raise 'asyncio.TimeoutError'
-                    await asyncio.wait_for(self._fut_watchdog_comm,
-                                           timeout=self._timeout_watchdog_comm)
-                    response = self._fut_watchdog_comm.result()
-                    if "id" in response:
-                        if response["id"] != msg["id"]:
-                            logger.error("Response Watchdog->RE Manager contains incorrect ID: %s. Expected %s",
-                                         response["id"], msg["id"])
-                        del response["id"]
-                    else:
-                        logger.error("Response Watchdog->RE Manager contains no id: %s", pprint.pformat(response))
-                else:
-                    response = None
-                return response
-
-            finally:
-                self._event_watchdog_comm.clear()  # Clear before the exit as well
-
-    async def _watchdog_response(self, response):
-        """
-        Set the future with the results
-        """
-        if self._event_watchdog_comm.is_set():
-            self._event_watchdog_comm.clear()  # Clear once the message received
-            self._fut_watchdog_comm.set_result(response)
-        else:
-            logger.error("Unsolicited message received Watchdog->Re Manager: %s. Message is ignored",
-                         pprint.pformat(response))
-
     # ===============================================================================
     #         Functions that send commands/request data from Watchdog process
 
-    async def _watchdog_start_re_worker(self, timeout=0.5):
+    async def _watchdog_start_re_worker(self):
         """
         Initiate the startup of the RE Worker. Returned 'success==True' means that the process
         was created successfully and RE environment initialization is started.
         """
         try:
-            response = await self._watchdog_send("start_re_worker")
-            success = response["result"]["success"]
-        except asyncio.TimeoutError:
+            response = await self._comm_to_watchdog.send_msg("start_re_worker")
+            success = response["success"]
+        except CommTimeoutError:
             success = False
+        # TODO: add processing of CommJsonRpcError and RuntimeError to all handlers !!!
         return success
 
-    async def _watchdog_join_re_worker(self, timeout=0.5):
+    async def _watchdog_join_re_worker(self, timeout_join=0.5):
         """
         Request Watchdog to join RE Worker process. The sequence of orderly closing of the process
         needs to be initiated before attempting to join the process.
         """
         try:
-            response = await self._watchdog_send("join_re_worker", timeout=timeout)
-            success = response["result"]["success"]
-        except asyncio.TimeoutError:
+            response = await self._comm_to_watchdog.send_msg("join_re_worker", {"timeout": timeout_join})
+            success = response["success"]
+        except CommTimeoutError:
             success = False
         return success
 
@@ -731,9 +652,9 @@ class RunEngineManager(Process):
         Request Watchdog to kill RE Worker process (justified only if the process is not responsive).
         """
         try:
-            response = await self._watchdog_send("kill_re_worker")
-            success = response["result"]["success"]
-        except asyncio.TimeoutError:
+            response = await self._comm_to_watchdog.send_msg("kill_re_worker")
+            success = response["success"]
+        except CommTimeoutError:
             success = False
         return success
 
@@ -742,8 +663,8 @@ class RunEngineManager(Process):
         Check if RE Worker process is alive.
         """
         try:
-            response = await self._watchdog_send("is_worker_alive")
-            worker_alive = response["result"]["worker_alive"]
+            response = await self._comm_to_watchdog.send_msg("is_worker_alive")
+            worker_alive = response["worker_alive"]
         except asyncio.TimeoutError:
             worker_alive = False
         return worker_alive
@@ -753,14 +674,15 @@ class RunEngineManager(Process):
         Inform Watchdog process that the manager is intentionally being stopped and
         it should not be restarted.
         """
-        await self._watchdog_send("manager_stopping", notification=True)
+        await self._comm_to_watchdog.send_msg("manager_stopping", notification=True)
 
     async def _watchdog_send_heartbeat(self):
         """
         Send (periodic) heartbeat signal to Watchdog.
         """
-        await self._watchdog_send("heartbeat", notification=True,
-                                  value="alive")
+        await self._comm_to_watchdog.send_msg("heartbeat",
+                                              {"value": "alive"},
+                                              notification=True)
 
     # ======================================================================
 

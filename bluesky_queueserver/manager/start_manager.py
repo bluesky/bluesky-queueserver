@@ -34,7 +34,8 @@ class WatchdogProcess:
         self._create_conn_pipes()
 
         # Class that supports communication over the pipe
-        self._comm_to_manager = PipeJsonRpcReceive(conn=self._watchdog_to_manager_conn)
+        self._comm_to_manager = PipeJsonRpcReceive(conn=self._watchdog_to_manager_conn,
+                                                   name="RE Watchdog-Manager Comm")
 
         self._watchdog_state = 0  # State is currently just time since last notification
         self._watchdog_state_lock = threading.Lock()

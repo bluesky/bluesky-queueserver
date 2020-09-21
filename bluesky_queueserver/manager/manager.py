@@ -548,8 +548,7 @@ class RunEngineManager(Process):
         self._loop = asyncio.get_running_loop()
 
         self._comm_to_watchdog = PipeJsonRpcSendAsync(conn=self._watchdog_conn,
-                                                      name="RE Manager-Watchdog Comm",
-                                                      loop=self._loop)
+                                                      name="RE Manager-Watchdog Comm")
         self._comm_to_watchdog.start()
 
         self._start_conn_threads()

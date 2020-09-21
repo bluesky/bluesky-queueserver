@@ -168,15 +168,43 @@ class PipeJsonRpcSendAsync:
         Default value of timeout: maximum time to wait for response after a message is sent
     name: str
         Name of the receiving thread (it is better to assign meaningful unique names to threads.
-    loop: asyncio loop
-        Running loop to execute async functions.
+
+    Examples
+    --------
+
+    .. code-block:: python
+
+        conn1, conn2 = multiprocessing.Pipe()
+
+        async def send_messages():
+            # Must be instantiated and used within the loop
+            p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client")
+            p_send.start()
+
+            method = "method_name"
+            params = {"value": 10}   #   or list of args [10, 25]
+            response = await p_send.send_msg(method, params, notification=notification)
+
+            p_send.stop()
+
+        asyncio.run(send_messages())
+        pc.stop()
+
+
+        pc = PipeJsonRpcSendAsync(conn=conn1, name="RE QServer Receive")
+
+        def func():
+            print("Testing")
+
+        pc.add_handler(func, "some_method")
+        pc.start()   # Wait and process commands
+        # The function 'func' is called when the message with method=="some_method" is received
+        pc.stop()  # Stop before exit to stop the thread.
+
     """
-    def __init__(self, conn, *, timeout=0.5, name="RE QServer Comm", loop=None):
+    def __init__(self, conn, *, timeout=0.5, name="RE QServer Comm"):
         self._conn = conn
-        if loop is None:
-            self._loop = self._loop = asyncio.get_running_loop()
-        else:
-            self._loop = loop
+        self._loop = self._loop = asyncio.get_running_loop()
 
         self._thread_name = name
 

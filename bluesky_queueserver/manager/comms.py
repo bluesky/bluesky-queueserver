@@ -243,7 +243,7 @@ class PipeJsonRpcSendAsync:
     """
     def __init__(self, conn, *, timeout=0.5, name="RE QServer Comm"):
         self._conn = conn
-        self._loop = self._loop = asyncio.get_running_loop()
+        self._loop = asyncio.get_running_loop()
 
         self._thread_name = name
 

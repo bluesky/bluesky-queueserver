@@ -85,7 +85,7 @@ def test_PipeJsonRpcReceive_1():
     pc.start()  # Expected to do nothing
 
     pc.stop()
-    ttime.sleep(0.15)  # Wait until the thread stops (0.1s polling period)
+    ttime.sleep(0.15)  # Wait until the thread stops (0.15s polling period)
     assert count_threads_with_name(new_name) == 0, "No threads are expected to exist"
 
     pc.start()  # Restart

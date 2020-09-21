@@ -33,12 +33,12 @@ class CommJsonRpcError(RuntimeError):
     def __init__(self, message, error_code, error_type):
         super().__init__(message)
         # TODO: change 'code' and 'type' to read-only properties
-        self.__error_code__ = error_code
-        self.__error_type__ = error_type
+        self._error_code = error_code
+        self._error_type = error_type
 
     @property
     def error_code(self):
-        return self.__error_code__
+        return self._error_code
 
     @error_code.setter
     def error_code(self, error_code):
@@ -46,7 +46,7 @@ class CommJsonRpcError(RuntimeError):
 
     @property
     def error_type(self):
-        return self.__error_type__
+        return self._error_type
 
     @error_type.setter
     def error_type(self, error_type):
@@ -352,8 +352,7 @@ class PipeJsonRpcSendAsync:
                             # Server Error (issue with execution of the method)
                             err_type = response["error"]["data"]["type"]
                             # Message: "Server error: <message text>"
-                            err_msg = response["error"]["message"] + ": " + \
-                                response["error"]["data"]["message"]
+                            err_msg = f'{response["error"]["message"]}: {response["error"]["data"]["message"]}'
                         else:
                             # Other json-rpc errors
                             err_type = "CommJsonRpcError"

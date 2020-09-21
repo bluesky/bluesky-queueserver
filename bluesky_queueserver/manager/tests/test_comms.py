@@ -58,11 +58,11 @@ def test_CommJsonRpcError_3_fail():
     err_msg, err_code, err_type = "Some error occured", 25, "RuntimeError"
     ex = CommJsonRpcError(err_msg, err_code, err_type)
 
-    with pytest.raises(RuntimeError, match="Attempt to set read-only attribute"):
+    with pytest.raises(AttributeError, match="can't set attribute"):
         ex.message = err_msg
-    with pytest.raises(RuntimeError, match="Attempt to set read-only attribute"):
+    with pytest.raises(AttributeError, match="can't set attribute"):
         ex.error_code = err_code
-    with pytest.raises(RuntimeError, match="Attempt to set read-only attribute"):
+    with pytest.raises(AttributeError, match="can't set attribute"):
         ex.error_type = err_type
 
 
@@ -85,7 +85,7 @@ def test_PipeJsonRpcReceive_1():
     pc.start()  # Expected to do nothing
 
     pc.stop()
-    ttime.sleep(0.15)  # Wait until the thread stops (0.1s polling period)
+    ttime.sleep(0.15)  # Wait until the thread stops (wait more than the 0.1s polling period)
     assert count_threads_with_name(new_name) == 0, "No threads are expected to exist"
 
     pc.start()  # Restart

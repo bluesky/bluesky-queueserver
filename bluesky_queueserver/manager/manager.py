@@ -80,7 +80,7 @@ class RunEngineManager(Process):
         self._fut_worker_status = None
 
         # The object of PipeJsonRpcSendAsync. Communciation with Watchdog module.
-        #    The object must be created on the loop.
+        #    The object must be created in the loop.
         self._comm_to_watchdog = None
 
     def _start_conn_threads(self):

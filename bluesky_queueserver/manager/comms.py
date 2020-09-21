@@ -332,15 +332,13 @@ class PipeJsonRpcSendAsync:
         async with self._lock_comm:
             msg = format_jsonrpc_msg(method, params, notification=notification)
             try:
-                if not notification:
-                    self._fut_comm = self._loop.create_future()
-
                 msg_json = json.dumps(msg)
                 self._conn.send(msg_json)
 
                 # No response is expected if this is a notification
                 if not notification:
                     self._expected_msg_id = msg["id"]
+                    self._fut_comm = self._loop.create_future()
                     # Waiting for the future may raise 'asyncio.TimeoutError'
                     await asyncio.wait_for(self._fut_comm, timeout=timeout)
                     response = self._fut_comm.result()

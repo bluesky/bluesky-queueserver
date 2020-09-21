@@ -10,6 +10,25 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+class CommTimeoutError(TimeoutError):
+    """
+    Raised when communication error occurs
+    """
+    pass
+
+
+class CommJsonRpcError(RuntimeError):
+    """
+    Raised when returned json-rpc message contains error
+    """
+    # TODO: probably '__str__' and '__repr__' should be overloaded. Expand unit tests
+    #       to include other errors.
+    def __init__(self, message, code, type):
+        super().__init__(message)
+        self.code = code
+        self.type = type
+
+
 def format_jsonrpc_msg(method, params=None, *, notification=False):
     """
     Returns dictionary that contains JSON RPC message.
@@ -202,7 +221,39 @@ class PipeJsonRpcSendAsync:
 
     async def send_msg(self, method, params=None, *, notification=False, timeout=None):
         """
-        The function will raise `asyncio.TimeoutError` in case of communication timeout
+        Send JSON RPC message to server and return the result of the function (method)
+        or raise exception in case of an error. Returns None if the message is notification.
+
+        Parameters
+        ----------
+        method: str
+            name of JSON RPC method
+        params: list or dict
+            args or kwargs of the remote method
+        notification: boolean
+            True - message is notification. The function returns immediately without
+            waiting of the response, which is never generated for notification.
+        timeout: float
+            Timeout in seconds. If no response is received at expiration of timeout,
+            `CommTimeoutError` is raised. If the response will be received later, it
+            will be ignored.
+
+        Raises
+        ------
+        CommTimeoutError
+            Timeout occurred. Response is not received in time
+        CommJsonRpcError
+            Error occurred while processing the message. This could indicate an error
+            in `json-rpc` package (e.g. method not found) or exception raised by
+            the method itself. It is recommended that the methods catch and process
+            their exceptions (may be except parameter validation) and leave
+            `CommJsonRpcError` for reporting `json-rpc` errors. In well tested
+            program this exception should never be raised.
+        RuntimeError
+            Unrecognized message received (message doesn't contain `result` or `error`
+            keys. This should never happen in well tested program.
+
+        The function will raise `CommTimeoutError` in case of communication timeout
         """
         # The lock protects from sending the next message
         #   before response to the previous message is received.
@@ -227,9 +278,32 @@ class PipeJsonRpcSendAsync:
                     await asyncio.wait_for(self._fut_comm,
                                            timeout=timeout)
                     response = self._fut_comm.result()
+
+                    if "result" in response:
+                        return response["result"]
+                    elif "error" in response:
+                        # TODO: verify that this is all information that should be saved
+                        err_code = response["error"]["code"]
+                        if "data" in response["error"]:
+                            # Server Error (issue with execution of the method)
+                            err_type = response["error"]["data"]["type"]
+                            err_msg = response["error"]["data"]["message"]
+                        else:
+                            # Other json-rpc errors
+                            err_type = "CommJsonRpcError"
+                            err_msg = response["error"]["message"]
+                        raise CommJsonRpcError(err_msg, code=err_code, type=err_type)
+                    else:
+                        err_msg = f"Message {pprint.pformat(msg)}\n" \
+                                  f"resulted in response with unknown format: {pprint.pformat(response)}"
+                        raise RuntimeError(err_msg)
                 else:
                     response = None
                 return response
+
+            except asyncio.TimeoutError:
+                raise CommTimeoutError(f"Timeout while waiting for response to message: \n"
+                                       f"{pprint.pformat(msg)}")
 
             finally:
                 self._event_comm.clear()  # Clear before the exit as well
@@ -237,6 +311,7 @@ class PipeJsonRpcSendAsync:
     async def _response_received(self, response):
         """
         Set the future with the results. Ignore all messages with unexpected or missing IDs.
+        Also ignore all unexpected messages.
         """
         if self._event_comm.is_set():
             if "id" in response:

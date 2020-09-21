@@ -10,7 +10,7 @@ import pprint
 import uuid
 
 from .worker import DB
-from .comms import PipeJsonRpcSendAsync
+from .comms import PipeJsonRpcSendAsync, CommTimeoutError
 
 import logging
 
@@ -630,9 +630,10 @@ class RunEngineManager(Process):
         """
         try:
             response = await self._comm_to_watchdog.send_msg("start_re_worker")
-            success = response["result"]["success"]
-        except asyncio.TimeoutError:
+            success = response["success"]
+        except CommTimeoutError:
             success = False
+        # TODO: add processing of CommJsonRpcError and RuntimeError to all handlers !!!
         return success
 
     async def _watchdog_join_re_worker(self, timeout_join=0.5):
@@ -642,8 +643,8 @@ class RunEngineManager(Process):
         """
         try:
             response = await self._comm_to_watchdog.send_msg("join_re_worker", {"timeout": timeout_join})
-            success = response["result"]["success"]
-        except asyncio.TimeoutError:
+            success = response["success"]
+        except CommTimeoutError:
             success = False
         return success
 
@@ -653,8 +654,8 @@ class RunEngineManager(Process):
         """
         try:
             response = await self._comm_to_watchdog.send_msg("kill_re_worker")
-            success = response["result"]["success"]
-        except asyncio.TimeoutError:
+            success = response["success"]
+        except CommTimeoutError:
             success = False
         return success
 
@@ -664,7 +665,7 @@ class RunEngineManager(Process):
         """
         try:
             response = await self._comm_to_watchdog.send_msg("is_worker_alive")
-            worker_alive = response["result"]["worker_alive"]
+            worker_alive = response["worker_alive"]
         except asyncio.TimeoutError:
             worker_alive = False
         return worker_alive

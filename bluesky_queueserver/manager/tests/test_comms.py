@@ -4,7 +4,8 @@ import json
 import multiprocessing
 import threading
 import asyncio
-from bluesky_queueserver.manager.comms import PipeJsonRpcReceive, PipeJsonRpcSendAsync
+from bluesky_queueserver.manager.comms import (
+    PipeJsonRpcReceive, PipeJsonRpcSendAsync, CommTimeoutError, CommJsonRpcError)
 from bluesky_queueserver.tests.common import format_jsonrpc_msg
 
 
@@ -379,9 +380,7 @@ def test_PipeJsonRpcSendAsync_2(method, params, result, notification):
 
             response = await p_send.send_msg(method, params, notification=notification)
             if not notification:
-                assert "result" in response, \
-                    f"Key 'result' is not contained in response: {response}"
-                assert response["result"] == result, \
+                assert response == result, \
                     f"Result does not match the expected: {response}"
                 assert value_nonlocal == "function_was_called", "Non-local variable has incorrect value"
             elif response is not None:
@@ -425,8 +424,8 @@ def test_PipeJsonRpcSendAsync_3():
 
         for n, fut in enumerate(futs):
             await asyncio.wait_for(fut, timeout=5.0)  # Timeout is in case of failure
-            response = fut.result()
-            assert response["result"] == n + 1, "Incorrect returned value"
+            result = fut.result()
+            assert result == n + 1, "Incorrect returned value"
 
         p_send.stop()
 
@@ -452,7 +451,7 @@ def test_PipeJsonRpcSendAsync_4():
 
         # Submit multiple messages at once. Messages should stay at the event loop
         #   and be processed one by one.
-        with pytest.raises(asyncio.TimeoutError):
+        with pytest.raises(CommTimeoutError, match="Timeout while waiting for response to message"):
             await p_send.send_msg("method1", timeout=0.5)
 
         p_send.stop()
@@ -488,11 +487,67 @@ def test_PipeJsonRpcSendAsync_5():
 
         # Submit multiple messages at once. Messages should stay at the event loop
         #   and be processed one by one.
-        with pytest.raises(asyncio.TimeoutError):
+        with pytest.raises(CommTimeoutError):
             await p_send.send_msg("method1", timeout=0.5)
 
-        response = await p_send.send_msg("method2", timeout=0.5)
-        assert response["result"] == 56, "Incorrect result received"
+        result = await p_send.send_msg("method2", timeout=0.5)
+        assert result == 56, "Incorrect result received"
+
+        p_send.stop()
+
+    asyncio.run(send_messages())
+    pc.stop()
+
+
+def test_PipeJsonRpcSendAsync_6_fail():
+    """
+    Exception raised inside the method.
+    """
+
+    def method_handler1():
+        raise RuntimeError("Function crashed ...")
+
+    conn1, conn2 = multiprocessing.Pipe()
+    pc = PipeJsonRpcReceive(conn=conn2, name="comm-server")
+    pc.add_method(method_handler1, "method1")
+    pc.start()
+
+    async def send_messages():
+        p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client")
+        p_send.start()
+
+        # Submit multiple messages at once. Messages should stay at the event loop
+        #   and be processed one by one.
+        with pytest.raises(CommJsonRpcError, match="Function crashed ..."):
+            await p_send.send_msg("method1", timeout=0.5)
+
+        p_send.stop()
+
+    asyncio.run(send_messages())
+    pc.stop()
+
+
+def test_PipeJsonRpcSendAsync_7_fail():
+    """
+    Method not found (other `json-rpc` errors will raise the same exception).
+    """
+
+    def method_handler1():
+        pass
+
+    conn1, conn2 = multiprocessing.Pipe()
+    pc = PipeJsonRpcReceive(conn=conn2, name="comm-server")
+    pc.add_method(method_handler1, "method1")
+    pc.start()
+
+    async def send_messages():
+        p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client")
+        p_send.start()
+
+        # Submit multiple messages at once. Messages should stay at the event loop
+        #   and be processed one by one.
+        with pytest.raises(CommJsonRpcError):
+            await p_send.send_msg("nonexisting_method", timeout=0.5)
 
         p_send.stop()
 

@@ -47,14 +47,27 @@ class RunEngineWorker(Process):
         self._conn = conn
 
         self._exit_event = None
+        self._exit_confirmed_event = None
+
         self._execution_queue = None
 
-        # Dictionary that contains parameters of currently executed plan or None if no plan is
-        #   currently executed. Plan is considered as being executed if it is paused.
-        self._running_plan = None
+        # Dictionary that holds current RE Worker state
+        self._state = {
+            # The dictionary of the currently running plan or the plan that was executed last
+            "running_plan": None,
+            # Boolean value that indicates if the current plan is completed (finished or stopped)
+            "running_plan_completed": False,
+            # Status of the RE environment: "initializing", "read", "closing"
+            "environment_state": "initializing",
+        }
 
         # Reference to Bluesky Run Engine
         self._RE = None
+
+        # Report (dict) generated after execution of a command. The report can be downloaded
+        #   by RE Manager.
+        self._re_report = None
+        self._re_report_lock = None  # threading.Lock
 
         # The thread that receives packets from the pipe 'self._conn'
         self._thread_conn = None
@@ -70,7 +83,7 @@ class RunEngineWorker(Process):
         of the communication Pipe.
         """
         while True:
-            if self._exit_event.is_set():
+            if self._exit_confirmed_event.is_set():
                 break
             if self._conn.poll(0.1):
                 try:
@@ -97,40 +110,47 @@ class RunEngineWorker(Process):
         logger.debug("Starting execution of a task")
         try:
             result = plan()
-            msg = {"type": "report",
-                   "value": {"action": "plan_exit",
-                             "success": True,
-                             "result": result,
-                             "err_msg": ""}}
-            if is_resuming:
-                msg["value"]["plan_state"] = "completed"
-            else:
-                msg["value"]["plan_state"] = "stopped"  # Here we don't distinguish between stop/abort/halt
+            with self._re_report_lock:
+                self._re_report = {"type": "report",
+                                   "value": {"action": "plan_exit",
+                                             "success": True,
+                                             "result": result,
+                                             "err_msg": ""}}
+                if is_resuming:
+                    self._re_report["value"]["plan_state"] = "completed"
+                    self._state["running_plan_completed"] = True
+                else:
+                    self._re_report["value"]["plan_state"] = "stopped"  # Here we don't distinguish between stop/abort/halt
+                    self._state["running_plan_completed"] = True
 
-            self._running_plan = None
+                # Include RE state
+                self._re_report["value"]["re_state"] = str(self._RE._state)
 
         except BaseException as ex:
-            msg = {"type": "report",
-                   "value": {"action": "plan_exit",
-                             "result": "",
-                             "err_msg": str(ex)}}
+            with self._re_report_lock:
 
-            if self._RE._state == "paused":
-                # Run Engine was paused
-                msg["value"]["plan_state"] = "paused"
-                msg["value"]["success"] = True
-            else:
-                # RE crashed. Plan execution can not be resumed. (Environment may have to be restarted.)
-                # TODO: clarify how this situation must be handled. Also additional error handling
-                #       may be required
-                msg["value"]["plan_state"] = "error"
-                msg["value"]["success"] = False
-                self._running_plan = None
+                self._re_report = {"type": "report",
+                       "value": {"action": "plan_exit",
+                                 "result": "",
+                                 "err_msg": str(ex)}}
 
-        # Include RE state
-        msg["value"]["re_state"] = str(self._RE._state)
+                if self._RE._state == "paused":
+                    # Run Engine was paused
+                    self._re_report["value"]["plan_state"] = "paused"
+                    self._re_report["value"]["success"] = True
 
-        self._conn.send(msg)
+                else:
+                    # RE crashed. Plan execution can not be resumed. (Environment may have to be restarted.)
+                    # TODO: clarify how this situation must be handled. Also additional error handling
+                    #       may be required
+                    self._re_report["value"]["plan_state"] = "error"
+                    self._re_report["value"]["success"] = False
+                    self._state["running_plan_completed"] = True
+
+                # Include RE state
+                self._re_report["value"]["re_state"] = str(self._RE._state)
+
+        #self._conn.send(msg)
         logger.debug("Finished execution of a task")
 
     def _load_new_plan(self, plan_info):
@@ -149,7 +169,8 @@ class RunEngineWorker(Process):
             plan kwargs
         """
         # Save reference to the currently executed plan
-        self._running_plan = plan_info
+        self._state["running_plan"] = plan_info
+        self._state["running_plan_completed"] = False
 
         logger.info("Starting a plan '%s'.", plan_info["name"])
 
@@ -230,14 +251,29 @@ class RunEngineWorker(Process):
 
         if type == "request":
             if value == "status":
-                plan_uid = self._running_plan["plan_uid"] if self._running_plan else None
+                plan_uid = self._state["running_plan"]["plan_uid"] \
+                    if self._state["running_plan"] else None
+                plan_completed = self._state["running_plan_completed"]
+                re_state = str(self._RE._state)
+                env_state = self._state["environment_state"]
+                re_report_available = self._re_report is None
                 msg_out = {"type": "result",
                            "contains": "status",
                            "value": {"running_plan_uid": plan_uid,
-                                     "re_state": str(self._RE._state),
+                                     "running_plan_completed": plan_completed,
+                                     "re_report_available": re_report_available,
+                                     "re_state": re_state,
+                                     "environment_state": env_state,
                                      }
                            }
                 self._conn.send(msg_out)
+
+            if value == "re_report":
+                # We need a lock here, because building a report consists of many operations
+                with self._re_report_lock:
+                    msg_out = self._re_report
+                    self._conn.send(msg_out)
+                    self._re_report = None  # Clear the report (consider it delivered)
 
         else:
             # The default acknowledge message (will be sent to `self._conn` if
@@ -276,6 +312,8 @@ class RunEngineWorker(Process):
                     invalid_state = 1
                 elif self._RE._state == 'running':
                     invalid_state = 2
+                elif self._state["running_plan"] or self._state["running_plan_completed"]:
+                    invalid_state = 3
 
                 if not invalid_state:  # == 0
                     try:
@@ -287,7 +325,9 @@ class RunEngineWorker(Process):
                         msg_ack["value"]["result"] = str(ex)
                 else:
                     msg_ack["value"]["status"] = "rejected"
-                    msg_list = ["the execution queue is not empty", "another plan is running"]
+                    msg_list = ["the execution queue is not empty",
+                                "another plan is running",
+                                "worker is not reset after completion of the previous plan"]
                     try:
                         s = msg_list[invalid_state - 1]
                     except Exception:
@@ -341,6 +381,27 @@ class RunEngineWorker(Process):
                         "Run Engine must be in 'paused' state to continue. " \
                         f"The state is '{self._RE._state}'"
 
+            # Reset worker: clear executed plan info (only if Run Engine is in idle state,
+            #   i.e. the plan is completed or stopped). The plan info must be reset before
+            #   the next plan could be started.
+            if type == "command" and value == "reset_worker":
+                if self._RE._state == "idle":
+                    self._state["running_plan"] = None
+                    self._state["running_plan_completed"] = False
+                    msg_ack["value"]["status"] = "accepted"
+                else:
+                    msg_ack["value"]["status"] = "rejected"
+
+            # Confirm exit: confirm that RE Manager received information that
+            #   that the environment is closing and no communication messages should
+            #   be sent to this environment. Communication loop may be closed.
+            if type == "command" and value == "confirm_exit":
+                if self._exit_event.is_set():
+                    self._exit_confirmed_event.set()
+                    msg_ack["value"]["status"] = "accepted"
+                else:
+                    msg_ack["value"]["status"] = "rejected"
+
             self._conn.send(msg_ack)
 
     # ------------------------------------------------------------
@@ -373,6 +434,12 @@ class RunEngineWorker(Process):
         """
 
         self._exit_event = threading.Event()
+        self._exit_confirmed_event = threading.Event()
+        self._re_report_lock = threading.Lock()
+
+        self._thread_conn = threading.Thread(target=self._receive_packet_thread,
+                                             name="RE Worker Receive")
+        self._thread_conn.start()
 
         # TODO: TC - Do you think that the following code may be included in RE.__init__()
         #   (for Python 3.8 and above)
@@ -404,8 +471,6 @@ class RunEngineWorker(Process):
         bec = BestEffortCallback()
         self._RE.subscribe(bec)
 
-        # db = Broker.named('temp')
-
         if 'kafka' in self._env_config:
             kafka_publisher = kafkaPublisher(
                 topic=self._env_config['kafka']['topic'],
@@ -425,23 +490,27 @@ class RunEngineWorker(Process):
 
         self._execution_queue = queue.Queue()
 
-        self._thread_conn = threading.Thread(target=self._receive_packet_thread,
-                                             name="RE Worker Receive")
-        self._thread_conn.start()
-
         # Environment is initialized: send a report
-        msg = {"type": "report",
-               "value": {"action": "environment_created"}}
-        self._conn.send(msg)
+        #msg = {"type": "report",
+        #       "value": {"action": "environment_created"}}
+        #self._conn.send(msg)
+
+        self._state["environment_state"] = "ready"
 
         # Now make the main thread busy
         self._execute_in_main_thread()
 
-        self._thread_conn.join()
+        self._state["environment_state"] = "closing"
+
+        # Wait until confirmation is received from RE Manager
+        while self._exit_confirmed_event.is_set():
+            ttime.sleep(0.1)
 
         del self._RE
 
         # Finally send a report
-        msg = {"type": "report",
-               "value": {"action": "environment_closed"}}
-        self._conn.send(msg)
+        #msg = {"type": "report",
+        #       "value": {"action": "environment_closed"}}
+        #self._conn.send(msg)
+
+        self._thread_conn.join()

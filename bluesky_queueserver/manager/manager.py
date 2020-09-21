@@ -74,9 +74,13 @@ class RunEngineManager(Process):
         self._r_pool = None
 
         self._heartbeat_generator_task = None  # Task for heartbeat generator
+        self._worker_status_task = None  # Task for periodic checks of Worker status
+
+        self._closing_environment = False
+        self._event_worker_closed = None
 
         self._event_worker_created = None
-        self._event_worker_closed = None
+        self._event_worker_closed_waiting = None
         self._fut_worker_status = None
 
         # The object of PipeJsonRpcSendAsync. Communciation with Watchdog module.
@@ -160,19 +164,62 @@ class RunEngineManager(Process):
 
     async def _stop_re_worker(self):
         """
+        Stop RE Worker. Returns the result as "success", "rejected" or "failed"
+        """
+        result = "success"
+        if await self._initiate_stop_re_worker():
+            # Wait for RE Worker to be prepared to close
+            self._event_worker_closed = asyncio.Event()
+            self._closing_environment = True
+            await self._event_worker_closed
+            self._closing_environment = False
+
+            if not await self._worker_confirm_exit():
+                result = "failed"
+        else:
+            result = "rejected"
+
+        return result
+
+    async def _initiate_stop_re_worker(self):
+        """
         Closes Run Engine execution environment in orderly way. Running plan needs
         to be stopped before the environment can be closed.
         """
         success = True
         if self._environment_exists:
-            self._event_worker_closed = asyncio.Event()
+            self._event_worker_closed_waiting = asyncio.Event()
 
             msg = {"type": "command", "value": "quit"}
             self._worker_conn.send(msg)
 
-            logger.debug("Waiting for RE Worker to close ...")
-            await self._event_worker_closed.wait()
+            response = await self._event_worker_closed_waiting.wait()
+            success = response["value"]["status"]
+        else:
+            success = False
+        return success
+
+    async def _stop_re_worker_initiated(self):
+        # Report from RE Worker received: environment was closed successfully.
+        self._event_worker_closed_waiting.set()
+
+    async def _worker_confirm_exit(self):
+        """
+        Confirm RE worker exit and make sure the worker thread exits.
+        """
+        success = True
+        if self._environment_exists:
+            self._event_worker_closed_waiting = asyncio.Event()  # Temporary reuse the event (will go away)
+
+            msg = {"type": "command", "value": "confirm_exit"}
+            self._worker_conn.send(msg)
+
+            logger.debug("Waiting for exit confirmation from RE worker ...")
+            await self._event_worker_closed_waiting.wait()
             logger.debug("RE Worker to closed")
+
+            # Environment is not in valid state anyway. So assume it does not exist.
+            self._environment_exists = False
 
             if not await self._watchdog_join_re_worker(timeout_join=0.5):
                 success = False
@@ -180,17 +227,30 @@ class RunEngineManager(Process):
                 #   since it may indicate that the worker process is stalled.
                 logger.error("Failed to properly join the worker process. "
                              "The process may not be properly closed.")
-            self._environment_exists = False
         else:
             success = False
         return success
 
-    async def _stopped_re_worker(self):
+    async def _worker_exit_confirmed(self):
         # Report from RE Worker received: environment was closed successfully.
-        self._event_worker_closed.set()
+        self._event_worker_closed_waiting.set()
 
     async def _is_worker_alive(self):
         return await self._watchdog_is_worker_alive()
+
+    async def _periodic_worker_status_request(self):
+        """
+        Periodically update locally stored RE Worker status
+        """
+        t_period = 0.5
+        while True:
+            await asyncio.sleep(t_period)
+            if self._environment_exists:
+                ws = await self._worker_status_request()
+                self._worker_status = ws
+                if self._closing_environment:
+                    if ws["value"]["environment_state"] == "closing":
+                        self._event_worker_closed.set()
 
     async def _worker_status_request(self):
         self._fut_worker_status = self._loop.create_future()
@@ -554,7 +614,10 @@ class RunEngineManager(Process):
         self._start_conn_threads()
 
         # Start heartbeat generator
-        self._heartbeat_generator_task = asyncio.ensure_future(self._heartbeat_generator(), loop=self._loop)
+        self._heartbeat_generator_task = asyncio.ensure_future(self._heartbeat_generator(),
+                                                               loop=self._loop)
+        self._worker_status_task = asyncio.ensure_future(self._periodic_worker_status_request(),
+                                                         loop=self._loop)
 
         self._r_pool = await aioredis.create_redis_pool(
             'redis://localhost', encoding='utf8')

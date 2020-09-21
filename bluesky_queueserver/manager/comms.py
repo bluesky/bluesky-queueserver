@@ -33,16 +33,16 @@ class CommJsonRpcError(RuntimeError):
     def __init__(self, message, error_code, error_type):
         super().__init__(message)
         # TODO: change 'code' and 'type' to read-only properties
-        self._error_code = error_code
-        self._error_type = error_type
+        self.__error_code = error_code
+        self.__error_type = error_type
 
     @property
     def error_code(self):
-        return self._error_code
+        return self.__error_code
 
     @property
     def error_type(self):
-        return self._error_type
+        return self.__error_type
 
     @property
     def message(self):

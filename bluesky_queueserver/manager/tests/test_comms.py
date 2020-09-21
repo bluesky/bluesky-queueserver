@@ -58,11 +58,11 @@ def test_CommJsonRpcError_3_fail():
     err_msg, err_code, err_type = "Some error occured", 25, "RuntimeError"
     ex = CommJsonRpcError(err_msg, err_code, err_type)
 
-    with pytest.raises(RuntimeError, match="Attempt to set read-only attribute"):
+    with pytest.raises(AttributeError, match="can't set attribute"):
         ex.message = err_msg
-    with pytest.raises(RuntimeError, match="Attempt to set read-only attribute"):
+    with pytest.raises(AttributeError, match="can't set attribute"):
         ex.error_code = err_code
-    with pytest.raises(RuntimeError, match="Attempt to set read-only attribute"):
+    with pytest.raises(AttributeError, match="can't set attribute"):
         ex.error_type = err_type
 
 

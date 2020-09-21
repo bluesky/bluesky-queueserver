@@ -40,25 +40,13 @@ class CommJsonRpcError(RuntimeError):
     def error_code(self):
         return self._error_code
 
-    @error_code.setter
-    def error_code(self, error_code):
-        raise RuntimeError("Attempt to set read-only attribute 'error_code'")
-
     @property
     def error_type(self):
         return self._error_type
 
-    @error_type.setter
-    def error_type(self, error_type):
-        raise RuntimeError("Attempt to set read-only attribute 'error_type'")
-
     @property
     def message(self):
         return super().__str__()
-
-    @message.setter
-    def message(self, message):
-        raise RuntimeError("Attempt to set read-only attribute 'message'")
 
     def __str__(self):
         msg = super().__str__() + f"\nError code: {self.error_code}. Error type: {self.error_type}"

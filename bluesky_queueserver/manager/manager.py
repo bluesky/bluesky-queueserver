@@ -76,11 +76,18 @@ class RunEngineManager(Process):
         self._heartbeat_generator_task = None  # Task for heartbeat generator
         self._worker_status_task = None  # Task for periodic checks of Worker status
 
+        self._creating_environment = False
+        self._event_worker_created = None
+
         self._closing_environment = False
         self._event_worker_closed = None
 
-        self._event_worker_created = None
         self._event_worker_closed_waiting = None
+        self._fut_worker_closed_waiting = None
+
+        self._plan_is_running = False
+        self._fut_plan_report = None
+
         self._fut_worker_status = None
 
         # The object of PipeJsonRpcSendAsync. Communciation with Watchdog module.
@@ -143,35 +150,60 @@ class RunEngineManager(Process):
     #          Functions that implement functionality of the server
 
     async def _start_re_worker(self):
+        if self._environment_exists:
+            accepted = False
+        else:
+            accepted = True
+            asyncio.ensure_future(self._start_re_worker_task())
+        return accepted
+
+    async def _start_re_worker_task(self):
         """
         Creates worker process.
         """
+        if self._environment_exists:
+            return
+
         self._event_worker_created = asyncio.Event()
+        self._creating_environment = True
 
         try:
             success = await self._watchdog_start_re_worker()
             if not success:
                 raise RuntimeError("Failed to create Worker process")
             logger.debug("Waiting for RE worker to start ...")
-            await self._event_worker_created.wait()
+            await self._event_worker_created.wait()  # TODO: timeout may be needed here
+            self._environment_exists = True
             logger.debug("Worker started successfully.")
         except Exception as ex:
             logger.exception("Failed to start_Worker: %s", str(ex))
 
-    async def _started_re_worker(self):
-        # Report from RE Worker received: environment was created successfully.
-        self._event_worker_created.set()
+        self._creating_environment = False
 
     async def _stop_re_worker(self):
+        if self._environment_exists:
+            accepted = True
+            asyncio.ensure_future(self._stop_re_worker_task())
+        else:
+            accepted = False
+        return accepted
+
+    async def _stop_re_worker_task(self):
         """
         Stop RE Worker. Returns the result as "success", "rejected" or "failed"
         """
+        if not self._environment_exists:
+            return
+
         result = "success"
+
         if await self._initiate_stop_re_worker():
             # Wait for RE Worker to be prepared to close
             self._event_worker_closed = asyncio.Event()
             self._closing_environment = True
-            await self._event_worker_closed
+
+            await self._event_worker_closed.wait()  # TODO: timeout may be needed here
+
             self._closing_environment = False
 
             if not await self._worker_confirm_exit():
@@ -186,22 +218,23 @@ class RunEngineManager(Process):
         Closes Run Engine execution environment in orderly way. Running plan needs
         to be stopped before the environment can be closed.
         """
-        success = True
         if self._environment_exists:
-            self._event_worker_closed_waiting = asyncio.Event()
+            self._fut_worker_closed_waiting = self._loop.create_future()
 
             msg = {"type": "command", "value": "quit"}
             self._worker_conn.send(msg)
 
-            response = await self._event_worker_closed_waiting.wait()
-            success = response["value"]["status"]
+            print(f"Preparing to wait for event 'closed'")  ##
+            status = await self._fut_worker_closed_waiting
+            print(f"Finished wait")  ##
+            success = (status == "accepted")
         else:
             success = False
         return success
 
-    async def _stop_re_worker_initiated(self):
+    async def _stop_re_worker_initiated(self, status):
         # Report from RE Worker received: environment was closed successfully.
-        self._event_worker_closed_waiting.set()
+        self._fut_worker_closed_waiting.set_result(status)
 
     async def _worker_confirm_exit(self):
         """
@@ -209,31 +242,35 @@ class RunEngineManager(Process):
         """
         success = True
         if self._environment_exists:
-            self._event_worker_closed_waiting = asyncio.Event()  # Temporary reuse the event (will go away)
+            self._fut_worker_closed_waiting = self._loop.create_future()  # Temporary reuse the event (will go away)
 
+            print(f"Send confirmation") ##
             msg = {"type": "command", "value": "confirm_exit"}
             self._worker_conn.send(msg)
 
             logger.debug("Waiting for exit confirmation from RE worker ...")
-            await self._event_worker_closed_waiting.wait()
-            logger.debug("RE Worker to closed")
+            status = await self._fut_worker_closed_waiting  # TODO: what do we do with the result?
+            if status == "accepted":
+                logger.debug("RE Worker to closed")
 
-            # Environment is not in valid state anyway. So assume it does not exist.
-            self._environment_exists = False
+                # Environment is not in valid state anyway. So assume it does not exist.
+                self._environment_exists = False
 
-            if not await self._watchdog_join_re_worker(timeout_join=0.5):
+                if not await self._watchdog_join_re_worker(timeout_join=0.5):
+                    success = False
+                    # TODO: this error should probably be handled differently than this,
+                    #   since it may indicate that the worker process is stalled.
+                    logger.error("Failed to properly join the worker process. "
+                                 "The process may not be properly closed.")
+            else:
                 success = False
-                # TODO: this error should probably be handled differently than this,
-                #   since it may indicate that the worker process is stalled.
-                logger.error("Failed to properly join the worker process. "
-                             "The process may not be properly closed.")
         else:
             success = False
         return success
 
-    async def _worker_exit_confirmed(self):
+    async def _worker_exit_confirmed(self, status):
         # Report from RE Worker received: environment was closed successfully.
-        self._event_worker_closed_waiting.set()
+        self._fut_worker_closed_waiting.set_result(status)
 
     async def _is_worker_alive(self):
         return await self._watchdog_is_worker_alive()
@@ -245,16 +282,27 @@ class RunEngineManager(Process):
         t_period = 0.5
         while True:
             await asyncio.sleep(t_period)
-            if self._environment_exists:
+            if self._environment_exists or self._creating_environment:
                 ws = await self._worker_status_request()
                 self._worker_status = ws
+                #print(f"ws={ws}")
                 if self._closing_environment:
-                    if ws["value"]["environment_state"] == "closing":
+                    if ws["environment_state"] == "closing":
                         self._event_worker_closed.set()
+
+                if self._creating_environment:
+                    #print(f"Checking environment status")  ##
+                    if ws["environment_state"] == "ready":
+                        #print(f"Status READY")  ##
+                        self._event_worker_created.set()
+
+                if self._plan_is_running:
+                    if ws["re_report_available"]:
+                        self._loop.create_task(self._get_re_report())
 
     async def _worker_status_request(self):
         self._fut_worker_status = self._loop.create_future()
-
+        #print(f"Sending request")  ##
         msg = {"type": "request", "value": "status"}
         self._worker_conn.send(msg)
 
@@ -262,6 +310,18 @@ class RunEngineManager(Process):
 
     async def _worker_status_received(self, status):
         self._fut_worker_status.set_result(status)
+
+    async def _get_re_report(self):
+        # TODO: rewrite report handling so that it is one async function, not multiple chained ones.
+        self._plan_is_running = False
+        #self._fut_re_report = self._loop.create_future()
+        #print(f"Sending request")  ##
+        msg = {"type": "request", "value": "re_report"}
+        self._worker_conn.send(msg)
+        #return await self._fut_re_report
+
+    #async def _re_report_received(self, report):
+    #    self._fut_re_report.set_result(report)
 
     async def _run_task(self):
         """
@@ -275,6 +335,14 @@ class RunEngineManager(Process):
 
         new_plan = await self._r_pool.lpop('plan_queue')
         if new_plan is not None:
+            # Reset RE environment (worker)
+            status = await self._reset_worker()
+            if status != "accepted":
+                logger.error("Failed to reset RE Worker.")
+                return False
+
+            self._plan_is_running = True
+
             new_plan = json.loads(new_plan)
             await self._set_running_plan_info(new_plan)
 
@@ -297,6 +365,16 @@ class RunEngineManager(Process):
             logger.info("Queue is empty")
             return False
 
+    async def _reset_worker(self):
+        self._fut_reset_worker = self._loop.create_future()
+        # print(f"Sending request")  ##
+        msg = {"type": "command", "value": "reset_worker"}
+        self._worker_conn.send(msg)
+        return await self._fut_reset_worker
+
+    async def _reset_worker_received(self, status):
+        self._fut_reset_worker.set_result(status)
+
     def _pause_run_engine(self, option):
         """
         Pause execution of a running plan. Run Engine must be in 'running' state in order for
@@ -309,6 +387,7 @@ class RunEngineManager(Process):
         """
         Continue handling of a paused plan.
         """
+        self._plan_is_running = True
         msg = {"type": "command", "value": "continue", "option": option}
         self._worker_conn.send(msg)
 
@@ -341,7 +420,7 @@ class RunEngineManager(Process):
             if self._worker_conn.poll(0.1):
                 try:
                     msg = self._worker_conn.recv()
-                    logger.debug("Message received from RE Worker: %s", pprint.pformat(msg))
+                    #logger.debug("Message received from RE Worker: %s", pprint.pformat(msg))
                     # Messages should be handled in the event loop
                     self._loop.call_soon_threadsafe(self._conn_worker_received, msg)
                 except Exception as ex:
@@ -385,11 +464,6 @@ class RunEngineManager(Process):
                     else:
                         logger.error("Unknown plan state %s was returned by RE Worker.", plan_state)
 
-                elif action == "environment_created":
-                    await self._started_re_worker()
-                elif action == "environment_closed":
-                    await self._stopped_re_worker()
-
             elif type == "acknowledge":
                 status = value["status"]
                 result = value["result"]
@@ -398,11 +472,18 @@ class RunEngineManager(Process):
                             "Status: '%s'\nResult: '%s'\nMessage: %s",
                             str(status), str(result), pprint.pformat(msg_original))
 
+                if (msg_original["type"] == "command") and (msg_original["value"] == "quit"):
+                    await self._stop_re_worker_initiated(status)
+                if (msg_original["type"] == "command") and (msg_original["value"] == "confirm_exit"):
+                    await self._worker_exit_confirmed(status)
+                if (msg_original["type"] == "command") and (msg_original["value"] == "reset_worker"):
+                    await self._reset_worker_received(status)
+
             elif type == "result":
                 contains = msg["contains"]
-                logger.info("Result received from RE Worker:\n"
-                            "Contains: '%s'\n Value: '%s'",
-                            str(contains), pprint.pformat(value))
+                #logger.info("Result received from RE Worker:\n"
+                #            "Contains: '%s'\n Value: '%s'",
+                #            str(contains), pprint.pformat(value))
                 if contains == "status":
                     await self._worker_status_received(value)
 
@@ -474,12 +555,8 @@ class RunEngineManager(Process):
         Creates RE environment: creates RE Worker process, starts and configures Run Engine.
         """
         logger.info("Creating the new RE environment.")
-        if not self._environment_exists:
-            await self._start_re_worker()
-            self._environment_exists = True
-            success, msg = True, ""
-        else:
-            success, msg = False, "Environment already exists."
+        success = await self._start_re_worker()
+        msg = "Environment already exists." if not success else ""
         return {"success": success, "msg": msg}
 
     async def _close_environment_handler(self, request):
@@ -675,7 +752,7 @@ class RunEngineManager(Process):
             await self._zmq_send(msg_out)
 
             if self._manager_stopping:
-                await self._stop_re_worker()  # Quitting RE Manager
+                await self._stop_re_worker_task()  # Quitting RE Manager
                 await self._watchdog_manager_stopping()
                 self._comm_to_watchdog.close()
                 self._zmq_socket.close()

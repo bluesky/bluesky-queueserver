@@ -251,12 +251,13 @@ class RunEngineWorker(Process):
 
         if type == "request":
             if value == "status":
+                #print("Request received")
                 plan_uid = self._state["running_plan"]["plan_uid"] \
                     if self._state["running_plan"] else None
                 plan_completed = self._state["running_plan_completed"]
-                re_state = str(self._RE._state)
+                re_state = str(self._RE._state) if self._RE else "null"
                 env_state = self._state["environment_state"]
-                re_report_available = self._re_report is None
+                re_report_available = self._re_report is not None
                 msg_out = {"type": "result",
                            "contains": "status",
                            "value": {"running_plan_uid": plan_uid,
@@ -291,7 +292,7 @@ class RunEngineWorker(Process):
                 #       For now simply assume that we can not close the environment in which
                 #       Run Engine is running using this method. Different method that kills
                 #       the worker process is needed.
-                if self._RE._state != "running":
+                if (self._RE is None) or (self._RE._state != "running"):
                     try:
                         self._exit_event.set()
                         msg_ack["value"]["status"] = "accepted"
@@ -506,7 +507,7 @@ class RunEngineWorker(Process):
         while self._exit_confirmed_event.is_set():
             ttime.sleep(0.1)
 
-        del self._RE
+        self._RE = None
 
         # Finally send a report
         #msg = {"type": "report",
@@ -514,3 +515,5 @@ class RunEngineWorker(Process):
         #self._conn.send(msg)
 
         self._thread_conn.join()
+
+        logger.info(f"Run Engine environment was closed successfully.")

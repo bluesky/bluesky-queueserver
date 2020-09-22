@@ -1,3 +1,5 @@
+from fastapi import FastAPI
+
 from aiohttp import web
 import asyncio
 import zmq
@@ -18,10 +20,11 @@ http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "de
 http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
 """
 
+app = FastAPI()
 
 class WebServer:
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         self._loop = asyncio.get_event_loop()
 
         # ZeroMQ communication
@@ -32,6 +35,10 @@ class WebServer:
         # Start communication task
         self._event_zmq_stop = None
         self._task_zmq_client_conn = asyncio.ensure_future(self._zmq_start_client_conn())
+
+    def __call__(self, *args, **kwargs):
+        print(args)
+        print(kwargs)
 
     def __del__(self):
         # Cancel the communication task
@@ -90,14 +97,14 @@ class WebServer:
         msg_in = await self._zmq_communicate(msg_out)
         return msg_in
 
-    async def _hello_handler(self, request):
+    async def _hello_handler(self):
         """
         May be called to get response from the server. Returns the number of plans in the queue.
         """
         msg = await self._send_command(command="")
         return web.json_response(msg)
 
-    async def _queue_view_handler(self, request):
+    async def _queue_view_handler(self):
         """
         Returns the contents of the current queue.
         """
@@ -186,15 +193,43 @@ class WebServer:
             ]
         )
 
+re_server = WebServer()
+
+@app.get('/')
+async def hello_handler():
+    """
+    May be called to get response from the server. Returns the number of plans in the queue.
+    """
+    res = await re_server._hello_handler()
+    return res
+
+@app.get('/queue_view')
+async def queue_view():
+    """
+    May be called to get response from the server. Returns the number of plans in the queue.
+    """
+    res = await re_server._queue_view_handler()
+    return res
+
+
+@app.get('/add_to_queue')
+async def queue_view(request):
+    """
+    May be called to get response from the server. Returns the number of plans in the queue.
+    """
+    res = await re_server._queue_view_handler()
+    return res
+
 
 def init_func(argv):
 
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger('bluesky_queueserver').setLevel("DEBUG")
 
-    re_server = WebServer()
-
-    app = web.Application(loop=re_server.get_loop())
-    re_server.setup_routes(app)
-    app["re_server"] = re_server  # To keep it alive
-    return app
+    re_server = WebServer(argv)
+    #
+    # app = web.Application(loop=re_server.get_loop())
+    # re_server.setup_routes(app)
+    # app["re_server"] = re_server  # To keep it alive
+    # return app
+    return re_server

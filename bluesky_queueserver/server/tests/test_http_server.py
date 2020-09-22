@@ -1,5 +1,6 @@
 import subprocess
 import sys
+import time as ttime
 
 import pytest
 import requests
@@ -136,3 +137,29 @@ def test_http_server_process_queue_handler(re_manager, aiohttp_server, add_plans
 
     resp6 = _request_to_json('post', '/process_queue')
     assert resp6 == {'success': True, 'msg': ''}
+
+
+def test_http_server_re_pause_continue_handlers(re_manager, aiohttp_server):  # noqa F811
+    resp1 = _request_to_json('post', '/create_environment')
+    assert resp1 == {'success': True, 'msg': ''}
+
+    resp2 = _request_to_json('post', '/add_to_queue',
+                             json={"plan": {"name": "count",
+                                            "args": [["det1", "det2"]],
+                                            "kwargs": {"num": 10, "delay": 1}}})
+    assert resp2['name'] == 'count'
+    assert resp2['args'] == [['det1', 'det2']]
+    assert 'plan_uid' in resp2
+
+    resp3 = _request_to_json('post', '/re_pause', json={"option": "immediate"})
+    assert resp3 == {'msg': '', 'success': True}
+    resp3a = _request_to_json('get', '/queue_view')
+    assert len(resp3a['queue']) == 1
+
+    resp4 = _request_to_json('post', '/re_continue', json={'option': 'abort'})
+    assert resp4 == {'msg': '', 'success': True}
+
+    ttime.sleep(15)
+
+    resp4a = _request_to_json('get', '/queue_view')
+    assert len(resp4a['queue']) == 1

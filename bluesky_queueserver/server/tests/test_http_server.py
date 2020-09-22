@@ -97,3 +97,14 @@ def test_http_server_create_environment_handler(re_manager, aiohttp_server):  # 
 
     resp2 = _request_to_json('post', '/create_environment')
     assert resp2 == {'success': False, 'msg': 'Environment already exists.'}
+
+
+def test_http_server_close_environment_handler(re_manager, aiohttp_server):  # noqa F811
+    resp1 = _request_to_json('post', '/create_environment')
+    assert resp1 == {'success': True, 'msg': ''}
+
+    resp2 = _request_to_json('post', '/close_environment')
+    assert resp2 == {'success': True, 'msg': ''}
+
+    resp3 = _request_to_json('post', '/close_environment')
+    assert resp3 == {'success': False, 'msg': 'Environment does not exist.'}

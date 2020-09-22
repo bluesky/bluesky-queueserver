@@ -108,3 +108,31 @@ def test_http_server_close_environment_handler(re_manager, aiohttp_server):  # n
 
     resp3 = _request_to_json('post', '/close_environment')
     assert resp3 == {'success': False, 'msg': 'Environment does not exist.'}
+
+
+def test_http_server_process_queue_handler(re_manager, aiohttp_server, add_plans_to_queue):  # noqa F811
+    resp1 = _request_to_json('post', '/process_queue')
+    assert resp1 == {'success': False, 'msg': 'Environment does not exist. Can not start the task.'}
+
+    resp2 = _request_to_json('post', '/create_environment')
+    assert resp2 == {'success': True, 'msg': ''}
+    resp2a = _request_to_json('get', '/queue_view')
+    assert len(resp2a['queue']) == 3
+
+    resp3 = _request_to_json('post', '/process_queue')
+    assert resp3 == {'success': True, 'msg': ''}
+    resp3a = _request_to_json('get', '/queue_view')
+    assert len(resp3a['queue']) == 2
+
+    resp4 = _request_to_json('post', '/process_queue')
+    assert resp4 == {'success': True, 'msg': ''}
+    resp4a = _request_to_json('get', '/queue_view')
+    assert len(resp4a['queue']) == 1
+
+    resp5 = _request_to_json('post', '/process_queue')
+    assert resp5 == {'success': True, 'msg': ''}
+    resp5a = _request_to_json('get', '/queue_view')
+    assert len(resp5a['queue']) == 0
+
+    resp6 = _request_to_json('post', '/process_queue')
+    assert resp6 == {'success': True, 'msg': ''}

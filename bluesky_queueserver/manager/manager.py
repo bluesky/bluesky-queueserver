@@ -224,9 +224,7 @@ class RunEngineManager(Process):
             msg = {"type": "command", "value": "quit"}
             self._worker_conn.send(msg)
 
-            print(f"Preparing to wait for event 'closed'")  ##
             status = await self._fut_worker_closed_waiting
-            print(f"Finished wait")  ##
             success = (status == "accepted")
         else:
             success = False
@@ -242,9 +240,9 @@ class RunEngineManager(Process):
         """
         success = True
         if self._environment_exists:
-            self._fut_worker_closed_waiting = self._loop.create_future()  # Temporary reuse the event (will go away)
+            # Temporary reuse the event (will go away)
+            self._fut_worker_closed_waiting = self._loop.create_future()
 
-            print(f"Send confirmation") ##
             msg = {"type": "command", "value": "confirm_exit"}
             self._worker_conn.send(msg)
 
@@ -285,15 +283,12 @@ class RunEngineManager(Process):
             if self._environment_exists or self._creating_environment:
                 ws = await self._worker_status_request()
                 self._worker_status = ws
-                #print(f"ws={ws}")
                 if self._closing_environment:
                     if ws["environment_state"] == "closing":
                         self._event_worker_closed.set()
 
                 if self._creating_environment:
-                    #print(f"Checking environment status")  ##
                     if ws["environment_state"] == "ready":
-                        #print(f"Status READY")  ##
                         self._event_worker_created.set()
 
                 if self._plan_is_running:
@@ -302,7 +297,6 @@ class RunEngineManager(Process):
 
     async def _worker_status_request(self):
         self._fut_worker_status = self._loop.create_future()
-        #print(f"Sending request")  ##
         msg = {"type": "request", "value": "status"}
         self._worker_conn.send(msg)
 
@@ -314,14 +308,8 @@ class RunEngineManager(Process):
     async def _get_re_report(self):
         # TODO: rewrite report handling so that it is one async function, not multiple chained ones.
         self._plan_is_running = False
-        #self._fut_re_report = self._loop.create_future()
-        #print(f"Sending request")  ##
         msg = {"type": "request", "value": "re_report"}
         self._worker_conn.send(msg)
-        #return await self._fut_re_report
-
-    #async def _re_report_received(self, report):
-    #    self._fut_re_report.set_result(report)
 
     async def _run_task(self):
         """
@@ -420,7 +408,6 @@ class RunEngineManager(Process):
             if self._worker_conn.poll(0.1):
                 try:
                     msg = self._worker_conn.recv()
-                    #logger.debug("Message received from RE Worker: %s", pprint.pformat(msg))
                     # Messages should be handled in the event loop
                     self._loop.call_soon_threadsafe(self._conn_worker_received, msg)
                 except Exception as ex:
@@ -481,9 +468,6 @@ class RunEngineManager(Process):
 
             elif type == "result":
                 contains = msg["contains"]
-                #logger.info("Result received from RE Worker:\n"
-                #            "Contains: '%s'\n Value: '%s'",
-                #            str(contains), pprint.pformat(value))
                 if contains == "status":
                     await self._worker_status_received(value)
 
@@ -722,6 +706,7 @@ class RunEngineManager(Process):
                 # Plan is running. Check if it is the same plan as in redis.
                 plan_stored = await self._get_running_plan_info()
                 plan_uid_stored = plan_stored["plan_uid"]
+                self._plan_is_running = True  # Wait for plan completion
                 if plan_uid_stored != plan_uid_running:
                     # Guess is that the environment may still work, so restart is
                     #   only recommended if it is convenient.

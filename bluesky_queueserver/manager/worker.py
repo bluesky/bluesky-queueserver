@@ -120,7 +120,8 @@ class RunEngineWorker(Process):
                     self._re_report["value"]["plan_state"] = "completed"
                     self._state["running_plan_completed"] = True
                 else:
-                    self._re_report["value"]["plan_state"] = "stopped"  # Here we don't distinguish between stop/abort/halt
+                    # Here we don't distinguish between stop/abort/halt
+                    self._re_report["value"]["plan_state"] = "stopped"
                     self._state["running_plan_completed"] = True
 
                 # Include RE state
@@ -130,9 +131,9 @@ class RunEngineWorker(Process):
             with self._re_report_lock:
 
                 self._re_report = {"type": "report",
-                       "value": {"action": "plan_exit",
-                                 "result": "",
-                                 "err_msg": str(ex)}}
+                                   "value": {"action": "plan_exit",
+                                             "result": "",
+                                             "err_msg": str(ex)}}
 
                 if self._RE._state == "paused":
                     # Run Engine was paused
@@ -150,7 +151,6 @@ class RunEngineWorker(Process):
                 # Include RE state
                 self._re_report["value"]["re_state"] = str(self._RE._state)
 
-        #self._conn.send(msg)
         logger.debug("Finished execution of a task")
 
     def _load_new_plan(self, plan_info):
@@ -251,7 +251,6 @@ class RunEngineWorker(Process):
 
         if type == "request":
             if value == "status":
-                #print("Request received")
                 plan_uid = self._state["running_plan"]["plan_uid"] \
                     if self._state["running_plan"] else None
                 plan_completed = self._state["running_plan_completed"]
@@ -491,11 +490,6 @@ class RunEngineWorker(Process):
 
         self._execution_queue = queue.Queue()
 
-        # Environment is initialized: send a report
-        #msg = {"type": "report",
-        #       "value": {"action": "environment_created"}}
-        #self._conn.send(msg)
-
         self._state["environment_state"] = "ready"
 
         # Now make the main thread busy
@@ -509,11 +503,6 @@ class RunEngineWorker(Process):
 
         self._RE = None
 
-        # Finally send a report
-        #msg = {"type": "report",
-        #       "value": {"action": "environment_closed"}}
-        #self._conn.send(msg)
-
         self._thread_conn.join()
 
-        logger.info(f"Run Engine environment was closed successfully.")
+        logger.info("Run Engine environment was closed successfully.")

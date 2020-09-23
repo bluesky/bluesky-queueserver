@@ -167,11 +167,11 @@ class PipeJsonRpcReceive:
 
     def _conn_received(self, msg):
 
-        if logger.level < 11:  # Print output only if logging level is DEBUG (10) or less
-            msg_json = json.loads(msg)
-            # We don't want to print 'heartbeat' messages
-            if not isinstance(msg_json, dict) or (msg_json["method"] != "heartbeat"):
-                logger.debug("Command received RE Manager->Watchdog: %s", pprint.pformat(msg_json))
+        # if logger.level < 11:  # Print output only if logging level is DEBUG (10) or less
+        #     msg_json = json.loads(msg)
+        #     We don't want to print 'heartbeat' messages
+        #     if not isinstance(msg_json, dict) or (msg_json["method"] != "heartbeat"):
+        #         logger.debug("Command received RE Manager->Watchdog: %s", pprint.pformat(msg_json))
 
         response = JSONRPCResponseManager.handle(msg, self._dispatcher)
         if response:
@@ -392,7 +392,7 @@ class PipeJsonRpcSendAsync:
                 try:
                     msg_json = self._conn.recv()
                     msg = json.loads(msg_json)
-                    logger.debug("Message Watchdog->Manager received: '%s'", pprint.pformat(msg))
+                    # logger.debug("Message Watchdog->Manager received: '%s'", pprint.pformat(msg))
                     # Messages should be handled in the event loop
                     self._loop.call_soon_threadsafe(self._conn_received, msg)
                 except Exception as ex:

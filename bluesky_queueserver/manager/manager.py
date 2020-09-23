@@ -4,7 +4,6 @@ import aioredis
 import zmq
 import zmq.asyncio
 from multiprocessing import Process
-import threading
 import time as ttime
 import pprint
 import uuid
@@ -76,29 +75,21 @@ class RunEngineManager(Process):
         self._heartbeat_generator_task = None  # Task for heartbeat generator
         self._worker_status_task = None  # Task for periodic checks of Worker status
 
-        self._creating_environment = False
-        self._event_worker_created = None
+        self._manager_state = "idle"  # "idle", "creating_environment"
+        self._fut_manager_task_completed = None
 
-        self._closing_environment = False
-        self._event_worker_closed = None
-
-        self._event_worker_closed_waiting = None
-        self._fut_worker_closed_waiting = None
-
-        self._plan_is_running = False
-        self._fut_plan_report = None
-
-        self._fut_worker_status = None
-
-        # The object of PipeJsonRpcSendAsync. Communciation with Watchdog module.
-        #    The object must be created in the loop.
+        # The objects of PipeJsonRpcSendAsync used for communciation with
+        #   Watchdog and Worker modules. The object must be instantiated in the loop.
         self._comm_to_watchdog = None
+        self._comm_to_worker = None
 
+    '''
     def _start_conn_threads(self):
         self._thread_conn_worker = threading.Thread(target=self._receive_packet_worker_thread,
                                                     name="RE QServer Comm2",
                                                     daemon=True)
         self._thread_conn_worker.start()
+    '''
 
     async def _heartbeat_generator(self):
         """
@@ -150,6 +141,11 @@ class RunEngineManager(Process):
     #          Functions that implement functionality of the server
 
     async def _start_re_worker(self):
+        """
+        Initiate creation of RE Worker environment. The function does not wait until
+        the environment is created. Returns True/False depending on whether
+        the command is accepted.
+        """
         if self._environment_exists:
             accepted = False
         else:
@@ -164,7 +160,8 @@ class RunEngineManager(Process):
         if self._environment_exists:
             return
 
-        self._event_worker_created = asyncio.Event()
+        self._fut_manager_task_completed = self._loop.create_future()
+        self._manager_state = "creating_environment"
         self._creating_environment = True
 
         try:
@@ -172,15 +169,19 @@ class RunEngineManager(Process):
             if not success:
                 raise RuntimeError("Failed to create Worker process")
             logger.debug("Waiting for RE worker to start ...")
-            await self._event_worker_created.wait()  # TODO: timeout may be needed here
+            await self._fut_manager_task_completed  # TODO: timeout may be needed here
+
             self._environment_exists = True
             logger.debug("Worker started successfully.")
         except Exception as ex:
             logger.exception("Failed to start_Worker: %s", str(ex))
 
-        self._creating_environment = False
+        self._manager_state = "idle"
 
     async def _stop_re_worker(self):
+        """
+        Initiate closing of RE Worker environment.
+        """
         if self._environment_exists:
             accepted = True
             asyncio.ensure_future(self._stop_re_worker_task())
@@ -197,78 +198,49 @@ class RunEngineManager(Process):
 
         result = "success"
 
-        if await self._initiate_stop_re_worker():
+        self._fut_manager_task_completed = self._loop.create_future()
+
+        success, err_msg = await self._worker_command_close_env()
+        if success:
             # Wait for RE Worker to be prepared to close
             self._event_worker_closed = asyncio.Event()
-            self._closing_environment = True
 
-            await self._event_worker_closed.wait()  # TODO: timeout may be needed here
+            self._manager_state = "closing_environment"
+            await self._fut_manager_task_completed  # TODO: timeout may be needed here
+            self._manager_state = "idle"
 
-            self._closing_environment = False
-
-            if not await self._worker_confirm_exit():
+            if not await self._confirm_re_worker_exit():
                 result = "failed"
         else:
             result = "rejected"
 
         return result
 
-    async def _initiate_stop_re_worker(self):
-        """
-        Closes Run Engine execution environment in orderly way. Running plan needs
-        to be stopped before the environment can be closed.
-        """
-        if self._environment_exists:
-            self._fut_worker_closed_waiting = self._loop.create_future()
-
-            msg = {"type": "command", "value": "quit"}
-            self._worker_conn.send(msg)
-
-            status = await self._fut_worker_closed_waiting
-            success = (status == "accepted")
-        else:
-            success = False
-        return success
-
-    async def _stop_re_worker_initiated(self, status):
-        # Report from RE Worker received: environment was closed successfully.
-        self._fut_worker_closed_waiting.set_result(status)
-
-    async def _worker_confirm_exit(self):
+    async def _confirm_re_worker_exit(self):
         """
         Confirm RE worker exit and make sure the worker thread exits.
         """
         success = True
         if self._environment_exists:
-            # Temporary reuse the event (will go away)
-            self._fut_worker_closed_waiting = self._loop.create_future()
-
-            msg = {"type": "command", "value": "confirm_exit"}
-            self._worker_conn.send(msg)
-
             logger.debug("Waiting for exit confirmation from RE worker ...")
-            status = await self._fut_worker_closed_waiting  # TODO: what do we do with the result?
-            if status == "accepted":
-                logger.debug("RE Worker to closed")
+            success, err_msg = await self._worker_command_confirm_exit()
 
-                # Environment is not in valid state anyway. So assume it does not exist.
-                self._environment_exists = False
+            # Environment is not in valid state anyway. So assume it does not exist.
+            self._environment_exists = False
+            if success:
+                logger.debug("Wait for RE Worker process to close (join)")
 
                 if not await self._watchdog_join_re_worker(timeout_join=0.5):
-                    success = False
+                    success, err_msg = False, "Failed to join RE Worker thread."
                     # TODO: this error should probably be handled differently than this,
                     #   since it may indicate that the worker process is stalled.
                     logger.error("Failed to properly join the worker process. "
                                  "The process may not be properly closed.")
             else:
-                success = False
+                success, err_msg = False, "RE Worker failed to exit (no confirmation)"
         else:
-            success = False
-        return success
-
-    async def _worker_exit_confirmed(self, status):
-        # Report from RE Worker received: environment was closed successfully.
-        self._fut_worker_closed_waiting.set_result(status)
+            success, err_msg = False, "RE Worker environment does not exist"
+        return success, err_msg
 
     async def _is_worker_alive(self):
         return await self._watchdog_is_worker_alive()
@@ -280,36 +252,66 @@ class RunEngineManager(Process):
         t_period = 0.5
         while True:
             await asyncio.sleep(t_period)
-            if self._environment_exists or self._creating_environment:
-                ws = await self._worker_status_request()
+            if self._environment_exists or self._manager_state == "creating_environment":
+                ws, _ = await self._worker_request_state()
                 self._worker_status = ws
-                if self._closing_environment:
+                if self._manager_state == "closing_environment":
                     if ws["environment_state"] == "closing":
-                        self._event_worker_closed.set()
+                        self._fut_manager_task_completed.set_result(None)
 
-                if self._creating_environment:
+                if self._manager_state == "creating_environment":
                     if ws["environment_state"] == "ready":
-                        self._event_worker_created.set()
+                        self._fut_manager_task_completed.set_result(None)
 
-                if self._plan_is_running:
+                if self._manager_state == "plan_running":
                     if ws["re_report_available"]:
-                        self._loop.create_task(self._get_re_report())
+                        self._loop.create_task(self._process_plan_report())
 
-    async def _worker_status_request(self):
-        self._fut_worker_status = self._loop.create_future()
-        msg = {"type": "request", "value": "status"}
-        self._worker_conn.send(msg)
+    async def _process_plan_report(self):
+        """
+        Process plan report. Called when plan report is available.
+        """
+        async def push_plan_back_to_queue():
+            p = await self._get_running_plan_info()
+            await self._r_pool.lpush('plan_queue', json.dumps(p))
+            await self._clear_running_plan_info()
 
-        return await self._fut_worker_status
+        # Read report first
+        plan_report, err_msg = await self._worker_request_plan_report()
+        if plan_report is None:
+            # TODO: this would typically mean a bug (communciation error). Probably more
+            #       complicated processing is needed
+            logger.error(f"Failed to download plan report: {err_msg}. Stopping queue processing.")
+            await push_plan_back_to_queue()
+            self._manager_state = "idle"
+        else:
+            plan_state = plan_report["plan_state"]
+            success = plan_report["success"]
+            result = plan_report["result"]
+            err_msg = plan_report["err_msg"]
 
-    async def _worker_status_received(self, status):
-        self._fut_worker_status.set_result(status)
+            msg_display = result if result else err_msg
+            logger.info("Report received from RE Worker:\n"
+                        "plan_state=%s\n"
+                        "success=%s\n%s\n)",
+                        plan_state, str(success), str(msg_display))
 
-    async def _get_re_report(self):
-        # TODO: rewrite report handling so that it is one async function, not multiple chained ones.
-        self._plan_is_running = False
-        msg = {"type": "request", "value": "re_report"}
-        self._worker_conn.send(msg)
+            if plan_state == "completed":
+                # Executed plan is removed from the queue only after it is successfully completed.
+                # If a plan was not completed or not successful (exception was raised), then
+                # execution of the queue is stopped. It can be restarted later (failed or
+                # interrupted plan will still be in the queue.
+                await self._clear_running_plan_info()
+                await self._run_task()
+            elif plan_state in ("stopped", "error"):
+                # Paused plan was stopped/aborted/halted
+                await push_plan_back_to_queue()
+                self._manager_state = "idle"
+            elif plan_state == "paused":
+                # The plan was paused (nothing should be done).
+                self._manager_state = "idle"
+            else:
+                logger.error("Unknown plan state %s was returned by RE Worker.", plan_state)
 
     async def _run_task(self):
         """
@@ -324,12 +326,13 @@ class RunEngineManager(Process):
         new_plan = await self._r_pool.lpop('plan_queue')
         if new_plan is not None:
             # Reset RE environment (worker)
-            status = await self._reset_worker()
-            if status != "accepted":
-                logger.error("Failed to reset RE Worker.")
+            success, err_msg = await self._worker_command_reset_worker()
+            if not success:
+                logger.error("Failed to reset RE Worker: %s", err_msg)
+                self._manager_state = "idle"
                 return False
 
-            self._plan_is_running = True
+            self._manager_state = "plan_running"
 
             new_plan = json.loads(new_plan)
             await self._set_running_plan_info(new_plan)
@@ -339,45 +342,47 @@ class RunEngineManager(Process):
             kwargs = new_plan["kwargs"] if "kwargs" in new_plan else {}
             plan_uid = new_plan["plan_uid"]
 
-            msg = {"type": "plan",
-                   "value": {"name": plan_name,
-                             "args": args,
-                             "kwargs": kwargs,
-                             "plan_uid": plan_uid
-                             }
-                   }
+            plan_info = {"name": plan_name,
+                         "args": args,
+                         "kwargs": kwargs,
+                         "plan_uid": plan_uid
+                         }
 
-            self._worker_conn.send(msg)
-            return True
+            success, err_msg = await self._worker_command_run_plan(plan_info)
+            if not success:
+                logger.error("Failed to start the plan %s.\nError: %s",
+                             pprint.pformat(plan_info), err_msg)
+                self._manager_state = "idle"
+                return False
+            else:
+                return True
         else:
             logger.info("Queue is empty")
+            self._manager_state = "idle"
             return False
 
-    async def _reset_worker(self):
-        self._fut_reset_worker = self._loop.create_future()
-        # print(f"Sending request")  ##
-        msg = {"type": "command", "value": "reset_worker"}
-        self._worker_conn.send(msg)
-        return await self._fut_reset_worker
-
-    async def _reset_worker_received(self, status):
-        self._fut_reset_worker.set_result(status)
-
-    def _pause_run_engine(self, option):
+    async def _pause_run_engine(self, option):
         """
         Pause execution of a running plan. Run Engine must be in 'running' state in order for
         the request to pause to be accepted by RE Worker.
         """
-        msg = {"type": "command", "value": "pause", "option": option}
-        self._worker_conn.send(msg)
+        success, err_msg = await self._worker_command_pause_plan(option)
+        if not success:
+            logger.error("Failed to pause the running plan: %s", err_msg)
+        else:
+            self._manager_state = "plan_running"
+        return success, err_msg
 
-    def _continue_run_engine(self, option):
+    async def _continue_run_engine(self, option):
         """
         Continue handling of a paused plan.
         """
-        self._plan_is_running = True
-        msg = {"type": "command", "value": "continue", "option": option}
-        self._worker_conn.send(msg)
+        success, err_msg = await self._worker_command_continue_plan(option)
+        if not success:
+            logger.error("Failed to pause the running plan: %s", err_msg)
+        else:
+            self._manager_state = "plan_running"
+        return success, err_msg
 
     def _print_db_uids(self):
         """
@@ -401,77 +406,151 @@ class RunEngineManager(Process):
         print(f"  Total of {n_runs} runs were found in 'temp' database.")
         print("===================================================================\n")
 
-    # ================================================================================
-    #         Functions for communication with the worker process (via Pipe)
-    def _receive_packet_worker_thread(self):
-        while True:
-            if self._worker_conn.poll(0.1):
-                try:
-                    msg = self._worker_conn.recv()
-                    # Messages should be handled in the event loop
-                    self._loop.call_soon_threadsafe(self._conn_worker_received, msg)
-                except Exception as ex:
-                    logger.exception("Exception occurred while waiting for packet: %s", str(ex))
-                    break
+    # ===============================================================================
+    #         Functions that send commands/request data from Worker process
 
-    def _conn_worker_received(self, msg):
-        async def process_message(msg):
-            type, value = msg["type"], msg["value"]
+    async def _worker_request_state(self):
+        try:
+            re_state = await self._comm_to_worker.send_msg("request_state")
+            err_msg = ""
+        except CommTimeoutError:
+            re_state, err_msg = None, "Timeout occurred"
+        return re_state, err_msg
 
-            if type == "report":
-                action = value["action"]
-                if action == "plan_exit":
+    async def _worker_request_plan_report(self):
+        try:
+            plan_report = await self._comm_to_worker.send_msg("request_plan_report")
+            err_msg = ""
+            if plan_report is None:
+                err_msg = "Report is not available at RE Worker"
+        except CommTimeoutError:
+            plan_report, err_msg = None, "Timeout occurred"
+        return plan_report, err_msg
 
-                    plan_state = value["plan_state"]
-                    success = value["success"]
-                    result = value["result"]
-                    err_msg = value["err_msg"]
+    async def _worker_command_close_env(self):
+        try:
+            response = await self._comm_to_worker.send_msg("command_close_env")
+            success = (response["status"] == "accepted")
+            err_msg = response["err_msg"]
+        except CommTimeoutError:
+            success, err_msg = None, "Timeout occurred"
+        return success, err_msg
 
-                    msg_display = result if result else err_msg
-                    logger.info("Report received from RE Worker:\n"
-                                "plan_state=%s\n"
-                                "success=%s\n%s\n)",
-                                plan_state, str(success), str(msg_display))
+    async def _worker_command_confirm_exit(self):
+        try:
+            response = await self._comm_to_worker.send_msg("command_confirm_exit")
+            success = (response["status"] == "accepted")
+            err_msg = response["err_msg"]
+        except CommTimeoutError:
+            success, err_msg = None, "Timeout occurred"
+        return success, err_msg
 
-                    if plan_state == "completed":
-                        # Executed plan is removed from the queue only after it is successfully completed.
-                        # If a plan was not completed or not successful (exception was raised), then
-                        # execution of the queue is stopped. It can be restarted later (failed or
-                        # interrupted plan will still be in the queue.
-                        await self._clear_running_plan_info()
-                        await self._run_task()
-                    elif plan_state in ("stopped", "error"):
-                        # Paused plan was stopped/aborted/halted
-                        p = await self._get_running_plan_info()
-                        await self._r_pool.lpush('plan_queue', json.dumps(p))
-                        await self._clear_running_plan_info()
-                    elif plan_state == "paused":
-                        # The plan was paused (nothing should be done)
-                        pass
-                    else:
-                        logger.error("Unknown plan state %s was returned by RE Worker.", plan_state)
+    async def _worker_command_run_plan(self, plan_info):
+        try:
+            response = await self._comm_to_worker.send_msg("command_run_plan",
+                                                           {"plan_info": plan_info})
+            success = (response["status"] == "accepted")
+            err_msg = response["err_msg"]
+        except CommTimeoutError:
+            success, err_msg = None, "Timeout occurred"
+        return success, err_msg
 
-            elif type == "acknowledge":
-                status = value["status"]
-                result = value["result"]
-                msg_original = value["msg"]
-                logger.info("Acknownegement received from RE Worker:\n"
-                            "Status: '%s'\nResult: '%s'\nMessage: %s",
-                            str(status), str(result), pprint.pformat(msg_original))
+    async def _worker_command_pause_plan(self, option):
+        try:
+            response = await self._comm_to_worker.send_msg("command_pause_plan",
+                                                           {"option": option})
+            success = (response["status"] == "accepted")
+            err_msg = response["err_msg"]
+        except CommTimeoutError:
+            success, err_msg = None, "Timeout occurred"
+        return success, err_msg
 
-                if (msg_original["type"] == "command") and (msg_original["value"] == "quit"):
-                    await self._stop_re_worker_initiated(status)
-                if (msg_original["type"] == "command") and (msg_original["value"] == "confirm_exit"):
-                    await self._worker_exit_confirmed(status)
-                if (msg_original["type"] == "command") and (msg_original["value"] == "reset_worker"):
-                    await self._reset_worker_received(status)
+    async def _worker_command_continue_plan(self, option):
+        try:
+            response = await self._comm_to_worker.send_msg("command_continue_plan",
+                                                           {"option": option})
+            success = (response["status"] == "accepted")
+            err_msg = response["err_msg"]
+        except CommTimeoutError:
+            success, err_msg = None, "Timeout occurred"
+        return success, err_msg
 
-            elif type == "result":
-                contains = msg["contains"]
-                if contains == "status":
-                    await self._worker_status_received(value)
+    async def _worker_command_reset_worker(self):
+        try:
+            response = await self._comm_to_worker.send_msg("command_reset_worker")
+            success = (response["status"] == "accepted")
+            err_msg = response["err_msg"]
+        except CommTimeoutError:
+            success, err_msg = None, "Timeout occurred"
+        return success, err_msg
 
-        asyncio.create_task(process_message(msg))
+    # ===============================================================================
+    #         Functions that send commands/request data from Watchdog process
+
+    async def _watchdog_start_re_worker(self):
+        """
+        Initiate the startup of the RE Worker. Returned 'success==True' means that the process
+        was created successfully and RE environment initialization is started.
+        """
+        try:
+            response = await self._comm_to_watchdog.send_msg("start_re_worker")
+            success = response["success"]
+        except CommTimeoutError:
+            success = False
+        # TODO: add processing of CommJsonRpcError and RuntimeError to all handlers !!!
+        return success
+
+    async def _watchdog_join_re_worker(self, timeout_join=0.5):
+        """
+        Request Watchdog to join RE Worker process. The sequence of orderly closing of the process
+        needs to be initiated before attempting to join the process.
+        """
+        try:
+            # Communication timeout must be a little bit larger than join timeout.
+            response = await self._comm_to_watchdog.send_msg("join_re_worker",
+                                                             {"timeout": timeout_join},
+                                                             timeout=timeout_join + 0.1)
+            success = response["success"]
+        except CommTimeoutError:
+            success = False
+        return success
+
+    async def _watchdog_kill_re_worker(self):
+        """
+        Request Watchdog to kill RE Worker process (justified only if the process is not responsive).
+        """
+        try:
+            response = await self._comm_to_watchdog.send_msg("kill_re_worker")
+            success = response["success"]
+        except CommTimeoutError:
+            success = False
+        return success
+
+    async def _watchdog_is_worker_alive(self):
+        """
+        Check if RE Worker process is alive.
+        """
+        try:
+            response = await self._comm_to_watchdog.send_msg("is_worker_alive")
+            worker_alive = response["worker_alive"]
+        except asyncio.TimeoutError:
+            worker_alive = False
+        return worker_alive
+
+    async def _watchdog_manager_stopping(self):
+        """
+        Inform Watchdog process that the manager is intentionally being stopped and
+        it should not be restarted.
+        """
+        await self._comm_to_watchdog.send_msg("manager_stopping", notification=True)
+
+    async def _watchdog_send_heartbeat(self):
+        """
+        Send (periodic) heartbeat signal to Watchdog.
+        """
+        await self._comm_to_watchdog.send_msg("heartbeat",
+                                              {"value": "alive"},
+                                              notification=True)
 
     # =========================================================================
     #                        ZMQ message handlers
@@ -575,8 +654,7 @@ class RunEngineManager(Process):
         available_options = ("deferred", "immediate")
         if option in available_options:
             if self._environment_exists:
-                self._pause_run_engine(option)
-                success, msg = True, ""
+                success, msg = await self._pause_run_engine(option)
             else:
                 success, msg = False, "Environment does not exist. Can not pause Run Engine."
         else:
@@ -593,8 +671,7 @@ class RunEngineManager(Process):
         available_options = ("resume", "abort", "stop", "halt")
         if option in available_options:
             if self._environment_exists:
-                self._continue_run_engine(option)
-                success, msg = True, ""
+                success, msg = await self._continue_run_engine(option)
             else:
                 success, msg = False, "Environment does not exist. Can not pause Run Engine."
         else:
@@ -670,9 +747,10 @@ class RunEngineManager(Process):
 
         self._comm_to_watchdog = PipeJsonRpcSendAsync(conn=self._watchdog_conn,
                                                       name="RE Manager-Watchdog Comm")
+        self._comm_to_worker = PipeJsonRpcSendAsync(conn=self._worker_conn,
+                                                    name="RE Manager-Worker Comm")
         self._comm_to_watchdog.start()
-
-        self._start_conn_threads()
+        self._comm_to_worker.start()
 
         # Start heartbeat generator
         self._heartbeat_generator_task = asyncio.ensure_future(self._heartbeat_generator(),
@@ -696,28 +774,27 @@ class RunEngineManager(Process):
 
         # Now check if the plan is still being executed (if it was executed)
         if self._environment_exists:
-            worker_status = await self._worker_status_request()
-            plan_uid_running = worker_status["running_plan_uid"]
-            if not plan_uid_running:
-                # Plan is not being executed (even if it was executed when the manager
-                #   process was stopped.
-                await self._clear_running_plan_info()
+            worker_status, err_msg = await self._worker_request_state()
+            if worker_status:
+                plan_uid_running = worker_status["running_plan_uid"]
+                if plan_uid_running:
+                    # Plan is running. Check if it is the same plan as in redis.
+                    plan_stored = await self._get_running_plan_info()
+                    if "plan_uid" in plan_stored:
+                        plan_uid_stored = plan_stored["plan_uid"]
+                        self._manager_state = "plan_running"  # Wait for plan completion
+                        if plan_uid_stored != plan_uid_running:
+                            # Guess is that the environment may still work, so restart is
+                            #   only recommended if it is convenient.
+                            logger.warning(
+                                "Inconsistency of internal QServer data was detected: \n"
+                                "UID of currently running plan is '%s', "
+                                "instead of '%s'.\n"
+                                "RE execution environment may need to be closed and created again \n"
+                                "to restore data integrity.", plan_uid_running, plan_uid_stored)
             else:
-                # Plan is running. Check if it is the same plan as in redis.
-                plan_stored = await self._get_running_plan_info()
-                plan_uid_stored = plan_stored["plan_uid"]
-                self._plan_is_running = True  # Wait for plan completion
-                if plan_uid_stored != plan_uid_running:
-                    # Guess is that the environment may still work, so restart is
-                    #   only recommended if it is convenient.
-                    logger.warning(
-                        "Inconsistency of internal QServer data was detected: \n"
-                        "UID of currently running plan is '%s', "
-                        "instead of '%s'.\n"
-                        "RE execution environment may need to be closed and created again \n"
-                        "to restore data integrity.", plan_uid_running, plan_uid_stored)
-        else:
-            # Environment does not exist, so there is no running plan
+                logger.error("Error while reading RE Worker status: %s", err_msg)
+        if self._manager_state != "plan_running":
             await self._clear_running_plan_info()
 
         logger.info("Starting ZeroMQ server")
@@ -739,75 +816,11 @@ class RunEngineManager(Process):
             if self._manager_stopping:
                 await self._stop_re_worker_task()  # Quitting RE Manager
                 await self._watchdog_manager_stopping()
-                self._comm_to_watchdog.close()
+                self._comm_to_watchdog.stop()
+                self._comm_to_worker.stop()
                 self._zmq_socket.close()
                 logger.info("RE Manager was stopped by ZMQ command.")
                 break
-
-    # ===============================================================================
-    #         Functions that send commands/request data from Watchdog process
-
-    async def _watchdog_start_re_worker(self):
-        """
-        Initiate the startup of the RE Worker. Returned 'success==True' means that the process
-        was created successfully and RE environment initialization is started.
-        """
-        try:
-            response = await self._comm_to_watchdog.send_msg("start_re_worker")
-            success = response["success"]
-        except CommTimeoutError:
-            success = False
-        # TODO: add processing of CommJsonRpcError and RuntimeError to all handlers !!!
-        return success
-
-    async def _watchdog_join_re_worker(self, timeout_join=0.5):
-        """
-        Request Watchdog to join RE Worker process. The sequence of orderly closing of the process
-        needs to be initiated before attempting to join the process.
-        """
-        try:
-            response = await self._comm_to_watchdog.send_msg("join_re_worker", {"timeout": timeout_join})
-            success = response["success"]
-        except CommTimeoutError:
-            success = False
-        return success
-
-    async def _watchdog_kill_re_worker(self):
-        """
-        Request Watchdog to kill RE Worker process (justified only if the process is not responsive).
-        """
-        try:
-            response = await self._comm_to_watchdog.send_msg("kill_re_worker")
-            success = response["success"]
-        except CommTimeoutError:
-            success = False
-        return success
-
-    async def _watchdog_is_worker_alive(self):
-        """
-        Check if RE Worker process is alive.
-        """
-        try:
-            response = await self._comm_to_watchdog.send_msg("is_worker_alive")
-            worker_alive = response["worker_alive"]
-        except asyncio.TimeoutError:
-            worker_alive = False
-        return worker_alive
-
-    async def _watchdog_manager_stopping(self):
-        """
-        Inform Watchdog process that the manager is intentionally being stopped and
-        it should not be restarted.
-        """
-        await self._comm_to_watchdog.send_msg("manager_stopping", notification=True)
-
-    async def _watchdog_send_heartbeat(self):
-        """
-        Send (periodic) heartbeat signal to Watchdog.
-        """
-        await self._comm_to_watchdog.send_msg("heartbeat",
-                                              {"value": "alive"},
-                                              notification=True)
 
     # ======================================================================
 

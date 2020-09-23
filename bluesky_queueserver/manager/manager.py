@@ -7,6 +7,8 @@ from multiprocessing import Process
 import time as ttime
 import pprint
 import uuid
+import enum
+from super_state_machine import machines
 
 from .worker import DB
 from .comms import PipeJsonRpcSendAsync, CommTimeoutError
@@ -26,6 +28,18 @@ http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "de
 
 http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
 """
+
+
+# TODO: this is incomplete set of states. Expect it to be expanded.
+class ManagerState(machines.StateMachine):
+
+    state = 'idle'
+
+    class States(enum.Enum):
+        IDLE = "idle"
+        CREATING_ENVIRONMENT = "creating_environment"
+        CLOSING_ENVIRONMENT = "closing_environment"
+        PLAN_RUNNING = "plan_running"
 
 
 class RunEngineManager(Process):
@@ -55,9 +69,10 @@ class RunEngineManager(Process):
         self._watchdog_conn = conn_watchdog
         self._worker_conn = conn_worker
 
+        # The following attributes hold the state of the system
         self._manager_stopping = False  # Set True to exit manager (by _stop_manager_handler)
         self._environment_exists = False  # True if RE Worker environment exists
-        self._manager_state = "idle"  # "idle", "creating_environment"
+        self._manager_state = ManagerState()
         self._worker_state = None  # Copy of the last downloaded state of RE Worker
 
         self._loop = None
@@ -188,7 +203,7 @@ class RunEngineManager(Process):
             return False, "Rejected: environment already exists"
 
         self._fut_manager_task_completed = self._loop.create_future()
-        self._manager_state = "creating_environment"
+        self._manager_state.set_creating_environment()
         self._creating_environment = True
 
         try:
@@ -205,7 +220,7 @@ class RunEngineManager(Process):
             logger.exception("Failed to start_Worker: %s", str(ex))
             success, err_msg = False, f"Failed to start_Worker {str(ex)}"
 
-        self._manager_state = "idle"
+        self._manager_state.set_idle()
         return success, err_msg
 
     async def _stop_re_worker(self):
@@ -233,9 +248,9 @@ class RunEngineManager(Process):
             # Wait for RE Worker to be prepared to close
             self._event_worker_closed = asyncio.Event()
 
-            self._manager_state = "closing_environment"
+            self._manager_state.set_closing_environment()
             await self._fut_manager_task_completed  # TODO: timeout may be needed here
-            self._manager_state = "idle"
+            self._manager_state.set_idle()
 
             if not await self._confirm_re_worker_exit():
                 success = False
@@ -279,18 +294,18 @@ class RunEngineManager(Process):
         t_period = 0.5
         while True:
             await asyncio.sleep(t_period)
-            if self._environment_exists or self._manager_state == "creating_environment":
+            if self._environment_exists or self._manager_state.is_creating_environment:
                 ws, _ = await self._worker_request_state()
                 self._worker_state = ws
-                if self._manager_state == "closing_environment":
+                if self._manager_state.is_closing_environment:
                     if ws["environment_state"] == "closing":
                         self._fut_manager_task_completed.set_result(None)
 
-                if self._manager_state == "creating_environment":
+                if self._manager_state.is_creating_environment:
                     if ws["environment_state"] == "ready":
                         self._fut_manager_task_completed.set_result(None)
 
-                if self._manager_state == "plan_running":
+                if self._manager_state.is_plan_running:
                     if ws["re_report_available"]:
                         self._loop.create_task(self._process_plan_report())
 
@@ -310,7 +325,7 @@ class RunEngineManager(Process):
             #       complicated processing is needed
             logger.error(f"Failed to download plan report: {err_msg}. Stopping queue processing.")
             await push_plan_back_to_queue()
-            self._manager_state = "idle"
+            self._manager_state.set_idle
         else:
             plan_state = plan_report["plan_state"]
             success = plan_report["success"]
@@ -333,10 +348,10 @@ class RunEngineManager(Process):
             elif plan_state in ("stopped", "error"):
                 # Paused plan was stopped/aborted/halted
                 await push_plan_back_to_queue()
-                self._manager_state = "idle"
+                self._manager_state.set_idle()
             elif plan_state == "paused":
                 # The plan was paused (nothing should be done).
-                self._manager_state = "idle"
+                self._manager_state.set_idle()
             else:
                 logger.error("Unknown plan state %s was returned by RE Worker.", plan_state)
 
@@ -348,7 +363,7 @@ class RunEngineManager(Process):
         """
         if not self._environment_exists:
             success, err_msg = False, "RE Worker environment does not exist."
-        elif self._manager_state != "idle":
+        elif not self._manager_state.is_idle:
             success, err_msg = False, "RE Manager is busy."
         else:
             asyncio.ensure_future(self._execute_background_task(self._start_plan_task()))
@@ -370,12 +385,12 @@ class RunEngineManager(Process):
             # Reset RE environment (worker)
             success, err_msg = await self._worker_command_reset_worker()
             if not success:
-                self._manager_state = "idle"
+                self._manager_state.set_idle()
                 err_msg = f"Failed to reset RE Worker: {err_msg}"
                 logger.error(err_msg)
                 return success, err_msg
 
-            self._manager_state = "plan_running"
+            self._manager_state.set_plan_running()
 
             new_plan = json.loads(new_plan)
             await self._set_running_plan_info(new_plan)
@@ -393,12 +408,12 @@ class RunEngineManager(Process):
 
             success, err_msg = await self._worker_command_run_plan(plan_info)
             if not success:
-                self._manager_state = "idle"
+                self._manager_state.set_idle()
                 logger.error("Failed to start the plan %s.\nError: %s",
                              pprint.pformat(plan_info), err_msg)
                 err_msg = f"Failed to start the plan: {err_msg}"
         else:
-            self._manager_state = "idle"
+            self._manager_state.set_idle()
             success, err_msg = False, "Queue is empty."
             logger.info(err_msg)
 
@@ -413,7 +428,7 @@ class RunEngineManager(Process):
         if not success:
             logger.error("Failed to pause the running plan: %s", err_msg)
         else:
-            self._manager_state = "plan_running"
+            self._manager_state.set_plan_running()
         return success, err_msg
 
     async def _continue_run_engine(self, option):
@@ -424,7 +439,7 @@ class RunEngineManager(Process):
         if not success:
             logger.error("Failed to pause the running plan: %s", err_msg)
         else:
-            self._manager_state = "plan_running"
+            self._manager_state.set_plan_running()
         return success, err_msg
 
     def _print_db_uids(self):
@@ -821,7 +836,7 @@ class RunEngineManager(Process):
                     plan_stored = await self._get_running_plan_info()
                     if "plan_uid" in plan_stored:
                         plan_uid_stored = plan_stored["plan_uid"]
-                        self._manager_state = "plan_running"  # Wait for plan completion
+                        self._manager_state.set_plan_running()  # Wait for plan completion
                         if plan_uid_stored != plan_uid_running:
                             # Guess is that the environment may still work, so restart is
                             #   only recommended if it is convenient.
@@ -833,7 +848,7 @@ class RunEngineManager(Process):
                                 "to restore data integrity.", plan_uid_running, plan_uid_stored)
             else:
                 logger.error("Error while reading RE Worker status: %s", err_msg)
-        if self._manager_state != "plan_running":
+        if not self._manager_state.is_plan_running:
             await self._clear_running_plan_info()
 
         logger.info("Starting ZeroMQ server")

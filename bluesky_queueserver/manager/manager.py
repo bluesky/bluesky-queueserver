@@ -38,8 +38,8 @@ class ManagerState(machines.StateMachine):
     class States(enum.Enum):
         IDLE = "idle"
         CREATING_ENVIRONMENT = "creating_environment"
+        EXECUTING_QUEUE = "executing_queue"
         CLOSING_ENVIRONMENT = "closing_environment"
-        PLAN_RUNNING = "plan_running"
 
 
 class RunEngineManager(Process):
@@ -305,7 +305,7 @@ class RunEngineManager(Process):
                     if ws["environment_state"] == "ready":
                         self._fut_manager_task_completed.set_result(None)
 
-                if self._manager_state.is_plan_running:
+                if self._manager_state.is_executing_queue:
                     if ws["re_report_available"]:
                         self._loop.create_task(self._process_plan_report())
 
@@ -325,7 +325,7 @@ class RunEngineManager(Process):
             #       complicated processing is needed
             logger.error(f"Failed to download plan report: {err_msg}. Stopping queue processing.")
             await push_plan_back_to_queue()
-            self._manager_state.set_idle
+            self._manager_state.set_idle()
         else:
             plan_state = plan_report["plan_state"]
             success = plan_report["success"]
@@ -390,7 +390,7 @@ class RunEngineManager(Process):
                 logger.error(err_msg)
                 return success, err_msg
 
-            self._manager_state.set_plan_running()
+            self._manager_state.set_executing_queue()
 
             new_plan = json.loads(new_plan)
             await self._set_running_plan_info(new_plan)
@@ -428,7 +428,7 @@ class RunEngineManager(Process):
         if not success:
             logger.error("Failed to pause the running plan: %s", err_msg)
         else:
-            self._manager_state.set_plan_running()
+            self._manager_state.set_executing_queue()
         return success, err_msg
 
     async def _continue_run_engine(self, option):
@@ -439,7 +439,7 @@ class RunEngineManager(Process):
         if not success:
             logger.error("Failed to pause the running plan: %s", err_msg)
         else:
-            self._manager_state.set_plan_running()
+            self._manager_state.set_executing_queue()
         return success, err_msg
 
     def _print_db_uids(self):
@@ -836,7 +836,7 @@ class RunEngineManager(Process):
                     plan_stored = await self._get_running_plan_info()
                     if "plan_uid" in plan_stored:
                         plan_uid_stored = plan_stored["plan_uid"]
-                        self._manager_state.set_plan_running()  # Wait for plan completion
+                        self._manager_state.set_executing_queue()  # Wait for plan completion
                         if plan_uid_stored != plan_uid_running:
                             # Guess is that the environment may still work, so restart is
                             #   only recommended if it is convenient.
@@ -848,7 +848,7 @@ class RunEngineManager(Process):
                                 "to restore data integrity.", plan_uid_running, plan_uid_stored)
             else:
                 logger.error("Error while reading RE Worker status: %s", err_msg)
-        if not self._manager_state.is_plan_running:
+        if not self._manager_state.is_executing_queue:
             await self._clear_running_plan_info()
 
         logger.info("Starting ZeroMQ server")

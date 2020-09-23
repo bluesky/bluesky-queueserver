@@ -130,24 +130,12 @@ def test_http_server_process_queue_handler(re_manager, aiohttp_server, add_plans
 
     resp3 = _request_to_json('post', '/process_queue')
     assert resp3 == {'success': True, 'msg': ''}
-    # resp3a = _request_to_json('get', '/queue_view')
-    # assert len(resp3a['queue']) == 2
-
-    # resp4 = _request_to_json('post', '/process_queue')
-    # assert resp4 == {'success': True, 'msg': ''}
-    # resp4a = _request_to_json('get', '/queue_view')
-    # assert len(resp4a['queue']) == 1
-
-    # resp5 = _request_to_json('post', '/process_queue')
-    # assert resp5 == {'success': True, 'msg': ''}
 
     ttime.sleep(25)  # Wait until all plans are executed
 
-    resp5a = _request_to_json('get', '/queue_view')
-    assert len(resp5a['queue']) == 0
+    resp4 = _request_to_json('get', '/queue_view')
+    assert len(resp4['queue']) == 0
 
-    # resp6 = _request_to_json('post', '/process_queue')
-    # assert resp6 == {'success': True, 'msg': ''}
 
 
 def test_http_server_re_pause_continue_handlers(re_manager, aiohttp_server):  # noqa F811

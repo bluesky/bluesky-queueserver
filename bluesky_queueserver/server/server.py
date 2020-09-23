@@ -1,12 +1,12 @@
-from fastapi import FastAPI, HTTPException
-from enum import Enum
-
 # from aiohttp import web
 import asyncio
+import logging
+from enum import Enum
+
 import zmq
 import zmq.asyncio
+from fastapi import FastAPI, HTTPException
 
-import logging
 logger = logging.getLogger(__name__)
 
 """
@@ -189,8 +189,6 @@ class ZMQ_Comm:
     #     )
 
 
-
-
 logging.basicConfig(level=logging.WARNING)
 logging.getLogger('bluesky_queueserver').setLevel("DEBUG")
 
@@ -202,6 +200,7 @@ re_server = ZMQ_Comm()
 class REPauseOptions(str, Enum):
     deferred = 'deferred'
     immediate = 'immediate'
+
 
 class REResumeOptions(str, Enum):
     resume = 'resume'

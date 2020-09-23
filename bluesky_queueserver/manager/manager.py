@@ -83,6 +83,11 @@ class RunEngineManager(Process):
         self._comm_to_watchdog = None
         self._comm_to_worker = None
 
+        self._background_task = None  # asyncio.Task
+        self._background_task_status = {"status": "success",
+                                        "err_msg": ""}
+
+
     '''
     def _start_conn_threads(self):
         self._thread_conn_worker = threading.Thread(target=self._receive_packet_worker_thread,
@@ -140,6 +145,40 @@ class RunEngineManager(Process):
     # ======================================================================
     #          Functions that implement functionality of the server
 
+    async def _execute_background_task(self, bckg_fut):
+        """
+        Monitors execution of a task in the background. Catches unhandled exceptions and
+        maintains the status of the background task.
+
+        Parameters
+        ----------
+        bckg_task: asyncio.Task
+            The task scheduled to execute on the background
+
+        Examples
+        --------
+
+        .. code-block:: python
+
+            # Call in the loop
+            asyncio.ensure_future(self._execute_background_task(some_coroutine()))
+        """
+        self._background_task_status["status"] = "running"
+        self._background_task_status["err_msg"] = False
+
+        try:
+            # 'self._background_task' may be used to cancel the task
+            self._background_task = asyncio.ensure_future(bckg_fut)
+            await self._background_task
+            success, err_msg = self._background_task.result()
+        except Exception as ex:
+            success = False
+            err_msg = f"Unhandled exception: {str(ex)}"
+            logger.exception("Unhandled exception during background task execution: %s", str(ex))
+
+        self._background_task_status["status"] = "success" if success else "failed"
+        self._background_task_status["err_msg"] = err_msg
+
     async def _start_re_worker(self):
         """
         Initiate creation of RE Worker environment. The function does not wait until
@@ -150,7 +189,7 @@ class RunEngineManager(Process):
             accepted = False
         else:
             accepted = True
-            asyncio.ensure_future(self._start_re_worker_task())
+            asyncio.ensure_future(self._execute_background_task(self._start_re_worker_task()))
         return accepted
 
     async def _start_re_worker_task(self):
@@ -158,7 +197,7 @@ class RunEngineManager(Process):
         Creates worker process.
         """
         if self._environment_exists:
-            return
+            return False, "Rejected: environment already exists"
 
         self._fut_manager_task_completed = self._loop.create_future()
         self._manager_state = "creating_environment"
@@ -173,10 +212,13 @@ class RunEngineManager(Process):
 
             self._environment_exists = True
             logger.debug("Worker started successfully.")
+            success, err_msg = True, ""
         except Exception as ex:
             logger.exception("Failed to start_Worker: %s", str(ex))
+            success, err_msg = False, f"Failed to start_Worker {str(ex)}"
 
         self._manager_state = "idle"
+        return success, err_msg
 
     async def _stop_re_worker(self):
         """
@@ -184,7 +226,7 @@ class RunEngineManager(Process):
         """
         if self._environment_exists:
             accepted = True
-            asyncio.ensure_future(self._stop_re_worker_task())
+            asyncio.ensure_future(self._execute_background_task(self._stop_re_worker_task()))
         else:
             accepted = False
         return accepted
@@ -194,9 +236,7 @@ class RunEngineManager(Process):
         Stop RE Worker. Returns the result as "success", "rejected" or "failed"
         """
         if not self._environment_exists:
-            return
-
-        result = "success"
+            return False, "Rejected: environment does not exists"
 
         self._fut_manager_task_completed = self._loop.create_future()
 
@@ -210,11 +250,10 @@ class RunEngineManager(Process):
             self._manager_state = "idle"
 
             if not await self._confirm_re_worker_exit():
-                result = "failed"
-        else:
-            result = "rejected"
+                success = False
+                err_msg = f"Failed to confirm closing of RE Worker thread"
 
-        return result
+        return success, err_msg
 
     async def _confirm_re_worker_exit(self):
         """

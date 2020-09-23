@@ -33,9 +33,10 @@ http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"scan", "args":[["det1", "det
 # TODO: this is incomplete set of states. Expect it to be expanded.
 class ManagerState(machines.StateMachine):
 
-    state = 'idle'
+    state = 'initializing'
 
     class States(enum.Enum):
+        INITIALIZING = "initializing"
         IDLE = "idle"
         CREATING_ENVIRONMENT = "creating_environment"
         EXECUTING_QUEUE = "executing_queue"
@@ -73,7 +74,7 @@ class RunEngineManager(Process):
         self._manager_stopping = False  # Set True to exit manager (by _stop_manager_handler)
         self._environment_exists = False  # True if RE Worker environment exists
         self._manager_state = ManagerState()
-        self._worker_state = None  # Copy of the last downloaded state of RE Worker
+        self._worker_state_info = None  # Copy of the last downloaded state of RE Worker
 
         self._loop = None
 
@@ -269,6 +270,7 @@ class RunEngineManager(Process):
 
             # Environment is not in valid state anyway. So assume it does not exist.
             self._environment_exists = False
+            self._worker_conn = None
             if success:
                 logger.debug("Wait for RE Worker process to close (join)")
 
@@ -296,7 +298,7 @@ class RunEngineManager(Process):
             await asyncio.sleep(t_period)
             if self._environment_exists or self._manager_state.is_creating_environment:
                 ws, _ = await self._worker_request_state()
-                self._worker_state = ws
+                self._worker_state_info = ws
                 if self._manager_state.is_closing_environment:
                     if ws["environment_state"] == "closing":
                         self._fut_manager_task_completed.set_result(None)
@@ -618,10 +620,27 @@ class RunEngineManager(Process):
         May be called to get response from the Manager. Returns the number of plans in the queue.
         """
         logger.info("Processing 'Hello' request.")
+
+        # Computed/retrieved data
         n_pending_plans = await self._r_pool.llen('plan_queue')
+        running_plan_info = await self._get_running_plan_info()
+
+        # Prepared output data
+        plans_in_queue = n_pending_plans
+        running_plan_uid = running_plan_info["plan_uid"] if running_plan_info else None
+        manager_state = self._manager_state.state
+        worker_environment_exists = self._environment_exists
+        # worker_state_info = self._worker_state_info
+
+        # TODO: consider different levels of verbosity for ping or other command to
+        #       retrieve detailed status.
         msg = {"msg": "RE Manager",
-               "n_plans": n_pending_plans,
-               "is_plan_running": bool(await self._get_running_plan_info())}
+               "plans_in_queue": plans_in_queue,
+               "running_plan_uid": running_plan_uid,
+               "manager_state": manager_state,
+               "worker_environment_exists": worker_environment_exists,
+               # "worker_state_info": worker_state_info
+               }
         return msg
 
     async def _queue_view_handler(self, request):
@@ -828,9 +847,9 @@ class RunEngineManager(Process):
 
         # Now check if the plan is still being executed (if it was executed)
         if self._environment_exists:
-            self._worker_state, err_msg = await self._worker_request_state()
-            if self._worker_state:
-                plan_uid_running = self._worker_state["running_plan_uid"]
+            self._worker_state_info, err_msg = await self._worker_request_state()
+            if self._worker_state_info:
+                plan_uid_running = self._worker_state_info["running_plan_uid"]
                 if plan_uid_running:
                     # Plan is running. Check if it is the same plan as in redis.
                     plan_stored = await self._get_running_plan_info()
@@ -855,6 +874,9 @@ class RunEngineManager(Process):
         self._zmq_socket = self._ctx.socket(zmq.REP)
         self._zmq_socket.bind(self._ip_zmq_server)
         logger.info("ZeroMQ server is waiting on %s", str(self._ip_zmq_server))
+
+        if self._manager_state.is_initializing:
+            self._manager_state.set_idle()
 
         while True:
             #  Wait for next request from client

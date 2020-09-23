@@ -9,20 +9,18 @@ from xprocess import ProcessStarter
 import bluesky_queueserver.server.server as bqss
 from bluesky_queueserver.manager.tests.test_general import \
     re_manager  # noqa F401
-from bluesky_queueserver.server.server import init_func
+# from bluesky_queueserver.server.server import init_func
 
 SERVER_IP = '0.0.0.0'
 SERVER_PORT = '8080'
 
 
 @pytest.fixture
-def aiohttp_server(xprocess):
+def fastapi_server(xprocess):
     class Starter(ProcessStarter):
-        pattern = "Connected to ZeroMQ"
-        args = (f"{sys.executable} -m aiohttp.web -H {SERVER_IP} -P {SERVER_PORT} "
-                f"{bqss.__name__}:{init_func.__name__}").split()
-
-    xprocess.ensure("aiohttp_server", Starter)
+        pattern = "Connected to ZeroMQ server"
+        args = f'uvicorn --host={SERVER_IP} --port {SERVER_PORT} {bqss.__name__}:app'.split()
+    xprocess.ensure("fastapi_server", Starter)
     # Clear the queue before the run:
     subprocess.run('qserver -c clear_queue'.split())
 
@@ -30,7 +28,7 @@ def aiohttp_server(xprocess):
 
     # Clear the queue after the run:
     subprocess.run('qserver -c clear_queue'.split())
-    xprocess.getinfo("aiohttp_server").terminate()
+    xprocess.getinfo("fastapi_server").terminate()
 
 
 @pytest.fixture
@@ -53,19 +51,19 @@ def _request_to_json(request_type, path, **kwargs):
     return resp
 
 
-def test_http_server_hello_handler(re_manager, aiohttp_server):  # noqa F811
+def test_http_server_hello_handler(re_manager, fastapi_server):  # noqa F811
     resp = _request_to_json('get', '/')
     assert resp['msg'] == 'RE Manager'
     assert resp['n_plans'] == 0
     assert resp['is_plan_running'] is False
 
 
-def test_http_server_queue_view_handler(re_manager, aiohttp_server):  # noqa F811
+def test_http_server_queue_view_handler(re_manager, fastapi_server):  # noqa F811
     resp = _request_to_json('get', '/queue_view')
     assert resp['queue'] == []
 
 
-def test_http_server_add_to_queue_handler(re_manager, aiohttp_server):  # noqa F811
+def test_http_server_add_to_queue_handler(re_manager, fastapi_server):  # noqa F811
     resp1 = _request_to_json('post', '/add_to_queue',
                              json={"plan": {"name": "count",
                                             "args": [["det1", "det2"]]}})
@@ -79,7 +77,7 @@ def test_http_server_add_to_queue_handler(re_manager, aiohttp_server):  # noqa F
     assert resp2['queue'][0] == resp1
 
 
-def test_http_server_pop_from_queue_handler(re_manager, aiohttp_server, add_plans_to_queue):  # noqa F811
+def test_http_server_pop_from_queue_handler(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
 
     resp1 = _request_to_json('get', '/queue_view')
     assert resp1['queue'] != []
@@ -92,7 +90,7 @@ def test_http_server_pop_from_queue_handler(re_manager, aiohttp_server, add_plan
     assert 'plan_uid' in resp2
 
 
-def test_http_server_create_environment_handler(re_manager, aiohttp_server):  # noqa F811
+def test_http_server_create_environment_handler(re_manager, fastapi_server):  # noqa F811
     resp1 = _request_to_json('post', '/create_environment')
     assert resp1 == {'success': True, 'msg': ''}
 
@@ -102,7 +100,7 @@ def test_http_server_create_environment_handler(re_manager, aiohttp_server):  # 
     assert resp2 == {'success': False, 'msg': 'Environment already exists.'}
 
 
-def test_http_server_close_environment_handler(re_manager, aiohttp_server):  # noqa F811
+def test_http_server_close_environment_handler(re_manager, fastapi_server):  # noqa F811
     resp1 = _request_to_json('post', '/create_environment')
     assert resp1 == {'success': True, 'msg': ''}
 
@@ -117,7 +115,7 @@ def test_http_server_close_environment_handler(re_manager, aiohttp_server):  # n
     assert resp3 == {'success': False, 'msg': 'Environment does not exist.'}
 
 
-def test_http_server_process_queue_handler(re_manager, aiohttp_server, add_plans_to_queue):  # noqa F811
+def test_http_server_process_queue_handler(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
     resp1 = _request_to_json('post', '/process_queue')
     assert resp1 == {'success': False, 'msg': 'RE Worker environment does not exist.'}
 
@@ -138,7 +136,7 @@ def test_http_server_process_queue_handler(re_manager, aiohttp_server, add_plans
 
 
 
-def test_http_server_re_pause_continue_handlers(re_manager, aiohttp_server):  # noqa F811
+def test_http_server_re_pause_continue_handlers(re_manager, fastapi_server):  # noqa F811
     resp1 = _request_to_json('post', '/create_environment')
     assert resp1 == {'success': True, 'msg': ''}
 
@@ -170,7 +168,7 @@ def test_http_server_re_pause_continue_handlers(re_manager, aiohttp_server):  # 
     assert len(resp4a['queue']) == 1  # The plan is back in the queue
 
 
-def test_http_server_close_print_db_uids_handler(re_manager, aiohttp_server, add_plans_to_queue):  # noqa F811
+def test_http_server_close_print_db_uids_handler(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
     resp1 = _request_to_json('post', '/create_environment')
     assert resp1 == {'success': True, 'msg': ''}
 

@@ -280,8 +280,9 @@ async def _re_pause_handler(payload: dict):
     """
     Pause Run Engine
     """
-    if not hasattr(REResumeOptions, payload['option']):
-        msg = f'The specified option "{payload["option"]}" is not allowed.'
+    if not hasattr(REPauseOptions, payload['option']):
+        msg = (f'The specified option "{payload["option"]}" is not allowed.\n'
+               f'Allowed options: {list(REPauseOptions.__members__.keys())}')
         raise HTTPException(status_code=444, detail=msg)
     msg = await re_server._send_command(command="re_pause", value=payload)
     return msg
@@ -293,7 +294,8 @@ async def _re_continue_handler(payload: dict):
     Control Run Engine in the paused state
     """
     if not hasattr(REResumeOptions, payload['option']):
-        msg = f'The specified option "{payload["option"]}" is not allowed.'
+        msg = (f'The specified option "{payload["option"]}" is not allowed.\n'
+               f'Allowed options: {list(REResumeOptions.__members__.keys())}')
         raise HTTPException(status_code=444, detail=msg)
     msg = await re_server._send_command(command="re_continue", value=payload)
     return msg

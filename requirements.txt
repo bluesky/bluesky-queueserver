@@ -1,12 +1,11 @@
-# List required packages in this file, one per line.
-aiohttp
 aioredis
 bluesky
 bluesky-kafka
 databroker
+fastapi
+json-rpc
 msgpack
 msgpack_numpy
 ophyd
 pyzmq
 requests
-json-rpc

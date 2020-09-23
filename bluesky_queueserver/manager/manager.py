@@ -51,17 +51,14 @@ class RunEngineManager(Process):
                                str(conn_worker))
 
         super().__init__(*args, **kwargs)
-        self._re_worker = None
 
         self._watchdog_conn = conn_watchdog
         self._worker_conn = conn_worker
 
         self._manager_stopping = False  # Set True to exit manager (by _stop_manager_handler)
-
-        self._environment_exists = False
-
-        # Threads must be started in the 'run' function so that they run in the correct process.
-        self._thread_conn_worker = None
+        self._environment_exists = False  # True if RE Worker environment exists
+        self._manager_state = "idle"  # "idle", "creating_environment"
+        self._worker_state = None  # Copy of the last downloaded state of RE Worker
 
         self._loop = None
 
@@ -75,14 +72,14 @@ class RunEngineManager(Process):
         self._heartbeat_generator_task = None  # Task for heartbeat generator
         self._worker_status_task = None  # Task for periodic checks of Worker status
 
-        self._manager_state = "idle"  # "idle", "creating_environment"
-        self._fut_manager_task_completed = None
+        self._fut_manager_task_completed = None  # Used for multiple purposes
 
         # The objects of PipeJsonRpcSendAsync used for communciation with
         #   Watchdog and Worker modules. The object must be instantiated in the loop.
         self._comm_to_watchdog = None
         self._comm_to_worker = None
 
+        # Data on a task executed in the background
         self._background_task = None  # asyncio.Task
         self._background_task_status = {"status": "success",
                                         "err_msg": ""}
@@ -275,7 +272,7 @@ class RunEngineManager(Process):
     async def _is_worker_alive(self):
         return await self._watchdog_is_worker_alive()
 
-    async def _periodic_worker_status_request(self):
+    async def _periodic_worker_state_request(self):
         """
         Periodically update locally stored RE Worker status
         """
@@ -284,7 +281,7 @@ class RunEngineManager(Process):
             await asyncio.sleep(t_period)
             if self._environment_exists or self._manager_state == "creating_environment":
                 ws, _ = await self._worker_request_state()
-                self._worker_status = ws
+                self._worker_state = ws
                 if self._manager_state == "closing_environment":
                     if ws["environment_state"] == "closing":
                         self._fut_manager_task_completed.set_result(None)
@@ -797,7 +794,7 @@ class RunEngineManager(Process):
         # Start heartbeat generator
         self._heartbeat_generator_task = asyncio.ensure_future(self._heartbeat_generator(),
                                                                loop=self._loop)
-        self._worker_status_task = asyncio.ensure_future(self._periodic_worker_status_request(),
+        self._worker_status_task = asyncio.ensure_future(self._periodic_worker_state_request(),
                                                          loop=self._loop)
 
         self._r_pool = await aioredis.create_redis_pool(
@@ -816,9 +813,9 @@ class RunEngineManager(Process):
 
         # Now check if the plan is still being executed (if it was executed)
         if self._environment_exists:
-            worker_status, err_msg = await self._worker_request_state()
-            if worker_status:
-                plan_uid_running = worker_status["running_plan_uid"]
+            self._worker_state, err_msg = await self._worker_request_state()
+            if self._worker_state:
+                plan_uid_running = self._worker_state["running_plan_uid"]
                 if plan_uid_running:
                     # Plan is running. Check if it is the same plan as in redis.
                     plan_stored = await self._get_running_plan_info()

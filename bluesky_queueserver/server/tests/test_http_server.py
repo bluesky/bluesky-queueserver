@@ -1,49 +1,13 @@
-import subprocess
-import sys
 import time as ttime
 
-import pytest
 import requests
-from xprocess import ProcessStarter
 
-import bluesky_queueserver.server.server as bqss
 from bluesky_queueserver.manager.tests.test_general import \
     re_manager  # noqa F401
-# from bluesky_queueserver.server.server import init_func
-
-SERVER_IP = '0.0.0.0'
-SERVER_PORT = '8080'
-
-
-@pytest.fixture
-def fastapi_server(xprocess):
-    class Starter(ProcessStarter):
-        pattern = "Connected to ZeroMQ server"
-        args = f'uvicorn --host={SERVER_IP} --port {SERVER_PORT} {bqss.__name__}:app'.split()
-    xprocess.ensure("fastapi_server", Starter)
-    # Clear the queue before the run:
-    subprocess.run('qserver -c clear_queue'.split())
-
-    yield
-
-    # Clear the queue after the run:
-    subprocess.run('qserver -c clear_queue'.split())
-    xprocess.getinfo("fastapi_server").terminate()
-
-
-@pytest.fixture
-def add_plans_to_queue():
-    subprocess.run('qserver -c clear_queue'.split())
-    subprocess.call(["qserver", "-c", "add_to_queue", "-v",
-                     "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num':10, 'delay':1}}"])
-    subprocess.call(["qserver", "-c", "add_to_queue", "-v",
-                     "{'name':'count', 'args':[['det1', 'det2']]}"])
-    subprocess.call(["qserver", "-c", "add_to_queue", "-v",
-                     "{'name':'count', 'args':[['det1', 'det2']]}"])
-
-    yield
-
-    subprocess.run('qserver -c clear_queue'.split())
+from bluesky_queueserver.server.tests.conftest import (SERVER_IP,  # noqa F401
+                                                       SERVER_PORT,
+                                                       add_plans_to_queue,
+                                                       fastapi_server)
 
 
 def _request_to_json(request_type, path, **kwargs):

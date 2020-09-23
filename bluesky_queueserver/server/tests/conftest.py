@@ -5,15 +5,15 @@ from xprocess import ProcessStarter
 
 import bluesky_queueserver.server.server as bqss
 
-SERVER_IP = '0.0.0.0'
-SERVER_PORT = '8080'
+SERVER_ADDRESS = 'localhost'
+SERVER_PORT = '8000'
 
 
 @pytest.fixture
 def fastapi_server(xprocess):
     class Starter(ProcessStarter):
         pattern = "Connected to ZeroMQ server"
-        args = f'uvicorn --host={SERVER_IP} --port {SERVER_PORT} {bqss.__name__}:app'.split()
+        args = f'uvicorn --host={SERVER_ADDRESS} --port {SERVER_PORT} {bqss.__name__}:app'.split()
     xprocess.ensure("fastapi_server", Starter)
     # Clear the queue before the run:
     subprocess.run('qserver -c clear_queue'.split())

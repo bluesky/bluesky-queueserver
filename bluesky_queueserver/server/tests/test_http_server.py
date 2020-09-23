@@ -4,14 +4,14 @@ import requests
 
 from bluesky_queueserver.manager.tests.test_general import \
     re_manager  # noqa F401
-from bluesky_queueserver.server.tests.conftest import (SERVER_IP,  # noqa F401
+from bluesky_queueserver.server.tests.conftest import (SERVER_ADDRESS,  # noqa F401
                                                        SERVER_PORT,
                                                        add_plans_to_queue,
                                                        fastapi_server)
 
 
 def _request_to_json(request_type, path, **kwargs):
-    resp = getattr(requests, request_type)(f'http://{SERVER_IP}:{SERVER_PORT}{path}', **kwargs).json()
+    resp = getattr(requests, request_type)(f'http://{SERVER_ADDRESS}:{SERVER_PORT}{path}', **kwargs).json()
     return resp
 
 

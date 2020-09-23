@@ -171,18 +171,11 @@ def test_http_server_close_print_db_uids_handler(re_manager, aiohttp_server, add
 
     resp2 = _request_to_json('post', '/process_queue')
     assert resp2 == {'success': True, 'msg': ''}
+
+    ttime.sleep(15)
+
     resp2a = _request_to_json('get', '/queue_view')
-    assert len(resp2a['queue']) == 2
-
-    resp3 = _request_to_json('post', '/process_queue')
-    assert resp3 == {'success': True, 'msg': ''}
-    resp3a = _request_to_json('get', '/queue_view')
-    assert len(resp3a['queue']) == 1
-
-    resp4 = _request_to_json('post', '/process_queue')
-    assert resp4 == {'success': True, 'msg': ''}
-    resp4a = _request_to_json('get', '/queue_view')
-    assert len(resp4a['queue']) == 0
+    assert len(resp2a['queue']) == 0
 
     resp5 = _request_to_json('post', '/print_db_uids')
     assert resp5 == {'msg': '', 'success': True}

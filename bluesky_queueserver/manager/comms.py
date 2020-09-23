@@ -33,16 +33,16 @@ class CommJsonRpcError(RuntimeError):
     def __init__(self, message, error_code, error_type):
         super().__init__(message)
         # TODO: change 'code' and 'type' to read-only properties
-        self._error_code = error_code
-        self._error_type = error_type
+        self.__error_code = error_code
+        self.__error_type = error_type
 
     @property
     def error_code(self):
-        return self._error_code
+        return self.__error_code
 
     @property
     def error_type(self):
-        return self._error_type
+        return self.__error_type
 
     @property
     def message(self):
@@ -167,11 +167,11 @@ class PipeJsonRpcReceive:
 
     def _conn_received(self, msg):
 
-        if logger.level < 11:  # Print output only if logging level is DEBUG (10) or less
-            msg_json = json.loads(msg)
-            # We don't want to print 'heartbeat' messages
-            if not isinstance(msg_json, dict) or (msg_json["method"] != "heartbeat"):
-                logger.debug("Command received RE Manager->Watchdog: %s", pprint.pformat(msg_json))
+        # if logger.level < 11:  # Print output only if logging level is DEBUG (10) or less
+        #     msg_json = json.loads(msg)
+        #     We don't want to print 'heartbeat' messages
+        #     if not isinstance(msg_json, dict) or (msg_json["method"] != "heartbeat"):
+        #         logger.debug("Command received RE Manager->Watchdog: %s", pprint.pformat(msg_json))
 
         response = JSONRPCResponseManager.handle(msg, self._dispatcher)
         if response:
@@ -392,7 +392,7 @@ class PipeJsonRpcSendAsync:
                 try:
                     msg_json = self._conn.recv()
                     msg = json.loads(msg_json)
-                    logger.debug("Message Watchdog->Manager received: '%s'", pprint.pformat(msg))
+                    # logger.debug("Message Watchdog->Manager received: '%s'", pprint.pformat(msg))
                     # Messages should be handled in the event loop
                     self._loop.call_soon_threadsafe(self._conn_received, msg)
                 except Exception as ex:

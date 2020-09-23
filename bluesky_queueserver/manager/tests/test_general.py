@@ -81,6 +81,7 @@ def test_qserver_cli_and_manager(re_manager):
     assert n_plans == 2, "Incorrect number of plans in the queue"
 
     subprocess.call(["qserver", "-c", "create_environment"])
+    ttime.sleep(1)  # TODO: implement API to check if environment exists. Use delay for now.
     subprocess.call(["qserver", "-c", "process_queue"])
 
     assert wait_for_processing_to_finish(60), "Timeout while waiting for process to finish"

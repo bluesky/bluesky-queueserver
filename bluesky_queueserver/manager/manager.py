@@ -87,15 +87,6 @@ class RunEngineManager(Process):
         self._background_task_status = {"status": "success",
                                         "err_msg": ""}
 
-
-    '''
-    def _start_conn_threads(self):
-        self._thread_conn_worker = threading.Thread(target=self._receive_packet_worker_thread,
-                                                    name="RE QServer Comm2",
-                                                    daemon=True)
-        self._thread_conn_worker.start()
-    '''
-
     async def _heartbeat_generator(self):
         """
         Heartbeat generator for Watchdog (indicates that the loop is running)
@@ -251,7 +242,7 @@ class RunEngineManager(Process):
 
             if not await self._confirm_re_worker_exit():
                 success = False
-                err_msg = f"Failed to confirm closing of RE Worker thread"
+                err_msg = "Failed to confirm closing of RE Worker thread"
 
         return success, err_msg
 

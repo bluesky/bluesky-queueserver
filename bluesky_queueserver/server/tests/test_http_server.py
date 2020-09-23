@@ -119,7 +119,7 @@ def test_http_server_close_environment_handler(re_manager, aiohttp_server):  # n
 
 def test_http_server_process_queue_handler(re_manager, aiohttp_server, add_plans_to_queue):  # noqa F811
     resp1 = _request_to_json('post', '/process_queue')
-    assert resp1 == {'success': False, 'msg': 'Environment does not exist. Can not start the task.'}
+    assert resp1 == {'success': False, 'msg': 'RE Worker environment does not exist.'}
 
     resp2 = _request_to_json('post', '/create_environment')
     assert resp2 == {'success': True, 'msg': ''}

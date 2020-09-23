@@ -332,7 +332,7 @@ class RunEngineManager(Process):
                 # execution of the queue is stopped. It can be restarted later (failed or
                 # interrupted plan will still be in the queue.
                 await self._clear_running_plan_info()
-                await self._run_task()
+                await self._start_plan_task()
             elif plan_state in ("stopped", "error"):
                 # Paused plan was stopped/aborted/halted
                 await push_plan_back_to_queue()
@@ -343,7 +343,22 @@ class RunEngineManager(Process):
             else:
                 logger.error("Unknown plan state %s was returned by RE Worker.", plan_state)
 
-    async def _run_task(self):
+    async def _start_plan(self):
+        """
+        Initiate creation of RE Worker environment. The function does not wait until
+        the environment is created. Returns True/False depending on whether
+        the command is accepted.
+        """
+        if not self._environment_exists:
+            success, err_msg = False, "RE Worker environment does not exist."
+        elif self._manager_state != "idle":
+            success, err_msg = False, "RE Manager is busy."
+        else:
+            asyncio.ensure_future(self._execute_background_task(self._start_plan_task()))
+            success, err_msg = True, ""
+        return success, err_msg
+
+    async def _start_plan_task(self):
         """
         Upload the plan to the worker process for execution.
         Plan in the queue is represented as a dictionary with the keys "name" (plan name),
@@ -358,9 +373,10 @@ class RunEngineManager(Process):
             # Reset RE environment (worker)
             success, err_msg = await self._worker_command_reset_worker()
             if not success:
-                logger.error("Failed to reset RE Worker: %s", err_msg)
                 self._manager_state = "idle"
-                return False
+                err_msg = f"Failed to reset RE Worker: {err_msg}"
+                logger.error(err_msg)
+                return success, err_msg
 
             self._manager_state = "plan_running"
 
@@ -380,16 +396,16 @@ class RunEngineManager(Process):
 
             success, err_msg = await self._worker_command_run_plan(plan_info)
             if not success:
+                self._manager_state = "idle"
                 logger.error("Failed to start the plan %s.\nError: %s",
                              pprint.pformat(plan_info), err_msg)
-                self._manager_state = "idle"
-                return False
-            else:
-                return True
+                err_msg = f"Failed to start the plan: {err_msg}"
         else:
-            logger.info("Queue is empty")
             self._manager_state = "idle"
-            return False
+            success, err_msg = False, "Queue is empty."
+            logger.info(err_msg)
+
+        return success, err_msg
 
     async def _pause_run_engine(self, option):
         """
@@ -668,11 +684,7 @@ class RunEngineManager(Process):
         it is executed. If the queue is empty, then nothing will happen.
         """
         logger.info("Starting queue processing.")
-        if self._environment_exists:
-            await self._run_task()
-            success, msg = True, ""
-        else:
-            success, msg = False, "Environment does not exist. Can not start the task."
+        success, msg = await self._start_plan()
         return {"success": success, "msg": msg}
 
     async def _re_pause_handler(self, request):

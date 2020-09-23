@@ -391,7 +391,7 @@ class RunEngineManager(Process):
             plan_info = {"name": plan_name,
                          "args": args,
                          "kwargs": kwargs,
-                         "plan_uid": plan_uid
+                         "plan_uid": plan_uid,
                          }
 
             success, err_msg = await self._worker_command_run_plan(plan_info)

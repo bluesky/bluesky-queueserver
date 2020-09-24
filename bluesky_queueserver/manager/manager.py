@@ -762,18 +762,24 @@ class RunEngineManager(Process):
         return {"success": True, "msg": ""}
 
     async def _stop_manager_handler(self, request):
-        # This is expected to block the event loop forever
+        """
+        Stop RE Manager in orderly way
+        """
         self._manager_stopping = True
         return {"success": True, "msg": "Initiated sequence of stopping RE Manager."}
 
     async def _kill_manager_handler(self, request):
-        # This is expected to block the event loop forever
+        """
+        Testing API: blocks event loop of RE Manager process forever and
+        causes Watchdog process to restart RE Manager.
+        """
+        # This is expected to block the event loop forever.
         while True:
             ttime.sleep(10)
 
     async def _zmq_execute(self, msg):
-        command = msg["command"]
-        value = msg["value"]
+        method = msg["method"]
+        params = msg["params"]
         handler_dict = {
             "": "_ping_handler",
             "queue_view": "_queue_view_handler",
@@ -791,13 +797,13 @@ class RunEngineManager(Process):
         }
 
         try:
-            handler_name = handler_dict[command]
+            handler_name = handler_dict[method]
             handler = getattr(self, handler_name)
-            result = await handler(value)
+            result = await handler(params)
         except KeyError:
-            result = {"success": False, "msg": f"Unknown command '{command}'"}
+            result = {"success": False, "msg": f"Unknown method '{method}'"}
         except AttributeError:
-            result = {"success": False, "msg": f"Handler for the command '{command}' is not implemented"}
+            result = {"success": False, "msg": f"Handler for the command '{method}' is not implemented"}
         return result
 
     # ======================================================================

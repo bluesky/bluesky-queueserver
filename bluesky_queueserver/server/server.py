@@ -81,11 +81,11 @@ class ZMQ_Comm:
         # The event must be set somewhere else
         await self._event_zmq_stop.wait()
 
-    def _create_msg(self, *, command, value=None):
-        return {"command": command, "value": value}
+    def _create_msg(self, *, command, params=None):
+        return {"method": command, "params": params}
 
-    async def _send_command(self, *, command, value=None):
-        msg_out = self._create_msg(command=command, value=value)
+    async def _send_command(self, *, command, params=None):
+        msg_out = self._create_msg(command=command, params=params)
         msg_in = await self._zmq_communicate(msg_out)
         return msg_in
 
@@ -112,7 +112,7 @@ class ZMQ_Comm:
     #     """
     #     data = await request.json()
     #     # TODO: validate inputs!
-    #     msg = await self._send_command(command="add_to_queue", value=data)
+    #     msg = await self._send_command(command="add_to_queue", params=data)
     #     return web.json_response(msg)
 
     # async def _pop_from_queue_handler(self, request):
@@ -150,7 +150,7 @@ class ZMQ_Comm:
     #     Pause Run Engine
     #     """
     #     data = await request.json()
-    #     msg = await self._send_command(command="re_pause", value=data)
+    #     msg = await self._send_command(command="re_pause", params=data)
     #     return web.json_response(msg)
 
     # async def _re_continue_handler(self, request):
@@ -158,7 +158,7 @@ class ZMQ_Comm:
     #     Control Run Engine in the paused state
     #     """
     #     data = await request.json()
-    #     msg = await self._send_command(command="re_continue", value=data)
+    #     msg = await self._send_command(command="re_continue", params=data)
     #     return web.json_response(msg)
 
     # async def _print_db_uids_handler(self, request):
@@ -233,7 +233,7 @@ async def _add_to_queue_handler(payload: dict):
     Adds new plan to the end of the queue
     """
     # TODO: validate inputs!
-    msg = await re_server._send_command(command="add_to_queue", value=payload)
+    msg = await re_server._send_command(command="add_to_queue", params=payload)
     return msg
 
 
@@ -284,7 +284,7 @@ async def _re_pause_handler(payload: dict):
         msg = (f'The specified option "{payload["option"]}" is not allowed.\n'
                f'Allowed options: {list(REPauseOptions.__members__.keys())}')
         raise HTTPException(status_code=444, detail=msg)
-    msg = await re_server._send_command(command="re_pause", value=payload)
+    msg = await re_server._send_command(command="re_pause", params=payload)
     return msg
 
 
@@ -297,7 +297,7 @@ async def _re_continue_handler(payload: dict):
         msg = (f'The specified option "{payload["option"]}" is not allowed.\n'
                f'Allowed options: {list(REResumeOptions.__members__.keys())}')
         raise HTTPException(status_code=444, detail=msg)
-    msg = await re_server._send_command(command="re_continue", value=payload)
+    msg = await re_server._send_command(command="re_continue", params=payload)
     return msg
 
 

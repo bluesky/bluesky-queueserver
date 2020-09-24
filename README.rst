@@ -163,9 +163,9 @@ Run 'qserver' in the monitoring mode (send 'ping' request to RE Manager every se
 
 Add a new plan to the queue::
 
-  qserver -c add_to_queue -v '{"name":"count", "args":[["det1", "det2"]]}'
-  qserver -c add_to_queue -v '{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
-  qserver -c add_to_queue -v '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
+  qserver -c add_to_queue -p '{"name":"count", "args":[["det1", "det2"]]}'
+  qserver -c add_to_queue -p '{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
+  qserver -c add_to_queue -p '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
 
 View the contents of the queue::
 
@@ -193,15 +193,15 @@ Close and destroy RE environment::
 
 Pause the Run Engine (and the queue)::
 
-  qserver -c re_pause -v immediate
-  qserver -c re_pause -v deferred
+  qserver -c re_pause -p immediate
+  qserver -c re_pause -p deferred
 
 Countinue paused plan::
 
-  qserver -c re_continue -v resume
-  qserver -c re_continue -v abort
-  qserver -c re_continue -v stop
-  qserver -c re_continue -v halt
+  qserver -c re_continue -p resume
+  qserver -c re_continue -p abort
+  qserver -c re_continue -p stop
+  qserver -c re_continue -p halt
 
 Print UIDs in 'temp' Databroker::
 

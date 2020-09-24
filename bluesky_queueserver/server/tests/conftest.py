@@ -28,11 +28,11 @@ def fastapi_server(xprocess):
 @pytest.fixture
 def add_plans_to_queue():
     subprocess.run('qserver -c clear_queue'.split())
-    subprocess.call(["qserver", "-c", "add_to_queue", "-v",
+    subprocess.call(["qserver", "-c", "add_to_queue", "-p",
                      "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num':10, 'delay':1}}"])
-    subprocess.call(["qserver", "-c", "add_to_queue", "-v",
+    subprocess.call(["qserver", "-c", "add_to_queue", "-p",
                      "{'name':'count', 'args':[['det1', 'det2']]}"])
-    subprocess.call(["qserver", "-c", "add_to_queue", "-v",
+    subprocess.call(["qserver", "-c", "add_to_queue", "-p",
                      "{'name':'count', 'args':[['det1', 'det2']]}"])
 
     yield

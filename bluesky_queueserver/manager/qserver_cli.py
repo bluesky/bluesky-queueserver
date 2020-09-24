@@ -44,7 +44,7 @@ class CliClient:
 
         # The attributes for storing output command and received input
         self._msg_command_out = ""
-        self._msg_value_out = {}
+        self._msg_params_out = {}
         self._msg_in = {}
         self._msg_err_in = ""
 
@@ -109,7 +109,7 @@ class CliClient:
             await self._zmq_open_connection(self._zmq_server_address)
             logger.info("Connected to ZeroMQ server '%s'", self._zmq_server_address)
             self._msg_in = await self._send_command(command=self._msg_command_out,
-                                                    value=self._msg_value_out)
+                                                    params=self._msg_params_out)
             self._msg_err_in = ""
         except Exception as ex:
             self._msg_in = None
@@ -120,28 +120,28 @@ class CliClient:
         if self._msg_err_in:
             logger.warning("Communication with RE Manager failed: %s", str(self._msg_err_in))
 
-    async def _send_command(self, *, command, value=None):
-        msg_out = self._create_msg(command=command, value=value)
+    async def _send_command(self, *, command, params=None):
+        msg_out = self._create_msg(command=command, params=params)
         msg_in = await self._zmq_communicate(msg_out)
         return msg_in
 
-    def _create_msg(self, command, value=None):
+    def _create_msg(self, command, params=None):
         # This function may transform human-friendly command names to API names
         command_dict = self.get_supported_commands()
         try:
             command = command_dict[command]
             # Present value in the proper format. This will change as the format is changed.
             if command == "add_to_queue":
-                value = {"plan": value}  # Value is dict
+                params = {"plan": params}  # Value is dict
             else:
-                value = {"option": value}  # Value is str
-            return {"command": command, "value": value}
+                params = {"option": params}  # Value is str
+            return {"method": command, "params": params}
         except KeyError:
             raise ValueError(f"Command '{command}' is not supported.")
 
-    def set_msg_out(self, command, value):
+    def set_msg_out(self, command, params):
         self._msg_command_out = command
-        self._msg_value_out = value
+        self._msg_params_out = params
 
     def get_msg_in(self):
         return self._msg_in, self._msg_err_in
@@ -160,29 +160,29 @@ def qserver():
                                      epilog=f'Bluesky-QServer version {qserver_version}.')
     parser.add_argument('--command', '-c', dest="command", action='store', required=True,
                         help=f"Command sent to the server. Supported commands: {supported_commands}.")
-    parser.add_argument('--value', '-v', dest="value", action='store', default=None,
-                        help="Arguments that are sent with the command. Currently the arguments "
+    parser.add_argument('--parameters', '-p', dest="params", action='store', default=None,
+                        help="Parameters that are sent with the command. Currently the parameters "
                              "must be represented as a string that contains a python dictionary.")
     parser.add_argument('--address', '-a', dest="address", action='store', default=None,
                         help="Address of the server (e.g. 'tcp://localhost:5555', quoted string)")
 
     args = parser.parse_args()
 
-    command, value = args.command, args.value
+    command, params = args.command, args.params
 
     if command not in supported_commands:
         print(f"Command '{command}' is not supported. Please enter a valid command.\n"
               f"Call 'qserver' with the option '-h' to see full list of supported commands.")
         sys.exit(1)
 
-    # Value is a string representing a python dictionary. We need to convert it into a dictionary.
+    # 'params' is a string representing a python dictionary. We need to convert it into a dictionary.
     #   Also don't evaluate the expression that is a non-quoted string with alphanumeric characters.
-    if (value is not None) and not re.search(r"^\w+$", value):
+    if (params is not None) and not re.search(r"^\w+$", params):
         try:
-            value = ast.literal_eval(value)
+            params = ast.literal_eval(params)
         except Exception as ex:
-            print(f"Failed to parse value {value}: {str(ex)}. "
-                  f"The value must be a valid Python dictionary")
+            print(f"Failed to parse parameter string {params}: {str(ex)}. "
+                  f"The parameters must represent a valid Python dictionary")
             sys.exit(1)
 
     # 'ping' command will be sent to RE Manager periodically if 'monitor' command is entered
@@ -194,7 +194,7 @@ def qserver():
     re_server = CliClient(address=args.address)
     try:
         while True:
-            re_server.set_msg_out(command, value)
+            re_server.set_msg_out(command, params)
             asyncio.run(re_server.zmq_single_request())
             msg, msg_err = re_server.get_msg_in()
 

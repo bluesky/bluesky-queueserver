@@ -12,6 +12,7 @@ from super_state_machine import machines
 
 from .worker import DB
 from .comms import PipeJsonRpcSendAsync, CommTimeoutError
+from .profile_ops import load_list_of_plans_and_devices
 
 import logging
 
@@ -101,6 +102,7 @@ class RunEngineManager(Process):
                                         "err_msg": ""}
 
         self._config = config or {}
+        self._allowed_plans, self._allowed_devices = [], []
 
     async def _heartbeat_generator(self):
         """
@@ -645,6 +647,14 @@ class RunEngineManager(Process):
                }
         return msg
 
+    async def _list_allowed_plans_and_devices_handler(self, request):
+        """
+         Returns the list of allowed plans.
+         """
+        logger.info("Returning the list of allowed plans.")
+        return {"allowed_plans": self._allowed_plans,
+                "allowed_devices": self._allowed_devices}
+
     async def _queue_view_handler(self, request):
         """
          Returns the contents of the current queue.
@@ -785,6 +795,7 @@ class RunEngineManager(Process):
         handler_dict = {
             "": "_ping_handler",
             "queue_view": "_queue_view_handler",
+            "list_allowed_plans_and_devices": "_list_allowed_plans_and_devices_handler",
             "add_to_queue": "_add_to_queue_handler",
             "pop_from_queue": "_pop_from_queue_handler",
             "clear_queue": "_clear_queue_handler",
@@ -849,6 +860,15 @@ class RunEngineManager(Process):
 
         # Create entry 'running_plan' in the pool if it does not exist yet
         await self._init_running_plan_info()
+
+        # Load lists of allowed plans and devices
+        logger.info("Loading the lists of allowed plans and devices ...")
+        path_pd = self._config["allowed_plans_and_devices_path"]
+        try:
+            self._allowed_plans, self._allowed_devices = load_list_of_plans_and_devices(path_pd)
+        except Exception as ex:
+            logger.exception("Error occurred while loading lists of allowed plans "
+                             "and devices from '%s': %s", path_pd, str(ex))
 
         # Set the environment state based on whether the worker process is alive (request Watchdog)
         self._environment_exists = await self._is_worker_alive()

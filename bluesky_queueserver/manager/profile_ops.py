@@ -3,6 +3,7 @@ import glob
 import runpy
 from collections.abc import Iterable
 import pkg_resources
+import yaml
 
 import ophyd
 
@@ -169,3 +170,38 @@ def parse_plan(plan, *, allowed_plans, allowed_devices):
         "kwargs": plan_kwargs_parsed
     }
     return plan_parsed
+
+# TODO: it may be a good idea to implement this as a separate CLI tool.
+#       For now it can be called from IPython. It shouldn't be called automatically
+#       at any time, since it loads profile collection. The list of allowed plans
+#       and devices can be also typed manually, since it shouldn't be very large.
+def gen_list_of_plans_and_devices(path=None, file_name="allowed_plans_and_devices.yaml", overwrite=False):
+    """
+    Generate the list of plans and devices from profile collection.
+    The list is saved to file `allowed_plans_and_devices.yaml`.
+    """
+    try:
+        if path is None:
+            path = os.path.abspath(".")
+
+        nspace = load_profile_collection(path)
+        plans = plans_from_nspace(nspace)
+        devices = devices_from_nspace(nspace)
+
+        plan_list = list(plans.keys())
+        device_list = list(devices.keys())
+
+        allowed_plans_and_devices = {
+            "allowed_plans": plan_list,
+            "allowed_devices": device_list,
+        }
+
+        file_path = os.path.join(path, file_name)
+        if os.path.exists(file_path) and not overwrite:
+            raise IOError("File '%s' already exists. File overwriting is disabled.")
+
+        with open(file_path, "w") as stream:
+            yaml.dump(allowed_plans_and_devices, stream)
+
+    except Exception as ex:
+        raise RuntimeError(f"Failed to create the list of devices and plans: {str(ex)}")

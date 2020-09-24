@@ -1,11 +1,13 @@
 import os
 import pytest
+import shutil
+import glob
 
 import ophyd
 
 from bluesky_queueserver.manager.profile_ops import \
     (get_default_profile_collection_dir, load_profile_collection, plans_from_nspace,
-     devices_from_nspace, parse_plan)
+     devices_from_nspace, parse_plan, gen_list_of_plans_and_devices)
 
 
 def test_get_default_profile_collection_dir():
@@ -86,3 +88,34 @@ def test_parse_plan(plan, success, err_msg):
     else:
         with pytest.raises(RuntimeError, match=err_msg):
             parse_plan(plan, allowed_plans=plans, allowed_devices=devices)
+
+
+def test_gen_list_of_plans_and_devices(tmp_path):
+    """
+    Copy simulated profile collection and generate the list of allowed (in this case available)
+    plans and devices based on the profile collection
+    """
+    pc_path = get_default_profile_collection_dir()
+
+    # Copy simulated profile collection (only .py files)
+    file_pattern = os.path.join(pc_path, "[0-9][0-9]*.py")
+    file_list = glob.glob(file_pattern)
+    for fln in file_list:
+        shutil.copy(fln, tmp_path)
+
+    # Check if profile collection was moved
+    file_pattern = os.path.join(tmp_path, "[0-9][0-9]*.py")
+    file_list = glob.glob(file_pattern)
+    assert len(file_list) > 0, "Profile collection was not copied"
+
+    fln_yaml = "list.yaml"
+    gen_list_of_plans_and_devices(tmp_path, file_name=fln_yaml)
+    assert os.path.isfile(os.path.join(tmp_path, fln_yaml)), \
+        "List of plans and devices was not created"
+
+    # Attempt to overwrite the file
+    with pytest.raises(RuntimeError, match="already exists. File overwriting is disabled."):
+        gen_list_of_plans_and_devices(tmp_path, file_name=fln_yaml)
+
+    # Allow file overwrite
+    gen_list_of_plans_and_devices(tmp_path, file_name=fln_yaml, overwrite=True)

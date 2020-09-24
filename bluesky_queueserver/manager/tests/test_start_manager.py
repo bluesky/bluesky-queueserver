@@ -14,7 +14,7 @@ class ReManagerEmulation(threading.Thread):
     'heartbeat' messages to inform RE Manager that it is running.
     """
 
-    def __init__(self, *args, conn_watchdog, conn_worker, **kwargs):
+    def __init__(self, *args, conn_watchdog, conn_worker, config=None, **kwargs):
         super().__init__(*args, **kwargs)
         self._conn_watchdog = conn_watchdog
         self.n_loops = 0
@@ -22,6 +22,7 @@ class ReManagerEmulation(threading.Thread):
         self._restart = False
         self._send_heartbeat = True
         self._lock = threading.Lock()
+        self._config = config or {}
 
     def _heartbeat(self):
         hb_period, dt = 0.5, 0.01
@@ -94,9 +95,9 @@ class ReManagerEmulation(threading.Thread):
 
 
 class ReWorkerEmulation(threading.Thread):
-    def __init__(self, *args, conn, env_config=None, **kwargs):
+    def __init__(self, *args, conn, config=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self._env_config = env_config or {}
+        self._config = config or {}
         self._exit = False
         self.n_loops = 0
 
@@ -255,9 +256,10 @@ def test_WatchdogProcess_6():
     """
     Test if RE configuration is passed to RE Worker
     """
-    config = {"some_parameter": "some_value"}
+    config_worker = {"some_parameter1": "some_value1"}
+    config_manager = {"some_parameter2": "some_value2"}
 
-    wp = WatchdogProcess(re_env_config=config,
+    wp = WatchdogProcess(config_worker=config_worker, config_manager=config_manager,
                          cls_run_engine_manager=ReManagerEmulation,
                          cls_run_engine_worker=ReWorkerEmulation)
     wp_th = threading.Thread(target=wp.run)
@@ -267,8 +269,9 @@ def test_WatchdogProcess_6():
     response = wp._re_manager.send_msg_to_watchdog("start_re_worker")
     assert response["success"] is True, "Unexpected response from RE Manager"
 
-    # Check if configuration was set correctly in RE Worker
-    assert wp._re_worker._env_config == config, "Configuration was not passed correctly"
+    # Check if configuration was set correctly in RE Worker and RE manager
+    assert wp._re_worker._config == config_worker, "Configuration was not passed correctly"
+    assert wp._re_manager._config == config_manager, "Configuration was not passed correctly"
 
     # Exit the process (thread).
     wp._re_worker.exit()

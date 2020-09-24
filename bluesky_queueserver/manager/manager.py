@@ -56,7 +56,7 @@ class RunEngineManager(Process):
     args, kwargs
         `args` and `kwargs` of the `multiprocessing.Process`
     """
-    def __init__(self, *args, conn_watchdog, conn_worker, **kwargs):
+    def __init__(self, *args, conn_watchdog, conn_worker, config=None, **kwargs):
 
         if not conn_watchdog:
             raise RuntimeError("Value of the parameter 'conn_watchdog' is invalid: %s.",
@@ -99,6 +99,8 @@ class RunEngineManager(Process):
         self._background_task = None  # asyncio.Task
         self._background_task_status = {"status": "success",
                                         "err_msg": ""}
+
+        self._config = config or {}
 
     async def _heartbeat_generator(self):
         """

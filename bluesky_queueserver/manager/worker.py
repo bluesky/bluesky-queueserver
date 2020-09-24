@@ -38,7 +38,7 @@ class RunEngineWorker(Process):
     args, kwargs
         `args` and `kwargs` of the `multiprocessing.Process`
     """
-    def __init__(self, *args, conn, env_config=None, **kwargs):
+    def __init__(self, *args, conn, config=None, **kwargs):
 
         if not conn:
             raise RuntimeError("Invalid value of parameter 'conn': %S.", str(conn))
@@ -76,7 +76,7 @@ class RunEngineWorker(Process):
                                                    name="RE Watchdog-Manager Comm")
 
         self._db = DB[0]
-        self._env_config = env_config or {}
+        self._config = config or {}
 
         self._re_namespace, self._allowed_plans, self._allowed_devices = {}, {}, {}
 
@@ -470,12 +470,12 @@ class RunEngineWorker(Process):
         def init_namespace():
             self._re_namespace, self._allowed_plans, self._allowed_devices = {}, {}, {}
 
-        if "profile_collection_path" not in self._env_config:
+        if "profile_collection_path" not in self._config:
             logger.warning("Path to profile collection was not specified. "
                            "No profile collection will be loaded.")
             init_namespace()
         else:
-            path = self._env_config["profile_collection_path"]
+            path = self._config["profile_collection_path"]
             logger.info("Loading beamline profiles located at '%s'", path)
             try:
                 self._re_namespace = load_profile_collection(path)
@@ -491,10 +491,10 @@ class RunEngineWorker(Process):
         bec = BestEffortCallback()
         self._RE.subscribe(bec)
 
-        if 'kafka' in self._env_config:
+        if 'kafka' in self._config:
             kafka_publisher = kafkaPublisher(
-                topic=self._env_config['kafka']['topic'],
-                bootstrap_servers=self._env_config['kafka']['bootstrap'],
+                topic=self._config['kafka']['topic'],
+                bootstrap_servers=self._config['kafka']['bootstrap'],
                 key="kafka-unit-test-key",
                 # work with a single broker
                 producer_config={

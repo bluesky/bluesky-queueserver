@@ -7,7 +7,8 @@ import ophyd
 
 from bluesky_queueserver.manager.profile_ops import \
     (get_default_profile_collection_dir, load_profile_collection, plans_from_nspace,
-     devices_from_nspace, parse_plan, gen_list_of_plans_and_devices)
+     devices_from_nspace, parse_plan, gen_list_of_plans_and_devices,
+     load_list_of_plans_and_devices)
 
 
 def test_get_default_profile_collection_dir():
@@ -119,3 +120,18 @@ def test_gen_list_of_plans_and_devices(tmp_path):
 
     # Allow file overwrite
     gen_list_of_plans_and_devices(tmp_path, file_name=fln_yaml, overwrite=True)
+
+
+def test_load_list_of_plans_and_devices():
+    """
+    Loads the list of allowed plans and devices from simulated profile collection.
+    """
+    pc_path = get_default_profile_collection_dir()
+    file_path = os.path.join(pc_path, "allowed_plans_and_devices.yaml")
+
+    allowed_plans, allowed_devices = load_list_of_plans_and_devices(file_path)
+
+    assert isinstance(allowed_plans, list), "Incorrect type of 'allowed_plans'"
+    assert len(allowed_plans) > 0, "List of allowed plans was not loaded"
+    assert isinstance(allowed_devices, list), "Incorrect type of 'allowed_devices'"
+    assert len(allowed_devices) > 0, "List of allowed devices was not loaded"

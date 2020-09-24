@@ -171,14 +171,34 @@ def parse_plan(plan, *, allowed_plans, allowed_devices):
     }
     return plan_parsed
 
-# TODO: it may be a good idea to implement this as a separate CLI tool.
+
+# TODO: it may be a good idea to implement 'gen_list_of_plans_and_devices' as a separate CLI tool.
 #       For now it can be called from IPython. It shouldn't be called automatically
 #       at any time, since it loads profile collection. The list of allowed plans
 #       and devices can be also typed manually, since it shouldn't be very large.
+
 def gen_list_of_plans_and_devices(path=None, file_name="allowed_plans_and_devices.yaml", overwrite=False):
     """
     Generate the list of plans and devices from profile collection.
     The list is saved to file `allowed_plans_and_devices.yaml`.
+
+    Parameters
+    ----------
+    path: str or None
+        path to the directory where the file is to be created. None - create file in current directory.
+    file_name: str
+        name of the output YAML file
+    overwrite: boolean
+        overwrite the file if it already exists
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    RuntimeError
+        Error occurred while creating or saving the lists.
     """
     try:
         if path is None:
@@ -205,3 +225,38 @@ def gen_list_of_plans_and_devices(path=None, file_name="allowed_plans_and_device
 
     except Exception as ex:
         raise RuntimeError(f"Failed to create the list of devices and plans: {str(ex)}")
+
+
+def load_list_of_plans_and_devices(path_to_file=None):
+    """
+    Load the lists of allowed plans and devices from YAML file. Returns empty lists
+    if `path_to_file` is None or "".
+
+    Parameters
+    ----------
+    path_to_file: str on None
+        Full path to .yaml file that contains the lists.
+
+    Returns
+    -------
+    (list, list)
+        List of allowed plans and list of allowed devices.
+
+    Raises
+    ------
+    IOError in case the file does not exist.
+    """
+    if not path_to_file:
+        return {"allowed_plans": [], "allowed_devices": []}
+
+    if not os.path.isfile(path_to_file):
+        raise IOError(f"Failed to load the list of allowed plans and devices: "
+                      f"file '{path_to_file}' does not exist.")
+
+    with open(path_to_file, "r") as stream:
+        allowed_plans_and_devices = yaml.safe_load(stream)
+
+    allowed_plans = allowed_plans_and_devices["allowed_plans"]
+    allowed_devices = allowed_plans_and_devices["allowed_devices"]
+
+    return allowed_plans, allowed_devices

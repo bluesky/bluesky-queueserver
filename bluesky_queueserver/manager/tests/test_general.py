@@ -84,6 +84,9 @@ def test_qserver_cli_and_manager(re_manager):
     # Clear queue
     subprocess.call(["qserver", "-c", "clear_queue"])
 
+    # Request the list of allowed plans and devices (we don't check what is returned)
+    subprocess.call(["qserver", "-c", "list_allowed_plans_and_devices"])
+
     # Add a number of plans
     subprocess.call(["qserver", "-c", "add_to_queue", "-p",
                      "{'name':'count', 'args':[['det1', 'det2']]}"])

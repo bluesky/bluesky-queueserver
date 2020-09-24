@@ -9,3 +9,4 @@ msgpack_numpy
 ophyd
 pyzmq
 requests
+super_state_machine

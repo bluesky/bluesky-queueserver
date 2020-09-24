@@ -18,8 +18,10 @@ def _request_to_json(request_type, path, **kwargs):
 def test_http_server_hello_handler(re_manager, fastapi_server):  # noqa F811
     resp = _request_to_json('get', '/')
     assert resp['msg'] == 'RE Manager'
-    assert resp['n_plans'] == 0
-    assert resp['is_plan_running'] is False
+    assert resp['manager_state'] == 'idle'
+    assert resp['plans_in_queue'] == 0
+    assert resp['running_plan_uid'] is None
+    assert resp['worker_environment_exists'] is False
 
 
 def test_http_server_queue_view_handler(re_manager, fastapi_server):  # noqa F811

@@ -2,7 +2,7 @@ aioredis
 bluesky
 bluesky-kafka
 databroker
-fastapi[all]
+fastapi
 json-rpc
 msgpack
 msgpack_numpy
@@ -11,3 +11,4 @@ pyyaml
 pyzmq
 requests
 super_state_machine
+uvicorn

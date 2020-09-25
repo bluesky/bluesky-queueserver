@@ -1,4 +1,3 @@
-# from aiohttp import web
 import asyncio
 import logging
 from enum import Enum
@@ -12,13 +11,13 @@ logger = logging.getLogger(__name__)
 """
 #  The following plans that can be used to test the server
 
-http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]]}'
+http POST http://localhost:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]]}'
 
 # This is the slowly running plan (convenient to test pausing)
-http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]],
+http POST http://localhost:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]],
 "kwargs":{"num":10, "delay":1}}'
 
-http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
+http POST http://localhost:8080/add_to_queue plan:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
 """
 
 
@@ -88,105 +87,6 @@ class ZMQ_Comm:
         msg_out = self._create_msg(command=command, params=params)
         msg_in = await self._zmq_communicate(msg_out)
         return msg_in
-
-    # =========================================================================
-    #    REST API handlers
-
-    # async def _hello_handler(self):
-    #     """
-    #     May be called to get response from the server. Returns the number of plans in the queue.
-    #     """
-    #     msg = await self._send_command(command="")
-    #     return web.json_response(msg)
-
-    # async def _queue_view_handler(self):
-    #     """
-    #     Returns the contents of the current queue.
-    #     """
-    #     msg = await self._send_command(command="queue_view")
-    #     return web.json_response(msg)
-
-    # async def _add_to_queue_handler(self, request):
-    #     """
-    #     Adds new plan to the end of the queue
-    #     """
-    #     data = await request.json()
-    #     # TODO: validate inputs!
-    #     msg = await self._send_command(command="add_to_queue", params=data)
-    #     return web.json_response(msg)
-
-    # async def _pop_from_queue_handler(self, request):
-    #     """
-    #     Pop the last item from back of the queue
-    #     """
-    #     msg = await self._send_command(command="pop_from_queue")
-    #     return web.json_response(msg)
-
-    # async def _create_environment_handler(self, request):
-    #     """
-    #     Creates RE environment: creates RE Worker process, starts and configures Run Engine.
-    #     """
-    #     msg = await self._send_command(command="create_environment")
-    #     return web.json_response(msg)
-
-    # async def _close_environment_handler(self, request):
-    #     """
-    #     Deletes RE environment. In the current 'demo' prototype the environment will be deleted
-    #     only after RE completes the current scan.
-    #     """
-    #     msg = await self._send_command(command="close_environment")
-    #     return web.json_response(msg)
-
-    # async def _process_queue_handler(self, request):
-    #     """
-    #     Start execution of the loaded queue. Additional runs can be added to the queue while
-    #     it is executed. If the queue is empty, then nothing will happen.
-    #     """
-    #     msg = await self._send_command(command="process_queue")
-    #     return web.json_response(msg)
-
-    # async def _re_pause_handler(self, request):
-    #     """
-    #     Pause Run Engine
-    #     """
-    #     data = await request.json()
-    #     msg = await self._send_command(command="re_pause", params=data)
-    #     return web.json_response(msg)
-
-    # async def _re_continue_handler(self, request):
-    #     """
-    #     Control Run Engine in the paused state
-    #     """
-    #     data = await request.json()
-    #     msg = await self._send_command(command="re_continue", params=data)
-    #     return web.json_response(msg)
-
-    # async def _print_db_uids_handler(self, request):
-    #     """
-    #     Prints the UIDs of the scans in 'temp' database. Just for the demo.
-    #     Not part of future API.
-    #     """
-    #     msg = await self._send_command(command="print_db_uids")
-    #     return web.json_response(msg)
-
-    # def setup_routes(self, app):
-    #     """
-    #     Setup routes to handler for web.Application
-    #     """
-    #     app.add_routes(
-    #         [
-    #             # web.get("/", self._hello_handler),
-    #             # web.get("/queue_view", self._queue_view_handler),
-    #             # web.post("/add_to_queue", self._add_to_queue_handler),
-    #             # web.post("/pop_from_queue", self._pop_from_queue_handler),
-    #             # web.post("/create_environment", self._create_environment_handler),
-    #             # web.post("/close_environment", self._close_environment_handler),
-    #             # web.post("/process_queue", self._process_queue_handler),
-    #             # web.post("/re_continue", self._re_continue_handler),
-    #             # web.post("/re_pause", self._re_pause_handler),
-    #             # web.post("/print_db_uids", self._print_db_uids_handler),
-    #         ]
-    #     )
 
 
 logging.basicConfig(level=logging.WARNING)

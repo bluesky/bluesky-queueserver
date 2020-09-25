@@ -649,8 +649,8 @@ class RunEngineManager(Process):
 
     async def _list_allowed_plans_and_devices_handler(self, request):
         """
-         Returns the list of allowed plans.
-         """
+        Returns the list of allowed plans.
+        """
         logger.info("Returning the list of allowed plans.")
         return {"allowed_plans": self._allowed_plans,
                 "allowed_devices": self._allowed_devices}

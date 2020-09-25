@@ -176,7 +176,8 @@ def start_manager():
                         default="127.0.0.1:9092")
     parser.add_argument("--profile_collection", "-p", dest="profile_collection_path",
                         type=str, help="Path to directory that contains profile collection.", )
-    parser.add_argument("--allowed_plans_and_devices", dest="allowed_plans_and_devices_path",
+    parser.add_argument("--allowed_plans_and_devices",
+                        dest="allowed_plans_and_devices_path",
                         type=str,
                         help="Path to file that contains the list of allowed plans. "
                              "The path may be a relative path to the profile collection directory. "

@@ -52,7 +52,7 @@ In the first shell start RE Manager::
 
 The Web Server should be started from the second shell as follows::
 
-  uvicorn bluesky_queueserver.server.server:app --port 8080 --host "0.0.0.0"
+  uvicorn bluesky_queueserver.server.server:app --host "0.0.0.0" --port 8080
 
 Use the third shell to send REST API requests to the server. Add plans to the queue::
 

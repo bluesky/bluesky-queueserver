@@ -227,6 +227,15 @@ async def _queue_view_handler():
     return msg
 
 
+@app.get('/list_allowed_plans_and_devices')
+async def _list_allowed_plans_and_devices_handler():
+    """
+    Returns the lists of allowed plans and devices.
+    """
+    msg = await re_server._send_command(command="list_allowed_plans_and_devices")
+    return msg
+
+
 @app.post('/add_to_queue')
 async def _add_to_queue_handler(payload: dict):
     """

@@ -18,7 +18,7 @@ from databroker import Broker
 from bluesky_kafka import Publisher as kafkaPublisher
 
 from .profile_ops import (load_profile_collection, plans_from_nspace,
-                          devices_from_nspace, parse_plan)
+                          devices_from_nspace, parse_plan, load_list_of_plans_and_devices)
 
 from .comms import PipeJsonRpcReceive
 
@@ -38,7 +38,7 @@ class RunEngineWorker(Process):
     args, kwargs
         `args` and `kwargs` of the `multiprocessing.Process`
     """
-    def __init__(self, *args, conn, env_config=None, **kwargs):
+    def __init__(self, *args, conn, config=None, **kwargs):
 
         if not conn:
             raise RuntimeError("Invalid value of parameter 'conn': %S.", str(conn))
@@ -76,9 +76,10 @@ class RunEngineWorker(Process):
                                                    name="RE Watchdog-Manager Comm")
 
         self._db = DB[0]
-        self._env_config = env_config or {}
+        self._config = config or {}
+        self._allowed_plans, self._allowed_devices = [], []
 
-        self._re_namespace, self._allowed_plans, self._allowed_devices = {}, {}, {}
+        self._re_namespace, self._existing_plans, self._existing_devices = {}, {}, {}
 
     def _execute_plan(self, plan, is_resuming):
         """
@@ -160,8 +161,8 @@ class RunEngineWorker(Process):
         logger.info("Starting a plan '%s'.", plan_info["name"])
 
         try:
-            plan_parsed = parse_plan(plan_info, allowed_plans=self._allowed_plans,
-                                     allowed_devices=self._allowed_devices)
+            plan_parsed = parse_plan(plan_info, allowed_plans=self._existing_plans,
+                                     allowed_devices=self._existing_devices)
 
             plan_func = plan_parsed["name"]
             plan_args_parsed = plan_parsed["args"]
@@ -468,33 +469,42 @@ class RunEngineWorker(Process):
         asyncio.set_event_loop(loop)
 
         def init_namespace():
-            self._re_namespace, self._allowed_plans, self._allowed_devices = {}, {}, {}
+            self._re_namespace, self._existing_plans, self._existing_devices = {}, {}, {}
 
-        if "profile_collection_path" not in self._env_config:
+        if "profile_collection_path" not in self._config:
             logger.warning("Path to profile collection was not specified. "
                            "No profile collection will be loaded.")
             init_namespace()
         else:
-            path = self._env_config["profile_collection_path"]
+            path = self._config["profile_collection_path"]
             logger.info("Loading beamline profiles located at '%s'", path)
             try:
                 self._re_namespace = load_profile_collection(path)
-                self._allowed_plans = plans_from_nspace(self._re_namespace)
-                self._allowed_devices = devices_from_nspace(self._re_namespace)
+                self._existing_plans = plans_from_nspace(self._re_namespace)
+                self._existing_devices = devices_from_nspace(self._re_namespace)
                 logger.info("Loading of the beamline profiles completed successfully")
             except Exception as ex:
                 logger.exception("Error wile loading profile collection: %s", str(ex))
                 init_namespace()
+
+        # Load lists of allowed plans and devices
+        logger.info("Loading the lists of allowed plans and devices ...")
+        path_pd = self._config["allowed_plans_and_devices_path"]
+        try:
+            self._allowed_plans, self._allowed_devices = load_list_of_plans_and_devices(path_pd)
+        except Exception as ex:
+            logger.exception("Error occurred while loading lists of allowed plans "
+                             "and devices from '%s': %s", path_pd, str(ex))
 
         self._RE = RunEngine({})
 
         bec = BestEffortCallback()
         self._RE.subscribe(bec)
 
-        if 'kafka' in self._env_config:
+        if 'kafka' in self._config:
             kafka_publisher = kafkaPublisher(
-                topic=self._env_config['kafka']['topic'],
-                bootstrap_servers=self._env_config['kafka']['bootstrap'],
+                topic=self._config['kafka']['topic'],
+                bootstrap_servers=self._config['kafka']['bootstrap'],
                 key="kafka-unit-test-key",
                 # work with a single broker
                 producer_config={

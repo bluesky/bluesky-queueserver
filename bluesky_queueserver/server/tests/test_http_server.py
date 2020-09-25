@@ -29,6 +29,14 @@ def test_http_server_queue_view_handler(re_manager, fastapi_server):  # noqa F81
     assert resp['queue'] == []
 
 
+def test_http_server_list_allowed_plans_and_devices(re_manager, fastapi_server):  # noqa F811
+    resp = _request_to_json('get', '/list_allowed_plans_and_devices')
+    assert isinstance(resp['allowed_plans'], list)
+    assert len(resp['allowed_plans']) > 0
+    assert isinstance(resp['allowed_devices'], list)
+    assert len(resp['allowed_devices']) > 0
+
+
 def test_http_server_add_to_queue_handler(re_manager, fastapi_server):  # noqa F811
     resp1 = _request_to_json('post', '/add_to_queue',
                              json={"plan": {"name": "count",

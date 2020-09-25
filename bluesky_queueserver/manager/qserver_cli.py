@@ -62,6 +62,7 @@ class CliClient:
         command_dict = {
             "ping": "",
             "queue_view": "queue_view",
+            "list_allowed_plans_and_devices": "list_allowed_plans_and_devices",
             "add_to_queue": "add_to_queue",
             "pop_from_queue": "pop_from_queue",
             "clear_queue": "clear_queue",

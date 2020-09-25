@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class WatchdogProcess:
-    def __init__(self, *, re_env_config=None,
+    def __init__(self, *, config_worker=None, config_manager=None,
                  cls_run_engine_worker=RunEngineWorker,
                  cls_run_engine_manager=RunEngineManager):
 
@@ -44,7 +44,8 @@ class WatchdogProcess:
         self._heartbeat_timeout = 5  # Time to wait before restarting RE Manager
 
         # Configuration of the RE environment (passed to RE Worker)
-        self._re_env_config = re_env_config
+        self._config_worker = config_worker
+        self._config_manager = config_manager
 
     def _create_conn_pipes(self):
         # Manager to worker
@@ -63,7 +64,7 @@ class WatchdogProcess:
         logger.info("Starting RE Worker ...")
         try:
             self._re_worker = self._cls_run_engine_worker(
-                conn=self._manager_conn, name="RE Worker Process", env_config=self._re_env_config,
+                conn=self._manager_conn, name="RE Worker Process", config=self._config_worker,
             )
             self._re_worker.start()
             success, err_msg = True, ""
@@ -125,6 +126,7 @@ class WatchdogProcess:
         self._init_watchdog_state()
         self._re_manager = self._cls_run_engine_manager(conn_watchdog=self._manager_to_watchdog_conn,
                                                         conn_worker=self._worker_conn,
+                                                        config=self._config_manager,
                                                         name="RE Manager Process")
         self._re_manager.start()
 
@@ -174,16 +176,24 @@ def start_manager():
                         default="127.0.0.1:9092")
     parser.add_argument("--profile_collection", "-p", dest="profile_collection_path",
                         type=str, help="Path to directory that contains profile collection.", )
+    parser.add_argument("--allowed_plans_and_devices",
+                        dest="allowed_plans_and_devices_path",
+                        type=str,
+                        help="Path to file that contains the list of allowed plans. "
+                             "The path may be a relative path to the profile collection directory. "
+                             "If the path is directory, then the default file name "
+                             "'allowed_plans_and_devices.yaml' is used.")
 
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger('bluesky_queueserver').setLevel("DEBUG")
 
     args = parser.parse_args()
-    config = {}
+    config_worker = {}
+    config_manager = {}
     if args.kafka_topic is not None:
-        config['kafka'] = {}
-        config['kafka']['topic'] = args.kafka_topic
-        config['kafka']['bootstrap'] = args.kafka_server
+        config_worker['kafka'] = {}
+        config_worker['kafka']['topic'] = args.kafka_topic
+        config_worker['kafka']['bootstrap'] = args.kafka_server
 
     if args.profile_collection_path:
         pc_path = args.profile_collection_path
@@ -196,12 +206,30 @@ def start_manager():
             return 1
     else:
         # The default collection is the collection of simulated Ophyd devices
-        #   and built-in Bluesky plans
+        #   and built-in Bluesky plans.
         pc_path = get_default_profile_collection_dir()
 
-    config["profile_collection_path"] = pc_path
+    config_worker["profile_collection_path"] = pc_path
 
-    wp = WatchdogProcess(re_env_config=config)
+    default_allowed_pd_fln = "allowed_plans_and_devices.yaml"
+    if args.allowed_plans_and_devices_path:
+        allowed_pd_path = os.path.expanduser(args.allowed_plans_and_devices_path)
+        if not os.path.isabs(allowed_pd_path):
+            allowed_pd_path = os.path.join(pc_path, allowed_pd_path)
+        if not allowed_pd_path.endswith(".yaml"):
+            os.path.join(allowed_pd_path, default_allowed_pd_fln)
+    else:
+        allowed_pd_path = os.path.join(pc_path, default_allowed_pd_fln)
+    if not os.path.isfile(allowed_pd_path):
+        logger.error("The list of allowed plans and devices was not found at "
+                     "'%s'. Proceed without the list: all plans and devices are allowed.",
+                     allowed_pd_path)
+        allowed_pd_path = None
+
+    config_worker["allowed_plans_and_devices_path"] = allowed_pd_path
+    config_manager["allowed_plans_and_devices_path"] = allowed_pd_path
+
+    wp = WatchdogProcess(config_worker=config_worker, config_manager=config_manager)
     try:
         wp.run()
     except KeyboardInterrupt:

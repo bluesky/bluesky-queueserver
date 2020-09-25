@@ -7,6 +7,7 @@ json-rpc
 msgpack
 msgpack_numpy
 ophyd
+pyyaml
 pyzmq
 requests
 super_state_machine

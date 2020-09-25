@@ -52,16 +52,16 @@ In the first shell start RE Manager::
 
 The Web Server should be started from the second shell as follows::
 
-  uvicorn bluesky_queueserver.server.server:app --host "0.0.0.0" --port 8080
+  uvicorn bluesky_queueserver.server.server:app --host localhost --port 8080
 
 Use the third shell to send REST API requests to the server. Add plans to the queue::
 
-  http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]]}'
-  http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
+  http POST http://localhost:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]]}'
+  http POST http://localhost:8080/add_to_queue plan:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
 
 The following plan runs for 10 seconds. It is convenient for testing pausing/resuming/stopping the plan::
 
-  http POST 0.0.0.0:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
+  http POST http://localhost:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
 
 The names of the plans and devices are strings. The strings are converted to references to plans and
 devices in the worker process. In this demo the server can recognize only 'det1', 'det2', 'motor' devices
@@ -72,31 +72,31 @@ from an empty queue).
 
 The last item can be removed from the back of the queue::
 
-  http POST 0.0.0.0:8080/pop_from_queue
+  http POST http://localhost:8080/pop_from_queue
 
 The number of entries in the queue may be checked as follows::
 
-  http GET 0.0.0.0:8080
+  http GET http://localhost:8080
 
 The contents of the queue can be retrieved as follows::
 
-  http GET 0.0.0.0:8080/queue_view
+  http GET http://localhost:8080/queue_view
 
 Before the queue can be executed, the worker environment must be created and initialized. This operation
 creates a new execution environment for Bluesky Run Engine and used to execute plans until it explicitly
 closed::
 
-  http POST 0.0.0.0:8080/create_environment
+  http POST http://localhost:8080/create_environment
 
 Execute the plans in the queue::
 
-  http POST 0.0.0.0:8080/process_queue
+  http POST http://localhost:8080/process_queue
 
 Request to execute an empty queue is a valid operation that does nothing.
 
 Environment may be closed as follows::
 
-  http POST 0.0.0.0:8080/close_environment
+  http POST http://localhost:8080/close_environment
 
 While a plan in a queue is executed, operation Run Engine can be paused. In the unlikely event
 if the request to pause is received while RunEngine is transitioning between two plans, the request
@@ -107,18 +107,18 @@ of the queue is stopped. Execution of the queue may be started again if needed.
 
 Immediate pausing of the Run Engine (returns to the last checkpoint in the plan)::
 
-  http POST 0.0.0.0:8080/re_pause option="immediate"
+  http POST http://localhost:8080/re_pause option="immediate"
 
 Deferred pausing of the Run Engine (plan is executed until the next checkpoint)::
 
-  http POST 0.0.0.0:8080/re_pause option="deferred"
+  http POST http://localhost:8080/re_pause option="deferred"
 
 Resuming, aborting, stopping or halting of currently executed plan::
 
-  http POST 0.0.0.0:8080/re_continue option="resume"
-  http POST 0.0.0.0:8080/re_continue option="abort"
-  http POST 0.0.0.0:8080/re_continue option="stop"
-  http POST 0.0.0.0:8080/re_continue option="halt"
+  http POST http://localhost:8080/re_continue option="resume"
+  http POST http://localhost:8080/re_continue option="abort"
+  http POST http://localhost:8080/re_continue option="stop"
+  http POST http://localhost:8080/re_continue option="halt"
 
 There is minimal user protection features implemented that will prevent execution of
 the commands that are not supported in current state of the server. Error messages are printed
@@ -130,7 +130,7 @@ used to collect documents from Run Engine. Data from all plans executed during Q
 are accumulated in the 'temp' database. The table that contains Run IDs and UIDs of the runs in
 the databased can be printed on the screen by sending the command::
 
-  http POST 0.0.0.0:8080/print_db_uids
+  http POST http://localhost:8080/print_db_uids
 
 The table will be printed in the RE Manager terminal::
 

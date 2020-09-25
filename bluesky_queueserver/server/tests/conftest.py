@@ -6,7 +6,7 @@ from xprocess import ProcessStarter
 import bluesky_queueserver.server.server as bqss
 
 SERVER_ADDRESS = 'localhost'
-SERVER_PORT = '8000'
+SERVER_PORT = '8080'
 
 
 @pytest.fixture

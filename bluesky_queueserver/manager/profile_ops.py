@@ -202,7 +202,7 @@ def gen_list_of_plans_and_devices(path=None, file_name="allowed_plans_and_device
     """
     try:
         if path is None:
-            path = os.path.abspath(".")
+            path = os.getcwd()
 
         nspace = load_profile_collection(path)
         plans = plans_from_nspace(nspace)

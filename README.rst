@@ -38,6 +38,7 @@ and then kill the processes::
 
 Installation of QueueServer from source::
 
+  sudo apt install redis
   pip install -e .
 
 This also sets up an entry point for the 'qserver' CLI tool.

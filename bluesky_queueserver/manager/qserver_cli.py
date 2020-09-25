@@ -13,6 +13,7 @@ import argparse
 import bluesky_queueserver
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 qserver_version = bluesky_queueserver.__version__
@@ -31,7 +32,6 @@ http POST http://localhost:8080/add_to_queue plan:='{"name":"scan", "args":[["de
 
 
 class CliClient:
-
     def __init__(self, *, address=None):
         # ZeroMQ communication
         self._ctx = zmq.asyncio.Context()
@@ -109,8 +109,9 @@ class CliClient:
         try:
             await self._zmq_open_connection(self._zmq_server_address)
             logger.info("Connected to ZeroMQ server '%s'", self._zmq_server_address)
-            self._msg_in = await self._send_command(command=self._msg_command_out,
-                                                    params=self._msg_params_out)
+            self._msg_in = await self._send_command(
+                command=self._msg_command_out, params=self._msg_params_out
+            )
             self._msg_err_in = ""
         except Exception as ex:
             self._msg_in = None
@@ -119,7 +120,9 @@ class CliClient:
             self._zmq_socket.close()
 
         if self._msg_err_in:
-            logger.warning("Communication with RE Manager failed: %s", str(self._msg_err_in))
+            logger.warning(
+                "Communication with RE Manager failed: %s", str(self._msg_err_in)
+            )
 
     async def _send_command(self, *, command, params=None):
         msg_out = self._create_msg(command=command, params=params)
@@ -151,29 +154,51 @@ class CliClient:
 def qserver():
 
     logging.basicConfig(level=logging.WARNING)
-    logging.getLogger('bluesky_queueserver').setLevel("CRITICAL")
+    logging.getLogger("bluesky_queueserver").setLevel("CRITICAL")
 
     supported_commands = list(CliClient.get_supported_commands().keys())
     # Add the command 'monitor' to the list. This command is not sent to RE Manager.
     supported_commands = ["monitor"] + supported_commands
 
-    parser = argparse.ArgumentParser(description='Command-line tool for communicating with RE Monitor.',
-                                     epilog=f'Bluesky-QServer version {qserver_version}.')
-    parser.add_argument('--command', '-c', dest="command", action='store', required=True,
-                        help=f"Command sent to the server. Supported commands: {supported_commands}.")
-    parser.add_argument('--parameters', '-p', dest="params", action='store', default=None,
-                        help="Parameters that are sent with the command. Currently the parameters "
-                             "must be represented as a string that contains a python dictionary.")
-    parser.add_argument('--address', '-a', dest="address", action='store', default=None,
-                        help="Address of the server (e.g. 'tcp://localhost:5555', quoted string)")
+    parser = argparse.ArgumentParser(
+        description="Command-line tool for communicating with RE Monitor.",
+        epilog=f"Bluesky-QServer version {qserver_version}.",
+    )
+    parser.add_argument(
+        "--command",
+        "-c",
+        dest="command",
+        action="store",
+        required=True,
+        help=f"Command sent to the server. Supported commands: {supported_commands}.",
+    )
+    parser.add_argument(
+        "--parameters",
+        "-p",
+        dest="params",
+        action="store",
+        default=None,
+        help="Parameters that are sent with the command. Currently the parameters "
+        "must be represented as a string that contains a python dictionary.",
+    )
+    parser.add_argument(
+        "--address",
+        "-a",
+        dest="address",
+        action="store",
+        default=None,
+        help="Address of the server (e.g. 'tcp://localhost:5555', quoted string)",
+    )
 
     args = parser.parse_args()
 
     command, params = args.command, args.params
 
     if command not in supported_commands:
-        print(f"Command '{command}' is not supported. Please enter a valid command.\n"
-              f"Call 'qserver' with the option '-h' to see full list of supported commands.")
+        print(
+            f"Command '{command}' is not supported. Please enter a valid command.\n"
+            f"Call 'qserver' with the option '-h' to see full list of supported commands."
+        )
         sys.exit(1)
 
     # 'params' is a string representing a python dictionary. We need to convert it into a dictionary.
@@ -182,12 +207,14 @@ def qserver():
         try:
             params = ast.literal_eval(params)
         except Exception as ex:
-            print(f"Failed to parse parameter string {params}: {str(ex)}. "
-                  f"The parameters must represent a valid Python dictionary")
+            print(
+                f"Failed to parse parameter string {params}: {str(ex)}. "
+                f"The parameters must represent a valid Python dictionary"
+            )
             sys.exit(1)
 
     # 'ping' command will be sent to RE Manager periodically if 'monitor' command is entered
-    monitor_on = (command == "monitor")
+    monitor_on = command == "monitor"
     if monitor_on:
         command = "ping"
         print("Running QSever monitor. Press Ctrl-C to exit ...")

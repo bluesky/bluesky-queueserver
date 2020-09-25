@@ -13,7 +13,9 @@ def get_default_profile_collection_dir():
     Returns the path to the default profile collection that is distributed with the package.
     The function does not guarantee that the directory exists.
     """
-    pc_path = pkg_resources.resource_filename('bluesky_queueserver', 'profile_collection_sim/')
+    pc_path = pkg_resources.resource_filename(
+        "bluesky_queueserver", "profile_collection_sim/"
+    )
     return pc_path
 
 
@@ -41,7 +43,9 @@ def load_profile_collection(path):
     if not os.path.exists(path):
         raise IOError(f"Path '{path}' does not exist.")
     if not os.path.isdir(path):
-        raise IOError(f"Failed to load the profile collection. Path '{path}' is not a directory.")
+        raise IOError(
+            f"Failed to load the profile collection. Path '{path}' is not a directory."
+        )
 
     file_pattern = os.path.join(path, "[0-9][0-9]*.py")
     file_list = glob.glob(file_pattern)
@@ -167,7 +171,7 @@ def parse_plan(plan, *, allowed_plans, allowed_devices):
     plan_parsed = {
         "name": plan_func,
         "args": plan_args_parsed,
-        "kwargs": plan_kwargs_parsed
+        "kwargs": plan_kwargs_parsed,
     }
     return plan_parsed
 
@@ -177,7 +181,10 @@ def parse_plan(plan, *, allowed_plans, allowed_devices):
 #       at any time, since it loads profile collection. The list of allowed plans
 #       and devices can be also typed manually, since it shouldn't be very large.
 
-def gen_list_of_plans_and_devices(path=None, file_name="allowed_plans_and_devices.yaml", overwrite=False):
+
+def gen_list_of_plans_and_devices(
+    path=None, file_name="allowed_plans_and_devices.yaml", overwrite=False
+):
     """
     Generate the list of plans and devices from profile collection.
     The list is saved to file `allowed_plans_and_devices.yaml`.
@@ -250,8 +257,10 @@ def load_list_of_plans_and_devices(path_to_file=None):
         return {"allowed_plans": [], "allowed_devices": []}
 
     if not os.path.isfile(path_to_file):
-        raise IOError(f"Failed to load the list of allowed plans and devices: "
-                      f"file '{path_to_file}' does not exist.")
+        raise IOError(
+            f"Failed to load the list of allowed plans and devices: "
+            f"file '{path_to_file}' does not exist."
+        )
 
     with open(path_to_file, "r") as stream:
         allowed_plans_and_devices = yaml.safe_load(stream)

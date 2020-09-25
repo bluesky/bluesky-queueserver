@@ -12,13 +12,19 @@ from .profile_ops import get_default_profile_collection_dir
 from .. import __version__
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 
 class WatchdogProcess:
-    def __init__(self, *, config_worker=None, config_manager=None,
-                 cls_run_engine_worker=RunEngineWorker,
-                 cls_run_engine_manager=RunEngineManager):
+    def __init__(
+        self,
+        *,
+        config_worker=None,
+        config_manager=None,
+        cls_run_engine_worker=RunEngineWorker,
+        cls_run_engine_manager=RunEngineManager,
+    ):
 
         self._cls_run_engine_worker = cls_run_engine_worker
         self._cls_run_engine_manager = cls_run_engine_manager
@@ -34,8 +40,9 @@ class WatchdogProcess:
         self._create_conn_pipes()
 
         # Class that supports communication over the pipe
-        self._comm_to_manager = PipeJsonRpcReceive(conn=self._watchdog_to_manager_conn,
-                                                   name="RE Watchdog-Manager Comm")
+        self._comm_to_manager = PipeJsonRpcReceive(
+            conn=self._watchdog_to_manager_conn, name="RE Watchdog-Manager Comm"
+        )
 
         self._watchdog_state = 0  # State is currently just time since last notification
         self._watchdog_state_lock = threading.Lock()
@@ -64,7 +71,9 @@ class WatchdogProcess:
         logger.info("Starting RE Worker ...")
         try:
             self._re_worker = self._cls_run_engine_worker(
-                conn=self._manager_conn, name="RE Worker Process", config=self._config_worker,
+                conn=self._manager_conn,
+                name="RE Worker Process",
+                config=self._config_worker,
             )
             self._re_worker.start()
             success, err_msg = True, ""
@@ -124,21 +133,29 @@ class WatchdogProcess:
 
     def _start_re_manager(self):
         self._init_watchdog_state()
-        self._re_manager = self._cls_run_engine_manager(conn_watchdog=self._manager_to_watchdog_conn,
-                                                        conn_worker=self._worker_conn,
-                                                        config=self._config_manager,
-                                                        name="RE Manager Process")
+        self._re_manager = self._cls_run_engine_manager(
+            conn_watchdog=self._manager_to_watchdog_conn,
+            conn_worker=self._worker_conn,
+            config=self._config_manager,
+            name="RE Manager Process",
+        )
         self._re_manager.start()
 
     def run(self):
 
         # Requests
-        self._comm_to_manager.add_method(self._start_re_worker_handler, "start_re_worker")
+        self._comm_to_manager.add_method(
+            self._start_re_worker_handler, "start_re_worker"
+        )
         self._comm_to_manager.add_method(self._join_re_worker_handler, "join_re_worker")
         self._comm_to_manager.add_method(self._kill_re_worker_handler, "kill_re_worker")
-        self._comm_to_manager.add_method(self._is_worker_alive_handler, "is_worker_alive")
+        self._comm_to_manager.add_method(
+            self._is_worker_alive_handler, "is_worker_alive"
+        )
         # Notifications
-        self._comm_to_manager.add_method(self._manager_stopping_handler, "manager_stopping")
+        self._comm_to_manager.add_method(
+            self._manager_stopping_handler, "manager_stopping"
+        )
         self._comm_to_manager.add_method(self._register_heartbeat_handler, "heartbeat")
 
         self._comm_to_manager.start()
@@ -158,8 +175,14 @@ class WatchdogProcess:
             # It may be a better idea to implement a ticker in a separate thread to act as
             #   a clock to be completely independent from system clock.
             t_min, t_max = self._heartbeat_timeout, self._heartbeat_timeout + 10.0
-            if (time_passed >= t_min) and (time_passed <= t_max) and not self._manager_is_stopping:
-                logger.error("Timeout detected by Watchdog. RE Manager malfunctioned and must be restarted.")
+            if (
+                (time_passed >= t_min)
+                and (time_passed <= t_max)
+                and not self._manager_is_stopping
+            ):
+                logger.error(
+                    "Timeout detected by Watchdog. RE Manager malfunctioned and must be restarted."
+                )
                 self._re_manager.kill()
                 self._start_re_manager()
 
@@ -171,29 +194,42 @@ def start_manager():
         description="Start a RE Manager",
         epilog=f"blueksy-queueserver version {__version__}",
     )
-    parser.add_argument("--kafka_topic", type=str, help="The kafka topic to publish to.", )
-    parser.add_argument("--kafka_server", type=str, help="Bootstrap server to connect to.",
-                        default="127.0.0.1:9092")
-    parser.add_argument("--profile_collection", "-p", dest="profile_collection_path",
-                        type=str, help="Path to directory that contains profile collection.", )
-    parser.add_argument("--allowed_plans_and_devices",
-                        dest="allowed_plans_and_devices_path",
-                        type=str,
-                        help="Path to file that contains the list of allowed plans. "
-                             "The path may be a relative path to the profile collection directory. "
-                             "If the path is directory, then the default file name "
-                             "'allowed_plans_and_devices.yaml' is used.")
+    parser.add_argument(
+        "--kafka_topic", type=str, help="The kafka topic to publish to.",
+    )
+    parser.add_argument(
+        "--kafka_server",
+        type=str,
+        help="Bootstrap server to connect to.",
+        default="127.0.0.1:9092",
+    )
+    parser.add_argument(
+        "--profile_collection",
+        "-p",
+        dest="profile_collection_path",
+        type=str,
+        help="Path to directory that contains profile collection.",
+    )
+    parser.add_argument(
+        "--allowed_plans_and_devices",
+        dest="allowed_plans_and_devices_path",
+        type=str,
+        help="Path to file that contains the list of allowed plans. "
+        "The path may be a relative path to the profile collection directory. "
+        "If the path is directory, then the default file name "
+        "'allowed_plans_and_devices.yaml' is used.",
+    )
 
     logging.basicConfig(level=logging.WARNING)
-    logging.getLogger('bluesky_queueserver').setLevel("DEBUG")
+    logging.getLogger("bluesky_queueserver").setLevel("DEBUG")
 
     args = parser.parse_args()
     config_worker = {}
     config_manager = {}
     if args.kafka_topic is not None:
-        config_worker['kafka'] = {}
-        config_worker['kafka']['topic'] = args.kafka_topic
-        config_worker['kafka']['bootstrap'] = args.kafka_server
+        config_worker["kafka"] = {}
+        config_worker["kafka"]["topic"] = args.kafka_topic
+        config_worker["kafka"]["bootstrap"] = args.kafka_server
 
     if args.profile_collection_path:
         pc_path = args.profile_collection_path
@@ -221,9 +257,11 @@ def start_manager():
     else:
         allowed_pd_path = os.path.join(pc_path, default_allowed_pd_fln)
     if not os.path.isfile(allowed_pd_path):
-        logger.error("The list of allowed plans and devices was not found at "
-                     "'%s'. Proceed without the list: all plans and devices are allowed.",
-                     allowed_pd_path)
+        logger.error(
+            "The list of allowed plans and devices was not found at "
+            "'%s'. Proceed without the list: all plans and devices are allowed.",
+            allowed_pd_path,
+        )
         allowed_pd_path = None
 
     config_worker["allowed_plans_and_devices_path"] = allowed_pd_path

@@ -7,6 +7,7 @@ from jsonrpc import JSONRPCResponseManager
 from jsonrpc.dispatcher import Dispatcher
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -14,6 +15,7 @@ class CommTimeoutError(TimeoutError):
     """
     Raised when communication error occurs
     """
+
     pass
 
 
@@ -30,6 +32,7 @@ class CommJsonRpcError(RuntimeError):
     error_type: str
         Error type (returned by `json-rpc` or set to `'CommJsonRpcError'`)
     """
+
     def __init__(self, message, error_code, error_type):
         super().__init__(message)
         # TODO: change 'code' and 'type' to read-only properties
@@ -49,11 +52,16 @@ class CommJsonRpcError(RuntimeError):
         return super().__str__()
 
     def __str__(self):
-        msg = super().__str__() + f"\nError code: {self.error_code}. Error type: {self.error_type}"
+        msg = (
+            super().__str__()
+            + f"\nError code: {self.error_code}. Error type: {self.error_type}"
+        )
         return msg
 
     def __repr__(self):
-        return f"CommJsonRpcError('{self.message}',{self.error_code},'{self.error_type}')"
+        return (
+            f"CommJsonRpcError('{self.message}',{self.error_code},'{self.error_type}')"
+        )
 
 
 def format_jsonrpc_msg(method, params=None, *, notification=False):
@@ -105,7 +113,10 @@ class PipeJsonRpcReceive:
         # The function 'func' is called when the message with method=="some_method" is received
         pc.stop()  # Stop before exit to stop the thread.
     """
-    def __init__(self, conn, *, name="RE QServer Comm",):
+
+    def __init__(
+        self, conn, *, name="RE QServer Comm",
+    ):
         self._conn = conn
         self._dispatcher = Dispatcher()  # json-rpc dispatcher
         self._thread_running = False  # Set True to exit the thread
@@ -146,9 +157,9 @@ class PipeJsonRpcReceive:
     def _start_conn_thread(self):
         if not self._thread_running:
             self._thread_running = True
-            self._thread_conn = threading.Thread(target=self._receive_conn_thread,
-                                                 name=self._thread_name,
-                                                 daemon=True)
+            self._thread_conn = threading.Thread(
+                target=self._receive_conn_thread, name=self._thread_name, daemon=True
+            )
             self._thread_conn.start()
 
     def _receive_conn_thread(self):
@@ -159,8 +170,11 @@ class PipeJsonRpcReceive:
                     # Messages should be handled in the event loop
                     self._conn_received(msg)
                 except Exception as ex:
-                    logger.exception("Exception occurred while waiting for "
-                                     "RE Manager-> Watchdog message: %s", str(ex))
+                    logger.exception(
+                        "Exception occurred while waiting for "
+                        "RE Manager-> Watchdog message: %s",
+                        str(ex),
+                    )
                     break
             if not self._thread_running:  # Exit thread
                 break
@@ -229,6 +243,7 @@ class PipeJsonRpcSendAsync:
         pc.stop()  # Stop before exit to stop the thread.
 
     """
+
     def __init__(self, conn, *, timeout=0.5, name="RE QServer Comm"):
         self._conn = conn
         self._loop = asyncio.get_running_loop()
@@ -270,9 +285,9 @@ class PipeJsonRpcSendAsync:
         # Start 'receive' thread
         if not self._thread_running:
             self._thread_running = True
-            self._pipe_receive_thread = threading.Thread(target=self._pipe_receive,
-                                                         name=self._thread_name,
-                                                         daemon=True)
+            self._pipe_receive_thread = threading.Thread(
+                target=self._pipe_receive, name=self._thread_name, daemon=True
+            )
             self._pipe_receive_thread.start()
 
     async def send_msg(self, method, params=None, *, notification=False, timeout=None):
@@ -345,18 +360,24 @@ class PipeJsonRpcSendAsync:
                             # Other json-rpc errors
                             err_type = "CommJsonRpcError"
                             err_msg = response["error"]["message"]
-                        raise CommJsonRpcError(err_msg, error_code=err_code, error_type=err_type)
+                        raise CommJsonRpcError(
+                            err_msg, error_code=err_code, error_type=err_type
+                        )
                     else:
-                        err_msg = f"Message {pprint.pformat(msg)}\n" \
-                                  f"resulted in response with unknown format: {pprint.pformat(response)}"
+                        err_msg = (
+                            f"Message {pprint.pformat(msg)}\n"
+                            f"resulted in response with unknown format: {pprint.pformat(response)}"
+                        )
                         raise RuntimeError(err_msg)
                 else:
                     response = None
                 return response
 
             except asyncio.TimeoutError:
-                raise CommTimeoutError(f"Timeout while waiting for response to message: \n"
-                                       f"{pprint.pformat(msg)}")
+                raise CommTimeoutError(
+                    f"Timeout while waiting for response to message: \n"
+                    f"{pprint.pformat(msg)}"
+                )
             finally:
                 self._fut_comm = None
                 self._expected_msg_id = None
@@ -370,18 +391,27 @@ class PipeJsonRpcSendAsync:
             if "id" in response:
                 if response["id"] != self._expected_msg_id:
                     # Incorrect ID: ignore the message.
-                    logger.error("Response Watchdog->RE Manager contains incorrect ID: %s. Expected %s.\n"
-                                 "Message: %s",
-                                 response["id"], self._expected_msg_id["id"], pprint.pformat(response))
+                    logger.error(
+                        "Response Watchdog->RE Manager contains incorrect ID: %s. Expected %s.\n"
+                        "Message: %s",
+                        response["id"],
+                        self._expected_msg_id["id"],
+                        pprint.pformat(response),
+                    )
                 else:
                     # Accept the message. Otherwise wait for timeout
                     self._fut_comm.set_result(response)
             else:
                 # Missing ID: ignore the message
-                logger.error("Response Watchdog->RE Manager contains no id: %s", pprint.pformat(response))
+                logger.error(
+                    "Response Watchdog->RE Manager contains no id: %s",
+                    pprint.pformat(response),
+                )
         else:
-            logger.error("Unsolicited message received Watchdog->Re Manager: %s. Message is ignored",
-                         pprint.pformat(response))
+            logger.error(
+                "Unsolicited message received Watchdog->Re Manager: %s. Message is ignored",
+                pprint.pformat(response),
+            )
 
     def _conn_received(self, response):
         asyncio.create_task(self._response_received(response))
@@ -396,7 +426,9 @@ class PipeJsonRpcSendAsync:
                     # Messages should be handled in the event loop
                     self._loop.call_soon_threadsafe(self._conn_received, msg)
                 except Exception as ex:
-                    logger.exception("Exception occurred while waiting for packet: %s", str(ex))
+                    logger.exception(
+                        "Exception occurred while waiting for packet: %s", str(ex)
+                    )
                     break
             if not self._thread_running:  # Exit thread
                 break

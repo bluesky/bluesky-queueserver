@@ -3,13 +3,14 @@ import json
 
 
 class PlanQueueOperations:
-    def __init__(self):
+    def __init__(self, redis_host="localhost"):
+        self._redis_host = redis_host
         self._name_running_plan = "running_plan"
         self._name_plan_queue = "plan_queue"
         self._r_pool = None
 
     async def start(self):
-        self._r_pool = await aioredis.create_redis_pool("redis://localhost", encoding="utf8")
+        self._r_pool = await aioredis.create_redis_pool(f"redis://{self._redis_host}", encoding="utf8")
 
     async def delete_pool_entries(self):
         """

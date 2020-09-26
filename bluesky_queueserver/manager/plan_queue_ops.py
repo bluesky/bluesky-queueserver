@@ -31,7 +31,7 @@ class PlanQueueOperations:
     async def init_running_plan_info(self):
         """
         Initialize running plan info: create Redis entry that hold empty plan ({})
-        a record doesn't exist.
+        if a record doesn't exist.
         """
         # Create entry 'running_plan' in the pool if it does not exist yet
         if (not await self.exists_running_plan_info()) or (not await self.get_running_plan_info()):
@@ -39,7 +39,7 @@ class PlanQueueOperations:
 
     async def set_running_plan_info(self, plan):
         """
-        Write info on the currently running to Redis
+        Write info on the currently running plan to Redis
         """
         await self._r_pool.set(self._name_running_plan, json.dumps(plan))
 
@@ -65,7 +65,7 @@ class PlanQueueOperations:
     #                       Plan Queue
     async def get_plan_queue_size(self):
         """
-        Get number of plan in the queue.
+        Get the number of plans in the queue.
 
         Returns
         -------
@@ -108,7 +108,7 @@ class PlanQueueOperations:
         Returns
         -------
         dict or None
-            The first plan in the queue represented as a dictionary or None if the queue is empty.
+            The last plan in the queue represented as a dictionary or None if the queue is empty.
         """
         plan_json = await self._r_pool.rpop(self._name_plan_queue)
         plan = json.loads(plan_json) if plan_json is not None else None

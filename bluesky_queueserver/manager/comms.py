@@ -56,7 +56,7 @@ class CommJsonRpcError(RuntimeError):
         return msg
 
     def __repr__(self):
-        return f"CommJsonRpcError('{self.message}',{self.error_code},'{self.error_type}')"
+        return f"CommJsonRpcError('{self.message}', {self.error_code}, '{self.error_type}')"
 
 
 def format_jsonrpc_msg(method, params=None, *, notification=False):
@@ -169,7 +169,7 @@ class PipeJsonRpcReceive:
                     self._conn_received(msg)
                 except Exception as ex:
                     logger.exception(
-                        "Exception occurred while waiting for " "RE Manager-> Watchdog message: %s",
+                        "Exception occurred while waiting for RE Manager-> Watchdog message: %s",
                         str(ex),
                     )
                     break
@@ -370,7 +370,7 @@ class PipeJsonRpcSendAsync:
 
             except asyncio.TimeoutError:
                 raise CommTimeoutError(
-                    f"Timeout while waiting for response to message: \n" f"{pprint.pformat(msg)}"
+                    f"Timeout while waiting for response to message: \n{pprint.pformat(msg)}"
                 )
             finally:
                 self._fut_comm = None
@@ -386,7 +386,7 @@ class PipeJsonRpcSendAsync:
                 if response["id"] != self._expected_msg_id:
                     # Incorrect ID: ignore the message.
                     logger.error(
-                        "Response Watchdog->RE Manager contains incorrect ID: %s. Expected %s.\n" "Message: %s",
+                        "Response Watchdog->RE Manager contains incorrect ID: %s. Expected %s.\nMessage: %s",
                         response["id"],
                         self._expected_msg_id["id"],
                         pprint.pformat(response),

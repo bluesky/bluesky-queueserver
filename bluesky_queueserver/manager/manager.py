@@ -287,7 +287,7 @@ class RunEngineManager(Process):
                     # TODO: this error should probably be handled differently than this,
                     #   since it may indicate that the worker process is stalled.
                     logger.error(
-                        "Failed to properly join the worker process. " "The process may not be properly closed."
+                        "Failed to properly join the worker process. The process may not be properly closed."
                     )
             else:
                 success, err_msg = False, "RE Worker failed to exit (no confirmation)"
@@ -346,7 +346,7 @@ class RunEngineManager(Process):
 
             msg_display = result if result else err_msg
             logger.info(
-                "Report received from RE Worker:\n" "plan_state=%s\n" "success=%s\n%s\n)",
+                "Report received from RE Worker:\nplan_state=%s\nsuccess=%s\n%s\n)",
                 plan_state,
                 str(success),
                 str(msg_display),
@@ -751,7 +751,7 @@ class RunEngineManager(Process):
         else:
             success, msg = (
                 False,
-                f"Option '{option}' is not supported. " f"Available options: {available_options}",
+                f"Option '{option}' is not supported. Available options: {available_options}",
             )
         return {"success": success, "msg": msg}
 
@@ -773,7 +773,7 @@ class RunEngineManager(Process):
         else:
             success, msg = (
                 False,
-                f"Option '{option}' is not supported. " f"Available options: {available_options}",
+                f"Option '{option}' is not supported. Available options: {available_options}",
             )
         return {"success": success, "msg": msg}
 
@@ -878,7 +878,7 @@ class RunEngineManager(Process):
             self._allowed_plans, self._allowed_devices = load_list_of_plans_and_devices(path_pd)
         except Exception as ex:
             logger.exception(
-                "Error occurred while loading lists of allowed plans " "and devices from '%s': %s",
+                "Error occurred while loading lists of allowed plans and devices from '%s': %s",
                 path_pd,
                 str(ex),
             )

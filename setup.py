@@ -39,9 +39,9 @@ setup(
     cmdclass=versioneer.get_cmdclass(),
     description="Server for queueing plans",
     long_description=readme,
-    author="Brookhaven National Labratory",
+    author="Brookhaven National Laboratory",
     author_email="",
-    url="https://github.com/tacaswell/bluesky-queueserver",
+    url="https://github.com/bluesky/bluesky-queueserver",
     python_requires=">={}".format(".".join(str(n) for n in min_version)),
     packages=find_packages(exclude=["docs", "tests"]),
     entry_points={

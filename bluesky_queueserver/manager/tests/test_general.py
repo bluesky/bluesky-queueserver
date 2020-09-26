@@ -12,7 +12,7 @@ def re_manager():
     Start RE Manager as a subprocess. Tests will communicate with RE Manager via ZeroMQ.
     """
     p = subprocess.Popen(["start-re-manager"], universal_newlines=True,
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     yield  # Nothing to return
 
@@ -85,7 +85,7 @@ def test_qserver_cli_and_manager(re_manager):
     subprocess.call(["qserver", "-c", "clear_queue"])
 
     # Request the list of allowed plans and devices (we don't check what is returned)
-    subprocess.call(["qserver", "-c", "list_allowed_plans_and_devices"])
+    subprocess.call(["qserver", "-c", "list_allowed_plans_and_devices"], stdout=subprocess.DEVNULL)
 
     # Add a number of plans
     subprocess.call(["qserver", "-c", "add_to_queue", "-p",
@@ -158,6 +158,7 @@ def test_qserver_cli_and_manager(re_manager):
                      "{'name':'count', 'args':[['det1', 'det2']]}"])
     n_plans, is_plan_running = get_reduced_state_info()
     assert n_plans == 3, "Incorrect number of plans in the queue"
+
     subprocess.call(["qserver", "-c", "process_queue"])
     ttime.sleep(1)
     subprocess.call(["qserver", "-c", "kill_manager"])

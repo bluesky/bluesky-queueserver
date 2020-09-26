@@ -131,7 +131,7 @@ def test_load_list_of_plans_and_devices():
 
     allowed_plans, allowed_devices = load_list_of_plans_and_devices(file_path)
 
-    assert isinstance(allowed_plans, list), "Incorrect type of 'allowed_plans'"
+    assert isinstance(allowed_plans, dict), "Incorrect type of 'allowed_plans'"
     assert len(allowed_plans) > 0, "List of allowed plans was not loaded"
-    assert isinstance(allowed_devices, list), "Incorrect type of 'allowed_devices'"
+    assert isinstance(allowed_devices, dict), "Incorrect type of 'allowed_devices'"
     assert len(allowed_devices) > 0, "List of allowed devices was not loaded"

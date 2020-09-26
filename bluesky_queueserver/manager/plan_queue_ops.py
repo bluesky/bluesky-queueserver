@@ -53,7 +53,8 @@ class PlanQueueOperations:
             Dictionary representing currently running plan. Empty dictionary if
             no plan is currently running.
         """
-        return json.loads(await self._r_pool.get(self._name_running_plan))
+        plan = await self._r_pool.get(self._name_running_plan)
+        return json.loads(plan) if plan else {}
 
     async def clear_running_plan_info(self):
         """

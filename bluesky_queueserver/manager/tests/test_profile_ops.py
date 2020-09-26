@@ -21,9 +21,7 @@ def test_get_default_profile_collection_dir():
     Function `get_default_profile_collection_dir`
     """
     pc_path = get_default_profile_collection_dir()
-    assert os.path.exists(
-        pc_path
-    ), "Directory with default profile collection deos not exist."
+    assert os.path.exists(pc_path), "Directory with default profile collection deos not exist."
 
 
 def test_load_profile_collection_1():
@@ -71,16 +69,15 @@ def test_devices_from_nspace():
     nspace = load_profile_collection(pc_path)
     devices = devices_from_nspace(nspace)
     for name, device in devices.items():
-        assert isinstance(
-            device, ophyd.Device
-        ), f"The object '{device}' is not an Ophyd device"
+        assert isinstance(device, ophyd.Device), f"The object '{device}' is not an Ophyd device"
 
 
 @pytest.mark.parametrize(
     "plan, success, err_msg",
-    [({"name": "count", "args": [["det1", "det2"]]}, True, ""),
-     ({"name": "scan", "args": [["det1", "det2"], "motor", -1, 1, 10]}, True, ""),
-     (
+    [
+        ({"name": "count", "args": [["det1", "det2"]]}, True, ""),
+        ({"name": "scan", "args": [["det1", "det2"], "motor", -1, 1, 10]}, True, ""),
+        (
             {
                 "name": "count",
                 "args": [["det1", "det2"]],
@@ -133,14 +130,10 @@ def test_gen_list_of_plans_and_devices(tmp_path):
 
     fln_yaml = "list.yaml"
     gen_list_of_plans_and_devices(tmp_path, file_name=fln_yaml)
-    assert os.path.isfile(
-        os.path.join(tmp_path, fln_yaml)
-    ), "List of plans and devices was not created"
+    assert os.path.isfile(os.path.join(tmp_path, fln_yaml)), "List of plans and devices was not created"
 
     # Attempt to overwrite the file
-    with pytest.raises(
-        RuntimeError, match="already exists. File overwriting is disabled."
-    ):
+    with pytest.raises(RuntimeError, match="already exists. File overwriting is disabled."):
         gen_list_of_plans_and_devices(tmp_path, file_name=fln_yaml)
 
     # Allow file overwrite

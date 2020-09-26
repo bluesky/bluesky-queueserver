@@ -11,8 +11,9 @@ def re_manager():
     """
     Start RE Manager as a subprocess. Tests will communicate with RE Manager via ZeroMQ.
     """
-    p = subprocess.Popen(["start-re-manager"], universal_newlines=True,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    p = subprocess.Popen(
+        ["start-re-manager"], universal_newlines=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    )
 
     yield  # Nothing to return
 

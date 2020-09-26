@@ -12,10 +12,12 @@ exclude = '''
     | \.mypy_cache
     | \.tox
     | \.venv
+    | \.pytest_cache
     | _build
     | buck-out
     | build
     | dist
+    | docs
   )/
   | versioneer.py
 )

@@ -14,9 +14,7 @@ def get_default_profile_collection_dir():
     Returns the path to the default profile collection that is distributed with the package.
     The function does not guarantee that the directory exists.
     """
-    pc_path = pkg_resources.resource_filename(
-        "bluesky_queueserver", "profile_collection_sim/"
-    )
+    pc_path = pkg_resources.resource_filename("bluesky_queueserver", "profile_collection_sim/")
     return pc_path
 
 
@@ -44,9 +42,7 @@ def load_profile_collection(path):
     if not os.path.exists(path):
         raise IOError(f"Path '{path}' does not exist.")
     if not os.path.isdir(path):
-        raise IOError(
-            f"Failed to load the profile collection. Path '{path}' is not a directory."
-        )
+        raise IOError(f"Failed to load the profile collection. Path '{path}' is not a directory.")
 
     file_pattern = os.path.join(path, "[0-9][0-9]*.py")
     file_list = glob.glob(file_pattern)
@@ -183,9 +179,7 @@ def parse_plan(plan, *, allowed_plans, allowed_devices):
 #       and devices can be also typed manually, since it shouldn't be very large.
 
 
-def gen_list_of_plans_and_devices(
-    path=None, file_name="allowed_plans_and_devices.yaml", overwrite=False
-):
+def gen_list_of_plans_and_devices(path=None, file_name="allowed_plans_and_devices.yaml", overwrite=False):
     """
     Generate the list of plans and devices from profile collection.
     The list is saved to file `allowed_plans_and_devices.yaml`.
@@ -237,8 +231,7 @@ def gen_list_of_plans_and_devices(
         allowed_plans_and_devices = {
             "allowed_plans": {k: process_plan(v) for k, v in plans.items()},
             "allowed_devices": {
-                k: {"classname": type(v).__name__, "module": type(v).__module__}
-                for k, v in devices.items()
+                k: {"classname": type(v).__name__, "module": type(v).__module__} for k, v in devices.items()
             },
         }
 
@@ -277,8 +270,7 @@ def load_list_of_plans_and_devices(path_to_file=None):
 
     if not os.path.isfile(path_to_file):
         raise IOError(
-            f"Failed to load the list of allowed plans and devices: "
-            f"file '{path_to_file}' does not exist."
+            f"Failed to load the list of allowed plans and devices: " f"file '{path_to_file}' does not exist."
         )
 
     with open(path_to_file, "r") as stream:

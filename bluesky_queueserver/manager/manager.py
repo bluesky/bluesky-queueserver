@@ -66,9 +66,7 @@ class RunEngineManager(Process):
                 str(conn_watchdog),
             )
         if not conn_worker:
-            raise RuntimeError(
-                "Value of the parameter 'conn_worker' is invalid: %s.", str(conn_worker)
-            )
+            raise RuntimeError("Value of the parameter 'conn_worker' is invalid: %s.", str(conn_worker))
 
         super().__init__(*args, **kwargs)
 
@@ -76,9 +74,7 @@ class RunEngineManager(Process):
         self._worker_conn = conn_worker
 
         # The following attributes hold the state of the system
-        self._manager_stopping = (
-            False  # Set True to exit manager (by _stop_manager_handler)
-        )
+        self._manager_stopping = False  # Set True to exit manager (by _stop_manager_handler)
         self._environment_exists = False  # True if RE Worker environment exists
         self._manager_state = ManagerState()
         self._worker_state_info = None  # Copy of the last downloaded state of RE Worker
@@ -190,9 +186,7 @@ class RunEngineManager(Process):
         except Exception as ex:
             success = False
             err_msg = f"Unhandled exception: {str(ex)}"
-            logger.exception(
-                "Unhandled exception during background task execution: %s", str(ex)
-            )
+            logger.exception("Unhandled exception during background task execution: %s", str(ex))
 
         self._background_task_status["status"] = "success" if success else "failed"
         self._background_task_status["err_msg"] = err_msg
@@ -207,9 +201,7 @@ class RunEngineManager(Process):
             accepted = False
         else:
             accepted = True
-            asyncio.ensure_future(
-                self._execute_background_task(self._start_re_worker_task())
-            )
+            asyncio.ensure_future(self._execute_background_task(self._start_re_worker_task()))
         return accepted
 
     async def _start_re_worker_task(self):
@@ -246,9 +238,7 @@ class RunEngineManager(Process):
         """
         if self._environment_exists:
             accepted = True
-            asyncio.ensure_future(
-                self._execute_background_task(self._stop_re_worker_task())
-            )
+            asyncio.ensure_future(self._execute_background_task(self._stop_re_worker_task()))
         else:
             accepted = False
         return accepted
@@ -297,8 +287,7 @@ class RunEngineManager(Process):
                     # TODO: this error should probably be handled differently than this,
                     #   since it may indicate that the worker process is stalled.
                     logger.error(
-                        "Failed to properly join the worker process. "
-                        "The process may not be properly closed."
+                        "Failed to properly join the worker process. " "The process may not be properly closed."
                     )
             else:
                 success, err_msg = False, "RE Worker failed to exit (no confirmation)"
@@ -346,9 +335,7 @@ class RunEngineManager(Process):
         if plan_report is None:
             # TODO: this would typically mean a bug (communciation error). Probably more
             #       complicated processing is needed
-            logger.error(
-                f"Failed to download plan report: {err_msg}. Stopping queue processing."
-            )
+            logger.error(f"Failed to download plan report: {err_msg}. Stopping queue processing.")
             await push_plan_back_to_queue()
             self._manager_state.set_idle()
         else:
@@ -359,9 +346,7 @@ class RunEngineManager(Process):
 
             msg_display = result if result else err_msg
             logger.info(
-                "Report received from RE Worker:\n"
-                "plan_state=%s\n"
-                "success=%s\n%s\n)",
+                "Report received from RE Worker:\n" "plan_state=%s\n" "success=%s\n%s\n)",
                 plan_state,
                 str(success),
                 str(msg_display),
@@ -382,9 +367,7 @@ class RunEngineManager(Process):
                 # The plan was paused (nothing should be done).
                 self._manager_state.set_idle()
             else:
-                logger.error(
-                    "Unknown plan state %s was returned by RE Worker.", plan_state
-                )
+                logger.error("Unknown plan state %s was returned by RE Worker.", plan_state)
 
     async def _start_plan(self):
         """
@@ -397,9 +380,7 @@ class RunEngineManager(Process):
         elif not self._manager_state.is_idle:
             success, err_msg = False, "RE Manager is busy."
         else:
-            asyncio.ensure_future(
-                self._execute_background_task(self._start_plan_task())
-            )
+            asyncio.ensure_future(self._execute_background_task(self._start_plan_task()))
             success, err_msg = True, ""
         return success, err_msg
 
@@ -411,9 +392,7 @@ class RunEngineManager(Process):
         Names of plans and devices are strings.
         """
         n_pending_plans = await self._plan_queue.get_plan_queue_size()
-        logger.info(
-            "Starting a new plan: %d plans are left in the queue", n_pending_plans
-        )
+        logger.info("Starting a new plan: %d plans are left in the queue", n_pending_plans)
 
         new_plan = await self._plan_queue.pop_first_plan()
         if new_plan is not None:
@@ -543,9 +522,7 @@ class RunEngineManager(Process):
 
     async def _worker_command_run_plan(self, plan_info):
         try:
-            response = await self._comm_to_worker.send_msg(
-                "command_run_plan", {"plan_info": plan_info}
-            )
+            response = await self._comm_to_worker.send_msg("command_run_plan", {"plan_info": plan_info})
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
         except CommTimeoutError:
@@ -554,9 +531,7 @@ class RunEngineManager(Process):
 
     async def _worker_command_pause_plan(self, option):
         try:
-            response = await self._comm_to_worker.send_msg(
-                "command_pause_plan", {"option": option}
-            )
+            response = await self._comm_to_worker.send_msg("command_pause_plan", {"option": option})
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
         except CommTimeoutError:
@@ -565,9 +540,7 @@ class RunEngineManager(Process):
 
     async def _worker_command_continue_plan(self, option):
         try:
-            response = await self._comm_to_worker.send_msg(
-                "command_continue_plan", {"option": option}
-            )
+            response = await self._comm_to_worker.send_msg("command_continue_plan", {"option": option})
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
         except CommTimeoutError:
@@ -647,9 +620,7 @@ class RunEngineManager(Process):
         """
         Send (periodic) heartbeat signal to Watchdog.
         """
-        await self._comm_to_watchdog.send_msg(
-            "heartbeat", {"value": "alive"}, notification=True
-        )
+        await self._comm_to_watchdog.send_msg("heartbeat", {"value": "alive"}, notification=True)
 
     # =========================================================================
     #                        ZMQ message handlers
@@ -780,8 +751,7 @@ class RunEngineManager(Process):
         else:
             success, msg = (
                 False,
-                f"Option '{option}' is not supported. "
-                f"Available options: {available_options}",
+                f"Option '{option}' is not supported. " f"Available options: {available_options}",
             )
         return {"success": success, "msg": msg}
 
@@ -803,8 +773,7 @@ class RunEngineManager(Process):
         else:
             success, msg = (
                 False,
-                f"Option '{option}' is not supported. "
-                f"Available options: {available_options}",
+                f"Option '{option}' is not supported. " f"Available options: {available_options}",
             )
         return {"success": success, "msg": msg}
 
@@ -884,22 +853,14 @@ class RunEngineManager(Process):
 
         self._loop = asyncio.get_running_loop()
 
-        self._comm_to_watchdog = PipeJsonRpcSendAsync(
-            conn=self._watchdog_conn, name="RE Manager-Watchdog Comm"
-        )
-        self._comm_to_worker = PipeJsonRpcSendAsync(
-            conn=self._worker_conn, name="RE Manager-Worker Comm"
-        )
+        self._comm_to_watchdog = PipeJsonRpcSendAsync(conn=self._watchdog_conn, name="RE Manager-Watchdog Comm")
+        self._comm_to_worker = PipeJsonRpcSendAsync(conn=self._worker_conn, name="RE Manager-Worker Comm")
         self._comm_to_watchdog.start()
         self._comm_to_worker.start()
 
         # Start heartbeat generator
-        self._heartbeat_generator_task = asyncio.ensure_future(
-            self._heartbeat_generator(), loop=self._loop
-        )
-        self._worker_status_task = asyncio.ensure_future(
-            self._periodic_worker_state_request(), loop=self._loop
-        )
+        self._heartbeat_generator_task = asyncio.ensure_future(self._heartbeat_generator(), loop=self._loop)
+        self._worker_status_task = asyncio.ensure_future(self._periodic_worker_state_request(), loop=self._loop)
 
         self._plan_queue = PlanQueueOperations()
         await self._plan_queue.start()
@@ -914,13 +875,10 @@ class RunEngineManager(Process):
         logger.info("Loading the lists of allowed plans and devices ...")
         path_pd = self._config["allowed_plans_and_devices_path"]
         try:
-            self._allowed_plans, self._allowed_devices = load_list_of_plans_and_devices(
-                path_pd
-            )
+            self._allowed_plans, self._allowed_devices = load_list_of_plans_and_devices(path_pd)
         except Exception as ex:
             logger.exception(
-                "Error occurred while loading lists of allowed plans "
-                "and devices from '%s': %s",
+                "Error occurred while loading lists of allowed plans " "and devices from '%s': %s",
                 path_pd,
                 str(ex),
             )
@@ -1000,6 +958,4 @@ class RunEngineManager(Process):
         except KeyboardInterrupt:
             # TODO: RE Manager must be orderly closed before Watchdog module is stopped.
             #   Right now it is just killed by SIGINT.
-            logger.info(
-                "RE Manager Process was stopped by SIGINT. Handling of Ctrl-C has to be revised!!!"
-            )
+            logger.info("RE Manager Process was stopped by SIGINT. Handling of Ctrl-C has to be revised!!!")

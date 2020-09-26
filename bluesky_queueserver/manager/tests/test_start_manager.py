@@ -56,9 +56,7 @@ class ReManagerEmulation(threading.Thread):
         """
         self.exit(restart=True)
 
-    def send_msg_to_watchdog(
-        self, method, params=None, *, notification=False, timeout=0.5
-    ):
+    def send_msg_to_watchdog(self, method, params=None, *, notification=False, timeout=0.5):
         # The function may block all communication for the period of 'timeout', but
         #   this is acceptable for testing. Timeout would typically indicate an error.
         msg = format_jsonrpc_msg(method, params, notification=notification)
@@ -279,12 +277,8 @@ def test_WatchdogProcess_6():
     assert response["success"] is True, "Unexpected response from RE Manager"
 
     # Check if configuration was set correctly in RE Worker and RE manager
-    assert (
-        wp._re_worker._config == config_worker
-    ), "Worker configuration was not passed correctly"
-    assert (
-        wp._re_manager._config == config_manager
-    ), "Manager configuration was not passed correctly"
+    assert wp._re_worker._config == config_worker, "Worker configuration was not passed correctly"
+    assert wp._re_manager._config == config_manager, "Manager configuration was not passed correctly"
 
     # Exit the process (thread).
     wp._re_worker.exit()

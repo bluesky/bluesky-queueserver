@@ -52,16 +52,11 @@ class CommJsonRpcError(RuntimeError):
         return super().__str__()
 
     def __str__(self):
-        msg = (
-            super().__str__()
-            + f"\nError code: {self.error_code}. Error type: {self.error_type}"
-        )
+        msg = super().__str__() + f"\nError code: {self.error_code}. Error type: {self.error_type}"
         return msg
 
     def __repr__(self):
-        return (
-            f"CommJsonRpcError('{self.message}',{self.error_code},'{self.error_type}')"
-        )
+        return f"CommJsonRpcError('{self.message}',{self.error_code},'{self.error_type}')"
 
 
 def format_jsonrpc_msg(method, params=None, *, notification=False):
@@ -174,8 +169,7 @@ class PipeJsonRpcReceive:
                     self._conn_received(msg)
                 except Exception as ex:
                     logger.exception(
-                        "Exception occurred while waiting for "
-                        "RE Manager-> Watchdog message: %s",
+                        "Exception occurred while waiting for " "RE Manager-> Watchdog message: %s",
                         str(ex),
                     )
                     break
@@ -363,9 +357,7 @@ class PipeJsonRpcSendAsync:
                             # Other json-rpc errors
                             err_type = "CommJsonRpcError"
                             err_msg = response["error"]["message"]
-                        raise CommJsonRpcError(
-                            err_msg, error_code=err_code, error_type=err_type
-                        )
+                        raise CommJsonRpcError(err_msg, error_code=err_code, error_type=err_type)
                     else:
                         err_msg = (
                             f"Message {pprint.pformat(msg)}\n"
@@ -378,8 +370,7 @@ class PipeJsonRpcSendAsync:
 
             except asyncio.TimeoutError:
                 raise CommTimeoutError(
-                    f"Timeout while waiting for response to message: \n"
-                    f"{pprint.pformat(msg)}"
+                    f"Timeout while waiting for response to message: \n" f"{pprint.pformat(msg)}"
                 )
             finally:
                 self._fut_comm = None
@@ -395,8 +386,7 @@ class PipeJsonRpcSendAsync:
                 if response["id"] != self._expected_msg_id:
                     # Incorrect ID: ignore the message.
                     logger.error(
-                        "Response Watchdog->RE Manager contains incorrect ID: %s. Expected %s.\n"
-                        "Message: %s",
+                        "Response Watchdog->RE Manager contains incorrect ID: %s. Expected %s.\n" "Message: %s",
                         response["id"],
                         self._expected_msg_id["id"],
                         pprint.pformat(response),
@@ -429,9 +419,7 @@ class PipeJsonRpcSendAsync:
                     # Messages should be handled in the event loop
                     self._loop.call_soon_threadsafe(self._conn_received, msg)
                 except Exception as ex:
-                    logger.exception(
-                        "Exception occurred while waiting for packet: %s", str(ex)
-                    )
+                    logger.exception("Exception occurred while waiting for packet: %s", str(ex))
                     break
             if not self._thread_running:  # Exit thread
                 break

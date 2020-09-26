@@ -78,9 +78,7 @@ class RunEngineWorker(Process):
         self._re_report_lock = None  # threading.Lock
 
         # Class that supports communication over the pipe
-        self._comm_to_manager = PipeJsonRpcReceive(
-            conn=self._conn, name="RE Watchdog-Manager Comm"
-        )
+        self._comm_to_manager = PipeJsonRpcReceive(conn=self._conn, name="RE Watchdog-Manager Comm")
 
         self._db = DB[0]
         self._config = config or {}
@@ -191,8 +189,7 @@ class RunEngineWorker(Process):
                         )
                     elif self._RE._state != "idle":
                         raise RuntimeError(
-                            f"Run Engine is in '{self._RE._state}' state. "
-                            "Stop or finish any running plan."
+                            f"Run Engine is in '{self._RE._state}' state. " "Stop or finish any running plan."
                         )
                     else:
                         result = self._RE(plan_func(*plan_args, **plan_kwargs))
@@ -239,13 +236,11 @@ class RunEngineWorker(Process):
                     )
                 elif self._RE._state != "paused":
                     raise RuntimeError(
-                        f"Run Engine is in '{self._RE._state}' state. "
-                        f"Only 'paused' plan can be continued."
+                        f"Run Engine is in '{self._RE._state}' state. " f"Only 'paused' plan can be continued."
                     )
                 elif option not in available_options:
                     raise RuntimeError(
-                        f"Option '{option}' is not supported. "
-                        f"Supported options: {available_options}"
+                        f"Option '{option}' is not supported. " f"Supported options: {available_options}"
                     )
                 else:
                     result = getattr(self._RE, option)()
@@ -264,11 +259,7 @@ class RunEngineWorker(Process):
         """
         Returns the state information of RE Worker environment.
         """
-        plan_uid = (
-            self._state["running_plan"]["plan_uid"]
-            if self._state["running_plan"]
-            else None
-        )
+        plan_uid = self._state["running_plan"]["plan_uid"] if self._state["running_plan"] else None
         plan_completed = self._state["running_plan_completed"]
         re_state = str(self._RE._state) if self._RE else "null"
         env_state = self._state["environment_state"]
@@ -315,8 +306,7 @@ class RunEngineWorker(Process):
         else:
             status = "rejected"
             err_msg = (
-                "Can not close the environment with running Run Engine. "
-                "Stop the running plan and try again."
+                "Can not close the environment with running Run Engine. " "Stop the running plan and try again."
             )
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
@@ -400,8 +390,7 @@ class RunEngineWorker(Process):
             try:
                 if option not in pausing_options:
                     raise RuntimeError(
-                        f"Option '{option}' is not supported. "
-                        f"Available options: {pausing_options}"
+                        f"Option '{option}' is not supported. " f"Available options: {pausing_options}"
                     )
 
                 defer = {"deferred": True, "immediate": False}[option]
@@ -412,10 +401,7 @@ class RunEngineWorker(Process):
                 err_msg = str(ex)
         else:
             status = "rejected"
-            err_msg = (
-                "Run engine can be paused only in 'running' state. "
-                f"Current state: '{self._RE._state}'"
-            )
+            err_msg = "Run engine can be paused only in 'running' state. " f"Current state: '{self._RE._state}'"
 
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
@@ -436,10 +422,7 @@ class RunEngineWorker(Process):
                 err_msg = str(ex)
         else:
             status = "rejected"
-            err_msg = (
-                "Run Engine must be in 'paused' state to continue. "
-                f"The state is '{self._RE._state}'"
-            )
+            err_msg = "Run Engine must be in 'paused' state to continue. " f"The state is '{self._RE._state}'"
 
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
@@ -457,10 +440,7 @@ class RunEngineWorker(Process):
             status = "accepted"
         else:
             status = "rejected"
-            err_msg = (
-                "Run Engine must be in 'idle' state to continue. "
-                f"The state is '{self._RE._state}'"
-            )
+            err_msg = "Run Engine must be in 'idle' state to continue. " f"The state is '{self._RE._state}'"
 
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
@@ -494,27 +474,13 @@ class RunEngineWorker(Process):
         by the `start` method.
         """
         self._comm_to_manager.add_method(self._request_state_handler, "request_state")
-        self._comm_to_manager.add_method(
-            self._request_plan_report_handler, "request_plan_report"
-        )
-        self._comm_to_manager.add_method(
-            self._command_close_env_handler, "command_close_env"
-        )
-        self._comm_to_manager.add_method(
-            self._command_confirm_exit_handler, "command_confirm_exit"
-        )
-        self._comm_to_manager.add_method(
-            self._command_run_plan_handler, "command_run_plan"
-        )
-        self._comm_to_manager.add_method(
-            self._command_pause_plan_handler, "command_pause_plan"
-        )
-        self._comm_to_manager.add_method(
-            self._command_continue_plan_handler, "command_continue_plan"
-        )
-        self._comm_to_manager.add_method(
-            self._command_reset_worker_handler, "command_reset_worker"
-        )
+        self._comm_to_manager.add_method(self._request_plan_report_handler, "request_plan_report")
+        self._comm_to_manager.add_method(self._command_close_env_handler, "command_close_env")
+        self._comm_to_manager.add_method(self._command_confirm_exit_handler, "command_confirm_exit")
+        self._comm_to_manager.add_method(self._command_run_plan_handler, "command_run_plan")
+        self._comm_to_manager.add_method(self._command_pause_plan_handler, "command_pause_plan")
+        self._comm_to_manager.add_method(self._command_continue_plan_handler, "command_continue_plan")
+        self._comm_to_manager.add_method(self._command_reset_worker_handler, "command_reset_worker")
         self._comm_to_manager.start()
 
         self._exit_event = threading.Event()
@@ -536,8 +502,7 @@ class RunEngineWorker(Process):
 
         if "profile_collection_path" not in self._config:
             logger.warning(
-                "Path to profile collection was not specified. "
-                "No profile collection will be loaded."
+                "Path to profile collection was not specified. " "No profile collection will be loaded."
             )
             init_namespace()
         else:
@@ -556,13 +521,10 @@ class RunEngineWorker(Process):
         logger.info("Loading the lists of allowed plans and devices ...")
         path_pd = self._config["allowed_plans_and_devices_path"]
         try:
-            self._allowed_plans, self._allowed_devices = load_list_of_plans_and_devices(
-                path_pd
-            )
+            self._allowed_plans, self._allowed_devices = load_list_of_plans_and_devices(path_pd)
         except Exception as ex:
             logger.exception(
-                "Error occurred while loading lists of allowed plans "
-                "and devices from '%s': %s",
+                "Error occurred while loading lists of allowed plans " "and devices from '%s': %s",
                 path_pd,
                 str(ex),
             )

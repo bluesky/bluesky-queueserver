@@ -91,9 +91,7 @@ def test_PipeJsonRpcReceive_1():
     pc.start()  # Expected to do nothing
 
     pc.stop()
-    ttime.sleep(
-        0.15
-    )  # Wait until the thread stops (wait more than the 0.1s polling period)
+    ttime.sleep(0.15)  # Wait until the thread stops (wait more than the 0.1s polling period)
     assert count_threads_with_name(new_name) == 0, "No threads are expected to exist"
 
     pc.start()  # Restart
@@ -147,9 +145,7 @@ def test_PipeJsonRpcReceive_2(method, params, result, notification):
 
     conn1, conn2 = multiprocessing.Pipe()
     pc = PipeJsonRpcReceive(conn=conn2)
-    pc.add_method(
-        method_handler1
-    )  # No name is specified, default name is "method_handler1"
+    pc.add_method(method_handler1)  # No name is specified, default name is "method_handler1"
     pc.add_method(method_handler1, "method1")
     pc.add_method(method_handler2, "method2")
     pc.add_method(method_handler3, "method3")
@@ -165,18 +161,10 @@ def test_PipeJsonRpcReceive_2(method, params, result, notification):
             if not notification:
                 response = conn1.recv()
                 response = json.loads(response)
-                assert (
-                    response["id"] == request["id"]
-                ), "Response ID does not match message ID."
-                assert (
-                    "result" in response
-                ), f"Key 'result' is not contained in response: {response}"
-                assert (
-                    response["result"] == result
-                ), f"Result does not match the expected: {response}"
-                assert (
-                    value_nonlocal == "function_was_called"
-                ), "Non-local variable has incorrect value"
+                assert response["id"] == request["id"], "Response ID does not match message ID."
+                assert "result" in response, f"Key 'result' is not contained in response: {response}"
+                assert response["result"] == result, f"Result does not match the expected: {response}"
+                assert value_nonlocal == "function_was_called", "Non-local variable has incorrect value"
             else:
                 assert False, "Notification was sent but response was received."
         else:
@@ -184,9 +172,7 @@ def test_PipeJsonRpcReceive_2(method, params, result, notification):
             if not notification:
                 assert False, "Timeout occurred while waiting for response."
             else:
-                assert (
-                    value_nonlocal == "function_was_called"
-                ), "Non-local variable has incorrect value"
+                assert value_nonlocal == "function_was_called", "Non-local variable has incorrect value"
 
     pc.stop()
 
@@ -223,12 +209,8 @@ def test_PipeJsonRpcReceive_3():
         response = conn1.recv()
         response = json.loads(response)
         assert len(response) == 2, "Unexpected number of response messages"
-        assert (
-            response[0]["id"] == request[0]["id"]
-        ), "Response ID does not match message ID."
-        assert (
-            response[1]["id"] == request[2]["id"]
-        ), "Response ID does not match message ID."
+        assert response[0]["id"] == request[0]["id"], "Response ID does not match message ID."
+        assert response[1]["id"] == request[2]["id"], "Response ID does not match message ID."
         assert response[0]["result"] == 22, "Response ID does not match message ID."
         assert response[1]["result"] == 16, "Response ID does not match message ID."
     else:
@@ -258,9 +240,7 @@ def test_PipeJsonRpcReceive_4_failing():
     if conn1.poll(timeout=0.5):  # Set timeout large enough
         response = conn1.recv()
         response = json.loads(response)
-        assert (
-            response["error"]["code"] == -32000
-        ), f"Incorrect error reported: {response}"
+        assert response["error"]["code"] == -32000, f"Incorrect error reported: {response}"
         assert response["error"]["data"]["type"] == "TypeError", "Incorrect error type."
     else:
         assert False, "Timeout occurred while waiting for response."
@@ -274,9 +254,7 @@ def test_PipeJsonRpcReceive_4_failing():
     if conn1.poll(timeout=0.5):
         response = conn1.recv()
         response = json.loads(response)
-        assert (
-            response["error"]["code"] == -32000
-        ), f"Incorrect error reported: {response}"
+        assert response["error"]["code"] == -32000, f"Incorrect error reported: {response}"
         assert response["error"]["data"]["type"] == "TypeError", "Incorrect error type."
     else:
         assert False, "Timeout occurred while waiting for response."
@@ -288,9 +266,7 @@ def test_PipeJsonRpcReceive_4_failing():
     if conn1.poll(timeout=0.5):
         response = conn1.recv()
         response = json.loads(response)
-        assert (
-            response["error"]["code"] == -32602
-        ), f"Incorrect error reported: {response}"
+        assert response["error"]["code"] == -32602, f"Incorrect error reported: {response}"
     else:
         assert False, "Timeout occurred while waiting for response."
 
@@ -301,9 +277,7 @@ def test_PipeJsonRpcReceive_4_failing():
     if conn1.poll(timeout=0.5):
         response = conn1.recv()
         response = json.loads(response)
-        assert (
-            response["error"]["code"] == -32601
-        ), f"Incorrect error reported: {response}"
+        assert response["error"]["code"] == -32601, f"Incorrect error reported: {response}"
     else:
         assert False, "Timeout occurred while waiting for response."
 
@@ -335,15 +309,9 @@ def test_PipeJsonRpcReceive_5_failing():
     if conn1.poll(timeout=0.5):  # Set timeout large enough
         response = conn1.recv()
         response = json.loads(response)
-        assert (
-            response["error"]["code"] == -32000
-        ), f"Incorrect error reported: {response}"
-        assert (
-            response["error"]["data"]["type"] == "RuntimeError"
-        ), "Incorrect error type."
-        assert (
-            response["error"]["data"]["message"] == "Function crashed ..."
-        ), "Incorrect message."
+        assert response["error"]["code"] == -32000, f"Incorrect error reported: {response}"
+        assert response["error"]["data"]["type"] == "RuntimeError", "Incorrect error type."
+        assert response["error"]["data"]["message"] == "Function crashed ...", "Incorrect message."
     else:
         assert False, "Timeout occurred while waiting for response."
 
@@ -392,9 +360,7 @@ def test_PipeJsonRpcSendAsync_1():
     new_name = "Unusual Thread Name"
 
     async def object_start_stop():
-        assert (
-            count_threads_with_name(new_name) == 0
-        ), "No threads are expected to exist"
+        assert count_threads_with_name(new_name) == 0, "No threads are expected to exist"
 
         pc = PipeJsonRpcSendAsync(conn=conn1, name=new_name)
         pc.start()
@@ -404,9 +370,7 @@ def test_PipeJsonRpcSendAsync_1():
 
         pc.stop()
         ttime.sleep(0.15)  # Wait until the thread stops (0.1s polling period)
-        assert (
-            count_threads_with_name(new_name) == 0
-        ), "No threads are expected to exist"
+        assert count_threads_with_name(new_name) == 0, "No threads are expected to exist"
 
         pc.start()  # Restart
         assert count_threads_with_name(new_name) == 1, "One thread is expected to exist"
@@ -461,9 +425,7 @@ def test_PipeJsonRpcSendAsync_2(method, params, result, notification):
 
     conn1, conn2 = multiprocessing.Pipe()
     pc = PipeJsonRpcReceive(conn=conn2, name="comm-server")
-    pc.add_method(
-        method_handler1
-    )  # No name is specified, default name is "method_handler1"
+    pc.add_method(method_handler1)  # No name is specified, default name is "method_handler1"
     pc.add_method(method_handler1, "method1")
     pc.add_method(method_handler2, "method2")
     pc.add_method(method_handler3, "method3")
@@ -481,12 +443,8 @@ def test_PipeJsonRpcSendAsync_2(method, params, result, notification):
 
             response = await p_send.send_msg(method, params, notification=notification)
             if not notification:
-                assert (
-                    response == result
-                ), f"Result does not match the expected: {response}"
-                assert (
-                    value_nonlocal == "function_was_called"
-                ), "Non-local variable has incorrect value"
+                assert response == result, f"Result does not match the expected: {response}"
+                assert value_nonlocal == "function_was_called", "Non-local variable has incorrect value"
             elif response is not None:
                 assert False, "Response was received for notification."
 
@@ -556,9 +514,7 @@ def test_PipeJsonRpcSendAsync_4():
 
         # Submit multiple messages at once. Messages should stay at the event loop
         #   and be processed one by one.
-        with pytest.raises(
-            CommTimeoutError, match="Timeout while waiting for response to message"
-        ):
+        with pytest.raises(CommTimeoutError, match="Timeout while waiting for response to message"):
             await p_send.send_msg("method1", timeout=0.5)
 
         p_send.stop()

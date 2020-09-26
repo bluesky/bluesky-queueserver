@@ -9,9 +9,7 @@ class PlanQueueOperations:
         self._r_pool = None
 
     async def start(self):
-        self._r_pool = await aioredis.create_redis_pool(
-            "redis://localhost", encoding="utf8"
-        )
+        self._r_pool = await aioredis.create_redis_pool("redis://localhost", encoding="utf8")
 
     async def delete_pool_entries(self):
         """
@@ -35,9 +33,7 @@ class PlanQueueOperations:
         a record doesn't exist.
         """
         # Create entry 'running_plan' in the pool if it does not exist yet
-        if (not await self.exists_running_plan_info()) or (
-            not await self.get_running_plan_info()
-        ):
+        if (not await self.exists_running_plan_info()) or (not await self.get_running_plan_info()):
             await self.clear_running_plan_info()
 
     async def set_running_plan_info(self, plan):

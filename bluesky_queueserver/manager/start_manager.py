@@ -144,18 +144,12 @@ class WatchdogProcess:
     def run(self):
 
         # Requests
-        self._comm_to_manager.add_method(
-            self._start_re_worker_handler, "start_re_worker"
-        )
+        self._comm_to_manager.add_method(self._start_re_worker_handler, "start_re_worker")
         self._comm_to_manager.add_method(self._join_re_worker_handler, "join_re_worker")
         self._comm_to_manager.add_method(self._kill_re_worker_handler, "kill_re_worker")
-        self._comm_to_manager.add_method(
-            self._is_worker_alive_handler, "is_worker_alive"
-        )
+        self._comm_to_manager.add_method(self._is_worker_alive_handler, "is_worker_alive")
         # Notifications
-        self._comm_to_manager.add_method(
-            self._manager_stopping_handler, "manager_stopping"
-        )
+        self._comm_to_manager.add_method(self._manager_stopping_handler, "manager_stopping")
         self._comm_to_manager.add_method(self._register_heartbeat_handler, "heartbeat")
 
         self._comm_to_manager.start()
@@ -175,14 +169,8 @@ class WatchdogProcess:
             # It may be a better idea to implement a ticker in a separate thread to act as
             #   a clock to be completely independent from system clock.
             t_min, t_max = self._heartbeat_timeout, self._heartbeat_timeout + 10.0
-            if (
-                (time_passed >= t_min)
-                and (time_passed <= t_max)
-                and not self._manager_is_stopping
-            ):
-                logger.error(
-                    "Timeout detected by Watchdog. RE Manager malfunctioned and must be restarted."
-                )
+            if (time_passed >= t_min) and (time_passed <= t_max) and not self._manager_is_stopping:
+                logger.error("Timeout detected by Watchdog. RE Manager malfunctioned and must be restarted.")
                 self._re_manager.kill()
                 self._start_re_manager()
 

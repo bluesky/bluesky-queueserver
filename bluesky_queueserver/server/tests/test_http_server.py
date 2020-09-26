@@ -40,9 +40,7 @@ def test_http_server_list_allowed_plans_and_devices(re_manager, fastapi_server):
 
 def test_http_server_add_to_queue_handler(re_manager, fastapi_server):  # noqa F811
     resp1 = _request_to_json(
-        "post",
-        "/add_to_queue",
-        json={"plan": {"name": "count", "args": [["det1", "det2"]]}},
+        "post", "/add_to_queue", json={"plan": {"name": "count", "args": [["det1", "det2"]]}},
     )
     assert resp1["name"] == "count"
     assert resp1["args"] == [["det1", "det2"]]
@@ -120,13 +118,7 @@ def test_http_server_re_pause_continue_handlers(re_manager, fastapi_server):  # 
     resp2 = _request_to_json(
         "post",
         "/add_to_queue",
-        json={
-            "plan": {
-                "name": "count",
-                "args": [["det1", "det2"]],
-                "kwargs": {"num": 10, "delay": 1},
-            }
-        },
+        json={"plan": {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}},
     )
     assert resp2["name"] == "count"
     assert resp2["args"] == [["det1", "det2"]]

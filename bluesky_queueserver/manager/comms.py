@@ -110,10 +110,7 @@ class PipeJsonRpcReceive:
     """
 
     def __init__(
-        self,
-        conn,
-        *,
-        name="RE QServer Comm",
+        self, conn, *, name="RE QServer Comm",
     ):
         self._conn = conn
         self._dispatcher = Dispatcher()  # json-rpc dispatcher
@@ -169,8 +166,7 @@ class PipeJsonRpcReceive:
                     self._conn_received(msg)
                 except Exception as ex:
                     logger.exception(
-                        "Exception occurred while waiting for RE Manager-> Watchdog message: %s",
-                        str(ex),
+                        "Exception occurred while waiting for RE Manager-> Watchdog message: %s", str(ex),
                     )
                     break
             if not self._thread_running:  # Exit thread
@@ -369,9 +365,7 @@ class PipeJsonRpcSendAsync:
                 return response
 
             except asyncio.TimeoutError:
-                raise CommTimeoutError(
-                    f"Timeout while waiting for response to message: \n{pprint.pformat(msg)}"
-                )
+                raise CommTimeoutError(f"Timeout while waiting for response to message: \n{pprint.pformat(msg)}")
             finally:
                 self._fut_comm = None
                 self._expected_msg_id = None
@@ -397,8 +391,7 @@ class PipeJsonRpcSendAsync:
             else:
                 # Missing ID: ignore the message
                 logger.error(
-                    "Response Watchdog->RE Manager contains no id: %s",
-                    pprint.pformat(response),
+                    "Response Watchdog->RE Manager contains no id: %s", pprint.pformat(response),
                 )
         else:
             logger.error(

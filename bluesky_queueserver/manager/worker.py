@@ -171,9 +171,7 @@ class RunEngineWorker(Process):
 
         try:
             plan_parsed = parse_plan(
-                plan_info,
-                allowed_plans=self._existing_plans,
-                allowed_devices=self._existing_devices,
+                plan_info, allowed_plans=self._existing_plans, allowed_devices=self._existing_devices,
             )
 
             plan_func = plan_parsed["name"]
@@ -305,9 +303,7 @@ class RunEngineWorker(Process):
                 err_msg = str(ex)
         else:
             status = "rejected"
-            err_msg = (
-                "Can not close the environment with running Run Engine. Stop the running plan and try again."
-            )
+            err_msg = "Can not close the environment with running Run Engine. Stop the running plan and try again."
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
 
@@ -389,9 +385,7 @@ class RunEngineWorker(Process):
         if self._RE._state == "running":
             try:
                 if option not in pausing_options:
-                    raise RuntimeError(
-                        f"Option '{option}' is not supported. Available options: {pausing_options}"
-                    )
+                    raise RuntimeError(f"Option '{option}' is not supported. Available options: {pausing_options}")
 
                 defer = {"deferred": True, "immediate": False}[option]
                 self._RE.request_pause(defer=defer)
@@ -501,9 +495,7 @@ class RunEngineWorker(Process):
             )
 
         if "profile_collection_path" not in self._config:
-            logger.warning(
-                "Path to profile collection was not specified. No profile collection will be loaded."
-            )
+            logger.warning("Path to profile collection was not specified. No profile collection will be loaded.")
             init_namespace()
         else:
             path = self._config["profile_collection_path"]
@@ -524,9 +516,7 @@ class RunEngineWorker(Process):
             self._allowed_plans, self._allowed_devices = load_list_of_plans_and_devices(path_pd)
         except Exception as ex:
             logger.exception(
-                "Error occurred while loading lists of allowed plans and devices from '%s': %s",
-                path_pd,
-                str(ex),
+                "Error occurred while loading lists of allowed plans and devices from '%s': %s", path_pd, str(ex),
             )
 
         self._RE = RunEngine({})
@@ -540,11 +530,7 @@ class RunEngineWorker(Process):
                 bootstrap_servers=self._config["kafka"]["bootstrap"],
                 key="kafka-unit-test-key",
                 # work with a single broker
-                producer_config={
-                    "acks": 1,
-                    "enable.idempotence": False,
-                    "request.timeout.ms": 5000,
-                },
+                producer_config={"acks": 1, "enable.idempotence": False, "request.timeout.ms": 5000},
                 serializer=partial(msgpack.dumps, default=mpn.encode),
             )
             self._RE.subscribe(kafka_publisher)

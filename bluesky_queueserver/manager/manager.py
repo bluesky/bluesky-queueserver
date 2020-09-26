@@ -62,8 +62,7 @@ class RunEngineManager(Process):
 
         if not conn_watchdog:
             raise RuntimeError(
-                "Value of the parameter 'conn_watchdog' is invalid: %s.",
-                str(conn_watchdog),
+                "Value of the parameter 'conn_watchdog' is invalid: %s.", str(conn_watchdog),
             )
         if not conn_worker:
             raise RuntimeError("Value of the parameter 'conn_worker' is invalid: %s.", str(conn_worker))
@@ -424,9 +423,7 @@ class RunEngineManager(Process):
             if not success:
                 self._manager_state.set_idle()
                 logger.error(
-                    "Failed to start the plan %s.\nError: %s",
-                    pprint.pformat(plan_info),
-                    err_msg,
+                    "Failed to start the plan %s.\nError: %s", pprint.pformat(plan_info), err_msg,
                 )
                 err_msg = f"Failed to start the plan: {err_msg}"
         else:
@@ -878,9 +875,7 @@ class RunEngineManager(Process):
             self._allowed_plans, self._allowed_devices = load_list_of_plans_and_devices(path_pd)
         except Exception as ex:
             logger.exception(
-                "Error occurred while loading lists of allowed plans and devices from '%s': %s",
-                path_pd,
-                str(ex),
+                "Error occurred while loading lists of allowed plans and devices from '%s': %s", path_pd, str(ex),
             )
 
         # Set the environment state based on whether the worker process is alive (request Watchdog)

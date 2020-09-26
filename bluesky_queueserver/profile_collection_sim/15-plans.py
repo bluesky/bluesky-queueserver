@@ -33,9 +33,6 @@ from bluesky.plans import (
 
 
 def marked_up_count(
-    detectors: List,
-    num: int = 1,
-    delay: Optional[float] = None,
-    md: Optional[Dict[str, Any]] = None,
+    detectors: List, num: int = 1, delay: Optional[float] = None, md: Optional[Dict[str, Any]] = None,
 ):
     return (yield from count(detectors, num=num, delay=delay, md=md))

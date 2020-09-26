@@ -22,7 +22,7 @@ http POST http://localhost:8080/add_to_queue plan:='{"name":"scan", "args":[["de
 
 
 class ZMQ_Comm:
-    def __init__(self, zmq_host='localhost', zmq_port='5555'):
+    def __init__(self, zmq_host="localhost", zmq_port="5555"):
         self._loop = asyncio.get_event_loop()
 
         # ZeroMQ communication
@@ -32,7 +32,9 @@ class ZMQ_Comm:
 
         # Start communication task
         self._event_zmq_stop = None
-        self._task_zmq_client_conn = asyncio.ensure_future(self._zmq_start_client_conn())
+        self._task_zmq_client_conn = asyncio.ensure_future(
+            self._zmq_start_client_conn()
+        )
 
     def __del__(self):
         # Cancel the communication task
@@ -90,7 +92,7 @@ class ZMQ_Comm:
 
 
 logging.basicConfig(level=logging.WARNING)
-logging.getLogger('bluesky_queueserver').setLevel("DEBUG")
+logging.getLogger("bluesky_queueserver").setLevel("DEBUG")
 
 # Use FastAPI
 app = FastAPI()
@@ -98,18 +100,18 @@ re_server = ZMQ_Comm()
 
 
 class REPauseOptions(str, Enum):
-    deferred = 'deferred'
-    immediate = 'immediate'
+    deferred = "deferred"
+    immediate = "immediate"
 
 
 class REResumeOptions(str, Enum):
-    resume = 'resume'
-    abort = 'abort'
-    stop = 'stop'
-    halt = 'halt'
+    resume = "resume"
+    abort = "abort"
+    stop = "stop"
+    halt = "halt"
 
 
-@app.get('/')
+@app.get("/")
 async def _hello_handler():
     """
     May be called to get response from the server. Returns the number of plans in the queue.
@@ -118,7 +120,7 @@ async def _hello_handler():
     return msg
 
 
-@app.get('/queue_view')
+@app.get("/queue_view")
 async def _queue_view_handler():
     """
     Returns the contents of the current queue.
@@ -127,7 +129,7 @@ async def _queue_view_handler():
     return msg
 
 
-@app.get('/list_allowed_plans_and_devices')
+@app.get("/list_allowed_plans_and_devices")
 async def _list_allowed_plans_and_devices_handler():
     """
     Returns the lists of allowed plans and devices.
@@ -136,7 +138,7 @@ async def _list_allowed_plans_and_devices_handler():
     return msg
 
 
-@app.post('/add_to_queue')
+@app.post("/add_to_queue")
 async def _add_to_queue_handler(payload: dict):
     """
     Adds new plan to the end of the queue
@@ -146,7 +148,7 @@ async def _add_to_queue_handler(payload: dict):
     return msg
 
 
-@app.post('/pop_from_queue')
+@app.post("/pop_from_queue")
 async def _pop_from_queue_handler():
     """
     Pop the last item from back of the queue
@@ -155,7 +157,7 @@ async def _pop_from_queue_handler():
     return msg
 
 
-@app.post('/create_environment')
+@app.post("/create_environment")
 async def _create_environment_handler():
     """
     Creates RE environment: creates RE Worker process, starts and configures Run Engine.
@@ -164,7 +166,7 @@ async def _create_environment_handler():
     return msg
 
 
-@app.post('/close_environment')
+@app.post("/close_environment")
 async def _close_environment_handler():
     """
     Deletes RE environment. In the current 'demo' prototype the environment will be deleted
@@ -174,7 +176,7 @@ async def _close_environment_handler():
     return msg
 
 
-@app.post('/process_queue')
+@app.post("/process_queue")
 async def _process_queue_handler():
     """
     Start execution of the loaded queue. Additional runs can be added to the queue while
@@ -184,33 +186,37 @@ async def _process_queue_handler():
     return msg
 
 
-@app.post('/re_pause')
+@app.post("/re_pause")
 async def _re_pause_handler(payload: dict):
     """
     Pause Run Engine
     """
-    if not hasattr(REPauseOptions, payload['option']):
-        msg = (f'The specified option "{payload["option"]}" is not allowed.\n'
-               f'Allowed options: {list(REPauseOptions.__members__.keys())}')
+    if not hasattr(REPauseOptions, payload["option"]):
+        msg = (
+            f'The specified option "{payload["option"]}" is not allowed.\n'
+            f"Allowed options: {list(REPauseOptions.__members__.keys())}"
+        )
         raise HTTPException(status_code=444, detail=msg)
     msg = await re_server._send_command(command="re_pause", params=payload)
     return msg
 
 
-@app.post('/re_continue')
+@app.post("/re_continue")
 async def _re_continue_handler(payload: dict):
     """
     Control Run Engine in the paused state
     """
-    if not hasattr(REResumeOptions, payload['option']):
-        msg = (f'The specified option "{payload["option"]}" is not allowed.\n'
-               f'Allowed options: {list(REResumeOptions.__members__.keys())}')
+    if not hasattr(REResumeOptions, payload["option"]):
+        msg = (
+            f'The specified option "{payload["option"]}" is not allowed.\n'
+            f"Allowed options: {list(REResumeOptions.__members__.keys())}"
+        )
         raise HTTPException(status_code=444, detail=msg)
     msg = await re_server._send_command(command="re_continue", params=payload)
     return msg
 
 
-@app.post('/print_db_uids')
+@app.post("/print_db_uids")
 async def _print_db_uids_handler():
     """
     Prints the UIDs of the scans in 'temp' database. Just for the demo.

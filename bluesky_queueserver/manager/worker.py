@@ -17,14 +17,19 @@ from databroker import Broker
 
 from bluesky_kafka import Publisher as kafkaPublisher
 
-from .profile_ops import (load_profile_collection, plans_from_nspace,
-                          devices_from_nspace, parse_plan, load_list_of_plans_and_devices)
+from .profile_ops import (
+    load_profile_collection,
+    plans_from_nspace,
+    devices_from_nspace,
+    parse_plan,
+    load_list_of_plans_and_devices,
+)
 
 from .comms import PipeJsonRpcReceive
 
 logger = logging.getLogger(__name__)
 
-DB = [Broker.named('temp')]
+DB = [Broker.named("temp")]
 
 
 class RunEngineWorker(Process):
@@ -38,6 +43,7 @@ class RunEngineWorker(Process):
     args, kwargs
         `args` and `kwargs` of the `multiprocessing.Process`
     """
+
     def __init__(self, *args, conn, config=None, **kwargs):
 
         if not conn:
@@ -72,8 +78,9 @@ class RunEngineWorker(Process):
         self._re_report_lock = None  # threading.Lock
 
         # Class that supports communication over the pipe
-        self._comm_to_manager = PipeJsonRpcReceive(conn=self._conn,
-                                                   name="RE Watchdog-Manager Comm")
+        self._comm_to_manager = PipeJsonRpcReceive(
+            conn=self._conn, name="RE Watchdog-Manager Comm"
+        )
 
         self._db = DB[0]
         self._config = config or {}
@@ -99,10 +106,12 @@ class RunEngineWorker(Process):
         try:
             result = plan()
             with self._re_report_lock:
-                self._re_report = {"action": "plan_exit",
-                                   "success": True,
-                                   "result": result,
-                                   "err_msg": ""}
+                self._re_report = {
+                    "action": "plan_exit",
+                    "success": True,
+                    "result": result,
+                    "err_msg": "",
+                }
                 if is_resuming:
                     self._re_report["plan_state"] = "completed"
                     self._state["running_plan_completed"] = True
@@ -117,9 +126,11 @@ class RunEngineWorker(Process):
         except BaseException as ex:
             with self._re_report_lock:
 
-                self._re_report = {"action": "plan_exit",
-                                   "result": "",
-                                   "err_msg": str(ex)}
+                self._re_report = {
+                    "action": "plan_exit",
+                    "result": "",
+                    "err_msg": str(ex),
+                }
 
                 if self._RE._state == "paused":
                     # Run Engine was paused
@@ -161,8 +172,11 @@ class RunEngineWorker(Process):
         logger.info("Starting a plan '%s'.", plan_info["name"])
 
         try:
-            plan_parsed = parse_plan(plan_info, allowed_plans=self._existing_plans,
-                                     allowed_devices=self._existing_devices)
+            plan_parsed = parse_plan(
+                plan_info,
+                allowed_plans=self._existing_plans,
+                allowed_devices=self._existing_devices,
+            )
 
             plan_func = plan_parsed["name"]
             plan_args_parsed = plan_parsed["args"]
@@ -170,15 +184,20 @@ class RunEngineWorker(Process):
 
             def get_plan(plan_func, plan_args, plan_kwargs):
                 def plan():
-                    if self._RE._state == 'panicked':
-                        raise RuntimeError("Run Engine is in the 'panicked' state. "
-                                           "You need to recreate the environment before you can run plans.")
-                    elif self._RE._state != 'idle':
-                        raise RuntimeError(f"Run Engine is in '{self._RE._state}' state. "
-                                           "Stop or finish any running plan.")
+                    if self._RE._state == "panicked":
+                        raise RuntimeError(
+                            "Run Engine is in the 'panicked' state. "
+                            "You need to recreate the environment before you can run plans."
+                        )
+                    elif self._RE._state != "idle":
+                        raise RuntimeError(
+                            f"Run Engine is in '{self._RE._state}' state. "
+                            "Stop or finish any running plan."
+                        )
                     else:
                         result = self._RE(plan_func(*plan_args, **plan_kwargs))
                     return result
+
                 return plan
 
             plan = get_plan(plan_func, plan_args_parsed, plan_kwargs_parsed)
@@ -189,7 +208,9 @@ class RunEngineWorker(Process):
             def get_plan(err_msg):
                 def plan():
                     raise Exception(err_msg)
+
                 return plan()
+
             plan = get_plan(str(ex))
 
         self._execution_queue.put((plan, True))
@@ -211,22 +232,29 @@ class RunEngineWorker(Process):
         # We are not parsing 'kwargs' at this time
         def get_plan(option, available_options):
             def plan():
-                if self._RE._state == 'panicked':
-                    raise RuntimeError("Run Engine is in the 'panicked' state. "
-                                       "You need to recreate the environment before you can run plans.")
-                elif self._RE._state != 'paused':
-                    raise RuntimeError(f"Run Engine is in '{self._RE._state}' state. "
-                                       f"Only 'paused' plan can be continued.")
+                if self._RE._state == "panicked":
+                    raise RuntimeError(
+                        "Run Engine is in the 'panicked' state. "
+                        "You need to recreate the environment before you can run plans."
+                    )
+                elif self._RE._state != "paused":
+                    raise RuntimeError(
+                        f"Run Engine is in '{self._RE._state}' state. "
+                        f"Only 'paused' plan can be continued."
+                    )
                 elif option not in available_options:
-                    raise RuntimeError(f"Option '{option}' is not supported. "
-                                       f"Supported options: {available_options}")
+                    raise RuntimeError(
+                        f"Option '{option}' is not supported. "
+                        f"Supported options: {available_options}"
+                    )
                 else:
                     result = getattr(self._RE, option)()
                 return result
+
             return plan
 
         plan = get_plan(option, available_options)
-        is_resuming = (option == "resume")
+        is_resuming = option == "resume"
         self._execution_queue.put((plan, is_resuming))
 
     # =============================================================================
@@ -236,17 +264,22 @@ class RunEngineWorker(Process):
         """
         Returns the state information of RE Worker environment.
         """
-        plan_uid = self._state["running_plan"]["plan_uid"] if self._state["running_plan"] else None
+        plan_uid = (
+            self._state["running_plan"]["plan_uid"]
+            if self._state["running_plan"]
+            else None
+        )
         plan_completed = self._state["running_plan_completed"]
         re_state = str(self._RE._state) if self._RE else "null"
         env_state = self._state["environment_state"]
         re_report_available = self._re_report is not None
-        msg_out = {"running_plan_uid": plan_uid,
-                   "running_plan_completed": plan_completed,
-                   "re_report_available": re_report_available,
-                   "re_state": re_state,
-                   "environment_state": env_state,
-                   }
+        msg_out = {
+            "running_plan_uid": plan_uid,
+            "running_plan_completed": plan_completed,
+            "re_report_available": re_report_available,
+            "re_state": re_state,
+            "environment_state": env_state,
+        }
         return msg_out
 
     def _request_plan_report_handler(self):
@@ -281,8 +314,10 @@ class RunEngineWorker(Process):
                 err_msg = str(ex)
         else:
             status = "rejected"
-            err_msg = "Can not close the environment with running Run Engine. " \
-                      "Stop the running plan and try again."
+            err_msg = (
+                "Can not close the environment with running Run Engine. "
+                "Stop the running plan and try again."
+            )
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
 
@@ -300,9 +335,11 @@ class RunEngineWorker(Process):
             status = "accepted"
         else:
             status = "rejected"
-            err_msg = "Environment closing was not initiated. Use command 'command_close_env' " \
-                      "to initiate closing and wait for RE Worker state: " \
-                      "self._state['environment_state']=='closing'"
+            err_msg = (
+                "Environment closing was not initiated. Use command 'command_close_env' "
+                "to initiate closing and wait for RE Worker state: "
+                "self._state['environment_state']=='closing'"
+            )
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
 
@@ -315,7 +352,7 @@ class RunEngineWorker(Process):
         invalid_state = 0
         if not self._execution_queue.empty():
             invalid_state = 1
-        elif self._RE._state == 'running':
+        elif self._RE._state == "running":
             invalid_state = 2
         elif self._state["running_plan"] or self._state["running_plan_completed"]:
             invalid_state = 3
@@ -331,17 +368,20 @@ class RunEngineWorker(Process):
                 err_msg = str(ex)
         else:
             status = "rejected"
-            msg_list = ["the execution queue is not empty",
-                        "another plan is running",
-                        "worker is not reset after completion of the previous plan"]
+            msg_list = [
+                "the execution queue is not empty",
+                "another plan is running",
+                "worker is not reset after completion of the previous plan",
+            ]
             try:
                 s = msg_list[invalid_state - 1]
             except Exception:
                 s = "UNDETERMINED CONDITION IS PRESENT"  # Shouldn't ever be printed
-            err_msg = \
-                f"Trying to run a plan (start Run Engine) while {s}.\n" \
-                "This may indicate a serious issue with the plan queue execution mechanism.\n" \
+            err_msg = (
+                f"Trying to run a plan (start Run Engine) while {s}.\n"
+                "This may indicate a serious issue with the plan queue execution mechanism.\n"
                 "Please report the issue to developers."
+            )
 
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
@@ -356,13 +396,15 @@ class RunEngineWorker(Process):
         # TODO: the question is whether it is possible or should be allowed to pause a plan in
         #       any other state than 'running'???
         err_msg = ""
-        if self._RE._state == 'running':
+        if self._RE._state == "running":
             try:
                 if option not in pausing_options:
-                    raise RuntimeError(f"Option '{option}' is not supported. "
-                                       f"Available options: {pausing_options}")
+                    raise RuntimeError(
+                        f"Option '{option}' is not supported. "
+                        f"Available options: {pausing_options}"
+                    )
 
-                defer = {'deferred': True, 'immediate': False}[option]
+                defer = {"deferred": True, "immediate": False}[option]
                 self._RE.request_pause(defer=defer)
                 status = "accepted"
             except Exception as ex:
@@ -370,9 +412,10 @@ class RunEngineWorker(Process):
                 err_msg = str(ex)
         else:
             status = "rejected"
-            err_msg = \
-                "Run engine can be paused only in 'running' state. " \
+            err_msg = (
+                "Run engine can be paused only in 'running' state. "
                 f"Current state: '{self._RE._state}'"
+            )
 
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
@@ -383,7 +426,7 @@ class RunEngineWorker(Process):
         """
         # Continue execution of the plan
         err_msg = ""
-        if self._RE.state == 'paused':
+        if self._RE.state == "paused":
             try:
                 logger.info("Run Engine: %s", option)
                 self._continue_plan(option)
@@ -393,9 +436,10 @@ class RunEngineWorker(Process):
                 err_msg = str(ex)
         else:
             status = "rejected"
-            err_msg = \
-                "Run Engine must be in 'paused' state to continue. " \
+            err_msg = (
+                "Run Engine must be in 'paused' state to continue. "
                 f"The state is '{self._RE._state}'"
+            )
 
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
@@ -413,9 +457,10 @@ class RunEngineWorker(Process):
             status = "accepted"
         else:
             status = "rejected"
-            err_msg = \
-                "Run Engine must be in 'idle' state to continue. " \
+            err_msg = (
+                "Run Engine must be in 'idle' state to continue. "
                 f"The state is '{self._RE._state}'"
+            )
 
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
@@ -449,13 +494,27 @@ class RunEngineWorker(Process):
         by the `start` method.
         """
         self._comm_to_manager.add_method(self._request_state_handler, "request_state")
-        self._comm_to_manager.add_method(self._request_plan_report_handler, "request_plan_report")
-        self._comm_to_manager.add_method(self._command_close_env_handler, "command_close_env")
-        self._comm_to_manager.add_method(self._command_confirm_exit_handler, "command_confirm_exit")
-        self._comm_to_manager.add_method(self._command_run_plan_handler, "command_run_plan")
-        self._comm_to_manager.add_method(self._command_pause_plan_handler, "command_pause_plan")
-        self._comm_to_manager.add_method(self._command_continue_plan_handler, "command_continue_plan")
-        self._comm_to_manager.add_method(self._command_reset_worker_handler, "command_reset_worker")
+        self._comm_to_manager.add_method(
+            self._request_plan_report_handler, "request_plan_report"
+        )
+        self._comm_to_manager.add_method(
+            self._command_close_env_handler, "command_close_env"
+        )
+        self._comm_to_manager.add_method(
+            self._command_confirm_exit_handler, "command_confirm_exit"
+        )
+        self._comm_to_manager.add_method(
+            self._command_run_plan_handler, "command_run_plan"
+        )
+        self._comm_to_manager.add_method(
+            self._command_pause_plan_handler, "command_pause_plan"
+        )
+        self._comm_to_manager.add_method(
+            self._command_continue_plan_handler, "command_continue_plan"
+        )
+        self._comm_to_manager.add_method(
+            self._command_reset_worker_handler, "command_reset_worker"
+        )
         self._comm_to_manager.start()
 
         self._exit_event = threading.Event()
@@ -469,11 +528,17 @@ class RunEngineWorker(Process):
         asyncio.set_event_loop(loop)
 
         def init_namespace():
-            self._re_namespace, self._existing_plans, self._existing_devices = {}, {}, {}
+            self._re_namespace, self._existing_plans, self._existing_devices = (
+                {},
+                {},
+                {},
+            )
 
         if "profile_collection_path" not in self._config:
-            logger.warning("Path to profile collection was not specified. "
-                           "No profile collection will be loaded.")
+            logger.warning(
+                "Path to profile collection was not specified. "
+                "No profile collection will be loaded."
+            )
             init_namespace()
         else:
             path = self._config["profile_collection_path"]
@@ -491,20 +556,26 @@ class RunEngineWorker(Process):
         logger.info("Loading the lists of allowed plans and devices ...")
         path_pd = self._config["allowed_plans_and_devices_path"]
         try:
-            self._allowed_plans, self._allowed_devices = load_list_of_plans_and_devices(path_pd)
+            self._allowed_plans, self._allowed_devices = load_list_of_plans_and_devices(
+                path_pd
+            )
         except Exception as ex:
-            logger.exception("Error occurred while loading lists of allowed plans "
-                             "and devices from '%s': %s", path_pd, str(ex))
+            logger.exception(
+                "Error occurred while loading lists of allowed plans "
+                "and devices from '%s': %s",
+                path_pd,
+                str(ex),
+            )
 
         self._RE = RunEngine({})
 
         bec = BestEffortCallback()
         self._RE.subscribe(bec)
 
-        if 'kafka' in self._config:
+        if "kafka" in self._config:
             kafka_publisher = kafkaPublisher(
-                topic=self._config['kafka']['topic'],
-                bootstrap_servers=self._config['kafka']['bootstrap'],
+                topic=self._config["kafka"]["topic"],
+                bootstrap_servers=self._config["kafka"]["bootstrap"],
                 key="kafka-unit-test-key",
                 # work with a single broker
                 producer_config={

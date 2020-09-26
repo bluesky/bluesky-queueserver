@@ -3,8 +3,8 @@ import time as ttime
 import requests
 
 from bluesky_queueserver.manager.tests.test_general import re_manager  # noqa F401
-from bluesky_queueserver.server.tests.conftest import (
-    SERVER_ADDRESS,  # noqa F401
+from bluesky_queueserver.server.tests.conftest import (  # noqa F401
+    SERVER_ADDRESS,
     SERVER_PORT,
     add_plans_to_queue,
     fastapi_server,
@@ -41,8 +41,8 @@ def test_http_server_list_allowed_plans_and_devices(re_manager, fastapi_server):
     assert len(resp['allowed_devices']) > 0
 =======
 def test_http_server_list_allowed_plans_and_devices(
-    re_manager, fastapi_server
-):  # noqa F811
+    re_manager, fastapi_server  # noqa F811
+):
     resp = _request_to_json("get", "/list_allowed_plans_and_devices")
     assert isinstance(resp["allowed_plans"], list)
     assert len(resp["allowed_plans"]) > 0
@@ -68,8 +68,8 @@ def test_http_server_add_to_queue_handler(re_manager, fastapi_server):  # noqa F
 
 
 def test_http_server_pop_from_queue_handler(
-    re_manager, fastapi_server, add_plans_to_queue
-):  # noqa F811
+    re_manager, fastapi_server, add_plans_to_queue  # noqa F811
+):
 
     resp1 = _request_to_json("get", "/queue_view")
     assert resp1["queue"] != []
@@ -82,8 +82,8 @@ def test_http_server_pop_from_queue_handler(
 
 
 def test_http_server_create_environment_handler(
-    re_manager, fastapi_server
-):  # noqa F811
+    re_manager, fastapi_server  # noqa F811
+):
     resp1 = _request_to_json("post", "/create_environment")
     assert resp1 == {"success": True, "msg": ""}
 
@@ -115,8 +115,8 @@ def test_http_server_close_environment_handler(re_manager, fastapi_server):  # n
 
 
 def test_http_server_process_queue_handler(
-    re_manager, fastapi_server, add_plans_to_queue
-):  # noqa F811
+    re_manager, fastapi_server, add_plans_to_queue  # noqa F811
+):
     resp1 = _request_to_json("post", "/process_queue")
     assert resp1 == {"success": False, "msg": "RE Worker environment does not exist."}
 
@@ -139,8 +139,8 @@ def test_http_server_process_queue_handler(
 
 
 def test_http_server_re_pause_continue_handlers(
-    re_manager, fastapi_server
-):  # noqa F811
+    re_manager, fastapi_server  # noqa F811
+):
     resp1 = _request_to_json("post", "/create_environment")
     assert resp1 == {"success": True, "msg": ""}
 
@@ -184,8 +184,8 @@ def test_http_server_re_pause_continue_handlers(
 
 
 def test_http_server_close_print_db_uids_handler(
-    re_manager, fastapi_server, add_plans_to_queue
-):  # noqa F811
+    re_manager, fastapi_server, add_plans_to_queue  # noqa F811
+):
     resp1 = _request_to_json("post", "/create_environment")
     assert resp1 == {"success": True, "msg": ""}
 

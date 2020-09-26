@@ -71,9 +71,7 @@ class WatchdogProcess:
         logger.info("Starting RE Worker ...")
         try:
             self._re_worker = self._cls_run_engine_worker(
-                conn=self._manager_conn,
-                name="RE Worker Process",
-                config=self._config_worker,
+                conn=self._manager_conn, name="RE Worker Process", config=self._config_worker
             )
             self._re_worker.start()
             success, err_msg = True, ""
@@ -179,19 +177,11 @@ class WatchdogProcess:
 
 def start_manager():
     parser = argparse.ArgumentParser(
-        description="Start a RE Manager",
-        epilog=f"blueksy-queueserver version {__version__}",
+        description="Start a RE Manager", epilog=f"blueksy-queueserver version {__version__}"
     )
+    parser.add_argument("--kafka_topic", type=str, help="The kafka topic to publish to.")
     parser.add_argument(
-        "--kafka_topic",
-        type=str,
-        help="The kafka topic to publish to.",
-    )
-    parser.add_argument(
-        "--kafka_server",
-        type=str,
-        help="Bootstrap server to connect to.",
-        default="127.0.0.1:9092",
+        "--kafka_server", type=str, help="Bootstrap server to connect to.", default="127.0.0.1:9092"
     )
     parser.add_argument(
         "--profile_collection",

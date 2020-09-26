@@ -411,7 +411,9 @@ class RunEngineManager(Process):
         Names of plans and devices are strings.
         """
         n_pending_plans = await self._plan_queue.get_plan_queue_size()
-        logger.info("Starting a new plan: %d plans are left in the queue", n_pending_plans)
+        logger.info(
+            "Starting a new plan: %d plans are left in the queue", n_pending_plans
+        )
 
         new_plan = await self._plan_queue.pop_first_plan()
         if new_plan is not None:
@@ -693,8 +695,8 @@ class RunEngineManager(Process):
 
     async def _queue_view_handler(self, request):
         """
-         Returns the contents of the current queue.
-         """
+        Returns the contents of the current queue.
+        """
         logger.info("Returning current queue.")
         all_plans = await self._plan_queue.get_plan_queue()
 

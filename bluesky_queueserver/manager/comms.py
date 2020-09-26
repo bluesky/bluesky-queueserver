@@ -115,7 +115,10 @@ class PipeJsonRpcReceive:
     """
 
     def __init__(
-        self, conn, *, name="RE QServer Comm",
+        self,
+        conn,
+        *,
+        name="RE QServer Comm",
     ):
         self._conn = conn
         self._dispatcher = Dispatcher()  # json-rpc dispatcher

@@ -195,7 +195,9 @@ def start_manager():
         epilog=f"blueksy-queueserver version {__version__}",
     )
     parser.add_argument(
-        "--kafka_topic", type=str, help="The kafka topic to publish to.",
+        "--kafka_topic",
+        type=str,
+        help="The kafka topic to publish to.",
     )
     parser.add_argument(
         "--kafka_server",

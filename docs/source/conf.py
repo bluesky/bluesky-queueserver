@@ -68,8 +68,8 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'bluesky-queueserver'
-copyright = '2019, Brookhaven National Labratory'
-author = 'Brookhaven National Labratory'
+copyright = '2019, Brookhaven National Laboratory'
+author = 'Brookhaven National Laboratory'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the

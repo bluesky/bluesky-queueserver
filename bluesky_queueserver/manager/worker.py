@@ -189,7 +189,7 @@ class RunEngineWorker(Process):
                         )
                     elif self._RE._state != "idle":
                         raise RuntimeError(
-                            f"Run Engine is in '{self._RE._state}' state. " "Stop or finish any running plan."
+                            f"Run Engine is in '{self._RE._state}' state. Stop or finish any running plan."
                         )
                     else:
                         result = self._RE(plan_func(*plan_args, **plan_kwargs))
@@ -236,11 +236,11 @@ class RunEngineWorker(Process):
                     )
                 elif self._RE._state != "paused":
                     raise RuntimeError(
-                        f"Run Engine is in '{self._RE._state}' state. " f"Only 'paused' plan can be continued."
+                        f"Run Engine is in '{self._RE._state}' state. Only 'paused' plan can be continued."
                     )
                 elif option not in available_options:
                     raise RuntimeError(
-                        f"Option '{option}' is not supported. " f"Supported options: {available_options}"
+                        f"Option '{option}' is not supported. Supported options: {available_options}"
                     )
                 else:
                     result = getattr(self._RE, option)()
@@ -306,7 +306,7 @@ class RunEngineWorker(Process):
         else:
             status = "rejected"
             err_msg = (
-                "Can not close the environment with running Run Engine. " "Stop the running plan and try again."
+                "Can not close the environment with running Run Engine. Stop the running plan and try again."
             )
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
@@ -390,7 +390,7 @@ class RunEngineWorker(Process):
             try:
                 if option not in pausing_options:
                     raise RuntimeError(
-                        f"Option '{option}' is not supported. " f"Available options: {pausing_options}"
+                        f"Option '{option}' is not supported. Available options: {pausing_options}"
                     )
 
                 defer = {"deferred": True, "immediate": False}[option]
@@ -502,7 +502,7 @@ class RunEngineWorker(Process):
 
         if "profile_collection_path" not in self._config:
             logger.warning(
-                "Path to profile collection was not specified. " "No profile collection will be loaded."
+                "Path to profile collection was not specified. No profile collection will be loaded."
             )
             init_namespace()
         else:
@@ -524,7 +524,7 @@ class RunEngineWorker(Process):
             self._allowed_plans, self._allowed_devices = load_list_of_plans_and_devices(path_pd)
         except Exception as ex:
             logger.exception(
-                "Error occurred while loading lists of allowed plans " "and devices from '%s': %s",
+                "Error occurred while loading lists of allowed plans and devices from '%s': %s",
                 path_pd,
                 str(ex),
             )

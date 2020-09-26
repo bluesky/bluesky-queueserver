@@ -270,7 +270,7 @@ def load_list_of_plans_and_devices(path_to_file=None):
 
     if not os.path.isfile(path_to_file):
         raise IOError(
-            f"Failed to load the list of allowed plans and devices: " f"file '{path_to_file}' does not exist."
+            f"Failed to load the list of allowed plans and devices: file '{path_to_file}' does not exist."
         )
 
     with open(path_to_file, "r") as stream:

@@ -24,7 +24,7 @@ class PlanQueueOperations:
 
     async def exists_running_plan_info(self):
         """
-        Check if plan exists in the ppol
+        Check if plan exists in the pool.
         """
         return await self._r_pool.exists(self._name_running_plan)
 

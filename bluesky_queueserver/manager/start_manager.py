@@ -71,9 +71,7 @@ class WatchdogProcess:
         logger.info("Starting RE Worker ...")
         try:
             self._re_worker = self._cls_run_engine_worker(
-                conn=self._manager_conn,
-                name="RE Worker Process",
-                config=self._config_worker,
+                conn=self._manager_conn, name="RE Worker Process", config=self._config_worker
             )
             self._re_worker.start()
             success, err_msg = True, ""
@@ -144,18 +142,12 @@ class WatchdogProcess:
     def run(self):
 
         # Requests
-        self._comm_to_manager.add_method(
-            self._start_re_worker_handler, "start_re_worker"
-        )
+        self._comm_to_manager.add_method(self._start_re_worker_handler, "start_re_worker")
         self._comm_to_manager.add_method(self._join_re_worker_handler, "join_re_worker")
         self._comm_to_manager.add_method(self._kill_re_worker_handler, "kill_re_worker")
-        self._comm_to_manager.add_method(
-            self._is_worker_alive_handler, "is_worker_alive"
-        )
+        self._comm_to_manager.add_method(self._is_worker_alive_handler, "is_worker_alive")
         # Notifications
-        self._comm_to_manager.add_method(
-            self._manager_stopping_handler, "manager_stopping"
-        )
+        self._comm_to_manager.add_method(self._manager_stopping_handler, "manager_stopping")
         self._comm_to_manager.add_method(self._register_heartbeat_handler, "heartbeat")
 
         self._comm_to_manager.start()
@@ -175,14 +167,8 @@ class WatchdogProcess:
             # It may be a better idea to implement a ticker in a separate thread to act as
             #   a clock to be completely independent from system clock.
             t_min, t_max = self._heartbeat_timeout, self._heartbeat_timeout + 10.0
-            if (
-                (time_passed >= t_min)
-                and (time_passed <= t_max)
-                and not self._manager_is_stopping
-            ):
-                logger.error(
-                    "Timeout detected by Watchdog. RE Manager malfunctioned and must be restarted."
-                )
+            if (time_passed >= t_min) and (time_passed <= t_max) and not self._manager_is_stopping:
+                logger.error("Timeout detected by Watchdog. RE Manager malfunctioned and must be restarted.")
                 self._re_manager.kill()
                 self._start_re_manager()
 
@@ -191,17 +177,11 @@ class WatchdogProcess:
 
 def start_manager():
     parser = argparse.ArgumentParser(
-        description="Start a RE Manager",
-        epilog=f"blueksy-queueserver version {__version__}",
+        description="Start a RE Manager", epilog=f"blueksy-queueserver version {__version__}"
     )
+    parser.add_argument("--kafka_topic", type=str, help="The kafka topic to publish to.")
     parser.add_argument(
-        "--kafka_topic", type=str, help="The kafka topic to publish to.",
-    )
-    parser.add_argument(
-        "--kafka_server",
-        type=str,
-        help="Bootstrap server to connect to.",
-        default="127.0.0.1:9092",
+        "--kafka_server", type=str, help="Bootstrap server to connect to.", default="127.0.0.1:9092"
     )
     parser.add_argument(
         "--profile_collection",

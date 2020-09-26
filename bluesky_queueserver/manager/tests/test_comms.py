@@ -5,7 +5,11 @@ import multiprocessing
 import threading
 import asyncio
 from bluesky_queueserver.manager.comms import (
-    PipeJsonRpcReceive, PipeJsonRpcSendAsync, CommTimeoutError, CommJsonRpcError)
+    PipeJsonRpcReceive,
+    PipeJsonRpcSendAsync,
+    CommTimeoutError,
+    CommJsonRpcError,
+)
 from bluesky_queueserver.tests.common import format_jsonrpc_msg
 
 
@@ -22,6 +26,7 @@ def count_threads_with_name(name):
 
 # =======================================================================
 #                       Class CommJsonRpcError
+
 
 def test_CommJsonRpcError_1():
     """
@@ -47,7 +52,7 @@ def test_CommJsonRpcError_2():
     assert str(err_code) in s, "Error code is not found in printed error message"
     assert err_type in s, "Error type is not found in printed error message"
 
-    repr = f"CommJsonRpcError('{err_msg}',{err_code},'{err_type}')"
+    repr = f"CommJsonRpcError('{err_msg}', {err_code}, '{err_type}')"
     assert ex.__repr__() == repr, "Error representation is printed incorrectly"
 
 
@@ -68,6 +73,7 @@ def test_CommJsonRpcError_3_fail():
 
 # =======================================================================
 #                       Class PipeJsonRpcReceive
+
 
 def test_PipeJsonRpcReceive_1():
     """
@@ -93,18 +99,21 @@ def test_PipeJsonRpcReceive_1():
     pc.stop()
 
 
-@pytest.mark.parametrize("method, params, result, notification", [
-    ("method_handler1", [], 5, False),
-    ("method_handler1", [], 5, True),
-    ("method1", [], 5, False),
-    ("method2", [5], 15, False),
-    ("method2", {"value": 5}, 15, False),
-    ("method2", {}, 12, False),
-    ("method3", {"value": 5}, 20, False),
-    ("method3", {}, 18, False),
-    ("method4", {"value": 5}, 20, False),
-    ("method4", {}, 19, False),
-])
+@pytest.mark.parametrize(
+    "method, params, result, notification",
+    [
+        ("method_handler1", [], 5, False),
+        ("method_handler1", [], 5, True),
+        ("method1", [], 5, False),
+        ("method2", [5], 15, False),
+        ("method2", {"value": 5}, 15, False),
+        ("method2", {}, 12, False),
+        ("method3", {"value": 5}, 20, False),
+        ("method3", {}, 18, False),
+        ("method4", {"value": 5}, 20, False),
+        ("method4", {}, 19, False),
+    ],
+)
 def test_PipeJsonRpcReceive_2(method, params, result, notification):
     """
     The case of single requests.
@@ -153,10 +162,8 @@ def test_PipeJsonRpcReceive_2(method, params, result, notification):
                 response = conn1.recv()
                 response = json.loads(response)
                 assert response["id"] == request["id"], "Response ID does not match message ID."
-                assert "result" in response, \
-                    f"Key 'result' is not contained in response: {response}"
-                assert response["result"] == result, \
-                    f"Result does not match the expected: {response}"
+                assert "result" in response, f"Key 'result' is not contained in response: {response}"
+                assert response["result"] == result, f"Result does not match the expected: {response}"
                 assert value_nonlocal == "function_was_called", "Non-local variable has incorrect value"
             else:
                 assert False, "Notification was sent but response was received."
@@ -174,6 +181,7 @@ def test_PipeJsonRpcReceive_3():
     """
     Test sending multiple requests
     """
+
     def method_handler3(*, value=3):
         return value + 15
 
@@ -190,9 +198,11 @@ def test_PipeJsonRpcReceive_3():
     pc.start()
 
     # Non-existing method ('Method not found' error)
-    request = [format_jsonrpc_msg("method3", {"value": 7}),
-               format_jsonrpc_msg("method4", {"value": 3}, notification=True),
-               format_jsonrpc_msg("method4", {"value": 9})]
+    request = [
+        format_jsonrpc_msg("method3", {"value": 7}),
+        format_jsonrpc_msg("method4", {"value": 3}, notification=True),
+        format_jsonrpc_msg("method4", {"value": 9}),
+    ]
     conn1.send(json.dumps(request))
 
     if conn1.poll(timeout=0.5):  # Set timeout large enough
@@ -213,6 +223,7 @@ def test_PipeJsonRpcReceive_4_failing():
     """
     Those tests are a result of exploration of how `json-rpc` error processing works.
     """
+
     def method_handler3(*, value=3):
         return value + 15
 
@@ -283,6 +294,7 @@ def test_PipeJsonRpcReceive_5_failing():
 
     EXCEPTIONS SHOULD BE PROCESSED INSIDE THE HANDLER!!!
     """
+
     def method_handler5():
         raise RuntimeError("Function crashed ...")
 
@@ -314,6 +326,7 @@ def test_PipeJsonRpcReceive_6_failing():
 
     ONLY INSTANTLY EXECUTED HANDLERS MAY BE USED!!!
     """
+
     def method_handler6():
         ttime.sleep(3)  # Longer than 'poll' timeout
 
@@ -337,6 +350,7 @@ def test_PipeJsonRpcReceive_6_failing():
 
 # =======================================================================
 #                       Class PipeJsonRpcSendAsync
+
 
 def test_PipeJsonRpcSendAsync_1():
     """
@@ -365,18 +379,21 @@ def test_PipeJsonRpcSendAsync_1():
     asyncio.run(object_start_stop())
 
 
-@pytest.mark.parametrize("method, params, result, notification", [
-    ("method_handler1", [], 5, False),
-    ("method_handler1", [], 5, True),
-    ("method1", [], 5, False),
-    ("method2", [5], 15, False),
-    ("method2", {"value": 5}, 15, False),
-    ("method2", {}, 12, False),
-    ("method3", {"value": 5}, 20, False),
-    ("method3", {}, 18, False),
-    ("method4", {"value": 5}, 20, False),
-    ("method4", {}, 19, False),
-])
+@pytest.mark.parametrize(
+    "method, params, result, notification",
+    [
+        ("method_handler1", [], 5, False),
+        ("method_handler1", [], 5, True),
+        ("method1", [], 5, False),
+        ("method2", [5], 15, False),
+        ("method2", {"value": 5}, 15, False),
+        ("method2", {}, 12, False),
+        ("method3", {"value": 5}, 20, False),
+        ("method3", {}, 18, False),
+        ("method4", {"value": 5}, 20, False),
+        ("method4", {}, 19, False),
+    ],
+)
 def test_PipeJsonRpcSendAsync_2(method, params, result, notification):
     """
     Test of basic functionality. Here we don't test for timeout case (it raises an exception).
@@ -426,8 +443,7 @@ def test_PipeJsonRpcSendAsync_2(method, params, result, notification):
 
             response = await p_send.send_msg(method, params, notification=notification)
             if not notification:
-                assert response == result, \
-                    f"Result does not match the expected: {response}"
+                assert response == result, f"Result does not match the expected: {response}"
                 assert value_nonlocal == "function_was_called", "Non-local variable has incorrect value"
             elif response is not None:
                 assert False, "Response was received for notification."
@@ -483,6 +499,7 @@ def test_PipeJsonRpcSendAsync_4():
     """
     Message timeout.
     """
+
     def method_handler1():
         ttime.sleep(1)
 
@@ -513,6 +530,7 @@ def test_PipeJsonRpcSendAsync_5():
     from the first message is received. Verify that the result returned in response to the
     second message is received. (We discard the result of the message that is timed out.)
     """
+
     def method_handler1():
         ttime.sleep(0.7)
         return 39

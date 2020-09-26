@@ -11,8 +11,9 @@ def re_manager():
     """
     Start RE Manager as a subprocess. Tests will communicate with RE Manager via ZeroMQ.
     """
-    p = subprocess.Popen(["start-re-manager"], universal_newlines=True,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    p = subprocess.Popen(
+        ["start-re-manager"], universal_newlines=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    )
 
     yield  # Nothing to return
 
@@ -43,7 +44,7 @@ def test_qserver_cli_and_manager(re_manager):
     def get_reduced_state_info():
         msg = get_queue_state()
         plans_in_queue = msg["plans_in_queue"]
-        queue_is_running = (msg["manager_state"] == "executing_queue")
+        queue_is_running = msg["manager_state"] == "executing_queue"
         return plans_in_queue, queue_is_running
 
     def condition_manager_idle(msg):
@@ -57,7 +58,7 @@ def test_qserver_cli_and_manager(re_manager):
 
     def condition_queue_processing_finished(msg):
         plans_in_queue = msg["plans_in_queue"]
-        queue_is_running = (msg["manager_state"] == "executing_queue")
+        queue_is_running = msg["manager_state"] == "executing_queue"
         return (plans_in_queue == 0) and not queue_is_running
 
     def wait_for_condition(time, condition):
@@ -68,18 +69,19 @@ def test_qserver_cli_and_manager(re_manager):
         dt = 0.5  # Period for checking the queue status
         time_stop = ttime.time() + time
         while ttime.time() < time_stop:
-            ttime.sleep(dt/2)
+            ttime.sleep(dt / 2)
             try:
                 msg = get_queue_state()
                 if condition(msg):
                     return True
             except TimeoutError:
                 pass
-            ttime.sleep(dt/2)
+            ttime.sleep(dt / 2)
         return False
 
-    assert wait_for_condition(time=3, condition=condition_manager_idle), \
-        "Timeout while waiting for manager to initialize."
+    assert wait_for_condition(
+        time=3, condition=condition_manager_idle
+    ), "Timeout while waiting for manager to initialize."
 
     # Clear queue
     subprocess.call(["qserver", "-c", "clear_queue"])
@@ -88,12 +90,19 @@ def test_qserver_cli_and_manager(re_manager):
     subprocess.call(["qserver", "-c", "list_allowed_plans_and_devices"], stdout=subprocess.DEVNULL)
 
     # Add a number of plans
-    subprocess.call(["qserver", "-c", "add_to_queue", "-p",
-                     "{'name':'count', 'args':[['det1', 'det2']]}"])
-    subprocess.call(["qserver", "-c", "add_to_queue", "-p",
-                     "{'name':'scan', 'args':[['det1', 'det2'], 'motor', -1, 1, 10]}"])
-    subprocess.call(["qserver", "-c", "add_to_queue", "-p",
-                     "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num':10, 'delay':1}}"])
+    subprocess.call(["qserver", "-c", "add_to_queue", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"])
+    subprocess.call(
+        ["qserver", "-c", "add_to_queue", "-p", "{'name':'scan', 'args':[['det1', 'det2'], 'motor', -1, 1, 10]}"]
+    )
+    subprocess.call(
+        [
+            "qserver",
+            "-c",
+            "add_to_queue",
+            "-p",
+            "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num':10, 'delay':1}}",
+        ]
+    )
 
     n_plans, is_plan_running = get_reduced_state_info()
     assert n_plans == 3, "Incorrect number of plans in the queue"
@@ -107,17 +116,26 @@ def test_qserver_cli_and_manager(re_manager):
 
     subprocess.call(["qserver", "-c", "create_environment"])
 
-    assert wait_for_condition(time=3, condition=condition_environment_created), \
-        "Timeout while waiting for environment to be created"
+    assert wait_for_condition(
+        time=3, condition=condition_environment_created
+    ), "Timeout while waiting for environment to be created"
 
     subprocess.call(["qserver", "-c", "process_queue"])
 
-    assert wait_for_condition(time=60, condition=condition_queue_processing_finished), \
-        "Timeout while waiting for process to finish"
+    assert wait_for_condition(
+        time=60, condition=condition_queue_processing_finished
+    ), "Timeout while waiting for process to finish"
 
     # Queue is expected to be empty (processed). Load one more plan.
-    subprocess.call(["qserver", "-c", "add_to_queue", "-p",
-                     "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num':10, 'delay':1}}"])
+    subprocess.call(
+        [
+            "qserver",
+            "-c",
+            "add_to_queue",
+            "-p",
+            "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num':10, 'delay':1}}",
+        ]
+    )
 
     n_plans, is_plan_running = get_reduced_state_info()
     assert n_plans == 1, "Incorrect number of plans in the queue"
@@ -131,41 +149,48 @@ def test_qserver_cli_and_manager(re_manager):
     ttime.sleep(2)  # Need some time to finish the current plan step
     subprocess.call(["qserver", "-c", "re_continue", "-p", "resume"])
 
-    assert wait_for_condition(time=60, condition=condition_queue_processing_finished), \
-        "Timeout while waiting for process to finish"
+    assert wait_for_condition(
+        time=60, condition=condition_queue_processing_finished
+    ), "Timeout while waiting for process to finish"
 
-    subprocess.call(["qserver", "-c", "add_to_queue", "-p",
-                     "{'name':'count', 'args':[['det1', 'det2']]}"])
-    subprocess.call(["qserver", "-c", "add_to_queue", "-p",
-                     "{'name':'count', 'args':[['det1', 'det2']]}"])
+    subprocess.call(["qserver", "-c", "add_to_queue", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"])
+    subprocess.call(["qserver", "-c", "add_to_queue", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"])
 
     n_plans, is_plan_running = get_reduced_state_info()
     assert n_plans == 2, "Incorrect number of plans in the queue"
 
     subprocess.call(["qserver", "-c", "process_queue"])
 
-    assert wait_for_condition(time=60, condition=condition_queue_processing_finished), \
-        "Timeout while waiting for process to finish"
+    assert wait_for_condition(
+        time=60, condition=condition_queue_processing_finished
+    ), "Timeout while waiting for process to finish"
 
     # Test 'killing' the manager during running plan. Load long plan and two short ones.
     #   The tests checks if execution of the queue is continued uninterrupted after
     #   the manager restart
-    subprocess.call(["qserver", "-c", "add_to_queue", "-p",
-                     "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num':10, 'delay':1}}"])
-    subprocess.call(["qserver", "-c", "add_to_queue", "-p",
-                     "{'name':'count', 'args':[['det1', 'det2']]}"])
-    subprocess.call(["qserver", "-c", "add_to_queue", "-p",
-                     "{'name':'count', 'args':[['det1', 'det2']]}"])
+    subprocess.call(
+        [
+            "qserver",
+            "-c",
+            "add_to_queue",
+            "-p",
+            "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num':10, 'delay':1}}",
+        ]
+    )
+    subprocess.call(["qserver", "-c", "add_to_queue", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"])
+    subprocess.call(["qserver", "-c", "add_to_queue", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"])
     n_plans, is_plan_running = get_reduced_state_info()
     assert n_plans == 3, "Incorrect number of plans in the queue"
 
     subprocess.call(["qserver", "-c", "process_queue"])
     ttime.sleep(1)
     subprocess.call(["qserver", "-c", "kill_manager"])
-    assert wait_for_condition(time=60, condition=condition_queue_processing_finished), \
-        "Timeout while waiting for process to finish"
+    assert wait_for_condition(
+        time=60, condition=condition_queue_processing_finished
+    ), "Timeout while waiting for process to finish"
 
     subprocess.call(["qserver", "-c", "close_environment"])
 
-    assert wait_for_condition(time=5, condition=condition_environment_closed), \
-        "Timeout while waiting for environment to be closed"
+    assert wait_for_condition(
+        time=5, condition=condition_environment_closed
+    ), "Timeout while waiting for environment to be closed"

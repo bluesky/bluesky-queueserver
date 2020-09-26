@@ -32,9 +32,7 @@ class ZMQ_Comm:
 
         # Start communication task
         self._event_zmq_stop = None
-        self._task_zmq_client_conn = asyncio.ensure_future(
-            self._zmq_start_client_conn()
-        )
+        self._task_zmq_client_conn = asyncio.ensure_future(self._zmq_start_client_conn())
 
     def __del__(self):
         # Cancel the communication task

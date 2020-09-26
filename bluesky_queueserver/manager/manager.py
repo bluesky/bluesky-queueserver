@@ -1,6 +1,4 @@
 import asyncio
-import json
-import aioredis
 import zmq
 import zmq.asyncio
 from multiprocessing import Process
@@ -13,6 +11,8 @@ from super_state_machine import machines
 from .worker import DB
 from .comms import PipeJsonRpcSendAsync, CommTimeoutError
 from .profile_ops import load_list_of_plans_and_devices
+from .plan_queue_ops import PlanQueueOperations
+
 
 import logging
 
@@ -66,9 +66,7 @@ class RunEngineManager(Process):
                 str(conn_watchdog),
             )
         if not conn_worker:
-            raise RuntimeError(
-                "Value of the parameter 'conn_worker' is invalid: %s.", str(conn_worker)
-            )
+            raise RuntimeError("Value of the parameter 'conn_worker' is invalid: %s.", str(conn_worker))
 
         super().__init__(*args, **kwargs)
 
@@ -76,9 +74,7 @@ class RunEngineManager(Process):
         self._worker_conn = conn_worker
 
         # The following attributes hold the state of the system
-        self._manager_stopping = (
-            False  # Set True to exit manager (by _stop_manager_handler)
-        )
+        self._manager_stopping = False  # Set True to exit manager (by _stop_manager_handler)
         self._environment_exists = False  # True if RE Worker environment exists
         self._manager_state = ManagerState()
         self._worker_state_info = None  # Copy of the last downloaded state of RE Worker
@@ -90,7 +86,7 @@ class RunEngineManager(Process):
         self._zmq_socket = None
         self._ip_zmq_server = "tcp://*:5555"
 
-        self._r_pool = None
+        self._plan_queue = None  # Object of class plan_queue_ops.PlanQueueOperations
 
         self._heartbeat_generator_task = None  # Task for heartbeat generator
         self._worker_status_task = None  # Task for periodic checks of Worker status
@@ -118,6 +114,7 @@ class RunEngineManager(Process):
             await asyncio.sleep(t_period)
             await self._watchdog_send_heartbeat()
 
+    '''
     # ======================================================================
     #          Communication with Redis
 
@@ -155,6 +152,7 @@ class RunEngineManager(Process):
             not await self._get_running_plan_info()
         ):
             await self._clear_running_plan_info()
+    '''
 
     # ======================================================================
     #          Functions that implement functionality of the server
@@ -188,9 +186,7 @@ class RunEngineManager(Process):
         except Exception as ex:
             success = False
             err_msg = f"Unhandled exception: {str(ex)}"
-            logger.exception(
-                "Unhandled exception during background task execution: %s", str(ex)
-            )
+            logger.exception("Unhandled exception during background task execution: %s", str(ex))
 
         self._background_task_status["status"] = "success" if success else "failed"
         self._background_task_status["err_msg"] = err_msg
@@ -205,9 +201,7 @@ class RunEngineManager(Process):
             accepted = False
         else:
             accepted = True
-            asyncio.ensure_future(
-                self._execute_background_task(self._start_re_worker_task())
-            )
+            asyncio.ensure_future(self._execute_background_task(self._start_re_worker_task()))
         return accepted
 
     async def _start_re_worker_task(self):
@@ -244,9 +238,7 @@ class RunEngineManager(Process):
         """
         if self._environment_exists:
             accepted = True
-            asyncio.ensure_future(
-                self._execute_background_task(self._stop_re_worker_task())
-            )
+            asyncio.ensure_future(self._execute_background_task(self._stop_re_worker_task()))
         else:
             accepted = False
         return accepted
@@ -295,8 +287,7 @@ class RunEngineManager(Process):
                     # TODO: this error should probably be handled differently than this,
                     #   since it may indicate that the worker process is stalled.
                     logger.error(
-                        "Failed to properly join the worker process. "
-                        "The process may not be properly closed."
+                        "Failed to properly join the worker process. The process may not be properly closed."
                     )
             else:
                 success, err_msg = False, "RE Worker failed to exit (no confirmation)"
@@ -335,18 +326,16 @@ class RunEngineManager(Process):
         """
 
         async def push_plan_back_to_queue():
-            p = await self._get_running_plan_info()
-            await self._r_pool.lpush("plan_queue", json.dumps(p))
-            await self._clear_running_plan_info()
+            p = await self._plan_queue.get_running_plan_info()
+            await self._plan_queue.push_plan_to_front_of_queue(p)
+            await self._plan_queue.clear_running_plan_info()
 
         # Read report first
         plan_report, err_msg = await self._worker_request_plan_report()
         if plan_report is None:
             # TODO: this would typically mean a bug (communciation error). Probably more
             #       complicated processing is needed
-            logger.error(
-                f"Failed to download plan report: {err_msg}. Stopping queue processing."
-            )
+            logger.error(f"Failed to download plan report: {err_msg}. Stopping queue processing.")
             await push_plan_back_to_queue()
             self._manager_state.set_idle()
         else:
@@ -357,9 +346,7 @@ class RunEngineManager(Process):
 
             msg_display = result if result else err_msg
             logger.info(
-                "Report received from RE Worker:\n"
-                "plan_state=%s\n"
-                "success=%s\n%s\n)",
+                "Report received from RE Worker:\nplan_state=%s\nsuccess=%s\n%s\n)",
                 plan_state,
                 str(success),
                 str(msg_display),
@@ -370,7 +357,7 @@ class RunEngineManager(Process):
                 # If a plan was not completed or not successful (exception was raised), then
                 # execution of the queue is stopped. It can be restarted later (failed or
                 # interrupted plan will still be in the queue.
-                await self._clear_running_plan_info()
+                await self._plan_queue.clear_running_plan_info()
                 await self._start_plan_task()
             elif plan_state in ("stopped", "error"):
                 # Paused plan was stopped/aborted/halted
@@ -380,9 +367,7 @@ class RunEngineManager(Process):
                 # The plan was paused (nothing should be done).
                 self._manager_state.set_idle()
             else:
-                logger.error(
-                    "Unknown plan state %s was returned by RE Worker.", plan_state
-                )
+                logger.error("Unknown plan state %s was returned by RE Worker.", plan_state)
 
     async def _start_plan(self):
         """
@@ -395,9 +380,7 @@ class RunEngineManager(Process):
         elif not self._manager_state.is_idle:
             success, err_msg = False, "RE Manager is busy."
         else:
-            asyncio.ensure_future(
-                self._execute_background_task(self._start_plan_task())
-            )
+            asyncio.ensure_future(self._execute_background_task(self._start_plan_task()))
             success, err_msg = True, ""
         return success, err_msg
 
@@ -408,12 +391,10 @@ class RunEngineManager(Process):
         "args" (list of args), "kwargs" (list of kwargs). Only the plan name is mandatory.
         Names of plans and devices are strings.
         """
-        n_pending_plans = await self._r_pool.llen("plan_queue")
-        logger.info(
-            "Starting a new plan: %d plans are left in the queue", n_pending_plans
-        )
+        n_pending_plans = await self._plan_queue.get_plan_queue_size()
+        logger.info("Starting a new plan: %d plans are left in the queue", n_pending_plans)
 
-        new_plan = await self._r_pool.lpop("plan_queue")
+        new_plan = await self._plan_queue.pop_first_plan()
         if new_plan is not None:
             # Reset RE environment (worker)
             success, err_msg = await self._worker_command_reset_worker()
@@ -425,8 +406,7 @@ class RunEngineManager(Process):
 
             self._manager_state.set_executing_queue()
 
-            new_plan = json.loads(new_plan)
-            await self._set_running_plan_info(new_plan)
+            await self._plan_queue.set_running_plan_info(new_plan)
 
             plan_name = new_plan["name"]
             args = new_plan["args"] if "args" in new_plan else []
@@ -542,9 +522,7 @@ class RunEngineManager(Process):
 
     async def _worker_command_run_plan(self, plan_info):
         try:
-            response = await self._comm_to_worker.send_msg(
-                "command_run_plan", {"plan_info": plan_info}
-            )
+            response = await self._comm_to_worker.send_msg("command_run_plan", {"plan_info": plan_info})
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
         except CommTimeoutError:
@@ -553,9 +531,7 @@ class RunEngineManager(Process):
 
     async def _worker_command_pause_plan(self, option):
         try:
-            response = await self._comm_to_worker.send_msg(
-                "command_pause_plan", {"option": option}
-            )
+            response = await self._comm_to_worker.send_msg("command_pause_plan", {"option": option})
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
         except CommTimeoutError:
@@ -564,9 +540,7 @@ class RunEngineManager(Process):
 
     async def _worker_command_continue_plan(self, option):
         try:
-            response = await self._comm_to_worker.send_msg(
-                "command_continue_plan", {"option": option}
-            )
+            response = await self._comm_to_worker.send_msg("command_continue_plan", {"option": option})
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
         except CommTimeoutError:
@@ -646,9 +620,7 @@ class RunEngineManager(Process):
         """
         Send (periodic) heartbeat signal to Watchdog.
         """
-        await self._comm_to_watchdog.send_msg(
-            "heartbeat", {"value": "alive"}, notification=True
-        )
+        await self._comm_to_watchdog.send_msg("heartbeat", {"value": "alive"}, notification=True)
 
     # =========================================================================
     #                        ZMQ message handlers
@@ -660,8 +632,8 @@ class RunEngineManager(Process):
         logger.info("Processing 'Hello' request.")
 
         # Computed/retrieved data
-        n_pending_plans = await self._r_pool.llen("plan_queue")
-        running_plan_info = await self._get_running_plan_info()
+        n_pending_plans = await self._plan_queue.get_plan_queue_size()
+        running_plan_info = await self._plan_queue.get_running_plan_info()
 
         # Prepared output data
         plans_in_queue = n_pending_plans
@@ -694,12 +666,12 @@ class RunEngineManager(Process):
 
     async def _queue_view_handler(self, request):
         """
-         Returns the contents of the current queue.
-         """
+        Returns the contents of the current queue.
+        """
         logger.info("Returning current queue.")
-        all_plans = await self._r_pool.lrange("plan_queue", 0, -1)
+        all_plans = await self._plan_queue.get_plan_queue()
 
-        return {"queue": [json.loads(_) for _ in all_plans]}
+        return {"queue": all_plans}
 
     async def _add_to_queue_handler(self, request):
         """
@@ -712,31 +684,25 @@ class RunEngineManager(Process):
             # Create Plan UID (used internally by QServer, user is not expected to see it)
             # Note, Plan UID is not related to Scan UID generated by Run Engine
             plan["plan_uid"] = str(uuid.uuid4())
-            await self._r_pool.rpush("plan_queue", json.dumps(plan))
+            await self._plan_queue.add_plan_to_queue(plan)
         else:
             plan = {}
         return plan
 
     async def _pop_from_queue_handler(self, request):
         """
-        Pop the last item from back of the queue
+        Pop the last item from back of the queue.
         """
         logger.info("Popping the last item from the queue.")
-        plan = await self._r_pool.rpop("plan_queue")
-        if plan is not None:
-            return json.loads(plan)
-        else:
-            return {}  # No items
+        plan = await self._plan_queue.pop_last_plan()
+        return plan
 
     async def _clear_queue_handler(self, request):
         """
         Remove all entries from the plan queue (does not affect currently executed run)
         """
         logger.info("Clearing the queue")
-        while True:
-            plan = await self._r_pool.rpop("plan_queue")
-            if plan is None:
-                break
+        await self._plan_queue.clear_plan_queue()
         return {"success": True, "msg": "Plan queue is now empty."}
 
     async def _create_environment_handler(self, request):
@@ -785,8 +751,7 @@ class RunEngineManager(Process):
         else:
             success, msg = (
                 False,
-                f"Option '{option}' is not supported. "
-                f"Available options: {available_options}",
+                f"Option '{option}' is not supported. Available options: {available_options}",
             )
         return {"success": success, "msg": msg}
 
@@ -808,8 +773,7 @@ class RunEngineManager(Process):
         else:
             success, msg = (
                 False,
-                f"Option '{option}' is not supported. "
-                f"Available options: {available_options}",
+                f"Option '{option}' is not supported. Available options: {available_options}",
             )
         return {"success": success, "msg": msg}
 
@@ -889,46 +853,32 @@ class RunEngineManager(Process):
 
         self._loop = asyncio.get_running_loop()
 
-        self._comm_to_watchdog = PipeJsonRpcSendAsync(
-            conn=self._watchdog_conn, name="RE Manager-Watchdog Comm"
-        )
-        self._comm_to_worker = PipeJsonRpcSendAsync(
-            conn=self._worker_conn, name="RE Manager-Worker Comm"
-        )
+        self._comm_to_watchdog = PipeJsonRpcSendAsync(conn=self._watchdog_conn, name="RE Manager-Watchdog Comm")
+        self._comm_to_worker = PipeJsonRpcSendAsync(conn=self._worker_conn, name="RE Manager-Worker Comm")
         self._comm_to_watchdog.start()
         self._comm_to_worker.start()
 
         # Start heartbeat generator
-        self._heartbeat_generator_task = asyncio.ensure_future(
-            self._heartbeat_generator(), loop=self._loop
-        )
-        self._worker_status_task = asyncio.ensure_future(
-            self._periodic_worker_state_request(), loop=self._loop
-        )
+        self._heartbeat_generator_task = asyncio.ensure_future(self._heartbeat_generator(), loop=self._loop)
+        self._worker_status_task = asyncio.ensure_future(self._periodic_worker_state_request(), loop=self._loop)
 
-        self._r_pool = await aioredis.create_redis_pool(
-            "redis://localhost", encoding="utf8"
-        )
+        self._plan_queue = PlanQueueOperations()
+        await self._plan_queue.start()
 
-        # It may be useful to have an API that would delete all used entries in Redis pool
-        #   The following code may go into this new API.
-        # await self._r_pool.delete("running_plan")
-        # await self._r_pool.delete("plan_queue")
+        # Delete Redis entries (for testing and debugging)
+        # self._plan_queue.delete_pool_entries()
 
         # Create entry 'running_plan' in the pool if it does not exist yet
-        await self._init_running_plan_info()
+        await self._plan_queue.init_running_plan_info()
 
         # Load lists of allowed plans and devices
         logger.info("Loading the lists of allowed plans and devices ...")
         path_pd = self._config["allowed_plans_and_devices_path"]
         try:
-            self._allowed_plans, self._allowed_devices = load_list_of_plans_and_devices(
-                path_pd
-            )
+            self._allowed_plans, self._allowed_devices = load_list_of_plans_and_devices(path_pd)
         except Exception as ex:
             logger.exception(
-                "Error occurred while loading lists of allowed plans "
-                "and devices from '%s': %s",
+                "Error occurred while loading lists of allowed plans and devices from '%s': %s",
                 path_pd,
                 str(ex),
             )
@@ -943,7 +893,8 @@ class RunEngineManager(Process):
                 plan_uid_running = self._worker_state_info["running_plan_uid"]
                 if plan_uid_running:
                     # Plan is running. Check if it is the same plan as in redis.
-                    plan_stored = await self._get_running_plan_info()
+                    # Plan is running. Check if it is the same plan as in redis.
+                    plan_stored = await self._plan_queue.get_running_plan_info()
                     if "plan_uid" in plan_stored:
                         plan_uid_stored = plan_stored["plan_uid"]
                         self._manager_state.set_executing_queue()  # Wait for plan completion
@@ -962,7 +913,7 @@ class RunEngineManager(Process):
             else:
                 logger.error("Error while reading RE Worker status: %s", err_msg)
         if not self._manager_state.is_executing_queue:
-            await self._clear_running_plan_info()
+            await self._plan_queue.clear_running_plan_info()
 
         logger.info("Starting ZeroMQ server")
         self._zmq_socket = self._ctx.socket(zmq.REP)
@@ -1007,6 +958,4 @@ class RunEngineManager(Process):
         except KeyboardInterrupt:
             # TODO: RE Manager must be orderly closed before Watchdog module is stopped.
             #   Right now it is just killed by SIGINT.
-            logger.info(
-                "RE Manager Process was stopped by SIGINT. Handling of Ctrl-C has to be revised!!!"
-            )
+            logger.info("RE Manager Process was stopped by SIGINT. Handling of Ctrl-C has to be revised!!!")

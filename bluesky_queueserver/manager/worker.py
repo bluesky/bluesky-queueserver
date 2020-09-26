@@ -171,7 +171,9 @@ class RunEngineWorker(Process):
 
         try:
             plan_parsed = parse_plan(
-                plan_info, allowed_plans=self._existing_plans, allowed_devices=self._existing_devices,
+                plan_info,
+                allowed_plans=self._existing_plans,
+                allowed_devices=self._existing_devices,
             )
 
             plan_func = plan_parsed["name"]
@@ -516,7 +518,9 @@ class RunEngineWorker(Process):
             self._allowed_plans, self._allowed_devices = load_list_of_plans_and_devices(path_pd)
         except Exception as ex:
             logger.exception(
-                "Error occurred while loading lists of allowed plans and devices from '%s': %s", path_pd, str(ex),
+                "Error occurred while loading lists of allowed plans and devices from '%s': %s",
+                path_pd,
+                str(ex),
             )
 
         self._RE = RunEngine({})

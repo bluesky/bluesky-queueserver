@@ -77,7 +77,11 @@ def test_devices_from_nspace():
     [
         ({"name": "count", "args": [["det1", "det2"]]}, True, ""),
         ({"name": "scan", "args": [["det1", "det2"], "motor", -1, 1, 10]}, True, ""),
-        ({"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}, True, "",),
+        (
+            {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}},
+            True,
+            "",
+        ),
         (
             {"name": "countABC", "args": [["det1", "det2"]]},
             False,

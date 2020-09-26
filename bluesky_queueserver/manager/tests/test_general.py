@@ -90,9 +90,7 @@ def test_qserver_cli_and_manager(re_manager):
     subprocess.call(["qserver", "-c", "list_allowed_plans_and_devices"], stdout=subprocess.DEVNULL)
 
     # Add a number of plans
-    subprocess.call(
-        ["qserver", "-c", "add_to_queue", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"]
-    )
+    subprocess.call(["qserver", "-c", "add_to_queue", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"])
     subprocess.call(
         ["qserver", "-c", "add_to_queue", "-p", "{'name':'scan', 'args':[['det1', 'det2'], 'motor', -1, 1, 10]}"]
     )
@@ -155,12 +153,8 @@ def test_qserver_cli_and_manager(re_manager):
         time=60, condition=condition_queue_processing_finished
     ), "Timeout while waiting for process to finish"
 
-    subprocess.call(
-        ["qserver", "-c", "add_to_queue", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"]
-    )
-    subprocess.call(
-        ["qserver", "-c", "add_to_queue", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"]
-    )
+    subprocess.call(["qserver", "-c", "add_to_queue", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"])
+    subprocess.call(["qserver", "-c", "add_to_queue", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"])
 
     n_plans, is_plan_running = get_reduced_state_info()
     assert n_plans == 2, "Incorrect number of plans in the queue"
@@ -183,12 +177,8 @@ def test_qserver_cli_and_manager(re_manager):
             "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num':10, 'delay':1}}",
         ]
     )
-    subprocess.call(
-        ["qserver", "-c", "add_to_queue", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"]
-    )
-    subprocess.call(
-        ["qserver", "-c", "add_to_queue", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"]
-    )
+    subprocess.call(["qserver", "-c", "add_to_queue", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"])
+    subprocess.call(["qserver", "-c", "add_to_queue", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"])
     n_plans, is_plan_running = get_reduced_state_info()
     assert n_plans == 3, "Incorrect number of plans in the queue"
 

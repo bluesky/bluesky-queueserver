@@ -182,7 +182,10 @@ def test_WatchdogProcess_4():
     Test if Watchdog correctly executing commands that control starting
     and stopping RE Worker.
     """
-    wp = WatchdogProcess(cls_run_engine_manager=ReManagerEmulation, cls_run_engine_worker=ReWorkerEmulation,)
+    wp = WatchdogProcess(
+        cls_run_engine_manager=ReManagerEmulation,
+        cls_run_engine_worker=ReWorkerEmulation,
+    )
     wp_th = threading.Thread(target=wp.run)
     wp_th.start()
     ttime.sleep(0.01)
@@ -223,7 +226,10 @@ def test_WatchdogProcess_5():
     """
     Test 'kill_re_worker' command RE Worker.
     """
-    wp = WatchdogProcess(cls_run_engine_manager=ReManagerEmulation, cls_run_engine_worker=ReWorkerEmulation,)
+    wp = WatchdogProcess(
+        cls_run_engine_manager=ReManagerEmulation,
+        cls_run_engine_worker=ReWorkerEmulation,
+    )
     wp_th = threading.Thread(target=wp.run)
     wp_th.start()
     ttime.sleep(0.01)

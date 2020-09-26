@@ -52,7 +52,7 @@ def test_CommJsonRpcError_2():
     assert str(err_code) in s, "Error code is not found in printed error message"
     assert err_type in s, "Error type is not found in printed error message"
 
-    repr = f"CommJsonRpcError('{err_msg}',{err_code},'{err_type}')"
+    repr = f"CommJsonRpcError('{err_msg}', {err_code}, '{err_type}')"
     assert ex.__repr__() == repr, "Error representation is printed incorrectly"
 
 

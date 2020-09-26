@@ -1,6 +1,7 @@
 import os
 import glob
 import runpy
+import inspect
 from collections.abc import Iterable
 import pkg_resources
 import yaml
@@ -74,9 +75,9 @@ def plans_from_nspace(nspace):
         Dictionary of Bluesky plans
     """
     plans = {}
-    for item in nspace.items():
-        if callable(item[1]):
-            plans[item[0]] = item[1]
+    for name, obj in nspace.items():
+        if callable(obj) and obj.__module__ != "typing":
+            plans[name] = obj
     return plans
 
 
@@ -215,12 +216,30 @@ def gen_list_of_plans_and_devices(
         plans = plans_from_nspace(nspace)
         devices = devices_from_nspace(nspace)
 
-        plan_list = list(plans.keys())
-        device_list = list(devices.keys())
+        def process_plan(plan):
+            def filter_values(v):
+                if v is inspect.Parameter.empty:
+                    return ""
+                return str(v)
+
+            sig = inspect.signature(plan)
+
+            ret = {"module": plan.__module__, "name": plan.__name__, "parameters": {}}
+            for p in sig.parameters.values():
+                working_dict = ret["parameters"][p.name] = {}
+                for target in ["kind", "default", "annotation"]:
+                    v = getattr(p, target)
+                    if v is not p.empty:
+                        working_dict[target] = filter_values(v)
+
+            return ret
 
         allowed_plans_and_devices = {
-            "allowed_plans": plan_list,
-            "allowed_devices": device_list,
+            "allowed_plans": {k: process_plan(v) for k, v in plans.items()},
+            "allowed_devices": {
+                k: {"classname": type(v).__name__, "module": type(v).__module__}
+                for k, v in devices.items()
+            },
         }
 
         file_path = os.path.join(path, file_name)

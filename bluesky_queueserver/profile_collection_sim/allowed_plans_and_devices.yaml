@@ -1,56 +1,669 @@
 allowed_devices:
-- motor
-- motor1
-- motor2
-- motor3
-- jittery_motor1
-- jittery_motor2
-- noisy_det
-- det
-- identical_det
-- det1
-- det2
-- det3
-- det4
-- det5
-- ab_det
-- direct_img
-- direct_img_list
-- pseudo3x3
-- pseudo1x3
-- det_with_conf
-- det_with_count_time
-- motor_no_pos
-- motor_empty_hints1
-- motor_empty_hints2
-- motor_no_hints1
-- motor_no_hints2
+  ab_det:
+    classname: ABDetector
+    module: ophyd.sim
+  det:
+    classname: SynGauss
+    module: ophyd.sim
+  det1:
+    classname: SynGauss
+    module: ophyd.sim
+  det2:
+    classname: SynGauss
+    module: ophyd.sim
+  det3:
+    classname: SynGauss
+    module: ophyd.sim
+  det4:
+    classname: Syn2DGauss
+    module: ophyd.sim
+  det5:
+    classname: Syn2DGauss
+    module: ophyd.sim
+  det_with_conf:
+    classname: DetWithConf
+    module: ophyd.sim
+  det_with_count_time:
+    classname: DetWithCountTime
+    module: ophyd.sim
+  direct_img:
+    classname: DirectImage
+    module: ophyd.sim
+  direct_img_list:
+    classname: DirectImage
+    module: ophyd.sim
+  identical_det:
+    classname: SynGauss
+    module: ophyd.sim
+  jittery_motor1:
+    classname: SynAxis
+    module: ophyd.sim
+  jittery_motor2:
+    classname: SynAxis
+    module: ophyd.sim
+  motor:
+    classname: SynAxis
+    module: ophyd.sim
+  motor1:
+    classname: SynAxis
+    module: ophyd.sim
+  motor2:
+    classname: SynAxis
+    module: ophyd.sim
+  motor3:
+    classname: SynAxis
+    module: ophyd.sim
+  motor_empty_hints1:
+    classname: SynAxisEmptyHints
+    module: ophyd.sim
+  motor_empty_hints2:
+    classname: SynAxisEmptyHints
+    module: ophyd.sim
+  motor_no_hints1:
+    classname: SynAxisNoHints
+    module: ophyd.sim
+  motor_no_hints2:
+    classname: SynAxisNoHints
+    module: ophyd.sim
+  motor_no_pos:
+    classname: SynAxisNoPosition
+    module: ophyd.sim
+  noisy_det:
+    classname: SynGauss
+    module: ophyd.sim
+  pseudo1x3:
+    classname: SPseudo1x3
+    module: ophyd.sim
+  pseudo3x3:
+    classname: SPseudo3x3
+    module: ophyd.sim
 allowed_plans:
-- count
-- list_scan
-- rel_list_scan
-- list_grid_scan
-- rel_list_grid_scan
-- log_scan
-- rel_log_scan
-- adaptive_scan
-- rel_adaptive_scan
-- tune_centroid
-- scan_nd
-- inner_product_scan
-- scan
-- grid_scan
-- rel_grid_scan
-- relative_inner_product_scan
-- rel_scan
-- tweak
-- spiral_fermat
-- rel_spiral_fermat
-- spiral
-- rel_spiral
-- spiral_square
-- rel_spiral_square
-- ramp_plan
-- fly
-- x2x_scan
-- move_then_count
+  adaptive_scan:
+    module: bluesky.plans
+    name: adaptive_scan
+    parameters:
+      backstep:
+        kind: POSITIONAL_OR_KEYWORD
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      max_step:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      min_step:
+        kind: POSITIONAL_OR_KEYWORD
+      motor:
+        kind: POSITIONAL_OR_KEYWORD
+      start:
+        kind: POSITIONAL_OR_KEYWORD
+      stop:
+        kind: POSITIONAL_OR_KEYWORD
+      target_delta:
+        kind: POSITIONAL_OR_KEYWORD
+      target_field:
+        kind: POSITIONAL_OR_KEYWORD
+      threshold:
+        default: '0.8'
+        kind: POSITIONAL_OR_KEYWORD
+  count:
+    module: bluesky.plans
+    name: count
+    parameters:
+      delay:
+        default: None
+        kind: POSITIONAL_OR_KEYWORD
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      num:
+        default: '1'
+        kind: POSITIONAL_OR_KEYWORD
+      per_shot:
+        default: None
+        kind: KEYWORD_ONLY
+  fly:
+    module: bluesky.plans
+    name: fly
+    parameters:
+      flyers:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+  grid_scan:
+    module: bluesky.plans
+    name: grid_scan
+    parameters:
+      args:
+        kind: VAR_POSITIONAL
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      per_step:
+        default: None
+        kind: KEYWORD_ONLY
+      snake_axes:
+        default: None
+        kind: KEYWORD_ONLY
+  inner_product_scan:
+    module: bluesky.plans
+    name: inner_product_scan
+    parameters:
+      args:
+        kind: VAR_POSITIONAL
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      num:
+        kind: POSITIONAL_OR_KEYWORD
+      per_step:
+        default: None
+        kind: KEYWORD_ONLY
+  list_grid_scan:
+    module: bluesky.plans
+    name: list_grid_scan
+    parameters:
+      args:
+        kind: VAR_POSITIONAL
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      per_step:
+        default: None
+        kind: KEYWORD_ONLY
+      snake_axes:
+        default: 'False'
+        kind: KEYWORD_ONLY
+  list_scan:
+    module: bluesky.plans
+    name: list_scan
+    parameters:
+      args:
+        kind: VAR_POSITIONAL
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      per_step:
+        default: None
+        kind: KEYWORD_ONLY
+  log_scan:
+    module: bluesky.plans
+    name: log_scan
+    parameters:
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      motor:
+        kind: POSITIONAL_OR_KEYWORD
+      num:
+        kind: POSITIONAL_OR_KEYWORD
+      per_step:
+        default: None
+        kind: KEYWORD_ONLY
+      start:
+        kind: POSITIONAL_OR_KEYWORD
+      stop:
+        kind: POSITIONAL_OR_KEYWORD
+  marked_up_count:
+    module: <run_path>
+    name: marked_up_count
+    parameters:
+      delay:
+        annotation: typing.Union[float, NoneType]
+        default: None
+        kind: POSITIONAL_OR_KEYWORD
+      detectors:
+        annotation: typing.List
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        annotation: typing.Union[typing.Dict[str, typing.Any], NoneType]
+        default: None
+        kind: POSITIONAL_OR_KEYWORD
+      num:
+        annotation: <class 'int'>
+        default: '1'
+        kind: POSITIONAL_OR_KEYWORD
+  move_then_count:
+    module: <run_path>
+    name: move_then_count
+    parameters: {}
+  ramp_plan:
+    module: bluesky.plans
+    name: ramp_plan
+    parameters:
+      go_plan:
+        kind: POSITIONAL_OR_KEYWORD
+      inner_plan_func:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: POSITIONAL_OR_KEYWORD
+      monitor_sig:
+        kind: POSITIONAL_OR_KEYWORD
+      period:
+        default: None
+        kind: POSITIONAL_OR_KEYWORD
+      take_pre_data:
+        default: 'True'
+        kind: POSITIONAL_OR_KEYWORD
+      timeout:
+        default: None
+        kind: POSITIONAL_OR_KEYWORD
+  rel_adaptive_scan:
+    module: bluesky.plans
+    name: rel_adaptive_scan
+    parameters:
+      backstep:
+        kind: POSITIONAL_OR_KEYWORD
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      max_step:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      min_step:
+        kind: POSITIONAL_OR_KEYWORD
+      motor:
+        kind: POSITIONAL_OR_KEYWORD
+      start:
+        kind: POSITIONAL_OR_KEYWORD
+      stop:
+        kind: POSITIONAL_OR_KEYWORD
+      target_delta:
+        kind: POSITIONAL_OR_KEYWORD
+      target_field:
+        kind: POSITIONAL_OR_KEYWORD
+      threshold:
+        default: '0.8'
+        kind: POSITIONAL_OR_KEYWORD
+  rel_grid_scan:
+    module: bluesky.plans
+    name: rel_grid_scan
+    parameters:
+      args:
+        kind: VAR_POSITIONAL
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      per_step:
+        default: None
+        kind: KEYWORD_ONLY
+      snake_axes:
+        default: None
+        kind: KEYWORD_ONLY
+  rel_list_grid_scan:
+    module: bluesky.plans
+    name: rel_list_grid_scan
+    parameters:
+      args:
+        kind: VAR_POSITIONAL
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      per_step:
+        default: None
+        kind: KEYWORD_ONLY
+      snake_axes:
+        default: 'False'
+        kind: KEYWORD_ONLY
+  rel_list_scan:
+    module: bluesky.plans
+    name: rel_list_scan
+    parameters:
+      args:
+        kind: VAR_POSITIONAL
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      per_step:
+        default: None
+        kind: KEYWORD_ONLY
+  rel_log_scan:
+    module: bluesky.plans
+    name: rel_log_scan
+    parameters:
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      motor:
+        kind: POSITIONAL_OR_KEYWORD
+      num:
+        kind: POSITIONAL_OR_KEYWORD
+      per_step:
+        default: None
+        kind: KEYWORD_ONLY
+      start:
+        kind: POSITIONAL_OR_KEYWORD
+      stop:
+        kind: POSITIONAL_OR_KEYWORD
+  rel_scan:
+    module: bluesky.plans
+    name: rel_scan
+    parameters:
+      args:
+        kind: VAR_POSITIONAL
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      num:
+        default: None
+        kind: KEYWORD_ONLY
+      per_step:
+        default: None
+        kind: KEYWORD_ONLY
+  rel_spiral:
+    module: bluesky.plans
+    name: rel_spiral
+    parameters:
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      dr:
+        kind: POSITIONAL_OR_KEYWORD
+      dr_y:
+        default: None
+        kind: KEYWORD_ONLY
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      nth:
+        kind: POSITIONAL_OR_KEYWORD
+      per_step:
+        default: None
+        kind: KEYWORD_ONLY
+      tilt:
+        default: '0.0'
+        kind: KEYWORD_ONLY
+      x_motor:
+        kind: POSITIONAL_OR_KEYWORD
+      x_range:
+        kind: POSITIONAL_OR_KEYWORD
+      y_motor:
+        kind: POSITIONAL_OR_KEYWORD
+      y_range:
+        kind: POSITIONAL_OR_KEYWORD
+  rel_spiral_fermat:
+    module: bluesky.plans
+    name: rel_spiral_fermat
+    parameters:
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      dr:
+        kind: POSITIONAL_OR_KEYWORD
+      dr_y:
+        default: None
+        kind: KEYWORD_ONLY
+      factor:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      per_step:
+        default: None
+        kind: KEYWORD_ONLY
+      tilt:
+        default: '0.0'
+        kind: KEYWORD_ONLY
+      x_motor:
+        kind: POSITIONAL_OR_KEYWORD
+      x_range:
+        kind: POSITIONAL_OR_KEYWORD
+      y_motor:
+        kind: POSITIONAL_OR_KEYWORD
+      y_range:
+        kind: POSITIONAL_OR_KEYWORD
+  rel_spiral_square:
+    module: bluesky.plans
+    name: rel_spiral_square
+    parameters:
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      per_step:
+        default: None
+        kind: KEYWORD_ONLY
+      x_motor:
+        kind: POSITIONAL_OR_KEYWORD
+      x_num:
+        kind: POSITIONAL_OR_KEYWORD
+      x_range:
+        kind: POSITIONAL_OR_KEYWORD
+      y_motor:
+        kind: POSITIONAL_OR_KEYWORD
+      y_num:
+        kind: POSITIONAL_OR_KEYWORD
+      y_range:
+        kind: POSITIONAL_OR_KEYWORD
+  relative_inner_product_scan:
+    module: bluesky.plans
+    name: relative_inner_product_scan
+    parameters:
+      args:
+        kind: VAR_POSITIONAL
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      num:
+        kind: POSITIONAL_OR_KEYWORD
+      per_step:
+        default: None
+        kind: KEYWORD_ONLY
+  scan:
+    module: bluesky.plans
+    name: scan
+    parameters:
+      args:
+        kind: VAR_POSITIONAL
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      num:
+        default: None
+        kind: KEYWORD_ONLY
+      per_step:
+        default: None
+        kind: KEYWORD_ONLY
+  scan_nd:
+    module: bluesky.plans
+    name: scan_nd
+    parameters:
+      cycler:
+        kind: POSITIONAL_OR_KEYWORD
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      per_step:
+        default: None
+        kind: KEYWORD_ONLY
+  spiral:
+    module: bluesky.plans
+    name: spiral
+    parameters:
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      dr:
+        kind: POSITIONAL_OR_KEYWORD
+      dr_y:
+        default: None
+        kind: KEYWORD_ONLY
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      nth:
+        kind: POSITIONAL_OR_KEYWORD
+      per_step:
+        default: None
+        kind: KEYWORD_ONLY
+      tilt:
+        default: '0.0'
+        kind: KEYWORD_ONLY
+      x_motor:
+        kind: POSITIONAL_OR_KEYWORD
+      x_range:
+        kind: POSITIONAL_OR_KEYWORD
+      x_start:
+        kind: POSITIONAL_OR_KEYWORD
+      y_motor:
+        kind: POSITIONAL_OR_KEYWORD
+      y_range:
+        kind: POSITIONAL_OR_KEYWORD
+      y_start:
+        kind: POSITIONAL_OR_KEYWORD
+  spiral_fermat:
+    module: bluesky.plans
+    name: spiral_fermat
+    parameters:
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      dr:
+        kind: POSITIONAL_OR_KEYWORD
+      dr_y:
+        default: None
+        kind: KEYWORD_ONLY
+      factor:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      per_step:
+        default: None
+        kind: KEYWORD_ONLY
+      tilt:
+        default: '0.0'
+        kind: KEYWORD_ONLY
+      x_motor:
+        kind: POSITIONAL_OR_KEYWORD
+      x_range:
+        kind: POSITIONAL_OR_KEYWORD
+      x_start:
+        kind: POSITIONAL_OR_KEYWORD
+      y_motor:
+        kind: POSITIONAL_OR_KEYWORD
+      y_range:
+        kind: POSITIONAL_OR_KEYWORD
+      y_start:
+        kind: POSITIONAL_OR_KEYWORD
+  spiral_square:
+    module: bluesky.plans
+    name: spiral_square
+    parameters:
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      per_step:
+        default: None
+        kind: KEYWORD_ONLY
+      x_center:
+        kind: POSITIONAL_OR_KEYWORD
+      x_motor:
+        kind: POSITIONAL_OR_KEYWORD
+      x_num:
+        kind: POSITIONAL_OR_KEYWORD
+      x_range:
+        kind: POSITIONAL_OR_KEYWORD
+      y_center:
+        kind: POSITIONAL_OR_KEYWORD
+      y_motor:
+        kind: POSITIONAL_OR_KEYWORD
+      y_num:
+        kind: POSITIONAL_OR_KEYWORD
+      y_range:
+        kind: POSITIONAL_OR_KEYWORD
+  tune_centroid:
+    module: bluesky.plans
+    name: tune_centroid
+    parameters:
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      min_step:
+        kind: POSITIONAL_OR_KEYWORD
+      motor:
+        kind: POSITIONAL_OR_KEYWORD
+      num:
+        default: '10'
+        kind: POSITIONAL_OR_KEYWORD
+      signal:
+        kind: POSITIONAL_OR_KEYWORD
+      snake:
+        default: 'False'
+        kind: POSITIONAL_OR_KEYWORD
+      start:
+        kind: POSITIONAL_OR_KEYWORD
+      step_factor:
+        default: '3.0'
+        kind: POSITIONAL_OR_KEYWORD
+      stop:
+        kind: POSITIONAL_OR_KEYWORD
+  tweak:
+    module: bluesky.plans
+    name: tweak
+    parameters:
+      detector:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      motor:
+        kind: POSITIONAL_OR_KEYWORD
+      step:
+        kind: POSITIONAL_OR_KEYWORD
+      target_field:
+        kind: POSITIONAL_OR_KEYWORD
+  x2x_scan:
+    module: bluesky.plans
+    name: x2x_scan
+    parameters:
+      detectors:
+        kind: POSITIONAL_OR_KEYWORD
+      md:
+        default: None
+        kind: KEYWORD_ONLY
+      motor1:
+        kind: POSITIONAL_OR_KEYWORD
+      motor2:
+        kind: POSITIONAL_OR_KEYWORD
+      num:
+        kind: POSITIONAL_OR_KEYWORD
+      per_step:
+        default: None
+        kind: KEYWORD_ONLY
+      start:
+        kind: POSITIONAL_OR_KEYWORD
+      stop:
+        kind: POSITIONAL_OR_KEYWORD

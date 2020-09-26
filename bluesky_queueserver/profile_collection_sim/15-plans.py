@@ -1,4 +1,5 @@
 # flake8: noqa
+from typing import List, Optional, Dict, Any
 
 from bluesky.plans import (
     count,
@@ -29,3 +30,12 @@ from bluesky.plans import (
     fly,
     x2x_scan,
 )
+
+
+def marked_up_count(
+    detectors: List,
+    num: int = 1,
+    delay: Optional[float] = None,
+    md: Optional[Dict[str, Any]] = None,
+):
+    return (yield from count(detectors, num=num, delay=delay, md=md))

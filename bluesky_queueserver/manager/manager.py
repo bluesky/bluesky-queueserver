@@ -355,7 +355,7 @@ class RunEngineManager(Process):
         logger.info("Starting a new plan: %d plans are left in the queue", n_pending_plans)
 
         new_plan = await self._plan_queue.pop_first_plan()
-        if new_plan is not None:
+        if new_plan:
             # Reset RE environment (worker)
             success, err_msg = await self._worker_command_reset_worker()
             if not success:

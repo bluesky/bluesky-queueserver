@@ -9,6 +9,10 @@ class PlanQueueOperations:
         self._name_plan_queue = "plan_queue"
         self._r_pool = None
 
+    def _verify_plan(self, plan):
+        if not isinstance(plan, dict):
+            raise TypeError(f"Parameter 'plan' should be of type dict: '{plan}', (type '{type(plan)}')")
+
     async def start(self):
         self._r_pool = await aioredis.create_redis_pool(f"redis://{self._redis_host}", encoding="utf8")
 
@@ -31,8 +35,7 @@ class PlanQueueOperations:
         plan: dict
             dictionary that contains plan parameters
         """
-        if not isinstance(plan, dict):
-            raise TypeError(f"Parameter 'plan' should be of type dict: '{plan}', (type '{type(plan)}')")
+        self._verify_plan(plan)
         await self._r_pool.set(self._name_running_plan, json.dumps(plan))
 
     async def get_running_plan_info(self):
@@ -89,10 +92,10 @@ class PlanQueueOperations:
         Returns
         -------
         dict or None
-            The first plan in the queue represented as a dictionary or None if the queue is empty.
+            The first plan in the queue represented as a dictionary or `{}` if the queue is empty.
         """
         plan_json = await self._r_pool.lpop(self._name_plan_queue)
-        plan = json.loads(plan_json) if plan_json is not None else None
+        plan = json.loads(plan_json) if plan_json else {}
         return plan
 
     async def pop_last_plan(self):
@@ -105,7 +108,7 @@ class PlanQueueOperations:
             The last plan in the queue represented as a dictionary or None if the queue is empty.
         """
         plan_json = await self._r_pool.rpop(self._name_plan_queue)
-        plan = json.loads(plan_json) if plan_json is not None else None
+        plan = json.loads(plan_json) if plan_json else {}
         return plan
 
     async def push_plan_to_front_of_queue(self, plan):
@@ -116,7 +119,13 @@ class PlanQueueOperations:
         ----------
         plan: dict
             Plan represented as a dictionary of parameters
+
+        Returns
+        -------
+        int
+            The new size of the queue.
         """
+        self._verify_plan(plan)
         return await self._r_pool.lpush(self._name_plan_queue, json.dumps(plan))
 
     async def add_plan_to_queue(self, plan):
@@ -127,14 +136,18 @@ class PlanQueueOperations:
         ----------
         plan: dict
             Plan represented as a dictionary of parameters
+
+        Returns
+        -------
+        int
+            The new size of the queue.
         """
+        self._verify_plan(plan)
         return await self._r_pool.rpush(self._name_plan_queue, json.dumps(plan))
 
     async def clear_plan_queue(self):
         """
         Remove all entries from the plan queue.
         """
-        while True:
-            plan = await self.pop_last_plan()
-            if plan is None:
-                break
+        while await self.get_plan_queue_size():
+            await self.pop_last_plan()

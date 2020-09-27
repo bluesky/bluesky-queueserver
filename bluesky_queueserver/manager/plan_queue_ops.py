@@ -14,33 +14,25 @@ class PlanQueueOperations:
 
     async def delete_pool_entries(self):
         """
-        Delete pool entries used by RE Manager. This method is mostly for use in testing.
+        Delete pool entries used by RE Manager. This method is mostly intended for use in testing.
         """
         await self._r_pool.delete(self._name_running_plan)
         await self._r_pool.delete(self._name_plan_queue)
 
     # -------------------------------------------------------------
-    #                       Running Plan
-
-    async def exists_running_plan_info(self):
-        """
-        Check if plan exists in the pool.
-        """
-        return await self._r_pool.exists(self._name_running_plan)
-
-    async def init_running_plan_info(self):
-        """
-        Initialize running plan info: create Redis entry that hold empty plan ({})
-        if a record doesn't exist.
-        """
-        # Create entry 'running_plan' in the pool if it does not exist yet
-        if (not await self.exists_running_plan_info()) or (not await self.get_running_plan_info()):
-            await self.clear_running_plan_info()
+    #                   Currently Running Plan
 
     async def set_running_plan_info(self, plan):
         """
         Write info on the currently running plan to Redis
+
+        Parameters
+        ----------
+        plan: dict
+            dictionary that contains plan parameters
         """
+        if not isinstance(plan, dict):
+            raise TypeError(f"Parameter 'plan' should be of type dict: '{plan}', (type '{type(plan)}')")
         await self._r_pool.set(self._name_running_plan, json.dumps(plan))
 
     async def get_running_plan_info(self):
@@ -51,7 +43,7 @@ class PlanQueueOperations:
         -------
         dict
             Dictionary representing currently running plan. Empty dictionary if
-            no plan is currently running.
+            no plan is currently running (key value is `{}` or the key does not exist).
         """
         plan = await self._r_pool.get(self._name_running_plan)
         return json.loads(plan) if plan else {}
@@ -64,6 +56,7 @@ class PlanQueueOperations:
 
     # -------------------------------------------------------------
     #                       Plan Queue
+
     async def get_plan_queue_size(self):
         """
         Get the number of plans in the queue.

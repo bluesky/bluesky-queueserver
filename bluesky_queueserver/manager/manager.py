@@ -114,46 +114,6 @@ class RunEngineManager(Process):
             await asyncio.sleep(t_period)
             await self._watchdog_send_heartbeat()
 
-    '''
-    # ======================================================================
-    #          Communication with Redis
-
-    async def _set_running_plan_info(self, plan):
-        """
-        Write info on the currently running to Redis
-        """
-        await self._r_pool.set("running_plan", json.dumps(plan))
-
-    async def _get_running_plan_info(self):
-        """
-        Read info on the currently running plan from Redis
-        """
-        return json.loads(await self._r_pool.get("running_plan"))
-
-    async def _clear_running_plan_info(self):
-        """
-        Clear info on the currently running plan in Redis.
-        """
-        await self._set_running_plan_info({})
-
-    async def _exists_running_plan_info(self):
-        """
-        Check if plan exists in the ppol
-        """
-        return await self._r_pool.exists("running_plan")
-
-    async def _init_running_plan_info(self):
-        """
-        Initialize running plan info: create Redis entry that hold empty plan ({})
-        a record doesn't exist.
-        """
-        # Create entry 'running_plan' in the pool if it does not exist yet
-        if (not await self._exists_running_plan_info()) or (
-            not await self._get_running_plan_info()
-        ):
-            await self._clear_running_plan_info()
-    '''
-
     # ======================================================================
     #          Functions that implement functionality of the server
 
@@ -867,9 +827,6 @@ class RunEngineManager(Process):
 
         # Delete Redis entries (for testing and debugging)
         # self._plan_queue.delete_pool_entries()
-
-        # Create entry 'running_plan' in the pool if it does not exist yet
-        await self._plan_queue.init_running_plan_info()
 
         # Load lists of allowed plans and devices
         logger.info("Loading the lists of allowed plans and devices ...")

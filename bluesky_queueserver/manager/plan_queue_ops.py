@@ -224,7 +224,7 @@ class PlanQueueOperations:
 
     async def _get_running_plan_info(self):
         """
-        See `self._get_running_plan_info` method.
+        See ``self._get_running_plan_info`` method.
         """
         plan = await self._r_pool.get(self._name_running_plan)
         return json.loads(plan) if plan else {}

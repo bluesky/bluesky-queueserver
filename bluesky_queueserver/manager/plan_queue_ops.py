@@ -101,7 +101,7 @@ class PlanQueueOperations:
 
     async def _delete_pool_entries(self):
         """
-        See ``self.delete_pool_entries`` method.
+        See ``self.delete_pool_entries()`` method.
         """
         await self._r_pool.delete(self._name_running_plan)
         await self._r_pool.delete(self._name_plan_queue)
@@ -212,7 +212,7 @@ class PlanQueueOperations:
 
     async def _is_plan_running(self):
         """
-        See ``self.is_plan_running`` method.
+        See ``self.is_plan_running()`` method.
         """
         return bool(await self._get_running_plan_info())
 
@@ -230,7 +230,7 @@ class PlanQueueOperations:
 
     async def _get_running_plan_info(self):
         """
-        See ``self._get_running_plan_info`` method.
+        See ``self._get_running_plan_info()`` method.
         """
         plan = await self._r_pool.get(self._name_running_plan)
         return json.loads(plan) if plan else {}
@@ -309,7 +309,7 @@ class PlanQueueOperations:
 
     async def _get_plan(self, pos):
         """
-        See ``self._get_plan`` method.
+        See ``self._get_plan()`` method.
         """
         if pos == "back":
             index = -1
@@ -331,7 +331,7 @@ class PlanQueueOperations:
         Parameters
         ----------
         pos: int or str
-            Position of the element (0, ..) or (-1, ..), ``front`` or ``back``.
+            Position of the element ``(0, ..)`` or ``(-1, ..)``, ``front`` or ``back``.
 
         Returns
         -------
@@ -376,7 +376,7 @@ class PlanQueueOperations:
 
     async def _pop_plan_from_queue(self, pos="back"):
         """
-        See ``self._pop_plan_from_queue`` method
+        See ``self._pop_plan_from_queue()`` method
         """
         if pos == "back":
             plan_json = await self._r_pool.rpop(self._name_plan_queue)

@@ -22,9 +22,9 @@ def pq():
 def test_running_plan_info(pq):
     """
     Basic test for the following methods:
-    ``PlanQueueOperations.is_plan_running()``
-    ``PlanQueueOperations.get_running_plan_info()``
-    ``PlanQueueOperations.delete_pool_entries()``
+    `PlanQueueOperations.is_plan_running()`
+    `PlanQueueOperations.get_running_plan_info()`
+    `PlanQueueOperations.delete_pool_entries()`
     """
 
     async def testing():
@@ -147,7 +147,7 @@ def test_new_plan_uid(pq):
 # fmt: on
 def test_set_new_plan_uuid(pq, plan):
     """
-    Basic test for the method ``set_new_plan_uuid``.
+    Basic test for the method ``set_new_plan_uuid()``.
     """
     uid = plan.get("plan_uid", None)
 
@@ -161,7 +161,7 @@ def test_set_new_plan_uuid(pq, plan):
 
 def test_uid_set(pq):
     """
-    Basic test for functions associated with ``_uid_set``
+    Basic test for functions associated with `_uid_set`
     """
     pq._uid_set_add("a")
     pq._uid_set_add("b")
@@ -181,7 +181,7 @@ def test_uid_set(pq):
 
 def test_uid_set_initialize(pq):
     """
-    Basic test for functions associated with ``_uid_set_initialize``
+    Basic test for functions associated with ``_uid_set_initialize()``
     """
 
     async def testing():
@@ -199,7 +199,7 @@ def test_uid_set_initialize(pq):
 
 def test_remove_plan(pq):
     """
-    Basic test for functions associated with ``_remove_plan``
+    Basic test for functions associated with ``_remove_plan()``
     """
 
     async def testing():

@@ -110,7 +110,7 @@ class REResumeOptions(str, Enum):
 
 
 @app.get("/")
-async def _ping_handler():
+async def ping_handler():
     """
     May be called to get response from the server. Returns the number of plans in the queue.
     """
@@ -119,7 +119,7 @@ async def _ping_handler():
 
 
 @app.get("/get_queue")
-async def _get_queue_handler():
+async def get_queue_handler():
     """
     Returns the contents of the current queue.
     """
@@ -128,7 +128,7 @@ async def _get_queue_handler():
 
 
 @app.get("/list_allowed_plans_and_devices")
-async def _list_allowed_plans_and_devices_handler():
+async def list_allowed_plans_and_devices_handler():
     """
     Returns the lists of allowed plans and devices.
     """
@@ -137,7 +137,7 @@ async def _list_allowed_plans_and_devices_handler():
 
 
 @app.post("/add_to_queue")
-async def _add_to_queue_handler(payload: dict):
+async def add_to_queue_handler(payload: dict):
     """
     Adds new plan to the end of the queue
     """
@@ -147,7 +147,7 @@ async def _add_to_queue_handler(payload: dict):
 
 
 @app.post("/clear_queue")
-async def _clear_queue_handler():
+async def clear_queue_handler():
     """
     Clear the plan queue.
     """
@@ -156,7 +156,7 @@ async def _clear_queue_handler():
 
 
 @app.post("/pop_from_queue")
-async def _pop_from_queue_handler():
+async def pop_from_queue_handler():
     """
     Pop the last item from back of the queue
     """
@@ -165,7 +165,7 @@ async def _pop_from_queue_handler():
 
 
 @app.get("/get_history")
-async def _get_history_handler():
+async def get_history_handler():
     """
     Returns the plan history (list of dicts).
     """
@@ -174,7 +174,7 @@ async def _get_history_handler():
 
 
 @app.post("/clear_history")
-async def _clear_history_handler():
+async def clear_history_handler():
     """
     Clear plan history.
     """
@@ -183,7 +183,7 @@ async def _clear_history_handler():
 
 
 @app.post("/create_environment")
-async def _create_environment_handler():
+async def create_environment_handler():
     """
     Creates RE environment: creates RE Worker process, starts and configures Run Engine.
     """
@@ -192,7 +192,7 @@ async def _create_environment_handler():
 
 
 @app.post("/close_environment")
-async def _close_environment_handler():
+async def close_environment_handler():
     """
     Deletes RE environment. In the current 'demo' prototype the environment will be deleted
     only after RE completes the current scan.
@@ -202,7 +202,7 @@ async def _close_environment_handler():
 
 
 @app.post("/process_queue")
-async def _process_queue_handler():
+async def process_queue_handler():
     """
     Start execution of the loaded queue. Additional runs can be added to the queue while
     it is executed. If the queue is empty, then nothing will happen.
@@ -212,7 +212,7 @@ async def _process_queue_handler():
 
 
 @app.post("/re_pause")
-async def _re_pause_handler(payload: dict):
+async def re_pause_handler(payload: dict):
     """
     Pause Run Engine
     """
@@ -227,7 +227,7 @@ async def _re_pause_handler(payload: dict):
 
 
 @app.post("/re_continue")
-async def _re_continue_handler(payload: dict):
+async def re_continue_handler(payload: dict):
     """
     Control Run Engine in the paused state
     """
@@ -242,7 +242,7 @@ async def _re_continue_handler(payload: dict):
 
 
 @app.post("/print_db_uids")
-async def _print_db_uids_handler():
+async def print_db_uids_handler():
     """
     Prints the UIDs of the scans in 'temp' database. Just for the demo.
     Not part of future API.

@@ -62,7 +62,7 @@ def test_running_plan_info(pq):
 # fmt: on
 def test_queue_clean(pq, plan_running, plans, result_running, result_plans):
     """
-    Test for `_queue_clean()` method
+    Test for ``_queue_clean()`` method
     """
 
     async def testing():
@@ -107,7 +107,7 @@ def test_verify_plan_type(pq, plan, result):
 # fmt: on
 def test_verify_plan(pq, plan, result, errmsg):
     """
-    Tests for method `_verify_plan()`.
+    Tests for method ``_verify_plan()``.
     """
     # Set two existiing plans and then set one of them as running
     existing_plans = [{"plan_uid": "two"}, {"plan_uid": "three"}]
@@ -134,7 +134,7 @@ def test_verify_plan(pq, plan, result, errmsg):
 
 def test_new_plan_uid(pq):
     """
-    Smoke test for the method `_new_plan_uid()`
+    Smoke test for the method ``_new_plan_uid()``.
     """
     assert isinstance(pq._new_plan_uid(), str)
 
@@ -147,7 +147,7 @@ def test_new_plan_uid(pq):
 # fmt: on
 def test_set_new_plan_uuid(pq, plan):
     """
-    Basic test for the method `set_new_plan_uuid`
+    Basic test for the method ``set_new_plan_uuid()``.
     """
     uid = plan.get("plan_uid", None)
 
@@ -181,7 +181,7 @@ def test_uid_set(pq):
 
 def test_uid_set_initialize(pq):
     """
-    Basic test for functions associated with `_uid_set_initialize`
+    Basic test for functions associated with ``_uid_set_initialize()``
     """
 
     async def testing():
@@ -199,7 +199,7 @@ def test_uid_set_initialize(pq):
 
 def test_remove_plan(pq):
     """
-    Basic test for functions associated with `_remove_plan`
+    Basic test for functions associated with ``_remove_plan()``
     """
 
     async def testing():
@@ -259,7 +259,7 @@ def test_remove_plan(pq):
 # fmt: on
 def test_get_plan_1(pq, pos, name):
     """
-    Basic test for the function `PlanQueueOperations.get_plan()`
+    Basic test for the function ``PlanQueueOperations.get_plan()``
     """
 
     async def testing():
@@ -280,7 +280,7 @@ def test_get_plan_1(pq, pos, name):
 
 def test_add_plan_to_queue_1(pq):
     """
-    Basic test for the function `PlanQueueOperations.add_plan_to_queue()`
+    Basic test for the function ``PlanQueueOperations.add_plan_to_queue()``
     """
 
     async def add_plan(plan, n, **kwargs):
@@ -315,7 +315,7 @@ def test_add_plan_to_queue_1(pq):
 
 def test_add_plan_to_queue_2_fail(pq):
     """
-    Failing tests for the function `PlanQueueOperations.add_plan_to_queue()`
+    Failing tests for the function ``PlanQueueOperations.add_plan_to_queue()``
     """
 
     async def testing():
@@ -351,7 +351,7 @@ def test_add_plan_to_queue_2_fail(pq):
 # fmt: on
 def test_pop_plan_from_queue_1(pq, pos, name):
     """
-    Basic test for the function `PlanQueueOperations.pop_plan_from_queue()`
+    Basic test for the function ``PlanQueueOperations.pop_plan_from_queue()``
     """
 
     async def testing():
@@ -378,7 +378,7 @@ def test_pop_plan_from_queue_1(pq, pos, name):
 @pytest.mark.parametrize("pos", ["front", "back", 0, 1, -1])
 def test_pop_plan_from_queue_2(pq, pos):
     """
-    Test for the function `PlanQueueOperations.pop_plan_from_queue()`:
+    Test for the function ``PlanQueueOperations.pop_plan_from_queue()``:
     the case of empty queue.
     """
 
@@ -391,7 +391,7 @@ def test_pop_plan_from_queue_2(pq, pos):
 
 def test_pop_plan_from_queue_3_fail(pq):
     """
-    Failing tests for the function `PlanQueueOperations.pop_plan_from_queue()`
+    Failing tests for the function ``PlanQueueOperations.pop_plan_from_queue()``
     """
 
     async def testing():
@@ -403,7 +403,7 @@ def test_pop_plan_from_queue_3_fail(pq):
 
 def test_clear_plan_queue(pq):
     """
-    Test for `PlanQueueOperations.clear_plan_queue` function
+    Test for ``PlanQueueOperations.clear_plan_queue`` function
     """
 
     async def testing():
@@ -430,7 +430,7 @@ def test_clear_plan_queue(pq):
 
 def test_plan_to_history_functions(pq):
     """
-    Test for `PlanQueueOperations._add_plan_to_history()` method.
+    Test for ``PlanQueueOperations._add_plan_to_history()`` method.
     """
 
     async def testing():
@@ -446,12 +446,17 @@ def test_plan_to_history_functions(pq):
         assert len(plan_history) == 3
         assert plan_history == plans
 
+        await pq.clear_plan_history()
+
+        plan_history = await pq.get_plan_history()
+        assert plan_history == []
+
     asyncio.run(testing())
 
 
 def test_set_next_plan_as_running(pq):
     """
-    Test for `PlanQueueOperations.set_next_plan_as_running()` function
+    Test for ``PlanQueueOperations.set_next_plan_as_running()`` function
     """
 
     async def testing():
@@ -482,7 +487,7 @@ def test_set_next_plan_as_running(pq):
 
 def test_set_processed_plan_as_completed(pq):
     """
-    Test for `PlanQueueOperations.set_processed_plan_as_completed()` function.
+    Test for ``PlanQueueOperations.set_processed_plan_as_completed()`` function.
     The function moves currently running plan to history.
     """
 
@@ -535,7 +540,7 @@ def test_set_processed_plan_as_completed(pq):
 
 def test_set_processed_plan_as_stopped(pq):
     """
-    Test for `PlanQueueOperations.set_processed_plan_as_stopped()` function.
+    Test for ``PlanQueueOperations.set_processed_plan_as_stopped()`` function.
     The function pushes running plan back to the queue and saves it in history as well.
     """
     plans = [{"plan_uid": 1, "name": "a"}, {"plan_uid": 2, "name": "b"}, {"plan_uid": 3, "name": "c"}]

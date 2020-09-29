@@ -7,7 +7,7 @@ import uuid
 class PlanQueueOperations:
     """
     The class supports operations with plan queue based on Redis. The public methods
-    of the class are protected with `asyncio.Lock`.
+    of the class are protected with ``asyncio.Lock``.
 
     Parameters
     ----------
@@ -101,7 +101,7 @@ class PlanQueueOperations:
 
     async def _delete_pool_entries(self):
         """
-        See ``self.delete_pool_entries`` method.
+        See ``self.delete_pool_entries()`` method.
         """
         await self._r_pool.delete(self._name_running_plan)
         await self._r_pool.delete(self._name_plan_queue)
@@ -126,7 +126,7 @@ class PlanQueueOperations:
     def _verify_plan(self, plan):
         """
         Verify that plan structure is valid enough to be put in the queue.
-        Current checks: plan is a dictionary, `plan_uid` key is present, Plan with the UID is not in
+        Current checks: plan is a dictionary, ``plan_uid`` key is present, Plan with the UID is not in
         the queue or currently running.
         """
         self._verify_plan_type(plan)
@@ -149,7 +149,7 @@ class PlanQueueOperations:
         Parameters
         ----------
         plan: dict
-            Dictionary of plan parameters. The dictionary may or may not have the key `plan_uid`
+            Dictionary of plan parameters. The dictionary may or may not have the key ``plan_uid``.
 
         Returns
         -------
@@ -162,34 +162,40 @@ class PlanQueueOperations:
 
     # --------------------------------------------------------------------------
     #                          Operations with UID set
-
+    # TODO: in future consider replacing this method with `self._uid_set.clear()`
+    #   The following private methods were introduced in case the set of UIDs
+    #   need to be moved to a different structure (e.g. to Redis). They could
+    #   be removed if such need does not materialize.
     def _uid_set_clear(self):
         """
-        Clear `self._uid_set`.
+        Clear ``self._uid_set``.
         """
-        self._uid_set = set()
+        self._uid_set.clear()
 
+    # TODO: in future consider replacing this method with `in self._uid_set`
     def _is_uid_in_set(self, uid):
         """
-        Checks if UID exists in `self._uid_set`.
+        Checks if UID exists in ``self._uid_set``.
         """
         return uid in self._uid_set
 
+    # TODO: in future consider replacing this method with `self._uid_set.add()`
     def _uid_set_add(self, uid):
         """
-        Add UID to `self._uid_set`.
+        Add UID to ``self._uid_set``.
         """
         self._uid_set.add(uid)
 
+    # TODO: in future consider replacing this method with `self._uid_set.remove()`
     def _uid_set_remove(self, uid):
         """
-        Remove UID from `self._uid_set`.
+        Remove UID from ``self._uid_set``.
         """
         self._uid_set.remove(uid)
 
     async def _uid_set_initialize(self):
         """
-        Initialize `self._uid_set` with UIDs extracted from the plans in the queue.
+        Initialize ``self._uid_set`` with UIDs extracted from the plans in the queue.
         """
         pq = await self._get_plan_queue()
         self._uid_set_clear()
@@ -206,7 +212,7 @@ class PlanQueueOperations:
 
     async def _is_plan_running(self):
         """
-        See ``self.is_plan_running`` method.
+        See ``self.is_plan_running()`` method.
         """
         return bool(await self._get_running_plan_info())
 
@@ -224,7 +230,7 @@ class PlanQueueOperations:
 
     async def _get_running_plan_info(self):
         """
-        See ``self._get_running_plan_info`` method.
+        See ``self._get_running_plan_info()`` method.
         """
         plan = await self._r_pool.get(self._name_running_plan)
         return json.loads(plan) if plan else {}
@@ -264,7 +270,7 @@ class PlanQueueOperations:
 
     async def _get_plan_queue_size(self):
         """
-        See `self.get_plan_queue_size()` method.
+        See ``self.get_plan_queue_size()`` method.
         """
         return await self._r_pool.llen(self._name_plan_queue)
 
@@ -282,7 +288,7 @@ class PlanQueueOperations:
 
     async def _get_plan_queue(self):
         """
-        See `self.get_plan_queue()` method.
+        See ``self.get_plan_queue()`` method.
         """
         all_plans_json = await self._r_pool.lrange(self._name_plan_queue, 0, -1)
         return [json.loads(_) for _ in all_plans_json]
@@ -303,7 +309,7 @@ class PlanQueueOperations:
 
     async def _get_plan(self, pos):
         """
-        See `self._get_plan` method.
+        See ``self._get_plan()`` method.
         """
         if pos == "back":
             index = -1
@@ -325,24 +331,24 @@ class PlanQueueOperations:
         Parameters
         ----------
         pos: int or str
-            Position of the element (0, ..) or (-1, ..), `front` or `back`.
+            Position of the element ``(0, ..)`` or ``(-1, ..)``, ``front`` or ``back``.
 
         Returns
         -------
         dict
-            Dictionary of plan parameters. Returns `{}` if no plan is found at the index.
+            Dictionary of plan parameters. Returns ``{}`` if no plan is found at the index.
 
         Raises
         ------
         TypeError
-            Incorrect text for
+            Incorrect value of ``pos`` (most likely a string different from ``front`` or ``back``)
         """
         async with self._lock:
             return await self._get_plan(pos)
 
     async def _remove_plan(self, plan, single=True):
         """
-        Remove exactly a plan from the queue. If `single=True` then the exception is
+        Remove exactly a plan from the queue. If ``single=True`` then the exception is
         raised in case of no or multiple matching plans are found in the queue.
         The function is not part of user API and shouldn't be used on exception from
         the other methods of the class.
@@ -360,7 +366,7 @@ class PlanQueueOperations:
         Raises
         ------
         RuntimeError
-            No or multiple matching plans are removed and `single=True`.
+            No or multiple matching plans are removed and ``single=True``.
         """
         n_rem_plans = await self._r_pool.lrem(self._name_plan_queue, 0, json.dumps(plan))
         if (n_rem_plans != 1) and single:
@@ -370,7 +376,7 @@ class PlanQueueOperations:
 
     async def _pop_plan_from_queue(self, pos="back"):
         """
-        See `self._pop_plan_from_queue` method
+        See ``self._pop_plan_from_queue()`` method
         """
         if pos == "back":
             plan_json = await self._r_pool.rpop(self._name_plan_queue)
@@ -397,18 +403,18 @@ class PlanQueueOperations:
         ----------
         pos: int or str
             Integer index specified position in the queue. Available string values: "front" or "back".
-            The range for the index is `-qsize..qsize-1`: `0, -qsize` - front element of the queue,
-            `-1, qsize-1` - back element of the queue.
+            The range for the index is ``-qsize..qsize-1``: ``0, -qsize`` - front element of the queue,
+            ``-1, qsize-1`` - back element of the queue.
 
         Returns
         -------
         dict or None
-            The last plan in the queue represented as a dictionary or `{}` if the queue is empty.
+            The last plan in the queue represented as a dictionary or ``{}`` if the queue is empty.
 
         Raises
         ------
         ValueError
-            Incorrect value of the parameter `pos` (typically unrecognized string).
+            Incorrect value of the parameter ``pos`` (typically unrecognized string).
 
         """
         async with self._lock:
@@ -416,7 +422,7 @@ class PlanQueueOperations:
 
     async def _add_plan_to_queue(self, plan, pos="back"):
         """
-        See `self.add_plan_to_queue` method.
+        See ``self.add_plan_to_queue`` method.
         """
         if "plan_uid" not in plan:
             plan = self.set_new_plan_uuid(plan)
@@ -455,13 +461,13 @@ class PlanQueueOperations:
             Plan represented as a dictionary of parameters
         pos: int or str
             Integer that specifies the position index, "front" or "back".
-            If `pos` is in the range `1..qsize-1` the plan is inserted
-            to the specified position and plans at positions `pos..qsize-1`
-            are shifted by one position to the right. If `-qsize<pos<0` the
+            If ``pos`` is in the range ``1..qsize-1`` the plan is inserted
+            to the specified position and plans at positions ``pos..qsize-1``
+            are shifted by one position to the right. If ``-qsize<pos<0`` the
             plan is inserted at the positon counting from the back of the queue
-            (-1 - the last element of the queue). If `pos>=qsize`,
-            the plan is added to the back of the queue. If `pos==0` or
-            `pos<=-qsize`, the plan is pushed to the front of the queue.
+            (-1 - the last element of the queue). If ``pos>=qsize``,
+            the plan is added to the back of the queue. If ``pos==0`` or
+            ``pos<=-qsize``, the plan is pushed to the front of the queue.
 
         Returns
         -------
@@ -471,16 +477,16 @@ class PlanQueueOperations:
         Raises
         ------
         ValueError
-            Incorrect value of the parameter `pos` (typically unrecognized string).
+            Incorrect value of the parameter ``pos`` (typically unrecognized string).
         TypeError
-            Incorrect type of `plan` (should be dict)
+            Incorrect type of ``plan`` (should be dict)
         """
         async with self._lock:
             return await self._add_plan_to_queue(plan, pos=pos)
 
     async def _clear_plan_queue(self):
         """
-        See `self.clear_plan_queue()` method.
+        See ``self.clear_plan_queue()`` method.
         """
         while await self._get_plan_queue_size():
             await self._pop_plan_from_queue()
@@ -516,7 +522,7 @@ class PlanQueueOperations:
 
     async def _get_plan_history_size(self):
         """
-        See `self.get_plan_history_size()` method.
+        See ``self.get_plan_history_size()`` method.
         """
         return await self._r_pool.llen(self._name_plan_history)
 
@@ -534,7 +540,7 @@ class PlanQueueOperations:
 
     async def _get_plan_history(self):
         """
-        See `self.get_plan_history()` method.
+        See ``self.get_plan_history()`` method.
         """
         all_plans_json = await self._r_pool.lrange(self._name_plan_history, 0, -1)
         return [json.loads(_) for _ in all_plans_json]
@@ -553,12 +559,27 @@ class PlanQueueOperations:
         async with self._lock:
             return await self._get_plan_history()
 
+    async def _clear_plan_history(self):
+        """
+        See ``self.clear_plan_history()`` method.
+        """
+        while await self._get_plan_history_size():
+            await self._r_pool.rpop(self._name_plan_history)
+
+    async def clear_plan_history(self):
+        """
+        Remove all entries from the plan queue. Does not touch the running plan.
+        The plan may be pushed back into the queue if it is stopped.
+        """
+        async with self._lock:
+            await self._clear_plan_history()
+
     # ----------------------------------------------------------------------
     #          Standard plan operations during queue execution
 
     async def _set_next_plan_as_running(self):
         """
-        See `self.set_next_plan_as_running()` method.
+        See ``self.set_next_plan_as_running()`` method.
         """
         # UID remains in the `self._uid_set` after this operation.
         if not await self._is_plan_running():
@@ -575,21 +596,21 @@ class PlanQueueOperations:
     async def set_next_plan_as_running(self):
         """
         Sets the next plan from the queue as a running plan. The plan is removed
-        from the queue. UID remains in `self._uid_set`, i.e. plan with the same UID
+        from the queue. UID remains in ``self._uid_set``, i.e. plan with the same UID
         may not be added to the queue while it is being executed.
 
         Returns
         -------
         dict
             The plan that was set as currently running. If another plan is currently
-            running or the queue is empty, then `{}` is returned.
+            running or the queue is empty, then ``{}`` is returned.
         """
         async with self._lock:
             return await self._set_next_plan_as_running()
 
     async def _set_processed_plan_as_completed(self, exit_status):
         """
-        See `self.set_processed_plan_as_completed` method.
+        See ``self.set_processed_plan_as_completed`` method.
         """
         # Note: UID remains in the `self._uid_set` after this operation
         if await self._is_plan_running():
@@ -604,8 +625,8 @@ class PlanQueueOperations:
 
     async def set_processed_plan_as_completed(self, exit_status):
         """
-        Moves currently executed plan to history and sets `exit_status` key.
-        UID is removed from `self._uid_set`, so a copy of the plan with
+        Moves currently executed plan to history and sets ``exit_status`` key.
+        UID is removed from ``self._uid_set``, so a copy of the plan with
         the same UID may be added to the queue.
 
         Parameters
@@ -616,15 +637,15 @@ class PlanQueueOperations:
         Returns
         -------
         dict
-            The plan added to the history including `exit_status`. If another no plan is currently
-            running, then `{}` is returned.
+            The plan added to the history including ``exit_status``. If another no plan is currently
+            running, then ``{}`` is returned.
         """
         async with self._lock:
             return await self._set_processed_plan_as_completed(exit_status=exit_status)
 
     async def _set_processed_plan_as_stopped(self, exit_status):
         """
-        See `self.set_prcessed_plan_as_stopped()` method.
+        See ``self.set_prcessed_plan_as_stopped()`` method.
         """
         # Note: UID is removed from `self._uid_set`.
         if await self._is_plan_running():
@@ -640,8 +661,8 @@ class PlanQueueOperations:
     async def set_processed_plan_as_stopped(self, exit_status):
         """
         Pushes currently executed plan to the beginning of the queue and adds
-        it to history with additional sets `exit_status` key.
-        UID is remains in `self._uid_set`.
+        it to history with additional sets ``exit_status`` key.
+        UID is remains in ``self._uid_set``.
 
         Parameters
         ----------
@@ -651,8 +672,8 @@ class PlanQueueOperations:
         Returns
         -------
         dict
-            The plan added to the history including `exit_status`. If another no plan is currently
-            running, then `{}` is returned.
+            The plan added to the history including ``exit_status``. If another no plan is currently
+            running, then ``{}`` is returned.
         """
         async with self._lock:
             return await self._set_processed_plan_as_stopped(exit_status=exit_status)

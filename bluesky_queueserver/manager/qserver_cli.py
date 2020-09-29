@@ -61,11 +61,13 @@ class CliClient:
         """
         command_dict = {
             "ping": "",
-            "queue_view": "queue_view",
+            "get_queue": "get_queue",
             "list_allowed_plans_and_devices": "list_allowed_plans_and_devices",
             "add_to_queue": "add_to_queue",
             "pop_from_queue": "pop_from_queue",
             "clear_queue": "clear_queue",
+            "get_history": "get_history",
+            "clear_history": "clear_history",
             "create_environment": "create_environment",
             "close_environment": "close_environment",
             "process_queue": "process_queue",
@@ -215,6 +217,8 @@ def qserver():
         command = "ping"
         print("Running QSever monitor. Press Ctrl-C to exit ...")
 
+    exit_code = None
+
     re_server = CliClient(address=args.address)
     try:
         while True:
@@ -227,11 +231,20 @@ def qserver():
 
             if not msg_err:
                 print(f"{current_time} - MESSAGE: {pprint.pformat(msg)}")
+                exit_code = None
             else:
                 print(f"{current_time} - ERROR: {msg_err}")
+                exit_code = 2
 
             if not monitor_on:
                 break
             ttime.sleep(1)
+    except Exception as ex:
+        logger.exception("Exception occurred: %s.", str(ex))
+        exit_code = 3
     except KeyboardInterrupt:
         print("\nThe program was manually stopped.")
+        exit_code = None
+
+    # Note: exit codes are arbitrarily selected. None translates to 0.
+    return exit_code

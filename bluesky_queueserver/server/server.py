@@ -21,7 +21,7 @@ http POST http://localhost:8080/add_to_queue plan:='{"name":"scan", "args":[["de
 """
 
 
-class ZMQ_Comm:
+class ZMQComm:
     def __init__(self, zmq_host="localhost", zmq_port="5555"):
         self._loop = asyncio.get_event_loop()
 
@@ -83,7 +83,7 @@ class ZMQ_Comm:
     def _create_msg(self, *, command, params=None):
         return {"method": command, "params": params}
 
-    async def _send_command(self, *, command, params=None):
+    async def send_command(self, *, command, params=None):
         msg_out = self._create_msg(command=command, params=params)
         msg_in = await self._zmq_communicate(msg_out)
         return msg_in
@@ -94,7 +94,7 @@ logging.getLogger("bluesky_queueserver").setLevel("DEBUG")
 
 # Use FastAPI
 app = FastAPI()
-re_server = ZMQ_Comm()
+re_server = ZMQComm()
 
 
 class REPauseOptions(str, Enum):
@@ -110,82 +110,109 @@ class REResumeOptions(str, Enum):
 
 
 @app.get("/")
-async def _hello_handler():
+async def ping_handler():
     """
     May be called to get response from the server. Returns the number of plans in the queue.
     """
-    msg = await re_server._send_command(command="")
+    msg = await re_server.send_command(command="")
     return msg
 
 
-@app.get("/queue_view")
-async def _queue_view_handler():
+@app.get("/get_queue")
+async def get_queue_handler():
     """
     Returns the contents of the current queue.
     """
-    msg = await re_server._send_command(command="queue_view")
+    msg = await re_server.send_command(command="get_queue")
     return msg
 
 
 @app.get("/list_allowed_plans_and_devices")
-async def _list_allowed_plans_and_devices_handler():
+async def list_allowed_plans_and_devices_handler():
     """
     Returns the lists of allowed plans and devices.
     """
-    msg = await re_server._send_command(command="list_allowed_plans_and_devices")
+    msg = await re_server.send_command(command="list_allowed_plans_and_devices")
     return msg
 
 
 @app.post("/add_to_queue")
-async def _add_to_queue_handler(payload: dict):
+async def add_to_queue_handler(payload: dict):
     """
     Adds new plan to the end of the queue
     """
     # TODO: validate inputs!
-    msg = await re_server._send_command(command="add_to_queue", params=payload)
+    msg = await re_server.send_command(command="add_to_queue", params=payload)
+    return msg
+
+
+@app.post("/clear_queue")
+async def clear_queue_handler():
+    """
+    Clear the plan queue.
+    """
+    msg = await re_server.send_command(command="clear_queue")
     return msg
 
 
 @app.post("/pop_from_queue")
-async def _pop_from_queue_handler():
+async def pop_from_queue_handler():
     """
     Pop the last item from back of the queue
     """
-    msg = await re_server._send_command(command="pop_from_queue")
+    msg = await re_server.send_command(command="pop_from_queue")
+    return msg
+
+
+@app.get("/get_history")
+async def get_history_handler():
+    """
+    Returns the plan history (list of dicts).
+    """
+    msg = await re_server.send_command(command="get_history")
+    return msg
+
+
+@app.post("/clear_history")
+async def clear_history_handler():
+    """
+    Clear plan history.
+    """
+    msg = await re_server.send_command(command="clear_history")
     return msg
 
 
 @app.post("/create_environment")
-async def _create_environment_handler():
+async def create_environment_handler():
     """
     Creates RE environment: creates RE Worker process, starts and configures Run Engine.
     """
-    msg = await re_server._send_command(command="create_environment")
+    msg = await re_server.send_command(command="create_environment")
     return msg
 
 
 @app.post("/close_environment")
-async def _close_environment_handler():
+async def close_environment_handler():
     """
     Deletes RE environment. In the current 'demo' prototype the environment will be deleted
     only after RE completes the current scan.
     """
-    msg = await re_server._send_command(command="close_environment")
+    msg = await re_server.send_command(command="close_environment")
     return msg
 
 
 @app.post("/process_queue")
-async def _process_queue_handler():
+async def process_queue_handler():
     """
     Start execution of the loaded queue. Additional runs can be added to the queue while
     it is executed. If the queue is empty, then nothing will happen.
     """
-    msg = await re_server._send_command(command="process_queue")
+    msg = await re_server.send_command(command="process_queue")
     return msg
 
 
 @app.post("/re_pause")
-async def _re_pause_handler(payload: dict):
+async def re_pause_handler(payload: dict):
     """
     Pause Run Engine
     """
@@ -195,12 +222,12 @@ async def _re_pause_handler(payload: dict):
             f"Allowed options: {list(REPauseOptions.__members__.keys())}"
         )
         raise HTTPException(status_code=444, detail=msg)
-    msg = await re_server._send_command(command="re_pause", params=payload)
+    msg = await re_server.send_command(command="re_pause", params=payload)
     return msg
 
 
 @app.post("/re_continue")
-async def _re_continue_handler(payload: dict):
+async def re_continue_handler(payload: dict):
     """
     Control Run Engine in the paused state
     """
@@ -210,15 +237,15 @@ async def _re_continue_handler(payload: dict):
             f"Allowed options: {list(REResumeOptions.__members__.keys())}"
         )
         raise HTTPException(status_code=444, detail=msg)
-    msg = await re_server._send_command(command="re_continue", params=payload)
+    msg = await re_server.send_command(command="re_continue", params=payload)
     return msg
 
 
 @app.post("/print_db_uids")
-async def _print_db_uids_handler():
+async def print_db_uids_handler():
     """
     Prints the UIDs of the scans in 'temp' database. Just for the demo.
     Not part of future API.
     """
-    msg = await re_server._send_command(command="print_db_uids")
+    msg = await re_server.send_command(command="print_db_uids")
     return msg

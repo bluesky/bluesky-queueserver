@@ -641,7 +641,7 @@ class PlanQueueOperations:
         """
         Pushes currently executed plan to the beginning of the queue and adds
         it to history with additional sets `exit_status` key.
-        UID is reamains in `self._uid_set`.
+        UID is remains in `self._uid_set`.
 
         Parameters
         ----------

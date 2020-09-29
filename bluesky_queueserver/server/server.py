@@ -167,7 +167,7 @@ async def _pop_from_queue_handler():
 @app.get("/get_history")
 async def _get_history_handler():
     """
-    Returns the plan history (list of dict).
+    Returns the plan history (list of dicts).
     """
     msg = await re_server.send_command(command="get_history")
     return msg

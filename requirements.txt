@@ -12,5 +12,4 @@ ophyd
 pyyaml
 pyzmq
 requests
-super_state_machine
 uvicorn

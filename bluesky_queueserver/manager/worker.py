@@ -519,6 +519,7 @@ class RunEngineWorker(Process):
                 "Error occurred while loading lists of allowed plans and devices from '%s': %s", path_pd, str(ex)
             )
 
+        logger.info("Configuring Run Engine ...")
         self._RE = RunEngine({})
 
         bec = BestEffortCallback()
@@ -541,7 +542,7 @@ class RunEngineWorker(Process):
 
         self._state["environment_state"] = "ready"
 
-        # Now make the main thread busy
+        logger.info("RE Environment is ready.")
         self._execute_in_main_thread()
 
         self._state["environment_state"] = "closing"

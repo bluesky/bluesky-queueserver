@@ -110,7 +110,7 @@ class REResumeOptions(str, Enum):
 
 
 @app.get("/")
-async def _hello_handler():
+async def _ping_handler():
     """
     May be called to get response from the server. Returns the number of plans in the queue.
     """

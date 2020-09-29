@@ -173,4 +173,13 @@ def test_http_server_close_print_db_uids_handler(re_manager, fastapi_server, add
     # TODO: can we return the list of UIDs here?
 
 
-# TODO: consider having an entry point for 'qserver -c clear_queue'.
+def test_http_server_clear_queue_handler(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
+    resp1 = _request_to_json("get", "/get_queue")
+    assert len(resp1["queue"]) == 3
+
+    resp2 = _request_to_json("post", "/clear_queue")
+    assert resp2["success"] is True
+    assert resp2["msg"] == "Plan queue is now empty."
+
+    resp3 = _request_to_json("get", "/get_queue")
+    assert len(resp3["queue"]) == 0

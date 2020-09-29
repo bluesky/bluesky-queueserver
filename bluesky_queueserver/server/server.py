@@ -21,7 +21,7 @@ http POST http://localhost:8080/add_to_queue plan:='{"name":"scan", "args":[["de
 """
 
 
-class ZMQ_Comm:
+class ZMQComm:
     def __init__(self, zmq_host="localhost", zmq_port="5555"):
         self._loop = asyncio.get_event_loop()
 
@@ -83,7 +83,7 @@ class ZMQ_Comm:
     def _create_msg(self, *, command, params=None):
         return {"method": command, "params": params}
 
-    async def _send_command(self, *, command, params=None):
+    async def send_command(self, *, command, params=None):
         msg_out = self._create_msg(command=command, params=params)
         msg_in = await self._zmq_communicate(msg_out)
         return msg_in
@@ -94,7 +94,7 @@ logging.getLogger("bluesky_queueserver").setLevel("DEBUG")
 
 # Use FastAPI
 app = FastAPI()
-re_server = ZMQ_Comm()
+re_server = ZMQComm()
 
 
 class REPauseOptions(str, Enum):
@@ -114,7 +114,7 @@ async def _hello_handler():
     """
     May be called to get response from the server. Returns the number of plans in the queue.
     """
-    msg = await re_server._send_command(command="")
+    msg = await re_server.send_command(command="")
     return msg
 
 
@@ -123,7 +123,7 @@ async def _get_queue_handler():
     """
     Returns the contents of the current queue.
     """
-    msg = await re_server._send_command(command="get_queue")
+    msg = await re_server.send_command(command="get_queue")
     return msg
 
 
@@ -132,7 +132,7 @@ async def _list_allowed_plans_and_devices_handler():
     """
     Returns the lists of allowed plans and devices.
     """
-    msg = await re_server._send_command(command="list_allowed_plans_and_devices")
+    msg = await re_server.send_command(command="list_allowed_plans_and_devices")
     return msg
 
 
@@ -142,7 +142,16 @@ async def _add_to_queue_handler(payload: dict):
     Adds new plan to the end of the queue
     """
     # TODO: validate inputs!
-    msg = await re_server._send_command(command="add_to_queue", params=payload)
+    msg = await re_server.send_command(command="add_to_queue", params=payload)
+    return msg
+
+
+@app.post("/clear_queue")
+async def _clear_queue_handler():
+    """
+    Adds new plan to the end of the queue
+    """
+    msg = await re_server.send_command(command="clear_queue")
     return msg
 
 
@@ -151,7 +160,7 @@ async def _pop_from_queue_handler():
     """
     Pop the last item from back of the queue
     """
-    msg = await re_server._send_command(command="pop_from_queue")
+    msg = await re_server.send_command(command="pop_from_queue")
     return msg
 
 
@@ -160,7 +169,7 @@ async def _create_environment_handler():
     """
     Creates RE environment: creates RE Worker process, starts and configures Run Engine.
     """
-    msg = await re_server._send_command(command="create_environment")
+    msg = await re_server.send_command(command="create_environment")
     return msg
 
 
@@ -170,7 +179,7 @@ async def _close_environment_handler():
     Deletes RE environment. In the current 'demo' prototype the environment will be deleted
     only after RE completes the current scan.
     """
-    msg = await re_server._send_command(command="close_environment")
+    msg = await re_server.send_command(command="close_environment")
     return msg
 
 
@@ -180,7 +189,7 @@ async def _process_queue_handler():
     Start execution of the loaded queue. Additional runs can be added to the queue while
     it is executed. If the queue is empty, then nothing will happen.
     """
-    msg = await re_server._send_command(command="process_queue")
+    msg = await re_server.send_command(command="process_queue")
     return msg
 
 
@@ -195,7 +204,7 @@ async def _re_pause_handler(payload: dict):
             f"Allowed options: {list(REPauseOptions.__members__.keys())}"
         )
         raise HTTPException(status_code=444, detail=msg)
-    msg = await re_server._send_command(command="re_pause", params=payload)
+    msg = await re_server.send_command(command="re_pause", params=payload)
     return msg
 
 
@@ -210,7 +219,7 @@ async def _re_continue_handler(payload: dict):
             f"Allowed options: {list(REResumeOptions.__members__.keys())}"
         )
         raise HTTPException(status_code=444, detail=msg)
-    msg = await re_server._send_command(command="re_continue", params=payload)
+    msg = await re_server.send_command(command="re_continue", params=payload)
     return msg
 
 
@@ -220,5 +229,5 @@ async def _print_db_uids_handler():
     Prints the UIDs of the scans in 'temp' database. Just for the demo.
     Not part of future API.
     """
-    msg = await re_server._send_command(command="print_db_uids")
+    msg = await re_server.send_command(command="print_db_uids")
     return msg

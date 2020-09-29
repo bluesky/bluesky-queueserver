@@ -108,7 +108,7 @@ def test_qserver_cli_and_manager(re_manager):
     assert n_plans == 3, "Incorrect number of plans in the queue"
     assert not is_plan_running, "Plan is executed while it shouldn't"
 
-    subprocess.call(["qserver", "-c", "queue_view"])
+    subprocess.call(["qserver", "-c", "get_queue"])
     subprocess.call(["qserver", "-c", "pop_from_queue"])
 
     n_plans, is_plan_running = get_reduced_state_info()

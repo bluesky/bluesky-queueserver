@@ -118,12 +118,12 @@ async def _hello_handler():
     return msg
 
 
-@app.get("/queue_view")
-async def _queue_view_handler():
+@app.get("/get_queue")
+async def _get_queue_handler():
     """
     Returns the contents of the current queue.
     """
-    msg = await re_server._send_command(command="queue_view")
+    msg = await re_server._send_command(command="get_queue")
     return msg
 
 

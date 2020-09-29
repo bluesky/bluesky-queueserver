@@ -614,14 +614,15 @@ class RunEngineManager(Process):
             "allowed_devices": self._allowed_devices,
         }
 
-    async def _queue_view_handler(self, request):
+    async def _get_queue_handler(self, request):
         """
         Returns the contents of the current queue.
         """
-        logger.info("Returning current queue.")
-        all_plans = await self._plan_queue.get_plan_queue()
+        logger.info("Returning current queue and running plan.")
+        plan_queue = await self._plan_queue.get_plan_queue()
+        running_plan = await self._plan_queue.get_running_plan_info()
 
-        return {"queue": all_plans}
+        return {"queue": plan_queue, "running_plan": running_plan}
 
     async def _add_to_queue_handler(self, request):
         """
@@ -757,7 +758,7 @@ class RunEngineManager(Process):
         params = msg["params"]
         handler_dict = {
             "": "_ping_handler",
-            "queue_view": "_queue_view_handler",
+            "get_queue": "_get_queue_handler",
             "list_allowed_plans_and_devices": "_list_allowed_plans_and_devices_handler",
             "add_to_queue": "_add_to_queue_handler",
             "pop_from_queue": "_pop_from_queue_handler",

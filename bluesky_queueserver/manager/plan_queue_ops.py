@@ -206,7 +206,7 @@ class PlanQueueOperations:
 
     async def _is_plan_running(self):
         """
-        See `self.is_plan_running` method.
+        See ``self.is_plan_running`` method.
         """
         return bool(await self._get_running_plan_info())
 

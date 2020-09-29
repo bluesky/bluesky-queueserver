@@ -488,12 +488,10 @@ class RunEngineWorker(Process):
         asyncio.set_event_loop(loop)
 
         def init_namespace():
-            self._re_namespace, self._existing_plans, self._existing_devices = (
-                {},
-                {},
-                {},
-            )
-
+            self._re_namespace = {}
+            self._existing_plans = {}
+            self._existing_devices = {}
+            
         if "profile_collection_path" not in self._config:
             logger.warning("Path to profile collection was not specified. No profile collection will be loaded.")
             init_namespace()

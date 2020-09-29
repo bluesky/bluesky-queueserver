@@ -446,6 +446,11 @@ def test_plan_to_history_functions(pq):
         assert len(plan_history) == 3
         assert plan_history == plans
 
+        await pq.clear_plan_history()
+
+        plan_history = await pq.get_plan_history()
+        assert plan_history == []
+
     asyncio.run(testing())
 
 

@@ -149,7 +149,7 @@ async def _add_to_queue_handler(payload: dict):
 @app.post("/clear_queue")
 async def _clear_queue_handler():
     """
-    Adds new plan to the end of the queue
+    Clear the plan queue.
     """
     msg = await re_server.send_command(command="clear_queue")
     return msg
@@ -161,6 +161,24 @@ async def _pop_from_queue_handler():
     Pop the last item from back of the queue
     """
     msg = await re_server.send_command(command="pop_from_queue")
+    return msg
+
+
+@app.get("/get_history")
+async def _get_history_handler():
+    """
+    Returns the plan history (list of dict).
+    """
+    msg = await re_server.send_command(command="get_history")
+    return msg
+
+
+@app.post("/clear_history")
+async def _clear_history_handler():
+    """
+    Clear plan history.
+    """
+    msg = await re_server.send_command(command="clear_history")
     return msg
 
 

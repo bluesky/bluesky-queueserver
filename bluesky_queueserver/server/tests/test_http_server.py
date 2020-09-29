@@ -183,3 +183,27 @@ def test_http_server_clear_queue_handler(re_manager, fastapi_server, add_plans_t
 
     resp3 = _request_to_json("get", "/get_queue")
     assert len(resp3["queue"]) == 0
+
+
+def test_http_server_plan_history(re_manager, fastapi_server):  # noqa F811
+    # Select very short plan
+    plan = {"plan": {"name": "count", "args": [["det1", "det2"]]}}
+    _request_to_json("post", "/add_to_queue", json=plan)
+    _request_to_json("post", "/add_to_queue", json=plan)
+    _request_to_json("post", "/add_to_queue", json=plan)
+
+    _request_to_json("post", "/create_environment")
+    ttime.sleep(1)
+
+    _request_to_json("post", "/process_queue")
+    ttime.sleep(5)
+
+    resp1 = _request_to_json("get", "/get_history")
+    assert len(resp1["history"]) == 3
+    assert resp1["history"][0]["name"] == "count"
+
+    resp2 = _request_to_json("post", "/clear_history")
+    assert resp2["success"] is True
+
+    resp3 = _request_to_json("get", "/get_history")
+    assert resp3["history"] == []

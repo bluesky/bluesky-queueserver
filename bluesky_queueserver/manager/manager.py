@@ -656,6 +656,23 @@ class RunEngineManager(Process):
         await self._plan_queue.clear_plan_queue()
         return {"success": True, "msg": "Plan queue is now empty."}
 
+    async def _get_history_handler(self, request):
+        """
+        Returns the contents of the plan history.
+        """
+        logger.info("Returning plan history.")
+        plan_history = await self._plan_queue.get_plan_history()
+
+        return {"history": plan_history}
+
+    async def _clear_history_handler(self, request):
+        """
+        Remove all entries from the plan history
+        """
+        logger.info("Clearing the plan execution history")
+        await self._plan_queue.clear_plan_history()
+        return {"success": True, "msg": "Plan history is now empty."}
+
     async def _create_environment_handler(self, request):
         """
         Creates RE environment: creates RE Worker process, starts and configures Run Engine.
@@ -763,6 +780,8 @@ class RunEngineManager(Process):
             "add_to_queue": "_add_to_queue_handler",
             "pop_from_queue": "_pop_from_queue_handler",
             "clear_queue": "_clear_queue_handler",
+            "get_history": "_get_history_handler",
+            "clear_history": "_clear_history_handler",
             "create_environment": "_create_environment_handler",
             "close_environment": "_close_environment_handler",
             "process_queue": "_process_queue_handler",

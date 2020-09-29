@@ -553,6 +553,21 @@ class PlanQueueOperations:
         async with self._lock:
             return await self._get_plan_history()
 
+    async def _clear_plan_history(self):
+        """
+        See `self.clear_plan_history()` method.
+        """
+        while await self._get_plan_history_size():
+            await self._r_pool.rpop(self._name_plan_history)
+
+    async def clear_plan_history(self):
+        """
+        Remove all entries from the plan queue. Does not touch the running plan.
+        The plan may be pushed back into the queue if it is stopped.
+        """
+        async with self._lock:
+            await self._clear_plan_history()
+
     # ----------------------------------------------------------------------
     #          Standard plan operations during queue execution
 

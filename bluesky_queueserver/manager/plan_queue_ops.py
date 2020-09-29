@@ -335,7 +335,7 @@ class PlanQueueOperations:
         Raises
         ------
         TypeError
-            Incorrect text for
+            Incorrect value of `pos` (most likely a string different from `front` or `black`
         """
         async with self._lock:
             return await self._get_plan(pos)

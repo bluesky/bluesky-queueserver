@@ -101,7 +101,7 @@ class PlanQueueOperations:
 
     async def _delete_pool_entries(self):
         """
-        See `self.delete_pool_entries` method.
+        See ``self.delete_pool_entries`` method.
         """
         await self._r_pool.delete(self._name_running_plan)
         await self._r_pool.delete(self._name_plan_queue)

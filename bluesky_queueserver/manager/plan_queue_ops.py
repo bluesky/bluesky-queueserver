@@ -237,7 +237,7 @@ class PlanQueueOperations:
         -------
         dict
             Dictionary representing currently running plan. Empty dictionary if
-            no plan is currently running (key value is `{}` or the key does not exist).
+            no plan is currently running (key value is ``{}`` or the key does not exist).
         """
         async with self._lock:
             return await self._get_running_plan_info()

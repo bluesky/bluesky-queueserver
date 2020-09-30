@@ -49,10 +49,33 @@ def load_profile_collection(path):
     file_list.sort()  # Sort in alphabetical order
 
     # Load the files into the namespace 'nspace'.
-    nspace = None
+    nspace = {}
+
+    class IPDummy:
+        def __init__(self, user_ns):
+            self.user_ns = user_ns
+
+        def __call__(self):
+            return self
+
+        def register_magics(self, *args, **kwargs):
+            ...
+
+        def magics(
+
+    class DummyRE:
+        preprocessors = []
+
+        def subscribe(self, *args, **kwargs):
+            ...
+
+    nspace["get_ipython"] = IPDummy(nspace)
+    nspace["RE"] = DummyRE()
     for file in file_list:
         nspace = runpy.run_path(file, nspace)
-
+    del nspace["get_ipython"]
+    nspace.pop("RE")
+    nspace.pop("db")
     return nspace
 
 

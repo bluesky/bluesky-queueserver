@@ -491,7 +491,7 @@ class RunEngineWorker(Process):
             self._re_namespace = {}
             self._existing_plans = {}
             self._existing_devices = {}
-            
+
         if "profile_collection_path" not in self._config:
             logger.warning("Path to profile collection was not specified. No profile collection will be loaded.")
             init_namespace()
@@ -517,13 +517,19 @@ class RunEngineWorker(Process):
                 "Error occurred while loading lists of allowed plans and devices from '%s': %s", path_pd, str(ex)
             )
 
-        logger.info("Configuring Run Engine ...")
+        logger.info("Instantiating and configuring Run Engine ...")
+
         self._RE = RunEngine({})
 
         bec = BestEffortCallback()
         self._RE.subscribe(bec)
 
+        self._RE.subscribe(self._db.insert)
+
         if "kafka" in self._config:
+            logger.info("Subscribing to Kafka: topic '%s', servers '%s'",
+                        self._config["kafka"]["topic"],
+                        self._config["kafka"]["bootstrap"])
             kafka_publisher = kafkaPublisher(
                 topic=self._config["kafka"]["topic"],
                 bootstrap_servers=self._config["kafka"]["bootstrap"],
@@ -533,8 +539,6 @@ class RunEngineWorker(Process):
                 serializer=partial(msgpack.dumps, default=mpn.encode),
             )
             self._RE.subscribe(kafka_publisher)
-
-        self._RE.subscribe(self._db.insert)
 
         self._execution_queue = queue.Queue()
 

@@ -378,9 +378,9 @@ class PipeJsonRpcSendAsync:
                 if response["id"] != self._expected_msg_id:
                     # Incorrect ID: ignore the message.
                     logger.error(
-                        "Response Watchdog->RE Manager contains incorrect ID: %s. Expected %s.\nMessage: %s",
+                        "Received response with incorrect message ID: %s. Expected %s.\nMessage: %s",
                         response["id"],
-                        self._expected_msg_id["id"],
+                        self._expected_msg_id,
                         pprint.pformat(response),
                     )
                 else:
@@ -388,10 +388,10 @@ class PipeJsonRpcSendAsync:
                     self._fut_comm.set_result(response)
             else:
                 # Missing ID: ignore the message
-                logger.error("Response Watchdog->RE Manager contains no id: %s", pprint.pformat(response))
+                logger.error("Received response with missing message ID: %s", pprint.pformat(response))
         else:
             logger.error(
-                "Unsolicited message received Watchdog->Re Manager: %s. Message is ignored",
+                "Unsolicited message received: %s. Message is ignored",
                 pprint.pformat(response),
             )
 

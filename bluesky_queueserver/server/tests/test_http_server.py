@@ -69,7 +69,7 @@ def test_http_server_create_environment_handler(re_manager, fastapi_server):  # 
     resp1 = _request_to_json("post", "/create_environment")
     assert resp1 == {"success": True, "msg": ""}
 
-    ttime.sleep(1)  # TODO: API needed to test if environment initialization is finished. Use delay for now.
+    ttime.sleep(2)  # TODO: API needed to test if environment initialization is finished. Use delay for now.
 
     resp2 = _request_to_json("post", "/create_environment")
     assert resp2 == {"success": False, "msg": "Environment already exists."}
@@ -79,7 +79,7 @@ def test_http_server_close_environment_handler(re_manager, fastapi_server):  # n
     resp1 = _request_to_json("post", "/create_environment")
     assert resp1 == {"success": True, "msg": ""}
 
-    ttime.sleep(1)  # TODO: API needed to test if environment initialization is finished. Use delay for now.
+    ttime.sleep(2)  # TODO: API needed to test if environment initialization is finished. Use delay for now.
 
     resp2 = _request_to_json("post", "/close_environment")
     assert resp2 == {"success": True, "msg": ""}
@@ -100,7 +100,7 @@ def test_http_server_process_queue_handler(re_manager, fastapi_server, add_plans
     assert len(resp2a["queue"]) == 3
     assert resp2a["running_plan"] == {}
 
-    ttime.sleep(1)  # TODO: API needed to test if environment initialization is finished. Use delay for now.
+    ttime.sleep(2)  # TODO: API needed to test if environment initialization is finished. Use delay for now.
 
     resp3 = _request_to_json("post", "/process_queue")
     assert resp3 == {"success": True, "msg": ""}
@@ -122,7 +122,7 @@ def test_http_server_re_pause_continue_handlers(re_manager, fastapi_server):  # 
     resp1 = _request_to_json("post", "/create_environment")
     assert resp1 == {"success": True, "msg": ""}
 
-    ttime.sleep(1)  # TODO: API needed to test if environment initialization is finished. Use delay for now.
+    ttime.sleep(2)  # TODO: API needed to test if environment initialization is finished. Use delay for now.
 
     resp2 = _request_to_json(
         "post",
@@ -157,7 +157,7 @@ def test_http_server_close_print_db_uids_handler(re_manager, fastapi_server, add
     resp1 = _request_to_json("post", "/create_environment")
     assert resp1 == {"success": True, "msg": ""}
 
-    ttime.sleep(1)  # TODO: API needed to test if environment initialization is finished. Use delay for now.
+    ttime.sleep(2)  # TODO: API needed to test if environment initialization is finished. Use delay for now.
 
     resp2 = _request_to_json("post", "/process_queue")
     assert resp2 == {"success": True, "msg": ""}
@@ -167,10 +167,6 @@ def test_http_server_close_print_db_uids_handler(re_manager, fastapi_server, add
     resp2a = _request_to_json("get", "/get_queue")
     assert len(resp2a["queue"]) == 0
     assert resp2a["running_plan"] == {}
-
-    resp5 = _request_to_json("post", "/print_db_uids")
-    assert resp5 == {"msg": "", "success": True}
-    # TODO: can we return the list of UIDs here?
 
 
 def test_http_server_clear_queue_handler(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
@@ -193,7 +189,7 @@ def test_http_server_plan_history(re_manager, fastapi_server):  # noqa F811
     _request_to_json("post", "/add_to_queue", json=plan)
 
     _request_to_json("post", "/create_environment")
-    ttime.sleep(1)
+    ttime.sleep(2)
 
     _request_to_json("post", "/process_queue")
     ttime.sleep(5)

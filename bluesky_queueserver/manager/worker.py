@@ -6,30 +6,20 @@ import asyncio
 from functools import partial
 import logging
 
+from .comms import PipeJsonRpcReceive
+
 import msgpack
 import msgpack_numpy as mpn
-
-from bluesky import RunEngine
-from bluesky.run_engine import get_bluesky_event_loop
-
-from bluesky.callbacks.best_effort import BestEffortCallback
-from databroker import Broker
-
-from bluesky_kafka import Publisher as kafkaPublisher
 
 from .profile_ops import (
     load_profile_collection,
     plans_from_nspace,
     devices_from_nspace,
-    parse_plan,
     load_list_of_plans_and_devices,
+    parse_plan,
 )
 
-from .comms import PipeJsonRpcReceive
-
 logger = logging.getLogger(__name__)
-
-DB = [Broker.named("temp")]
 
 
 class RunEngineWorker(Process):
@@ -80,7 +70,7 @@ class RunEngineWorker(Process):
         # Class that supports communication over the pipe
         self._comm_to_manager = PipeJsonRpcReceive(conn=self._conn, name="RE Watchdog-Manager Comm")
 
-        self._db = DB[0]
+        self._db = None
         self._config = config or {}
         self._allowed_plans, self._allowed_devices = [], []
 
@@ -480,6 +470,16 @@ class RunEngineWorker(Process):
         self._exit_event = threading.Event()
         self._exit_confirmed_event = threading.Event()
         self._re_report_lock = threading.Lock()
+
+        from bluesky import RunEngine
+        from bluesky.run_engine import get_bluesky_event_loop
+        from bluesky.callbacks.best_effort import BestEffortCallback
+        from bluesky_kafka import Publisher as kafkaPublisher
+        from databroker import Broker
+
+        # TODO: subscribe to local databroker (currently there is no way to access
+        #    'temp' databroker from outside the process). Production version will use Kafka.
+        self._db = Broker.named("temp")
 
         # TODO: TC - Do you think that the following code may be included in RE.__init__()
         #   (for Python 3.8 and above)

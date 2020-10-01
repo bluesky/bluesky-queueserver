@@ -8,8 +8,6 @@ import yaml
 import tempfile
 import re
 
-import ophyd
-
 import logging
 
 logger = logging.getLogger(__name__)
@@ -212,6 +210,8 @@ def devices_from_nspace(nspace):
     dict(str: callable)
         Dictionary of devices.
     """
+    import ophyd
+
     devices = {}
     for item in nspace.items():
         if isinstance(item[1], ophyd.Device):

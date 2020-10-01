@@ -7,7 +7,6 @@ import pprint
 import uuid
 import enum
 
-from .worker import DB
 from .comms import PipeJsonRpcSendAsync, CommTimeoutError
 from .profile_ops import load_list_of_plans_and_devices
 from .plan_queue_ops import PlanQueueOperations
@@ -262,18 +261,19 @@ class RunEngineManager(Process):
             await asyncio.sleep(t_period)
             if self._environment_exists or (self._manager_state == MState.CREATING_ENVIRONMENT):
                 ws, _ = await self._worker_request_state()
-                self._worker_state_info = ws
-                if self._manager_state == MState.CLOSING_ENVIRONMENT:
-                    if ws["environment_state"] == "closing":
-                        self._fut_manager_task_completed.set_result(None)
+                if ws is not None:
+                    self._worker_state_info = ws
+                    if self._manager_state == MState.CLOSING_ENVIRONMENT:
+                        if ws["environment_state"] == "closing":
+                            self._fut_manager_task_completed.set_result(None)
 
-                if self._manager_state == MState.CREATING_ENVIRONMENT:
-                    if ws["environment_state"] == "ready":
-                        self._fut_manager_task_completed.set_result(None)
+                    if self._manager_state == MState.CREATING_ENVIRONMENT:
+                        if ws["environment_state"] == "ready":
+                            self._fut_manager_task_completed.set_result(None)
 
-                if self._manager_state == MState.EXECUTING_QUEUE:
-                    if ws["re_report_available"]:
-                        self._loop.create_task(self._process_plan_report())
+                    if self._manager_state == MState.EXECUTING_QUEUE:
+                        if ws["re_report_available"]:
+                            self._loop.create_task(self._process_plan_report())
 
     async def _process_plan_report(self):
         """
@@ -408,28 +408,6 @@ class RunEngineManager(Process):
         else:
             self._manager_state = MState.EXECUTING_QUEUE
         return success, err_msg
-
-    def _print_db_uids(self):
-        """
-        Prints the UIDs of the scans in 'temp' database. Just for the demo.
-        Not part of future API.
-        """
-        print("\n===================================================================")
-        print("             The contents of 'temp' database.")
-        print("-------------------------------------------------------------------")
-        n_runs = 0
-        db_instance = DB[0]
-        for run_id in range(1, 100000):
-            try:
-                hdr = db_instance[run_id]
-                uid = hdr.start["uid"]
-                n_runs += 1
-                print(f"Run ID: {run_id}   UID: {uid}")
-            except Exception:
-                break
-        print("-------------------------------------------------------------------")
-        print(f"  Total of {n_runs} runs were found in 'temp' database.")
-        print("===================================================================\n")
 
     # ===============================================================================
     #         Functions that send commands/request data from Worker process
@@ -745,15 +723,6 @@ class RunEngineManager(Process):
             )
         return {"success": success, "msg": msg}
 
-    async def _print_db_uids_handler(self, request):
-        """
-        Prints the UIDs of the scans in 'temp' database. Just for the demo.
-        Not part of future API.
-        """
-        logger.info("Print UIDs of collected run ('temp' Databroker).")
-        self._print_db_uids()
-        return {"success": True, "msg": ""}
-
     async def _stop_manager_handler(self, request):
         """
         Stop RE Manager in orderly way
@@ -787,7 +756,6 @@ class RunEngineManager(Process):
             "process_queue": "_process_queue_handler",
             "re_pause": "_re_pause_handler",
             "re_continue": "_re_continue_handler",
-            "print_db_uids": "_print_db_uids_handler",
             "stop_manager": "_stop_manager_handler",
             "kill_manager": "_kill_manager_handler",
         }

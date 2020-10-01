@@ -73,7 +73,6 @@ class CliClient:
             "process_queue": "process_queue",
             "re_pause": "re_pause",
             "re_continue": "re_continue",
-            "print_db_uids": "print_db_uids",
             "stop_manager": "stop_manager",
             "kill_manager": "kill_manager",
         }

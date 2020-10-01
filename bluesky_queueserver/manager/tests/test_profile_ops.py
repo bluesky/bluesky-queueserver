@@ -33,7 +33,105 @@ def test_load_profile_collection_1():
     assert len(nspace) > 0, "Failed to load the profile collection"
 
 
-def test_load_profile_collection_2_fail(tmp_path):
+def _copy_default_profile_collection(tmp_path):
+    """
+    Copy default profile collections (only .py files) to temporary directory.
+    Returns the new temporary directory.
+    """
+    # Default path
+    pc_path = get_default_profile_collection_dir()
+    # New path
+    new_pc_path = os.path.join(tmp_path, "startup")
+
+    os.makedirs(new_pc_path, exist_ok=True)
+
+    # Copy simulated profile collection (only .py files)
+    file_pattern = os.path.join(pc_path, "[0-9][0-9]*.py")
+    file_list = glob.glob(file_pattern)
+    for fln in file_list:
+        shutil.copy(fln, new_pc_path)
+
+    return new_pc_path
+
+
+def test_load_profile_collection_2(tmp_path):
+    """
+    Loading a copy of the default profile collection
+    """
+    pc_path = _copy_default_profile_collection(tmp_path)
+    nspace = load_profile_collection(pc_path)
+    assert len(nspace) > 0, "Failed to load the profile collection"
+
+
+# fmt: off
+@pytest.mark.parametrize("additional_code, success, errmsg", [
+    # Patched as expected
+    ("""
+\n
+from IPython import get_ipython
+
+get_ipython().user_ns
+
+""", True, ""),
+
+    # Not patched ('get_ipython' is commented)
+    ("""
+\n
+from IPython # import get_ipython
+
+get_ipython().user_ns
+""", False, "Profile calls 'get_ipython' before the patch was applied"),
+
+    # using 'get_ipython' before it is patched
+    ("""
+\n
+get_ipython().user_ns
+
+""", False, "Profile calls 'get_ipython' before the patch was applied"),
+
+    # Commented 'get_ipython' -> OK
+    ("""
+\n
+a = 10  # get_ipython().user_ns
+""", True, ""),
+
+    # Raise exception in the profile
+    ("""
+\n
+raise Exception("Manually raised exception.")
+
+""", False, "Manually raised exception."),
+
+])
+# fmt: on
+def test_load_profile_collection_3(tmp_path, additional_code, success, errmsg):
+    """
+    Loading a copy of the default profile collection
+    """
+    pc_path = _copy_default_profile_collection(tmp_path)
+
+    # Path to the first file (starts with 00)
+    file_pattern = os.path.join(pc_path, "[0-9][0-9]*.py")
+    file_list = glob.glob(file_pattern)
+    file_list.sort()
+    fln = file_list[0]
+
+    with open(fln, "r") as file_in:
+        code = file_in.readlines()
+
+    with open(fln, "w") as file_out:
+        file_out.writelines(additional_code)
+        file_out.writelines(code)
+
+    if success:
+        nspace = load_profile_collection(pc_path)
+        assert len(nspace) > 0, "Failed to load the profile collection"
+    else:
+        with pytest.raises(Exception, match=errmsg):
+            load_profile_collection(pc_path)
+
+
+def test_load_profile_collection_4_fail(tmp_path):
     """
     Failing cases
     """

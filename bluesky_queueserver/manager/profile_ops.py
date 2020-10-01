@@ -164,7 +164,7 @@ def load_profile_collection(path, patch_profiles=True):
     # Load the files into the namespace 'nspace'.
     nspace = None
     for file in file_list:
-        logger.info(f"Loading profile collection file '{file}' ...")
+        logger.info(f"Loading startup file '{file}' ...")
         fln_tmp = _patch_profile(file) if patch_profiles else file
         nspace = runpy.run_path(fln_tmp, nspace)
 

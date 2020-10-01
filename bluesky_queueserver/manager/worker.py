@@ -6,30 +6,20 @@ import asyncio
 from functools import partial
 import logging
 
+from .comms import PipeJsonRpcReceive
+
 import msgpack
 import msgpack_numpy as mpn
-
-from bluesky import RunEngine
-from bluesky.run_engine import get_bluesky_event_loop
-
-from bluesky.callbacks.best_effort import BestEffortCallback
-from databroker import Broker
-
-from bluesky_kafka import Publisher as kafkaPublisher
 
 from .profile_ops import (
     load_profile_collection,
     plans_from_nspace,
     devices_from_nspace,
-    parse_plan,
     load_list_of_plans_and_devices,
+    parse_plan,
 )
 
-from .comms import PipeJsonRpcReceive
-
 logger = logging.getLogger(__name__)
-
-DB = [Broker.named("temp")]
 
 
 class RunEngineWorker(Process):
@@ -80,7 +70,7 @@ class RunEngineWorker(Process):
         # Class that supports communication over the pipe
         self._comm_to_manager = PipeJsonRpcReceive(conn=self._conn, name="RE Watchdog-Manager Comm")
 
-        self._db = DB[0]
+        self._db = None
         self._config = config or {}
         self._allowed_plans, self._allowed_devices = [], []
 
@@ -481,6 +471,16 @@ class RunEngineWorker(Process):
         self._exit_confirmed_event = threading.Event()
         self._re_report_lock = threading.Lock()
 
+        from bluesky import RunEngine
+        from bluesky.run_engine import get_bluesky_event_loop
+        from bluesky.callbacks.best_effort import BestEffortCallback
+        from bluesky_kafka import Publisher as kafkaPublisher
+        from databroker import Broker
+
+        # TODO: subscribe to local databroker (currently there is no way to access
+        #    'temp' databroker from outside the process). Production version will use Kafka.
+        self._db = Broker.named("temp")
+
         # TODO: TC - Do you think that the following code may be included in RE.__init__()
         #   (for Python 3.8 and above)
         # Setting the default event loop is needed to make the code work with Python 3.8.
@@ -488,11 +488,9 @@ class RunEngineWorker(Process):
         asyncio.set_event_loop(loop)
 
         def init_namespace():
-            self._re_namespace, self._existing_plans, self._existing_devices = (
-                {},
-                {},
-                {},
-            )
+            self._re_namespace = {}
+            self._existing_plans = {}
+            self._existing_devices = {}
 
         if "profile_collection_path" not in self._config:
             logger.warning("Path to profile collection was not specified. No profile collection will be loaded.")
@@ -506,7 +504,7 @@ class RunEngineWorker(Process):
                 self._existing_devices = devices_from_nspace(self._re_namespace)
                 logger.info("Loading of the beamline profiles completed successfully")
             except Exception as ex:
-                logger.exception("Error wile loading profile collection: %s", str(ex))
+                logger.exception("Error while loading profile collection: %s", str(ex))
                 init_namespace()
 
         # Load lists of allowed plans and devices
@@ -519,13 +517,21 @@ class RunEngineWorker(Process):
                 "Error occurred while loading lists of allowed plans and devices from '%s': %s", path_pd, str(ex)
             )
 
-        logger.info("Configuring Run Engine ...")
+        logger.info("Instantiating and configuring Run Engine ...")
+
         self._RE = RunEngine({})
 
         bec = BestEffortCallback()
         self._RE.subscribe(bec)
 
+        self._RE.subscribe(self._db.insert)
+
         if "kafka" in self._config:
+            logger.info(
+                "Subscribing to Kafka: topic '%s', servers '%s'",
+                self._config["kafka"]["topic"],
+                self._config["kafka"]["bootstrap"],
+            )
             kafka_publisher = kafkaPublisher(
                 topic=self._config["kafka"]["topic"],
                 bootstrap_servers=self._config["kafka"]["bootstrap"],
@@ -535,8 +541,6 @@ class RunEngineWorker(Process):
                 serializer=partial(msgpack.dumps, default=mpn.encode),
             )
             self._RE.subscribe(kafka_publisher)
-
-        self._RE.subscribe(self._db.insert)
 
         self._execution_queue = queue.Queue()
 

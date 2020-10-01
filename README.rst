@@ -81,7 +81,7 @@ The number of entries in the queue may be checked as follows::
 
 The contents of the queue can be retrieved as follows::
 
-  http GET http://localhost:8080/queue_view
+  http GET http://localhost:8080/get_queue
 
 Before the queue can be executed, the worker environment must be created and initialized. This operation
 creates a new execution environment for Bluesky Run Engine and used to execute plans until it explicitly
@@ -125,26 +125,6 @@ There is minimal user protection features implemented that will prevent executio
 the commands that are not supported in current state of the server. Error messages are printed
 in the terminal that is running the server along with output of Run Engine.
 
-There is demo of data collection capability. The instance of the QueueServer is keeping a reference
-to an instance of 'temp' Databroker, which is passed to the RE Worker at the time of creation and
-used to collect documents from Run Engine. Data from all plans executed during QueueServer session
-are accumulated in the 'temp' database. The table that contains Run IDs and UIDs of the runs in
-the databased can be printed on the screen by sending the command::
-
-  http POST http://localhost:8080/print_db_uids
-
-The table will be printed in the RE Manager terminal::
-
-    ===================================================================
-                 The contents of 'temp' database.
-    -------------------------------------------------------------------
-    Run ID: 1   UID: bd621328-ffcf-409f-a668-0c303c0d287f
-    Run ID: 2   UID: e85f2f40-44e9-4097-be50-c27f42c4e201
-    Run ID: 3   UID: 1dec536d-3397-43c1-91a3-2af323452bfe
-    -------------------------------------------------------------------
-      Total of 3 runs were found in 'temp' database.
-    ===================================================================
-
 The 'qserver' CLI tool can be started from a separate shell. Display help options::
 
   qserver -h
@@ -170,7 +150,7 @@ Add a new plan to the queue::
 
 View the contents of the queue::
 
-  qserver -c queue_view
+  qserver -c get_queue
 
 Pop the last element from queue::
 
@@ -204,9 +184,6 @@ Countinue paused plan::
   qserver -c re_continue -p stop
   qserver -c re_continue -p halt
 
-Print UIDs in 'temp' Databroker::
-
-  qserver -c print_db_uids
 
 Close RE Manager in orderly way. No plans should be running at the moment when the command is issued::
 

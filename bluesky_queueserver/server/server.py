@@ -239,13 +239,3 @@ async def re_continue_handler(payload: dict):
         raise HTTPException(status_code=444, detail=msg)
     msg = await re_server.send_command(command="re_continue", params=payload)
     return msg
-
-
-@app.post("/print_db_uids")
-async def print_db_uids_handler():
-    """
-    Prints the UIDs of the scans in 'temp' database. Just for the demo.
-    Not part of future API.
-    """
-    msg = await re_server.send_command(command="print_db_uids")
-    return msg

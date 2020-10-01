@@ -504,7 +504,7 @@ class RunEngineWorker(Process):
                 self._existing_devices = devices_from_nspace(self._re_namespace)
                 logger.info("Loading of the beamline profiles completed successfully")
             except Exception as ex:
-                logger.exception("Error wile loading profile collection: %s", str(ex))
+                logger.exception("Error while loading profile collection: %s", str(ex))
                 init_namespace()
 
         # Load lists of allowed plans and devices
@@ -527,9 +527,11 @@ class RunEngineWorker(Process):
         self._RE.subscribe(self._db.insert)
 
         if "kafka" in self._config:
-            logger.info("Subscribing to Kafka: topic '%s', servers '%s'",
-                        self._config["kafka"]["topic"],
-                        self._config["kafka"]["bootstrap"])
+            logger.info(
+                "Subscribing to Kafka: topic '%s', servers '%s'",
+                self._config["kafka"]["topic"],
+                self._config["kafka"]["bootstrap"],
+            )
             kafka_publisher = kafkaPublisher(
                 topic=self._config["kafka"]["topic"],
                 bootstrap_servers=self._config["kafka"]["bootstrap"],

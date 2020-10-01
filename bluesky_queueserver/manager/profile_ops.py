@@ -5,8 +5,14 @@ import inspect
 from collections.abc import Iterable
 import pkg_resources
 import yaml
+import tempfile
+import re
 
 import ophyd
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def get_default_profile_collection_dir():
@@ -18,7 +24,114 @@ def get_default_profile_collection_dir():
     return pc_path
 
 
-def load_profile_collection(path):
+_patch1 = """
+
+__local_namespace = locals()
+
+try:
+    pass  # Prevent errors when patching an empty file
+
+"""
+
+_patch2 = """
+
+    import logging
+    logger_patch = logging.Logger(__name__)
+
+
+    class IPDummy:
+        def __init__(self, user_ns):
+            self.user_ns = user_ns
+
+            # May be this should be some meaningful logger (used by 'configure_bluesky_logging')
+            self.log = logging.Logger('ipython_patch')
+
+
+    def get_ipython_patch():
+        ip_dummy = IPDummy(__local_namespace)
+        return ip_dummy
+
+    get_ipython = get_ipython_patch
+
+"""
+
+_patch3 = """
+
+except BaseException as ex:
+    logger_patch.exception("Exception while loading profile: '%s'", str(ex))
+    raise
+
+"""
+
+
+def _patch_profile(file_name):
+    """
+    Patch the profile (.py file from a beamline profile collection).
+    Patching includes placing the code in the file in ``try..except..` block
+    and inserting patch for ``get_ipython()`` function after the line
+    ``from IPython import get_python``.
+
+    The patched file is saved to the temporary file ``qserver/profile_temp.py``
+    in standard directory for the temporary files. For Linux it is ``/tmp``.
+    It is assumed that files in profile collection are processed one by one, so
+    overwriting the same temporary file is a good way to eliminate resource leaks.
+
+    Parameters
+    ----------
+    file_name: str
+        full path to the patched file.
+
+    Returns
+    -------
+    str
+        full path to the patched temporary file.
+    """
+
+    # On Linux the temporary .py file will be always '/tmp/qserver/profile_temp.py'
+    #   On other systems the file will be placed in appropriate location, but
+    #   it will always be the same file.
+    tmp_dir = os.path.join(tempfile.gettempdir(), "qserver")
+    os.makedirs(tmp_dir, exist_ok=True)
+    tmp_fln = os.path.join(tmp_dir, "profile_temp.py")
+
+    with open(file_name, "r") as fln_in:
+        code = fln_in.readlines()
+
+    def get_prefix(s):
+        # Returns the sequence of spaces and tabs at the beginning of the code line
+        prefix = ""
+        while s and (s == " " or s == "\t"):
+            prefix += s[0]
+            s = s[1:]
+        return prefix
+
+    with open(tmp_fln, "w") as fln_out:
+        # insert 'try ..'
+        fln_out.writelines(_patch1)
+        is_patched = False
+        for line in code:
+            fln_out.write("    " + line)
+            # The following RE patterns cover only the cases of commenting with '#'.
+            if not is_patched:
+                if re.search(r"^[^#]*IPython[^#]+get_ipython", line):
+                    # Keep the same indentation as in the preceding line
+                    prefix = get_prefix(line)
+                    for lp in _patch2:
+                        fln_out.write(prefix + lp)
+                    is_patched = True  # Patch only once
+                elif re.search(r"^[^#]*get_ipython *\(", line):
+                    # 'get_ipython()' is called before the patch was applied
+                    raise RuntimeError(
+                        "Profile calls 'get_ipython' before the patch was "
+                        "applied. Inspect and correct the code."
+                    )
+        # insert 'except ..'
+        fln_out.writelines(_patch3)
+
+    return tmp_fln
+
+
+def load_profile_collection(path, patch_profiles=True):
     """
     Load profile collection located at the specified path. The collection consists of
     .py files started with 'DD-', where D is a digit (e.g. 05-file.py). The files
@@ -28,6 +141,9 @@ def load_profile_collection(path):
     ----------
     path: str
         path to profile collection
+    patch_profiles: boolean
+        enable/disable patching profiles. At this point there is no reason not to
+        patch profiles.
 
     Returns
     -------
@@ -51,7 +167,13 @@ def load_profile_collection(path):
     # Load the files into the namespace 'nspace'.
     nspace = None
     for file in file_list:
-        nspace = runpy.run_path(file, nspace)
+        logger.info(f"Loading profile collection file '{file}' ...")
+        fln_tmp = _patch_profile(file) if patch_profiles else file
+        nspace = runpy.run_path(fln_tmp, nspace)
+
+    # Discard RE and db from the profile namespace (if they exist).
+    nspace.pop("RE", None)
+    nspace.pop("db", None)
 
     return nspace
 

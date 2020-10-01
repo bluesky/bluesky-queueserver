@@ -81,7 +81,7 @@ The number of entries in the queue may be checked as follows::
 
 The contents of the queue can be retrieved as follows::
 
-  http GET http://localhost:8080/queue_view
+  http GET http://localhost:8080/get_queue
 
 Before the queue can be executed, the worker environment must be created and initialized. This operation
 creates a new execution environment for Bluesky Run Engine and used to execute plans until it explicitly
@@ -170,7 +170,7 @@ Add a new plan to the queue::
 
 View the contents of the queue::
 
-  qserver -c queue_view
+  qserver -c get_queue
 
 Pop the last element from queue::
 

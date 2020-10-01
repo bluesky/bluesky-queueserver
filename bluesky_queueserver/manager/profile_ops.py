@@ -26,6 +26,9 @@ def get_default_profile_collection_dir():
 
 _patch1 = """
 
+import logging
+logger_patch = logging.Logger(__name__)
+
 __local_namespace = locals()
 
 try:
@@ -34,10 +37,6 @@ try:
 """
 
 _patch2 = """
-
-    import logging
-    logger_patch = logging.Logger(__name__)
-
 
     class IPDummy:
         def __init__(self, user_ns):

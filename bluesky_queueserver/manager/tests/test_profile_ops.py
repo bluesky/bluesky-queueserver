@@ -67,6 +67,7 @@ code_rel_import = """
 from dir1.dir2.file2 import *
 """
 
+
 def create_rel_imports_dirs(tmp_path):
     path1 = os.path.join(tmp_path, "dir1")
     path2 = os.path.join(path1, "dir2")

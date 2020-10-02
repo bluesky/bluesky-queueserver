@@ -162,7 +162,7 @@ def load_profile_collection(path, patch_profiles=True):
     file_list = glob.glob(file_pattern)
     file_list.sort()  # Sort in alphabetical order
 
-    # Add original path to the profile collection to allow relative imports
+    # Add original path to the profile collection to allow local imports
     #   from the patched temporary file.
     if path not in sys.path:
         # We don't want to add/remove the path if it is already in `sys.path` for some reason.

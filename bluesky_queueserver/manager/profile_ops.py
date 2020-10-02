@@ -164,7 +164,12 @@ def load_profile_collection(path, patch_profiles=True):
 
     # Add original path to the profile collection to allow relative imports
     #   from the patched temporary file.
-    sys.path.append(path)
+    if path not in sys.path:
+        # We don't want to add/remove the path if it is already in `sys.path` for some reason.
+        sys.path.append(path)
+        path_is_set = True
+    else:
+        path_is_set = False
 
     # Load the files into the namespace 'nspace'.
     try:
@@ -179,7 +184,8 @@ def load_profile_collection(path, patch_profiles=True):
         nspace.pop("db", None)
     finally:
         try:
-            sys.path.remove(path)
+            if path_is_set:
+                sys.path.remove(path)
         except Exception:
             pass
 

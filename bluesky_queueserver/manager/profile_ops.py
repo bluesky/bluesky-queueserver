@@ -7,6 +7,7 @@ import pkg_resources
 import yaml
 import tempfile
 import re
+import sys
 
 import logging
 
@@ -161,16 +162,32 @@ def load_profile_collection(path, patch_profiles=True):
     file_list = glob.glob(file_pattern)
     file_list.sort()  # Sort in alphabetical order
 
-    # Load the files into the namespace 'nspace'.
-    nspace = None
-    for file in file_list:
-        logger.info(f"Loading startup file '{file}' ...")
-        fln_tmp = _patch_profile(file) if patch_profiles else file
-        nspace = runpy.run_path(fln_tmp, nspace)
+    # Add original path to the profile collection to allow local imports
+    #   from the patched temporary file.
+    if path not in sys.path:
+        # We don't want to add/remove the path if it is already in `sys.path` for some reason.
+        sys.path.append(path)
+        path_is_set = True
+    else:
+        path_is_set = False
 
-    # Discard RE and db from the profile namespace (if they exist).
-    nspace.pop("RE", None)
-    nspace.pop("db", None)
+    # Load the files into the namespace 'nspace'.
+    try:
+        nspace = None
+        for file in file_list:
+            logger.info(f"Loading startup file '{file}' ...")
+            fln_tmp = _patch_profile(file) if patch_profiles else file
+            nspace = runpy.run_path(fln_tmp, nspace)
+
+        # Discard RE and db from the profile namespace (if they exist).
+        nspace.pop("RE", None)
+        nspace.pop("db", None)
+    finally:
+        try:
+            if path_is_set:
+                sys.path.remove(path)
+        except Exception:
+            pass
 
     return nspace
 

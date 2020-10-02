@@ -34,6 +34,8 @@ class ZMQComm:
         self._event_zmq_stop = None
         self._task_zmq_client_conn = asyncio.ensure_future(self._zmq_start_client_conn())
 
+        self._lock_zmq = asyncio.Lock()
+
     def __del__(self):
         # Cancel the communication task
         if not self._task_zmq_client_conn.done():
@@ -84,9 +86,10 @@ class ZMQComm:
         return {"method": command, "params": params}
 
     async def send_command(self, *, command, params=None):
-        msg_out = self._create_msg(command=command, params=params)
-        msg_in = await self._zmq_communicate(msg_out)
-        return msg_in
+        async with self._lock_zmq:
+            msg_out = self._create_msg(command=command, params=params)
+            msg_in = await self._zmq_communicate(msg_out)
+            return msg_in
 
 
 logging.basicConfig(level=logging.WARNING)

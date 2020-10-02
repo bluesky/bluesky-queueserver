@@ -63,12 +63,12 @@ def test_load_profile_collection_2(tmp_path):
     assert len(nspace) > 0, "Failed to load the profile collection"
 
 
-code_rel_import = """
+code_local_import = """
 from dir1.dir2.file2 import *
 """
 
 
-def create_rel_imports_dirs(tmp_path):
+def create_local_imports_dirs(tmp_path):
     path1 = os.path.join(tmp_path, "dir1")
     path2 = os.path.join(path1, "dir2")
     fln1 = os.path.join(path1, "file1.py")
@@ -96,7 +96,7 @@ def f2():
 
 
 # fmt: off
-@pytest.mark.parametrize("rel_imports", [False, True])
+@pytest.mark.parametrize("local_imports", [False, True])
 @pytest.mark.parametrize("additional_code, success, errmsg", [
     # Patched as expected
     ("""
@@ -137,13 +137,13 @@ raise Exception("Manually raised exception.")
 
 ])
 # fmt: on
-def test_load_profile_collection_3(tmp_path, rel_imports, additional_code, success, errmsg):
+def test_load_profile_collection_3(tmp_path, local_imports, additional_code, success, errmsg):
     """
     Loading a copy of the default profile collection
     """
     pc_path = _copy_default_profile_collection(tmp_path)
 
-    create_rel_imports_dirs(pc_path)
+    create_local_imports_dirs(pc_path)
 
     # Path to the first file (starts with 00)
     file_pattern = os.path.join(pc_path, "[0-9][0-9]*.py")
@@ -155,17 +155,17 @@ def test_load_profile_collection_3(tmp_path, rel_imports, additional_code, succe
         code = file_in.readlines()
 
     with open(fln, "w") as file_out:
-        if rel_imports:
-            file_out.writelines(code_rel_import)
+        if local_imports:
+            file_out.writelines(code_local_import)
         file_out.writelines(additional_code)
         file_out.writelines(code)
 
     if success:
         nspace = load_profile_collection(pc_path)
         assert len(nspace) > 0, "Failed to load the profile collection"
-        if rel_imports:
-            assert "f1" in nspace, "Test for relative imports failed"
-            assert "f2" in nspace, "Test for relative imports failed"
+        if local_imports:
+            assert "f1" in nspace, "Test for local imports failed"
+            assert "f2" in nspace, "Test for local imports failed"
     else:
         with pytest.raises(Exception, match=errmsg):
             load_profile_collection(pc_path)

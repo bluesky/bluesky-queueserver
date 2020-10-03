@@ -244,17 +244,27 @@ async def environment_open_handler():
     """
     Creates RE environment: creates RE Worker process, starts and configures Run Engine.
     """
-    msg = await re_server.send_command(command="create_environment")
+    msg = await re_server.send_command(command="environment_open")
     return msg
 
 
 @app.post("/environment/close")
 async def environment_close_handler():
     """
-    Deletes RE environment. In the current 'demo' prototype the environment will be deleted
-    only after RE completes the current scan.
+    Orderly closes of RE environment. The command returns success only if no plan is running,
+    i.e. RE Manager is in the idle state. The command is rejected if a plan is running.
     """
-    msg = await re_server.send_command(command="close_environment")
+    msg = await re_server.send_command(command="environment_close")
+    return msg
+
+
+@app.post("/environment/destroy")
+async def environment_destroy_handler():
+    """
+    Destroys RE environment by killing RE Worker process. This is a last resort command which
+    should be made available only to expert level users.
+    """
+    msg = await re_server.send_command(command="environment_destroy")
     return msg
 
 

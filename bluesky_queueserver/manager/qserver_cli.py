@@ -69,8 +69,9 @@ class CliClient:
             "clear_queue": "clear_queue",
             "get_history": "get_history",
             "clear_history": "clear_history",
-            "create_environment": "create_environment",
-            "close_environment": "close_environment",
+            "environment_open": "environment_open",
+            "environment_close": "environment_close",
+            "environment_destroy": "environment_destroy",
             "process_queue": "process_queue",
             "re_pause": "re_pause",
             "re_resume": "re_resume",
@@ -234,17 +235,20 @@ def qserver():
 
             if not msg_err:
                 print(f"{current_time} - MESSAGE: {pprint.pformat(msg)}")
-                exit_code = None
+                if isinstance(msg, dict) and ("success" in msg) and (msg["success"] is False):
+                    exit_code = 2
+                else:
+                    exit_code = None
             else:
                 print(f"{current_time} - ERROR: {msg_err}")
-                exit_code = 2
+                exit_code = 3
 
             if not monitor_on:
                 break
             ttime.sleep(1)
     except Exception as ex:
         logger.exception("Exception occurred: %s.", str(ex))
-        exit_code = 3
+        exit_code = 4
     except KeyboardInterrupt:
         print("\nThe program was manually stopped.")
         exit_code = None

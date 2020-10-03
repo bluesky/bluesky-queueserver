@@ -33,9 +33,11 @@ http POST http://localhost:8080/add_to_queue plan:='{"name":"scan", "args":[["de
 class MState(enum.Enum):
     INITIALIZING = "initializing"
     IDLE = "idle"
+    PAUSED = "paused"  # Paused plan
     CREATING_ENVIRONMENT = "creating_environment"
     EXECUTING_QUEUE = "executing_queue"
     CLOSING_ENVIRONMENT = "closing_environment"
+    DESTROYING_ENVIRONMENT = "destroying_environment"
 
 
 class RunEngineManager(Process):
@@ -190,19 +192,27 @@ class RunEngineManager(Process):
         """
         Initiate closing of RE Worker environment.
         """
-        if self._environment_exists:
-            accepted = True
-            asyncio.ensure_future(self._execute_background_task(self._stop_re_worker_task()))
-        else:
+        if not self._environment_exists:
             accepted = False
-        return accepted
+            err_msg = "RE environment does not exist"
+        elif self._manager_state != MState.IDLE:
+            accepted = False
+            err_msg = "A plan is currently running"
+        else:
+            accepted = True
+            err_msg = False
+            asyncio.ensure_future(self._execute_background_task(self._stop_re_worker_task()))
+        return accepted, err_msg
 
     async def _stop_re_worker_task(self):
         """
-        Stop RE Worker. Returns the result as "success", "rejected" or "failed"
+        Closing of the RE Worker.
         """
         if not self._environment_exists:
             return False, "Rejected: environment does not exists"
+
+        if self._manager_state != MState.IDLE:
+            return False, "A plan is currently running"
 
         self._fut_manager_task_completed = self._loop.create_future()
 
@@ -219,6 +229,48 @@ class RunEngineManager(Process):
                 success = False
                 err_msg = "Failed to confirm closing of RE Worker thread"
 
+        return success, err_msg
+
+    async def _kill_re_worker(self):
+        """
+        Kill the process in which RE worker is running.
+        """
+        if self._environment_exists:
+            accepted = True
+            err_msg = ""
+            asyncio.ensure_future(self._execute_background_task(self._kill_re_worker_task()))
+        else:
+            accepted = False
+            err_msg = "RE environment does not exist"
+        return accepted, err_msg
+
+    async def _kill_re_worker_task(self):
+        """
+        Stop RE Worker. Returns the result as "success", "rejected" or "failed"
+        """
+        success = False
+        self._manager_state = MState.DESTROYING_ENVIRONMENT
+        await self._watchdog_kill_re_worker()
+        # Wait for at most 10 seconds. Consider the environment destroyed after this.
+        #   This should never fail unless there is a bug in the Manager or Watchdog,
+        #   since killing process can be done in any state of the Worker.
+        # TODO: think about handling timeout errors.
+        for n in range(10):
+            await asyncio.sleep(1)
+            if not await self._watchdog_is_worker_alive():
+                success = True
+                break
+
+        self._manager_state = MState.IDLE
+        self._environment_exists = False
+        # If a plan is running, it needs to be pushed back into the queue
+        await self._plan_queue.set_processed_plan_as_stopped(exit_status="environment_destroyed")
+
+        err_msg = "" if success else "Failed to properly destroy RE Worker environment."
+        logger.info("RE Worker environment is destroyed")
+        if not success:
+
+            logger.error(err_msg)
         return success, err_msg
 
     async def _confirm_re_worker_exit(self):
@@ -260,6 +312,10 @@ class RunEngineManager(Process):
         while True:
             await asyncio.sleep(t_period)
             if self._environment_exists or (self._manager_state == MState.CREATING_ENVIRONMENT):
+
+                if self._manager_state == MState.DESTROYING_ENVIRONMENT:
+                    continue
+
                 ws, _ = await self._worker_request_state()
                 if ws is not None:
                     self._worker_state_info = ws
@@ -316,7 +372,7 @@ class RunEngineManager(Process):
                 self._manager_state = MState.IDLE
             elif plan_state == "paused":
                 # The plan was paused (nothing should be done).
-                self._manager_state = MState.IDLE
+                self._manager_state = MState.PAUSED
             else:
                 logger.error("Unknown plan state %s was returned by RE Worker.", plan_state)
 
@@ -415,23 +471,30 @@ class RunEngineManager(Process):
         """
         Continue handling of a paused plan
         """
+
         available_options = ("resume", "abort", "stop", "halt")
-        if option in available_options:
-            if self._environment_exists:
-                success, err_msg = await self._worker_command_continue_plan(option)
-                if success:
-                    self._manager_state = MState.EXECUTING_QUEUE
-                else:
-                    logger.error("Failed to pause the running plan: %s", err_msg)
-            else:
-                success, err_msg = (
-                    False,
-                    "Environment does not exist. Can not pause Run Engine.",
-                )
-        else:
+        if self._manager_state != MState.PAUSED:
+            success = False
+            err_msg = f"RE Manager is not paused: current state is '{self._manager_state.value}'"
+
+        elif option not in available_options:
             # This function is called only within the class: allow exception to be raised.
             #   It should make the unit tests fail.
             raise ValueError(f"Option '{option}' is not supported. " f"Available options: {available_options}")
+
+        elif self._environment_exists:
+            success, err_msg = await self._worker_command_continue_plan(option)
+            if success:
+                self._manager_state = MState.EXECUTING_QUEUE
+            else:
+                logger.error("Failed to pause the running plan: %s", err_msg)
+
+        else:
+            success, err_msg = (
+                False,
+                "Environment does not exist. Can not pause Run Engine.",
+            )
+
         return {"success": success, "msg": err_msg}
 
     # ===============================================================================
@@ -587,9 +650,11 @@ class RunEngineManager(Process):
         # Computed/retrieved data
         n_pending_plans = await self._plan_queue.get_plan_queue_size()
         running_plan_info = await self._plan_queue.get_running_plan_info()
+        n_plans_in_history = await self._plan_queue.get_plan_history_size()
 
         # Prepared output data
         plans_in_queue = n_pending_plans
+        plans_in_history = n_plans_in_history
         running_plan_uid = running_plan_info["plan_uid"] if running_plan_info else None
         manager_state = self._manager_state.value
         worker_environment_exists = self._environment_exists
@@ -600,6 +665,7 @@ class RunEngineManager(Process):
         msg = {
             "msg": "RE Manager",
             "plans_in_queue": plans_in_queue,
+            "plans_in_history": plans_in_history,
             "running_plan_uid": running_plan_uid,
             "manager_state": manager_state,
             "worker_environment_exists": worker_environment_exists,
@@ -684,24 +750,32 @@ class RunEngineManager(Process):
         await self._plan_queue.clear_plan_history()
         return {"success": True, "msg": "Plan history is now empty."}
 
-    async def _create_environment_handler(self, request):
+    async def _environment_open_handler(self, request):
         """
         Creates RE environment: creates RE Worker process, starts and configures Run Engine.
         """
-        logger.info("Creating the new RE environment.")
+        logger.info("Opening the new RE environment ...")
         success = await self._start_re_worker()
         msg = "Environment already exists." if not success else ""
         return {"success": success, "msg": msg}
 
-    async def _close_environment_handler(self, request):
+    async def _environment_close_handler(self, request):
         """
-        Deletes RE environment. In the current 'demo' prototype the environment will be deleted
-        only after RE completes the current scan.
+        Orderly closes of RE environment. The command returns success only if no plan is running,
+        i.e. RE Manager is in the idle state. The command is rejected if a plan is running.
         """
-        logger.info("Closing current RE environment.")
-        success = await self._stop_re_worker()
-        msg = "" if success else "Environment does not exist."
-        return {"success": success, "msg": msg}
+        logger.info("Closing existing RE environment ...")
+        success, err_msg = await self._stop_re_worker()
+        return {"success": success, "msg": err_msg}
+
+    async def _environment_destroy_handler(self, request):
+        """
+        Destroys RE environment by killing RE Worker process. This is a last resort command which
+        should be made available only to expert level users.
+        """
+        logger.info("Destroying current RE environment ...")
+        success, err_msg = await self._kill_re_worker()
+        return {"success": success, "msg": err_msg}
 
     async def _process_queue_handler(self, request):
         """
@@ -791,8 +865,9 @@ class RunEngineManager(Process):
             "clear_queue": "_clear_queue_handler",
             "get_history": "_get_history_handler",
             "clear_history": "_clear_history_handler",
-            "create_environment": "_create_environment_handler",
-            "close_environment": "_close_environment_handler",
+            "environment_open": "_environment_open_handler",
+            "environment_close": "_environment_close_handler",
+            "environment_destroy": "_environment_destroy_handler",
             "process_queue": "_process_queue_handler",
             "re_pause": "_re_pause_handler",
             "re_resume": "_re_resume_handler",

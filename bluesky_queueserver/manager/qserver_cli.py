@@ -62,7 +62,8 @@ class CliClient:
         command_dict = {
             "ping": "",
             "get_queue": "get_queue",
-            "list_allowed_plans_and_devices": "list_allowed_plans_and_devices",
+            "plans_allowed": "plans_allowed",
+            "devices_allowed": "devices_allowed",
             "add_to_queue": "add_to_queue",
             "pop_from_queue": "pop_from_queue",
             "clear_queue": "clear_queue",
@@ -72,7 +73,10 @@ class CliClient:
             "close_environment": "close_environment",
             "process_queue": "process_queue",
             "re_pause": "re_pause",
-            "re_continue": "re_continue",
+            "re_resume": "re_resume",
+            "re_stop": "re_stop",
+            "re_abort": "re_abort",
+            "re_halt": "re_halt",
             "stop_manager": "stop_manager",
             "kill_manager": "kill_manager",
         }

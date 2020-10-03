@@ -398,6 +398,7 @@ class RunEngineManager(Process):
             self._manager_state = MState.EXECUTING_QUEUE
         return success, err_msg
 
+    '''
     async def _continue_run_engine(self, option):
         """
         Continue handling of a paused plan.
@@ -408,6 +409,30 @@ class RunEngineManager(Process):
         else:
             self._manager_state = MState.EXECUTING_QUEUE
         return success, err_msg
+    '''
+
+    async def _continue_run_engine(self, *, option):
+        """
+        Continue handling of a paused plan
+        """
+        available_options = ("resume", "abort", "stop", "halt")
+        if option in available_options:
+            if self._environment_exists:
+                success, err_msg = await self._worker_command_continue_plan(option)
+                if success:
+                    self._manager_state = MState.EXECUTING_QUEUE
+                else:
+                    logger.error("Failed to pause the running plan: %s", err_msg)
+            else:
+                success, err_msg = (
+                    False,
+                    "Environment does not exist. Can not pause Run Engine.",
+                )
+        else:
+            # This function is called only within the class: allow exception to be raised.
+            #   It should make the unit tests fail.
+            raise ValueError(f"Option '{option}' is not supported. " f"Available options: {available_options}")
+        return {"success": success, "msg": err_msg}
 
     # ===============================================================================
     #         Functions that send commands/request data from Worker process
@@ -582,14 +607,22 @@ class RunEngineManager(Process):
         }
         return msg
 
-    async def _list_allowed_plans_and_devices_handler(self, request):
+    async def _plans_allowed_handler(self, request):
         """
         Returns the list of allowed plans.
         """
         logger.info("Returning the list of allowed plans.")
         return {
-            "allowed_plans": self._allowed_plans,
-            "allowed_devices": self._allowed_devices,
+            "plans_allowed": self._allowed_plans,
+        }
+
+    async def _devices_allowed_handler(self, request):
+        """
+        Returns the list of allowed devices.
+        """
+        logger.info("Returning the list of allowed devices.")
+        return {
+            "devices_allowed": self._allowed_devices,
         }
 
     async def _get_queue_handler(self, request):
@@ -701,27 +734,33 @@ class RunEngineManager(Process):
             )
         return {"success": success, "msg": msg}
 
-    async def _re_continue_handler(self, request):
+    async def _re_resume_handler(self, request):
         """
-        Control Run Engine in the paused state
+        Run Engine: resume execution of a paused plan
         """
-        logger.info("Continue paused queue (plan).")
-        option = request["option"] if "option" in request else None
-        available_options = ("resume", "abort", "stop", "halt")
-        if option in available_options:
-            if self._environment_exists:
-                success, msg = await self._continue_run_engine(option)
-            else:
-                success, msg = (
-                    False,
-                    "Environment does not exist. Can not pause Run Engine.",
-                )
-        else:
-            success, msg = (
-                False,
-                f"Option '{option}' is not supported. Available options: {available_options}",
-            )
-        return {"success": success, "msg": msg}
+        logger.info("Resuming paused plan ...")
+        return await self._continue_run_engine(option="resume")
+
+    async def _re_stop_handler(self, request):
+        """
+        Run Engine: stop execution of a paused plan
+        """
+        logger.info("Stopping paused plan ...")
+        return await self._continue_run_engine(option="stop")
+
+    async def _re_abort_handler(self, request):
+        """
+        Run Engine: abort execution of a paused plan
+        """
+        logger.info("Aborting paused plan ...")
+        return await self._continue_run_engine(option="abort")
+
+    async def _re_halt_handler(self, request):
+        """
+        Run Engine: halt execution of a paused plan
+        """
+        logger.info("Halting paused plan ...")
+        return await self._continue_run_engine(option="halt")
 
     async def _stop_manager_handler(self, request):
         """
@@ -745,7 +784,8 @@ class RunEngineManager(Process):
         handler_dict = {
             "": "_ping_handler",
             "get_queue": "_get_queue_handler",
-            "list_allowed_plans_and_devices": "_list_allowed_plans_and_devices_handler",
+            "plans_allowed": "_plans_allowed_handler",
+            "devices_allowed": "_devices_allowed_handler",
             "add_to_queue": "_add_to_queue_handler",
             "pop_from_queue": "_pop_from_queue_handler",
             "clear_queue": "_clear_queue_handler",
@@ -755,7 +795,10 @@ class RunEngineManager(Process):
             "close_environment": "_close_environment_handler",
             "process_queue": "_process_queue_handler",
             "re_pause": "_re_pause_handler",
-            "re_continue": "_re_continue_handler",
+            "re_resume": "_re_resume_handler",
+            "re_stop": "_re_stop_handler",
+            "re_abort": "_re_abort_handler",
+            "re_halt": "_re_halt_handler",
             "stop_manager": "_stop_manager_handler",
             "kill_manager": "_kill_manager_handler",
         }

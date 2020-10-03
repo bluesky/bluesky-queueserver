@@ -100,7 +100,8 @@ def test_qserver_cli_and_manager(re_manager):
     assert subprocess.call(["qserver", "-c", "clear_queue"]) == 0
 
     # Request the list of allowed plans and devices (we don't check what is returned)
-    assert subprocess.call(["qserver", "-c", "list_allowed_plans_and_devices"], stdout=subprocess.DEVNULL) == 0
+    assert subprocess.call(["qserver", "-c", "plans_allowed"], stdout=subprocess.DEVNULL) == 0
+    assert subprocess.call(["qserver", "-c", "devices_allowed"], stdout=subprocess.DEVNULL) == 0
 
     # Add a number of plans
     plan_1 = "{'name':'count', 'args':[['det1', 'det2']]}"

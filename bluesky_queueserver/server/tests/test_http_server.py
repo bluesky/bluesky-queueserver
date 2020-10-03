@@ -1,6 +1,7 @@
 import time as ttime
 
 import requests
+import pytest
 
 from bluesky_queueserver.manager.tests.test_general import re_manager  # noqa F401
 from bluesky_queueserver.server.tests.conftest import (  # noqa F401
@@ -43,12 +44,13 @@ def test_http_server_get_queue_handler(re_manager, fastapi_server):  # noqa F811
     assert resp["running_plan"] == {}
 
 
-def test_http_server_list_allowed_plans_and_devices(re_manager, fastapi_server):  # noqa F811
-    resp = _request_to_json("get", "/list_allowed_plans_and_devices")
-    assert isinstance(resp["allowed_plans"], dict)
-    assert len(resp["allowed_plans"]) > 0
-    assert isinstance(resp["allowed_devices"], dict)
-    assert len(resp["allowed_devices"]) > 0
+def test_http_server_allowed_plans_and_devices(re_manager, fastapi_server):  # noqa F811
+    resp1 = _request_to_json("get", "/plans/allowed")
+    assert isinstance(resp1["plans_allowed"], dict)
+    assert len(resp1["plans_allowed"]) > 0
+    resp2 = _request_to_json("get", "/devices/allowed")
+    assert isinstance(resp2["devices_allowed"], dict)
+    assert len(resp2["devices_allowed"]) > 0
 
 
 def test_http_server_add_to_queue_handler(re_manager, fastapi_server):  # noqa F811
@@ -130,38 +132,50 @@ def test_http_server_process_queue_handler(re_manager, fastapi_server, add_plans
     assert resp2a["running_plan"] == {}
 
 
-def test_http_server_re_pause_continue_handlers(re_manager, fastapi_server):  # noqa F811
-    resp1 = _request_to_json("post", "/create_environment")
+# fmt: off
+@pytest.mark.parametrize("option_pause, option_continue", [
+    ("deferred", "resume"),
+    ("immediate", "resume"),
+    ("deferred", "stop"),
+    ("deferred", "abort"),
+    ("deferred", "halt")
+])
+# fmt: on
+def test_http_server_re_pause_continue_handlers(
+    re_manager, fastapi_server, option_pause, option_continue  # noqa F811
+):
+    resp1 = _request_to_json("post", "/environment/open")
     assert resp1 == {"success": True, "msg": ""}
 
     assert wait_for_environment_to_be_created(10), "Timeout"
 
     resp2 = _request_to_json(
         "post",
-        "/add_to_queue",
+        "/queue/plan/add",
         json={"plan": {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}},
     )
     assert resp2["name"] == "count"
     assert resp2["args"] == [["det1", "det2"]]
     assert "plan_uid" in resp2
 
-    resp3 = _request_to_json("post", "/process_queue")
+    resp3 = _request_to_json("post", "/queue/start")
     assert resp3 == {"success": True, "msg": ""}
     ttime.sleep(3.5)  # Let some time pass before pausing the plan (fractional number of seconds)
-    resp3a = _request_to_json("post", "/re_pause", json={"option": "immediate"})
+    resp3a = _request_to_json("post", "/re/pause", json={"option": option_pause})
     assert resp3a == {"msg": "", "success": True}
-    ttime.sleep(1)  # TODO: API is needed
-    resp3b = _request_to_json("get", "/get_queue")
+    ttime.sleep(2)  # TODO: API is needed
+    resp3b = _request_to_json("get", "/queue/get")
     assert len(resp3b["queue"]) == 0  # The plan is paused, but it is not in the queue
     assert resp3b["running_plan"] != {}  # Running plan is set
 
-    resp4 = _request_to_json("post", "/re_continue", json={"option": "abort"})
+    resp4 = _request_to_json("post", f"/re/{option_continue}")
     assert resp4 == {"msg": "", "success": True}
 
     ttime.sleep(15)  # TODO: we need to wait for plan completion
 
-    resp4a = _request_to_json("get", "/get_queue")
-    assert len(resp4a["queue"]) == 1  # The plan is back in the queue
+    resp4a = _request_to_json("get", "/queue/get")
+    # The plan returns to the queue if it is stopped
+    assert len(resp4a["queue"]) == 0 if option_continue == "resume" else 1
     assert resp4a["running_plan"] == {}
 
 

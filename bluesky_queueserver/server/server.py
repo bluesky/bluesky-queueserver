@@ -105,11 +105,55 @@ class REPauseOptions(str, Enum):
     immediate = "immediate"
 
 
-class REResumeOptions(str, Enum):
-    resume = "resume"
-    abort = "abort"
-    stop = "stop"
-    halt = "halt"
+def validate_payload_keys(payload, *, required_keys=None, optional_keys=None):
+    """
+    Validate keys in the payload. Raise an exception if the request contains unsupported
+    keys or if some of the required keys are missing.
+
+    Parameters
+    ----------
+    payload: dict
+        Payload received with the request.
+    required_keys: list(str)
+        List of the required payload keys. All the keys must be present in the request.
+    optional_keys: list(str)
+        List of optional keys.
+
+    Raises
+    ------
+    ValueError
+        payload contains unsupported keys or some of the required keys are missing.
+    """
+
+    # TODO: it would be better to use something similar to 'jsonschema' validator.
+    #   Unfortunately 'jsonschema' provides terrible error reporting.
+    #   Any suggestions?
+    #   For now let's use primitive validaator that ensures that the dictionary
+    #   has necessary and only allowed top level keys.
+
+    required_keys = required_keys or []
+    optional_keys = optional_keys or []
+
+    payload_keys = list(payload.keys())
+    r_keys = set(required_keys)
+    a_keys = set(required_keys).union(set(optional_keys))
+    extra_keys = set()
+
+    for key in payload_keys:
+        if key not in a_keys:
+            extra_keys.add(key)
+        else:
+            if key in r_keys:
+                r_keys.remove(key)
+
+    err_msg = ""
+    if r_keys:
+        err_msg += f"Some required keys are missing in the request: {r_keys}. "
+    if extra_keys:
+        err_msg += f"Request contains keys the are not supported: {extra_keys}."
+
+    if err_msg:
+        raise ValueError(err_msg)
 
 
 @app.get("/")
@@ -121,8 +165,17 @@ async def ping_handler():
     return msg
 
 
-@app.get("/get_queue")
-async def get_queue_handler():
+@app.get("/status")
+async def status_handler():
+    """
+    May be called to get response from the server. Returns the number of plans in the queue.
+    """
+    msg = await re_server.send_command(command="")
+    return msg
+
+
+@app.get("/queue/get")
+async def queue_get_handler():
     """
     Returns the contents of the current queue.
     """
@@ -130,27 +183,8 @@ async def get_queue_handler():
     return msg
 
 
-@app.get("/list_allowed_plans_and_devices")
-async def list_allowed_plans_and_devices_handler():
-    """
-    Returns the lists of allowed plans and devices.
-    """
-    msg = await re_server.send_command(command="list_allowed_plans_and_devices")
-    return msg
-
-
-@app.post("/add_to_queue")
-async def add_to_queue_handler(payload: dict):
-    """
-    Adds new plan to the end of the queue
-    """
-    # TODO: validate inputs!
-    msg = await re_server.send_command(command="add_to_queue", params=payload)
-    return msg
-
-
-@app.post("/clear_queue")
-async def clear_queue_handler():
+@app.post("/queue/clear")
+async def queue_clear_handler():
     """
     Clear the plan queue.
     """
@@ -158,54 +192,8 @@ async def clear_queue_handler():
     return msg
 
 
-@app.post("/pop_from_queue")
-async def pop_from_queue_handler():
-    """
-    Pop the last item from back of the queue
-    """
-    msg = await re_server.send_command(command="pop_from_queue")
-    return msg
-
-
-@app.get("/get_history")
-async def get_history_handler():
-    """
-    Returns the plan history (list of dicts).
-    """
-    msg = await re_server.send_command(command="get_history")
-    return msg
-
-
-@app.post("/clear_history")
-async def clear_history_handler():
-    """
-    Clear plan history.
-    """
-    msg = await re_server.send_command(command="clear_history")
-    return msg
-
-
-@app.post("/create_environment")
-async def create_environment_handler():
-    """
-    Creates RE environment: creates RE Worker process, starts and configures Run Engine.
-    """
-    msg = await re_server.send_command(command="create_environment")
-    return msg
-
-
-@app.post("/close_environment")
-async def close_environment_handler():
-    """
-    Deletes RE environment. In the current 'demo' prototype the environment will be deleted
-    only after RE completes the current scan.
-    """
-    msg = await re_server.send_command(command="close_environment")
-    return msg
-
-
-@app.post("/process_queue")
-async def process_queue_handler():
+@app.post("/queue/start")
+async def queue_start_handler():
     """
     Start execution of the loaded queue. Additional runs can be added to the queue while
     it is executed. If the queue is empty, then nothing will happen.
@@ -214,31 +202,130 @@ async def process_queue_handler():
     return msg
 
 
-@app.post("/re_pause")
+@app.post("/queue/plan/add")
+async def queue_plan_add_handler(payload: dict):
+    """
+    Adds new plan to the end of the queue
+    """
+    # TODO: validate inputs!
+    msg = await re_server.send_command(command="add_to_queue", params=payload)
+    return msg
+
+
+@app.post("/queue/plan/remove")
+async def queue_plan_remove_handler():
+    """
+    Pop the last item from back of the queue
+    """
+    msg = await re_server.send_command(command="pop_from_queue")
+    return msg
+
+
+@app.get("/history/get")
+async def history_get_handler():
+    """
+    Returns the plan history (list of dicts).
+    """
+    msg = await re_server.send_command(command="get_history")
+    return msg
+
+
+@app.post("/history/clear")
+async def history_clear_handler():
+    """
+    Clear plan history.
+    """
+    msg = await re_server.send_command(command="clear_history")
+    return msg
+
+
+@app.post("/environment/open")
+async def environment_open_handler():
+    """
+    Creates RE environment: creates RE Worker process, starts and configures Run Engine.
+    """
+    msg = await re_server.send_command(command="create_environment")
+    return msg
+
+
+@app.post("/environment/close")
+async def environment_close_handler():
+    """
+    Deletes RE environment. In the current 'demo' prototype the environment will be deleted
+    only after RE completes the current scan.
+    """
+    msg = await re_server.send_command(command="close_environment")
+    return msg
+
+
+@app.post("/re/pause")
 async def re_pause_handler(payload: dict):
     """
-    Pause Run Engine
+    Pause Run Engine.
     """
-    if not hasattr(REPauseOptions, payload["option"]):
-        msg = (
-            f'The specified option "{payload["option"]}" is not allowed.\n'
-            f"Allowed options: {list(REPauseOptions.__members__.keys())}"
-        )
-        raise HTTPException(status_code=444, detail=msg)
+    try:
+        validate_payload_keys(payload, required_keys=["option"])
+        if not hasattr(REPauseOptions, payload["option"]):
+            raise ValueError(
+                f'The specified option "{payload["option"]}" is not allowed.\n'
+                f"Allowed options: {list(REPauseOptions.__members__.keys())}"
+            )
+    except Exception as ex:
+        raise HTTPException(status_code=444, detail=str(ex))
+
     msg = await re_server.send_command(command="re_pause", params=payload)
     return msg
 
 
-@app.post("/re_continue")
-async def re_continue_handler(payload: dict):
+@app.post("/re/resume")
+async def re_resume_handler():
     """
-    Control Run Engine in the paused state
+    Run Engine: resume execution of a paused plan
     """
-    if not hasattr(REResumeOptions, payload["option"]):
-        msg = (
-            f'The specified option "{payload["option"]}" is not allowed.\n'
-            f"Allowed options: {list(REResumeOptions.__members__.keys())}"
-        )
-        raise HTTPException(status_code=444, detail=msg)
-    msg = await re_server.send_command(command="re_continue", params=payload)
+    msg = await re_server.send_command(command="re_resume")
+    return msg
+
+
+@app.post("/re/stop")
+async def re_stop_handler():
+    """
+    Run Engine: stop execution of a paused plan
+    """
+    msg = await re_server.send_command(command="re_stop")
+    return msg
+
+
+@app.post("/re/abort")
+async def re_abort_handler():
+    """
+    Run Engine: abort execution of a paused plan
+    """
+    msg = await re_server.send_command(command="re_abort")
+    return msg
+
+
+@app.post("/re/halt")
+async def re_halt_handler():
+    """
+    Run Engine: halt execution of a paused plan
+    """
+    msg = await re_server.send_command(command="re_halt")
+    return msg
+
+
+@app.get("/plans/allowed")
+async def plans_allowed_handler():
+    """
+    Returns the lists of allowed plans and devices.
+    """
+    msg = await re_server.send_command(command="plans_allowed")
+    return msg
+
+
+@app.get("/devices/allowed")
+async def devices_allowed_handler():
+    """
+    Returns the lists of allowed plans and devices.
+    """
+    msg = await re_server.send_command(command="devices_allowed")
     return msg

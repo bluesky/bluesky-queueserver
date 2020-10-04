@@ -944,13 +944,16 @@ class RunEngineManager(Process):
             self._worker_state_info, err_msg = await self._worker_request_state()
             if self._worker_state_info:
                 plan_uid_running = self._worker_state_info["running_plan_uid"]
+                re_state = self._worker_state_info["re_state"]
                 if plan_uid_running:
-                    # Plan is running. Check if it is the same plan as in redis.
                     # Plan is running. Check if it is the same plan as in redis.
                     plan_stored = await self._plan_queue.get_running_plan_info()
                     if "plan_uid" in plan_stored:
                         plan_uid_stored = plan_stored["plan_uid"]
-                        self._manager_state = MState.EXECUTING_QUEUE  # Wait for plan completion
+                        if re_state in ("paused", "pausing"):
+                            self._manager_state = MState.PAUSED  # Paused and can be resumed
+                        else:
+                            self._manager_state = MState.EXECUTING_QUEUE  # Wait for plan completion
                         if plan_uid_stored != plan_uid_running:
                             # Guess is that the environment may still work, so restart is
                             #   only recommended if it is convenient.

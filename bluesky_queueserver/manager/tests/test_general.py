@@ -348,7 +348,7 @@ def test_qserver_re_pause_continue(re_manager, option_pause, option_continue):
     # Clear queue
     assert subprocess.call(["qserver", "-c", "clear_queue"]) == 0
 
-    plan = "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num':5, 'delay':1}}"
+    plan = "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num': 10, 'delay': 1}}"
     assert subprocess.call(["qserver", "-c", "add_to_queue", "-p", plan]) == 0
     assert subprocess.call(["qserver", "-c", "add_to_queue", "-p", plan]) == 0
 
@@ -414,6 +414,88 @@ def test_qserver_re_pause_continue(re_manager, option_pause, option_continue):
     assert n_plans == 0, "Incorrect number of plans in the queue"
     assert is_plan_running is False
     assert n_history == n_history_expected
+
+    assert subprocess.call(["qserver", "-c", "environment_close"]) == 0
+    assert wait_for_condition(
+        time=5, condition=condition_environment_closed
+    ), "Timeout while waiting for environment to be closed"
+
+
+# fmt: off
+@pytest.mark.parametrize("time_kill", ["before", 2, 8, "paused"])
+# fmt: on
+def test_qserver_manager_kill(re_manager, time_kill):
+    """
+    Test for `test_manager_kill` command. The command is stopping the event loop of RE Manager,
+    causeing RE Watchdog to restart it. RE Manager can be restarted at any time: the restart
+    should not affect executed plans or the state of the queue or RE Worker. Response to this
+    command is never returned, so it can also be used to test how the system handles communication
+    timeouts. It takes 5 seconds of RE Manager inactivity befor it is restarted. The following cases
+    are tested:
+    - RE Manager is killed and restarted before queue processing is started.
+    - RE Manager is killed and restarted while the 1st plan in the queue is executed.
+    - RE Manager is killed while the 1st plan is still executed and is not restarted before
+    the plan execution is finished. RE Manager is supposed to recognize that the plan is completed,
+    process the report and start processing of the next plan.
+    - RE Manager is killed and restarted while the 1st plan is in 'paused' state. RE Manager is
+    supposed to switch to 'paused' state at the restart. The plan can execution can be resumed.
+    """
+    assert wait_for_condition(
+        time=3, condition=condition_manager_idle
+    ), "Timeout while waiting for manager to initialize."
+
+    # Clear queue
+    assert subprocess.call(["qserver", "-c", "clear_queue"]) == 0
+
+    plan = "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num': 10, 'delay': 1}}"
+    assert subprocess.call(["qserver", "-c", "add_to_queue", "-p", plan]) == 0
+    assert subprocess.call(["qserver", "-c", "add_to_queue", "-p", plan]) == 0
+
+    assert subprocess.call(["qserver", "-c", "environment_open"]) == 0
+    assert wait_for_condition(
+        time=3, condition=condition_environment_created
+    ), "Timeout while waiting for environment to be opened"
+
+    if time_kill == "before":
+        # The command that kills manager always times out
+        assert subprocess.call(["qserver", "-c", "kill_manager"]) != 0
+        ttime.sleep(8)  # It takes 5 seconds before the manager is restarted
+
+        status = get_queue_state()
+        assert status["manager_state"] == "idle"
+
+    # Start queue processing
+    assert subprocess.call(["qserver", "-c", "process_queue"]) == 0
+
+    if isinstance(time_kill, int):
+        ttime.sleep(time_kill)
+        # The command that kills manager always times out
+        assert subprocess.call(["qserver", "-c", "kill_manager"]) != 0
+        ttime.sleep(8)  # It takes 5 seconds before the manager is restarted
+
+        status = get_queue_state()
+        assert status["manager_state"] == "executing_queue"
+
+    elif time_kill == "paused":
+        ttime.sleep(3)
+        assert subprocess.call(["qserver", "-c", "re_pause", "-p", "deferred"]) == 0
+        assert wait_for_condition(time=3, condition=condition_manager_paused)
+        assert subprocess.call(["qserver", "-c", "kill_manager"]) != 0
+        ttime.sleep(8)  # It takes 5 seconds before the manager is restarted
+
+        status = get_queue_state()
+        assert status["manager_state"] == "paused"
+
+        assert subprocess.call(["qserver", "-c", "re_resume"]) == 0
+
+    assert wait_for_condition(
+        time=60, condition=condition_queue_processing_finished
+    ), "Timeout while waiting for process to finish"
+
+    n_plans, is_plan_running, n_history = get_reduced_state_info()
+    assert n_plans == 0, "Incorrect number of plans in the queue"
+    assert is_plan_running is False
+    assert n_history == 2
 
     assert subprocess.call(["qserver", "-c", "environment_close"]) == 0
     assert wait_for_condition(

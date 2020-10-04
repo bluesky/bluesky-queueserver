@@ -175,7 +175,7 @@ def validate_payload_keys(payload, *, required_keys=None, optional_keys=None):
 @app.get("/")
 async def ping_handler():
     """
-    May be called to get response from the server. Returns the number of plans in the queue.
+    May be called to get some response from the server. Currently returns status of RE Manager.
     """
     msg = await re_server.send_command(command="")
     return msg
@@ -184,9 +184,9 @@ async def ping_handler():
 @app.get("/status")
 async def status_handler():
     """
-    May be called to get response from the server. Returns the number of plans in the queue.
+    Returns status of RE Manager.
     """
-    msg = await re_server.send_command(command="")
+    msg = await re_server.send_command(command="status")
     return msg
 
 

@@ -61,6 +61,7 @@ class CliClient:
         """
         command_dict = {
             "ping": "",
+            "status": "status",
             "get_queue": "get_queue",
             "plans_allowed": "plans_allowed",
             "devices_allowed": "devices_allowed",

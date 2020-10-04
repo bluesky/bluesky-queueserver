@@ -652,9 +652,15 @@ class RunEngineManager(Process):
 
     async def _ping_handler(self, request):
         """
-        May be called to get response from the Manager. Returns the number of plans in the queue.
+        May be called to get some response from the Manager. Returns status of the manager.
         """
-        logger.info("Processing 'Hello' request.")
+        return await self._status_handler(request)
+
+    async def _status_handler(self, request):
+        """
+        Returns status of the manager.
+        """
+        logger.info("Processing 'status' request.")
 
         # Computed/retrieved data
         n_pending_plans = await self._plan_queue.get_plan_queue_size()
@@ -866,6 +872,7 @@ class RunEngineManager(Process):
         params = msg["params"]
         handler_dict = {
             "": "_ping_handler",
+            "status": "_status_handler",
             "get_queue": "_get_queue_handler",
             "plans_allowed": "_plans_allowed_handler",
             "devices_allowed": "_devices_allowed_handler",

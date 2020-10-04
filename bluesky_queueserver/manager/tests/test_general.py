@@ -11,7 +11,7 @@ from ._common import copy_default_profile_collection, patch_first_startup_file, 
 
 def get_queue_state():
     re_server = CliClient()
-    command, params = "ping", None
+    command, params = "status", None
     re_server.set_msg_out(command, params)
     asyncio.run(re_server.zmq_single_request())
     msg, _ = re_server.get_msg_in()

@@ -169,18 +169,24 @@ class RunEngineManager(Process):
 
         self._fut_manager_task_completed = self._loop.create_future()
         self._manager_state = MState.CREATING_ENVIRONMENT
-        self._creating_environment = True
 
         try:
             success = await self._watchdog_start_re_worker()
             if not success:
                 raise RuntimeError("Failed to create Worker process")
             logger.debug("Waiting for RE worker to start ...")
-            await self._fut_manager_task_completed  # TODO: timeout may be needed here
+            success = await self._fut_manager_task_completed  # TODO: timeout may be needed here
+            if success:
+                self._environment_exists = True
+                logger.debug("Worker started successfully.")
+                success, err_msg = True, ""
+            else:
+                self._environment_exists = True
+                await self._confirm_re_worker_exit()
+                self._environment_exists = False
+                logger.debug("Error occurred while opening RE Worker environment.")
+                success, err_msg = False, "Error occurred while opening RE Worker environment."
 
-            self._environment_exists = True
-            logger.debug("Worker started successfully.")
-            success, err_msg = True, ""
         except Exception as ex:
             logger.exception("Failed to start_Worker: %s", str(ex))
             success, err_msg = False, f"Failed to start_Worker {str(ex)}"
@@ -284,7 +290,6 @@ class RunEngineManager(Process):
 
             # Environment is not in valid state anyway. So assume it does not exist.
             self._environment_exists = False
-            self._worker_conn = None
             if success:
                 logger.debug("Wait for RE Worker process to close (join)")
 
@@ -323,11 +328,15 @@ class RunEngineManager(Process):
                         if ws["environment_state"] == "closing":
                             self._fut_manager_task_completed.set_result(None)
 
-                    if self._manager_state == MState.CREATING_ENVIRONMENT:
-                        if ws["environment_state"] == "ready":
-                            self._fut_manager_task_completed.set_result(None)
+                    elif self._manager_state == MState.CREATING_ENVIRONMENT:
+                        # If RE Worker environment fails to open, then it switchins to 'closing' status.
+                        #   Closing must be confirmed by Manager before it is closed.
+                        if ws["environment_state"] in "ready":
+                            self._fut_manager_task_completed.set_result(True)
+                        if ws["environment_state"] == "closing":
+                            self._fut_manager_task_completed.set_result(False)
 
-                    if self._manager_state == MState.EXECUTING_QUEUE:
+                    elif self._manager_state == MState.EXECUTING_QUEUE:
                         if ws["re_report_available"]:
                             self._loop.create_task(self._process_plan_report())
 

@@ -200,13 +200,13 @@ class RunEngineManager(Process):
         """
         if not self._environment_exists:
             accepted = False
-            err_msg = "RE environment does not exist"
+            err_msg = "RE Worker environment does not exist."
         elif self._manager_state != MState.IDLE:
             accepted = False
             err_msg = "A plan is currently running"
         else:
             accepted = True
-            err_msg = False
+            err_msg = ""
             asyncio.ensure_future(self._execute_background_task(self._stop_re_worker_task()))
         return accepted, err_msg
 

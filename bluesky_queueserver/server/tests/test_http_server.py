@@ -39,7 +39,7 @@ def test_http_server_ping_handler(re_manager, fastapi_server):  # noqa F811
 
 
 def test_http_server_get_queue_handler(re_manager, fastapi_server):  # noqa F811
-    resp = _request_to_json("get", "/get_queue")
+    resp = _request_to_json("get", "/queue/get")
     assert resp["queue"] == []
     assert resp["running_plan"] == {}
 
@@ -54,12 +54,14 @@ def test_http_server_allowed_plans_and_devices(re_manager, fastapi_server):  # n
 
 
 def test_http_server_add_to_queue_handler(re_manager, fastapi_server):  # noqa F811
-    resp1 = _request_to_json("post", "/add_to_queue", json={"plan": {"name": "count", "args": [["det1", "det2"]]}})
+    resp1 = _request_to_json(
+        "post", "/queue/plan/add", json={"plan": {"name": "count", "args": [["det1", "det2"]]}}
+    )
     assert resp1["name"] == "count"
     assert resp1["args"] == [["det1", "det2"]]
     assert "plan_uid" in resp1
 
-    resp2 = _request_to_json("get", "/get_queue")
+    resp2 = _request_to_json("get", "/queue/get")
     assert resp2["queue"] != []
     assert len(resp2["queue"]) == 1
     assert resp2["queue"][0] == resp1
@@ -68,66 +70,66 @@ def test_http_server_add_to_queue_handler(re_manager, fastapi_server):  # noqa F
 
 def test_http_server_pop_from_queue_handler(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
 
-    resp1 = _request_to_json("get", "/get_queue")
+    resp1 = _request_to_json("get", "/queue/get")
     assert resp1["queue"] != []
     assert len(resp1["queue"]) == 3
     assert resp1["running_plan"] == {}
 
-    resp2 = _request_to_json("post", "/pop_from_queue", json={})
+    resp2 = _request_to_json("post", "/queue/plan/remove", json={})
     assert resp2["name"] == "count"
     assert resp2["args"] == [["det1", "det2"]]
     assert "plan_uid" in resp2
 
 
-def test_http_server_create_environment_handler(re_manager, fastapi_server):  # noqa F811
-    resp1 = _request_to_json("post", "/create_environment")
+def test_http_server_open_environment_handler(re_manager, fastapi_server):  # noqa F811
+    resp1 = _request_to_json("post", "/environment/open")
     assert resp1 == {"success": True, "msg": ""}
 
     assert wait_for_environment_to_be_created(10), "Timeout"
 
-    resp2 = _request_to_json("post", "/create_environment")
+    resp2 = _request_to_json("post", "/environment/open")
     assert resp2 == {"success": False, "msg": "Environment already exists."}
 
 
 def test_http_server_close_environment_handler(re_manager, fastapi_server):  # noqa F811
-    resp1 = _request_to_json("post", "/create_environment")
+    resp1 = _request_to_json("post", "/environment/open")
     assert resp1 == {"success": True, "msg": ""}
 
     assert wait_for_environment_to_be_created(10), "Timeout"
 
-    resp2 = _request_to_json("post", "/close_environment")
+    resp2 = _request_to_json("post", "/environment/close")
     assert resp2 == {"success": True, "msg": ""}
 
     ttime.sleep(3)  # TODO: API needed to test if environment is closed. Use delay for now.
 
-    resp3 = _request_to_json("post", "/close_environment")
-    assert resp3 == {"success": False, "msg": "Environment does not exist."}
+    resp3 = _request_to_json("post", "/environment/close")
+    assert resp3 == {"success": False, "msg": "RE Worker environment does not exist."}
 
 
 def test_http_server_process_queue_handler(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
-    resp1 = _request_to_json("post", "/process_queue")
+    resp1 = _request_to_json("post", "/queue/start")
     assert resp1 == {"success": False, "msg": "RE Worker environment does not exist."}
 
-    resp2 = _request_to_json("post", "/create_environment")
+    resp2 = _request_to_json("post", "/environment/open")
     assert resp2 == {"success": True, "msg": ""}
-    resp2a = _request_to_json("get", "/get_queue")
+    resp2a = _request_to_json("get", "/queue/get")
     assert len(resp2a["queue"]) == 3
     assert resp2a["running_plan"] == {}
 
     assert wait_for_environment_to_be_created(10), "Timeout"
 
-    resp3 = _request_to_json("post", "/process_queue")
+    resp3 = _request_to_json("post", "/queue/start")
     assert resp3 == {"success": True, "msg": ""}
 
     ttime.sleep(1)
     # The plan is currently being executed. 'get_queue' is expected to return currently executed plan.
-    resp4 = _request_to_json("get", "/get_queue")
+    resp4 = _request_to_json("get", "/queue/get")
     assert len(resp4["queue"]) == 2
     assert resp4["running_plan"]["name"] == "count"  # Check name of the running plan
 
     ttime.sleep(25)  # Wait until all plans are executed
 
-    resp4 = _request_to_json("get", "/get_queue")
+    resp4 = _request_to_json("get", "/queue/get")
     assert len(resp4["queue"]) == 0
     assert resp2a["running_plan"] == {}
 
@@ -180,52 +182,52 @@ def test_http_server_re_pause_continue_handlers(
 
 
 def test_http_server_close_print_db_uids_handler(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
-    resp1 = _request_to_json("post", "/create_environment")
+    resp1 = _request_to_json("post", "/environment/open")
     assert resp1 == {"success": True, "msg": ""}
 
     assert wait_for_environment_to_be_created(10), "Timeout"
 
-    resp2 = _request_to_json("post", "/process_queue")
+    resp2 = _request_to_json("post", "/queue/start")
     assert resp2 == {"success": True, "msg": ""}
 
     ttime.sleep(15)
 
-    resp2a = _request_to_json("get", "/get_queue")
+    resp2a = _request_to_json("get", "/queue/get")
     assert len(resp2a["queue"]) == 0
     assert resp2a["running_plan"] == {}
 
 
 def test_http_server_clear_queue_handler(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
-    resp1 = _request_to_json("get", "/get_queue")
+    resp1 = _request_to_json("get", "/queue/get")
     assert len(resp1["queue"]) == 3
 
-    resp2 = _request_to_json("post", "/clear_queue")
+    resp2 = _request_to_json("post", "/queue/clear")
     assert resp2["success"] is True
     assert resp2["msg"] == "Plan queue is now empty."
 
-    resp3 = _request_to_json("get", "/get_queue")
+    resp3 = _request_to_json("get", "/queue/get")
     assert len(resp3["queue"]) == 0
 
 
 def test_http_server_plan_history(re_manager, fastapi_server):  # noqa F811
     # Select very short plan
     plan = {"plan": {"name": "count", "args": [["det1", "det2"]]}}
-    _request_to_json("post", "/add_to_queue", json=plan)
-    _request_to_json("post", "/add_to_queue", json=plan)
-    _request_to_json("post", "/add_to_queue", json=plan)
+    _request_to_json("post", "/queue/plan/add", json=plan)
+    _request_to_json("post", "/queue/plan/add", json=plan)
+    _request_to_json("post", "/queue/plan/add", json=plan)
 
-    _request_to_json("post", "/create_environment")
+    _request_to_json("post", "/environment/open")
     assert wait_for_environment_to_be_created(10), "Timeout"
 
-    _request_to_json("post", "/process_queue")
+    _request_to_json("post", "/queue/start")
     ttime.sleep(5)
 
-    resp1 = _request_to_json("get", "/get_history")
+    resp1 = _request_to_json("get", "/history/get")
     assert len(resp1["history"]) == 3
     assert resp1["history"][0]["name"] == "count"
 
-    resp2 = _request_to_json("post", "/clear_history")
+    resp2 = _request_to_json("post", "/history/clear")
     assert resp2["success"] is True
 
-    resp3 = _request_to_json("get", "/get_history")
+    resp3 = _request_to_json("get", "/history/get")
     assert resp3["history"] == []

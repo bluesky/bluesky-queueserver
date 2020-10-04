@@ -6,6 +6,8 @@ import pytest
 from bluesky_queueserver.manager.qserver_cli import CliClient
 from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
 
+from ._common import copy_default_profile_collection, patch_first_startup_file, patch_first_startup_file_undo
+
 
 def get_queue_state():
     re_server = CliClient()
@@ -67,39 +69,98 @@ def wait_for_condition(time, condition):
     return False
 
 
+def clear_redis_pool():
+    # Remove all Redis entries.
+    pq = PlanQueueOperations()
+
+    async def run():
+        await pq.start()
+        await pq.delete_pool_entries()
+
+    asyncio.run(run())
+
+
+class ReManager:
+    def __init__(self, params=None):
+        self._p = None
+        self._start_manager(params)
+
+    # def __del__(self):
+    #    if self._p:
+    #        self.stop_manager()
+
+    def _start_manager(self, params=None):
+        """
+        Start RE manager.
+
+        Parameters
+        ----------
+        params: list(str)
+            The list of command line parameters passed to the manager at startup
+
+        Returns
+        -------
+        subprocess.Popen
+            Subprocess in which the manager is running. It needs to be stopped at certain point.
+        """
+        if not self._p:
+            clear_redis_pool()
+
+            cmd = ["start-re-manager"]
+            if params:
+                cmd += params
+            self._p = subprocess.Popen(
+                cmd, universal_newlines=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+
+    def stop_manager(self, timeout=5):
+        """
+        Attempt to exit the subprocess that is running manager in orderly way and kill it
+        after timeout.
+
+        Parameters
+        ----------
+        p: subprocess.Popen
+            Subprocess in which the manager is running
+        timeout: float
+            Timeout in seconds.
+        """
+        if self._p:
+            # Try to stop the manager in a nice way first by sending the command
+            subprocess.call(["qserver", "-c", "stop_manager"])
+            try:
+                self._p.wait(timeout)
+                clear_redis_pool()
+
+            except subprocess.TimeoutExpired:
+                # The manager is not responsive, so just kill the process.
+                self._p.kill()
+                clear_redis_pool()
+                assert False, "RE Manager failed to stop"
+
+            self._p = None
+
+
 @pytest.fixture
 def re_manager():
     """
     Start RE Manager as a subprocess. Tests will communicate with RE Manager via ZeroMQ.
     """
-
-    def clear_redis_pool():
-        # Remove all Redis entries.
-        pq = PlanQueueOperations()
-
-        async def run():
-            await pq.start()
-            await pq.delete_pool_entries()
-
-        asyncio.run(run())
-
-    clear_redis_pool()
-    p = subprocess.Popen(
-        ["start-re-manager"], universal_newlines=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    )
-
+    re = ReManager()
     yield  # Nothing to return
+    re.stop_manager()
 
-    # Try to stop the manager in a nice way first by sending the command
-    subprocess.call(["qserver", "-c", "stop_manager"])
-    try:
-        p.wait(5)
-        clear_redis_pool()
-    except subprocess.TimeoutExpired:
-        # The manager is not responsive, so just kill the process.
-        p.kill()
-        clear_redis_pool()
-        assert False, "RE Manager failed to stop"
+
+@pytest.fixture
+def re_manager_pc_copy(tmp_path):
+    """
+    Start RE Manager as a subprocess. Tests will communicate with RE Manager via ZeroMQ.
+    Copy profile collection and return its temporary path.
+    """
+    pc_path = copy_default_profile_collection(tmp_path)
+    re = ReManager(["-p", pc_path])
+    yield pc_path  # Location of the copy of the default profile collection.
+    re.stop_manager()
 
 
 def test_qserver_cli_and_manager(re_manager):
@@ -501,3 +562,68 @@ def test_qserver_manager_kill(re_manager, time_kill):
     assert wait_for_condition(
         time=5, condition=condition_environment_closed
     ), "Timeout while waiting for environment to be closed"
+
+
+# fmt: off
+@pytest.mark.parametrize("additional_code, success", [
+    # Nothing is added. Load profiles as usual.
+    ("""
+""", True),
+
+    # Simulate profile that takes long time to load.
+    ("""
+\n
+import time as ttime
+ttime.sleep(20)
+
+""", True),
+
+    # Raise exception while loading the profile. This should cause RE Worker to exit.
+    ("""
+\n
+raise Exception("This exception is raised to test if error handling works correctly")
+
+""", False),
+])
+# fmt: on
+def test_qserver_env_open_various_cases(re_manager_pc_copy, additional_code, success):
+
+    pc_path = re_manager_pc_copy
+
+    # Patch one of the startup files.
+    patch_first_startup_file(pc_path, additional_code)
+
+    # Wait until RE Manager is started
+    assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+    # Attempt to create the environment
+    assert subprocess.call(["qserver", "-c", "environment_open"]) == 0
+    assert wait_for_condition(time=30, condition=condition_manager_idle)
+
+    status = get_queue_state()
+    assert status["worker_environment_exists"] == success
+
+    if not success:
+        # Remove the offending patch and try to start the environment again. It should work
+        patch_first_startup_file_undo(pc_path)
+        assert subprocess.call(["qserver", "-c", "environment_open"]) == 0
+        assert wait_for_condition(time=3, condition=condition_environment_created)
+
+    # Run a plan to make sure RE Manager is functional after the startup.
+    plan = "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num': 10, 'delay': 1}}"
+    assert subprocess.call(["qserver", "-c", "add_to_queue", "-p", plan]) == 0
+
+    # Start queue processing
+    assert subprocess.call(["qserver", "-c", "process_queue"]) == 0
+    ttime.sleep(2)
+    status = get_queue_state()
+    assert status["manager_state"] == "executing_queue"
+
+    assert wait_for_condition(time=60, condition=condition_queue_processing_finished)
+    n_plans, is_plan_running, n_history = get_reduced_state_info()
+    assert n_plans == 0, "Incorrect number of plans in the queue"
+    assert is_plan_running is False
+    assert n_history == 1
+
+    assert subprocess.call(["qserver", "-c", "environment_close"]) == 0
+    assert wait_for_condition(time=5, condition=condition_environment_closed)

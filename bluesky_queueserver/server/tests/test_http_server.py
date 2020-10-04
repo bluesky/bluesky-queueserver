@@ -231,3 +231,22 @@ def test_http_server_plan_history(re_manager, fastapi_server):  # noqa F811
 
     resp3 = _request_to_json("get", "/history/get")
     assert resp3["history"] == []
+
+
+def test_http_server_manager_kill(re_manager, fastapi_server):  # noqa F811
+
+    _request_to_json("post", "/environment/open")
+    assert wait_for_environment_to_be_created(10), "Timeout"
+
+    resp = _request_to_json("post", "/test/manager/kill")
+    assert resp["success"] is False
+    assert "ZMQ communication error:" in resp["msg"]
+
+    ttime.sleep(10)
+
+    resp = _request_to_json("get", "/")
+    assert resp["msg"] == "RE Manager"
+    assert resp["manager_state"] == "idle"
+    assert resp["plans_in_queue"] == 0
+    assert resp["running_plan_uid"] is None
+    assert resp["worker_environment_exists"] is True

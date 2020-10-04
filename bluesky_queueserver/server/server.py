@@ -71,14 +71,23 @@ class ZMQComm:
         msg_in = await self._zmq_receive()
         return msg_in
 
-    async def _zmq_start_client_conn(self):
-        self._event_zmq_stop = asyncio.Event()
+    def _zmq_socket_open(self):
         self._zmq_socket = self._ctx.socket(zmq.REQ)
         self._zmq_socket.RCVTIMEO = 2000  # Timeout for 'recv' operation
+        self._zmq_socket.SNDTIMEO = 500  # Timeout for 'send' operation
+        # Clear the buffer quickly after the socket is closed
+        self._zmq_socket.setsockopt(zmq.LINGER, 100)
 
         self._zmq_socket.connect(self._zmq_server_address)
         logger.info("Connected to ZeroMQ server '%s'" % str(self._zmq_server_address))
 
+    def _zmq_socket_restart(self):
+        self._zmq_socket.close()
+        self._zmq_socket_open()
+
+    async def _zmq_start_client_conn(self):
+        self._event_zmq_stop = asyncio.Event()
+        self._zmq_socket_open()
         # The event must be set somewhere else
         await self._event_zmq_stop.wait()
 
@@ -87,8 +96,15 @@ class ZMQComm:
 
     async def send_command(self, *, command, params=None):
         async with self._lock_zmq:
-            msg_out = self._create_msg(command=command, params=params)
-            msg_in = await self._zmq_communicate(msg_out)
+            try:
+                msg_out = self._create_msg(command=command, params=params)
+                msg_in = await self._zmq_communicate(msg_out)
+                if not msg_in:
+                    raise Exception("Timeout while waiting for response from RE Manager.")
+            except Exception as ex:
+                # This is very likely a timeout (RE Manager is not responding)
+                msg_in = {"success": False, "msg": f"ZMQ communication error: {str(ex)}"}
+                self._zmq_socket_restart()
             return msg_in
 
 
@@ -338,4 +354,14 @@ async def devices_allowed_handler():
     Returns the lists of allowed plans and devices.
     """
     msg = await re_server.send_command(command="devices_allowed")
+    return msg
+
+
+@app.post("/test/manager/kill")
+async def test_manager_kill_handler():
+    """
+    The command stops event loop of RE Manager process. Used for testing of RE Manager
+    stability and handling of communication timeouts.
+    """
+    msg = await re_server.send_command(command="kill_manager")
     return msg

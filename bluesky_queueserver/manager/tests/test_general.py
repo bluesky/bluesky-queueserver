@@ -782,3 +782,50 @@ def test_queue_plan_add_2_fail(re_manager, pos):  # noqa F811
         assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", pos]) != 0
     else:
         assert subprocess.call(["qserver", "-c", "queue_plan_add"]) != 0
+
+
+# fmt: off
+@pytest.mark.parametrize("pos, pos_result, success", [
+    (None, 2, True),
+    ("back", 2, True),
+    ("front", 0, True),
+    ("some", None, False),
+    (0, 0, True),
+    (1, 1, True),
+    (2, 2, True),
+    (3, None, False),
+    (100, None, False),
+    (-1, 2, True),
+    (-2, 1, True),
+    (-3, 0, True),
+    (-4, 0, False),
+    (-100, 0, False),
+])
+# fmt: on
+def test_queue_plan_remove(re_manager, pos, pos_result, success):  # noqa F811
+    plans = [
+        "{'name':'count', 'args':[['det1']]}",
+        "{'name':'count', 'args':[['det2']]}",
+        "{'name':'count', 'args':[['det1', 'det2']]}",
+    ]
+    plans_args = [[["det1"]], [["det2"]], [["det1", "det2"]]]
+
+    for plan in plans:
+        assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan]) == 0
+
+    # Remove entry at the specified position
+    args = ["-p", str(pos)] if (pos is not None) else []
+    res = subprocess.call(["qserver", "-c", "queue_plan_remove", *args])
+    if success:
+        assert res == 0
+    else:
+        assert res != 0
+
+    resp = get_queue()
+    assert len(resp["queue"]) == (2 if success else 3)
+    if success:
+        ind = [0, 1, 2]
+        ind.pop(pos_result)
+        # Check that the right entry disappeared from the queue.
+        assert resp["queue"][0]["args"] == plans_args[ind[0]]
+        assert resp["queue"][1]["args"] == plans_args[ind[1]]

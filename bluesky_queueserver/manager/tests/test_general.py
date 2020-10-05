@@ -109,6 +109,20 @@ class ReManager:
                 cmd, universal_newlines=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
 
+    def check_if_stopped(self, timeout=5):
+        """
+        Waits for the process to be stopped. Returns ``True`` when it is stopped.
+        and ``False`` otherwise.
+        """
+        try:
+            # Make sure that the process is terminated
+            self._p.wait(5)
+            # Disable additional attempts to stop the process
+            self._p = None
+            return True
+        except subprocess.TimeoutExpired:
+            return False
+
     def stop_manager(self, timeout=5):
         """
         Attempt to exit the subprocess that is running manager in orderly way and kill it
@@ -645,10 +659,8 @@ def test_qserver_manager_stop_1(re_manager, option):
 
     assert subprocess.call(cmd) == 0
 
-    # Make sure that the process is terminated
-    re_manager._p.wait(5)
-    # Disable additional attempts to stop the process
-    re_manager._p = None
+    # Check if RE Manager was stopped.
+    assert re_manager.check_if_stopped() is True
 
 
 # fmt: off
@@ -681,10 +693,8 @@ def test_qserver_manager_stop_2(re_manager, option):
     if option == "safe_off":
         assert subprocess.call(cmd) == 0
 
-        # Make sure that the process is terminated
-        re_manager._p.wait(5)
-        # Disable additional attempts to stop the process
-        re_manager._p = None
+        # Check if RE Manager was stopped.
+        assert re_manager.check_if_stopped() is True
 
     else:
         assert subprocess.call(cmd) != 0

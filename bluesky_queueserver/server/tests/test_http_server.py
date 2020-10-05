@@ -259,3 +259,59 @@ def test_http_server_manager_kill(re_manager, fastapi_server):  # noqa F811
     assert resp["plans_in_queue"] == 0
     assert resp["running_plan_uid"] is None
     assert resp["worker_environment_exists"] is True
+
+
+# fmt: off
+@pytest.mark.parametrize("option", [None, "safe_on", "safe_off"])
+# fmt: on
+def test_http_server_clear_queue_handler_1(re_manager, fastapi_server, option):  # noqa F811
+
+    _request_to_json("post", "/environment/open")
+    assert wait_for_environment_to_be_created(10), "Timeout"
+
+    kwargs = {"json": {"option": option} if option else {}}
+    resp1 = _request_to_json("post", "/manager/stop",  **kwargs)
+    assert resp1["success"] is True
+
+    assert re_manager.check_if_stopped() is True
+
+
+# fmt: off
+@pytest.mark.parametrize("option", [None, "safe_on", "safe_off"])
+# fmt: on
+def test_http_server_clear_queue_handler_2(re_manager, fastapi_server, add_plans_to_queue, option):  # noqa F811
+
+    _request_to_json("post", "/environment/open")
+    assert wait_for_environment_to_be_created(10), "Timeout"
+
+    _request_to_json("post", "/queue/start")
+
+    ttime.sleep(2)
+    resp = _request_to_json("get", "/status")
+    assert resp["msg"] == "RE Manager"
+    assert resp["manager_state"] == "executing_queue"
+    assert resp["plans_in_queue"] == 2
+    assert resp["running_plan_uid"] is not None
+    assert resp["plans_in_history"] == 0
+    assert resp["worker_environment_exists"] is True
+
+    # Attempt to stop
+    kwargs = {"json": {"option": option} if option else {}}
+    resp1 = _request_to_json("post", "/manager/stop",  **kwargs)
+    assert resp1["success"] == (option == "safe_off")
+
+    if option == "safe_off":
+        assert re_manager.check_if_stopped() is True
+
+    else:
+        # The queue is expected to be running
+        ttime.sleep(15)
+        resp = _request_to_json("get", "/status")
+        assert resp["msg"] == "RE Manager"
+        assert resp["manager_state"] == "idle"
+        assert resp["plans_in_queue"] == 0
+        assert resp["plans_in_history"] == 3
+        assert resp["running_plan_uid"] is None
+        assert resp["worker_environment_exists"] is True
+
+

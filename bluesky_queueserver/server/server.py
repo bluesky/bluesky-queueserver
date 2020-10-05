@@ -358,11 +358,11 @@ async def devices_allowed_handler():
 
 
 @app.post("/manager/stop")
-async def manager_stop_handler():
+async def manager_stop_handler(payload: dict):
     """
     Stops of RE Manager. RE Manager will not be restarted after it is stoped.
     """
-    msg = await re_server.send_command(command="manager_stop")
+    msg = await re_server.send_command(command="manager_stop", params=payload)
     return msg
 
 

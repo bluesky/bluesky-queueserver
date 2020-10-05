@@ -20,6 +20,20 @@ def get_queue_state():
     return msg
 
 
+def get_queue():
+    """
+    Returns current queue.
+    """
+    re_server = CliClient()
+    command, params = "queue_get", None
+    re_server.set_msg_out(command, params)
+    asyncio.run(re_server.zmq_single_request())
+    msg, _ = re_server.get_msg_in()
+    if msg is None:
+        raise TimeoutError("Timeout occured while monitoring RE Manager state")
+    return msg
+
+
 def get_reduced_state_info():
     msg = get_queue_state()
     plans_in_queue = msg["plans_in_queue"]
@@ -704,3 +718,67 @@ def test_qserver_manager_stop_2(re_manager, option):
         assert n_plans == 0, "Incorrect number of plans in the queue"
         assert is_plan_running is False
         assert n_history == 2
+
+
+# fmt: off
+@pytest.mark.parametrize("pos, pos_result, success", [
+    (None, 2, True),
+    ("back", 2, True),
+    ("front", 0, True),
+    ("some", None, False),
+    (0, 0, True),
+    (1, 1, True),
+    (2, 2, True),
+    (3, 2, True),
+    (100, 2, True),
+    (-1, 1, True),
+    (-2, 0, True),
+    (-3, 0, True),
+    (-100, 0, True),
+])
+# fmt: on
+def test_queue_plan_add_1(re_manager, pos, pos_result, success):  # noqa F811
+
+    # Wait until RE Manager is started
+    assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+    plan1 = "{'name':'count', 'args':[['det1']]}"
+    plan2 = "{'name':'count', 'args':[['det1', 'det2']]}"
+
+    # Create the queue with 2 entries
+    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan1]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan1]) == 0
+
+    # Add another entry at the specified position
+    params = [plan2]
+    if pos is not None:
+        params.append(str(pos))
+
+    res = subprocess.call(["qserver", "-c", "queue_plan_add", "-p", *params])
+    if success:
+        assert res == 0
+    else:
+        assert res != 0
+
+    resp = get_queue()
+    assert len(resp["queue"]) == (3 if success else 2)
+
+    if success:
+        assert resp["queue"][pos_result]["args"] == [["det1", "det2"]]
+        assert "plan_uid" in resp["queue"][pos_result]
+
+
+# fmt: off
+@pytest.mark.parametrize("pos", [None, "back"])
+# fmt: on
+def test_queue_plan_add_2_fail(re_manager, pos):  # noqa F811
+    """
+    No plan is supplied.
+    """
+    # Wait until RE Manager is started
+    assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+    if pos:
+        assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", pos]) != 0
+    else:
+        assert subprocess.call(["qserver", "-c", "queue_plan_add"]) != 0

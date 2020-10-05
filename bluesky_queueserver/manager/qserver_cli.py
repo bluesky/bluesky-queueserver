@@ -62,25 +62,25 @@ class CliClient:
         command_dict = {
             "ping": "",
             "status": "status",
-            "get_queue": "get_queue",
+            "queue_get": "queue_get",
             "plans_allowed": "plans_allowed",
             "devices_allowed": "devices_allowed",
-            "add_to_queue": "add_to_queue",
-            "pop_from_queue": "pop_from_queue",
-            "clear_queue": "clear_queue",
-            "get_history": "get_history",
-            "clear_history": "clear_history",
+            "queue_plan_add": "queue_plan_add",
+            "queue_plan_remove": "queue_plan_remove",
+            "queue_clear": "queue_clear",
+            "history_get": "history_get",
+            "history_clear": "history_clear",
             "environment_open": "environment_open",
             "environment_close": "environment_close",
             "environment_destroy": "environment_destroy",
-            "process_queue": "process_queue",
+            "queue_start": "queue_start",
             "re_pause": "re_pause",
             "re_resume": "re_resume",
             "re_stop": "re_stop",
             "re_abort": "re_abort",
             "re_halt": "re_halt",
-            "stop_manager": "stop_manager",
-            "kill_manager": "kill_manager",
+            "manager_stop": "manager_stop",
+            "manager_kill": "manager_kill",
         }
         return command_dict
 
@@ -138,7 +138,7 @@ class CliClient:
         try:
             command = command_dict[command]
             # Present value in the proper format. This will change as the format is changed.
-            if command == "add_to_queue":
+            if command == "queue_plan_add":
                 params = {"plan": params}  # Value is dict
             else:
                 params = {"option": params}  # Value is str

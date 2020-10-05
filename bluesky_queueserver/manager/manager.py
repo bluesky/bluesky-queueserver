@@ -70,7 +70,7 @@ class RunEngineManager(Process):
         self._worker_conn = conn_worker
 
         # The following attributes hold the state of the system
-        self._manager_stopping = False  # Set True to exit manager (by _stop_manager_handler)
+        self._manager_stopping = False  # Set True to exit manager (by _manager_stop_handler)
         self._environment_exists = False  # True if RE Worker environment exists
         self._manager_state = MState.INITIALIZING
         self._worker_state_info = None  # Copy of the last downloaded state of RE Worker
@@ -132,7 +132,7 @@ class RunEngineManager(Process):
             asyncio.ensure_future(self._execute_background_task(some_coroutine()))
         """
         self._background_task_status["status"] = "running"
-        self._background_task_status["err_msg"] = False
+        self._background_task_status["err_msg"] = ""
 
         try:
             # 'self._background_task' may be used to cancel the task
@@ -215,7 +215,7 @@ class RunEngineManager(Process):
         Closing of the RE Worker.
         """
         if not self._environment_exists:
-            return False, "Rejected: environment does not exists"
+            return False, "Environment does not exists"
 
         if self._manager_state != MState.IDLE:
             return False, "A plan is currently running"
@@ -463,19 +463,6 @@ class RunEngineManager(Process):
             self._manager_state = MState.EXECUTING_QUEUE
         return success, err_msg
 
-    '''
-    async def _continue_run_engine(self, option):
-        """
-        Continue handling of a paused plan.
-        """
-        success, err_msg = await self._worker_command_continue_plan(option)
-        if not success:
-            logger.error("Failed to pause the running plan: %s", err_msg)
-        else:
-            self._manager_state = MState.EXECUTING_QUEUE
-        return success, err_msg
-    '''
-
     async def _continue_run_engine(self, *, option):
         """
         Continue handling of a paused plan
@@ -706,7 +693,7 @@ class RunEngineManager(Process):
             "devices_allowed": self._allowed_devices,
         }
 
-    async def _get_queue_handler(self, request):
+    async def _queue_get_handler(self, request):
         """
         Returns the contents of the current queue.
         """
@@ -716,7 +703,7 @@ class RunEngineManager(Process):
 
         return {"queue": plan_queue, "running_plan": running_plan}
 
-    async def _add_to_queue_handler(self, request):
+    async def _queue_plan_add_handler(self, request):
         """
         Adds new plan to the end of the queue
         """
@@ -732,7 +719,7 @@ class RunEngineManager(Process):
             plan = {}
         return plan
 
-    async def _pop_from_queue_handler(self, request):
+    async def _queue_plan_remove_handler(self, request):
         """
         Pop the last item from back of the queue.
         """
@@ -740,7 +727,7 @@ class RunEngineManager(Process):
         plan = await self._plan_queue.pop_plan_from_queue("back")
         return plan
 
-    async def _clear_queue_handler(self, request):
+    async def _queue_clear_handler(self, request):
         """
         Remove all entries from the plan queue (does not affect currently executed run)
         """
@@ -748,7 +735,7 @@ class RunEngineManager(Process):
         await self._plan_queue.clear_plan_queue()
         return {"success": True, "msg": "Plan queue is now empty."}
 
-    async def _get_history_handler(self, request):
+    async def _history_get_handler(self, request):
         """
         Returns the contents of the plan history.
         """
@@ -757,7 +744,7 @@ class RunEngineManager(Process):
 
         return {"history": plan_history}
 
-    async def _clear_history_handler(self, request):
+    async def _history_clear_handler(self, request):
         """
         Remove all entries from the plan history
         """
@@ -792,7 +779,7 @@ class RunEngineManager(Process):
         success, err_msg = await self._kill_re_worker()
         return {"success": success, "msg": err_msg}
 
-    async def _process_queue_handler(self, request):
+    async def _queue_start_handler(self, request):
         """
         Start execution of the loaded queue. Additional runs can be added to the queue while
         it is executed. If the queue is empty, then nothing will happen.
@@ -851,14 +838,47 @@ class RunEngineManager(Process):
         logger.info("Halting paused plan ...")
         return await self._continue_run_engine(option="halt")
 
-    async def _stop_manager_handler(self, request):
+    async def _manager_stop_handler(self, request):
         """
-        Stop RE Manager in orderly way
-        """
-        self._manager_stopping = True
-        return {"success": True, "msg": "Initiated sequence of stopping RE Manager."}
+        Stop RE Manager in orderly way. The method may be called with option
+        ``safe_off`` and ``safe_on``. If no option is provided, then the default
+        option ``safe_on`` is used.
 
-    async def _kill_manager_handler(self, request):
+        If called with ``safe_on``, then the manager is closed only if it is in 'idle'
+        state, i.e. no plan is currently running or paused. If called with ``safe_off`,
+        then the closing sequence is initiated immediately. RE Worker will be terminated
+        and running plan will be not be finished.
+
+        This command should not be exposed to the users, but it may be valuable for
+        testing.
+        """
+        allowed_options = ("safe_off", "safe_on")
+        option = "safe_on"
+        success = True
+
+        if "option" in request:
+            r_option = request["option"]
+            if r_option:
+                if r_option not in allowed_options:
+                    success = False
+                    msg = f"Option '{r_option}' is not allowed. Allowed options: {allowed_options}"
+                else:
+                    option = r_option
+
+        if success and (option == "safe_on") and (self._manager_state != MState.IDLE):
+            success = False
+            msg = (
+                f"Closing RE Manager with option '{option}' is allowed "
+                f"only in 'idle' state. Current state: '{self._manager_state.value}'"
+            )
+
+        if success:
+            msg = f"Initiating stopping of RE Manager with option '{option}'."
+            self._manager_stopping = True
+
+        return {"success": success, "msg": msg}
+
+    async def _manager_kill_handler(self, request):
         """
         Testing API: blocks event loop of RE Manager process forever and
         causes Watchdog process to restart RE Manager.
@@ -873,25 +893,25 @@ class RunEngineManager(Process):
         handler_dict = {
             "": "_ping_handler",
             "status": "_status_handler",
-            "get_queue": "_get_queue_handler",
+            "queue_get": "_queue_get_handler",
             "plans_allowed": "_plans_allowed_handler",
             "devices_allowed": "_devices_allowed_handler",
-            "add_to_queue": "_add_to_queue_handler",
-            "pop_from_queue": "_pop_from_queue_handler",
-            "clear_queue": "_clear_queue_handler",
-            "get_history": "_get_history_handler",
-            "clear_history": "_clear_history_handler",
+            "queue_plan_add": "_queue_plan_add_handler",
+            "queue_plan_remove": "_queue_plan_remove_handler",
+            "queue_clear": "_queue_clear_handler",
+            "history_get": "_history_get_handler",
+            "history_clear": "_history_clear_handler",
             "environment_open": "_environment_open_handler",
             "environment_close": "_environment_close_handler",
             "environment_destroy": "_environment_destroy_handler",
-            "process_queue": "_process_queue_handler",
+            "queue_start": "_queue_start_handler",
             "re_pause": "_re_pause_handler",
             "re_resume": "_re_resume_handler",
             "re_stop": "_re_stop_handler",
             "re_abort": "_re_abort_handler",
             "re_halt": "_re_halt_handler",
-            "stop_manager": "_stop_manager_handler",
-            "kill_manager": "_kill_manager_handler",
+            "manager_stop": "_manager_stop_handler",
+            "manager_kill": "_manager_kill_handler",
         }
 
         try:
@@ -1009,7 +1029,16 @@ class RunEngineManager(Process):
             await self._zmq_send(msg_out)
 
             if self._manager_stopping:
-                await self._stop_re_worker_task()  # Quitting RE Manager
+                # This should stop RE Worker if no plan is currently running
+                success, _ = await self._stop_re_worker_task()  # Quitting RE Manager
+                if not success and self._environment_exists:
+                    # Most likely the plan is currently running or RE Worker is 'frozen'
+                    #   Killing RE Worker which is running a plan can be done only by
+                    #   explicit permission. This option should not be available to
+                    #   regular users.
+                    # TODO: may be additional level of protection should be added here.
+                    await self._kill_re_worker_task()
+
                 await self._watchdog_manager_stopping()
                 self._comm_to_watchdog.stop()
                 self._comm_to_worker.stop()

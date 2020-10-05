@@ -47,13 +47,13 @@ def test_http_server_status_handler(re_manager, fastapi_server):  # noqa F811
     assert resp["worker_environment_exists"] is False
 
 
-def test_http_server_get_queue_handler(re_manager, fastapi_server):  # noqa F811
+def test_http_server_queue_get_handler(re_manager, fastapi_server):  # noqa F811
     resp = _request_to_json("get", "/queue/get")
     assert resp["queue"] == []
     assert resp["running_plan"] == {}
 
 
-def test_http_server_allowed_plans_and_devices(re_manager, fastapi_server):  # noqa F811
+def test_http_server_plans_allowed_and_devices(re_manager, fastapi_server):  # noqa F811
     resp1 = _request_to_json("get", "/plans/allowed")
     assert isinstance(resp1["plans_allowed"], dict)
     assert len(resp1["plans_allowed"]) > 0
@@ -62,7 +62,7 @@ def test_http_server_allowed_plans_and_devices(re_manager, fastapi_server):  # n
     assert len(resp2["devices_allowed"]) > 0
 
 
-def test_http_server_add_to_queue_handler(re_manager, fastapi_server):  # noqa F811
+def test_http_server_queue_plan_add_handler(re_manager, fastapi_server):  # noqa F811
     resp1 = _request_to_json(
         "post", "/queue/plan/add", json={"plan": {"name": "count", "args": [["det1", "det2"]]}}
     )
@@ -77,7 +77,7 @@ def test_http_server_add_to_queue_handler(re_manager, fastapi_server):  # noqa F
     assert resp2["running_plan"] == {}
 
 
-def test_http_server_pop_from_queue_handler(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
+def test_http_server_queue_plan_remove_handler(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
 
     resp1 = _request_to_json("get", "/queue/get")
     assert resp1["queue"] != []
@@ -115,7 +115,7 @@ def test_http_server_close_environment_handler(re_manager, fastapi_server):  # n
     assert resp3 == {"success": False, "msg": "RE Worker environment does not exist."}
 
 
-def test_http_server_process_queue_handler(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
+def test_http_server_queue_start_handler(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
     resp1 = _request_to_json("post", "/queue/start")
     assert resp1 == {"success": False, "msg": "RE Worker environment does not exist."}
 

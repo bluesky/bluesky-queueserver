@@ -195,7 +195,7 @@ async def queue_get_handler():
     """
     Returns the contents of the current queue.
     """
-    msg = await re_server.send_command(command="get_queue")
+    msg = await re_server.send_command(command="queue_get")
     return msg
 
 
@@ -204,7 +204,7 @@ async def queue_clear_handler():
     """
     Clear the plan queue.
     """
-    msg = await re_server.send_command(command="clear_queue")
+    msg = await re_server.send_command(command="queue_clear")
     return msg
 
 
@@ -214,7 +214,7 @@ async def queue_start_handler():
     Start execution of the loaded queue. Additional runs can be added to the queue while
     it is executed. If the queue is empty, then nothing will happen.
     """
-    msg = await re_server.send_command(command="process_queue")
+    msg = await re_server.send_command(command="queue_start")
     return msg
 
 
@@ -224,7 +224,7 @@ async def queue_plan_add_handler(payload: dict):
     Adds new plan to the end of the queue
     """
     # TODO: validate inputs!
-    msg = await re_server.send_command(command="add_to_queue", params=payload)
+    msg = await re_server.send_command(command="queue_plan_add", params=payload)
     return msg
 
 
@@ -233,7 +233,7 @@ async def queue_plan_remove_handler():
     """
     Pop the last item from back of the queue
     """
-    msg = await re_server.send_command(command="pop_from_queue")
+    msg = await re_server.send_command(command="queue_plan_remove")
     return msg
 
 
@@ -242,7 +242,7 @@ async def history_get_handler():
     """
     Returns the plan history (list of dicts).
     """
-    msg = await re_server.send_command(command="get_history")
+    msg = await re_server.send_command(command="history_get")
     return msg
 
 
@@ -251,7 +251,7 @@ async def history_clear_handler():
     """
     Clear plan history.
     """
-    msg = await re_server.send_command(command="clear_history")
+    msg = await re_server.send_command(command="history_clear")
     return msg
 
 
@@ -357,11 +357,20 @@ async def devices_allowed_handler():
     return msg
 
 
+@app.post("/manager/stop")
+async def manager_stop_handler():
+    """
+    Stops of RE Manager. RE Manager will not be restarted after it is stoped.
+    """
+    msg = await re_server.send_command(command="manager_stop")
+    return msg
+
+
 @app.post("/test/manager/kill")
 async def test_manager_kill_handler():
     """
     The command stops event loop of RE Manager process. Used for testing of RE Manager
     stability and handling of communication timeouts.
     """
-    msg = await re_server.send_command(command="kill_manager")
+    msg = await re_server.send_command(command="manager_kill")
     return msg

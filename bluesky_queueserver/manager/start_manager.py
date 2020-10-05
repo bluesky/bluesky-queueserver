@@ -173,6 +173,7 @@ class WatchdogProcess:
                 self._start_re_manager()
 
         self._comm_to_manager.stop()
+        logger.info("RE Watchdog is stopped.")
 
 
 def start_manager():

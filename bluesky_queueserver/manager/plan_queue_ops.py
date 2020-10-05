@@ -339,12 +339,14 @@ class PlanQueueOperations:
         Returns
         -------
         dict
-            Dictionary of plan parameters. Returns ``{}`` if no plan is found at the index.
+            Dictionary of plan parameters.
 
         Raises
         ------
         TypeError
             Incorrect value of ``pos`` (most likely a string different from ``front`` or ``back``)
+        IndexError
+            No element with position ``pos`` exists in the queue (index is out of range).
         """
         async with self._lock:
             return await self._get_plan(pos)
@@ -383,9 +385,13 @@ class PlanQueueOperations:
         """
         if pos == "back":
             plan_json = await self._r_pool.rpop(self._name_plan_queue)
+            if plan_json is None:
+                raise IndexError("Queue is empty")
             plan = json.loads(plan_json) if plan_json else {}
         elif pos == "front":
             plan_json = await self._r_pool.lpop(self._name_plan_queue)
+            if plan_json is None:
+                raise IndexError("Queue is empty")
             plan = json.loads(plan_json) if plan_json else {}
         elif isinstance(pos, int):
             plan = await self._get_plan(pos)
@@ -403,7 +409,8 @@ class PlanQueueOperations:
 
     async def pop_plan_from_queue(self, pos="back"):
         """
-        Pop a plan from the queue.
+        Pop a plan from the queue. Raises ``IndexError`` if plan with index ``pos`` is unavailable
+        or if the queue is empty.
 
         Parameters
         ----------
@@ -415,13 +422,14 @@ class PlanQueueOperations:
         Returns
         -------
         dict or None
-            The last plan in the queue represented as a dictionary or ``{}`` if the queue is empty.
+            The last plan in the queue represented as a dictionary.
 
         Raises
         ------
         ValueError
             Incorrect value of the parameter ``pos`` (typically unrecognized string).
-
+        IndexError
+            Position ``pos`` does not exist or the queue is empty.
         """
         async with self._lock:
             return await self._pop_plan_from_queue(pos=pos)

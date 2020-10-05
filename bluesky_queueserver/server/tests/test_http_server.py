@@ -181,7 +181,7 @@ def test_http_server_queue_plan_remove_handler_2(
     for plan in plans:
         _request_to_json("post", "/queue/plan/add", json={"plan": plan})
 
-    # Add another entry at the specified position
+    # Remove entry at the specified position
     params = {} if pos is None else {"pos": pos}
     resp1 = _request_to_json("post", "/queue/plan/remove", json=params)
 
@@ -279,7 +279,7 @@ def test_http_server_re_pause_continue_handlers(
     assert resp2["qsize"] == 1
     assert resp2["plan"]["name"] == "count"
     assert resp2["plan"]["args"] == [["det1", "det2"]]
-    assert "plan_uid" in resp1["plan"]
+    assert "plan_uid" in resp2["plan"]
 
     resp3 = _request_to_json("post", "/queue/start")
     assert resp3 == {"success": True, "msg": ""}

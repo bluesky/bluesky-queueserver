@@ -269,11 +269,12 @@ def test_get_plan_1(pq, pos, name):
         await pq.add_plan_to_queue({"name": "c"})
         assert await pq.get_plan_queue_size() == 3
 
-        plan = await pq.get_plan(pos)
-        if name:
+        if name is not None:
+            plan = await pq.get_plan(pos)
             assert plan["name"] == name
         else:
-            assert plan == {}
+            with pytest.raises(IndexError, match="Index .* is out of range"):
+                await pq.get_plan(pos)
 
     asyncio.run(testing())
 
@@ -361,8 +362,8 @@ def test_pop_plan_from_queue_1(pq, pos, name):
         await pq.add_plan_to_queue({"name": "c"})
         assert await pq.get_plan_queue_size() == 3
 
-        plan, qsize = await pq.pop_plan_from_queue(pos)
-        if name:
+        if name is not None:
+            plan, qsize = await pq.pop_plan_from_queue(pos)
             assert plan["name"] == name
             assert qsize == 2
             assert await pq.get_plan_queue_size() == 2
@@ -370,9 +371,8 @@ def test_pop_plan_from_queue_1(pq, pos, name):
             await pq.add_plan_to_queue(plan)
             assert await pq.get_plan_queue_size() == 3
         else:
-            assert plan == {}
-            assert qsize == 3
-            assert await pq.get_plan_queue_size() == 3
+            with pytest.raises(IndexError, match="Index .* is out of range"):
+                await pq.pop_plan_from_queue(pos)
 
     asyncio.run(testing())
 
@@ -386,7 +386,8 @@ def test_pop_plan_from_queue_2(pq, pos):
 
     async def testing():
         assert await pq.get_plan_queue_size() == 0
-        assert await pq.pop_plan_from_queue(pos) == ({}, 0)
+        with pytest.raises(IndexError, match="Index .* is out of range|Queue is empty"):
+            await pq.pop_plan_from_queue(pos)
 
     asyncio.run(testing())
 

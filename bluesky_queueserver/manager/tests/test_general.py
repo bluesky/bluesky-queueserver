@@ -169,7 +169,7 @@ def re_manager_pc_copy(tmp_path):
     """
     pc_path = copy_default_profile_collection(tmp_path)
     re = ReManager(["-p", pc_path])
-    yield pc_path  # Location of the copy of the default profile collection.
+    yield re, pc_path  # Location of the copy of the default profile collection.
     re.stop_manager()
 
 
@@ -598,7 +598,7 @@ raise Exception("This exception is raised to test if error handling works correc
 # fmt: on
 def test_qserver_env_open_various_cases(re_manager_pc_copy, additional_code, success):
 
-    pc_path = re_manager_pc_copy
+    _, pc_path = re_manager_pc_copy
 
     # Patch one of the startup files.
     patch_first_startup_file(pc_path, additional_code)

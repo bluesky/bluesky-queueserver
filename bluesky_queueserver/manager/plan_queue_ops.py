@@ -321,6 +321,9 @@ class PlanQueueOperations:
             raise TypeError(f"Parameter 'pos' has incorrect type: pos={str(pos)} (type={type(pos)})")
 
         plan_json = await self._r_pool.lindex(self._name_plan_queue, index)
+        if plan_json is None:
+            raise IndexError(f"Index '{index}' is out of range (parameter pos = '{pos}')")
+
         plan = json.loads(plan_json) if plan_json else {}
         return plan
 
@@ -393,7 +396,10 @@ class PlanQueueOperations:
 
         if plan:
             self._uid_set_remove(plan["plan_uid"])
-        return plan
+
+        qsize = await self._get_plan_queue_size()
+
+        return plan, qsize
 
     async def pop_plan_from_queue(self, pos="back"):
         """

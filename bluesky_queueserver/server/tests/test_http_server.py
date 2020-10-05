@@ -62,22 +62,82 @@ def test_http_server_plans_allowed_and_devices(re_manager, fastapi_server):  # n
     assert len(resp2["devices_allowed"]) > 0
 
 
-def test_http_server_queue_plan_add_handler(re_manager, fastapi_server):  # noqa F811
+def test_http_server_queue_plan_add_handler_1(re_manager, fastapi_server):  # noqa F811
     resp1 = _request_to_json(
         "post", "/queue/plan/add", json={"plan": {"name": "count", "args": [["det1", "det2"]]}}
     )
-    assert resp1["name"] == "count"
-    assert resp1["args"] == [["det1", "det2"]]
-    assert "plan_uid" in resp1
+    assert resp1["success"] is True
+    assert resp1["qsize"] == 1
+    assert resp1["plan"]["name"] == "count"
+    assert resp1["plan"]["args"] == [["det1", "det2"]]
+    assert "plan_uid" in resp1["plan"]
 
     resp2 = _request_to_json("get", "/queue/get")
     assert resp2["queue"] != []
     assert len(resp2["queue"]) == 1
-    assert resp2["queue"][0] == resp1
+    assert resp2["queue"][0] == resp1["plan"]
     assert resp2["running_plan"] == {}
 
 
-def test_http_server_queue_plan_remove_handler(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
+# fmt: off
+@pytest.mark.parametrize("pos, pos_result, success", [
+    (None, 2, True),
+    ("back", 2, True),
+    ("front", 0, True),
+    ("some", None, False),
+    (0, 0, True),
+    (1, 1, True),
+    (2, 2, True),
+    (3, 2, True),
+    (100, 2, True),
+    (-1, 1, True),
+    (-2, 0, True),
+    (-3, 0, True),
+    (-100, 0, True),
+])
+# fmt: on
+def test_http_server_queue_plan_add_handler_2(re_manager, fastapi_server, pos, pos_result, success):  # noqa F811
+
+    plan1 = {"name": "count", "args": [["det1"]]}
+    plan2 = {"name": "count", "args": [["det1", "det2"]]}
+
+    # Create the queue with 2 entries
+    _request_to_json("post", "/queue/plan/add", json={"plan": plan1})
+    _request_to_json("post", "/queue/plan/add", json={"plan": plan1})
+
+    # Add another entry at the specified position
+    params = {"plan": plan2}
+    if pos is not None:
+        params.update({"pos": pos})
+    resp1 = _request_to_json("post", "/queue/plan/add", json=params)
+
+    assert resp1["success"] is success
+    assert resp1["qsize"] == (3 if success else None)
+    assert resp1["plan"]["name"] == "count"
+    assert resp1["plan"]["args"] == plan2["args"]
+    assert "plan_uid" in resp1["plan"]
+
+    resp2 = _request_to_json("get", "/queue/get")
+
+    assert len(resp2["queue"]) == (3 if success else 2)
+    assert resp2["running_plan"] == {}
+
+    if success:
+        assert resp2["queue"][pos_result]["args"] == plan2["args"]
+
+
+def test_http_server_queue_plan_add_handler_3_fail(re_manager, fastapi_server):  # noqa F811
+    """
+    Failing case: call without sending a plan.
+    """
+    resp1 = _request_to_json("post", "/queue/plan/add", json={})
+    assert resp1["success"] is False
+    assert resp1["qsize"] is None
+    assert resp1["plan"] == {}
+    assert "no plan was found" in resp1["msg"]
+
+
+def test_http_server_queue_plan_remove_handler_1(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
 
     resp1 = _request_to_json("get", "/queue/get")
     assert resp1["queue"] != []
@@ -85,9 +145,59 @@ def test_http_server_queue_plan_remove_handler(re_manager, fastapi_server, add_p
     assert resp1["running_plan"] == {}
 
     resp2 = _request_to_json("post", "/queue/plan/remove", json={})
-    assert resp2["name"] == "count"
-    assert resp2["args"] == [["det1", "det2"]]
-    assert "plan_uid" in resp2
+    assert resp2["success"] is True
+    assert resp2["qsize"] == 2
+    assert resp2["plan"]["name"] == "count"
+    assert resp2["plan"]["args"] == [["det1", "det2"]]
+    assert "plan_uid" in resp2["plan"]
+
+
+# fmt: off
+@pytest.mark.parametrize("pos, pos_result, success", [
+    (None, 2, True),
+    ("back", 2, True),
+    ("front", 0, True),
+    ("some", None, False),
+    (0, 0, True),
+    (1, 1, True),
+    (2, 2, True),
+    (3, None, False),
+    (100, None, False),
+    (-1, 2, True),
+    (-2, 1, True),
+    (-3, 0, True),
+    (-4, 0, False),
+    (-100, 0, False),
+])
+# fmt: on
+def test_http_server_queue_plan_remove_handler_2(
+    re_manager, fastapi_server, pos, pos_result, success  # noqa F811
+):
+    plans = [
+        {"name": "count", "args": [["det1"]]},
+        {"name": "count", "args": [["det2"]]},
+        {"name": "count", "args": [["det1", "det2"]]},
+    ]
+    for plan in plans:
+        _request_to_json("post", "/queue/plan/add", json={"plan": plan})
+
+    # Add another entry at the specified position
+    params = {} if pos is None else {"pos": pos}
+    resp1 = _request_to_json("post", "/queue/plan/remove", json=params)
+
+    assert resp1["success"] is success
+    assert resp1["qsize"] == (2 if success else None)
+    if success:
+        assert resp1["plan"]["args"] == plans[pos_result]["args"]
+        assert "plan_uid" in resp1["plan"]
+        assert resp1["msg"] == ""
+    else:
+        assert resp1["plan"] == {}
+        assert "Failed to remove a plan" in resp1["msg"]
+
+    resp2 = _request_to_json("get", "/queue/get")
+    assert len(resp2["queue"]) == (2 if success else 3)
+    assert resp2["running_plan"] == {}
 
 
 def test_http_server_open_environment_handler(re_manager, fastapi_server):  # noqa F811
@@ -165,9 +275,11 @@ def test_http_server_re_pause_continue_handlers(
         "/queue/plan/add",
         json={"plan": {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}},
     )
-    assert resp2["name"] == "count"
-    assert resp2["args"] == [["det1", "det2"]]
-    assert "plan_uid" in resp2
+    assert resp2["success"] is True
+    assert resp2["qsize"] == 1
+    assert resp2["plan"]["name"] == "count"
+    assert resp2["plan"]["args"] == [["det1", "det2"]]
+    assert "plan_uid" in resp1["plan"]
 
     resp3 = _request_to_json("post", "/queue/start")
     assert resp3 == {"success": True, "msg": ""}
@@ -270,7 +382,7 @@ def test_http_server_clear_queue_handler_1(re_manager, fastapi_server, option): 
     assert wait_for_environment_to_be_created(10), "Timeout"
 
     kwargs = {"json": {"option": option} if option else {}}
-    resp1 = _request_to_json("post", "/manager/stop",  **kwargs)
+    resp1 = _request_to_json("post", "/manager/stop", **kwargs)
     assert resp1["success"] is True
 
     assert re_manager.check_if_stopped() is True
@@ -297,7 +409,7 @@ def test_http_server_clear_queue_handler_2(re_manager, fastapi_server, add_plans
 
     # Attempt to stop
     kwargs = {"json": {"option": option} if option else {}}
-    resp1 = _request_to_json("post", "/manager/stop",  **kwargs)
+    resp1 = _request_to_json("post", "/manager/stop", **kwargs)
     assert resp1["success"] == (option == "safe_off")
 
     if option == "safe_off":
@@ -313,5 +425,3 @@ def test_http_server_clear_queue_handler_2(re_manager, fastapi_server, add_plans
         assert resp["plans_in_history"] == 3
         assert resp["running_plan_uid"] is None
         assert resp["worker_environment_exists"] is True
-
-

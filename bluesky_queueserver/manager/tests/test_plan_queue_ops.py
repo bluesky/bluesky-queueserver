@@ -361,15 +361,17 @@ def test_pop_plan_from_queue_1(pq, pos, name):
         await pq.add_plan_to_queue({"name": "c"})
         assert await pq.get_plan_queue_size() == 3
 
-        plan = await pq.pop_plan_from_queue(pos)
+        plan, qsize = await pq.pop_plan_from_queue(pos)
         if name:
             assert plan["name"] == name
+            assert qsize == 2
             assert await pq.get_plan_queue_size() == 2
             # Push the plan back to the queue (proves that UID is removed from '_uid_set')
             await pq.add_plan_to_queue(plan)
             assert await pq.get_plan_queue_size() == 3
         else:
             assert plan == {}
+            assert qsize == 3
             assert await pq.get_plan_queue_size() == 3
 
     asyncio.run(testing())
@@ -384,7 +386,7 @@ def test_pop_plan_from_queue_2(pq, pos):
 
     async def testing():
         assert await pq.get_plan_queue_size() == 0
-        assert await pq.pop_plan_from_queue(pos) == {}
+        assert await pq.pop_plan_from_queue(pos) == ({}, 0)
 
     asyncio.run(testing())
 

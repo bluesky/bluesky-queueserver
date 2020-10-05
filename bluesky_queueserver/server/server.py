@@ -221,7 +221,7 @@ async def queue_start_handler():
 @app.post("/queue/plan/add")
 async def queue_plan_add_handler(payload: dict):
     """
-    Adds new plan to the end of the queue
+    Adds new plan to the queue
     """
     # TODO: validate inputs!
     msg = await re_server.send_command(command="queue_plan_add", params=payload)
@@ -229,11 +229,11 @@ async def queue_plan_add_handler(payload: dict):
 
 
 @app.post("/queue/plan/remove")
-async def queue_plan_remove_handler():
+async def queue_plan_remove_handler(payload: dict):
     """
-    Pop the last item from back of the queue
+    Remove plan from the queue
     """
-    msg = await re_server.send_command(command="queue_plan_remove")
+    msg = await re_server.send_command(command="queue_plan_remove", params=payload)
     return msg
 
 

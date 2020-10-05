@@ -12,4 +12,4 @@ ophyd
 pyyaml
 pyzmq
 requests
-uvicorn
+uvicorn>=0.12.0

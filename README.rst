@@ -20,15 +20,33 @@ Server for queueing plans
 Features
 --------
 
-This is demo version of the QueueServer that supports creation and closing of Run Engine execution environment, adding
-and removing items from the queue, checking the queue status and execution of the queue, pausing (immediate and
-deferred), resuming, aborting, stopping and halting plans, collection of data to 'temp' Databroker.
+This is demo version of the QueueServer. The project is in the process of active development, so
+APIs may change at any time without notice. QueueServer may not be considered stable, so install
+and use it only for evaluation purposes.
 
-Implementation of error handling is very limited. The modules are relatively stable when running the commands
-presented below, the shell may still freeze if the sequence of operations is violated (e.g. if the Manager
-application is closed using Ctrl-C is pressed before the RE environment is not closed). In this case
-some sockets will remain open and prevent the Manager from restarting. To close the sockets (we are interested
-sockets on ports 5555 and 8080), find PIDs of the processes::
+QueueServer is supporting the following functions:
+
+
+- Opening, closing and destroying of RE (Run Engine) Worker environment.
+
+- Loading and publishing the lists of allowed plans and devices.
+
+- Loading beamline profile collections.
+
+- Adding and removing plans from the queue.
+
+- Starting the queue.
+
+- Pausing (immediate and deferred), resuming and stopping (stop, abort and halt) the running plan.
+
+- Saving data to Databroker (some more work is needed).
+
+- Streaming document via Kafka.
+
+
+In some cases the program may crash and leave some sockets open. This may prevent the Manager from
+restarting. To close the sockets (we are interested sockets on ports 5555 and 8080), find
+PIDs of the processes::
 
   $ sudo netstat -ltnp
 
@@ -55,49 +73,145 @@ The Web Server should be started from the second shell as follows::
 
   uvicorn bluesky_queueserver.server.server:app --host localhost --port 8080
 
-Use the third shell to send REST API requests to the server. Add plans to the queue::
+The third shell will be used to send HTTP requests. RE Manager can also be controlled using 'qserver' CLI
+tool. If only CLI tool will be used, then there is no need to start the Web Server. In the following manual
+demostrates how to control RE Manager using CLI commands and HTTP requests. The CLI tool commands will be
+shown alongside with HTTP requests.
 
-  http POST http://localhost:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]]}'
-  http POST http://localhost:8080/add_to_queue plan:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
+The 'qserver' CLI tool can be started from a separate shell. Display help options::
 
-The following plan runs for 10 seconds. It is convenient for testing pausing/resuming/stopping the plan::
+  qserver -h
 
-  http POST http://localhost:8080/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
+The most basic request is 'ping' intended to fetch some response from RE Manager::
 
-The names of the plans and devices are strings. The strings are converted to references to plans and
-devices in the worker process. In this demo the server can recognize only 'det1', 'det2', 'motor' devices
-and 'count' and 'scan' plans. If items are added to the running queue and they
-are executed as part of the queue. If execution of the queue is finished before an item is added, then
-execution has to be started again (execution is stopped once an attempt is made to fetch an element
-from an empty queue).
-
-The last item can be removed from the back of the queue::
-
-  http POST http://localhost:8080/pop_from_queue
-
-The number of entries in the queue may be checked as follows::
-
+  qserver -c ping
   http GET http://localhost:8080
 
-The contents of the queue can be retrieved as follows::
+Current default address of RE Manager is set to tcp://localhost:5555, but different
+address may be passed as a parameter to CLI tool::
 
-  http GET http://localhost:8080/get_queue
+  qserver -c ping -a "tcp://localhost:5555"
 
-Before the queue can be executed, the worker environment must be created and initialized. This operation
-creates a new execution environment for Bluesky Run Engine and used to execute plans until it explicitly
-closed::
+The 'qserver' CLI tool may run in the monitoring mode (send 'ping' request to RE Manager every second)::
 
-  http POST http://localhost:8080/create_environment
+  qserver -c monitor
 
-Execute the plans in the queue::
+Currently 'ping' request returns status of RE Manager, but the returned data may change. The recommended
+way to fetch status of RE Manager is to use 'status' request::
 
-  http POST http://localhost:8080/process_queue
+  qserver -c status
+  http GET http://localhost:8080/status
+
+Befor plans could be executed, RE Worker environment must be opened. Opening RE Worker environment
+involves loading beamline profile collection and instantiation of Run Engine and may take a few minutes.
+The package comes with simulated profile collection that includes simulated Ophyd devices and built-in
+Bluesky plans and loads almost instantly. An open RE Worker environment may be closed or destroyed.
+Orderly closing of the environment is a safe operation, which is possible only when RE Worker
+(and RE Manager) is in idle state, i.e. no plans are currently running or paused. Destroying
+the environment is potentially dangerous, since it involves killing of RE Process that could potentially
+be running plans, and supposed to be used for destroying unresponsive environment in case of RE failure.
+Note that any operations on the queue (such as adding or removing plans) can be performed before
+the environment is opened.
+
+Open the new RE environment::
+
+  qserver -c environment_open
+  http POST http://localhost:8080/environment/open
+
+Close RE environment::
+
+  qserver -c environment_close
+  http POST http://localhost:8080/environment/close
+
+Destroy RE environment::
+
+  qserver -c environment_destroy
+  http POST http://localhost:8080/environment/destroy
+
+Get the lists (JSON) of allowed plans and devices::
+
+  qserver -c plans_allowed
+  qserver -c devices_allowed
+
+  http GET http://localhost:8080/plans/allowed
+  http GET http://localhost:8080/devices/allowed
+
+Push a new plan to the back of the queue::
+
+  qserver -c queue_plan_add -p '{"name":"count", "args":[["det1", "det2"]]}'
+  qserver -c queue_plan_add -p '{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
+  qserver -c queue_plan_add -p '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
+
+  http POST http://localhost:8080/queue/plan/add plan:='{"name":"count", "args":[["det1", "det2"]]}'
+  http POST http://localhost:8080/queue/plan/add plan:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
+  http POST http://localhost:8080/queue/plan/add plan:='{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
+
+It takes 10 second to execute the third plan in the group above, so it is may be the most convenient for testing
+pausing/resuming/stopping of experimental plans.
+
+The plan to be added at any position of the queue including pushing to the front or back of the queue::
+
+  qserver -c queue_plan_add -p front '{"name":"count", "args":[["det1", "det2"]]}'
+  qserver -c queue_plan_add -p back '{"name":"count", "args":[["det1", "det2"]]}'
+  qserver -c queue_plan_add -p 2 '{"name":"count", "args":[["det1", "det2"]]}'  # Inserted at pos #2 (0-based)
+
+  http POST http://localhost:8080/queue/plan/add pos:='"front"' plan:='{"name":"count", "args":[["det1", "det2"]]}'
+  http POST http://localhost:8080/queue/plan/add pos:='"back"' plan:='{"name":"count", "args":[["det1", "det2"]]}'
+  http POST http://localhost:8080/queue/plan/add pos:=2 plan:='{"name":"count", "args":[["det1", "det2"]]}'
+
+The following command will insert the plan in place of the last element and shift the last element to
+the back so that the new element is now previous to last::
+
+  qserver -c queue_plan_add -p -1 '{"name":"count", "args":[["det1", "det2"]]}'
+  http POST http://localhost:8080/queue/plan/add pos:=-1 plan:='{"name":"count", "args":[["det1", "det2"]]}'
+
+If the queue has 5 elements (0..4), then the following command pushes the new plan to the back of the queue::
+
+  qserver -c queue_plan_add -p 5 '{"name":"count", "args":[["det1", "det2"]]}'
+  http POST http://localhost:8080/queue/plan/add pos:=5 plan:='{"name":"count", "args":[["det1", "det2"]]}'
+
+The 'queue_plan_add' request will accept any index value. If the index is out of range, then the plan will
+be pushed to the front or the back of the queue. If the queue is currently running, then it is recommended
+to access elements using negative indices (counted from the back of the queue).
+
+The names of the plans and devices are strings. The strings are converted to references to Bluesky plans and
+Ophyd devices in the worker process. The simulated beamline profile collection includes all simulated
+Ophyd devices and built-in Bluesky plans.
+
+Queue can be edited at any time. Changes to the running queue become effective the moment they are
+performed. As the currently running plan is finished, the new plan is popped from the top of the queue.
+
+The contents of the queue may be fetched at any time::
+
+  qserver -c queue_get
+  http GET http://localhost:8080/queue/get
+
+The last item can be removed (popped) from the back of the queue::
+
+  qserver -c queue_plan_remove
+  echo '{}' | http POST http://localhost:8080/queue/plan/remove
+
+The position of the removed element may be specified similarly to `queue_plan_add` request with the difference
+that the position index must point to the existing element, otherwise the request fails (returns 'success==False').
+The following examples remove the plan from the front of the queue and the element previous to last::
+
+  qserver -c queue_plan_remove -p front
+  qserver -c queue_plan_remove -p -2
+
+  http POST http://localhost:8080/queue/plan/remove pos:='"front"'
+  http POST http://localhost:8080/queue/plan/remove pos:=-2
+
+Remove all entries from the plan queue::
+
+  qserver -c queue-clear
+  http POST http://localhost:8080/queue/clear
+
+Start execution of the plan queue. The environment MUST be opened before queue could be started::
+
+  qserver -c queue_start
+  http POST http://localhost:8080/queue/start
 
 Request to execute an empty queue is a valid operation that does nothing.
-
-Environment may be closed as follows::
-
-  http POST http://localhost:8080/close_environment
 
 While a plan in a queue is executed, operation Run Engine can be paused. In the unlikely event
 if the request to pause is received while RunEngine is transitioning between two plans, the request
@@ -106,92 +220,63 @@ state, plan execution can be resumed, aborted, stopped or halted. If the plan is
 or halted, it is not removed from the plan queue (it remains the first in the queue) and execution
 of the queue is stopped. Execution of the queue may be started again if needed.
 
-Immediate pausing of the Run Engine (returns to the last checkpoint in the plan)::
+Running plan can be paused immediately (returns to the last checkpoint in the plan) or at the next
+checkpoint (deferred pause)::
 
-  http POST http://localhost:8080/re_pause option="immediate"
+  qserver -c re_pause -p immediate
+  qserver -c re_pause -p deferred
 
-Deferred pausing of the Run Engine (plan is executed until the next checkpoint)::
-
-  http POST http://localhost:8080/re_pause option="deferred"
+  http POST http://localhost:8080/re/pause option="immediate"
+  http POST http://localhost:8080/re/pause option="deferred"
 
 Resuming, aborting, stopping or halting of currently executed plan::
 
-  http POST http://localhost:8080/re_continue option="resume"
-  http POST http://localhost:8080/re_continue option="abort"
-  http POST http://localhost:8080/re_continue option="stop"
-  http POST http://localhost:8080/re_continue option="halt"
+  qserver -c re_resume
+  qserver -c re_stop
+  qserver -c re_abort
+  qserver -c re_halt
+
+  http POST http://localhost:8080/re/resume
+  http POST http://localhost:8080/re/stop
+  http POST http://localhost:8080/re/abort
+  http POST http://localhost:8080/re_halt
 
 There is minimal user protection features implemented that will prevent execution of
 the commands that are not supported in current state of the server. Error messages are printed
 in the terminal that is running the server along with output of Run Engine.
 
-The 'qserver' CLI tool can be started from a separate shell. Display help options::
+Data on executed plans, including stopped plans, is recorded in the history. History can
+be downloaded at any time::
 
-  qserver -h
+  qserver -c history_get
+  http GET http://localhost:8080/history/get
 
-Run 'ping' command (get status from RE Manager)::
+History is not intended for long-term storage. It can be cleared at any time::
 
-  qserver -c ping
+  qserver -c history_clear
+  http POST http://localhost:8080/history/clear
 
-Current default address of RE Manager is set to tcp://localhost:5555, but different
-address may be passed as a parameter::
+Stop RE Manager (exit RE Manager application). There are two options: safe request that is rejected
+when the queue is running or a plan is paused::
 
-  qserver -c ping -a "tcp://localhost:5555"
+  qserver -c manager_stop
+  qserver -c manager_stop -p safe_on
 
-Run 'qserver' in the monitoring mode (send 'ping' request to RE Manager every second)::
+  echo '{}' | http POST http://localhost:8080/manager/stop
+  http POST http://localhost:8080/manager/stop option="safe_on"
 
-  qserver -c monitor
+Manager can be also stopped at any time using unsafe stop, which causes current RE Worker to be
+destroyed even if a plan is running::
 
-Add a new plan to the queue::
+  qserver -c manager_stop -p safe_off
+  http POST http://localhost:8080/manager/stop option="safe_off"
 
-  qserver -c add_to_queue -p '{"name":"count", "args":[["det1", "det2"]]}'
-  qserver -c add_to_queue -p '{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
-  qserver -c add_to_queue -p '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
+The 'test_manager_kill' request is designed specifically for testing ability of RE Watchdog
+to restart malfunctioning RE Manager process. This command stops event loop of RE Manager process
+and causes RE Watchdog to restart the process (currently after 5 seconds). RE Manager
+process is expected to fully recover its state, so that the restart does not affect
+running or paused plans or the state of the queue. Another potential use of the request
+is to test handling of communication timeouts, since RE Manager does not respond to the request::
 
-View the contents of the queue::
-
-  qserver -c get_queue
-
-Pop the last element from queue::
-
-  qserver -c pop_from_queue
-
-Remove all entries from the plan queue::
-
-  qserver -c clear_queue
-
-Create new RE environment::
-
-  qserver -c create_environment
-
-Execute the plan queue::
-
-  qserver -c process_queue
-
-Close and destroy RE environment::
-
-  qserver -c close_environment
-
-Pause the Run Engine (and the queue)::
-
-  qserver -c re_pause -p immediate
-  qserver -c re_pause -p deferred
-
-Countinue paused plan::
-
-  qserver -c re_continue -p resume
-  qserver -c re_continue -p abort
-  qserver -c re_continue -p stop
-  qserver -c re_continue -p halt
-
-
-Close RE Manager in orderly way. No plans should be running at the moment when the command is issued::
-
-  qserver -c stop_manager
-
-Kill Manager process. Permanently blocks the event loop of Manager process and triggers its restart.
-The command is intended to be used in testing procedures (it will be more difficult to send this
-command in the production version, but Manager process should restart without causing any issues
-to running plans)::
-
-  qserver -c kill_manager
+  qserver -c test_manager_kill
+  http POST http://localhost:8080/test/manager/kill

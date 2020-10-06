@@ -237,6 +237,15 @@ async def queue_plan_remove_handler(payload: dict):
     return msg
 
 
+@app.get("/queue/plan/get")
+async def queue_plan_get_handler(payload: dict):
+    """
+    Get a plan from the queue
+    """
+    msg = await re_server.send_command(command="queue_plan_get", params=payload)
+    return msg
+
+
 @app.get("/history/get")
 async def history_get_handler():
     """

@@ -137,19 +137,25 @@ def test_http_server_queue_plan_add_handler_3_fail(re_manager, fastapi_server): 
     assert "no plan was found" in resp1["msg"]
 
 
-def test_http_server_queue_plan_remove_handler_1(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
+def test_http_server_queue_plan_get_remove_handler_1(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
 
     resp1 = _request_to_json("get", "/queue/get")
     assert resp1["queue"] != []
     assert len(resp1["queue"]) == 3
     assert resp1["running_plan"] == {}
 
-    resp2 = _request_to_json("post", "/queue/plan/remove", json={})
+    resp2 = _request_to_json("get", "/queue/plan/get", json={})
     assert resp2["success"] is True
-    assert resp2["qsize"] == 2
     assert resp2["plan"]["name"] == "count"
     assert resp2["plan"]["args"] == [["det1", "det2"]]
     assert "plan_uid" in resp2["plan"]
+
+    resp3 = _request_to_json("post", "/queue/plan/remove", json={})
+    assert resp3["success"] is True
+    assert resp3["qsize"] == 2
+    assert resp3["plan"]["name"] == "count"
+    assert resp3["plan"]["args"] == [["det1", "det2"]]
+    assert "plan_uid" in resp3["plan"]
 
 
 # fmt: off
@@ -170,7 +176,7 @@ def test_http_server_queue_plan_remove_handler_1(re_manager, fastapi_server, add
     (-100, 0, False),
 ])
 # fmt: on
-def test_http_server_queue_plan_remove_handler_2(
+def test_http_server_queue_plan_get_remove_handler_2(
     re_manager, fastapi_server, pos, pos_result, success  # noqa F811
 ):
     plans = [
@@ -183,21 +189,33 @@ def test_http_server_queue_plan_remove_handler_2(
 
     # Remove entry at the specified position
     params = {} if pos is None else {"pos": pos}
-    resp1 = _request_to_json("post", "/queue/plan/remove", json=params)
 
+    # Testing '/queue/plan/get'
+    resp1 = _request_to_json("get", "/queue/plan/get", json=params)
     assert resp1["success"] is success
-    assert resp1["qsize"] == (2 if success else None)
     if success:
         assert resp1["plan"]["args"] == plans[pos_result]["args"]
         assert "plan_uid" in resp1["plan"]
         assert resp1["msg"] == ""
     else:
         assert resp1["plan"] == {}
-        assert "Failed to remove a plan" in resp1["msg"]
+        assert "Failed to get a plan" in resp1["msg"]
 
-    resp2 = _request_to_json("get", "/queue/get")
-    assert len(resp2["queue"]) == (2 if success else 3)
-    assert resp2["running_plan"] == {}
+    # Testing '/queue/plan/remove'
+    resp2 = _request_to_json("post", "/queue/plan/remove", json=params)
+    assert resp2["success"] is success
+    assert resp2["qsize"] == (2 if success else None)
+    if success:
+        assert resp2["plan"]["args"] == plans[pos_result]["args"]
+        assert "plan_uid" in resp2["plan"]
+        assert resp2["msg"] == ""
+    else:
+        assert resp2["plan"] == {}
+        assert "Failed to remove a plan" in resp2["msg"]
+
+    resp3 = _request_to_json("get", "/queue/get")
+    assert len(resp3["queue"]) == (2 if success else 3)
+    assert resp3["running_plan"] == {}
 
 
 def test_http_server_open_environment_handler(re_manager, fastapi_server):  # noqa F811

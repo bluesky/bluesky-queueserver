@@ -73,6 +73,7 @@ class RunEngineManager(Process):
         self._manager_stopping = False  # Set True to exit manager (by _manager_stop_handler)
         self._environment_exists = False  # True if RE Worker environment exists
         self._manager_state = MState.INITIALIZING
+        self._queue_stopping = False  # Queue is in the process of being stopped
         self._worker_state_info = None  # Copy of the last downloaded state of RE Worker
 
         self._loop = None
@@ -385,6 +386,10 @@ class RunEngineManager(Process):
             else:
                 logger.error("Unknown plan state %s was returned by RE Worker.", plan_state)
 
+        if self._manager_state == MState.IDLE:
+            # No plans are running: deactivate the stop sequence.
+            self._queue_stop_deactivate()
+
     async def _start_plan(self):
         """
         Initiate creation of RE Worker environment. The function does not wait until
@@ -396,6 +401,7 @@ class RunEngineManager(Process):
         elif not self._manager_state == MState.IDLE:
             success, err_msg = False, "RE Manager is busy."
         else:
+            self._queue_stop_deactivate()  # Just in case
             asyncio.ensure_future(self._execute_background_task(self._start_plan_task()))
             success, err_msg = True, ""
         return success, err_msg
@@ -410,7 +416,17 @@ class RunEngineManager(Process):
         n_pending_plans = await self._plan_queue.get_plan_queue_size()
         logger.info("Starting a new plan: %d plans are left in the queue", n_pending_plans)
 
-        if n_pending_plans:
+        if not n_pending_plans:
+            self._manager_state = MState.IDLE
+            success, err_msg = False, "Queue is empty."
+            logger.info(err_msg)
+
+        elif self._queue_stopping:
+            self._manager_state = MState.IDLE
+            success, err_msg = False, "Queue is stopped."
+            logger.info(err_msg)
+
+        else:
             # Reset RE environment (worker)
             success, err_msg = await self._worker_command_reset_worker()
             if not success:
@@ -444,12 +460,24 @@ class RunEngineManager(Process):
                     err_msg,
                 )
                 err_msg = f"Failed to start the plan: {err_msg}"
-        else:
-            self._manager_state = MState.IDLE
-            success, err_msg = False, "Queue is empty."
-            logger.info(err_msg)
+
+        if self._manager_state == MState.IDLE:
+            # No plans are running: deactivate the stop sequence.
+            self._queue_stop_deactivate()
 
         return success, err_msg
+
+    def _queue_stop_activate(self):
+        if self._manager_state != MState.EXECUTING_QUEUE:
+            msg = f"Failed to pause the queue. Queue is not running. Manager state: {self._manager_state}"
+            return {"success": False, "msg": msg}
+        else:
+            self._queue_stopping = True
+            return {"success": True, "msg": ""}
+
+    def _queue_stop_deactivate(self):
+        self._queue_stopping = False
+        return {"success": True, "msg": ""}
 
     async def _pause_run_engine(self, option):
         """
@@ -743,9 +771,29 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg, "plan": plan, "qsize": qsize}
 
+    async def _queue_plan_get_handler(self, request):
+        """
+        Returns an item from the queue. The position of the item
+        may be specified as an index (positive or negative) or a string
+        from the set {``front``, ``back``}. The default option is ``back``
+        """
+        logger.info("Getting an item from the queue.")
+        try:
+            plan, msg = {}, ""
+            pos = request.get("pos", "back")
+            plan = await self._plan_queue.get_plan(pos=pos)
+            success = True
+        except Exception as ex:
+            success = False
+            msg = f"Failed to get a plan: {str(ex)}"
+
+        return {"success": success, "msg": msg, "plan": plan}
+
     async def _queue_plan_remove_handler(self, request):
         """
-        Pop the last item from back of the queue.
+        Removes (pops) item from the queue. The position of the item
+        may be specified as an index (positive or negative) or a string
+        from the set {``front``, ``back``}. The default option is ``back``
         """
         logger.info("Removing item from the queue.")
         try:
@@ -818,6 +866,28 @@ class RunEngineManager(Process):
         """
         logger.info("Starting queue processing.")
         success, msg = await self._start_plan()
+        return {"success": success, "msg": msg}
+
+    async def _queue_stop_activate_handler(self, request):
+        """
+        Stop execution of the running queue. Currently running plan will be completed
+        and the next plan will not be started. Stopping the queue is a safe operation
+        that should not lead to data loss.
+
+        The request will fail if the queue is not running.
+        """
+        logger.info("Activating 'stop queue' sequence ...")
+        success, msg = self._queue_stop_activate()
+        return {"success": success, "msg": msg}
+
+    async def _queue_stop_deactivate_handler(self, request):
+        """
+        Deactivate the sequence of stopping the queue execution.
+
+        The request always succeeds.
+        """
+        logger.info("Deactivating 'stop queue' sequence ...")
+        success, msg = self._queue_stop_deactivate()
         return {"success": success, "msg": msg}
 
     async def _re_pause_handler(self, request):
@@ -928,15 +998,18 @@ class RunEngineManager(Process):
             "queue_get": "_queue_get_handler",
             "plans_allowed": "_plans_allowed_handler",
             "devices_allowed": "_devices_allowed_handler",
-            "queue_plan_add": "_queue_plan_add_handler",
-            "queue_plan_remove": "_queue_plan_remove_handler",
-            "queue_clear": "_queue_clear_handler",
             "history_get": "_history_get_handler",
             "history_clear": "_history_clear_handler",
             "environment_open": "_environment_open_handler",
             "environment_close": "_environment_close_handler",
             "environment_destroy": "_environment_destroy_handler",
+            "queue_plan_add": "_queue_plan_add_handler",
+            "queue_plan_get": "_queue_plan_get_handler",
+            "queue_plan_remove": "_queue_plan_remove_handler",
+            "queue_clear": "_queue_clear_handler",
             "queue_start": "_queue_start_handler",
+            "queue_stop_activate": "_queue_stop_activate_handler",
+            "queue_stop_deactivate": "_queue_stop_deactivate_handler",
             "re_pause": "_re_pause_handler",
             "re_resume": "_re_resume_handler",
             "re_stop": "_re_stop_handler",

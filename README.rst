@@ -201,6 +201,17 @@ The following examples remove the plan from the front of the queue and the eleme
   http POST http://localhost:8080/queue/plan/remove pos:='"front"'
   http POST http://localhost:8080/queue/plan/remove pos:=-2
 
+Plans can be read from the queue without changing it. `queue_plan_get` requests are formatted identically to
+`queue_plan_remove` requests::
+
+  qserver -c queue_plan_get
+  qserver -c queue_plan_get -p front
+  qserver -c queue_plan_get -p -2
+
+  echo '{}' | http GET http://localhost:8080/queue/plan/get
+  http GET http://localhost:8080/queue/plan/get pos:='"front"'
+  http GET http://localhost:8080/queue/plan/get pos:=-2
+
 Remove all entries from the plan queue::
 
   qserver -c queue-clear

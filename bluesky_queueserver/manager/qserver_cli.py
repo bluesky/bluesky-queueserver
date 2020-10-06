@@ -61,18 +61,21 @@ class CliClient:
         command_dict = {
             "ping": "",
             "status": "status",
-            "queue_get": "queue_get",
             "plans_allowed": "plans_allowed",
             "devices_allowed": "devices_allowed",
-            "queue_plan_add": "queue_plan_add",
-            "queue_plan_remove": "queue_plan_remove",
-            "queue_clear": "queue_clear",
             "history_get": "history_get",
             "history_clear": "history_clear",
             "environment_open": "environment_open",
             "environment_close": "environment_close",
             "environment_destroy": "environment_destroy",
+            "queue_get": "queue_get",
+            "queue_plan_add": "queue_plan_add",
+            "queue_plan_get": "queue_plan_get",
+            "queue_plan_remove": "queue_plan_remove",
+            "queue_clear": "queue_clear",
             "queue_start": "queue_start",
+            "queue_stop_activate": "queue_stop_activate",
+            "queue_stop_deactivate": "queue_stop_deactivate",
             "re_pause": "re_pause",
             "re_resume": "re_resume",
             "re_stop": "re_stop",
@@ -157,7 +160,7 @@ class CliClient:
                 else:
                     raise ValueError("Invalid number of method arguments: '%s'", pprint.pformat(params))
 
-            elif command == "queue_plan_remove":
+            elif command in ("queue_plan_remove", "queue_plan_get"):
                 if 0 <= len(params) <= 1:
                     prms = {"pos": params[0]} if len(params) else {}
                 else:
@@ -231,7 +234,7 @@ def qserver():
             f"Command '{command}' is not supported. Please enter a valid command.\n"
             f"Call 'qserver' with the option '-h' to see full list of supported commands."
         )
-        sys.exit(10)
+        sys.exit(1)
 
     # 'params' is a string representing a python dictionary. We need to convert it into a dictionary.
     #   Also don't evaluate the expression that is a non-quoted string with alphanumeric characters.

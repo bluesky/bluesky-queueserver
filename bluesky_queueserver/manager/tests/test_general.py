@@ -802,7 +802,10 @@ def test_queue_plan_add_2_fail(re_manager, pos):  # noqa F811
     (-100, 0, False),
 ])
 # fmt: on
-def test_queue_plan_remove(re_manager, pos, pos_result, success):  # noqa F811
+def test_queue_plan_get_remove(re_manager, pos, pos_result, success):  # noqa F811
+    """
+    Tests for ``queue_plan_get`` and ``queue_plan_remove`` requests.
+    """
     plans = [
         "{'name':'count', 'args':[['det1']]}",
         "{'name':'count', 'args':[['det2']]}",
@@ -815,6 +818,15 @@ def test_queue_plan_remove(re_manager, pos, pos_result, success):  # noqa F811
 
     # Remove entry at the specified position
     args = ["-p", str(pos)] if (pos is not None) else []
+
+    # Testing 'queue_plan_get'. ONLY THE RETURN CODE IS TESTED.
+    res = subprocess.call(["qserver", "-c", "queue_plan_get", *args])
+    if success:
+        assert res == 0
+    else:
+        assert res != 0
+
+    # Testing 'queue_plan_remove'.
     res = subprocess.call(["qserver", "-c", "queue_plan_remove", *args])
     if success:
         assert res == 0

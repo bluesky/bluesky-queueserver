@@ -443,3 +443,48 @@ def test_http_server_clear_queue_handler_2(re_manager, fastapi_server, add_plans
         assert resp["plans_in_history"] == 3
         assert resp["running_plan_uid"] is None
         assert resp["worker_environment_exists"] is True
+
+
+# fmt: off
+@pytest.mark.parametrize("deactivate", [False, True])
+# fmt: on
+def test_http_server_queue_stop(re_manager, fastapi_server, add_plans_to_queue, deactivate):  # noqa F811
+    """
+    Methods ``queue_stop_activate`` and ``queue_stop_deactivate``.
+    """
+    _request_to_json("post", "/environment/open")
+    assert wait_for_environment_to_be_created(10), "Timeout"
+
+    # Queue is not running, so the request is expected to fail
+    resp1 = _request_to_json("post", "/queue/stop/activate")
+    assert resp1["success"] is False
+    status = _request_to_json("get", "/status")
+    assert status["queue_stop_pending"] is False
+
+    _request_to_json("post", "/queue/start")
+    ttime.sleep(2)
+    status = _request_to_json("get", "/status")
+    assert status["manager_state"] == "executing_queue"
+
+    resp2 = _request_to_json("post", "/queue/stop/activate")
+    assert resp2["success"] is True
+    status = _request_to_json("get", "/status")
+    assert status["queue_stop_pending"] is True
+
+    if deactivate:
+        ttime.sleep(1)
+
+        resp3 = _request_to_json("post", "/queue/stop/deactivate")
+        assert resp3["success"] is True
+        status = _request_to_json("get", "/status")
+        assert status["queue_stop_pending"] is False
+
+    ttime.sleep(15)
+
+    status = _request_to_json("get", "/status")
+    assert status["manager_state"] == "idle"
+    assert status["plans_in_queue"] == (0 if deactivate else 2)
+    assert status["plans_in_history"] == (3 if deactivate else 1)
+    assert status["running_plan_uid"] is None
+    assert status["worker_environment_exists"] is True
+    assert status["queue_stop_pending"] is False

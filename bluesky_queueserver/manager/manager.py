@@ -73,7 +73,7 @@ class RunEngineManager(Process):
         self._manager_stopping = False  # Set True to exit manager (by _manager_stop_handler)
         self._environment_exists = False  # True if RE Worker environment exists
         self._manager_state = MState.INITIALIZING
-        self._queue_stopping = False  # Queue is in the process of being stopped
+        self._queue_stop_pending = False  # Queue is in the process of being stopped
         self._worker_state_info = None  # Copy of the last downloaded state of RE Worker
 
         self._loop = None
@@ -421,7 +421,7 @@ class RunEngineManager(Process):
             success, err_msg = False, "Queue is empty."
             logger.info(err_msg)
 
-        elif self._queue_stopping:
+        elif self._queue_stop_pending:
             self._manager_state = MState.IDLE
             success, err_msg = False, "Queue is stopped."
             logger.info(err_msg)
@@ -470,14 +470,14 @@ class RunEngineManager(Process):
     def _queue_stop_activate(self):
         if self._manager_state != MState.EXECUTING_QUEUE:
             msg = f"Failed to pause the queue. Queue is not running. Manager state: {self._manager_state}"
-            return {"success": False, "msg": msg}
+            return False, msg
         else:
-            self._queue_stopping = True
-            return {"success": True, "msg": ""}
+            self._queue_stop_pending = True
+            return True, ""
 
     def _queue_stop_deactivate(self):
-        self._queue_stopping = False
-        return {"success": True, "msg": ""}
+        self._queue_stop_pending = False
+        return True, ""
 
     async def _pause_run_engine(self, option):
         """
@@ -687,6 +687,7 @@ class RunEngineManager(Process):
         plans_in_history = n_plans_in_history
         running_plan_uid = running_plan_info["plan_uid"] if running_plan_info else None
         manager_state = self._manager_state.value
+        queue_stop_pending = self._queue_stop_pending
         worker_environment_exists = self._environment_exists
         # worker_state_info = self._worker_state_info
 
@@ -698,6 +699,7 @@ class RunEngineManager(Process):
             "plans_in_history": plans_in_history,
             "running_plan_uid": running_plan_uid,
             "manager_state": manager_state,
+            "queue_stop_pending": queue_stop_pending,
             "worker_environment_exists": worker_environment_exists,
             # "worker_state_info": worker_state_info
         }

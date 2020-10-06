@@ -218,6 +218,25 @@ async def queue_start_handler():
     return msg
 
 
+@app.post("/queue/stop/activate")
+async def queue_stop_activate():
+    """
+    Activate the sequence of stopping the queue. Currently running plan will be completed,
+    but the next plan will not be started.
+    """
+    msg = await re_server.send_command(command="queue_stop_activate")
+    return msg
+
+
+@app.post("/queue/stop/deactivate")
+async def queue_stop_deactivate():
+    """
+    Deactivate the sequence of stopping the queue.
+    """
+    msg = await re_server.send_command(command="queue_stop_deactivate")
+    return msg
+
+
 @app.post("/queue/plan/add")
 async def queue_plan_add_handler(payload: dict):
     """

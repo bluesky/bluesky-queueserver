@@ -841,3 +841,50 @@ def test_queue_plan_get_remove(re_manager, pos, pos_result, success):  # noqa F8
         # Check that the right entry disappeared from the queue.
         assert resp["queue"][0]["args"] == plans_args[ind[0]]
         assert resp["queue"][1]["args"] == plans_args[ind[1]]
+
+
+# fmt: off
+@pytest.mark.parametrize("deactivate", [False, True])
+# fmt: on
+def test_qserver_queue_stop(re_manager, deactivate):
+    """
+    Methods ``queue_stop_activate`` and ``queue_stop_deactivate``.
+    """
+    # Wait until RE Manager is started
+    assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+    # Attempt to create the environment
+    assert subprocess.call(["qserver", "-c", "environment_open"]) == 0
+    assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+    plan = "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num': 10, 'delay': 1}}"
+    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan]) == 0
+
+    # Queue is not running, so the request is expected to fail
+    assert subprocess.call(["qserver", "-c", "queue_stop_activate"]) != 0
+    status = get_queue_state()
+    assert status["queue_stop_pending"] is False
+
+    assert subprocess.call(["qserver", "-c", "queue_start"]) == 0
+    ttime.sleep(2)
+    status = get_queue_state()
+    assert status["manager_state"] == "executing_queue"
+
+    assert subprocess.call(["qserver", "-c", "queue_stop_activate"]) == 0
+    status = get_queue_state()
+    assert status["queue_stop_pending"] is True
+
+    if deactivate:
+        ttime.sleep(1)
+        assert subprocess.call(["qserver", "-c", "queue_stop_deactivate"]) == 0
+        status = get_queue_state()
+        assert status["queue_stop_pending"] is False
+
+    assert wait_for_condition(time=60, condition=condition_manager_idle)
+    n_plans, is_plan_running, n_history = get_reduced_state_info()
+    assert n_plans == (0 if deactivate else 1)
+    assert is_plan_running is False
+    assert n_history == (2 if deactivate else 1)
+    status = get_queue_state()
+    assert status["queue_stop_pending"] is False

@@ -208,9 +208,9 @@ Plans can be read from the queue without changing it. `queue_plan_get` requests 
   qserver -c queue_plan_get -p front
   qserver -c queue_plan_get -p -2
 
-  echo '{}' | http GET http://localhost:8080/queue/plan/get
-  http GET http://localhost:8080/queue/plan/get pos:='"front"'
-  http GET http://localhost:8080/queue/plan/get pos:=-2
+  echo '{}' | http POST http://localhost:8080/queue/plan/get
+  http POST http://localhost:8080/queue/plan/get pos:='"front"'
+  http POST http://localhost:8080/queue/plan/get pos:=-2
 
 Remove all entries from the plan queue::
 
@@ -225,14 +225,14 @@ Start execution of the plan queue. The environment MUST be opened before queue c
 Request to execute an empty queue is a valid operation that does nothing.
 
 The queue can be stopped at any time. Stopping the queue is a safe operation. When the stopping
-sequence is initiated, the currently running plan is finished and the next plan will not be started.
-The stopping sequence can be deactivated if it was activated by mistake or decision was changed::
+sequence is initiated, the currently running plan is finished and the next plan is not be started.
+The stopping sequence can be cancelled if it was activated by mistake or decision was changed::
 
-  qserver -c queue_stop_activate
-  qserver -c queue_stop_deactivate
+  qserver -c queue_stop
+  qserver -c queue_stop_cancel
 
-  http POST http://localhost:8080/queue/stop/activate
-  http POST http://localhost:8080/queue/stop/deactivate
+  http POST http://localhost:8080/queue/stop
+  http POST http://localhost:8080/queue/stop/cancel
 
 While a plan in a queue is executed, operation Run Engine can be paused. In the unlikely event
 if the request to pause is received while RunEngine is transitioning between two plans, the request

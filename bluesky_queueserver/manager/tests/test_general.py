@@ -848,7 +848,7 @@ def test_queue_plan_get_remove(re_manager, pos, pos_result, success):  # noqa F8
 # fmt: on
 def test_qserver_queue_stop(re_manager, deactivate):
     """
-    Methods ``queue_stop_activate`` and ``queue_stop_deactivate``.
+    Methods ``queue_stop`` and ``queue_stop_cancel``.
     """
     # Wait until RE Manager is started
     assert wait_for_condition(time=10, condition=condition_manager_idle)
@@ -862,7 +862,7 @@ def test_qserver_queue_stop(re_manager, deactivate):
     assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan]) == 0
 
     # Queue is not running, so the request is expected to fail
-    assert subprocess.call(["qserver", "-c", "queue_stop_activate"]) != 0
+    assert subprocess.call(["qserver", "-c", "queue_stop"]) != 0
     status = get_queue_state()
     assert status["queue_stop_pending"] is False
 
@@ -871,13 +871,13 @@ def test_qserver_queue_stop(re_manager, deactivate):
     status = get_queue_state()
     assert status["manager_state"] == "executing_queue"
 
-    assert subprocess.call(["qserver", "-c", "queue_stop_activate"]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_stop"]) == 0
     status = get_queue_state()
     assert status["queue_stop_pending"] is True
 
     if deactivate:
         ttime.sleep(1)
-        assert subprocess.call(["qserver", "-c", "queue_stop_deactivate"]) == 0
+        assert subprocess.call(["qserver", "-c", "queue_stop_cancel"]) == 0
         status = get_queue_state()
         assert status["queue_stop_pending"] is False
 

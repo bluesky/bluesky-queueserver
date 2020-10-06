@@ -870,7 +870,7 @@ class RunEngineManager(Process):
         success, msg = await self._start_plan()
         return {"success": success, "msg": msg}
 
-    async def _queue_stop_activate_handler(self, request):
+    async def _queue_stop_handler(self, request):
         """
         Stop execution of the running queue. Currently running plan will be completed
         and the next plan will not be started. Stopping the queue is a safe operation
@@ -882,7 +882,7 @@ class RunEngineManager(Process):
         success, msg = self._queue_stop_activate()
         return {"success": success, "msg": msg}
 
-    async def _queue_stop_deactivate_handler(self, request):
+    async def _queue_stop_cancel_handler(self, request):
         """
         Deactivate the sequence of stopping the queue execution.
 
@@ -1010,8 +1010,8 @@ class RunEngineManager(Process):
             "queue_plan_remove": "_queue_plan_remove_handler",
             "queue_clear": "_queue_clear_handler",
             "queue_start": "_queue_start_handler",
-            "queue_stop_activate": "_queue_stop_activate_handler",
-            "queue_stop_deactivate": "_queue_stop_deactivate_handler",
+            "queue_stop": "_queue_stop_handler",
+            "queue_stop_cancel": "_queue_stop_cancel_handler",
             "re_pause": "_re_pause_handler",
             "re_resume": "_re_resume_handler",
             "re_stop": "_re_stop_handler",

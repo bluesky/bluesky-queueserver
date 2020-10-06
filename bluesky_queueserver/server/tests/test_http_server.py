@@ -144,7 +144,7 @@ def test_http_server_queue_plan_get_remove_handler_1(re_manager, fastapi_server,
     assert len(resp1["queue"]) == 3
     assert resp1["running_plan"] == {}
 
-    resp2 = _request_to_json("get", "/queue/plan/get", json={})
+    resp2 = _request_to_json("post", "/queue/plan/get", json={})
     assert resp2["success"] is True
     assert resp2["plan"]["name"] == "count"
     assert resp2["plan"]["args"] == [["det1", "det2"]]
@@ -191,7 +191,7 @@ def test_http_server_queue_plan_get_remove_handler_2(
     params = {} if pos is None else {"pos": pos}
 
     # Testing '/queue/plan/get'
-    resp1 = _request_to_json("get", "/queue/plan/get", json=params)
+    resp1 = _request_to_json("post", "/queue/plan/get", json=params)
     assert resp1["success"] is success
     if success:
         assert resp1["plan"]["args"] == plans[pos_result]["args"]
@@ -456,7 +456,7 @@ def test_http_server_queue_stop(re_manager, fastapi_server, add_plans_to_queue, 
     assert wait_for_environment_to_be_created(10), "Timeout"
 
     # Queue is not running, so the request is expected to fail
-    resp1 = _request_to_json("post", "/queue/stop/activate")
+    resp1 = _request_to_json("post", "/queue/stop")
     assert resp1["success"] is False
     status = _request_to_json("get", "/status")
     assert status["queue_stop_pending"] is False
@@ -466,7 +466,7 @@ def test_http_server_queue_stop(re_manager, fastapi_server, add_plans_to_queue, 
     status = _request_to_json("get", "/status")
     assert status["manager_state"] == "executing_queue"
 
-    resp2 = _request_to_json("post", "/queue/stop/activate")
+    resp2 = _request_to_json("post", "/queue/stop")
     assert resp2["success"] is True
     status = _request_to_json("get", "/status")
     assert status["queue_stop_pending"] is True
@@ -474,7 +474,7 @@ def test_http_server_queue_stop(re_manager, fastapi_server, add_plans_to_queue, 
     if deactivate:
         ttime.sleep(1)
 
-        resp3 = _request_to_json("post", "/queue/stop/deactivate")
+        resp3 = _request_to_json("post", "/queue/stop/cancel")
         assert resp3["success"] is True
         status = _request_to_json("get", "/status")
         assert status["queue_stop_pending"] is False

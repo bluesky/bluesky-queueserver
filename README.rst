@@ -102,7 +102,7 @@ way to fetch status of RE Manager is to use 'status' request::
   qserver -c status
   http GET http://localhost:8080/status
 
-Befor plans could be executed, RE Worker environment must be opened. Opening RE Worker environment
+Before plans could be executed, the RE Worker environment must be opened. Opening RE Worker environment
 involves loading beamline profile collection and instantiation of Run Engine and may take a few minutes.
 The package comes with simulated profile collection that includes simulated Ophyd devices and built-in
 Bluesky plans and loads almost instantly. An open RE Worker environment may be closed or destroyed.

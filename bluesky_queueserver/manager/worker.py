@@ -457,6 +457,8 @@ class RunEngineWorker(Process):
         Overrides the `run()` function of the `multiprocessing.Process` class. Called
         by the `start` method.
         """
+        success = True
+
         self._comm_to_manager.add_method(self._request_state_handler, "request_state")
         self._comm_to_manager.add_method(self._request_plan_report_handler, "request_plan_report")
         self._comm_to_manager.add_method(self._command_close_env_handler, "command_close_env")
@@ -497,15 +499,18 @@ class RunEngineWorker(Process):
             init_namespace()
         else:
             path = self._config["profile_collection_path"]
-            logger.info("Loading beamline profiles located at '%s'", path)
+            logger.info("Loading beamline profile collection from directory '%s' ...", path)
             try:
                 self._re_namespace = load_profile_collection(path)
                 self._existing_plans = plans_from_nspace(self._re_namespace)
                 self._existing_devices = devices_from_nspace(self._re_namespace)
-                logger.info("Loading of the beamline profiles completed successfully")
+                logger.info("Beamline profile collection was loaded completed.")
             except Exception as ex:
-                logger.exception("Error while loading profile collection: %s", str(ex))
-                init_namespace()
+                logger.exception(
+                    "Failed to start RE Worker environment. Error while " "loading profile collection: %s.",
+                    str(ex),
+                )
+                success = False
 
         # Load lists of allowed plans and devices
         logger.info("Loading the lists of allowed plans and devices ...")
@@ -517,38 +522,48 @@ class RunEngineWorker(Process):
                 "Error occurred while loading lists of allowed plans and devices from '%s': %s", path_pd, str(ex)
             )
 
-        logger.info("Instantiating and configuring Run Engine ...")
+        if success:
+            logger.info("Instantiating and configuring Run Engine ...")
 
-        self._RE = RunEngine({})
+            try:
+                self._RE = RunEngine({})
 
-        bec = BestEffortCallback()
-        self._RE.subscribe(bec)
+                bec = BestEffortCallback()
+                self._RE.subscribe(bec)
 
-        self._RE.subscribe(self._db.insert)
+                self._RE.subscribe(self._db.insert)
 
-        if "kafka" in self._config:
-            logger.info(
-                "Subscribing to Kafka: topic '%s', servers '%s'",
-                self._config["kafka"]["topic"],
-                self._config["kafka"]["bootstrap"],
-            )
-            kafka_publisher = kafkaPublisher(
-                topic=self._config["kafka"]["topic"],
-                bootstrap_servers=self._config["kafka"]["bootstrap"],
-                key="kafka-unit-test-key",
-                # work with a single broker
-                producer_config={"acks": 1, "enable.idempotence": False, "request.timeout.ms": 5000},
-                serializer=partial(msgpack.dumps, default=mpn.encode),
-            )
-            self._RE.subscribe(kafka_publisher)
+                if "kafka" in self._config:
+                    logger.info(
+                        "Subscribing to Kafka: topic '%s', servers '%s'",
+                        self._config["kafka"]["topic"],
+                        self._config["kafka"]["bootstrap"],
+                    )
+                    kafka_publisher = kafkaPublisher(
+                        topic=self._config["kafka"]["topic"],
+                        bootstrap_servers=self._config["kafka"]["bootstrap"],
+                        key="kafka-unit-test-key",
+                        # work with a single broker
+                        producer_config={"acks": 1, "enable.idempotence": False, "request.timeout.ms": 5000},
+                        serializer=partial(msgpack.dumps, default=mpn.encode),
+                    )
+                    self._RE.subscribe(kafka_publisher)
 
-        self._execution_queue = queue.Queue()
+                self._execution_queue = queue.Queue()
 
-        self._state["environment_state"] = "ready"
+                self._state["environment_state"] = "ready"
 
-        logger.info("RE Environment is ready.")
-        self._execute_in_main_thread()
+            except BaseException as ex:
+                success = False
+                logger.exception("Error occurred while initializing the environment: %s.", str(ex))
 
+        if success:
+            logger.info("RE Environment is ready.")
+            self._execute_in_main_thread()
+        else:
+            self._exit_event.set()
+
+        logger.info("Environment is waiting to be closed ...")
         self._state["environment_state"] = "closing"
 
         # Wait until confirmation is received from RE Manager

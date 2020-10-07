@@ -5,6 +5,9 @@ import glob
 
 import ophyd
 
+from ._common import copy_default_profile_collection, patch_first_startup_file
+
+
 from bluesky_queueserver.manager.profile_ops import (
     get_default_profile_collection_dir,
     load_profile_collection,
@@ -33,32 +36,11 @@ def test_load_profile_collection_1():
     assert len(nspace) > 0, "Failed to load the profile collection"
 
 
-def _copy_default_profile_collection(tmp_path):
-    """
-    Copy default profile collections (only .py files) to temporary directory.
-    Returns the new temporary directory.
-    """
-    # Default path
-    pc_path = get_default_profile_collection_dir()
-    # New path
-    new_pc_path = os.path.join(tmp_path, "startup")
-
-    os.makedirs(new_pc_path, exist_ok=True)
-
-    # Copy simulated profile collection (only .py files)
-    file_pattern = os.path.join(pc_path, "[0-9][0-9]*.py")
-    file_list = glob.glob(file_pattern)
-    for fln in file_list:
-        shutil.copy(fln, new_pc_path)
-
-    return new_pc_path
-
-
 def test_load_profile_collection_2(tmp_path):
     """
     Loading a copy of the default profile collection
     """
-    pc_path = _copy_default_profile_collection(tmp_path)
+    pc_path = copy_default_profile_collection(tmp_path)
     nspace = load_profile_collection(pc_path)
     assert len(nspace) > 0, "Failed to load the profile collection"
 
@@ -141,24 +123,14 @@ def test_load_profile_collection_3(tmp_path, local_imports, additional_code, suc
     """
     Loading a copy of the default profile collection
     """
-    pc_path = _copy_default_profile_collection(tmp_path)
+    pc_path = copy_default_profile_collection(tmp_path)
 
     create_local_imports_dirs(pc_path)
 
-    # Path to the first file (starts with 00)
-    file_pattern = os.path.join(pc_path, "[0-9][0-9]*.py")
-    file_list = glob.glob(file_pattern)
-    file_list.sort()
-    fln = file_list[0]
-
-    with open(fln, "r") as file_in:
-        code = file_in.readlines()
-
-    with open(fln, "w") as file_out:
-        if local_imports:
-            file_out.writelines(code_local_import)
-        file_out.writelines(additional_code)
-        file_out.writelines(code)
+    patch_first_startup_file(pc_path, additional_code)
+    if local_imports:
+        # Note: local imports go above the additional code.
+        patch_first_startup_file(pc_path, code_local_import)
 
     if success:
         nspace = load_profile_collection(pc_path)

@@ -17,30 +17,30 @@ def fastapi_server(xprocess):
 
     xprocess.ensure("fastapi_server", Starter)
     # Clear the queue before the run:
-    subprocess.run("qserver -c clear_queue".split())
+    subprocess.run("qserver -c queue_clear".split())
 
     yield
 
     # Clear the queue after the run:
-    subprocess.run("qserver -c clear_queue".split())
+    subprocess.run("qserver -c queue_clear".split())
     xprocess.getinfo("fastapi_server").terminate()
 
 
 @pytest.fixture
 def add_plans_to_queue():
-    subprocess.run("qserver -c clear_queue".split())
+    subprocess.run("qserver -c queue_clear".split())
     subprocess.call(
         [
             "qserver",
             "-c",
-            "add_to_queue",
+            "queue_plan_add",
             "-p",
             "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num':10, 'delay':1}}",
         ]
     )
-    subprocess.call(["qserver", "-c", "add_to_queue", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"])
-    subprocess.call(["qserver", "-c", "add_to_queue", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"])
+    subprocess.call(["qserver", "-c", "queue_plan_add", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"])
+    subprocess.call(["qserver", "-c", "queue_plan_add", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"])
 
     yield
 
-    subprocess.run("qserver -c clear_queue".split())
+    subprocess.run("qserver -c queue_clear".split())

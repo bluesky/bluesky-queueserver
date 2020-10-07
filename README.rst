@@ -31,7 +31,7 @@ QueueServer is supporting the following functions:
 
 - Loading and publishing the lists of allowed plans and devices.
 
-- Loading beamline profile collections.
+- Loading beamlines' startup files from the corresponding ``profile_collection`` repositories.
 
 - Adding and removing plans from the queue.
 

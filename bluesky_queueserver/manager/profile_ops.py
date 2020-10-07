@@ -8,6 +8,7 @@ import yaml
 import tempfile
 import re
 import sys
+import pprint
 
 import logging
 
@@ -311,7 +312,7 @@ def parse_plan(plan, *, allowed_plans, allowed_devices):
     return plan_parsed
 
 
-def validate_plan(plan, *, allowed_plans_dict):
+def validate_plan(plan, *, allowed_plans):
     """
     Validate the dictionary of plan parameters. Expected to be called before the plan
     is added to the queue.
@@ -320,7 +321,7 @@ def validate_plan(plan, *, allowed_plans_dict):
     ----------
     plan: dict
         The dictionary of plan parameters
-    allowed_plans_dict: dict
+    allowed_plans: dict
         The dictionary with allowed plans: key - plan name.
 
     Returns
@@ -329,7 +330,29 @@ def validate_plan(plan, *, allowed_plans_dict):
         Success (True/False) and error message that indicates the reason for plan
         rejection
     """
-    success, msg=""
+    success, msg = True, ""
+
+    # For now allow execution of all plans if no plan descriptions are provided
+    #   (plan list is empty). This will change in the future.
+    # TODO: at some point make the list of allowed plans required. This will require
+    #   implementation of some tools to make generation of basic plan list convenient.
+    if not allowed_plans:
+        return success, msg
+
+    try:
+        # Verify that plan name is in the list of allowed plans
+        if "name" not in plan:
+            msg = f"Plan name is not specified."
+            raise Exception(msg)
+
+        if plan["name"] not in allowed_plans:
+            msg = f"Plan '{plan['name']}' is not in the list of allowed plans."
+            raise Exception(msg)
+
+    except Exception as ex:
+        success = False
+        msg = f"Plan validation failed: {str(ex)}\nPlan: {pprint.pformat(plan)}"
+
     return success, msg
 
 
@@ -418,7 +441,7 @@ def load_list_of_plans_and_devices(path_to_file=None):
 
     Returns
     -------
-    (list, list)
+    (dict, dict)
         List of allowed plans and list of allowed devices.
 
     Raises
@@ -426,7 +449,7 @@ def load_list_of_plans_and_devices(path_to_file=None):
     IOError in case the file does not exist.
     """
     if not path_to_file:
-        return {"allowed_plans": [], "allowed_devices": []}
+        return {"allowed_plans": {}, "allowed_devices": {}}
 
     if not os.path.isfile(path_to_file):
         raise IOError(

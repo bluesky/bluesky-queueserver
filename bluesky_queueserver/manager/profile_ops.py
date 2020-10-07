@@ -311,6 +311,28 @@ def parse_plan(plan, *, allowed_plans, allowed_devices):
     return plan_parsed
 
 
+def validate_plan(plan, *, allowed_plans_dict):
+    """
+    Validate the dictionary of plan parameters. Expected to be called before the plan
+    is added to the queue.
+
+    Parameters
+    ----------
+    plan: dict
+        The dictionary of plan parameters
+    allowed_plans_dict: dict
+        The dictionary with allowed plans: key - plan name.
+
+    Returns
+    -------
+    (boolean, str)
+        Success (True/False) and error message that indicates the reason for plan
+        rejection
+    """
+    success, msg=""
+    return success, msg
+
+
 # TODO: it may be a good idea to implement 'gen_list_of_plans_and_devices' as a separate CLI tool.
 #       For now it can be called from IPython. It shouldn't be called automatically
 #       at any time, since it loads profile collection. The list of allowed plans

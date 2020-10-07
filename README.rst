@@ -96,7 +96,7 @@ The 'qserver' CLI tool may run in the monitoring mode (send 'ping' request to RE
 
   qserver -c monitor
 
-Currently 'ping' request returns status of RE Manager, but the returned data may change. The recommended
+Currently 'ping' request returns the status of RE Manager, but the returned data may change. The recommended
 way to fetch status of RE Manager is to use 'status' request::
 
   qserver -c status

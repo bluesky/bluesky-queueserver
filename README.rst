@@ -45,7 +45,7 @@ QueueServer is supporting the following functions:
 
 
 In some cases the program may crash and leave some sockets open. This may prevent the Manager from
-restarting. To close the sockets (we are interested sockets on ports 5555 and 8080), find
+restarting. To close the sockets (we are interested in sockets on ports 5555 and 8080), find
 PIDs of the processes::
 
   $ sudo netstat -ltnp

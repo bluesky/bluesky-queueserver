@@ -159,8 +159,7 @@ def validate_payload_keys(payload, *, required_keys=None, optional_keys=None):
         if key not in a_keys:
             extra_keys.add(key)
         else:
-            if key in r_keys:
-                r_keys.remove(key)
+            r_keys -= {key}
 
     err_msg = ""
     if r_keys:
@@ -221,8 +220,9 @@ async def queue_start_handler():
 @app.post("/queue/stop")
 async def queue_stop():
     """
-    Activate the sequence of stopping the queue. Currently running plan will be completed,
-    but the next plan will not be started.
+    Activate the sequence of stopping the queue. The currently running plan will be completed,
+    but the next plan will not be started. The request will be rejected if no plans are currently
+    running
     """
     msg = await re_server.send_command(command="queue_stop")
     return msg
@@ -231,7 +231,12 @@ async def queue_stop():
 @app.post("/queue/stop/cancel")
 async def queue_stop_cancel():
     """
-    Deactivate the sequence of stopping the queue.
+    Cancel pending request to stop the queue while the current plan is still running.
+    It may be useful if the `/queue/stop` request was issued by mistake or the operator
+    changed his mind. Since `/queue/stop` takes effect only after the currently running
+    plan is completed, user may have time to cancel the request and continue execution of
+    the queue. The command always succeeds, but it has no effect if no queue stop
+    requests are pending.
     """
     msg = await re_server.send_command(command="queue_stop_cancel")
     return msg

@@ -16,18 +16,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-"""
-#  The following plans that can be used to test the syste
-
-http POST http://localhost:60610/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]]}'
-
-# This is the slowly running plan (convenient to test pausing)
-http POST http://localhost:60610/add_to_queue plan:='{"name":"count", "args":[["det1", "det2"]],
-"kwargs":{"num":10, "delay":1}}'
-
-http POST http://localhost:60610/add_to_queue plan:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
-"""
-
 
 # TODO: this is incomplete set of states. Expect it to be expanded.
 class MState(enum.Enum):

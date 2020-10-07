@@ -379,7 +379,7 @@ async def plans_allowed_handler():
 @app.get("/devices/allowed")
 async def devices_allowed_handler():
     """
-    Returns the lists of allowed plans and devices.
+    Returns the lists of allowed devices.
     """
     msg = await re_server.send_command(command="devices_allowed")
     return msg

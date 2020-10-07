@@ -41,7 +41,7 @@ QueueServer is supporting the following functions:
 
 - Saving data to Databroker (some more work is needed).
 
-- Streaming document via Kafka.
+- Streaming documents via Kafka.
 
 
 In some cases the program may crash and leave some sockets open. This may prevent the Manager from

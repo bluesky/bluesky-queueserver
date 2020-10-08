@@ -1,7 +1,5 @@
 import os
 import pytest
-import shutil
-import glob
 
 import ophyd
 
@@ -219,19 +217,6 @@ def test_gen_list_of_plans_and_devices(tmp_path):
     Copy simulated profile collection and generate the list of allowed (in this case available)
     plans and devices based on the profile collection
     """
-    #pc_path = get_default_profile_collection_dir()
-
-    # Copy simulated profile collection (only .py files)
-    #file_pattern = os.path.join(pc_path, "[0-9][0-9]*.py")
-    #file_list = glob.glob(file_pattern)
-    #for fln in file_list:
-    #    shutil.copy(fln, tmp_path)
-
-    # Check if profile collection was moved
-    #file_pattern = os.path.join(tmp_path, "[0-9][0-9]*.py")
-    #file_list = glob.glob(file_pattern)
-    #assert len(file_list) > 0, "Profile collection was not copied"
-
     pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
 
     fln_yaml = "list.yaml"

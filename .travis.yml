@@ -18,7 +18,6 @@ cache:
     - $HOME/.cache/pip
     - $HOME/.ccache  # https://github.com/travis-ci/travis-ci/issues/5853
 
-
 jobs:
   fast_finish: true
   include:
@@ -27,14 +26,17 @@ jobs:
     - python: 3.7
     - python: 3.8
       env: BUILD_DOCS=true SUBMIT_CODECOV=true
+    # As of 2020-10-08, Python 3.9 distribution is not available in TravisCI's repos yet.
+    # - python: 3.9
 
 before_install:
-  - if [ $FLAKE_8 == 'true' ]; then
-      pip install flake8;
-      flake8 .;
-      let res=$?;
-      echo "The project code was verified with 'flake8'. Exit code ($res).";
-      exit $res;
+  - |
+    if [ "${FLAKE_8}" == "true" ]; then
+        pip install flake8
+        flake8 .
+        let res=$?
+        echo "The project code was verified with 'flake8'. Exit code ($res)."
+        exit $res
     fi
 
 install:
@@ -49,12 +51,12 @@ script:
   - coverage run -m pytest -v  # Run the tests and check for test coverage.
   - coverage report -m  # Generate test coverage report.
   - set -e
-  - if [ BUILD_DOCS == 'true' ]; then
-      make -C docs html;
-      pip install doctr;
-      doctr deploy --built-docs docs/build/html .;
+  - |
+    if [ "${BUILD_DOCS}" == "true" ]; then
+        make -C docs/ html
+        pip install doctr
+        doctr deploy --built-docs docs/build/html .
     fi
-
 
 after_success:
   # - if [ $SUBMIT_CODECOV == 'true' ]; then codecov; fi;

@@ -45,7 +45,7 @@ QueueServer is supporting the following functions:
 
 
 In some cases the program may crash and leave some sockets open. This may prevent the Manager from
-restarting. To close the sockets (we are interested in sockets on ports 5555 and 8080), find
+restarting. To close the sockets (we are interested in sockets on ports 5555 and 60610), find
 PIDs of the processes::
 
   $ sudo netstat -ltnp
@@ -71,7 +71,7 @@ In the first shell start RE Manager::
 
 The Web Server should be started from the second shell as follows::
 
-  uvicorn bluesky_queueserver.server.server:app --host localhost --port 8080
+  uvicorn bluesky_queueserver.server.server:app --host localhost --port 60610
 
 The third shell will be used to send HTTP requests. RE Manager can also be controlled using 'qserver' CLI
 tool. If only CLI tool will be used, then there is no need to start the Web Server. In the following manual
@@ -85,7 +85,7 @@ The 'qserver' CLI tool can be started from a separate shell. Display help option
 The most basic request is 'ping' intended to fetch some response from RE Manager::
 
   qserver -c ping
-  http GET http://localhost:8080
+  http GET http://localhost:60610
 
 Current default address of RE Manager is set to tcp://localhost:5555, but different
 address may be passed as a parameter to CLI tool::
@@ -100,7 +100,7 @@ Currently 'ping' request returns the status of RE Manager, but the returned data
 way to fetch status of RE Manager is to use 'status' request::
 
   qserver -c status
-  http GET http://localhost:8080/status
+  http GET http://localhost:60610/status
 
 Before plans could be executed, the RE Worker environment must be opened. Opening RE Worker environment
 involves loading beamline profile collection and instantiation of Run Engine and may take a few minutes.
@@ -116,25 +116,25 @@ the environment is opened.
 Open the new RE environment::
 
   qserver -c environment_open
-  http POST http://localhost:8080/environment/open
+  http POST http://localhost:60610/environment/open
 
 Close RE environment::
 
   qserver -c environment_close
-  http POST http://localhost:8080/environment/close
+  http POST http://localhost:60610/environment/close
 
 Destroy RE environment::
 
   qserver -c environment_destroy
-  http POST http://localhost:8080/environment/destroy
+  http POST http://localhost:60610/environment/destroy
 
 Get the lists (JSON) of allowed plans and devices::
 
   qserver -c plans_allowed
   qserver -c devices_allowed
 
-  http GET http://localhost:8080/plans/allowed
-  http GET http://localhost:8080/devices/allowed
+  http GET http://localhost:60610/plans/allowed
+  http GET http://localhost:60610/devices/allowed
 
 Push a new plan to the back of the queue::
 
@@ -142,9 +142,9 @@ Push a new plan to the back of the queue::
   qserver -c queue_plan_add -p '{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
   qserver -c queue_plan_add -p '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
 
-  http POST http://localhost:8080/queue/plan/add plan:='{"name":"count", "args":[["det1", "det2"]]}'
-  http POST http://localhost:8080/queue/plan/add plan:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
-  http POST http://localhost:8080/queue/plan/add plan:='{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
+  http POST http://localhost:60610/queue/plan/add plan:='{"name":"count", "args":[["det1", "det2"]]}'
+  http POST http://localhost:60610/queue/plan/add plan:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
+  http POST http://localhost:60610/queue/plan/add plan:='{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
 
 It takes 10 second to execute the third plan in the group above, so it is may be the most convenient for testing
 pausing/resuming/stopping of experimental plans.
@@ -155,20 +155,20 @@ The plan to be added at any position of the queue including pushing to the front
   qserver -c queue_plan_add -p back '{"name":"count", "args":[["det1", "det2"]]}'
   qserver -c queue_plan_add -p 2 '{"name":"count", "args":[["det1", "det2"]]}'  # Inserted at pos #2 (0-based)
 
-  http POST http://localhost:8080/queue/plan/add pos:='"front"' plan:='{"name":"count", "args":[["det1", "det2"]]}'
-  http POST http://localhost:8080/queue/plan/add pos:='"back"' plan:='{"name":"count", "args":[["det1", "det2"]]}'
-  http POST http://localhost:8080/queue/plan/add pos:=2 plan:='{"name":"count", "args":[["det1", "det2"]]}'
+  http POST http://localhost:60610/queue/plan/add pos:='"front"' plan:='{"name":"count", "args":[["det1", "det2"]]}'
+  http POST http://localhost:60610/queue/plan/add pos:='"back"' plan:='{"name":"count", "args":[["det1", "det2"]]}'
+  http POST http://localhost:60610/queue/plan/add pos:=2 plan:='{"name":"count", "args":[["det1", "det2"]]}'
 
 The following command will insert the plan in place of the last element and shift the last element to
 the back so that the new element is now previous to last::
 
   qserver -c queue_plan_add -p -1 '{"name":"count", "args":[["det1", "det2"]]}'
-  http POST http://localhost:8080/queue/plan/add pos:=-1 plan:='{"name":"count", "args":[["det1", "det2"]]}'
+  http POST http://localhost:60610/queue/plan/add pos:=-1 plan:='{"name":"count", "args":[["det1", "det2"]]}'
 
 If the queue has 5 elements (0..4), then the following command pushes the new plan to the back of the queue::
 
   qserver -c queue_plan_add -p 5 '{"name":"count", "args":[["det1", "det2"]]}'
-  http POST http://localhost:8080/queue/plan/add pos:=5 plan:='{"name":"count", "args":[["det1", "det2"]]}'
+  http POST http://localhost:60610/queue/plan/add pos:=5 plan:='{"name":"count", "args":[["det1", "det2"]]}'
 
 The 'queue_plan_add' request will accept any index value. If the index is out of range, then the plan will
 be pushed to the front or the back of the queue. If the queue is currently running, then it is recommended
@@ -184,12 +184,12 @@ performed. As the currently running plan is finished, the new plan is popped fro
 The contents of the queue may be fetched at any time::
 
   qserver -c queue_get
-  http GET http://localhost:8080/queue/get
+  http GET http://localhost:60610/queue/get
 
 The last item can be removed (popped) from the back of the queue::
 
   qserver -c queue_plan_remove
-  echo '{}' | http POST http://localhost:8080/queue/plan/remove
+  echo '{}' | http POST http://localhost:60610/queue/plan/remove
 
 The position of the removed element may be specified similarly to `queue_plan_add` request with the difference
 that the position index must point to the existing element, otherwise the request fails (returns 'success==False').
@@ -198,8 +198,8 @@ The following examples remove the plan from the front of the queue and the eleme
   qserver -c queue_plan_remove -p front
   qserver -c queue_plan_remove -p -2
 
-  http POST http://localhost:8080/queue/plan/remove pos:='"front"'
-  http POST http://localhost:8080/queue/plan/remove pos:=-2
+  http POST http://localhost:60610/queue/plan/remove pos:='"front"'
+  http POST http://localhost:60610/queue/plan/remove pos:=-2
 
 Plans can be read from the queue without changing it. `queue_plan_get` requests are formatted identically to
 `queue_plan_remove` requests::
@@ -208,19 +208,19 @@ Plans can be read from the queue without changing it. `queue_plan_get` requests 
   qserver -c queue_plan_get -p front
   qserver -c queue_plan_get -p -2
 
-  echo '{}' | http POST http://localhost:8080/queue/plan/get
-  http POST http://localhost:8080/queue/plan/get pos:='"front"'
-  http POST http://localhost:8080/queue/plan/get pos:=-2
+  echo '{}' | http POST http://localhost:60610/queue/plan/get
+  http POST http://localhost:60610/queue/plan/get pos:='"front"'
+  http POST http://localhost:60610/queue/plan/get pos:=-2
 
 Remove all entries from the plan queue::
 
   qserver -c queue-clear
-  http POST http://localhost:8080/queue/clear
+  http POST http://localhost:60610/queue/clear
 
 Start execution of the plan queue. The environment MUST be opened before queue could be started::
 
   qserver -c queue_start
-  http POST http://localhost:8080/queue/start
+  http POST http://localhost:60610/queue/start
 
 Request to execute an empty queue is a valid operation that does nothing.
 
@@ -231,8 +231,8 @@ The stopping sequence can be cancelled if it was activated by mistake or decisio
   qserver -c queue_stop
   qserver -c queue_stop_cancel
 
-  http POST http://localhost:8080/queue/stop
-  http POST http://localhost:8080/queue/stop/cancel
+  http POST http://localhost:60610/queue/stop
+  http POST http://localhost:60610/queue/stop/cancel
 
 While a plan in a queue is executed, operation Run Engine can be paused. In the unlikely event
 if the request to pause is received while RunEngine is transitioning between two plans, the request
@@ -247,8 +247,8 @@ checkpoint (deferred pause)::
   qserver -c re_pause -p immediate
   qserver -c re_pause -p deferred
 
-  http POST http://localhost:8080/re/pause option="immediate"
-  http POST http://localhost:8080/re/pause option="deferred"
+  http POST http://localhost:60610/re/pause option="immediate"
+  http POST http://localhost:60610/re/pause option="deferred"
 
 Resuming, aborting, stopping or halting of currently executed plan::
 
@@ -257,10 +257,10 @@ Resuming, aborting, stopping or halting of currently executed plan::
   qserver -c re_abort
   qserver -c re_halt
 
-  http POST http://localhost:8080/re/resume
-  http POST http://localhost:8080/re/stop
-  http POST http://localhost:8080/re/abort
-  http POST http://localhost:8080/re_halt
+  http POST http://localhost:60610/re/resume
+  http POST http://localhost:60610/re/stop
+  http POST http://localhost:60610/re/abort
+  http POST http://localhost:60610/re_halt
 
 There is minimal user protection features implemented that will prevent execution of
 the commands that are not supported in current state of the server. Error messages are printed
@@ -270,12 +270,12 @@ Data on executed plans, including stopped plans, is recorded in the history. His
 be downloaded at any time::
 
   qserver -c history_get
-  http GET http://localhost:8080/history/get
+  http GET http://localhost:60610/history/get
 
 History is not intended for long-term storage. It can be cleared at any time::
 
   qserver -c history_clear
-  http POST http://localhost:8080/history/clear
+  http POST http://localhost:60610/history/clear
 
 Stop RE Manager (exit RE Manager application). There are two options: safe request that is rejected
 when the queue is running or a plan is paused::
@@ -283,14 +283,14 @@ when the queue is running or a plan is paused::
   qserver -c manager_stop
   qserver -c manager_stop -p safe_on
 
-  echo '{}' | http POST http://localhost:8080/manager/stop
-  http POST http://localhost:8080/manager/stop option="safe_on"
+  echo '{}' | http POST http://localhost:60610/manager/stop
+  http POST http://localhost:60610/manager/stop option="safe_on"
 
 Manager can be also stopped at any time using unsafe stop, which causes current RE Worker to be
 destroyed even if a plan is running::
 
   qserver -c manager_stop -p safe_off
-  http POST http://localhost:8080/manager/stop option="safe_off"
+  http POST http://localhost:60610/manager/stop option="safe_off"
 
 The 'test_manager_kill' request is designed specifically for testing ability of RE Watchdog
 to restart malfunctioning RE Manager process. This command stops event loop of RE Manager process
@@ -300,4 +300,4 @@ running or paused plans or the state of the queue. Another potential use of the 
 is to test handling of communication timeouts, since RE Manager does not respond to the request::
 
   qserver -c test_manager_kill
-  http POST http://localhost:8080/test/manager/kill
+  http POST http://localhost:60610/test/manager/kill

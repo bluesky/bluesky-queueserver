@@ -46,6 +46,12 @@ install:
   - pip list
 
 script:
+  - |
+    uvicorn_config=$(python -c 'import pkg_resources; print(pkg_resources.resource_filename("bluesky_queueserver", "configs/uvicorn-logging.yaml"))')
+    echo -e "uvicorn config: ${uvicorn_config}"
+    echo -e "\n===================================================================="
+    cat ${uvicorn_config}
+    echo -e "===============================================================\n"
   - coverage run -m pytest -v  # Run the tests and check for test coverage.
   - coverage report -m  # Generate test coverage report.
   - set -e

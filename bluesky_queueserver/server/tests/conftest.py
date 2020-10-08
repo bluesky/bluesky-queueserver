@@ -17,7 +17,7 @@ def fastapi_server(xprocess):
         pattern = "Connected to ZeroMQ server"
         args = (
             f"uvicorn --host {SERVER_ADDRESS} --port {SERVER_PORT} "
-            # f"--log-config {UVICORN_CONFIG} "
+            f"--log-config {UVICORN_CONFIG} "
             f"{bqss.__name__}:app".split()
         )
 

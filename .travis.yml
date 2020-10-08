@@ -39,10 +39,12 @@ before_install:
 
 install:
   # Install this package and the packages listed in requirements.txt.
-  - pip install . --upgrade
+  - pip install .
   # Install extra requirements for running tests and building docs.
-  - pip install -r requirements-dev.txt --upgrade
+  - pip install -r requirements-dev.txt
   - pip install scikit-image
+  # Need to get the latest version as previous commands do not upgrade it.
+  - pip install -v --upgrade uvicorn
   - pip list
 
 script:

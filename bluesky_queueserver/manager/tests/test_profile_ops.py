@@ -219,29 +219,31 @@ def test_gen_list_of_plans_and_devices(tmp_path):
     Copy simulated profile collection and generate the list of allowed (in this case available)
     plans and devices based on the profile collection
     """
-    pc_path = get_default_profile_collection_dir()
+    #pc_path = get_default_profile_collection_dir()
 
     # Copy simulated profile collection (only .py files)
-    file_pattern = os.path.join(pc_path, "[0-9][0-9]*.py")
-    file_list = glob.glob(file_pattern)
-    for fln in file_list:
-        shutil.copy(fln, tmp_path)
+    #file_pattern = os.path.join(pc_path, "[0-9][0-9]*.py")
+    #file_list = glob.glob(file_pattern)
+    #for fln in file_list:
+    #    shutil.copy(fln, tmp_path)
 
     # Check if profile collection was moved
-    file_pattern = os.path.join(tmp_path, "[0-9][0-9]*.py")
-    file_list = glob.glob(file_pattern)
-    assert len(file_list) > 0, "Profile collection was not copied"
+    #file_pattern = os.path.join(tmp_path, "[0-9][0-9]*.py")
+    #file_list = glob.glob(file_pattern)
+    #assert len(file_list) > 0, "Profile collection was not copied"
+
+    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
 
     fln_yaml = "list.yaml"
-    gen_list_of_plans_and_devices(tmp_path, file_name=fln_yaml)
-    assert os.path.isfile(os.path.join(tmp_path, fln_yaml)), "List of plans and devices was not created"
+    gen_list_of_plans_and_devices(pc_path, file_name=fln_yaml)
+    assert os.path.isfile(os.path.join(pc_path, fln_yaml)), "List of plans and devices was not created"
 
     # Attempt to overwrite the file
     with pytest.raises(RuntimeError, match="already exists. File overwriting is disabled."):
-        gen_list_of_plans_and_devices(tmp_path, file_name=fln_yaml)
+        gen_list_of_plans_and_devices(pc_path, file_name=fln_yaml)
 
     # Allow file overwrite
-    gen_list_of_plans_and_devices(tmp_path, file_name=fln_yaml, overwrite=True)
+    gen_list_of_plans_and_devices(pc_path, file_name=fln_yaml, overwrite=True)
 
 
 def test_load_list_of_plans_and_devices():

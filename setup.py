@@ -53,10 +53,8 @@ setup(
     include_package_data=True,
     package_data={
         "bluesky_queueserver": [
-            "profile_collection_sim/*"
-            # When adding files here, remember to update MANIFEST.in as well,
-            # or else they will not be included in the distribution on PyPI!
-            # 'path/to/data_file',
+            "profile_collection_sim/*",
+            "configs/*",
         ]
     },
     install_requires=requirements,

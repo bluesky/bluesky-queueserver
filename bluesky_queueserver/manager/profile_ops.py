@@ -342,12 +342,96 @@ def validate_plan(plan, *, allowed_plans):
     try:
         # Verify that plan name is in the list of allowed plans
         if "name" not in plan:
-            msg = f"Plan name is not specified."
+            msg = "Plan name is not specified."
             raise Exception(msg)
 
-        if plan["name"] not in allowed_plans:
+        plan_name = plan["name"]
+
+        if plan_name not in allowed_plans:
             msg = f"Plan '{plan['name']}' is not in the list of allowed plans."
             raise Exception(msg)
+
+        parameters = allowed_plans[plan_name]["parameters"]
+        plan_args, plan_kwargs = plan["args"], plan["kwargs"]
+
+        # Check if the number of positional arguments is not greater than expected.
+        n_param = 0
+        for _ in plan_args:
+            if n_param >= len(parameters):
+                raise ValueError(
+                    f"The number of args exceeds the number of allowed parameters: "
+                    f"{len(parameters)} parameters are allowed."
+                )
+            param = parameters[n_param]
+            pkind = param["kind"]
+            if pkind == "VAR_POSITIONAL":
+                # Absorbs the rest of 'args' even if there are no more args.
+                n_param += 1
+                break
+            if pkind in ("POSITIONAL_OR_KEYWORD", "POSITIONAL_ONLY"):
+                # Move to the next parameter
+                n_param += 1
+            elif pkind in ("KEYWORD_ONLY", "VAR_KEYWORD"):
+                raise ValueError(
+                    f"Plan parameters contain too many args ({len(plan_args)}): " f"{n_param} args are expected."
+                )
+            else:
+                # This should happen only if no args or kwargs are expected.
+                raise ValueError(f"Plan parameters contain {len(plan_args)}. No args are expected.")
+
+        if (n_param >= len(parameters)) and plan_kwargs:
+            raise ValueError("Plan parameters contains kwargs. No kwargs are expected.")
+
+        if parameters[n_param]["kind"] == "VAR_POSITIONAL":
+            n_param += n_param
+
+        if (n_param >= len(parameters)) and plan_kwargs:
+            raise ValueError("Plan parameters contains kwargs. No kwargs are expected.")
+
+        # Check if there exists a parameter of VAR_POSITIONAL kind. It will indicate that
+        #   more args are expected.
+        var_positional_exists = False
+        for pinfo in parameters[n_param:]:
+            if pinfo["kind"] == "VAR_POSITIONAL":
+                var_positional_exists = True
+                break
+        if var_positional_exists:
+            raise ValueError("More args are expected than provided.")
+
+        if parameters[n_param]["kind"] not in ("POSITIONAL_OR_KEYWORD", "KEYWORD_ONLY", "VAR_KEYWORD"):
+            raise ValueError(
+                f"Plan parameters contains more args ({len(plan_args)}) than expected: " f"({n_param})"
+            )
+
+        # Dictionary of the remaining keys
+        premaining = {_["name"]: _ for _ in parameters[n_param:]}
+
+        # Check if there exists a parameter of VAR_KEYWORD kind. It will absorb all
+        #   kwargs with unknown names.
+        var_keyword_exists = False
+        for pname, pinfo in premaining:
+            if pinfo["kind"] == "VAR_KEYWORD":
+                var_keyword_exists = True
+                break
+
+        # Check if there are no kwargs with unexpected names.
+        unexpected_kwargs = []
+        for pa in plan_kwargs.keys():
+            if pa in premaining:
+                premaining.pop(pa)
+            else:
+                unexpected_kwargs.append(pa)
+
+        if not var_keyword_exists:
+            raise ValueError(f"Unexpected kwargs '{unexpected_kwargs}' in the plan parameters.")
+
+        # Now checked if there are any missing kwargs that don't have default values.
+        kwargs_missed = []
+        for pname, pinfo in premaining.items():
+            if "default" not in pinfo:
+                kwargs_missed.append(pname)
+        if kwargs_missed:
+            raise ValueError(f"Plan parameters do not contain required kwargs {kwargs_missed}.")
 
     except Exception as ex:
         success = False
@@ -401,9 +485,10 @@ def gen_list_of_plans_and_devices(path=None, file_name="allowed_plans_and_device
 
             sig = inspect.signature(plan)
 
-            ret = {"module": plan.__module__, "name": plan.__name__, "parameters": {}}
+            ret = {"module": plan.__module__, "name": plan.__name__, "parameters": []}
             for p in sig.parameters.values():
-                working_dict = ret["parameters"][p.name] = {}
+                working_dict = {"name": p.name}
+                ret["parameters"].append(working_dict)
                 for target in ["kind", "default", "annotation"]:
                     v = getattr(p, target)
                     if v is not p.empty:
@@ -420,7 +505,7 @@ def gen_list_of_plans_and_devices(path=None, file_name="allowed_plans_and_device
 
         file_path = os.path.join(path, file_name)
         if os.path.exists(file_path) and not overwrite:
-            raise IOError("File '%s' already exists. File overwriting is disabled.")
+            raise IOError(f"File '{file_path}' already exists. File overwriting is disabled.")
 
         with open(file_path, "w") as stream:
             yaml.dump(allowed_plans_and_devices, stream)

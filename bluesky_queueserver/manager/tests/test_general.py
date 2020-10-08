@@ -768,10 +768,27 @@ def test_queue_plan_add_1(re_manager, pos, pos_result, success):  # noqa F811
         assert "plan_uid" in resp["queue"][pos_result]
 
 
+def test_queue_plan_add_2(re_manager):  # noqa F811
+    """
+    Failing cases: adding the plans that are expected to fail validation.
+    """
+    # Wait until RE Manager is started
+    assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+    # Unknown plan name
+    plan1 = "{'name':'count_test', 'args':[['det1']]}"
+    # Unknown kwarg
+    plan2 = "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'abc': 10}}"
+
+    # Both calls are expected to fail
+    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan1]) != 0
+    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan2]) != 0
+
+
 # fmt: off
 @pytest.mark.parametrize("pos", [None, "back"])
 # fmt: on
-def test_queue_plan_add_2_fail(re_manager, pos):  # noqa F811
+def test_queue_plan_add_3_fail(re_manager, pos):  # noqa F811
     """
     No plan is supplied.
     """

@@ -747,7 +747,7 @@ class RunEngineManager(Process):
             plan = request["plan"]
             pos = request.get("pos", "back")  # Position is optional
 
-            success, msg = validate_plan(plan, allowed_plans_dict=self._allowed_plans)
+            success, msg = validate_plan(plan, allowed_plans=self._allowed_plans)
             if not success:
                 raise Exception(msg)
 

@@ -331,6 +331,7 @@ def validate_plan(plan, *, allowed_plans):
         rejection
     """
     success, msg = True, ""
+    completed = False
 
     # For now allow execution of all plans if no plan descriptions are provided
     #   (plan list is empty). This will change in the future.
@@ -340,13 +341,18 @@ def validate_plan(plan, *, allowed_plans):
         return success, msg
 
     try:
-        # Verify that plan name is in the list of allowed plans
+        if "args" not in plan:
+            plan["args"] = []
+
+        if "kwargs" not in plan:
+            plan["kwargs"] = {}
+
         if "name" not in plan:
             msg = "Plan name is not specified."
             raise Exception(msg)
 
+        # Verify that plan name is in the list of allowed plans
         plan_name = plan["name"]
-
         if plan_name not in allowed_plans:
             msg = f"Plan '{plan['name']}' is not in the list of allowed plans."
             raise Exception(msg)
@@ -358,10 +364,13 @@ def validate_plan(plan, *, allowed_plans):
         n_param = 0
         for _ in plan_args:
             if n_param >= len(parameters):
+                # Too many parameters (more args than the total number of parameters
+                #   and there is no '*args')
                 raise ValueError(
                     f"The number of args exceeds the number of allowed parameters: "
                     f"{len(parameters)} parameters are allowed."
                 )
+
             param = parameters[n_param]
             pkind = param["kind"]
             if pkind == "VAR_POSITIONAL":
@@ -379,59 +388,54 @@ def validate_plan(plan, *, allowed_plans):
                 # This should happen only if no args or kwargs are expected.
                 raise ValueError(f"Plan parameters contain {len(plan_args)}. No args are expected.")
 
-        if (n_param >= len(parameters)) and plan_kwargs:
-            raise ValueError("Plan parameters contains kwargs. No kwargs are expected.")
-
-        if parameters[n_param]["kind"] == "VAR_POSITIONAL":
-            n_param += n_param
-
-        if (n_param >= len(parameters)) and plan_kwargs:
-            raise ValueError("Plan parameters contains kwargs. No kwargs are expected.")
-
-        # Check if there exists a parameter of VAR_POSITIONAL kind. It will indicate that
-        #   more args are expected.
-        var_positional_exists = False
-        for pinfo in parameters[n_param:]:
-            if pinfo["kind"] == "VAR_POSITIONAL":
-                var_positional_exists = True
-                break
-        if var_positional_exists:
-            raise ValueError("More args are expected than provided.")
-
-        if parameters[n_param]["kind"] not in ("POSITIONAL_OR_KEYWORD", "KEYWORD_ONLY", "VAR_KEYWORD"):
-            raise ValueError(
-                f"Plan parameters contains more args ({len(plan_args)}) than expected: " f"({n_param})"
-            )
-
-        # Dictionary of the remaining keys
-        premaining = {_["name"]: _ for _ in parameters[n_param:]}
-
-        # Check if there exists a parameter of VAR_KEYWORD kind. It will absorb all
-        #   kwargs with unknown names.
-        var_keyword_exists = False
-        for pname, pinfo in premaining:
-            if pinfo["kind"] == "VAR_KEYWORD":
-                var_keyword_exists = True
-                break
-
-        # Check if there are no kwargs with unexpected names.
-        unexpected_kwargs = []
-        for pa in plan_kwargs.keys():
-            if pa in premaining:
-                premaining.pop(pa)
+        if n_param >= len(parameters):
+            if plan_kwargs:
+                raise ValueError("Plan parameters contains kwargs. No kwargs are expected.")
             else:
-                unexpected_kwargs.append(pa)
+                completed = True
 
-        if not var_keyword_exists:
-            raise ValueError(f"Unexpected kwargs '{unexpected_kwargs}' in the plan parameters.")
+        if not completed:
+            if parameters[n_param]["kind"] == "VAR_POSITIONAL":
+                n_param += 1
 
-        # Now checked if there are any missing kwargs that don't have default values.
-        kwargs_missed = []
-        for pname, pinfo in premaining.items():
-            if "default" not in pinfo:
-                kwargs_missed.append(pname)
-        if kwargs_missed:
-            raise ValueError(f"Plan parameters do not contain required kwargs {kwargs_missed}.")
+            if n_param >= len(parameters):
+                if plan_kwargs:
+                    raise ValueError("Plan parameters contains kwargs. No kwargs are expected.")
+                else:
+                    completed = True
+
+        if not completed:
+            # Dictionary of the remaining keys
+            premaining = {_["name"]: _ for _ in parameters[n_param:]}
+
+            # Check if there exists a parameter of VAR_POSITIONAL kind. It will indicate that
+            #   more args are expected.
+            var_keyword_exists = False
+            for pname, pinfo in premaining.copy().items():
+                if pinfo["kind"] == "VAR_POSITIONAL":
+                    premaining.pop(pname)
+                if pinfo["kind"] == "VAR_KEYWORD":
+                    var_keyword_exists = True
+                    premaining.pop(pname)
+
+            # Check if there are no kwargs with unexpected names.
+            unexpected_kwargs = []
+            for pa in plan_kwargs.keys():
+                if pa in premaining:
+                    premaining.pop(pa)
+                else:
+                    unexpected_kwargs.append(pa)
+
+            if not var_keyword_exists and unexpected_kwargs:
+                raise ValueError(f"Unexpected kwargs {unexpected_kwargs} in the plan parameters.")
+
+            # Now checked if there are any missing kwargs that don't have default values.
+            kwargs_missed = []
+            for pname, pinfo in premaining.items():
+                if "default" not in pinfo:
+                    kwargs_missed.append(pname)
+            if kwargs_missed:
+                raise ValueError(f"Plan parameters do not contain required args or kwargs {kwargs_missed}.")
 
     except Exception as ex:
         success = False
@@ -444,6 +448,43 @@ def validate_plan(plan, *, allowed_plans):
 #       For now it can be called from IPython. It shouldn't be called automatically
 #       at any time, since it loads profile collection. The list of allowed plans
 #       and devices can be also typed manually, since it shouldn't be very large.
+
+
+def _process_plan(plan):
+    """
+    Returns parameters of a plan.
+
+    Parameters
+    ----------
+    plan: function
+        reference to the function implementing the plan
+
+    Returns
+    -------
+    dict
+        Dictionary with plan parameters with the following keys: ``module`` - name
+        of the module where the plan is located, ``name`` - name of the plan, ``parameters`` -
+        the list of plan parameters. The list of plan parameters include ``name``, ``kind``,
+        ``default`` (if available) and ``annotation`` (if available).
+    """
+
+    def filter_values(v):
+        if v is inspect.Parameter.empty:
+            return ""
+        return str(v)
+
+    sig = inspect.signature(plan)
+
+    ret = {"module": plan.__module__, "name": plan.__name__, "parameters": []}
+    for p in sig.parameters.values():
+        working_dict = {"name": p.name}
+        ret["parameters"].append(working_dict)
+        for target in ["kind", "default", "annotation"]:
+            v = getattr(p, target)
+            if v is not p.empty:
+                working_dict[target] = filter_values(v)
+
+    return ret
 
 
 def gen_list_of_plans_and_devices(path=None, file_name="allowed_plans_and_devices.yaml", overwrite=False):
@@ -477,27 +518,8 @@ def gen_list_of_plans_and_devices(path=None, file_name="allowed_plans_and_device
         plans = plans_from_nspace(nspace)
         devices = devices_from_nspace(nspace)
 
-        def process_plan(plan):
-            def filter_values(v):
-                if v is inspect.Parameter.empty:
-                    return ""
-                return str(v)
-
-            sig = inspect.signature(plan)
-
-            ret = {"module": plan.__module__, "name": plan.__name__, "parameters": []}
-            for p in sig.parameters.values():
-                working_dict = {"name": p.name}
-                ret["parameters"].append(working_dict)
-                for target in ["kind", "default", "annotation"]:
-                    v = getattr(p, target)
-                    if v is not p.empty:
-                        working_dict[target] = filter_values(v)
-
-            return ret
-
         allowed_plans_and_devices = {
-            "allowed_plans": {k: process_plan(v) for k, v in plans.items()},
+            "allowed_plans": {k: _process_plan(v) for k, v in plans.items()},
             "allowed_devices": {
                 k: {"classname": type(v).__name__, "module": type(v).__module__} for k, v in devices.items()
             },

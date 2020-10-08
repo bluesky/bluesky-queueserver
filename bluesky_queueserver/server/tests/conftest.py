@@ -8,16 +8,18 @@ import bluesky_queueserver.server.server as bqss
 
 SERVER_ADDRESS = "localhost"
 SERVER_PORT = "60610"
-UVICORN_CONFIG = pkg_resources.resource_filename('bluesky_queueserver', 'configs/uvicorn-logging.yaml')
+UVICORN_CONFIG = pkg_resources.resource_filename("bluesky_queueserver", "configs/uvicorn-logging.yaml")
 
 
 @pytest.fixture
 def fastapi_server(xprocess):
     class Starter(ProcessStarter):
         pattern = "Connected to ZeroMQ server"
-        args = (f"uvicorn --host {SERVER_ADDRESS} --port {SERVER_PORT} "
-                f"--log-config {UVICORN_CONFIG} "
-                f"{bqss.__name__}:app".split())
+        args = (
+            f"uvicorn --host {SERVER_ADDRESS} --port {SERVER_PORT} "
+            f"--log-config {UVICORN_CONFIG} "
+            f"{bqss.__name__}:app".split()
+        )
 
     xprocess.ensure("fastapi_server", Starter)
     # Clear the queue before the run:

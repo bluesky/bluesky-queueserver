@@ -39,9 +39,9 @@ before_install:
 
 install:
   # Install this package and the packages listed in requirements.txt.
-  - pip install .
+  - pip install . --upgrade
   # Install extra requirements for running tests and building docs.
-  - pip install -r requirements-dev.txt
+  - pip install -r requirements-dev.txt --upgrade
   - pip install scikit-image
   - pip list
 

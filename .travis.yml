@@ -38,11 +38,11 @@ jobs:
 
 before_install:
   - |
-    # set -e
+    set -e
     if [ "${FLAKE_8}" == "true" ]; then
         pip install flake8
         flake8 .
-        let res=$?
+        res=$?
         echo "The project code was verified with 'flake8'. Exit code ($res)."
         exit $res
     fi
@@ -57,12 +57,12 @@ install:
 
 before_script:
   - |
-    # set -e
+    set -e
     if [ "${BUILD_DOCS}" == "true" ]; then
         make -C docs/ html
         pip install doctr
         doctr deploy --built-docs docs/build/html .
-        let res=$?
+        res=$?
         echo "Docs deployment with 'doctr' finished with exit code ($res)."
         exit $res
     fi

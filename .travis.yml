@@ -10,8 +10,6 @@ env:
     - BUILD_DOCS=false
     - SUBMIT_CODECOV=false
     - FLAKE_8=false
-    # Doctr deploy key for bluesky/bluesky-queueserver
-    - secure: "hnbMpEgR/qH9h2nIDFBw2j5MrxnvkuT0fXrxeDH0l9EB6p1A45wkHC+kl2GzUHck7LLU8n47tjiJK9PssVZPQOYmMsK3lpLTqPfZEQ1DvUeNis2MVs3fjtjoUqRF0DAhuXI/+sG2qCNGm0+CHVlp1BPaRQxVzBQoPIcYy0oAqGzjx+kL7g3ucrsKqF6nkkuQ71Zj4PhxsPNAI3/7V2REOOPeEiXVfib8JxDsWYXjn/2/2IiGS0JR8yLkjRFmhEKGQxKJfNwpbLYL2WQd3FkvtaZIsUJ40x0Fuk1lbISdZ7UFfBxhbrzRiG8DLDwtUwvDsw0ZSf7qh7qM7WQzxs7lz2pGTtdJBC1+UZJ1xwzCaF8YCJWHVurkk9hp5QLnOGGLq1vopqjn+M7Qnv178HFApZ74H11hnbX3Gv4oRlUP4AmSdYmWDyb83zvIWsl+vcLwzatZBJ/m1msacSidfswdxSWATeCX5rzO7KQ8A++QTu8Sjb7Xe8607V1Z6PNJzM9sAzWGsCTWydx/5TDAocs0S0gJDhwZm+bduwOR/OloPyvDGT1zVS1V4FSF1rlUhr8iiMhtbSqDADt5i8nbXIC1VBsY6bgvRJJjR88Gi7AVmyc19bI+4JKFZRPFpzvqRfb4mO5ry9BVM+pTm5r+Zn2na3tfgL5ZkYECceFi8YIfrss="
 
 cache:
   directories:
@@ -25,7 +23,11 @@ jobs:
       env: FLAKE_8=true
     - python: 3.7
     - python: 3.8
-      env: BUILD_DOCS=true SUBMIT_CODECOV=true
+      env:
+        - BUILD_DOCS=true
+        - SUBMIT_CODECOV=true
+        # Doctr deploy key for bluesky/bluesky-queueserver
+        - secure: "hnbMpEgR/qH9h2nIDFBw2j5MrxnvkuT0fXrxeDH0l9EB6p1A45wkHC+kl2GzUHck7LLU8n47tjiJK9PssVZPQOYmMsK3lpLTqPfZEQ1DvUeNis2MVs3fjtjoUqRF0DAhuXI/+sG2qCNGm0+CHVlp1BPaRQxVzBQoPIcYy0oAqGzjx+kL7g3ucrsKqF6nkkuQ71Zj4PhxsPNAI3/7V2REOOPeEiXVfib8JxDsWYXjn/2/2IiGS0JR8yLkjRFmhEKGQxKJfNwpbLYL2WQd3FkvtaZIsUJ40x0Fuk1lbISdZ7UFfBxhbrzRiG8DLDwtUwvDsw0ZSf7qh7qM7WQzxs7lz2pGTtdJBC1+UZJ1xwzCaF8YCJWHVurkk9hp5QLnOGGLq1vopqjn+M7Qnv178HFApZ74H11hnbX3Gv4oRlUP4AmSdYmWDyb83zvIWsl+vcLwzatZBJ/m1msacSidfswdxSWATeCX5rzO7KQ8A++QTu8Sjb7Xe8607V1Z6PNJzM9sAzWGsCTWydx/5TDAocs0S0gJDhwZm+bduwOR/OloPyvDGT1zVS1V4FSF1rlUhr8iiMhtbSqDADt5i8nbXIC1VBsY6bgvRJJjR88Gi7AVmyc19bI+4JKFZRPFpzvqRfb4mO5ry9BVM+pTm5r+Zn2na3tfgL5ZkYECceFi8YIfrss="
     # As of 2020-10-08, Python 3.9 distribution is not available in TravisCI's repos yet.
     # - python: 3.9
 

@@ -126,7 +126,37 @@ def test_http_server_queue_plan_add_handler_2(re_manager, fastapi_server, pos, p
         assert resp2["queue"][pos_result]["args"] == plan2["args"]
 
 
-def test_http_server_queue_plan_add_handler_3_fail(re_manager, fastapi_server):  # noqa F811
+def test_http_server_queue_plan_add_handler_3(re_manager, fastapi_server):  # noqa F811
+
+    # Unknown plan name
+    plan1 = {"plan": {"name": "count_test", "args": [["det1", "det2"]]}}
+    resp1 = _request_to_json("post", "/queue/plan/add", json=plan1)
+    assert resp1["success"] is False
+    assert "Plan 'count_test' is not in the list of allowed plans" in resp1["msg"]
+
+    # Unknown kwarg
+    plan2 = {"plan": {"name": "count", "args": [["det1", "det2"]], "kwargs": {"abc": 10}}}
+    resp2 = _request_to_json("post", "/queue/plan/add", json=plan2)
+    assert resp2["success"] is False
+    assert "Unexpected kwargs ['abc'] in the plan parameters" in resp2["msg"]
+
+    # Valid plan
+    plan3 = {"plan": {"name": "count", "args": [["det1", "det2"]]}}
+    resp3 = _request_to_json("post", "/queue/plan/add", json=plan3)
+    assert resp3["success"] is True
+    assert resp3["qsize"] == 1
+    assert resp3["plan"]["name"] == "count"
+    assert resp3["plan"]["args"] == [["det1", "det2"]]
+    assert "plan_uid" in resp3["plan"]
+
+    resp4 = _request_to_json("get", "/queue/get")
+    assert resp4["queue"] != []
+    assert len(resp4["queue"]) == 1
+    assert resp4["queue"][0] == resp3["plan"]
+    assert resp4["running_plan"] == {}
+
+
+def test_http_server_queue_plan_add_handler_4_fail(re_manager, fastapi_server):  # noqa F811
     """
     Failing case: call without sending a plan.
     """

@@ -1,7 +1,5 @@
 import os
 import pytest
-import shutil
-import glob
 
 import ophyd
 
@@ -16,6 +14,8 @@ from bluesky_queueserver.manager.profile_ops import (
     parse_plan,
     gen_list_of_plans_and_devices,
     load_list_of_plans_and_devices,
+    _process_plan,
+    validate_plan,
 )
 
 
@@ -217,29 +217,18 @@ def test_gen_list_of_plans_and_devices(tmp_path):
     Copy simulated profile collection and generate the list of allowed (in this case available)
     plans and devices based on the profile collection
     """
-    pc_path = get_default_profile_collection_dir()
-
-    # Copy simulated profile collection (only .py files)
-    file_pattern = os.path.join(pc_path, "[0-9][0-9]*.py")
-    file_list = glob.glob(file_pattern)
-    for fln in file_list:
-        shutil.copy(fln, tmp_path)
-
-    # Check if profile collection was moved
-    file_pattern = os.path.join(tmp_path, "[0-9][0-9]*.py")
-    file_list = glob.glob(file_pattern)
-    assert len(file_list) > 0, "Profile collection was not copied"
+    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
 
     fln_yaml = "list.yaml"
-    gen_list_of_plans_and_devices(tmp_path, file_name=fln_yaml)
-    assert os.path.isfile(os.path.join(tmp_path, fln_yaml)), "List of plans and devices was not created"
+    gen_list_of_plans_and_devices(pc_path, file_name=fln_yaml)
+    assert os.path.isfile(os.path.join(pc_path, fln_yaml)), "List of plans and devices was not created"
 
     # Attempt to overwrite the file
     with pytest.raises(RuntimeError, match="already exists. File overwriting is disabled."):
-        gen_list_of_plans_and_devices(tmp_path, file_name=fln_yaml)
+        gen_list_of_plans_and_devices(pc_path, file_name=fln_yaml)
 
     # Allow file overwrite
-    gen_list_of_plans_and_devices(tmp_path, file_name=fln_yaml, overwrite=True)
+    gen_list_of_plans_and_devices(pc_path, file_name=fln_yaml, overwrite=True)
 
 
 def test_load_list_of_plans_and_devices():
@@ -255,3 +244,93 @@ def test_load_list_of_plans_and_devices():
     assert len(allowed_plans) > 0, "List of allowed plans was not loaded"
     assert isinstance(allowed_devices, dict), "Incorrect type of 'allowed_devices'"
     assert len(allowed_devices) > 0, "List of allowed devices was not loaded"
+
+
+def _f1(a, b, c):
+    pass
+
+
+def _f2(*args, **kwargs):
+    pass
+
+
+def _f3(a, b, *args, c, d):
+    pass
+
+
+def _f4(a, b, *args, c, d=4):
+    pass
+
+
+def _f5(a, b=5, *args, c, d=4):
+    pass
+
+
+# fmt: off
+@pytest.mark.parametrize("func, plan, success, errmsg", [
+    (_f1, {"name": "nonexistent", "args": [1, 4, 5], "kwargs": {}}, False,
+     "Plan 'nonexistent' is not in the list of allowed plans"),
+
+    (_f1, {"name": "existing", "args": [1, 4, 5], "kwargs": {}}, True, ""),
+    (_f1, {"name": "existing", "args": [1, 4], "kwargs": {"c": 5}}, True, ""),
+    (_f1, {"name": "existing", "args": [], "kwargs": {"a": 1, "b": 4, "c": 5}}, True, ""),
+    (_f1, {"name": "existing", "args": [], "kwargs": {"c": 1, "b": 4, "a": 5}}, True, ""),
+    (_f1, {"name": "existing", "args": [1, 4], "kwargs": {}}, False,
+     "Plan parameters do not contain required args or kwargs"),
+    (_f1, {"name": "existing", "args": [], "kwargs": {}}, False,
+     "Plan parameters do not contain required args or kwargs"),
+    (_f1, {"name": "existing", "args": [1, 4, 6, 7], "kwargs": {}}, False,
+     "The number of args exceeds the number of allowed parameters"),
+    (_f1, {"name": "existing", "args": [1, 4, 6, 7], "kwargs": {"kw": 10}}, False,
+     "The number of args exceeds the number of allowed parameters"),
+    (_f1, {"name": "existing", "args": [1, 4], "kwargs": {"b": 10}}, False,
+     "Unexpected kwargs ['b'] in the plan parameters"),
+
+    (_f2, {"name": "existing", "args": [1, 4, 5], "kwargs": {}}, True, ""),
+    (_f2, {"name": "existing", "args": [], "kwargs": {"a": 1, "b": 4, "c": 5}}, True, ""),
+    (_f2, {"name": "existing", "args": [1, 4, 5], "kwargs": {"a": 1, "b": 4, "c": 5}}, True, ""),
+
+    (_f2, {"name": "existing", "args": [1, 4, 5]}, True, ""),
+    (_f2, {"name": "existing", "kwargs": {"a": 1, "b": 4, "c": 5}}, True, ""),
+
+    (_f3, {"name": "existing", "args": [1, 4], "kwargs": {"c": 5, "d": 10}}, True, ""),
+    (_f3, {"name": "existing", "args": [], "kwargs": {"a": 1, "b": 4, "c": 5, "d": 10}}, True, ""),
+    (_f3, {"name": "existing", "args": [], "kwargs": {"a": 1, "b": 4, "d": 10}}, False,
+     "Plan parameters do not contain required args or kwargs ['c']"),
+    (_f3, {"name": "existing", "args": [6, 8], "kwargs": {"a": 1, "c": 4, "d": 10}}, False,
+     "Unexpected kwargs ['a'] in the plan parameters"),
+
+    (_f4, {"name": "existing", "args": [1, 4], "kwargs": {"c": 5, "d": 10}}, True, ""),
+    (_f4, {"name": "existing", "args": [1, 4], "kwargs": {"c": 5}}, True, ""),
+    (_f4, {"name": "existing", "args": [1, 4], "kwargs": {"d": 10}}, False,
+     "Plan parameters do not contain required args or kwargs ['c']"),
+
+    (_f5, {"name": "existing", "args": [1, 4], "kwargs": {"c": 5, "d": 10}}, True, ""),
+    (_f5, {"name": "existing", "args": [1], "kwargs": {"c": 5, "d": 10}}, True, ""),
+    (_f5, {"name": "existing", "args": [], "kwargs": {"c": 5, "d": 10}}, False,
+     "Plan parameters do not contain required args or kwargs ['a']"),
+
+])
+# fmt: on
+def test_validate_plan_1(func, plan, success, errmsg):
+    """
+    Tests for the plan validation algorithm.
+    """
+    allowed_plans = {"existing": _process_plan(func)}
+    success_out, errmsg_out = validate_plan(plan, allowed_plans=allowed_plans)
+
+    assert success_out == success, f"errmsg: {errmsg_out}"
+    if success:
+        assert errmsg_out == errmsg
+    else:
+        assert errmsg in errmsg_out
+
+
+@pytest.mark.parametrize("allowed_plans", [None, {}])
+def test_validate_plan_2(allowed_plans):
+    """
+    At this point all plans are considered valid if there is not list of allowed plans.
+    """
+    success_out, errmsg_out = validate_plan({}, allowed_plans=allowed_plans)
+    assert success_out is True
+    assert errmsg_out == ""

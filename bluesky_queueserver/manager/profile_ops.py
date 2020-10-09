@@ -8,6 +8,7 @@ import yaml
 import tempfile
 import re
 import sys
+import pprint
 
 import logging
 
@@ -311,10 +312,179 @@ def parse_plan(plan, *, allowed_plans, allowed_devices):
     return plan_parsed
 
 
+def validate_plan(plan, *, allowed_plans):
+    """
+    Validate the dictionary of plan parameters. Expected to be called before the plan
+    is added to the queue.
+
+    Parameters
+    ----------
+    plan: dict
+        The dictionary of plan parameters
+    allowed_plans: dict
+        The dictionary with allowed plans: key - plan name.
+
+    Returns
+    -------
+    (boolean, str)
+        Success (True/False) and error message that indicates the reason for plan
+        rejection
+    """
+    success, msg = True, ""
+    completed = False
+
+    # For now allow execution of all plans if no plan descriptions are provided
+    #   (plan list is empty). This will change in the future.
+    # TODO: at some point make the list of allowed plans required. This will require
+    #   implementation of some tools to make generation of basic plan list convenient.
+    if not allowed_plans:
+        return success, msg
+
+    try:
+        if "args" not in plan:
+            plan["args"] = []
+
+        if "kwargs" not in plan:
+            plan["kwargs"] = {}
+
+        if "name" not in plan:
+            msg = "Plan name is not specified."
+            raise Exception(msg)
+
+        # Verify that plan name is in the list of allowed plans
+        plan_name = plan["name"]
+        if plan_name not in allowed_plans:
+            msg = f"Plan '{plan['name']}' is not in the list of allowed plans."
+            raise Exception(msg)
+
+        parameters = allowed_plans[plan_name]["parameters"]
+        plan_args, plan_kwargs = plan["args"], plan["kwargs"]
+
+        # Check if the number of positional arguments is not greater than expected.
+        n_param = 0
+        for _ in plan_args:
+            if n_param >= len(parameters):
+                # Too many parameters (more args than the total number of parameters
+                #   and there is no '*args')
+                raise ValueError(
+                    f"The number of args exceeds the number of allowed parameters: "
+                    f"{len(parameters)} parameters are allowed."
+                )
+
+            param = parameters[n_param]
+            pkind = param["kind"]
+            if pkind == "VAR_POSITIONAL":
+                # Absorbs the rest of 'args' even if there are no more args.
+                n_param += 1
+                break
+            if pkind in ("POSITIONAL_OR_KEYWORD", "POSITIONAL_ONLY"):
+                # Move to the next parameter
+                n_param += 1
+            elif pkind in ("KEYWORD_ONLY", "VAR_KEYWORD"):
+                raise ValueError(
+                    f"Plan parameters contain too many args ({len(plan_args)}): " f"{n_param} args are expected."
+                )
+            else:
+                # This should happen only if no args or kwargs are expected.
+                raise ValueError(f"Plan parameters contain {len(plan_args)}. No args are expected.")
+
+        if n_param >= len(parameters):
+            if plan_kwargs:
+                raise ValueError("Plan parameters contains kwargs. No kwargs are expected.")
+            else:
+                completed = True
+
+        if not completed:
+            if parameters[n_param]["kind"] == "VAR_POSITIONAL":
+                n_param += 1
+
+            if n_param >= len(parameters):
+                if plan_kwargs:
+                    raise ValueError("Plan parameters contains kwargs. No kwargs are expected.")
+                else:
+                    completed = True
+
+        if not completed:
+            # Dictionary of the remaining keys
+            premaining = {_["name"]: _ for _ in parameters[n_param:]}
+
+            # Check if there exists a parameter of VAR_POSITIONAL kind. It will indicate that
+            #   more args are expected.
+            var_keyword_exists = False
+            for pname, pinfo in premaining.copy().items():
+                if pinfo["kind"] == "VAR_POSITIONAL":
+                    premaining.pop(pname)
+                if pinfo["kind"] == "VAR_KEYWORD":
+                    var_keyword_exists = True
+                    premaining.pop(pname)
+
+            # Check if there are no kwargs with unexpected names.
+            unexpected_kwargs = []
+            for pa in plan_kwargs.keys():
+                if pa in premaining:
+                    premaining.pop(pa)
+                else:
+                    unexpected_kwargs.append(pa)
+
+            if not var_keyword_exists and unexpected_kwargs:
+                raise ValueError(f"Unexpected kwargs {unexpected_kwargs} in the plan parameters.")
+
+            # Now checked if there are any missing kwargs that don't have default values.
+            kwargs_missed = []
+            for pname, pinfo in premaining.items():
+                if "default" not in pinfo:
+                    kwargs_missed.append(pname)
+            if kwargs_missed:
+                raise ValueError(f"Plan parameters do not contain required args or kwargs {kwargs_missed}.")
+
+    except Exception as ex:
+        success = False
+        msg = f"Plan validation failed: {str(ex)}\nPlan: {pprint.pformat(plan)}"
+
+    return success, msg
+
+
 # TODO: it may be a good idea to implement 'gen_list_of_plans_and_devices' as a separate CLI tool.
 #       For now it can be called from IPython. It shouldn't be called automatically
 #       at any time, since it loads profile collection. The list of allowed plans
 #       and devices can be also typed manually, since it shouldn't be very large.
+
+
+def _process_plan(plan):
+    """
+    Returns parameters of a plan.
+
+    Parameters
+    ----------
+    plan: function
+        reference to the function implementing the plan
+
+    Returns
+    -------
+    dict
+        Dictionary with plan parameters with the following keys: ``module`` - name
+        of the module where the plan is located, ``name`` - name of the plan, ``parameters`` -
+        the list of plan parameters. The list of plan parameters include ``name``, ``kind``,
+        ``default`` (if available) and ``annotation`` (if available).
+    """
+
+    def filter_values(v):
+        if v is inspect.Parameter.empty:
+            return ""
+        return str(v)
+
+    sig = inspect.signature(plan)
+
+    ret = {"module": plan.__module__, "name": plan.__name__, "parameters": []}
+    for p in sig.parameters.values():
+        working_dict = {"name": p.name}
+        ret["parameters"].append(working_dict)
+        for target in ["kind", "default", "annotation"]:
+            v = getattr(p, target)
+            if v is not p.empty:
+                working_dict[target] = filter_values(v)
+
+    return ret
 
 
 def gen_list_of_plans_and_devices(path=None, file_name="allowed_plans_and_devices.yaml", overwrite=False):
@@ -348,26 +518,8 @@ def gen_list_of_plans_and_devices(path=None, file_name="allowed_plans_and_device
         plans = plans_from_nspace(nspace)
         devices = devices_from_nspace(nspace)
 
-        def process_plan(plan):
-            def filter_values(v):
-                if v is inspect.Parameter.empty:
-                    return ""
-                return str(v)
-
-            sig = inspect.signature(plan)
-
-            ret = {"module": plan.__module__, "name": plan.__name__, "parameters": {}}
-            for p in sig.parameters.values():
-                working_dict = ret["parameters"][p.name] = {}
-                for target in ["kind", "default", "annotation"]:
-                    v = getattr(p, target)
-                    if v is not p.empty:
-                        working_dict[target] = filter_values(v)
-
-            return ret
-
         allowed_plans_and_devices = {
-            "allowed_plans": {k: process_plan(v) for k, v in plans.items()},
+            "allowed_plans": {k: _process_plan(v) for k, v in plans.items()},
             "allowed_devices": {
                 k: {"classname": type(v).__name__, "module": type(v).__module__} for k, v in devices.items()
             },
@@ -375,7 +527,7 @@ def gen_list_of_plans_and_devices(path=None, file_name="allowed_plans_and_device
 
         file_path = os.path.join(path, file_name)
         if os.path.exists(file_path) and not overwrite:
-            raise IOError("File '%s' already exists. File overwriting is disabled.")
+            raise IOError(f"File '{file_path}' already exists. File overwriting is disabled.")
 
         with open(file_path, "w") as stream:
             yaml.dump(allowed_plans_and_devices, stream)
@@ -396,7 +548,7 @@ def load_list_of_plans_and_devices(path_to_file=None):
 
     Returns
     -------
-    (list, list)
+    (dict, dict)
         List of allowed plans and list of allowed devices.
 
     Raises
@@ -404,7 +556,7 @@ def load_list_of_plans_and_devices(path_to_file=None):
     IOError in case the file does not exist.
     """
     if not path_to_file:
-        return {"allowed_plans": [], "allowed_devices": []}
+        return {"allowed_plans": {}, "allowed_devices": {}}
 
     if not os.path.isfile(path_to_file):
         raise IOError(

@@ -5,7 +5,7 @@ import shutil
 from bluesky_queueserver.manager.profile_ops import get_default_profile_collection_dir
 
 
-def copy_default_profile_collection(tmp_path):
+def copy_default_profile_collection(tmp_path, *, copy_yaml=True):
     """
     Copy default profile collections (only .py files) to temporary directory.
     Returns the new temporary directory.
@@ -18,10 +18,14 @@ def copy_default_profile_collection(tmp_path):
     os.makedirs(new_pc_path, exist_ok=True)
 
     # Copy simulated profile collection (only .py files)
-    file_pattern = os.path.join(pc_path, "[0-9][0-9]*.py")
-    file_list = glob.glob(file_pattern)
-    for fln in file_list:
-        shutil.copy(fln, new_pc_path)
+    patterns = ["[0-9][0-9]*.py"]
+    if copy_yaml:
+        patterns.append("*.yaml")
+    for pattern in patterns:
+        file_pattern = os.path.join(pc_path, pattern)
+        file_list = glob.glob(file_pattern)
+        for fln in file_list:
+            shutil.copy(fln, new_pc_path)
 
     return new_pc_path
 

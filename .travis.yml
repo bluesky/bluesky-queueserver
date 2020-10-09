@@ -38,7 +38,7 @@ jobs:
 
 before_install:
   - |
-    set -e
+    # set -e
     if [ "${FLAKE_8}" == "true" ]; then
         pip install flake8
         flake8 .
@@ -57,7 +57,7 @@ install:
 
 before_script:
   - |
-    set -e
+    # set -e
     if [ "${BUILD_DOCS}" == "true" ]; then
         make -C docs/ html
         pip install doctr
@@ -68,8 +68,7 @@ before_script:
     fi
 
 script:
-  - |
-    if coverage run -m pytest -v  # Run the tests and check for test coverage.
+  - coverage run -m pytest -v  # Run the tests and check for test coverage.
   - coverage report -m  # Generate test coverage report.
 
 after_success:

@@ -52,8 +52,8 @@ install:
 script:
   - coverage run -m pytest -v  # Run the tests and check for test coverage.
   - coverage report -m  # Generate test coverage report.
-  - set -e
   - |
+    set -e
     if [ "${BUILD_DOCS}" == "true" ]; then
         make -C docs/ html
         pip install doctr

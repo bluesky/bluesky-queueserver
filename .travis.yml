@@ -19,10 +19,15 @@ cache:
 jobs:
   fast_finish: true
   include:
-    - python: 3.8  # This build will run only 'flake8'
-      env: FLAKE_8=true
     - python: 3.7
     - python: 3.8
+
+    - python: 3.8  # This build will only run 'flake8'
+      name: "Check style"
+      env: FLAKE_8=true
+
+    - python: 3.8  # This build will only deploy docs.
+      name: "Build/deploy docs"
       env:
         - BUILD_DOCS=true
         - SUBMIT_CODECOV=true
@@ -33,6 +38,7 @@ jobs:
 
 before_install:
   - |
+    set -e
     if [ "${FLAKE_8}" == "true" ]; then
         pip install flake8
         flake8 .
@@ -49,16 +55,22 @@ install:
   - pip install scikit-image
   - pip list
 
-script:
-  - coverage run -m pytest -v  # Run the tests and check for test coverage.
-  - coverage report -m  # Generate test coverage report.
+before_script:
   - |
     set -e
     if [ "${BUILD_DOCS}" == "true" ]; then
         make -C docs/ html
         pip install doctr
         doctr deploy --built-docs docs/build/html .
+        let res=$?
+        echo "Docs deployment with 'doctr' finished with exit code ($res)."
+        exit $res
     fi
+
+script:
+  - |
+    if coverage run -m pytest -v  # Run the tests and check for test coverage.
+  - coverage report -m  # Generate test coverage report.
 
 after_success:
   # - if [ $SUBMIT_CODECOV == 'true' ]; then codecov; fi;

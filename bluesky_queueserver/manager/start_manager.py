@@ -202,7 +202,7 @@ def start_manager():
     )
     parser.add_argument(
         "--user_group_permissions",
-        dest="user_group_permissions",
+        dest="user_group_permissions_path",
         type=str,
         help="Path to file that contains lists of plans and devices available to users. "
         "The path may be a relative path to the profile collection directory. "
@@ -237,30 +237,30 @@ def start_manager():
 
     config_worker["profile_collection_path"] = pc_path
 
-    default_allowed_pd_fln = "existing_plans_and_devices.yaml"
-    if args.allowed_plans_and_devices_path:
-        allowed_pd_path = os.path.expanduser(args.allowed_plans_and_devices_path)
-        if not os.path.isabs(allowed_pd_path):
-            allowed_pd_path = os.path.join(pc_path, allowed_pd_path)
-        if not allowed_pd_path.endswith(".yaml"):
-            os.path.join(allowed_pd_path, default_allowed_pd_fln)
+    default_existing_pd_fln = "existing_plans_and_devices.yaml"
+    if args.existing_plans_and_devices_path:
+        existing_pd_path = os.path.expanduser(args.existing_plans_and_devices_path)
+        if not os.path.isabs(existing_pd_path):
+            allowed_pd_path = os.path.join(pc_path, existing_pd_path)
+        if not existing_pd_path.endswith(".yaml"):
+            os.path.join(existing_pd_path, default_existing_pd_fln)
     else:
-        allowed_pd_path = os.path.join(pc_path, default_allowed_pd_fln)
-    if not os.path.isfile(allowed_pd_path):
+        existing_pd_path = os.path.join(pc_path, default_existing_pd_fln)
+    if not os.path.isfile(existing_pd_path):
         logger.error(
             "The list of allowed plans and devices was not found at "
             "'%s'. Proceed without the list: all plans and devices are allowed.",
-            allowed_pd_path,
+            existing_pd_path,
         )
-        allowed_pd_path = None
+        existing_pd_path = None
 
     default_user_group_pd_fln = "user_group_permissions.yaml"
-    if args.user_group_permissions:
-        user_group_pd_path = os.path.expanduser(args.user_group_permissions)
+    if args.user_group_permissions_path:
+        user_group_pd_path = os.path.expanduser(args.user_group_permissions_path)
         if not os.path.isabs(user_group_pd_path):
             user_group_pd_path = os.path.join(pc_path, user_group_pd_path)
-        if not allowed_pd_path.endswith(".yaml"):
-            os.path.join(user_group_pd_path, default_allowed_pd_fln)
+        if not user_group_pd_path.endswith(".yaml"):
+            os.path.join(user_group_pd_path, default_existing_pd_fln)
     else:
         user_group_pd_path = os.path.join(pc_path, default_user_group_pd_fln)
     if not os.path.isfile(user_group_pd_path):
@@ -271,8 +271,8 @@ def start_manager():
         )
         user_group_pd_path = None
 
-    config_worker["existing_plans_and_devices_path"] = allowed_pd_path
-    config_manager["existing_plans_and_devices_path"] = allowed_pd_path
+    config_worker["existing_plans_and_devices_path"] = existing_pd_path
+    config_manager["existing_plans_and_devices_path"] = existing_pd_path
     config_worker["user_group_permissions_path"] = user_group_pd_path
     config_manager["user_group_permissions_path"] = user_group_pd_path
 

@@ -1,0 +1,18 @@
+user_groups:
+  root:  # The group includes all available plan and devices
+    allowed:
+      - null  # Allow all
+    forbidden:
+      - null  # Nothing is forbidden
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed:
+      - ".*"  # A different way to allow all
+    forbidden:
+      - null  # Nothing is forbidden
+  test_user:  # Users with limited access capabilities
+    allowed:
+      - "^count$"  # Use regular expression patterns
+      - "scan$"
+    forbidden:
+      - "^adaptive_scan$" # Use regular expression patterns
+      - "^inner_product"

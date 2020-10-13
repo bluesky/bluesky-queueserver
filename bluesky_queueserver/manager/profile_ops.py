@@ -9,6 +9,7 @@ import tempfile
 import re
 import sys
 import pprint
+import jsonschema
 
 import logging
 
@@ -570,3 +571,56 @@ def load_list_of_plans_and_devices(path_to_file=None):
     allowed_devices = allowed_plans_and_devices["allowed_devices"]
 
     return allowed_plans, allowed_devices
+
+
+_user_group_permission_schema = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["user_groups"],
+    "properties": {
+        "user_groups": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "object",
+                "requiredProperties": ["allowed", "forbidden"],
+                "additionalProperties": False,
+                "properties": {
+                    "allowed": {
+                        "type": "array",
+                        "additionalItems": {"type": "string"},
+                        "items": [{"type": ["string", "null"]}],
+                    },
+                    "forbidden": {
+                        "type": "array",
+                        "additionalItems": {"type": "string"},
+                        "items": [{"type": ["string", "null"]}],
+                    },
+                },
+            },
+        },
+    },
+}
+
+
+def load_user_group_permissions(path_to_file=None):
+
+    if not path_to_file:
+        return {}
+
+    try:
+
+        if not os.path.isfile(path_to_file):
+            raise IOError(f"File '{path_to_file}' does not exist.")
+
+        with open(path_to_file, "r") as stream:
+            user_group_permissions = yaml.safe_load(stream)
+
+        # if "user_groups" not in user_group_permissions:
+        #    raise IOError(f"Incorrect format of user group permissions: key 'user_groups' is missing.")
+        jsonschema.validate(instance=user_group_permissions, schema=_user_group_permission_schema)
+
+    except Exception as ex:
+        msg = f"Error while loading user group permissions from file '{path_to_file}': {str(ex)}"
+        raise IOError(msg)
+
+    return user_group_permissions

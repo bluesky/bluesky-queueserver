@@ -1,5 +1,7 @@
 import os
 import pytest
+import copy
+import yaml
 
 import ophyd
 
@@ -14,6 +16,7 @@ from bluesky_queueserver.manager.profile_ops import (
     parse_plan,
     gen_list_of_plans_and_devices,
     load_list_of_plans_and_devices,
+    load_user_group_permissions,
     _process_plan,
     validate_plan,
 )
@@ -244,6 +247,118 @@ def test_load_list_of_plans_and_devices():
     assert len(allowed_plans) > 0, "List of allowed plans was not loaded"
     assert isinstance(allowed_devices, dict), "Incorrect type of 'allowed_devices'"
     assert len(allowed_devices) > 0, "List of allowed devices was not loaded"
+
+
+_user_groups_text = """user_groups:
+  root:  # The group includes all available plan and devices
+    allowed:
+      - null  # Allow all
+    forbidden:
+      - null  # Nothing is forbidden
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed:
+      - ".*"  # A different way to allow all
+    forbidden:
+      - null  # Nothing is forbidden
+  test_user:  # Users with limited access capabilities
+    allowed:
+      - "^count$"  # Use regular expression patterns 
+      - "scan$"
+    forbidden:
+      - "^adaptive_scan$" # Use regular expression patterns
+      - "^inner_product"
+"""
+
+# fmt: off
+_user_groups_dict = \
+{"user_groups":
+     {"root": {"allowed": [None], "forbidden": [None]},
+      "admin": {"allowed": [".*"], "forbidden": [None]},
+      "test_user": {"allowed": ["^count$", "scan$"],
+                    "forbidden": ["^adaptive_scan$", "^inner_product"]}
+      }
+ }
+# fmt: on
+
+
+def test_load_user_group_permissions_1(tmp_path):
+    """
+    Create YAML file (with comments), load it and compare with the expected results.
+    """
+    path_to_file = os.path.join(tmp_path, "some_dir")
+    os.makedirs(path_to_file, exist_ok=True)
+    path_to_file = os.path.join(path_to_file, "user_permissions.yaml")
+    with open(path_to_file, "w") as f:
+        f.writelines(_user_groups_text)
+
+    user_group_permissions = load_user_group_permissions(path_to_file)
+    assert user_group_permissions == _user_groups_dict
+
+
+def test_load_user_group_permissions_2_fail(tmp_path):
+    """
+    Function ``load_user_group_permissions``. Failed schema validation.
+    """
+    path_to_file = os.path.join(tmp_path, "some_dir")
+    os.makedirs(path_to_file, exist_ok=True)
+    path_to_file = os.path.join(path_to_file, "user_permissions.yaml")
+
+    with pytest.raises(IOError, match=f"File '{path_to_file}' does not exist"):
+        load_user_group_permissions(path_to_file)
+
+
+def test_load_user_group_permissions_3_fail(tmp_path):
+    """
+    Function ``load_user_group_permissions``. Failed schema validation.
+    """
+    path_to_file = os.path.join(tmp_path, "some_dir")
+    os.makedirs(path_to_file, exist_ok=True)
+    path_to_file = os.path.join(path_to_file, "user_permissions.yaml")
+
+    ug_dict = copy.deepcopy(_user_groups_dict)
+    ug_dict["user_groups"]["test_user"]["something"] = ["a", "b"]
+
+    with open(path_to_file, "w") as f:
+        yaml.dump(ug_dict, f)
+
+    with pytest.raises(IOError, match="Additional properties are not allowed"):
+        load_user_group_permissions(path_to_file)
+
+
+def test_load_user_group_permissions_4_fail(tmp_path):
+    """
+    Function ``load_user_group_permissions``. Failed schema validation.
+    """
+    path_to_file = os.path.join(tmp_path, "some_dir")
+    os.makedirs(path_to_file, exist_ok=True)
+    path_to_file = os.path.join(path_to_file, "user_permissions.yaml")
+
+    ug_dict = copy.deepcopy(_user_groups_dict)
+    ug_dict["unknown_key"] = ["a", "b"]
+
+    with open(path_to_file, "w") as f:
+        yaml.dump(ug_dict, f)
+
+    with pytest.raises(IOError, match="Additional properties are not allowed"):
+        load_user_group_permissions(path_to_file)
+
+
+def test_load_user_group_permissions_5_fail(tmp_path):
+    """
+    Function ``load_user_group_permissions``. Failed schema validation.
+    """
+    path_to_file = os.path.join(tmp_path, "some_dir")
+    os.makedirs(path_to_file, exist_ok=True)
+    path_to_file = os.path.join(path_to_file, "user_permissions.yaml")
+
+    ug_dict = copy.deepcopy(_user_groups_dict)
+    ug_dict["user_groups"]["test_user"]["allowed"].append(50)
+
+    with open(path_to_file, "w") as f:
+        yaml.dump(ug_dict, f)
+
+    with pytest.raises(IOError, match="is not of type 'string'"):
+        load_user_group_permissions(path_to_file)
 
 
 def _f1(a, b, c):

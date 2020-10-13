@@ -8,7 +8,7 @@ import uuid
 import enum
 
 from .comms import PipeJsonRpcSendAsync, CommTimeoutError
-from .profile_ops import load_list_of_plans_and_devices, validate_plan
+from .profile_ops import load_existing_plans_and_devices, validate_plan
 from .plan_queue_ops import PlanQueueOperations
 
 
@@ -1063,7 +1063,7 @@ class RunEngineManager(Process):
         logger.info("Loading the lists of allowed plans and devices ...")
         path_pd = self._config["existing_plans_and_devices_path"]
         try:
-            self._allowed_plans, self._allowed_devices = load_list_of_plans_and_devices(path_pd)
+            self._allowed_plans, self._allowed_devices = load_existing_plans_and_devices(path_pd)
         except Exception as ex:
             logger.exception(
                 "Error occurred while loading lists of allowed plans and devices from '%s': %s",

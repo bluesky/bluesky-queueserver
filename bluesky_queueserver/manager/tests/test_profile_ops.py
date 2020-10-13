@@ -15,10 +15,12 @@ from bluesky_queueserver.manager.profile_ops import (
     devices_from_nspace,
     parse_plan,
     gen_list_of_plans_and_devices,
-    load_list_of_plans_and_devices,
+    load_existing_plans_and_devices,
     load_user_group_permissions,
     _process_plan,
     validate_plan,
+    _select_allowed_items,
+    load_allowed_plans_and_devices,
 )
 
 
@@ -234,48 +236,78 @@ def test_gen_list_of_plans_and_devices(tmp_path):
     gen_list_of_plans_and_devices(pc_path, file_name=fln_yaml, overwrite=True)
 
 
-def test_load_list_of_plans_and_devices():
+def test_load_existing_plans_and_devices():
     """
     Loads the list of allowed plans and devices from simulated profile collection.
     """
     pc_path = get_default_profile_collection_dir()
     file_path = os.path.join(pc_path, "existing_plans_and_devices.yaml")
 
-    allowed_plans, allowed_devices = load_list_of_plans_and_devices(file_path)
+    existing_plans, existing_devices = load_existing_plans_and_devices(file_path)
 
-    assert isinstance(allowed_plans, dict), "Incorrect type of 'allowed_plans'"
-    assert len(allowed_plans) > 0, "List of allowed plans was not loaded"
-    assert isinstance(allowed_devices, dict), "Incorrect type of 'allowed_devices'"
-    assert len(allowed_devices) > 0, "List of allowed devices was not loaded"
+    assert isinstance(existing_plans, dict), "Incorrect type of 'allowed_plans'"
+    assert len(existing_plans) > 0, "List of allowed plans was not loaded"
+    assert isinstance(existing_devices, dict), "Incorrect type of 'allowed_devices'"
+    assert len(existing_devices) > 0, "List of allowed devices was not loaded"
+
+    existing_plans, existing_devices = load_existing_plans_and_devices(None)
+    assert existing_plans == {}
+    assert existing_devices == {}
 
 
-_user_groups_text = """user_groups:
+_user_groups_text = r"""user_groups:
   root:  # The group includes all available plan and devices
-    allowed:
+    allowed_plans:
       - null  # Allow all
-    forbidden:
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - null  # Allow all
+    forbidden_devices:
       - null  # Nothing is forbidden
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
-    allowed:
+    allowed_plans:
       - ".*"  # A different way to allow all
-    forbidden:
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - ".*"  # A different way to allow all
+    forbidden_devices:
       - null  # Nothing is forbidden
   test_user:  # Users with limited access capabilities
-    allowed:
+    allowed_plans:
       - "^count$"  # Use regular expression patterns
       - "scan$"
-    forbidden:
+    forbidden_plans:
       - "^adaptive_scan$" # Use regular expression patterns
       - "^inner_product"
+    allowed_devices:
+      - "^det"  # Use regular expression patterns
+      - "^motor"
+    forbidden_devices:
+      - "^det[3-5]$" # Use regular expression patterns
+      - "^motor\\d+$"
 """
 
 _user_groups_dict = {
     "user_groups": {
-        "root": {"allowed": [None], "forbidden": [None]},
-        "admin": {"allowed": [".*"], "forbidden": [None]},
+        "root": {
+            "allowed_plans": [None],
+            "forbidden_plans": [None],
+            "allowed_devices": [None],
+            "forbidden_devices": [None],
+        },
+        "admin": {
+            "allowed_plans": [".*"],
+            "forbidden_plans": [None],
+            "allowed_devices": [".*"],
+            "forbidden_devices": [None],
+        },
         "test_user": {
-            "allowed": ["^count$", "scan$"],
-            "forbidden": ["^adaptive_scan$", "^inner_product"],
+            "allowed_plans": ["^count$", "scan$"],
+            "forbidden_plans": ["^adaptive_scan$", "^inner_product"],
+            "allowed_devices": ["^det", "^motor"],
+            "forbidden_devices": ["^det[3-5]$", r"^motor\d+$"],
         },
     }
 }
@@ -343,7 +375,8 @@ def test_load_user_group_permissions_4_fail(tmp_path):
         load_user_group_permissions(path_to_file)
 
 
-def test_load_user_group_permissions_5_fail(tmp_path):
+@pytest.mark.parametrize("group_to_delete", ["root", "admin"])
+def test_load_user_group_permissions_5_fail(tmp_path, group_to_delete):
     """
     Function ``load_user_group_permissions``. Failed schema validation.
     """
@@ -352,13 +385,98 @@ def test_load_user_group_permissions_5_fail(tmp_path):
     path_to_file = os.path.join(path_to_file, "user_permissions.yaml")
 
     ug_dict = copy.deepcopy(_user_groups_dict)
-    ug_dict["user_groups"]["test_user"]["allowed"].append(50)
+    ug_dict["user_groups"].pop(group_to_delete)
+
+    with open(path_to_file, "w") as f:
+        yaml.dump(ug_dict, f)
+
+    with pytest.raises(IOError, match="Missing required user group"):
+        load_user_group_permissions(path_to_file)
+
+
+def test_load_user_group_permissions_6_fail(tmp_path):
+    """
+    Function ``load_user_group_permissions``. Failed schema validation.
+    """
+    path_to_file = os.path.join(tmp_path, "some_dir")
+    os.makedirs(path_to_file, exist_ok=True)
+    path_to_file = os.path.join(path_to_file, "user_permissions.yaml")
+
+    ug_dict = copy.deepcopy(_user_groups_dict)
+    ug_dict["user_groups"]["test_user"]["allowed_plans"].append(50)
 
     with open(path_to_file, "w") as f:
         yaml.dump(ug_dict, f)
 
     with pytest.raises(IOError, match="is not of type 'string'"):
         load_user_group_permissions(path_to_file)
+
+
+# fmt: off
+@pytest.mark.parametrize("item_dict, allow_patterns, disallow_patterns, result", [
+    ({"abc34": 1, "abcd": 2}, [r"^abc"], [r"^abc\d+$"], {"abcd": 2}),
+    ({"abc34": 1, "abcd": 2}, [r"^abc"], [r"^abc.*$"], {}),
+    ({"abc34": 1, "abcd": 2}, [r"^abc"], [r"^abcde$", r"^abc.*$"], {}),
+    ({"abc34": 1, "abcd": 2}, [r"^abc"], [r"^abcde$", r"^a.2$"], {"abc34": 1, "abcd": 2}),
+    ({"abc34": 1, "abcd": 2}, [r"d$", r"4$"], [r"^abcde$", r"^a.2$"], {"abc34": 1, "abcd": 2}),
+    ({"abc34": 1, "abcd": 2}, [None], [r"^abc\d+$"], {"abcd": 2}),
+    ({"abc34": 1, "abcd": 2}, [r"^abc"], [None], {"abc34": 1, "abcd": 2}),
+    ({"abc34": 1, "abcd": 2}, [None], [None], {"abc34": 1, "abcd": 2}),
+    ({"abc34": 1, "abcd": 2}, [], [None], {}),
+    ({"abc34": 1, "abcd": 2}, [None], [], {"abc34": 1, "abcd": 2}),
+    ({}, [r"^abc"], [r"^abc\d+$"], {}),
+])
+# fmt: on
+def test_select_allowed_items(item_dict, allow_patterns, disallow_patterns, result):
+    """
+    Tests for ``_select_allowed_items``.
+    """
+    r = _select_allowed_items(item_dict, allow_patterns, disallow_patterns)
+    assert r == result
+
+
+# fmt: off
+@pytest.mark.parametrize("fln_existing_items, fln_user_groups, empty_dict, all_users", [
+    ("existing_plans_and_devices.yaml", "user_group_permissions.yaml", False, True),
+    ("existing_plans_and_devices.yaml", None, False, False),
+    (None, "user_group_permissions.yaml", True, True),
+    (None, None, True, False),
+])
+# fmt: on
+def test_load_allowed_plans_and_devices(fln_existing_items, fln_user_groups, empty_dict, all_users):
+    """"""
+    pc_path = get_default_profile_collection_dir()
+
+    fln_existing_items = None if (fln_existing_items is None) else os.path.join(pc_path, fln_existing_items)
+    fln_user_groups = None if (fln_user_groups is None) else os.path.join(pc_path, fln_user_groups)
+
+    allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+        path_existing_plans_and_devices=fln_existing_items, path_user_group_permissions=fln_user_groups
+    )
+
+    if empty_dict:
+        assert allowed_plans == {}
+        assert allowed_devices == {}
+    else:
+        assert "root" in allowed_plans
+        assert "root" in allowed_devices
+        assert allowed_plans["root"]
+        assert allowed_devices["root"]
+
+        if all_users:
+            assert "admin" in allowed_plans
+            assert "admin" in allowed_devices
+            assert allowed_plans["admin"]
+            assert allowed_devices["admin"]
+            assert "test_user" in allowed_plans
+            assert "test_user" in allowed_devices
+            assert allowed_plans["test_user"]
+            assert allowed_devices["test_user"]
+        else:
+            assert "admin" not in allowed_plans
+            assert "admin" not in allowed_devices
+            assert "test_user" not in allowed_plans
+            assert "test_user" not in allowed_devices
 
 
 def _f1(a, b, c):

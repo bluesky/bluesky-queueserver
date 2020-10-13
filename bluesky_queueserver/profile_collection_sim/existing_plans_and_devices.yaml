@@ -1,4 +1,4 @@
-allowed_devices:
+existing_devices:
   ab_det:
     classname: ABDetector
     module: ophyd.sim
@@ -77,7 +77,7 @@ allowed_devices:
   pseudo3x3:
     classname: SPseudo3x3
     module: ophyd.sim
-allowed_plans:
+existing_plans:
   adaptive_scan:
     module: bluesky.plans
     name: adaptive_scan

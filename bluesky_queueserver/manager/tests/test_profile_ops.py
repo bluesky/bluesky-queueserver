@@ -262,23 +262,23 @@ _user_groups_text = """user_groups:
       - null  # Nothing is forbidden
   test_user:  # Users with limited access capabilities
     allowed:
-      - "^count$"  # Use regular expression patterns 
+      - "^count$"  # Use regular expression patterns
       - "scan$"
     forbidden:
       - "^adaptive_scan$" # Use regular expression patterns
       - "^inner_product"
 """
 
-# fmt: off
-_user_groups_dict = \
-{"user_groups":
-     {"root": {"allowed": [None], "forbidden": [None]},
-      "admin": {"allowed": [".*"], "forbidden": [None]},
-      "test_user": {"allowed": ["^count$", "scan$"],
-                    "forbidden": ["^adaptive_scan$", "^inner_product"]}
-      }
- }
-# fmt: on
+_user_groups_dict = {
+    "user_groups": {
+        "root": {"allowed": [None], "forbidden": [None]},
+        "admin": {"allowed": [".*"], "forbidden": [None]},
+        "test_user": {
+            "allowed": ["^count$", "scan$"],
+            "forbidden": ["^adaptive_scan$", "^inner_product"],
+        },
+    }
+}
 
 
 def test_load_user_group_permissions_1(tmp_path):

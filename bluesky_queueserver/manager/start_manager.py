@@ -241,7 +241,7 @@ def start_manager():
     if args.existing_plans_and_devices_path:
         existing_pd_path = os.path.expanduser(args.existing_plans_and_devices_path)
         if not os.path.isabs(existing_pd_path):
-            allowed_pd_path = os.path.join(pc_path, existing_pd_path)
+            existing_pd_path = os.path.join(pc_path, existing_pd_path)
         if not existing_pd_path.endswith(".yaml"):
             os.path.join(existing_pd_path, default_existing_pd_fln)
     else:

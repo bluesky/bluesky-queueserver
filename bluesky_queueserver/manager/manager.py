@@ -8,7 +8,7 @@ import uuid
 import enum
 
 from .comms import PipeJsonRpcSendAsync, CommTimeoutError
-from .profile_ops import load_existing_plans_and_devices, validate_plan
+from .profile_ops import load_allowed_plans_and_devices, validate_plan
 from .plan_queue_ops import PlanQueueOperations
 
 
@@ -88,7 +88,7 @@ class RunEngineManager(Process):
         self._background_task_status = {"status": "success", "err_msg": ""}
 
         self._config = config or {}
-        self._allowed_plans, self._allowed_devices = [], []
+        self._allowed_plans, self._allowed_devices = {}, {}
 
     async def _heartbeat_generator(self):
         """
@@ -699,7 +699,7 @@ class RunEngineManager(Process):
         """
         logger.info("Returning the list of allowed plans.")
         return {
-            "plans_allowed": self._allowed_plans,
+            "plans_allowed": self._allowed_plans["root"],
         }
 
     async def _devices_allowed_handler(self, request):
@@ -708,7 +708,7 @@ class RunEngineManager(Process):
         """
         logger.info("Returning the list of allowed devices.")
         return {
-            "devices_allowed": self._allowed_devices,
+            "devices_allowed": self._allowed_devices["root"],
         }
 
     async def _queue_get_handler(self, request):
@@ -747,7 +747,8 @@ class RunEngineManager(Process):
             plan = request["plan"]
             pos = request.get("pos", "back")  # Position is optional
 
-            success, msg = validate_plan(plan, allowed_plans=self._allowed_plans)
+            allowed_plans = self._allowed_plans["root"] if self._allowed_plans else self._allowed_plans
+            success, msg = validate_plan(plan, allowed_plans=allowed_plans)
             if not success:
                 raise Exception(msg)
 
@@ -1062,8 +1063,11 @@ class RunEngineManager(Process):
         # Load lists of allowed plans and devices
         logger.info("Loading the lists of allowed plans and devices ...")
         path_pd = self._config["existing_plans_and_devices_path"]
+        path_ug = self._config["user_group_permissions_path"]
         try:
-            self._allowed_plans, self._allowed_devices = load_existing_plans_and_devices(path_pd)
+            self._allowed_plans, self._allowed_devices = load_allowed_plans_and_devices(
+                path_existing_plans_and_devices=path_pd, path_user_group_permissions=path_ug
+            )
         except Exception as ex:
             logger.exception(
                 "Error occurred while loading lists of allowed plans and devices from '%s': %s",

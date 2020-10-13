@@ -236,7 +236,7 @@ def test_load_list_of_plans_and_devices():
     Loads the list of allowed plans and devices from simulated profile collection.
     """
     pc_path = get_default_profile_collection_dir()
-    file_path = os.path.join(pc_path, "allowed_plans_and_devices.yaml")
+    file_path = os.path.join(pc_path, "existing_plans_and_devices.yaml")
 
     allowed_plans, allowed_devices = load_list_of_plans_and_devices(file_path)
 

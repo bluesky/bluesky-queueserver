@@ -514,7 +514,7 @@ class RunEngineWorker(Process):
 
         # Load lists of allowed plans and devices
         logger.info("Loading the lists of allowed plans and devices ...")
-        path_pd = self._config["allowed_plans_and_devices_path"]
+        path_pd = self._config["existing_plans_and_devices_path"]
         try:
             self._allowed_plans, self._allowed_devices = load_list_of_plans_and_devices(path_pd)
         except Exception as ex:

@@ -147,12 +147,17 @@ class CliClient:
                         raise ValueError("Invalid set of method arguments: '%s'", pprint.pformat(params))
                 else:
                     raise ValueError("Invalid number of method arguments: '%s'", pprint.pformat(params))
+                prms["user"] = "qserver-cli"
+                prms["user_group"] = "root"
 
             elif command in ("queue_plan_remove", "queue_plan_get"):
                 if 0 <= len(params) <= 1:
                     prms = {"pos": params[0]} if len(params) else {}
                 else:
                     raise ValueError("Invalid number of method arguments: '%s'", pprint.pformat(params))
+
+            elif command in ("plans_allowed", "devices_allowed"):
+                prms = {"user_group": "root"}
 
             else:
                 if 0 <= len(params) <= 1:

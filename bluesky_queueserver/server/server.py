@@ -236,7 +236,10 @@ async def queue_plan_add_handler(payload: dict):
     Adds new plan to the queue
     """
     # TODO: validate inputs!
-    msg = await re_server.send_command(command="queue_plan_add", params=payload)
+    params = payload
+    params["user"] = "John Doe"
+    params["user_group"] = "admin"
+    msg = await re_server.send_command(command="queue_plan_add", params=params)
     return msg
 
 
@@ -365,7 +368,8 @@ async def plans_allowed_handler():
     """
     Returns the lists of allowed plans.
     """
-    msg = await re_server.send_command(command="plans_allowed")
+    params = {"user_group": "admin"}
+    msg = await re_server.send_command(command="plans_allowed", params=params)
     return msg
 
 
@@ -374,7 +378,8 @@ async def devices_allowed_handler():
     """
     Returns the lists of allowed devices.
     """
-    msg = await re_server.send_command(command="devices_allowed")
+    params = {"user_group": "admin"}
+    msg = await re_server.send_command(command="devices_allowed", params=params)
     return msg
 
 

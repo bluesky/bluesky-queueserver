@@ -656,7 +656,7 @@ def _select_allowed_items(item_dict, allow_patterns, disallow_patterns):
     item_dict: dict
         Dictionary of items.
     allow_patterns: list(str)
-        Selected item should match at least one of the re pattern. If it the value is ``[None]``
+        Selected item should match at least one of the re patterns. If the value is ``[None]``
         then all items are selected. If ``[]``, then no items are selected.
     disallow_patterns: list(str)
         Selected item should not match any of the re patterns. If the value is ``[None]``

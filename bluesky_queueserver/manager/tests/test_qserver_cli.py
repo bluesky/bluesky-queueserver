@@ -1,193 +1,25 @@
 import time as ttime
 import subprocess
-import asyncio
 import pytest
 
-from bluesky_queueserver.manager.qserver_cli import CliClient
-from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
+from ._common import (
+    patch_first_startup_file,
+    patch_first_startup_file_undo,
+    wait_for_condition,
+    condition_manager_idle,
+    condition_manager_paused,
+    condition_environment_created,
+    condition_environment_closed,
+    condition_queue_processing_finished,
+    get_reduced_state_info,
+    get_queue_state,
+    get_queue,
+)
 
-from ._common import copy_default_profile_collection, patch_first_startup_file, patch_first_startup_file_undo
-
-
-def get_queue_state():
-    re_server = CliClient()
-    command, params = "status", None
-    re_server.set_msg_out(command, params)
-    asyncio.run(re_server.zmq_single_request())
-    msg, _ = re_server.get_msg_in()
-    if msg is None:
-        raise TimeoutError("Timeout occured while monitoring RE Manager state")
-    return msg
-
-
-def get_queue():
-    """
-    Returns current queue.
-    """
-    re_server = CliClient()
-    command, params = "queue_get", None
-    re_server.set_msg_out(command, params)
-    asyncio.run(re_server.zmq_single_request())
-    msg, _ = re_server.get_msg_in()
-    if msg is None:
-        raise TimeoutError("Timeout occured while monitoring RE Manager state")
-    return msg
+from ._common import re_manager, re_manager_pc_copy  # noqa: F401
 
 
-def get_reduced_state_info():
-    msg = get_queue_state()
-    plans_in_queue = msg["plans_in_queue"]
-    queue_is_running = msg["manager_state"] == "executing_queue"
-    plans_in_history = msg["plans_in_history"]
-    return plans_in_queue, queue_is_running, plans_in_history
-
-
-def condition_manager_idle(msg):
-    return msg["manager_state"] == "idle"
-
-
-def condition_manager_paused(msg):
-    return msg["manager_state"] == "paused"
-
-
-def condition_environment_created(msg):
-    return msg["worker_environment_exists"]
-
-
-def condition_environment_closed(msg):
-    return not msg["worker_environment_exists"]
-
-
-def condition_queue_processing_finished(msg):
-    plans_in_queue = msg["plans_in_queue"]
-    queue_is_running = msg["manager_state"] == "executing_queue"
-    return (plans_in_queue == 0) and not queue_is_running
-
-
-def wait_for_condition(time, condition):
-    """
-    Wait until queue is processed. Note: processing of TimeoutError is needed for
-    monitoring RE Manager while it is restarted.
-    """
-    dt = 0.5  # Period for checking the queue status
-    time_stop = ttime.time() + time
-    while ttime.time() < time_stop:
-        ttime.sleep(dt / 2)
-        try:
-            msg = get_queue_state()
-            if condition(msg):
-                return True
-        except TimeoutError:
-            pass
-        ttime.sleep(dt / 2)
-    return False
-
-
-def clear_redis_pool():
-    # Remove all Redis entries.
-    pq = PlanQueueOperations()
-
-    async def run():
-        await pq.start()
-        await pq.delete_pool_entries()
-
-    asyncio.run(run())
-
-
-class ReManager:
-    def __init__(self, params=None):
-        self._p = None
-        self._start_manager(params)
-
-    def _start_manager(self, params=None):
-        """
-        Start RE manager.
-
-        Parameters
-        ----------
-        params: list(str)
-            The list of command line parameters passed to the manager at startup
-
-        Returns
-        -------
-        subprocess.Popen
-            Subprocess in which the manager is running. It needs to be stopped at certain point.
-        """
-        if not self._p:
-            clear_redis_pool()
-
-            cmd = ["start-re-manager"]
-            if params:
-                cmd += params
-            self._p = subprocess.Popen(
-                cmd, universal_newlines=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            )
-
-    def check_if_stopped(self, timeout=5):
-        """
-        Waits for the process to be stopped. Returns ``True`` when it is stopped.
-        and ``False`` otherwise.
-        """
-        try:
-            # Make sure that the process is terminated
-            self._p.wait(5)
-            # Disable additional attempts to stop the process
-            self._p = None
-            return True
-        except subprocess.TimeoutExpired:
-            return False
-
-    def stop_manager(self, timeout=5):
-        """
-        Attempt to exit the subprocess that is running manager in orderly way and kill it
-        after timeout.
-
-        Parameters
-        ----------
-        p: subprocess.Popen
-            Subprocess in which the manager is running
-        timeout: float
-            Timeout in seconds.
-        """
-        if self._p:
-            # Try to stop the manager in a nice way first by sending the command
-            subprocess.call(["qserver", "-c", "manager_stop"])
-            try:
-                self._p.wait(timeout)
-                clear_redis_pool()
-
-            except subprocess.TimeoutExpired:
-                # The manager is not responsive, so just kill the process.
-                self._p.kill()
-                clear_redis_pool()
-                assert False, "RE Manager failed to stop"
-
-            self._p = None
-
-
-@pytest.fixture
-def re_manager():
-    """
-    Start RE Manager as a subprocess. Tests will communicate with RE Manager via ZeroMQ.
-    """
-    re = ReManager()
-    yield re  # Nothing to return
-    re.stop_manager()
-
-
-@pytest.fixture
-def re_manager_pc_copy(tmp_path):
-    """
-    Start RE Manager as a subprocess. Tests will communicate with RE Manager via ZeroMQ.
-    Copy profile collection and return its temporary path.
-    """
-    pc_path = copy_default_profile_collection(tmp_path)
-    re = ReManager(["-p", pc_path])
-    yield re, pc_path  # Location of the copy of the default profile collection.
-    re.stop_manager()
-
-
-def test_qserver_cli_and_manager(re_manager):
+def test_qserver_cli_and_manager(re_manager):  # noqa: F811
     """
     Long test runs a series of CLI commands.
     """
@@ -295,7 +127,7 @@ def test_qserver_cli_and_manager(re_manager):
     ), "Timeout while waiting for environment to be closed"
 
 
-def test_qserver_environment_close(re_manager):
+def test_qserver_environment_close(re_manager):  # noqa: F811
     """
     Test for `environment_close` command
     """
@@ -343,7 +175,7 @@ def test_qserver_environment_close(re_manager):
     ), "Timeout while waiting for environment to be closed"
 
 
-def test_qserver_environment_destroy(re_manager):
+def test_qserver_environment_destroy(re_manager):  # noqa: F811
     """
     Test for `environment_destroy` command
     """
@@ -416,7 +248,7 @@ def test_qserver_environment_destroy(re_manager):
     ("deferred", "halt")
 ])
 # fmt: on
-def test_qserver_re_pause_continue(re_manager, option_pause, option_continue):
+def test_qserver_re_pause_continue(re_manager, option_pause, option_continue):  # noqa: F811
     """
     Test for `re_pause`, `re_resume`, `re_stop`, `re_abort` and `re_halt` commands
     """
@@ -509,7 +341,7 @@ def test_qserver_re_pause_continue(re_manager, option_pause, option_continue):
 # fmt: off
 @pytest.mark.parametrize("time_kill", ["before", 2, 8, "paused"])
 # fmt: on
-def test_qserver_manager_kill(re_manager, time_kill):
+def test_qserver_manager_kill(re_manager, time_kill):  # noqa: F811
     """
     Test for `test_manager_kill` command. The command is stopping the event loop of RE Manager,
     causeing RE Watchdog to restart it. RE Manager can be restarted at any time: the restart
@@ -610,7 +442,7 @@ raise Exception("This exception is raised to test if error handling works correc
 """, False),
 ])
 # fmt: on
-def test_qserver_env_open_various_cases(re_manager_pc_copy, additional_code, success):
+def test_qserver_env_open_various_cases(re_manager_pc_copy, additional_code, success):  # noqa: F811
 
     _, pc_path = re_manager_pc_copy
 
@@ -656,7 +488,7 @@ def test_qserver_env_open_various_cases(re_manager_pc_copy, additional_code, suc
 # fmt: off
 @pytest.mark.parametrize("option", [None, "safe_on", "safe_off"])
 # fmt: on
-def test_qserver_manager_stop_1(re_manager, option):
+def test_qserver_manager_stop_1(re_manager, option):  # noqa: F811
     """
     Method ``manager_stop``. Environment is in 'idle' state.
     """
@@ -680,7 +512,7 @@ def test_qserver_manager_stop_1(re_manager, option):
 # fmt: off
 @pytest.mark.parametrize("option", [None, "safe_on", "safe_off"])
 # fmt: on
-def test_qserver_manager_stop_2(re_manager, option):
+def test_qserver_manager_stop_2(re_manager, option):  # noqa: F811
     """
     Method ``manager_stop``. Environment is running a plan.
     """
@@ -863,7 +695,7 @@ def test_queue_plan_get_remove(re_manager, pos, pos_result, success):  # noqa F8
 # fmt: off
 @pytest.mark.parametrize("deactivate", [False, True])
 # fmt: on
-def test_qserver_queue_stop(re_manager, deactivate):
+def test_qserver_queue_stop(re_manager, deactivate):  # noqa: F811
     """
     Methods ``queue_stop`` and ``queue_stop_cancel``.
     """

@@ -3,7 +3,7 @@ import time as ttime
 import requests
 import pytest
 
-from bluesky_queueserver.manager.tests.test_general import re_manager  # noqa F401
+from bluesky_queueserver.manager.tests._common import re_manager  # noqa F401
 from bluesky_queueserver.server.tests.conftest import (  # noqa F401
     SERVER_ADDRESS,
     SERVER_PORT,

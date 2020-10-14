@@ -206,7 +206,7 @@ def start_manager():
         type=str,
         help="Path to file that contains lists of plans and devices available to users. "
         "The path may be a relative path to the profile collection directory. "
-        "If the path is directory, then the default file name "
+        "If the path is a directory, then the default file name "
         "'user_group_permissions.yaml' is used.",
     )
 

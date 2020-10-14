@@ -677,11 +677,13 @@ def _select_allowed_items(item_dict, allow_patterns, disallow_patterns):
                 for pattern in allow_patterns:
                     if re.search(pattern, item):
                         select_item = True
+                        break
         if select_item:
             if disallow_patterns and (disallow_patterns[0] is not None):
                 for pattern in disallow_patterns:
                     if re.search(pattern, item):
                         select_item = False
+                        break
         if select_item:
             items_selected[item] = copy.deepcopy(item_dict[item])
 

@@ -492,7 +492,7 @@ def _process_plan(plan):
 def gen_list_of_plans_and_devices(path=None, file_name="existing_plans_and_devices.yaml", overwrite=False):
     """
     Generate the list of plans and devices from profile collection.
-    The list is saved to file `existing_plans_and_devices.yaml`.
+    The list is saved to file ``existing_plans_and_devices.yaml``.
 
     Parameters
     ----------

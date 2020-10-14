@@ -690,7 +690,7 @@ def _select_allowed_items(item_dict, allow_patterns, disallow_patterns):
 
 def load_allowed_plans_and_devices(path_existing_plans_and_devices=None, path_user_group_permissions=None):
     """
-    Generate dictionaries of allowed plans and devices for each user group. If there is no user
+    Generate dictionaries of allowed plans and devices for each user group. If there are no user
     groups defined (path is None), then output dictionaries will have one user group 'root'
     with all existing plans and devices allowed. If the plans and dictionaries do not exist
     (path_existing_plans_and_devices is None), then empty dictionaries are returned.

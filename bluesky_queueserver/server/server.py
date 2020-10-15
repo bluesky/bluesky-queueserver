@@ -9,6 +9,11 @@ from fastapi import FastAPI, HTTPException
 logger = logging.getLogger(__name__)
 
 
+# Login and authentication are not implemented, but some API methods require
+#   login data. So for now we set up fixed user name and group
+_login_data = {"user": "John Doe", "user_group": "admin"}
+
+
 class ZMQComm:
     def __init__(self, zmq_host="localhost", zmq_port="5555"):
         self._loop = asyncio.get_event_loop()
@@ -236,7 +241,10 @@ async def queue_plan_add_handler(payload: dict):
     Adds new plan to the queue
     """
     # TODO: validate inputs!
-    msg = await re_server.send_command(command="queue_plan_add", params=payload)
+    params = payload
+    params["user"] = _login_data["user"]
+    params["user_group"] = _login_data["user_group"]
+    msg = await re_server.send_command(command="queue_plan_add", params=params)
     return msg
 
 
@@ -365,7 +373,8 @@ async def plans_allowed_handler():
     """
     Returns the lists of allowed plans.
     """
-    msg = await re_server.send_command(command="plans_allowed")
+    params = {"user_group": _login_data["user_group"]}
+    msg = await re_server.send_command(command="plans_allowed", params=params)
     return msg
 
 
@@ -374,7 +383,8 @@ async def devices_allowed_handler():
     """
     Returns the lists of allowed devices.
     """
-    msg = await re_server.send_command(command="devices_allowed")
+    params = {"user_group": _login_data["user_group"]}
+    msg = await re_server.send_command(command="devices_allowed", params=params)
     return msg
 
 

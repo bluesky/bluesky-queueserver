@@ -192,13 +192,22 @@ def start_manager():
         help="Path to directory that contains profile collection.",
     )
     parser.add_argument(
-        "--allowed_plans_and_devices",
-        dest="allowed_plans_and_devices_path",
+        "--existing_plans_and_devices",
+        dest="existing_plans_and_devices_path",
         type=str,
-        help="Path to file that contains the list of allowed plans. "
+        help="Path to file that contains the list of existing plans and devices. "
         "The path may be a relative path to the profile collection directory. "
         "If the path is directory, then the default file name "
-        "'allowed_plans_and_devices.yaml' is used.",
+        "'existing_plans_and_devices.yaml' is used.",
+    )
+    parser.add_argument(
+        "--user_group_permissions",
+        dest="user_group_permissions_path",
+        type=str,
+        help="Path to file that contains lists of plans and devices available to users. "
+        "The path may be a relative path to the profile collection directory. "
+        "If the path is a directory, then the default file name "
+        "'user_group_permissions.yaml' is used.",
     )
 
     logging.basicConfig(level=logging.WARNING)
@@ -228,25 +237,44 @@ def start_manager():
 
     config_worker["profile_collection_path"] = pc_path
 
-    default_allowed_pd_fln = "allowed_plans_and_devices.yaml"
-    if args.allowed_plans_and_devices_path:
-        allowed_pd_path = os.path.expanduser(args.allowed_plans_and_devices_path)
-        if not os.path.isabs(allowed_pd_path):
-            allowed_pd_path = os.path.join(pc_path, allowed_pd_path)
-        if not allowed_pd_path.endswith(".yaml"):
-            os.path.join(allowed_pd_path, default_allowed_pd_fln)
+    default_existing_pd_fln = "existing_plans_and_devices.yaml"
+    if args.existing_plans_and_devices_path:
+        existing_pd_path = os.path.expanduser(args.existing_plans_and_devices_path)
+        if not os.path.isabs(existing_pd_path):
+            existing_pd_path = os.path.join(pc_path, existing_pd_path)
+        if not existing_pd_path.endswith(".yaml"):
+            os.path.join(existing_pd_path, default_existing_pd_fln)
     else:
-        allowed_pd_path = os.path.join(pc_path, default_allowed_pd_fln)
-    if not os.path.isfile(allowed_pd_path):
+        existing_pd_path = os.path.join(pc_path, default_existing_pd_fln)
+    if not os.path.isfile(existing_pd_path):
         logger.error(
             "The list of allowed plans and devices was not found at "
             "'%s'. Proceed without the list: all plans and devices are allowed.",
-            allowed_pd_path,
+            existing_pd_path,
         )
-        allowed_pd_path = None
+        existing_pd_path = None
 
-    config_worker["allowed_plans_and_devices_path"] = allowed_pd_path
-    config_manager["allowed_plans_and_devices_path"] = allowed_pd_path
+    default_user_group_pd_fln = "user_group_permissions.yaml"
+    if args.user_group_permissions_path:
+        user_group_pd_path = os.path.expanduser(args.user_group_permissions_path)
+        if not os.path.isabs(user_group_pd_path):
+            user_group_pd_path = os.path.join(pc_path, user_group_pd_path)
+        if not user_group_pd_path.endswith(".yaml"):
+            os.path.join(user_group_pd_path, default_existing_pd_fln)
+    else:
+        user_group_pd_path = os.path.join(pc_path, default_user_group_pd_fln)
+    if not os.path.isfile(user_group_pd_path):
+        logger.error(
+            "The file with user permissions was not found at "
+            "'%s'. All existing plans and devices will be allowed to all users.",
+            user_group_pd_path,
+        )
+        user_group_pd_path = None
+
+    config_worker["existing_plans_and_devices_path"] = existing_pd_path
+    config_manager["existing_plans_and_devices_path"] = existing_pd_path
+    config_worker["user_group_permissions_path"] = user_group_pd_path
+    config_manager["user_group_permissions_path"] = user_group_pd_path
 
     wp = WatchdogProcess(config_worker=config_worker, config_manager=config_manager)
     try:

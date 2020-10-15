@@ -15,7 +15,7 @@ from .profile_ops import (
     load_profile_collection,
     plans_from_nspace,
     devices_from_nspace,
-    load_list_of_plans_and_devices,
+    load_allowed_plans_and_devices,
     parse_plan,
 )
 
@@ -72,7 +72,7 @@ class RunEngineWorker(Process):
 
         self._db = None
         self._config = config or {}
-        self._allowed_plans, self._allowed_devices = [], []
+        self._allowed_plans, self._allowed_devices = {}, {}
 
         self._re_namespace, self._existing_plans, self._existing_devices = {}, {}, {}
 
@@ -514,9 +514,12 @@ class RunEngineWorker(Process):
 
         # Load lists of allowed plans and devices
         logger.info("Loading the lists of allowed plans and devices ...")
-        path_pd = self._config["allowed_plans_and_devices_path"]
+        path_pd = self._config["existing_plans_and_devices_path"]
+        path_ug = self._config["user_group_permissions_path"]
         try:
-            self._allowed_plans, self._allowed_devices = load_list_of_plans_and_devices(path_pd)
+            self._allowed_plans, self._allowed_devices = load_allowed_plans_and_devices(
+                path_existing_plans_and_devices=path_pd, path_user_group_permissions=path_ug
+            )
         except Exception as ex:
             logger.exception(
                 "Error occurred while loading lists of allowed plans and devices from '%s': %s", path_pd, str(ex)

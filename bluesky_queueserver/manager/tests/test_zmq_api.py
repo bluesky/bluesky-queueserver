@@ -1,4 +1,10 @@
 import pytest
+import os
+
+from bluesky_queueserver.manager.profile_ops import (
+    get_default_profile_collection_dir,
+    load_allowed_plans_and_devices,
+)
 
 from ._common import (
     zmq_communicate,
@@ -13,6 +19,9 @@ _plan3 = {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 5, "del
 
 # User name and user group name used throughout most of the tests.
 _user, _user_group = "Testing Script", "admin"
+
+_existing_plans_and_devices_fln = "existing_plans_and_devices.yaml"
+_user_group_permissions_fln = "user_group_permissions.yaml"
 
 # =======================================================================================
 #                             Method 'queue_plan_add'
@@ -146,3 +155,79 @@ def test_zmq_api_queue_plan_add_3_fail(re_manager):  # noqa F811
     assert len(resp8["queue"]) == 1
     assert resp8["queue"][0] == resp7["plan"]
     assert resp8["running_plan"] == {}
+
+
+# =======================================================================================
+#                      Method 'plans_allowed', 'devices_allowed'
+
+
+def test_zmq_api_plans_allowed_and_devices_allowed_1(re_manager):  # noqa F811
+    """
+    Basic calls to 'plans_allowed', 'devices_allowed' methods.
+    """
+    params = {"user_group": _user_group}
+    resp1, _ = zmq_communicate("plans_allowed", params)
+    assert resp1["success"] is True
+    assert resp1["msg"] == ""
+    assert isinstance(resp1["plans_allowed"], dict)
+    assert len(resp1["plans_allowed"]) > 0
+    resp2, _ = zmq_communicate("devices_allowed", params)
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+    assert isinstance(resp2["devices_allowed"], dict)
+    assert len(resp2["devices_allowed"]) > 0
+
+
+def test_zmq_api_plans_allowed_and_devices_allowed_2(re_manager):  # noqa F811
+    """
+    Test that group names are recognized correctly. The number of returned plans and
+    devices is compared to the number of plans and devices loaded from the profile
+    collection. The functions for loading files and generating lists are tested
+    separately somewhere else.
+    """
+
+    pc_path = get_default_profile_collection_dir()
+    path_epd = os.path.join(pc_path, _existing_plans_and_devices_fln)
+    path_up = os.path.join(pc_path, _user_group_permissions_fln)
+
+    allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+        path_existing_plans_and_devices=path_epd, path_user_group_permissions=path_up
+    )
+
+    # Make sure that the user groups is the same. Otherwise it's a bug.
+    assert set(allowed_plans.keys()) == set(allowed_devices.keys())
+
+    group_info = {
+        _: {"n_plans": len(allowed_plans[_]), "n_devices": len(allowed_devices[_])} for _ in allowed_plans.keys()
+    }
+
+    for group, info in group_info.items():
+        params = {"user_group": group}
+        resp1, _ = zmq_communicate("plans_allowed", params)
+        resp2, _ = zmq_communicate("devices_allowed", params)
+        allowed_plans = resp1["plans_allowed"]
+        allowed_devices = resp2["devices_allowed"]
+        assert len(allowed_plans) == info["n_plans"]
+        assert len(allowed_devices) == info["n_devices"]
+
+
+# fmt: off
+@pytest.mark.parametrize("params, message", [
+    ({}, "user group is not specified"),
+    ({"user_group": "no_such_group"}, "Unknown user group: 'no_such_group'"),
+])
+# fmt: on
+def test_zmq_api_plans_allowed_and_devices_allowed_3_fail(re_manager, params, message):  # noqa F811
+    """
+    Some failing cases for 'plans_allowed', 'devices_allowed' methods.
+    """
+    resp1, _ = zmq_communicate("plans_allowed", params)
+    assert resp1["success"] is False
+    assert message in resp1["msg"]
+    assert isinstance(resp1["plans_allowed"], dict)
+    assert len(resp1["plans_allowed"]) == 0
+    resp2, _ = zmq_communicate("devices_allowed", params)
+    assert resp1["success"] is False
+    assert message in resp1["msg"]
+    assert isinstance(resp2["devices_allowed"], dict)
+    assert len(resp2["devices_allowed"]) == 0

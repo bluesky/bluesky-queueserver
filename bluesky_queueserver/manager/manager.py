@@ -701,7 +701,7 @@ class RunEngineManager(Process):
 
         try:
             if "user_group" not in request:
-                raise Exception("Incorrect request format: user group was not found")
+                raise Exception("Incorrect request format: user group is not specified")
 
             user_group = request["user_group"]
 
@@ -728,7 +728,7 @@ class RunEngineManager(Process):
 
         try:
             if "user_group" not in request:
-                raise Exception("Incorrect request format: user group was not found")
+                raise Exception("Incorrect request format: user group is not specified")
 
             user_group = request["user_group"]
 

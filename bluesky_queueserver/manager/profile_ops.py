@@ -584,7 +584,7 @@ _user_group_permission_schema = {
             "type": "object",
             "additionalProperties": {
                 "type": "object",
-                "requiredProperties": ["allowed", "forbidden"],
+                "required": ["allowed", "forbidden"],
                 "additionalProperties": False,
                 "properties": {
                     "allowed_plans": {

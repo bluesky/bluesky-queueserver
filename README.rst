@@ -54,9 +54,17 @@ and then kill the processes::
 
   $ kill -9 <pid>
 
-Installation of QueueServer from source::
+
+Setup redis linux::
 
   sudo apt install redis
+
+Setup redis mac::
+
+  https://gist.github.com/tomysmile/1b8a321e7c58499ef9f9441b2faa0aa8
+
+Installation of QueueServer from source::
+
   pip install -e .
 
 This also sets up an entry point for the 'qserver' CLI tool.

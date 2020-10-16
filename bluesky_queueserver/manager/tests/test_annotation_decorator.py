@@ -343,7 +343,6 @@ def test_annotation_dectorator_5(custom_annotation, expected_docstring):
 
     assert func._custom_parameter_annotation_ == custom_annotation
     assert list(func("gridscan", val_kwarg="det2")) == list(range(len("gridscan") + len("det2")))
-    ## assert False, print(func.__doc__)
     assert func.__name__ == "func"
     assert func.__doc__ == expected_docstring
 
@@ -420,6 +419,7 @@ str
     Yields strings from the list of three strings.
 """
 
+
 # fmt: off
 @pytest.mark.parametrize("custom_annotation, expected_docstring", [
     (_more_complicated_annotation, _more_complicated_annotation_doc),
@@ -447,6 +447,5 @@ def test_annotation_dectorator_6(custom_annotation, expected_docstring):
 
     assert func._custom_parameter_annotation_ == custom_annotation
     assert list(func("det1", ["det1", "det2"])) == ["str1", "str2", "str3"]
-    ##assert False, print(func.__doc__)
     assert func.__name__ == "func"
     assert func.__doc__ == expected_docstring

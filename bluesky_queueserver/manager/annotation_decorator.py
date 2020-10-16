@@ -162,7 +162,7 @@ def _extract_yield_type(param_annotation):
 
     # Special case: typing.Generator(<type>, None, None) - extract <type>
     if not success:
-        param_annotation, success = _get_enclosed_str(param_annotation, "typing.Generator\[", "]")
+        param_annotation, success = _get_enclosed_str(param_annotation, r"typing.Generator\[", "]")
         if success:
             p_list = param_annotation.split(",")
             if p_list:

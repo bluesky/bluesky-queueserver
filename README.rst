@@ -90,6 +90,10 @@ The 'qserver' CLI tool can be started from a separate shell. Display help option
 
   qserver -h
 
+Install httpie::
+
+  https://httpie.org/docs#installation
+
 The most basic request is 'ping' intended to fetch some response from RE Manager::
 
   qserver -c ping

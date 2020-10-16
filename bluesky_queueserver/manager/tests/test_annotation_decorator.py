@@ -1,4 +1,4 @@
-import typing
+# import typing
 from bluesky_queueserver.manager.annotation_decorator import parameter_annotation_decorator
 
 """
@@ -40,13 +40,30 @@ def _plan_for_testing(
 """
 
 _simple_annotation_with_return = {
-    "description": "Simple function",
+    "description": "Simple function with return value",
     "parameters": {
         "val_arg": {"description": "Parameter 'val_arg'"},
         "val_kwarg": {"description": "Parameter 'val_kwarg'"},
     },
     "returns": {"description": "Return value"},
 }
+
+_simple_annotation_with_return_doc = """Simple function with return value
+
+Parameters
+----------
+val_arg
+    Parameter 'val_arg'
+    Kind: positional or keyword
+val_kwarg
+    Parameter 'val_kwarg'
+    Kind: keyword only
+    Default: 10
+
+Returns
+-------
+Return value
+"""
 
 
 def test_annotation_dectorator_1():
@@ -60,15 +77,29 @@ def test_annotation_dectorator_1():
 
     assert func._custom_parameter_annotation_ == _simple_annotation_with_return
     assert func(10, val_kwarg=20) == 30
+    assert func.__doc__ == _simple_annotation_with_return_doc
 
 
 _simple_annotation = {
-    "description": "Simple function with return value",
+    "description": "Simple generator function",
     "parameters": {
         "val_arg": {"description": "Parameter 'val_arg'"},
         "val_kwarg": {"description": "Parameter 'val_kwarg'"},
     },
 }
+
+_simple_annotation_doc = """Simple generator function
+
+Parameters
+----------
+val_arg
+    Parameter 'val_arg'
+    Kind: positional or keyword
+val_kwarg
+    Parameter 'val_kwarg'
+    Kind: keyword only
+    Default: 10
+"""
 
 
 def test_annotation_dectorator_2():
@@ -84,4 +115,4 @@ def test_annotation_dectorator_2():
 
     assert func._custom_parameter_annotation_ == _simple_annotation
     assert list(func(10, val_kwarg=20)) == list(range(30))
-
+    assert func.__doc__ == _simple_annotation_doc

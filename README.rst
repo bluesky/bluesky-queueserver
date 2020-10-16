@@ -86,6 +86,10 @@ tool. If only CLI tool will be used, then there is no need to start the Web Serv
 demostrates how to control RE Manager using CLI commands and HTTP requests. The CLI tool commands will be
 shown alongside with HTTP requests.
 
+To view interactive API docs, visit::
+
+  http://localhost:60610/docs
+
 The 'qserver' CLI tool can be started from a separate shell. Display help options::
 
   qserver -h

@@ -86,7 +86,7 @@ tool. If only CLI tool will be used, then there is no need to start the Web Serv
 demostrates how to control RE Manager using CLI commands and HTTP requests. The CLI tool commands will be
 shown alongside with HTTP requests.
 
-To view interactivate API docs visit::
+To view interactive API docs, visit::
 
   http://localhost:60610/docs
 

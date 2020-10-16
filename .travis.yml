@@ -38,7 +38,6 @@ jobs:
 
 before_install:
   - |
-    # set -e
     if [ "${FLAKE_8}" == "true" ]; then
         pip install flake8
         flake8 .
@@ -57,13 +56,19 @@ install:
 
 before_script:
   - |
-    set -e
     if [ "${BUILD_DOCS}" == "true" ]; then
         make -C docs/ html
-        pip install doctr
-        doctr deploy --built-docs docs/build/html .
         res=$?
-        echo "Docs deployment with 'doctr' finished with exit code ($res)."
+        echo "Docs build finished with the exit code ($res)."
+
+        if [ $res -gt 0 ]; then
+            echo "Not attempting to run doctr due to the docs failed to build"
+        else
+            pip install doctr
+            doctr deploy --built-docs docs/build/html .
+            res=$?
+            echo "Docs deployment with 'doctr' finished with the exit code ($res)."
+        fi
         exit $res
     fi
 

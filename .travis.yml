@@ -10,31 +10,40 @@ env:
     - BUILD_DOCS=false
     - SUBMIT_CODECOV=false
     - FLAKE_8=false
-    # Doctr deploy key for bluesky/bluesky-queueserver
-    - secure: "hnbMpEgR/qH9h2nIDFBw2j5MrxnvkuT0fXrxeDH0l9EB6p1A45wkHC+kl2GzUHck7LLU8n47tjiJK9PssVZPQOYmMsK3lpLTqPfZEQ1DvUeNis2MVs3fjtjoUqRF0DAhuXI/+sG2qCNGm0+CHVlp1BPaRQxVzBQoPIcYy0oAqGzjx+kL7g3ucrsKqF6nkkuQ71Zj4PhxsPNAI3/7V2REOOPeEiXVfib8JxDsWYXjn/2/2IiGS0JR8yLkjRFmhEKGQxKJfNwpbLYL2WQd3FkvtaZIsUJ40x0Fuk1lbISdZ7UFfBxhbrzRiG8DLDwtUwvDsw0ZSf7qh7qM7WQzxs7lz2pGTtdJBC1+UZJ1xwzCaF8YCJWHVurkk9hp5QLnOGGLq1vopqjn+M7Qnv178HFApZ74H11hnbX3Gv4oRlUP4AmSdYmWDyb83zvIWsl+vcLwzatZBJ/m1msacSidfswdxSWATeCX5rzO7KQ8A++QTu8Sjb7Xe8607V1Z6PNJzM9sAzWGsCTWydx/5TDAocs0S0gJDhwZm+bduwOR/OloPyvDGT1zVS1V4FSF1rlUhr8iiMhtbSqDADt5i8nbXIC1VBsY6bgvRJJjR88Gi7AVmyc19bI+4JKFZRPFpzvqRfb4mO5ry9BVM+pTm5r+Zn2na3tfgL5ZkYECceFi8YIfrss="
 
 cache:
   directories:
     - $HOME/.cache/pip
     - $HOME/.ccache  # https://github.com/travis-ci/travis-ci/issues/5853
 
-
 jobs:
   fast_finish: true
   include:
-    - python: 3.8  # This build will run only 'flake8'
-      env: FLAKE_8=true
     - python: 3.7
     - python: 3.8
-      env: BUILD_DOCS=true SUBMIT_CODECOV=true
+
+    - python: 3.8  # This build will only run 'flake8'
+      name: "Check style"
+      env: FLAKE_8=true
+
+    - python: 3.8  # This build will only deploy docs.
+      name: "Build/deploy docs"
+      env:
+        - BUILD_DOCS=true
+        - SUBMIT_CODECOV=true
+        # Doctr deploy key for bluesky/bluesky-queueserver
+        - secure: "hnbMpEgR/qH9h2nIDFBw2j5MrxnvkuT0fXrxeDH0l9EB6p1A45wkHC+kl2GzUHck7LLU8n47tjiJK9PssVZPQOYmMsK3lpLTqPfZEQ1DvUeNis2MVs3fjtjoUqRF0DAhuXI/+sG2qCNGm0+CHVlp1BPaRQxVzBQoPIcYy0oAqGzjx+kL7g3ucrsKqF6nkkuQ71Zj4PhxsPNAI3/7V2REOOPeEiXVfib8JxDsWYXjn/2/2IiGS0JR8yLkjRFmhEKGQxKJfNwpbLYL2WQd3FkvtaZIsUJ40x0Fuk1lbISdZ7UFfBxhbrzRiG8DLDwtUwvDsw0ZSf7qh7qM7WQzxs7lz2pGTtdJBC1+UZJ1xwzCaF8YCJWHVurkk9hp5QLnOGGLq1vopqjn+M7Qnv178HFApZ74H11hnbX3Gv4oRlUP4AmSdYmWDyb83zvIWsl+vcLwzatZBJ/m1msacSidfswdxSWATeCX5rzO7KQ8A++QTu8Sjb7Xe8607V1Z6PNJzM9sAzWGsCTWydx/5TDAocs0S0gJDhwZm+bduwOR/OloPyvDGT1zVS1V4FSF1rlUhr8iiMhtbSqDADt5i8nbXIC1VBsY6bgvRJJjR88Gi7AVmyc19bI+4JKFZRPFpzvqRfb4mO5ry9BVM+pTm5r+Zn2na3tfgL5ZkYECceFi8YIfrss="
+    # As of 2020-10-08, Python 3.9 distribution is not available in TravisCI's repos yet.
+    # - python: 3.9
 
 before_install:
-  - if [ $FLAKE_8 == 'true' ]; then
-      pip install flake8;
-      flake8 .;
-      let res=$?;
-      echo "The project code was verified with 'flake8'. Exit code ($res).";
-      exit $res;
+  - |
+    if [ "${FLAKE_8}" == "true" ]; then
+        pip install flake8
+        flake8 .
+        res=$?
+        echo "The project code was verified with 'flake8'. Exit code ($res)."
+        exit $res
     fi
 
 install:
@@ -45,16 +54,27 @@ install:
   - pip install scikit-image
   - pip list
 
+before_script:
+  - |
+    if [ "${BUILD_DOCS}" == "true" ]; then
+        make -C docs/ html
+        res=$?
+        echo "Docs build finished with the exit code ($res)."
+
+        if [ $res -gt 0 ]; then
+            echo "Not attempting to run doctr due to the docs failed to build"
+        else
+            pip install doctr
+            doctr deploy --built-docs docs/build/html .
+            res=$?
+            echo "Docs deployment with 'doctr' finished with the exit code ($res)."
+        fi
+        exit $res
+    fi
+
 script:
   - coverage run -m pytest -v  # Run the tests and check for test coverage.
   - coverage report -m  # Generate test coverage report.
-  - set -e
-  - if [ BUILD_DOCS == 'true' ]; then
-      make -C docs html;
-      pip install doctr;
-      doctr deploy --built-docs docs/build/html .;
-    fi
-
 
 after_success:
   # - if [ $SUBMIT_CODECOV == 'true' ]; then codecov; fi;

@@ -11,11 +11,9 @@ import re
 
 _parameter_annotation_schema = {
     "type": "object",
-    "required": ["description", "parameters"],
+    "required": ["description"],
     "properties": {
         "description": {"type": "string"},
-    },
-    "additionalProperties": {
         "parameters": {
             "type": "object",
             "additionalProperties": {
@@ -50,6 +48,7 @@ _parameter_annotation_schema = {
             },
         },
     },
+    "additionalProperties": False,
 }
 
 
@@ -199,9 +198,8 @@ def _collect_data_for_docstring(func, annotation):
     #   values for generator is 'Yields' and for regular functions it is 'Returns'
     doc_params["is_generator"] = inspect.isgeneratorfunction(func)
 
+    doc_params["parameters"] = {}
     if parameters:  # The function may have no parameters
-        doc_params["parameters"] = dict()
-
         # We will print names of ALL parameters from the signature
         for p_name, p in parameters.items():
             # Select description, annotation and types from available sources.
@@ -424,13 +422,14 @@ def parameter_annotation_decorator(annotation):
         parameters = sig.parameters
 
         param_unknown = []
-        for p in annotation["parameters"]:
-            if p not in parameters:
-                param_unknown.append(p)
+        if "parameters" in annotation:
+            for p in annotation["parameters"]:
+                if p not in parameters:
+                    param_unknown.append(p)
         if param_unknown:
             msg = (
                 f"Custom annotation parameters {param_unknown} are not "
-                f"the signature of function '{func.__name__}'."
+                f"in the signature of function '{func.__name__}'."
             )
             raise ValueError(msg)
         setattr(wrapper, "_custom_parameter_annotation_", annotation)

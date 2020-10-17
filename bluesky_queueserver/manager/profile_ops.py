@@ -11,6 +11,7 @@ import sys
 import pprint
 import jsonschema
 import copy
+import pickle
 
 import logging
 
@@ -374,7 +375,7 @@ def validate_plan(plan, *, allowed_plans):
                 )
 
             param = parameters[n_param]
-            pkind = param["kind"]
+            pkind = param["kind"]["name"]
             if pkind == "VAR_POSITIONAL":
                 # Absorbs the rest of 'args' even if there are no more args.
                 n_param += 1
@@ -397,7 +398,7 @@ def validate_plan(plan, *, allowed_plans):
                 completed = True
 
         if not completed:
-            if parameters[n_param]["kind"] == "VAR_POSITIONAL":
+            if parameters[n_param]["kind"]["name"] == "VAR_POSITIONAL":
                 n_param += 1
 
             if n_param >= len(parameters):
@@ -414,9 +415,9 @@ def validate_plan(plan, *, allowed_plans):
             #   more args are expected.
             var_keyword_exists = False
             for pname, pinfo in premaining.copy().items():
-                if pinfo["kind"] == "VAR_POSITIONAL":
+                if pinfo["kind"]["name"] == "VAR_POSITIONAL":
                     premaining.pop(pname)
-                if pinfo["kind"] == "VAR_KEYWORD":
+                if pinfo["kind"]["name"] == "VAR_KEYWORD":
                     var_keyword_exists = True
                     premaining.pop(pname)
 
@@ -434,7 +435,7 @@ def validate_plan(plan, *, allowed_plans):
             # Now checked if there are any missing kwargs that don't have default values.
             kwargs_missed = []
             for pname, pinfo in premaining.items():
-                if "default" not in pinfo:
+                if ("default" not in pinfo) or (not pinfo["default"]):
                     kwargs_missed.append(pname)
             if kwargs_missed:
                 raise ValueError(f"Plan parameters do not contain required args or kwargs {kwargs_missed}.")
@@ -450,6 +451,43 @@ def validate_plan(plan, *, allowed_plans):
 #       For now it can be called from IPython. It shouldn't be called automatically
 #       at any time, since it loads profile collection. The list of allowed plans
 #       and devices can be also typed manually, since it shouldn't be very large.
+
+def bytes2hex(bytes_array):
+    """
+    Converts byte array (result of ``pickle.dumps`` to spaced hexadecimal string representation.
+
+    Parameters
+    ----------
+    bytes_array: bytes
+        Array of bytes to be converted.
+
+    Returns
+    -------
+    str
+        Hexadecimal representation of the byte array.
+    """
+    s_hex = bytes_array.hex()
+    # Insert spaces between each hex number. It makes YAML file formatting better.
+    return ' '.join([s_hex[_: _ + 2] for _ in range(0, len(s_hex), 2)])
+
+
+def hex2bytes(hex_str):
+    """
+    Converts spaced hexadecimal string (output of ``bytes2hex`` function to an array of bytes.
+
+    Parameters
+    ----------
+    hex_str: str
+        String of hexadecimal numbers separated by spaces.
+
+    Returns
+    -------
+    bytes
+        Array of bytes (ready to be unpicked).
+    """
+    # Delete spaces from the string to prepare it for conversion.
+    hex_str = hex_str.replace(" ", "")
+    return bytes.fromhex(hex_str)
 
 
 def _process_plan(plan):
@@ -477,15 +515,40 @@ def _process_plan(plan):
 
     sig = inspect.signature(plan)
 
-    ret = {"module": plan.__module__, "name": plan.__name__, "parameters": []}
+    if hasattr(plan, "_custom_parameter_annotation_"):
+        param_annotation = plan._custom_parameter_annotation_
+    else:
+        param_annotation = None
+
+    ret = {"name": plan.__name__, "parameters": []}
+
+    if param_annotation:
+        # The function description should always be present
+        ret["description"] = param_annotation.get("description", "")
+
+    # Function parameters
     for p in sig.parameters.values():
         working_dict = {"name": p.name}
         ret["parameters"].append(working_dict)
-        for target in ["kind", "default", "annotation"]:
-            v = getattr(p, target)
-            if v is not p.empty:
-                working_dict[target] = filter_values(v)
 
+        working_dict["kind"] = {"name": p.kind.name, "value": p.kind.value}
+
+        working_dict["default"] = str(filter_values(p.default))
+        working_dict["default_pickled"] = bytes2hex(pickle.dumps(p.default))
+
+        working_dict["annotation"] = str(filter_values(p.annotation))
+        working_dict["annotation_pickled"] = bytes2hex(pickle.dumps(p.annotation))
+
+        if param_annotation and ("parameters" in param_annotation):
+            working_dict["custom"] = param_annotation["parameters"].get(p.name, {})
+
+    # Return value
+    return_info = {}
+    return_info["annotation"] = str(filter_values(sig.return_annotation))
+    return_info["annotation_pickled"] = bytes2hex(pickle.dumps(sig.return_annotation))
+    if param_annotation and ("returns" in param_annotation):
+        return_info["custom"] = param_annotation["returns"]
+    ret["returns"] = return_info
     return ret
 
 
@@ -532,7 +595,7 @@ def gen_list_of_plans_and_devices(path=None, file_name="existing_plans_and_devic
             raise IOError(f"File '{file_path}' already exists. File overwriting is disabled.")
 
         with open(file_path, "w") as stream:
-            stream.write("# This file is automatically generated. Edit at your own risk.")
+            stream.write("# This file is automatically generated. Edit at your own risk.\n")
             yaml.dump(existing_plans_and_devices, stream)
 
     except Exception as ex:
@@ -567,7 +630,7 @@ def load_existing_plans_and_devices(path_to_file=None):
         )
 
     with open(path_to_file, "r") as stream:
-        existing_plans_and_devices = yaml.safe_load(stream)
+        existing_plans_and_devices = yaml.load(stream, Loader=yaml.FullLoader)
 
     existing_plans = existing_plans_and_devices["existing_plans"]
     existing_devices = existing_plans_and_devices["existing_devices"]

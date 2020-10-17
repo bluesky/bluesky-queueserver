@@ -1,4 +1,7 @@
 # flake8: noqa
+import typing
+import ophyd
+import bluesky
 from bluesky_queueserver.manager.annotation_decorator import parameter_annotation_decorator
 
 
@@ -12,19 +15,27 @@ from bluesky_queueserver.manager.annotation_decorator import parameter_annotatio
                 "devices": {"Motors": ("motor1", "motor2")},
             },
             "detectors": {
-                "descriptions": "Detectors to use for measurement.",
+                "description": "Detectors to use for measurement.",
                 "annotation": "typing.List[Detectors]",
                 "devices": {"Detectors": ("det1", "det2", "det3")},
             },
             "positions": {
-                "descriptions": "Positions to for motors. The number of positions must be equal "
+                "description": "Motor positions. The number of positions must be equal "
                 "to the number of the motors.",
                 "annotation": "typing.List[float]",
             },
         },
+        "returns": {
+            "description": "Yields a sequence of plan messages.",
+            "annotation": "typing.Generator[tuple, None, None]",
+        }
     }
 )
-def move_then_count(motors, detectors, positions):
+def move_then_count(
+    motors: typing.List[ophyd.device.Device],
+    detectors: typing.List[ophyd.device.Device],
+    positions: typing.List[float],
+) -> typing.Generator[bluesky.utils.Msg, None, None]:
     if not isinstance(motors, (list, tuple)):
         raise TypeError(f"Parameter 'motors' should be a list or a tuple: type(motors) = {type(motors)}")
     if not isinstance(detectors, (list, tuple)):

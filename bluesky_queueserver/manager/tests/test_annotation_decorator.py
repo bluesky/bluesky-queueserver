@@ -1,5 +1,6 @@
 import typing
 import pytest
+import jsonschema
 from bluesky_queueserver.manager.annotation_decorator import (
     parameter_annotation_decorator,
     _convert_annotation_to_type,
@@ -449,3 +450,80 @@ def test_annotation_dectorator_6(custom_annotation, expected_docstring):
     assert list(func("det1", ["det1", "det2"])) == ["str1", "str2", "str3"]
     assert func.__name__ == "func"
     assert func.__doc__ == expected_docstring
+
+
+_trivial_annotation = {
+    "description": "Example of annotation with varargs and varkwargs.",
+}
+
+_trivial_annotation_doc = """Example of annotation with varargs and varkwargs.
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("custom_annotation, expected_docstring", [
+    (_trivial_annotation, _trivial_annotation_doc),
+])
+# fmt: on
+def test_annotation_dectorator_7(custom_annotation, expected_docstring):
+    """
+    The trivial case of the decorator that only specifieds function description
+    and the function has no parameters.
+    """
+    @parameter_annotation_decorator(custom_annotation)
+    def func():
+        str_list = ["str1", "str2", "str3"]
+        for s in str_list:
+            yield s
+
+    assert func._custom_parameter_annotation_ == custom_annotation
+    assert list(func()) == ["str1", "str2", "str3"]
+    assert func.__name__ == "func"
+    assert func.__doc__ == expected_docstring
+
+
+_trivial_annotation_error1 = {
+    "descriptions": "Example of annotation with varargs and varkwargs.",
+}
+
+_trivial_annotation_error2 = {
+}
+
+_trivial_annotation_error3 = {
+    "description": "Example of annotation with varargs and varkwargs.",
+    "parameters": {
+        "no_such_parameter": {
+            "description": "The function has no such parameter"
+        }
+    }
+}
+
+_trivial_annotation_error4 = {
+    "description": "Example of annotation with varargs and varkwargs.",
+    "parameters": {
+        "no_such_parameter4": {
+            "descriptions": "Required key is 'discription'. Schema validation should fail."
+        }
+    }
+}
+
+
+# fmt: off
+@pytest.mark.parametrize("custom_annotation, ex_type, err_msg", [
+    (_trivial_annotation_error1, jsonschema.ValidationError,  "'description' is a required property"),
+    (_trivial_annotation_error2, jsonschema.ValidationError, "'description' is a required property"),
+    (_trivial_annotation_error3, ValueError, r"\['no_such_parameter'] are not in the signature of function"),
+    (_trivial_annotation_error4, jsonschema.ValidationError,
+     r"'description' is a required property"),
+])
+# fmt: on
+def test_annotation_dectorator_8_fail(custom_annotation, ex_type, err_msg):
+    """
+    The trivial case of the decorator that only specifieds function description
+    and the function has no parameters.
+    """
+    with pytest.raises(ex_type, match=err_msg):
+        @parameter_annotation_decorator(custom_annotation)
+        def func():
+            pass
+

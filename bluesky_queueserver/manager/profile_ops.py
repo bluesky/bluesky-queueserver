@@ -722,6 +722,14 @@ def _process_plan(plan):
     return ret
 
 
+def _prepare_plans(plans):
+    return {k: _process_plan(v) for k, v in plans.items()}
+
+
+def _prepare_devices(devices):
+    return {k: {"classname": type(v).__name__, "module": type(v).__module__} for k, v in devices.items()}
+
+
 def gen_list_of_plans_and_devices(path=None, file_name="existing_plans_and_devices.yaml", overwrite=False):
     """
     Generate the list of plans and devices from profile collection.
@@ -754,10 +762,8 @@ def gen_list_of_plans_and_devices(path=None, file_name="existing_plans_and_devic
         devices = devices_from_nspace(nspace)
 
         existing_plans_and_devices = {
-            "existing_plans": {k: _process_plan(v) for k, v in plans.items()},
-            "existing_devices": {
-                k: {"classname": type(v).__name__, "module": type(v).__module__} for k, v in devices.items()
-            },
+            "existing_plans": _prepare_plans(plans),
+            "existing_devices": _prepare_devices(devices),
         }
 
         file_path = os.path.join(path, file_name)

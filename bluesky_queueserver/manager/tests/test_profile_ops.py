@@ -26,6 +26,8 @@ from bluesky_queueserver.manager.profile_ops import (
     load_allowed_plans_and_devices,
     hex2bytes,
     bytes2hex,
+    _prepare_plans,
+    _prepare_devices,
 )
 
 
@@ -275,6 +277,35 @@ def test_load_existing_plans_and_devices():
     existing_plans, existing_devices = load_existing_plans_and_devices(None)
     assert existing_plans == {}
     assert existing_devices == {}
+
+
+def test_verify_default_profile_collection():
+    """
+    Verify if the list of existing plans and devices matches current default profile collection.
+    This test may fail if the the algorithm for generating the lists, the set of built-in
+    bluesky plans or simulated Ophyd devices was changed. Generate the new list to fix the
+    issue.
+    """
+    # Create dictionaries of existing plans and devices. Apply all preprocessing steps.
+    pc_path = get_default_profile_collection_dir()
+    nspace = load_profile_collection(pc_path)
+
+    plans = plans_from_nspace(nspace)
+    plans = _prepare_plans(plans)
+
+    devices = devices_from_nspace(nspace)
+    devices = _prepare_devices(devices)
+
+    # Read the list of the existing plans of devices
+    file_path = os.path.join(pc_path, "existing_plans_and_devices.yaml")
+    existing_plans, existing_devices = load_existing_plans_and_devices(file_path)
+
+    # Compare
+    assert set(plans.keys()) == set(existing_plans.keys())
+    assert set(devices) == set(existing_devices)
+
+    assert plans == existing_plans
+    assert devices == existing_devices
 
 
 _user_groups_text = r"""user_groups:

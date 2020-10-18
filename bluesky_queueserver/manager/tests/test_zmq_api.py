@@ -112,7 +112,7 @@ def test_zmq_api_queue_plan_add_3_fail(re_manager):  # noqa F811
     params2 = {"plan": plan2, "user": _user, "user_group": _user_group}
     resp2, _ = zmq_communicate("queue_plan_add", params2)
     assert resp2["success"] is False
-    assert "Unexpected kwargs ['abc'] in the plan parameters" in resp2["msg"]
+    assert "Failed to add a plan: Plan validation failed: got an unexpected keyword argument 'abc'" in resp2["msg"]
 
     # User name is not specified
     params3 = {"plan": plan2, "user_group": _user_group}

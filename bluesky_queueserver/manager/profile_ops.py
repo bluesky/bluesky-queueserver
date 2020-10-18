@@ -730,6 +730,25 @@ def _prepare_devices(devices):
     return {k: {"classname": type(v).__name__, "module": type(v).__module__} for k, v in devices.items()}
 
 
+def _unpickle_types(existing_dict):
+    """
+    Unpickle types in the dictionary of existing devices or plans. Unpickling is needed if
+    two dictionaries need to be compared (representation of pickled items may differ between
+    different versions of Python). Currently used in unit tests.
+    """
+    if isinstance(existing_dict, dict):
+        for key, value in existing_dict.items():
+            if key.endswith("_pickled"):
+                if isinstance(value, str):
+                    unpickled_value = pickle.loads(hex2bytes(value))
+                    existing_dict[key] = unpickled_value
+            else:
+                _unpickle_types(value)
+    elif isinstance(existing_dict, list) or isinstance(existing_dict, tuple):
+        for item in existing_dict:
+            _unpickle_types(item)
+
+
 def gen_list_of_plans_and_devices(path=None, file_name="existing_plans_and_devices.yaml", overwrite=False):
     """
     Generate the list of plans and devices from profile collection.

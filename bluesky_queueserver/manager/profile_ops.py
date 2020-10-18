@@ -572,9 +572,13 @@ def validate_plan(plan, *, allowed_plans, allowed_devices):
     plan: dict
         The dictionary of plan parameters
     allowed_plans: dict or None
-        The dictionary with allowed plans: key - plan name.
+        The dictionary with allowed plans: key - plan name. If None, then
+        all plans are allowed (may change in the future). If ``{}`` then no
+        plans are allowed.
     allowed_devices: dict or None
-        The dictionary with allowed devices: key - device name.
+        The dictionary with allowed devices: key - device name. If None, then
+        all devices are allowed (may change in the future). If ``{}`` then no
+        devices are allowed.
 
     Returns
     -------
@@ -589,7 +593,7 @@ def validate_plan(plan, *, allowed_plans, allowed_devices):
         # TODO: reconsider this behavior before production version is released.
         #   In demo version it may be useful to be able to work without the list of allowed
         #   plans, but for production the plans must be strictly validated.
-        if allowed_plans:
+        if allowed_plans is not None:
             # Verify that plan name is in the list of allowed plans
             plan_name = plan["name"]
 
@@ -597,16 +601,19 @@ def validate_plan(plan, *, allowed_plans, allowed_devices):
                 msg = f"Plan '{plan['name']}' is not in the list of allowed plans."
                 raise Exception(msg)
 
-            param_list = allowed_plans[plan_name]["parameters"]
+            param_list = copy.deepcopy(allowed_plans[plan_name]["parameters"])
+
             # Filter 'devices' and 'plans' entries of 'param_list'. Leave only plans that are
             #   in 'allowed_plans' and devices that are in 'allowed_devices'
             for p in param_list:
-                if "plans" in p:
-                    for p_type in p["plans"]:
-                        p["plans"][p_type] = tuple(_ for _ in p["plans"][p_type] if _ in allowed_plans)
-                if allowed_devices and ("devices" in p):
-                    for p_type in p["devices"]:
-                        p["devices"][p_type] = tuple(_ for _ in p["devices"][p_type] if _ in allowed_devices)
+                if ("custom" in p) and ("plans" in p["custom"]):
+                    p_plans = p["custom"]["plans"]
+                    for p_type in p_plans:
+                        p_plans[p_type] = tuple(_ for _ in p_plans[p_type] if _ in allowed_plans)
+                if (allowed_devices is not None) and ("custom" in p) and ("devices" in p["custom"]):
+                    p_dev = p["custom"]["devices"]
+                    for p_type in p_dev:
+                        p_dev[p_type] = tuple(_ for _ in p_dev[p_type] if _ in allowed_devices)
 
             call_args = plan.get("args", {})
             call_kwargs = plan.get("kwargs", {})

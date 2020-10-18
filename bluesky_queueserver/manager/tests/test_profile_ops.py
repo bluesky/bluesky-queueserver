@@ -570,7 +570,7 @@ def test_validate_plan_1(func, plan, success, errmsg):
     Tests for the plan validation algorithm.
     """
     allowed_plans = {"existing": _process_plan(func)}
-    success_out, errmsg_out = validate_plan(plan, allowed_plans=allowed_plans)
+    success_out, errmsg_out = validate_plan(plan, allowed_plans=allowed_plans, allowed_devices=None)
 
     assert success_out == success, f"errmsg: {errmsg_out}"
     if success:
@@ -584,6 +584,6 @@ def test_validate_plan_2(allowed_plans):
     """
     At this point all plans are considered valid if there is not list of allowed plans.
     """
-    success_out, errmsg_out = validate_plan({}, allowed_plans=allowed_plans)
+    success_out, errmsg_out = validate_plan({}, allowed_plans=allowed_plans, allowed_devices=None)
     assert success_out is True
     assert errmsg_out == ""

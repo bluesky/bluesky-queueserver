@@ -796,7 +796,8 @@ class RunEngineManager(Process):
             pos = request.get("pos", "back")  # Position is optional
 
             allowed_plans = self._allowed_plans[user_group] if self._allowed_plans else self._allowed_plans
-            success, msg = validate_plan(plan, allowed_plans=allowed_plans)
+            allowed_devices = self._allowed_devices[user_group] if self._allowed_devices else self._allowed_devices
+            success, msg = validate_plan(plan, allowed_plans=allowed_plans, allowed_devices=allowed_devices)
             if not success:
                 raise Exception(msg)
 

@@ -562,7 +562,7 @@ def _validate_plan_parameters(param_list, call_args, call_kwargs):
     return bound_args.arguments
 
 
-def validate_plan(plan, *, allowed_plans):
+def validate_plan(plan, *, allowed_plans, allowed_devices):
     """
     Validate the dictionary of plan parameters. Expected to be called before the plan
     is added to the queue.
@@ -571,8 +571,10 @@ def validate_plan(plan, *, allowed_plans):
     ----------
     plan: dict
         The dictionary of plan parameters
-    allowed_plans: dict
+    allowed_plans: dict or None
         The dictionary with allowed plans: key - plan name.
+    allowed_devices: dict or None
+        The dictionary with allowed devices: key - device name.
 
     Returns
     -------
@@ -596,6 +598,16 @@ def validate_plan(plan, *, allowed_plans):
                 raise Exception(msg)
 
             param_list = allowed_plans[plan_name]["parameters"]
+            # Filter 'devices' and 'plans' entries of 'param_list'. Leave only plans that are
+            #   in 'allowed_plans' and devices that are in 'allowed_devices'
+            for p in param_list:
+                if "plans" in p:
+                    for p_type in p["plans"]:
+                        p["plans"][p_type] = tuple(_ for _ in p["plans"][p_type] if _ in allowed_plans)
+                if allowed_devices and ("devices" in p):
+                    for p_type in p["devices"]:
+                        p["devices"][p_type] = tuple(_ for _ in p["devices"][p_type] if _ in allowed_devices)
+
             call_args = plan.get("args", {})
             call_kwargs = plan.get("kwargs", {})
 

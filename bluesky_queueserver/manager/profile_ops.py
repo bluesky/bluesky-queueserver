@@ -12,6 +12,10 @@ import pprint
 import jsonschema
 import copy
 import pickle
+import typing
+import pydantic
+import enum
+import random
 
 import logging
 
@@ -315,6 +319,296 @@ def parse_plan(plan, *, allowed_plans, allowed_devices):
     return plan_parsed
 
 
+# ===============================================================================
+#   Validation of plan parameters
+
+
+def _compare_types(object_in, object_out):
+    """
+    Compares types of parameters. If both parameters are iterables (list or tuple),
+    then the function is recursively called for each element. A set of rules is
+    applied to types to determine if the types are matching.
+    """
+    if isinstance(object_in, (list, tuple)) and isinstance(object_out, (list, tuple)):
+        match = True
+        if len(object_in) == len(object_out):
+            for o_in, o_out in zip(object_in, object_out):
+                if not _compare_types(o_in, o_out):
+                    match = False
+        else:
+            # This should never happen, since 'object_out' is obtained by
+            #   applying transformations on 'object_in', but it is still
+            #   good to check to avoid exceptions.
+            match = False
+    else:
+        match = False
+        # This is the set of rules used to determine if types are matching.
+        #   Types are required to be identical, except in the following cases:
+        if isinstance(object_out, type(object_in)):
+            match = True
+
+        # 'int' is allowed to be converted to float
+        if isinstance(object_out, float) and isinstance(object_in, int):
+            match = True
+
+        # Conversion to Enum is valid (parameters often contain values, that are converted to Enums).
+        elif issubclass(type(object_out), enum.Enum) and object_in == object_out.value:
+            match = True
+
+    return match
+
+
+def _compare_in_out(kwargs_in, kwargs_out):
+    """
+    Compares input and output kwargs for ``pydantic`` model. Accumulates and returns
+    the error message that includes the data on all parameters with mismatching types.
+    """
+    match, msg = True, ""
+    for k, v in kwargs_out.items():
+        if k in kwargs_in:
+            valid = _compare_types(kwargs_in[k], v)
+            print(f"key='{k}' In={kwargs_in[k]} Out={v} Result={valid}")
+            if not valid:
+                msg = f"{msg}\n" if msg else msg
+                msg += (
+                    f"Incorrect parameter type: key='{k}', "
+                    f"value='{kwargs_in[k]}' ({type(kwargs_in[k])}), "
+                    f"interpreted as '{v}' ({type(v)})"
+                )
+                match = False
+    return match, msg
+
+
+def _process_custom_annotation(custom_annotation):
+    created_type_list = []
+    annotation = None
+    try:
+        if "annotation" in custom_annotation:
+            # Read annotation (as a string)
+            annotation_str = custom_annotation["annotation"]
+
+            # Create the dictionary of devices or plans
+            devices = custom_annotation.get("devices", {})
+            plans = custom_annotation.get("plans", {})
+            items = devices.copy()
+            items.update(plans)
+
+            if items:
+                # Create types
+                for item_name in items:
+                    # The dictionary value for the devices/plans may be a list(tuple) of items
+                    #   or None. If the value is None, then any device or plan will be accepted.
+                    #   The list of device or plan names will be used to construct enum.Enum
+                    #   type, which is used to verify if the name in args or kwargs matches
+                    #   one of the arguments.
+                    if items[item_name] is not None:
+                        # Create temporary unique type name
+                        while True:
+                            type_name = f"_type__{random.randint(0, 100000)}_"
+                            if type_name not in globals():
+                                break
+
+                        # Replace all occurrences of the type nae in the custom annotation.
+                        annotation_str = annotation_str.replace(item_name, type_name)
+
+                        # Create temporary type as a subclass of enum.Enum, e.g.
+                        # enum.Enum('Device', {'det1': 'det1', 'det2': 'det2', 'det3': 'det3'})
+                        type_code = f"enum.Enum('{type_name}', {{"
+                        for d in items[item_name]:
+                            type_code += f"'{d}': '{d}',"
+                        type_code += "})"
+                        globals()[type_name] = eval(type_code)
+                        created_type_list.append(type_name)
+
+                    else:
+                        # Accept any device or plan: any string will be accepted without
+                        #   verification.
+                        annotation_str = annotation_str.replace(item_name, "str")
+
+            # Once all the types are created,  execute the code for annotation.
+            annotation = eval(annotation_str)
+
+    except Exception:
+        # In case of exception, delete all types that were already created
+        for type_name in created_type_list:
+            globals().pop(type_name)
+        raise
+
+    return annotation, created_type_list
+
+
+def _construct_parameters(param_list):
+    """
+    Construct the list of ``inspect.Parameter`` parameters based on parameter list.
+    """
+    parameters = []
+    created_type_list = []
+    try:
+
+        for p in param_list:
+
+            # Generate annotation from custom annotation data if possible.
+            #   'annotation == None', then use 'official' Python annotation
+            annotation_custom = None
+            if "custom" in p:
+                annotation_custom, type_list = _process_custom_annotation(p["custom"])
+                created_type_list += type_list
+
+            # Custom annotation always overrides Python annotation
+            if annotation_custom:
+                annotation = annotation_custom
+            elif "annotation_pickled" in p:
+                annotation = pickle.loads(hex2bytes(p["annotation_pickled"]))
+            else:
+                # If no annotation is provided, then accept any value
+                annotation = typing.Any
+
+            # If there is no annotation, then accepty any value:
+            #   'pydantic' doesn't understand 'empty' annotation.
+            if annotation == inspect.Parameter.empty:
+                annotation = typing.Any
+
+            if "default_pickled" in p:
+                default = pickle.loads(hex2bytes(p["default_pickled"]))
+            else:
+                default = inspect.Parameter.empty
+
+            param = inspect.Parameter(
+                name=p["name"], kind=p["kind"]["value"], default=default, annotation=annotation
+            )
+            parameters.append(param)
+
+    except Exception:
+        # In case of exception, delete all types that were already created
+        for type_name in created_type_list:
+            globals().pop(type_name)
+        raise
+
+    return parameters, created_type_list
+
+
+def pydantic_create_model(kwargs, parameters):
+    # Now create the 'pydantic' model based on parameters
+    model_kwargs = {}
+    for p in parameters:
+        if hasattr(p, "default") and p.default != inspect.Parameter.empty:
+            default = p.default
+        else:
+            if p.kind == p.VAR_POSITIONAL:
+                default = []
+            elif p.kind == p.VAR_KEYWORD:
+                default = {}
+            else:
+                default = ...
+
+        if hasattr(p, "annotation"):
+            if p.kind == p.VAR_POSITIONAL:
+                annotation = typing.List[p.annotation]
+            elif p.kind == p.VAR_KEYWORD:
+                annotation = typing.Dict[str, p.annotation]
+            else:
+                annotation = p.annotation
+        else:
+            annotation = None
+
+        if annotation is not None:
+            model_kwargs[p.name] = (annotation, default)
+        else:
+            model_kwargs[p.name] = default
+
+    print(f"Model kwargs:\n{pprint.pformat(model_kwargs)}")
+
+    Model = pydantic.create_model("Model", **model_kwargs)
+
+    # Verify the arguments using 'pydantic' model
+    return Model(**kwargs)
+
+
+def _validate_plan_parameters(param_list, call_args, call_kwargs):
+    # Reconstruct signature
+    created_type_list = []
+    try:
+        # Reconstruct 'inspect.Parameter' parameters based on the parameter list
+        parameters, created_type_list = _construct_parameters(param_list)
+
+        # Create signature based on the list of parameters
+        sig = inspect.Signature(parameters)
+
+        # Verify the list of parameters based on signature.
+        bound_args = sig.bind(*call_args, **call_kwargs)
+        print(f"Bound args:\n{pprint.pformat(dict(bound_args.arguments))}")
+
+        m = pydantic_create_model(bound_args.arguments, parameters)
+        print(f"Model:\n{pprint.pformat(m.dict())}")
+
+        # The final step: match types of the output value of the pydantic model with input
+        #   types. 'Pydantic' is converting types whenever possible, but we need precise
+        #   type checking with a fiew exceptions
+        success, msg = _compare_in_out(bound_args.arguments, m.dict())
+        if not success:
+            raise ValueError(f"Error in argument types: {msg}")
+        print(f"In/Out match: {success}")
+
+    except Exception:
+        raise
+
+    finally:
+        # Delete all temporary types from global namespace.
+        print(f"Total of {len(created_type_list)} types will be deleted.")
+        print(f"types: {created_type_list}")
+        for type_name in created_type_list:
+            globals().pop(type_name)
+
+    return bound_args.arguments
+
+
+def validate_plan(plan, *, allowed_plans):
+    """
+    Validate the dictionary of plan parameters. Expected to be called before the plan
+    is added to the queue.
+
+    Parameters
+    ----------
+    plan: dict
+        The dictionary of plan parameters
+    allowed_plans: dict
+        The dictionary with allowed plans: key - plan name.
+
+    Returns
+    -------
+    (boolean, str)
+        Success (True/False) and error message that indicates the reason for plan
+        rejection
+    """
+    try:
+        success, msg = True, ""
+
+        # If there is no list of allowed plans, then consider the plan valid.
+        # TODO: reconsider this behavior before production version is released.
+        #   In demo version it may be useful to be able to work without the list of allowed
+        #   plans, but for production the plans must be strictly validated.
+        if allowed_plans:
+            # Verify that plan name is in the list of allowed plans
+            plan_name = plan["name"]
+
+            if plan_name not in allowed_plans:
+                msg = f"Plan '{plan['name']}' is not in the list of allowed plans."
+                raise Exception(msg)
+
+            param_list = allowed_plans[plan_name]["parameters"]
+            call_args = plan.get("args", {})
+            call_kwargs = plan.get("kwargs", {})
+
+            _validate_plan_parameters(param_list=param_list, call_args=call_args, call_kwargs=call_kwargs)
+
+    except Exception as ex:
+        success = False
+        msg = f"Plan validation failed: {str(ex)}\nPlan: {pprint.pformat(plan)}"
+
+    return success, msg
+
+
+'''
 def validate_plan(plan, *, allowed_plans):
     """
     Validate the dictionary of plan parameters. Expected to be called before the plan
@@ -445,6 +739,7 @@ def validate_plan(plan, *, allowed_plans):
         msg = f"Plan validation failed: {str(ex)}\nPlan: {pprint.pformat(plan)}"
 
     return success, msg
+'''
 
 
 # TODO: it may be a good idea to implement 'gen_list_of_plans_and_devices' as a separate CLI tool.
@@ -452,9 +747,10 @@ def validate_plan(plan, *, allowed_plans):
 #       at any time, since it loads profile collection. The list of allowed plans
 #       and devices can be also typed manually, since it shouldn't be very large.
 
+
 def bytes2hex(bytes_array):
     """
-    Converts byte array (result of ``pickle.dumps`` to spaced hexadecimal string representation.
+    Converts byte array (output of ``pickle.dumps()``) to spaced hexadecimal string representation.
 
     Parameters
     ----------
@@ -468,12 +764,12 @@ def bytes2hex(bytes_array):
     """
     s_hex = bytes_array.hex()
     # Insert spaces between each hex number. It makes YAML file formatting better.
-    return ' '.join([s_hex[_: _ + 2] for _ in range(0, len(s_hex), 2)])
+    return " ".join([s_hex[n : n + 2] for n in range(0, len(s_hex), 2)])  # noqa: E203
 
 
 def hex2bytes(hex_str):
     """
-    Converts spaced hexadecimal string (output of ``bytes2hex`` function to an array of bytes.
+    Converts spaced hexadecimal string (output of ``bytes2hex()``) function to an array of bytes.
 
     Parameters
     ----------

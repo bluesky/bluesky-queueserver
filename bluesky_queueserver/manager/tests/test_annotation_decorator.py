@@ -470,6 +470,7 @@ def test_annotation_dectorator_7(custom_annotation, expected_docstring):
     The trivial case of the decorator that only specifieds function description
     and the function has no parameters.
     """
+
     @parameter_annotation_decorator(custom_annotation)
     def func():
         str_list = ["str1", "str2", "str3"]
@@ -486,25 +487,18 @@ _trivial_annotation_error1 = {
     "descriptions": "Example of annotation with varargs and varkwargs.",
 }
 
-_trivial_annotation_error2 = {
-}
+_trivial_annotation_error2 = {}
 
 _trivial_annotation_error3 = {
     "description": "Example of annotation with varargs and varkwargs.",
-    "parameters": {
-        "no_such_parameter": {
-            "description": "The function has no such parameter"
-        }
-    }
+    "parameters": {"no_such_parameter": {"description": "The function has no such parameter"}},
 }
 
 _trivial_annotation_error4 = {
     "description": "Example of annotation with varargs and varkwargs.",
     "parameters": {
-        "no_such_parameter4": {
-            "descriptions": "Required key is 'discription'. Schema validation should fail."
-        }
-    }
+        "no_such_parameter4": {"descriptions": "Required key is 'discription'. Schema validation should fail."}
+    },
 }
 
 
@@ -523,7 +517,7 @@ def test_annotation_dectorator_8_fail(custom_annotation, ex_type, err_msg):
     and the function has no parameters.
     """
     with pytest.raises(ex_type, match=err_msg):
+
         @parameter_annotation_decorator(custom_annotation)
         def func():
             pass
-

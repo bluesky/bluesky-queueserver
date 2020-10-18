@@ -28,7 +28,7 @@ from bluesky_queueserver.manager.annotation_decorator import parameter_annotatio
         "returns": {
             "description": "Yields a sequence of plan messages.",
             "annotation": "typing.Generator[tuple, None, None]",
-        }
+        },
     }
 )
 def move_then_count(

@@ -521,23 +521,23 @@ def _f5(a, b=5, *args, c, d=4):
 
 # fmt: off
 @pytest.mark.parametrize("func, plan, success, errmsg", [
-    #(_f1, {"name": "nonexistent", "args": [1, 4, 5], "kwargs": {}}, False,
-    # "Plan 'nonexistent' is not in the list of allowed plans"),
+    (_f1, {"name": "nonexistent", "args": [1, 4, 5], "kwargs": {}}, False,
+     "Plan 'nonexistent' is not in the list of allowed plans"),
 
-    #(_f1, {"name": "existing", "args": [1, 4, 5], "kwargs": {}}, True, ""),
-    #(_f1, {"name": "existing", "args": [1, 4], "kwargs": {"c": 5}}, True, ""),
-    #(_f1, {"name": "existing", "args": [], "kwargs": {"a": 1, "b": 4, "c": 5}}, True, ""),
-    #(_f1, {"name": "existing", "args": [], "kwargs": {"c": 1, "b": 4, "a": 5}}, True, ""),
+    (_f1, {"name": "existing", "args": [1, 4, 5], "kwargs": {}}, True, ""),
+    (_f1, {"name": "existing", "args": [1, 4], "kwargs": {"c": 5}}, True, ""),
+    (_f1, {"name": "existing", "args": [], "kwargs": {"a": 1, "b": 4, "c": 5}}, True, ""),
+    (_f1, {"name": "existing", "args": [], "kwargs": {"c": 1, "b": 4, "a": 5}}, True, ""),
     (_f1, {"name": "existing", "args": [1, 4], "kwargs": {}}, False,
-     "Plan parameters do not contain required args or kwargs"),
+     "Plan validation failed: missing a required argument: 'c'"),
     (_f1, {"name": "existing", "args": [], "kwargs": {}}, False,
-     "Plan parameters do not contain required args or kwargs"),
+     "Plan validation failed: missing a required argument: 'a'"),
     (_f1, {"name": "existing", "args": [1, 4, 6, 7], "kwargs": {}}, False,
-     "The number of args exceeds the number of allowed parameters"),
+     "Plan validation failed: too many positional arguments"),
     (_f1, {"name": "existing", "args": [1, 4, 6, 7], "kwargs": {"kw": 10}}, False,
-     "The number of args exceeds the number of allowed parameters"),
+     "Plan validation failed: too many positional arguments"),
     (_f1, {"name": "existing", "args": [1, 4], "kwargs": {"b": 10}}, False,
-     "Unexpected kwargs ['b'] in the plan parameters"),
+     "Plan validation failed: multiple values for argument 'b'"),
 
     (_f2, {"name": "existing", "args": [1, 4, 5], "kwargs": {}}, True, ""),
     (_f2, {"name": "existing", "args": [], "kwargs": {"a": 1, "b": 4, "c": 5}}, True, ""),
@@ -549,19 +549,19 @@ def _f5(a, b=5, *args, c, d=4):
     (_f3, {"name": "existing", "args": [1, 4], "kwargs": {"c": 5, "d": 10}}, True, ""),
     (_f3, {"name": "existing", "args": [], "kwargs": {"a": 1, "b": 4, "c": 5, "d": 10}}, True, ""),
     (_f3, {"name": "existing", "args": [], "kwargs": {"a": 1, "b": 4, "d": 10}}, False,
-     "Plan parameters do not contain required args or kwargs ['c']"),
+     "Plan validation failed: missing a required argument: 'c'"),
     (_f3, {"name": "existing", "args": [6, 8], "kwargs": {"a": 1, "c": 4, "d": 10}}, False,
-     "Unexpected kwargs ['a'] in the plan parameters"),
+     "Plan validation failed: multiple values for argument 'a'"),
 
     (_f4, {"name": "existing", "args": [1, 4], "kwargs": {"c": 5, "d": 10}}, True, ""),
     (_f4, {"name": "existing", "args": [1, 4], "kwargs": {"c": 5}}, True, ""),
     (_f4, {"name": "existing", "args": [1, 4], "kwargs": {"d": 10}}, False,
-     "Plan parameters do not contain required args or kwargs ['c']"),
+     "Plan validation failed: missing a required argument: 'c'"),
 
     (_f5, {"name": "existing", "args": [1, 4], "kwargs": {"c": 5, "d": 10}}, True, ""),
     (_f5, {"name": "existing", "args": [1], "kwargs": {"c": 5, "d": 10}}, True, ""),
     (_f5, {"name": "existing", "args": [], "kwargs": {"c": 5, "d": 10}}, False,
-     "Plan parameters do not contain required args or kwargs ['a']"),
+     "Plan validation failed: missing a required argument: 'a"),
 
 ])
 # fmt: on

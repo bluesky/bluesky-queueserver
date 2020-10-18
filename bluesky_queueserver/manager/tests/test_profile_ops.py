@@ -623,8 +623,8 @@ def test_validate_plan_2(allowed_plans, success):
     }
 )
 def _some_strange_plan(
-    motors: typing.List[int],  # The actual type should be 'ophyd.device.Device', not 'int'
-    detectors: typing.List[int],  # The actual type should be 'ophyd.device.Device', not 'int'
+    motors: typing.List[typing.Any],  # The actual type should be a list of 'ophyd.device.Device'
+    detectors: typing.List[typing.Any],  # The actual type should be a list of 'ophyd.device.Device'
     plans_to_run: typing.Union[typing.List[callable], callable],
     positions: typing.Union[typing.List[float], float, None] = 10,  # TYPE IS ACTUALLY USED FOR VALIDATION
 ) -> typing.Generator[str, None, None]:  # Type should be 'bluesky.utils.Msg', not 'str'

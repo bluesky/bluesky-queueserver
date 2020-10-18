@@ -379,6 +379,23 @@ def _compare_in_out(kwargs_in, kwargs_out):
 
 
 def _process_custom_annotation(custom_annotation):
+    """
+    Process custom annotation if it exists (custom_annotation["annotation"]).
+    If there is no annotation, then return None and empty list of temporary type objects.
+    If it exists, then return reference to the annotation (type object) and the list
+    temporary types that need to be deleted once the processing (parameter validation)
+    is complete.
+
+    Parameters
+    ----------
+    custom_annotation: dict
+        Dictionary that may contain custom annotation (key ``custom_annotation``).
+
+    Returns
+    -------
+    type, list
+        Tuple (annotation type, list of temporary types).
+    """
     created_type_list = []
     annotation = None
     try:
@@ -487,7 +504,16 @@ def _construct_parameters(param_list):
 
 
 def pydantic_create_model(kwargs, parameters):
-    # Now create the 'pydantic' model based on parameters
+    """
+    Create the 'pydantic' model based on parameters.
+
+    Parameters
+    ----------
+    kwargs: dict
+        Bound parameters of the functioncall
+    parameters: list
+        Parameters of the plan with annotation.
+    """
     model_kwargs = {}
     for p in parameters:
         if hasattr(p, "default") and p.default != inspect.Parameter.empty:
@@ -522,6 +548,29 @@ def pydantic_create_model(kwargs, parameters):
 
 
 def _validate_plan_parameters(param_list, call_args, call_kwargs):
+    """
+    Validate plan parameters based on parameter annotations.
+
+    Parameters
+    ----------
+    param_list: dict
+        The list of parameters with annotations (including custom annotations if available).
+    call_args: list
+        'args' of the plan
+    call_kwargs: dict
+        'kwargs' of the plan
+
+    Returns
+    -------
+    dict
+        Bound arguments of the called plan.
+
+    Raises
+    ------
+    Exception
+        Exception is raised if the plan is invalid. The exception message contains
+        information on the error.
+    """
     # Reconstruct signature
     created_type_list = []
     try:
@@ -723,10 +772,16 @@ def _process_plan(plan):
 
 
 def _prepare_plans(plans):
+    """
+    Prepare dictionary of existing plans for saving to YAML file.
+    """
     return {k: _process_plan(v) for k, v in plans.items()}
 
 
 def _prepare_devices(devices):
+    """
+    Prepare dictionary of existing devices for saving to YAML file.
+    """
     return {k: {"classname": type(v).__name__, "module": type(v).__module__} for k, v in devices.items()}
 
 
@@ -735,6 +790,10 @@ def _unpickle_types(existing_dict):
     Unpickle types in the dictionary of existing devices or plans. Unpickling is needed if
     two dictionaries need to be compared (representation of pickled items may differ between
     different versions of Python). Currently used in unit tests.
+
+    The data structure contains lists of dictionaries, so unpickling function must be able
+    to iteratively process the list elements. The data is processed in place, the function
+    does not return anything.
     """
     if isinstance(existing_dict, dict):
         for key, value in existing_dict.items():
@@ -873,6 +932,25 @@ _user_group_permission_schema = {
 
 
 def load_user_group_permissions(path_to_file=None):
+    """
+    Load the data on allowed plans and devices for user groups.
+
+    Parameters
+    ----------
+    path_to_file: str
+        Full path to YAML file that contains user data permissions.
+
+    Returns
+    -------
+    dict
+        Data structure with user permissions. Returns ``{}`` if path is empty string
+        or None.
+
+    Raises
+    ------
+    IOError
+        Error while reading the YAML file.
+    """
 
     if not path_to_file:
         return {}

@@ -6,7 +6,6 @@ import subprocess
 import asyncio
 import time as ttime
 import zmq
-import zmq.asyncio
 
 from bluesky_queueserver.manager.profile_ops import get_default_profile_collection_dir
 from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations

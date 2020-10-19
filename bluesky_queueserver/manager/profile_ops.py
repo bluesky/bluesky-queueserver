@@ -11,11 +11,6 @@ import sys
 import pprint
 import jsonschema
 import copy
-import pickle
-import typing
-import pydantic
-import enum
-import random
 
 import logging
 
@@ -319,291 +314,7 @@ def parse_plan(plan, *, allowed_plans, allowed_devices):
     return plan_parsed
 
 
-# ===============================================================================
-#   Validation of plan parameters
-
-
-def _compare_types(object_in, object_out):
-    """
-    Compares types of parameters. If both parameters are iterables (list or tuple),
-    then the function is recursively called for each element. A set of rules is
-    applied to types to determine if the types are matching.
-    """
-    if isinstance(object_in, (list, tuple)) and isinstance(object_out, (list, tuple)):
-        match = True
-        if len(object_in) == len(object_out):
-            for o_in, o_out in zip(object_in, object_out):
-                if not _compare_types(o_in, o_out):
-                    match = False
-        else:
-            # This should never happen, since 'object_out' is obtained by
-            #   applying transformations on 'object_in', but it is still
-            #   good to check to avoid exceptions.
-            match = False
-    else:
-        match = False
-        # This is the set of rules used to determine if types are matching.
-        #   Types are required to be identical, except in the following cases:
-        if isinstance(object_out, type(object_in)):
-            match = True
-
-        # 'int' is allowed to be converted to float
-        if isinstance(object_out, float) and isinstance(object_in, int):
-            match = True
-
-        # Conversion to Enum is valid (parameters often contain values, that are converted to Enums).
-        elif issubclass(type(object_out), enum.Enum) and object_in == object_out.value:
-            match = True
-
-    return match
-
-
-def _compare_in_out(kwargs_in, kwargs_out):
-    """
-    Compares input and output kwargs for ``pydantic`` model. Accumulates and returns
-    the error message that includes the data on all parameters with mismatching types.
-    """
-    match, msg = True, ""
-    for k, v in kwargs_out.items():
-        if k in kwargs_in:
-            valid = _compare_types(kwargs_in[k], v)
-            if not valid:
-                msg = f"{msg}\n" if msg else msg
-                msg += (
-                    f"Incorrect parameter type: key='{k}', "
-                    f"value='{kwargs_in[k]}' ({type(kwargs_in[k])}), "
-                    f"interpreted as '{v}' ({type(v)})"
-                )
-                match = False
-    return match, msg
-
-
-def _process_custom_annotation(custom_annotation):
-    """
-    Process custom annotation if it exists (custom_annotation["annotation"]).
-    If there is no annotation, then return None and empty list of temporary type objects.
-    If it exists, then return reference to the annotation (type object) and the list
-    temporary types that need to be deleted once the processing (parameter validation)
-    is complete.
-
-    Parameters
-    ----------
-    custom_annotation: dict
-        Dictionary that may contain custom annotation (key ``custom_annotation``).
-
-    Returns
-    -------
-    type, list
-        Tuple (annotation type, list of temporary types).
-    """
-    created_type_list = []
-    annotation = None
-    try:
-        if "annotation" in custom_annotation:
-            # Read annotation (as a string)
-            annotation_str = custom_annotation["annotation"]
-
-            # Create the dictionary of devices or plans
-            devices = custom_annotation.get("devices", {})
-            plans = custom_annotation.get("plans", {})
-            items = devices.copy()
-            items.update(plans)
-
-            if items:
-                # Create types
-                for item_name in items:
-                    # The dictionary value for the devices/plans may be a list(tuple) of items
-                    #   or None. If the value is None, then any device or plan will be accepted.
-                    #   The list of device or plan names will be used to construct enum.Enum
-                    #   type, which is used to verify if the name in args or kwargs matches
-                    #   one of the arguments.
-                    if items[item_name] is not None:
-                        # Create temporary unique type name
-                        while True:
-                            type_name = f"_type__{random.randint(0, 100000)}_"
-                            if type_name not in globals():
-                                break
-
-                        # Replace all occurrences of the type nae in the custom annotation.
-                        annotation_str = annotation_str.replace(item_name, type_name)
-
-                        # Create temporary type as a subclass of enum.Enum, e.g.
-                        # enum.Enum('Device', {'det1': 'det1', 'det2': 'det2', 'det3': 'det3'})
-                        type_code = f"enum.Enum('{type_name}', {{"
-                        for d in items[item_name]:
-                            type_code += f"'{d}': '{d}',"
-                        type_code += "})"
-                        globals()[type_name] = eval(type_code)
-                        created_type_list.append(type_name)
-
-                    else:
-                        # Accept any device or plan: any string will be accepted without
-                        #   verification.
-                        annotation_str = annotation_str.replace(item_name, "str")
-
-            # Once all the types are created,  execute the code for annotation.
-            annotation = eval(annotation_str)
-
-    except Exception:
-        # In case of exception, delete all types that were already created
-        for type_name in created_type_list:
-            globals().pop(type_name)
-        raise
-
-    return annotation, created_type_list
-
-
-def _construct_parameters(param_list):
-    """
-    Construct the list of ``inspect.Parameter`` parameters based on parameter list.
-    """
-    parameters = []
-    created_type_list = []
-    try:
-
-        for p in param_list:
-
-            # Generate annotation from custom annotation data if possible.
-            #   'annotation == None', then use 'official' Python annotation
-            annotation_custom = None
-            if "custom" in p:
-                annotation_custom, type_list = _process_custom_annotation(p["custom"])
-                created_type_list += type_list
-
-            # Custom annotation always overrides Python annotation
-            if annotation_custom:
-                annotation = annotation_custom
-            elif "annotation_pickled" in p:
-                annotation = pickle.loads(hex2bytes(p["annotation_pickled"]))
-            else:
-                # If no annotation is provided, then accept any value
-                annotation = typing.Any
-
-            # If there is no annotation, then accepty any value:
-            #   'pydantic' doesn't understand 'empty' annotation.
-            if annotation == inspect.Parameter.empty:
-                annotation = typing.Any
-
-            if "default_pickled" in p:
-                default = pickle.loads(hex2bytes(p["default_pickled"]))
-            else:
-                default = inspect.Parameter.empty
-
-            param = inspect.Parameter(
-                name=p["name"], kind=p["kind"]["value"], default=default, annotation=annotation
-            )
-            parameters.append(param)
-
-    except Exception:
-        # In case of exception, delete all types that were already created
-        for type_name in created_type_list:
-            globals().pop(type_name)
-        raise
-
-    return parameters, created_type_list
-
-
-def pydantic_create_model(kwargs, parameters):
-    """
-    Create the 'pydantic' model based on parameters.
-
-    Parameters
-    ----------
-    kwargs: dict
-        Bound parameters of the functioncall
-    parameters: list
-        Parameters of the plan with annotation.
-    """
-    model_kwargs = {}
-    for p in parameters:
-        if hasattr(p, "default") and p.default != inspect.Parameter.empty:
-            default = p.default
-        else:
-            if p.kind == p.VAR_POSITIONAL:
-                default = []
-            elif p.kind == p.VAR_KEYWORD:
-                default = {}
-            else:
-                default = ...
-
-        if hasattr(p, "annotation"):
-            if p.kind == p.VAR_POSITIONAL:
-                annotation = typing.List[p.annotation]
-            elif p.kind == p.VAR_KEYWORD:
-                annotation = typing.Dict[str, p.annotation]
-            else:
-                annotation = p.annotation
-        else:
-            annotation = None
-
-        if annotation is not None:
-            model_kwargs[p.name] = (annotation, default)
-        else:
-            model_kwargs[p.name] = default
-
-    Model = pydantic.create_model("Model", **model_kwargs)
-
-    # Verify the arguments using 'pydantic' model
-    return Model(**kwargs)
-
-
-def _validate_plan_parameters(param_list, call_args, call_kwargs):
-    """
-    Validate plan parameters based on parameter annotations.
-
-    Parameters
-    ----------
-    param_list: dict
-        The list of parameters with annotations (including custom annotations if available).
-    call_args: list
-        'args' of the plan
-    call_kwargs: dict
-        'kwargs' of the plan
-
-    Returns
-    -------
-    dict
-        Bound arguments of the called plan.
-
-    Raises
-    ------
-    Exception
-        Exception is raised if the plan is invalid. The exception message contains
-        information on the error.
-    """
-    # Reconstruct signature
-    created_type_list = []
-    try:
-        # Reconstruct 'inspect.Parameter' parameters based on the parameter list
-        parameters, created_type_list = _construct_parameters(param_list)
-
-        # Create signature based on the list of parameters
-        sig = inspect.Signature(parameters)
-
-        # Verify the list of parameters based on signature.
-        bound_args = sig.bind(*call_args, **call_kwargs)
-
-        m = pydantic_create_model(bound_args.arguments, parameters)
-
-        # The final step: match types of the output value of the pydantic model with input
-        #   types. 'Pydantic' is converting types whenever possible, but we need precise
-        #   type checking with a fiew exceptions
-        success, msg = _compare_in_out(bound_args.arguments, m.dict())
-        if not success:
-            raise ValueError(f"Error in argument types: {msg}")
-
-    except Exception:
-        raise
-
-    finally:
-        # Delete all temporary types from global namespace.
-        for type_name in created_type_list:
-            globals().pop(type_name)
-
-    return bound_args.arguments
-
-
-def validate_plan(plan, *, allowed_plans, allowed_devices):
+def validate_plan(plan, *, allowed_plans):
     """
     Validate the dictionary of plan parameters. Expected to be called before the plan
     is added to the queue.
@@ -612,14 +323,8 @@ def validate_plan(plan, *, allowed_plans, allowed_devices):
     ----------
     plan: dict
         The dictionary of plan parameters
-    allowed_plans: dict or None
-        The dictionary with allowed plans: key - plan name. If None, then
-        all plans are allowed (may change in the future). If ``{}`` then no
-        plans are allowed.
-    allowed_devices: dict or None
-        The dictionary with allowed devices: key - device name. If None, then
-        all devices are allowed (may change in the future). If ``{}`` then no
-        devices are allowed.
+    allowed_plans: dict
+        The dictionary with allowed plans: key - plan name.
 
     Returns
     -------
@@ -627,36 +332,112 @@ def validate_plan(plan, *, allowed_plans, allowed_devices):
         Success (True/False) and error message that indicates the reason for plan
         rejection
     """
+    success, msg = True, ""
+    completed = False
+
+    # For now allow execution of all plans if no plan descriptions are provided
+    #   (plan list is empty). This will change in the future.
+    # TODO: at some point make the list of allowed plans required. This will require
+    #   implementation of some tools to make generation of basic plan list convenient.
+    if not allowed_plans:
+        return success, msg
+
     try:
-        success, msg = True, ""
+        if "args" not in plan:
+            plan["args"] = []
 
-        # If there is no list of allowed plans (it is None), then consider the plan valid.
-        if allowed_plans is not None:
-            # Verify that plan name is in the list of allowed plans
-            plan_name = plan["name"]
+        if "kwargs" not in plan:
+            plan["kwargs"] = {}
 
-            if plan_name not in allowed_plans:
-                msg = f"Plan '{plan['name']}' is not in the list of allowed plans."
-                raise Exception(msg)
+        if "name" not in plan:
+            msg = "Plan name is not specified."
+            raise Exception(msg)
 
-            param_list = copy.deepcopy(allowed_plans[plan_name]["parameters"])
+        # Verify that plan name is in the list of allowed plans
+        plan_name = plan["name"]
+        if plan_name not in allowed_plans:
+            msg = f"Plan '{plan['name']}' is not in the list of allowed plans."
+            raise Exception(msg)
 
-            # Filter 'devices' and 'plans' entries of 'param_list'. Leave only plans that are
-            #   in 'allowed_plans' and devices that are in 'allowed_devices'
-            for p in param_list:
-                if ("custom" in p) and ("plans" in p["custom"]):
-                    p_plans = p["custom"]["plans"]
-                    for p_type in p_plans:
-                        p_plans[p_type] = tuple(_ for _ in p_plans[p_type] if _ in allowed_plans)
-                if (allowed_devices is not None) and ("custom" in p) and ("devices" in p["custom"]):
-                    p_dev = p["custom"]["devices"]
-                    for p_type in p_dev:
-                        p_dev[p_type] = tuple(_ for _ in p_dev[p_type] if _ in allowed_devices)
+        parameters = allowed_plans[plan_name]["parameters"]
+        plan_args, plan_kwargs = plan["args"], plan["kwargs"]
 
-            call_args = plan.get("args", {})
-            call_kwargs = plan.get("kwargs", {})
+        # Check if the number of positional arguments is not greater than expected.
+        n_param = 0
+        for _ in plan_args:
+            if n_param >= len(parameters):
+                # Too many parameters (more args than the total number of parameters
+                #   and there is no '*args')
+                raise ValueError(
+                    f"The number of args exceeds the number of allowed parameters: "
+                    f"{len(parameters)} parameters are allowed."
+                )
 
-            _validate_plan_parameters(param_list=param_list, call_args=call_args, call_kwargs=call_kwargs)
+            param = parameters[n_param]
+            pkind = param["kind"]
+            if pkind == "VAR_POSITIONAL":
+                # Absorbs the rest of 'args' even if there are no more args.
+                n_param += 1
+                break
+            if pkind in ("POSITIONAL_OR_KEYWORD", "POSITIONAL_ONLY"):
+                # Move to the next parameter
+                n_param += 1
+            elif pkind in ("KEYWORD_ONLY", "VAR_KEYWORD"):
+                raise ValueError(
+                    f"Plan parameters contain too many args ({len(plan_args)}): " f"{n_param} args are expected."
+                )
+            else:
+                # This should happen only if no args or kwargs are expected.
+                raise ValueError(f"Plan parameters contain {len(plan_args)}. No args are expected.")
+
+        if n_param >= len(parameters):
+            if plan_kwargs:
+                raise ValueError("Plan parameters contains kwargs. No kwargs are expected.")
+            else:
+                completed = True
+
+        if not completed:
+            if parameters[n_param]["kind"] == "VAR_POSITIONAL":
+                n_param += 1
+
+            if n_param >= len(parameters):
+                if plan_kwargs:
+                    raise ValueError("Plan parameters contains kwargs. No kwargs are expected.")
+                else:
+                    completed = True
+
+        if not completed:
+            # Dictionary of the remaining keys
+            premaining = {_["name"]: _ for _ in parameters[n_param:]}
+
+            # Check if there exists a parameter of VAR_POSITIONAL kind. It will indicate that
+            #   more args are expected.
+            var_keyword_exists = False
+            for pname, pinfo in premaining.copy().items():
+                if pinfo["kind"] == "VAR_POSITIONAL":
+                    premaining.pop(pname)
+                if pinfo["kind"] == "VAR_KEYWORD":
+                    var_keyword_exists = True
+                    premaining.pop(pname)
+
+            # Check if there are no kwargs with unexpected names.
+            unexpected_kwargs = []
+            for pa in plan_kwargs.keys():
+                if pa in premaining:
+                    premaining.pop(pa)
+                else:
+                    unexpected_kwargs.append(pa)
+
+            if not var_keyword_exists and unexpected_kwargs:
+                raise ValueError(f"Unexpected kwargs {unexpected_kwargs} in the plan parameters.")
+
+            # Now checked if there are any missing kwargs that don't have default values.
+            kwargs_missed = []
+            for pname, pinfo in premaining.items():
+                if "default" not in pinfo:
+                    kwargs_missed.append(pname)
+            if kwargs_missed:
+                raise ValueError(f"Plan parameters do not contain required args or kwargs {kwargs_missed}.")
 
     except Exception as ex:
         success = False
@@ -669,44 +450,6 @@ def validate_plan(plan, *, allowed_plans, allowed_devices):
 #       For now it can be called from IPython. It shouldn't be called automatically
 #       at any time, since it loads profile collection. The list of allowed plans
 #       and devices can be also typed manually, since it shouldn't be very large.
-
-
-def bytes2hex(bytes_array):
-    """
-    Converts byte array (output of ``pickle.dumps()``) to spaced hexadecimal string representation.
-
-    Parameters
-    ----------
-    bytes_array: bytes
-        Array of bytes to be converted.
-
-    Returns
-    -------
-    str
-        Hexadecimal representation of the byte array.
-    """
-    s_hex = bytes_array.hex()
-    # Insert spaces between each hex number. It makes YAML file formatting better.
-    return " ".join([s_hex[n : n + 2] for n in range(0, len(s_hex), 2)])  # noqa: E203
-
-
-def hex2bytes(hex_str):
-    """
-    Converts spaced hexadecimal string (output of ``bytes2hex()``) function to an array of bytes.
-
-    Parameters
-    ----------
-    hex_str: str
-        String of hexadecimal numbers separated by spaces.
-
-    Returns
-    -------
-    bytes
-        Array of bytes (ready to be unpicked).
-    """
-    # Delete spaces from the string to prepare it for conversion.
-    hex_str = hex_str.replace(" ", "")
-    return bytes.fromhex(hex_str)
 
 
 def _process_plan(plan):
@@ -734,78 +477,16 @@ def _process_plan(plan):
 
     sig = inspect.signature(plan)
 
-    if hasattr(plan, "_custom_parameter_annotation_"):
-        param_annotation = plan._custom_parameter_annotation_
-    else:
-        param_annotation = None
-
-    ret = {"name": plan.__name__, "parameters": []}
-
-    if param_annotation:
-        # The function description should always be present
-        ret["description"] = param_annotation.get("description", "")
-
-    # Function parameters
+    ret = {"module": plan.__module__, "name": plan.__name__, "parameters": []}
     for p in sig.parameters.values():
         working_dict = {"name": p.name}
         ret["parameters"].append(working_dict)
+        for target in ["kind", "default", "annotation"]:
+            v = getattr(p, target)
+            if v is not p.empty:
+                working_dict[target] = filter_values(v)
 
-        working_dict["kind"] = {"name": p.kind.name, "value": p.kind.value}
-
-        working_dict["default"] = str(filter_values(p.default))
-        working_dict["default_pickled"] = bytes2hex(pickle.dumps(p.default))
-
-        working_dict["annotation"] = str(filter_values(p.annotation))
-        working_dict["annotation_pickled"] = bytes2hex(pickle.dumps(p.annotation))
-
-        if param_annotation and ("parameters" in param_annotation):
-            working_dict["custom"] = param_annotation["parameters"].get(p.name, {})
-
-    # Return value
-    return_info = {}
-    return_info["annotation"] = str(filter_values(sig.return_annotation))
-    return_info["annotation_pickled"] = bytes2hex(pickle.dumps(sig.return_annotation))
-    if param_annotation and ("returns" in param_annotation):
-        return_info["custom"] = param_annotation["returns"]
-    ret["returns"] = return_info
     return ret
-
-
-def _prepare_plans(plans):
-    """
-    Prepare dictionary of existing plans for saving to YAML file.
-    """
-    return {k: _process_plan(v) for k, v in plans.items()}
-
-
-def _prepare_devices(devices):
-    """
-    Prepare dictionary of existing devices for saving to YAML file.
-    """
-    return {k: {"classname": type(v).__name__, "module": type(v).__module__} for k, v in devices.items()}
-
-
-def _unpickle_types(existing_dict):
-    """
-    Unpickle types in the dictionary of existing devices or plans. Unpickling is needed if
-    two dictionaries need to be compared (representation of pickled items may differ between
-    different versions of Python). Currently used in unit tests.
-
-    The data structure contains lists of dictionaries, so unpickling function must be able
-    to iteratively process the list elements. The data is processed in place, the function
-    does not return anything.
-    """
-    if isinstance(existing_dict, dict):
-        for key, value in existing_dict.items():
-            if key.endswith("_pickled"):
-                if isinstance(value, str):
-                    unpickled_value = pickle.loads(hex2bytes(value))
-                    existing_dict[key] = unpickled_value
-            else:
-                _unpickle_types(value)
-    elif isinstance(existing_dict, list) or isinstance(existing_dict, tuple):
-        for item in existing_dict:
-            _unpickle_types(item)
 
 
 def gen_list_of_plans_and_devices(path=None, file_name="existing_plans_and_devices.yaml", overwrite=False):
@@ -840,8 +521,10 @@ def gen_list_of_plans_and_devices(path=None, file_name="existing_plans_and_devic
         devices = devices_from_nspace(nspace)
 
         existing_plans_and_devices = {
-            "existing_plans": _prepare_plans(plans),
-            "existing_devices": _prepare_devices(devices),
+            "existing_plans": {k: _process_plan(v) for k, v in plans.items()},
+            "existing_devices": {
+                k: {"classname": type(v).__name__, "module": type(v).__module__} for k, v in devices.items()
+            },
         }
 
         file_path = os.path.join(path, file_name)
@@ -849,7 +532,7 @@ def gen_list_of_plans_and_devices(path=None, file_name="existing_plans_and_devic
             raise IOError(f"File '{file_path}' already exists. File overwriting is disabled.")
 
         with open(file_path, "w") as stream:
-            stream.write("# This file is automatically generated. Edit at your own risk.\n")
+            stream.write("# This file is automatically generated. Edit at your own risk.")
             yaml.dump(existing_plans_and_devices, stream)
 
     except Exception as ex:
@@ -884,7 +567,7 @@ def load_existing_plans_and_devices(path_to_file=None):
         )
 
     with open(path_to_file, "r") as stream:
-        existing_plans_and_devices = yaml.load(stream, Loader=yaml.FullLoader)
+        existing_plans_and_devices = yaml.safe_load(stream)
 
     existing_plans = existing_plans_and_devices["existing_plans"]
     existing_devices = existing_plans_and_devices["existing_devices"]
@@ -901,7 +584,7 @@ _user_group_permission_schema = {
             "type": "object",
             "additionalProperties": {
                 "type": "object",
-                "required": ["allowed_plans", "forbidden_plans", "allowed_devices", "forbidden_devices"],
+                "requiredProperties": ["allowed", "forbidden"],
                 "additionalProperties": False,
                 "properties": {
                     "allowed_plans": {
@@ -932,25 +615,6 @@ _user_group_permission_schema = {
 
 
 def load_user_group_permissions(path_to_file=None):
-    """
-    Load the data on allowed plans and devices for user groups.
-
-    Parameters
-    ----------
-    path_to_file: str
-        Full path to YAML file that contains user data permissions.
-
-    Returns
-    -------
-    dict
-        Data structure with user permissions. Returns ``{}`` if path is empty string
-        or None.
-
-    Raises
-    ------
-    IOError
-        Error while reading the YAML file.
-    """
 
     if not path_to_file:
         return {}

@@ -195,7 +195,7 @@ def _collect_data_for_docstring(func, annotation):
     doc_params = dict()
     # Description of the function (it must be present in annotation)
     doc_params["description"] = annotation["description"]
-    # Flag that tells if the function is generator. Title for returning
+    # Flag that tells if the function is a generator. Title for returning
     #   values for generator is 'Yields' and for regular functions it is 'Returns'
     doc_params["is_generator"] = inspect.isgeneratorfunction(func)
 

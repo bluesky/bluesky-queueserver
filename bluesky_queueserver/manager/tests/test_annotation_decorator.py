@@ -319,7 +319,7 @@ val_kwarg: typing.List(Device)
 Yields
 ------
 int
-    Sequence of number
+    Sequence of numbers
 """
 
 

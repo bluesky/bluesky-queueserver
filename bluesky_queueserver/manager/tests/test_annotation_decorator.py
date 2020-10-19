@@ -207,7 +207,6 @@ def test_annotation_dectorator_2(custom_annotation, expected_docstring):
     assert func._custom_parameter_annotation_ == custom_annotation
     assert func(10, val_kwarg=20) == 30
     assert func.__name__ == "func"
-    # assert False, print(func.__doc__)
     assert func.__doc__ == expected_docstring
 
 

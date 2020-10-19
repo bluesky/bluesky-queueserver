@@ -61,7 +61,7 @@ def _print_docstring_title(title):
     Parameters
     ----------
     title: str
-        Title (such as ``Parameters``, ``Returns`` or ``Yields``.
+        Title (such as ``Parameters``, ``Returns`` or ``Yields``).
 
     Returns
     -------

@@ -10,6 +10,7 @@ scikit-image # Needed for BEC/other stuff to run, factor out
 msgpack>=1.0.0
 msgpack_numpy
 ophyd
+pydantic
 pyyaml
 pyzmq
 requests

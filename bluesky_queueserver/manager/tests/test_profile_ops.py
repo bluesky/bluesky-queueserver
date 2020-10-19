@@ -2,11 +2,14 @@ import os
 import pytest
 import copy
 import yaml
+import pickle
+import typing
 
 import ophyd
 
 from ._common import copy_default_profile_collection, patch_first_startup_file
 
+from bluesky_queueserver.manager.annotation_decorator import parameter_annotation_decorator
 
 from bluesky_queueserver.manager.profile_ops import (
     get_default_profile_collection_dir,
@@ -21,7 +24,29 @@ from bluesky_queueserver.manager.profile_ops import (
     validate_plan,
     _select_allowed_items,
     load_allowed_plans_and_devices,
+    hex2bytes,
+    bytes2hex,
+    _prepare_plans,
+    _prepare_devices,
+    _unpickle_types,
 )
+
+
+def test_hex2bytes_bytes2hex():
+    """
+    Basic test for the functions ``hex2bytes`` and ``bytes2hex``.
+    """
+    dict_initial = {"abc": 50, "def": {"some_key": "some_value"}}
+
+    # Check if pickling/unpickling a dictionary works.
+    b_in = pickle.dumps(dict_initial)
+    s = bytes2hex(b_in)
+    assert isinstance(s, str)
+    assert len(s) == 3 * len(b_in) - 1
+    b_out = hex2bytes(s)
+    assert b_out == b_in
+    dict_result = pickle.loads(b_out)
+    assert dict_result == dict_initial
 
 
 def test_get_default_profile_collection_dir():
@@ -253,6 +278,78 @@ def test_load_existing_plans_and_devices():
     existing_plans, existing_devices = load_existing_plans_and_devices(None)
     assert existing_plans == {}
     assert existing_devices == {}
+
+
+def test_unpickle_items():
+    """
+    Simple test for ``_unpickle_items()``.
+    """
+    # Dictionary that contains pickled values. The dictionary may contain lists (tuples)
+    #   of dictionaries, so the conversion function must be able to handle the lists.
+    item_dict_pickled = {
+        "a": "abc",
+        "b": typing.Any,
+        "b_pickled": bytes2hex(pickle.dumps(typing.Any)),
+        "e": {
+            "f": {
+                "a": "abc",
+                "b": typing.List[typing.Any],
+                "b_pickled": bytes2hex(pickle.dumps(typing.List[typing.Any])),
+            },
+            "g": [
+                {
+                    "d": {
+                        "p_pickled": bytes2hex(pickle.dumps(typing.Union[float, str])),
+                    }
+                }
+            ],
+        },
+    }
+
+    # The dictionary with raw binary items.
+    item_dict = copy.deepcopy(item_dict_pickled)
+    item_dict["b_pickled"] = typing.Any
+    item_dict["e"]["f"]["b_pickled"] = typing.List[typing.Any]
+    item_dict["e"]["g"][0]["d"]["p_pickled"] = typing.Union[float, str]
+
+    _unpickle_types(item_dict_pickled)
+    assert item_dict_pickled == item_dict
+
+
+def test_verify_default_profile_collection():
+    """
+    Verify if the list of existing plans and devices matches current default profile collection.
+    This test may fail if the the algorithm for generating the lists, the set of built-in
+    bluesky plans or simulated Ophyd devices was changed. Generate the new list to fix the
+    issue.
+    """
+    # Create dictionaries of existing plans and devices. Apply all preprocessing steps.
+    pc_path = get_default_profile_collection_dir()
+    nspace = load_profile_collection(pc_path)
+
+    plans = plans_from_nspace(nspace)
+    plans = _prepare_plans(plans)
+
+    devices = devices_from_nspace(nspace)
+    devices = _prepare_devices(devices)
+
+    # Read the list of the existing plans of devices
+    file_path = os.path.join(pc_path, "existing_plans_and_devices.yaml")
+    existing_plans, existing_devices = load_existing_plans_and_devices(file_path)
+
+    # The types must be unpicked before they could be compared (pickling format may
+    #   differ depending on Python version)
+    _unpickle_types(plans)
+    _unpickle_types(devices)
+    _unpickle_types(existing_plans)
+    _unpickle_types(existing_devices)
+
+    # Compare
+    assert set(plans.keys()) == set(existing_plans.keys())
+    assert set(devices) == set(existing_devices)
+
+    assert plans == existing_plans
+    assert devices == existing_devices
 
 
 _user_groups_text = r"""user_groups:
@@ -509,15 +606,15 @@ def _f5(a, b=5, *args, c, d=4):
     (_f1, {"name": "existing", "args": [], "kwargs": {"a": 1, "b": 4, "c": 5}}, True, ""),
     (_f1, {"name": "existing", "args": [], "kwargs": {"c": 1, "b": 4, "a": 5}}, True, ""),
     (_f1, {"name": "existing", "args": [1, 4], "kwargs": {}}, False,
-     "Plan parameters do not contain required args or kwargs"),
+     "Plan validation failed: missing a required argument: 'c'"),
     (_f1, {"name": "existing", "args": [], "kwargs": {}}, False,
-     "Plan parameters do not contain required args or kwargs"),
+     "Plan validation failed: missing a required argument: 'a'"),
     (_f1, {"name": "existing", "args": [1, 4, 6, 7], "kwargs": {}}, False,
-     "The number of args exceeds the number of allowed parameters"),
+     "Plan validation failed: too many positional arguments"),
     (_f1, {"name": "existing", "args": [1, 4, 6, 7], "kwargs": {"kw": 10}}, False,
-     "The number of args exceeds the number of allowed parameters"),
+     "Plan validation failed: too many positional arguments"),
     (_f1, {"name": "existing", "args": [1, 4], "kwargs": {"b": 10}}, False,
-     "Unexpected kwargs ['b'] in the plan parameters"),
+     "Plan validation failed: multiple values for argument 'b'"),
 
     (_f2, {"name": "existing", "args": [1, 4, 5], "kwargs": {}}, True, ""),
     (_f2, {"name": "existing", "args": [], "kwargs": {"a": 1, "b": 4, "c": 5}}, True, ""),
@@ -529,19 +626,19 @@ def _f5(a, b=5, *args, c, d=4):
     (_f3, {"name": "existing", "args": [1, 4], "kwargs": {"c": 5, "d": 10}}, True, ""),
     (_f3, {"name": "existing", "args": [], "kwargs": {"a": 1, "b": 4, "c": 5, "d": 10}}, True, ""),
     (_f3, {"name": "existing", "args": [], "kwargs": {"a": 1, "b": 4, "d": 10}}, False,
-     "Plan parameters do not contain required args or kwargs ['c']"),
+     "Plan validation failed: missing a required argument: 'c'"),
     (_f3, {"name": "existing", "args": [6, 8], "kwargs": {"a": 1, "c": 4, "d": 10}}, False,
-     "Unexpected kwargs ['a'] in the plan parameters"),
+     "Plan validation failed: multiple values for argument 'a'"),
 
     (_f4, {"name": "existing", "args": [1, 4], "kwargs": {"c": 5, "d": 10}}, True, ""),
     (_f4, {"name": "existing", "args": [1, 4], "kwargs": {"c": 5}}, True, ""),
     (_f4, {"name": "existing", "args": [1, 4], "kwargs": {"d": 10}}, False,
-     "Plan parameters do not contain required args or kwargs ['c']"),
+     "Plan validation failed: missing a required argument: 'c'"),
 
     (_f5, {"name": "existing", "args": [1, 4], "kwargs": {"c": 5, "d": 10}}, True, ""),
     (_f5, {"name": "existing", "args": [1], "kwargs": {"c": 5, "d": 10}}, True, ""),
     (_f5, {"name": "existing", "args": [], "kwargs": {"c": 5, "d": 10}}, False,
-     "Plan parameters do not contain required args or kwargs ['a']"),
+     "Plan validation failed: missing a required argument: 'a"),
 
 ])
 # fmt: on
@@ -550,7 +647,7 @@ def test_validate_plan_1(func, plan, success, errmsg):
     Tests for the plan validation algorithm.
     """
     allowed_plans = {"existing": _process_plan(func)}
-    success_out, errmsg_out = validate_plan(plan, allowed_plans=allowed_plans)
+    success_out, errmsg_out = validate_plan(plan, allowed_plans=allowed_plans, allowed_devices=None)
 
     assert success_out == success, f"errmsg: {errmsg_out}"
     if success:
@@ -559,11 +656,140 @@ def test_validate_plan_1(func, plan, success, errmsg):
         assert errmsg in errmsg_out
 
 
-@pytest.mark.parametrize("allowed_plans", [None, {}])
-def test_validate_plan_2(allowed_plans):
+@pytest.mark.parametrize("allowed_plans, success", [(None, True), ({}, False)])
+def test_validate_plan_2(allowed_plans, success):
     """
     At this point all plans are considered valid if there is not list of allowed plans.
     """
-    success_out, errmsg_out = validate_plan({}, allowed_plans=allowed_plans)
-    assert success_out is True
-    assert errmsg_out == ""
+    success_out, errmsg_out = validate_plan({}, allowed_plans=allowed_plans, allowed_devices=None)
+    assert success_out is success
+
+
+@parameter_annotation_decorator(
+    {
+        "description": "Move motors into positions; then count dets.",
+        "parameters": {
+            "motors": {
+                "description": "List of motors to be moved into specified positions before the measurement",
+                "annotation": "typing.List[Motors]",
+                "devices": {"Motors": ("m1", "m2", "m3")},
+            },
+            "detectors": {
+                "description": "Detectors to use for measurement.",
+                "annotation": "typing.Union[typing.List[Detectors1], Detectors2]",
+                "devices": {
+                    "Detectors1": ("d1", "d2", "d3"),
+                    "Detectors2": ("d4", "d5"),
+                },
+            },
+            "positions": {
+                "description": "Motor positions.",
+            },
+            "plans_to_run": {
+                "description": "Plan to execute for measurement.",
+                "annotation": "typing.Union[typing.List[Plans], Plans]",
+                "plans": {"Plans": ("p1", "p3")},
+            },
+        },
+        "returns": {
+            "description": "Yields a sequence of plan messages.",
+            "annotation": "typing.Generator[tuple, None, None]",
+        },
+    }
+)
+def _some_strange_plan(
+    motors: typing.List[typing.Any],  # The actual type should be a list of 'ophyd.device.Device'
+    detectors: typing.List[typing.Any],  # The actual type should be a list of 'ophyd.device.Device'
+    plans_to_run: typing.Union[typing.List[callable], callable],
+    positions: typing.Union[typing.List[float], float, None] = 10,  # TYPE IS ACTUALLY USED FOR VALIDATION
+) -> typing.Generator[str, None, None]:  # Type should be 'bluesky.utils.Msg', not 'str'
+    yield from ["one", "two", "three"]
+
+
+# fmt: off
+@pytest.mark.parametrize("plan, allowed_devices, success, errmsg", [
+    # Basic use of the function.
+    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
+     ("m1", "m2", "d1", "d2"), True, ""),
+    # The same as the previous call, but all parameters are passed as kwargs.
+    ({"args": [], "kwargs": {"motors": ("m1", "m2"), "detectors": ("d1", "d2"), "plans_to_run": ("p1",),
+                             "positions": (10.0, 20.0)}},
+     ("m1", "m2", "d1", "d2"), True, ""),
+    # Positions are int (instead of float). Should be converted to float.
+    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10, 20)], "kwargs": {}},
+     ("m1", "m2", "d1", "d2"), True, ""),
+    # Position is a single value (part of type description).
+    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",), 10], "kwargs": {}},
+     ("m1", "m2", "d1", "d2"), True, ""),
+    # Position is None (part of type description).
+    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",), None], "kwargs": {}},
+     ("m1", "m2", "d1", "d2"), True, ""),
+    # Position is not specified (default value is used).
+    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",)], "kwargs": {}},
+     ("m1", "m2", "d1", "d2"), True, ""),
+
+    # Use motor that is not listed in the annotation (but exists in the list of allowed devices).
+    ({"args": [("m2", "m4"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
+     ("m2", "m4", "d1", "d2"), False, "value is not a valid enumeration member; permitted: 'm2'"),
+    # The motor is not in the list of allowed devices.
+    ({"args": [("m2", "m3"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
+     ("m2", "m4", "d1", "d2"), False, "value is not a valid enumeration member; permitted: 'm2'"),
+    # Both motors are not in the list of allowed devices.
+    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
+     ("m4", "m5", "d1", "d2"), False, "value is not a valid enumeration member; permitted:"),
+    # Empty list of allowed devices (should be the same result as above).
+    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
+     (), False, "value is not a valid enumeration member; permitted:"),
+    # Single motor is passed as a scalar (instead of a list element)
+    ({"args": ["m2", ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
+     ("m2", "m4", "d1", "d2"), False, "value is not a valid list"),
+
+    # Pass single detector (allowed).
+    ({"args": [("m1", "m2"), "d4", ("p1",), (10.0, 20.0)], "kwargs": {}},
+     ("m1", "m2", "d1", "d2", "d4"), True, ""),
+    # Pass single detector from 'Detectors2' group, which is not in the list of allowed devices.
+    ({"args": [("m1", "m2"), "d4", ("p1",), (10.0, 20.0)], "kwargs": {}},
+     ("m1", "m2", "d1", "d2"), False, "value is not a valid enumeration member; permitted:"),
+    # Pass single detector from 'Detectors1' group (not allowed).
+    ({"args": [("m1", "m2"), "d2", ("p1",), (10.0, 20.0)], "kwargs": {}},
+     ("m1", "m2", "d1", "d2", "d4"), False, " value is not a valid list"),
+    # Pass a detector from a group 'Detector2' as a list element.
+    ({"args": [("m1", "m2"), ("d4",), ("p1",), (10.0, 20.0)], "kwargs": {}},
+     ("m1", "m2", "d1", "d2", "d4"), False, "value is not a valid enumeration member; permitted: 'd1', 'd2'"),
+
+    # Plan 'p3' is not in the list of allowed plans
+    ({"args": [("m1", "m2"), ("d1", "d2"), ("p3",), (10.0, 20.0)], "kwargs": {}},
+     ("m1", "m2", "d1", "d2"), False, "value is not a valid enumeration member; permitted: 'p1'"),
+    # Plan 'p2' is in the list of allowed plans, but not listed in the annotation.
+    ({"args": [("m1", "m2"), ("d1", "d2"), ("p2",), (10.0, 20.0)], "kwargs": {}},
+     ("m1", "m2", "d1", "d2"), False, "value is not a valid enumeration member; permitted: 'p1'"),
+    # Plan 'p2' is in the list of allowed plans, but not listed in the annotation.
+    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1", "p2"), (10.0, 20.0)], "kwargs": {}},
+     ("m1", "m2", "d1", "d2"), False, "value is not a valid enumeration member; permitted: 'p1'"),
+    # Single plan is passed as a scalar (allowed in the annotation).
+    ({"args": [("m1", "m2"), ("d1", "d2"), "p1", (10.0, 20.0)], "kwargs": {}},
+     ("m1", "m2", "d1", "d2"), True, ""),
+
+])
+# fmt: on
+def test_validate_plan_3(plan, allowed_devices, success, errmsg):
+    """
+    Test ``validate_plan`` on a function with more complicated signature and custom annotation.
+    Mostly testing verification of types and use of the list of available devices.
+    """
+    plan["name"] = "_some_strange_plan"
+    allowed_plans = {
+        "_some_strange_plan": _process_plan(_some_strange_plan),
+        "p1": {},  # The plan is used only as a parameter value
+        "p2": {},  # The plan is used only as a parameter value
+    }
+    # 'allowed_devices' must be a dictionary
+    allowed_devices = {_: None for _ in allowed_devices}
+
+    success_out, errmsg_out = validate_plan(plan, allowed_plans=allowed_plans, allowed_devices=allowed_devices)
+
+    assert success_out == success, f"errmsg: {errmsg_out}"
+    if success:
+        assert errmsg_out == errmsg
+    else:
+        assert errmsg in errmsg_out

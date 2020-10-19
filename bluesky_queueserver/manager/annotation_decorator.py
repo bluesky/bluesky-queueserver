@@ -54,13 +54,13 @@ _parameter_annotation_schema = {
 
 def _print_docstring_title(title):
     """
-    Print title of the docstring to a string. Title is underline using correct number
+    Print title of the docstring to a string. The title is underlined using the correct number
     of ``-`` sybmols.
 
     Parameters
     ----------
     title: str
-        Title (such as ``Parameters``, ``Returns`` or ``Yields``.
+        Title (such as ``Parameters``, ``Returns`` or ``Yields``).
 
     Returns
     -------
@@ -194,7 +194,7 @@ def _collect_data_for_docstring(func, annotation):
     doc_params = dict()
     # Description of the function (it must be present in annotation)
     doc_params["description"] = annotation["description"]
-    # Flag that tells if the function is generator. Title for returning
+    # Flag that tells if the function is a generator. Title for returning
     #   values for generator is 'Yields' and for regular functions it is 'Returns'
     doc_params["is_generator"] = inspect.isgeneratorfunction(func)
 

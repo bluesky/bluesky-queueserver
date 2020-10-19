@@ -208,7 +208,6 @@ def test_annotation_dectorator_2(custom_annotation, expected_docstring):
     assert func._custom_parameter_annotation_ == custom_annotation
     assert func(10, val_kwarg=20) == 30
     assert func.__name__ == "func"
-    # assert False, print(func.__doc__)
     assert func.__doc__ == expected_docstring
 
 
@@ -288,7 +287,7 @@ _custom_annotation_plans_and_devices = {
     "description": "Custom annotation with plans and devices.",
     "parameters": {
         "val_arg": {
-            "description": "Parameter that accepts a plans.",
+            "description": "Parameter that accepts plans.",
             "annotation": "typing.Union(Plan1, Plan2)",
             "plans": {"Plan1": ("count", "scan", "gridscan"), "Plan2": ("some", "other", "plans")},
         },
@@ -298,7 +297,7 @@ _custom_annotation_plans_and_devices = {
             "devices": {"Device": ("det1", "det2", "det3")},
         },
     },
-    "returns": {"description": "Sequence of number"},
+    "returns": {"description": "Sequence of numbers"},
 }
 
 
@@ -321,7 +320,7 @@ val_kwarg: typing.List(Device)
 Yields
 ------
 int
-    Sequence of number
+    Sequence of numbers
 """
 
 
@@ -369,7 +368,7 @@ _more_complicated_annotation = {
         "kwargs": {
             "devices": {"Detector": ("det50", "det51")},
             "annotation": "typing.Union[float, Detector]",
-            "description": "Detectors and ints",
+            "description": "Detectors or floats",
         },
     },
     "returns": {"description": "Yields strings from the list of three strings."},
@@ -409,7 +408,7 @@ val2: typing.Union[int, float]
     Kind: keyword only.
     Default: 6.
 kwargs: typing.Union[float, Detector]
-    Detectors and ints
+    Detectors or floats
     Allowed device names:
         'Detector': ('det50', 'det51')
     Kind: var keyword.

@@ -367,7 +367,7 @@ _more_complicated_annotation = {
         "kwargs": {
             "devices": {"Detector": ("det50", "det51")},
             "annotation": "typing.Union[float, Detector]",
-            "description": "Detectors and ints",
+            "description": "Detectors or floats",
         },
     },
     "returns": {"description": "Yields strings from the list of three strings."},

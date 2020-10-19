@@ -286,7 +286,7 @@ _custom_annotation_plans_and_devices = {
     "description": "Custom annotation with plans and devices.",
     "parameters": {
         "val_arg": {
-            "description": "Parameter that accepts a plans.",
+            "description": "Parameter that accepts plans.",
             "annotation": "typing.Union(Plan1, Plan2)",
             "plans": {"Plan1": ("count", "scan", "gridscan"), "Plan2": ("some", "other", "plans")},
         },

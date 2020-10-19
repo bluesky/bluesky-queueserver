@@ -407,7 +407,7 @@ val2: typing.Union[int, float]
     Kind: keyword only.
     Default: 6.
 kwargs: typing.Union[float, Detector]
-    Detectors and ints
+    Detectors or floats
     Allowed device names:
         'Detector': ('det50', 'det51')
     Kind: var keyword.

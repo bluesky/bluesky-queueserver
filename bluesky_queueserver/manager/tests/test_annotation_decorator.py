@@ -296,7 +296,7 @@ _custom_annotation_plans_and_devices = {
             "devices": {"Device": ("det1", "det2", "det3")},
         },
     },
-    "returns": {"description": "Sequence of number"},
+    "returns": {"description": "Sequence of numbers"},
 }
 
 

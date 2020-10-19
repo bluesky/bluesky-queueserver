@@ -55,7 +55,7 @@ _parameter_annotation_schema = {
 
 def _print_docstring_title(title):
     """
-    Print title of the docstring to a string. Title is underline using correct number
+    Print title of the docstring to a string. The title is underlined using the correct number
     of ``-`` sybmols.
 
     Parameters

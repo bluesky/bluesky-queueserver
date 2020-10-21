@@ -30,7 +30,7 @@ async def startup_event():
 @app.on_event("shutdown")
 def shutdown_event():
     global zmq_to_manager
-    del zmq_to_manager
+    zmq_to_manager.close()
 
 
 class REPauseOptions(str, Enum):

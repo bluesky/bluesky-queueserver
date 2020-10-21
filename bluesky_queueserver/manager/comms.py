@@ -448,6 +448,7 @@ class ZMQCommSendAsync:
             for n in range(10):
                 msg = await send_message(method="some_method", params={"some_value": n}
                 print(f"msg={msg}")
+            zmq_comm.close()
 
         asyncio.run(communicate())
     """
@@ -478,7 +479,7 @@ class ZMQCommSendAsync:
         self._lock_zmq = asyncio.Lock()
 
     def __del__(self):
-        self._zmq_socket.close()
+        self.close()
 
     def get_loop(self):
         """
@@ -567,6 +568,13 @@ class ZMQCommSendAsync:
                 msg_in = {"success": False, "msg": errmsg}
             return msg_in
 
+    def close(self):
+        """
+        Close ZMQ socket. Call to close socket if the object is no longer needed, but may
+        not be destroyed for some time.
+        """
+        self._zmq_socket.close()
+
 
 def zmq_single_request(method, params=None, *, zmq_server_address=None):
     """
@@ -599,7 +607,7 @@ def zmq_single_request(method, params=None, *, zmq_server_address=None):
         nonlocal msg_received
         zmq_to_manager = ZMQCommSendAsync(zmq_server_address=zmq_server_address)
         msg_received = await zmq_to_manager.send_message(method=method, params=params)
-        del zmq_to_manager  # This will close the socket
+        zmq_to_manager.close()
 
     try:
         asyncio.run(send_request(method, params))

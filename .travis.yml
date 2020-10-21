@@ -65,7 +65,7 @@ before_script:
             echo "Not attempting to run doctr due to the docs failed to build"
         else
             pip install doctr
-            doctr deploy --built-docs docs/build/html .
+            doctr deploy --built-docs docs/build/html . --branch-whitelist main
             res=$?
             echo "Docs deployment with 'doctr' finished with the exit code ($res)."
         fi

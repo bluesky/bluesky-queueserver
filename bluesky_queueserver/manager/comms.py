@@ -426,10 +426,9 @@ class ZMQCommSendAsync:
     ----------
     loop: asyncio loop
         Current event loop
-    zmq_host: str
-        Host name or IP of ZMQ server
-    zmq_port: str or int
-        Port of the ZMQ server
+    zmq_server_address: str or None
+        Address of ZMQ server. If None, then the default address is ``tcp://localhost:5555``
+        is used.
     timeout_recv: int
         Timeout (in ms) for ZMQ receive operations.
     timeout_send: int
@@ -458,13 +457,14 @@ class ZMQCommSendAsync:
         self,
         *,
         loop=None,
-        zmq_host="localhost",
-        zmq_port="5555",
+        zmq_server_address=None,
         timeout_recv=2000,
         timeout_send=500,
         raise_timeout_exceptions=False,
     ):
         self._loop = loop if loop else asyncio.get_event_loop()
+
+        zmq_server_address = zmq_server_address or "tcp://localhost:5555"
 
         self._timeout_receive = timeout_recv  # Timeout for 'recv' operation (ms)
         self._timeout_send = timeout_send  # # Timeout for 'send' operation (ms)
@@ -473,7 +473,7 @@ class ZMQCommSendAsync:
         # ZeroMQ communication
         self._ctx = zmq.asyncio.Context()
         self._zmq_socket = None
-        self._zmq_server_address = f"tcp://{zmq_host}:{zmq_port}"
+        self._zmq_server_address = zmq_server_address
 
         self._zmq_socket_open()
         self._lock_zmq = asyncio.Lock()
@@ -511,7 +511,10 @@ class ZMQCommSendAsync:
         # Clear the buffer quickly after the socket is closed
         self._zmq_socket.setsockopt(zmq.LINGER, 100)
 
-        self._zmq_socket.connect(self._zmq_server_address)
+        if self._zmq_socket.connect(self._zmq_server_address):
+            msg_err = f"Failed to connect to the server '{self._zmq_server_address}'"
+            raise RuntimeError(msg_err)
+
         logger.info("Connected to ZeroMQ server '%s'" % str(self._zmq_server_address))
 
     def _zmq_socket_restart(self):

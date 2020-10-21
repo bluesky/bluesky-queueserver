@@ -36,6 +36,9 @@ jobs:
     # As of 2020-10-08, Python 3.9 distribution is not available in TravisCI's repos yet.
     # - python: 3.9
 
+  allow_failures:
+    - name: "Build/deploy docs"
+
 before_install:
   - |
     if [ "${FLAKE_8}" == "true" ]; then

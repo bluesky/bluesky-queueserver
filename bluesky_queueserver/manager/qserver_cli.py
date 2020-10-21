@@ -105,7 +105,7 @@ def create_msg(command, params=None):
         raise ValueError(f"Command '{command}' is not supported.")
 
 
-def single_zmq_request(zmq_server_address, method, params):
+def single_zmq_request(method, params, *, zmq_server_address=None):
 
     msg_received = None
 
@@ -208,7 +208,7 @@ def qserver():
 
     try:
         while True:
-            msg, msg_err = single_zmq_request(args.address, command, params)
+            msg, msg_err = single_zmq_request(command, params, zmq_server_address=args.address)
 
             now = datetime.now()
             current_time = now.strftime("%H:%M:%S")

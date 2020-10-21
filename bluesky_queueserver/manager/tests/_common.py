@@ -5,11 +5,10 @@ import pytest
 import subprocess
 import asyncio
 import time as ttime
-import zmq
-import zmq.asyncio
 
 from bluesky_queueserver.manager.profile_ops import get_default_profile_collection_dir
 from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
+from bluesky_queueserver.manager.comms import zmq_single_request
 
 import logging
 
@@ -88,120 +87,9 @@ def patch_first_startup_file_undo(pc_path):
         os.rename(fln_tmp, fln)
 
 
-class TinyZmqClient:
-    """
-    This is a simplified version of ZMQ Client, which is very similar to the client
-    used in ``qserver_cli``. The server does not perform any verification of input
-    and output data and intended for testing 0MQ API of RE Manager.
-    """
-
-    def __init__(self, *, address=None):
-        # ZeroMQ communication
-        self._ctx = zmq.asyncio.Context()
-        self._zmq_socket = None
-
-        if address is None:
-            self._zmq_server_address = "tcp://localhost:5555"
-        else:
-            self._zmq_server_address = address
-
-        # The attributes for storing output command and received input
-        self._msg_method_out = ""
-        self._msg_params_out = {}
-        self._msg_in = {}
-        self._msg_err_in = ""
-
-    async def _zmq_send(self, msg):
-        await self._zmq_socket.send_json(msg)
-
-    async def _zmq_receive(self):
-        return await self._zmq_socket.recv_json()
-
-    async def _zmq_communicate(self, msg_out):
-        try:
-            await self._zmq_send(msg_out)
-            msg_in = await self._zmq_receive()
-            return msg_in
-        except Exception as ex:
-            raise RuntimeError(f"ZeroMQ communication failed: {str(ex)}")
-
-    async def _zmq_open_connection(self, address):
-        if self._zmq_socket.connect(address):
-            msg_err = f"Failed to connect to the server '{address}'"
-            raise RuntimeError(msg_err)
-
-    async def zmq_single_request(self):
-        self._zmq_socket = self._ctx.socket(zmq.REQ)
-        self._zmq_socket.RCVTIMEO = 2000  # Timeout for 'recv' operation
-        self._zmq_socket.SNDTIMEO = 500  # Timeout for 'send' operation
-        # Clear the buffer quickly after the socket is closed
-        self._zmq_socket.setsockopt(zmq.LINGER, 100)
-
-        try:
-            await self._zmq_open_connection(self._zmq_server_address)
-            logger.info("Connected to ZeroMQ server '%s'", self._zmq_server_address)
-            self._msg_in = await self._send_command(method=self._msg_method_out, params=self._msg_params_out)
-            self._msg_err_in = ""
-        except Exception as ex:
-            self._msg_in = None
-            self._msg_err_in = str(ex)
-            # Close the socket to clear the buffer quickly in case of an error.
-            self._zmq_socket.close()
-
-        if self._msg_err_in:
-            logger.warning("Communication with RE Manager failed: %s", str(self._msg_err_in))
-
-    async def _send_command(self, *, method, params=None):
-        msg_out = self._create_msg(method=method, params=params)
-        msg_in = await self._zmq_communicate(msg_out)
-        return msg_in
-
-    def _create_msg(self, method, params=None):
-        """
-        The function combines 'method' and 'params' to form a request message
-        sent over ZMQ.
-        """
-        params = params or {}
-        return {"method": method, "params": params}
-
-    def set_msg_out(self, method, params):
-        self._msg_method_out = method
-        self._msg_params_out = params
-
-    def get_msg_in(self):
-        return self._msg_in, self._msg_err_in
-
-
-def zmq_communicate(method, params=None):
-    """
-    Communicate with RE Manager.
-
-    Parameters
-    ----------
-    method: str
-        Name of the method called in RE Manager
-    params: dict or None
-        Dictionary of parameters (payload of the message). If ``None`` then
-        the message is sent with empty payload: ``params = {}``.
-
-    Returns
-    -------
-    msg: dict or None
-        Message received from RE Manager in response to the request. None if communication
-        error (timeout) occurred.
-    err_msg: str
-        Contains a message in case communication error (timeout) occurs. Empty string otherwise.
-    """
-    zmq_client = TinyZmqClient()
-    zmq_client.set_msg_out(method, params)
-    asyncio.run(zmq_client.zmq_single_request())
-    msg, err_msg = zmq_client.get_msg_in()
-    return msg, err_msg
-
-
 def get_queue_state():
     method, params = "status", None
-    msg, _ = zmq_communicate(method, params)
+    msg, _ = zmq_single_request(method, params)
     if msg is None:
         raise TimeoutError("Timeout occurred while reading RE Manager status.")
     return msg
@@ -212,7 +100,7 @@ def get_queue():
     Returns current queue.
     """
     method, params = "queue_get", None
-    msg, _ = zmq_communicate(method, params)
+    msg, _ = zmq_single_request(method, params)
     if msg is None:
         raise TimeoutError("Timeout occurred while loading queue from RE Manager.")
     return msg
@@ -335,7 +223,7 @@ class ReManager:
         """
         if self._p:
             # Try to stop the manager in a nice way first by sending the command
-            zmq_communicate(method="manager_stop", params=None)
+            zmq_single_request(method="manager_stop", params=None)
             try:
                 self._p.wait(timeout)
                 clear_redis_pool()

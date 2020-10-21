@@ -450,7 +450,6 @@ class ZMQCommSendAsync:
                 print(f"msg={msg}")
 
         asyncio.run(communicate())
-
     """
 
     def __init__(
@@ -537,8 +536,9 @@ class ZMQCommSendAsync:
         method: str
             Name of the method to be invoked on the server. The method must be supported
             by the server.
-        params: dict
-            Dictionary of parameters passed to the method.
+        params: dict or None
+            Dictionary of parameters passed to the method. If ``None`` then empty dictionar
+            is passed to the server.
 
         Returns
         -------
@@ -550,6 +550,10 @@ class ZMQCommSendAsync:
         CommTimeoutError
             Raised if communication error occurs and ``raise_timeout_exceptions`` is set ``True``.
         """
+
+        # Send empty dictionary if no parameters are passed
+        params = params or {}
+
         async with self._lock_zmq:
             try:
                 msg_out = self._create_msg(method=method, params=params)
@@ -562,3 +566,51 @@ class ZMQCommSendAsync:
                     raise CommTimeoutError(errmsg)
                 msg_in = {"success": False, "msg": errmsg}
             return msg_in
+
+
+def zmq_single_request(method, params=None, *, zmq_server_address=None):
+    """
+    Send a single request to ZMQ server. The function opens the socket, sends
+    a single ZMQ request and closes the socket. The function is not expected
+    to raise exceptions. In case of communication error the return value
+    of ``msg`` is ``None`` and ``err_msg`` contains the error message. Otherwise
+    ``err_msg`` is empty and ``msg`` contains the dictionary returned by the server.
+
+    Parameters
+    ----------
+    method: str
+        Name of the method called in RE Manager
+    params: dict or None
+        Dictionary of parameters (payload of the message). If ``None`` then
+        the message is sent with empty payload: ``params = {}``.
+
+    Returns
+    -------
+    msg: dict or None
+        Message received from RE Manager in response to the request. None if communication
+        error (timeout) occurred.
+    err_msg: str
+        Contains a message in case communication error (timeout) occurs. Empty string otherwise.
+    """
+
+    msg_received = None
+
+    async def send_request(method, params):
+        nonlocal msg_received
+        zmq_to_manager = ZMQCommSendAsync(zmq_server_address=zmq_server_address)
+        msg_received = await zmq_to_manager.send_message(method=method, params=params)
+        del zmq_to_manager  # This will close the socket
+
+    try:
+        asyncio.run(send_request(method, params))
+
+        msg = msg_received
+        msg_err = ""
+    except Exception as ex:
+        msg = None
+        msg_err = str(ex)
+
+    if msg_err:
+        logger.warning("Communication with RE Manager failed: %s", str(msg_err))
+
+    return msg, msg_err

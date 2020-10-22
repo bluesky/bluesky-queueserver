@@ -538,7 +538,7 @@ class ZMQCommSendAsync:
             Name of the method to be invoked on the server. The method must be supported
             by the server.
         params: dict or None
-            Dictionary of parameters passed to the method. If ``None`` then empty dictionar
+            Dictionary of parameters passed to the method. If ``None``, then an empty dictionary
             is passed to the server.
 
         Returns

@@ -159,29 +159,39 @@ def test_set_new_plan_uuid(pq, plan):
     assert new_plan["plan_uid"] != uid
 
 
-def test_uid_set(pq):
+def test_uid_dict_1(pq):
     """
-    Basic test for functions associated with `_uid_set`
+    Basic test for functions associated with `_uid_dict`
     """
-    pq._uid_set_add("a")
-    pq._uid_set_add("b")
+    plan_a = {"plan_uid": "a", "name": "name_a"}
+    plan_b = {"plan_uid": "b", "name": "name_b"}
+    plan_c = {"plan_uid": "c", "name": "name_c"}
 
-    assert pq._is_uid_in_set("a") is True
-    assert pq._is_uid_in_set("b") is True
-    assert pq._is_uid_in_set("c") is False
+    plan_b_updated = {"plan_uid": "b", "name": "name_b_updated"}
 
-    pq._uid_set_remove("a")
-    assert pq._is_uid_in_set("a") is False
-    assert pq._is_uid_in_set("b") is True
+    pq._uid_dict_add(plan_a["plan_uid"], plan_a)
+    pq._uid_dict_add(plan_b["plan_uid"], plan_b)
 
-    pq._uid_set_clear()
-    assert pq._is_uid_in_set("a") is False
-    assert pq._is_uid_in_set("b") is False
+    assert pq._is_uid_in_dict(plan_a["plan_uid"]) is True
+    assert pq._is_uid_in_dict(plan_b["plan_uid"]) is True
+    assert pq._is_uid_in_dict(plan_c["plan_uid"]) is False
+
+    assert pq._uid_dict[plan_b["plan_uid"]] == plan_b
+    pq._uid_dict_update(plan_b_updated["plan_uid"], plan_b_updated)
+    assert pq._uid_dict[plan_b["plan_uid"]] == plan_b_updated
+
+    pq._uid_dict_remove(plan_a["plan_uid"])
+    assert pq._is_uid_in_dict(plan_a["plan_uid"]) is False
+    assert pq._is_uid_in_dict(plan_b["plan_uid"]) is True
+
+    pq._uid_dict_clear()
+    assert pq._is_uid_in_dict(plan_a["plan_uid"]) is False
+    assert pq._is_uid_in_dict(plan_b["plan_uid"]) is False
 
 
-def test_uid_set_initialize(pq):
+def test_uid_dict_2_initialize(pq):
     """
-    Basic test for functions associated with ``_uid_set_initialize()``
+    Basic test for functions associated with ``_uid_dict_initialize()``
     """
 
     async def testing():
@@ -189,12 +199,58 @@ def test_uid_set_initialize(pq):
         await pq.add_plan_to_queue({"name": "b"})
         await pq.add_plan_to_queue({"name": "c"})
         plans = await pq.get_plan_queue()
-        uid_set = set([_["plan_uid"] for _ in plans])
+        uid_dict = {_["plan_uid"]: _ for _ in plans}
 
-        await pq._uid_set_initialize()
-        assert pq._uid_set == uid_set
+        await pq._uid_dict_initialize()
+        assert pq._uid_dict == uid_dict
 
     asyncio.run(testing())
+
+
+def test_uid_dict_3_failing(pq):
+    """
+    Failing cases for functions associated with `_uid_dict`
+    """
+    plan_a = {"plan_uid": "a", "name": "name_a"}
+    plan_b = {"plan_uid": "b", "name": "name_b"}
+    plan_c = {"plan_uid": "c", "name": "name_c"}
+
+    pq._uid_dict_add(plan_a["plan_uid"], plan_a)
+    pq._uid_dict_add(plan_b["plan_uid"], plan_b)
+
+    # Add plan with UID that already exists
+    with pytest.raises(RuntimeError,
+                       match=f"'{plan_a['plan_uid']}', which is already in the queue"):
+        pq._uid_dict_add(plan_a["plan_uid"], plan_a)
+
+    assert len(pq._uid_dict) == 2
+
+    # Remove plan with UID does not exist exists
+    with pytest.raises(RuntimeError,
+                       match=f"'{plan_c['plan_uid']}', which is not in the queue"):
+        pq._uid_dict_remove(plan_c["plan_uid"])
+
+    assert len(pq._uid_dict) == 2
+
+    # Update plan with UID does not exist exists
+    with pytest.raises(RuntimeError,
+                       match=f"'{plan_c['plan_uid']}', which is not in the queue"):
+        pq._uid_dict_update(plan_c["plan_uid"], plan_c)
+
+    assert len(pq._uid_dict) == 2
+
+
+    # assert pq._is_uid_in_dict(plan_a["plan_uid"]) is True
+    # assert pq._is_uid_in_dict(plan_b["plan_uid"]) is True
+    # assert pq._is_uid_in_dict(plan_c["plan_uid"]) is False
+    #
+    # pq._uid_dict_remove(plan_a["plan_uid"])
+    # assert pq._is_uid_in_dict(plan_a["plan_uid"]) is False
+    # assert pq._is_uid_in_dict(plan_b["plan_uid"]) is True
+    #
+    # pq._uid_dict_clear()
+    # assert pq._is_uid_in_dict(plan_a["plan_uid"]) is False
+    # assert pq._is_uid_in_dict(plan_b["plan_uid"]) is False
 
 
 def test_remove_plan(pq):
@@ -367,7 +423,7 @@ def test_pop_plan_from_queue_1(pq, pos, name):
             assert plan["name"] == name
             assert qsize == 2
             assert await pq.get_plan_queue_size() == 2
-            # Push the plan back to the queue (proves that UID is removed from '_uid_set')
+            # Push the plan back to the queue (proves that UID is removed from '_uid_dict')
             await pq.add_plan_to_queue(plan)
             assert await pq.get_plan_queue_size() == 3
         else:
@@ -417,13 +473,13 @@ def test_clear_plan_queue(pq):
         await pq.set_next_plan_as_running()
 
         assert await pq.get_plan_queue_size() == 2
-        assert len(pq._uid_set) == 3
+        assert len(pq._uid_dict) == 3
 
         # Clears the queue only (doesn't touch the running plan)
         await pq.clear_plan_queue()
 
         assert await pq.get_plan_queue_size() == 0
-        assert len(pq._uid_set) == 1
+        assert len(pq._uid_dict) == 1
 
         with pytest.raises(ValueError, match="Parameter 'pos' has incorrect value"):
             await pq.pop_plan_from_queue(pos="something")
@@ -478,12 +534,12 @@ def test_set_next_plan_as_running(pq):
         assert await pq.set_next_plan_as_running() != {}
 
         assert await pq.get_plan_queue_size() == 2
-        assert len(pq._uid_set) == 3
+        assert len(pq._uid_dict) == 3
 
         # Apply if a plan is already running
         assert await pq.set_next_plan_as_running() == {}
         assert await pq.get_plan_queue_size() == 2
-        assert len(pq._uid_set) == 3
+        assert len(pq._uid_dict) == 3
 
     asyncio.run(testing())
 

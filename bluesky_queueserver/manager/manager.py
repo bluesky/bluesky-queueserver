@@ -846,7 +846,7 @@ class RunEngineManager(Process):
         logger.info("Removing item from the queue.")
         try:
             plan, qsize, msg = {}, None, ""
-            pos = request.get("pos", "back")
+            pos = request.get("pos", None)
             plan, qsize = await self._plan_queue.pop_plan_from_queue(pos=pos)
             success = True
         except Exception as ex:

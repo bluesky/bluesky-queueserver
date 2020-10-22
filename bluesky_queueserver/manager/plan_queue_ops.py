@@ -56,7 +56,7 @@ class PlanQueueOperations:
 
     def __init__(self, redis_host="localhost"):
         self._redis_host = redis_host
-        self._uid_set = set()
+        self._uid_dict = dict()
         self._r_pool = None
 
         self._name_running_plan = "running_plan"
@@ -74,7 +74,7 @@ class PlanQueueOperations:
             async with self._lock:
                 self._r_pool = await aioredis.create_redis_pool(f"redis://{self._redis_host}", encoding="utf8")
                 await self._queue_clean()
-                await self._uid_set_initialize()
+                await self._uid_dict_initialize()
 
     async def _queue_clean(self):
         """
@@ -106,7 +106,7 @@ class PlanQueueOperations:
         await self._r_pool.delete(self._name_running_plan)
         await self._r_pool.delete(self._name_plan_queue)
         await self._r_pool.delete(self._name_plan_history)
-        self._uid_set_clear()
+        self._uid_dict_clear()
 
     async def delete_pool_entries(self):
         """
@@ -133,7 +133,7 @@ class PlanQueueOperations:
         # Verify plan UID
         if "plan_uid" not in plan:
             raise ValueError("Plan does not have UID.")
-        if self._is_uid_in_set(plan["plan_uid"]):
+        if self._is_uid_in_dict(plan["plan_uid"]):
             raise RuntimeError(f"Plan with UID {plan['plan_uid']} is already in the queue")
 
     def _new_plan_uid(self):
@@ -162,50 +162,55 @@ class PlanQueueOperations:
 
     # --------------------------------------------------------------------------
     #                          Operations with UID set
-    # TODO: in future consider replacing this method with `self._uid_set.clear()`
-    #   The following private methods were introduced in case the set of UIDs
-    #   need to be moved to a different structure (e.g. to Redis). They could
-    #   be removed if such need does not materialize.
-    def _uid_set_clear(self):
+    def _uid_dict_clear(self):
         """
-        Clear ``self._uid_set``.
+        Clear ``self._uid_dict``.
         """
-        self._uid_set.clear()
+        self._uid_dict.clear()
 
-    # TODO: in future consider replacing this method with `in self._uid_set`
-    def _is_uid_in_set(self, uid):
+    def _is_uid_in_dict(self, uid):
         """
-        Checks if UID exists in ``self._uid_set``.
+        Checks if UID exists in ``self._uid_dict``.
         """
-        return uid in self._uid_set
+        return uid in self._uid_dict
 
-    # TODO: in future consider replacing this method with `self._uid_set.add()`
-    def _uid_set_add(self, uid):
+    def _uid_dict_add(self, uid, plan):
         """
-        Add UID to ``self._uid_set``.
+        Add UID to ``self._uid_dict``.
         """
-        self._uid_set.add(uid)
+        if self._is_uid_in_dict(uid):
+            raise RuntimeError(f"Trying to add plan with UID '{uid}', which is already in the queue")
+        self._uid_dict.update({uid: plan})
 
-    # TODO: in future consider replacing this method with `self._uid_set.remove()`
-    def _uid_set_remove(self, uid):
+    def _uid_dict_remove(self, uid):
         """
-        Remove UID from ``self._uid_set``.
+        Remove UID from ``self._uid_dict``.
         """
-        self._uid_set.remove(uid)
+        if not self._is_uid_in_dict(uid):
+            raise RuntimeError(f"Trying to remove plan with UID '{uid}', which is not in the queue")
+        self._uid_dict.pop(uid)
 
-    async def _uid_set_initialize(self):
+    def _uid_dict_update(self, uid, plan):
         """
-        Initialize ``self._uid_set`` with UIDs extracted from the plans in the queue.
+        Update a plan with UID that is already in the dictionary.
+        """
+        if not self._is_uid_in_dict(uid):
+            raise RuntimeError(f"Trying to update plan with UID '{uid}', which is not in the queue")
+        self._uid_dict.update({uid: plan})
+
+    async def _uid_dict_initialize(self):
+        """
+        Initialize ``self._uid_dict`` with UIDs extracted from the plans in the queue.
         """
         pq = await self._get_plan_queue()
-        self._uid_set_clear()
+        self._uid_dict_clear()
         # Go over all plans in the queue
         for plan in pq:
-            self._uid_set_add(plan["plan_uid"])
+            self._uid_dict_add(plan["plan_uid"], plan)
         # If plan is currently running
         plan = await self._get_running_plan_info()
         if plan:
-            self._uid_set_add(plan["plan_uid"])
+            self._uid_dict_add(plan["plan_uid"], plan)
 
     # -------------------------------------------------------------
     #                   Currently Running Plan
@@ -379,10 +384,12 @@ class PlanQueueOperations:
                 f"The number of removed plans is {n_rem_plans}. One plans is expected to be removed."
             )
 
-    async def _pop_plan_from_queue(self, pos="back"):
+    async def _pop_plan_from_queue(self, pos=None):
         """
         See ``self._pop_plan_from_queue()`` method
         """
+        pos = pos or "back"
+
         if pos == "back":
             plan_json = await self._r_pool.rpop(self._name_plan_queue)
             if plan_json is None:
@@ -398,26 +405,27 @@ class PlanQueueOperations:
             if plan:
                 await self._remove_plan(plan)
         else:
-            raise ValueError(f"Parameter 'pos' has incorrect value:: pos={str(pos)} (type={type(pos)})")
+            raise ValueError(f"Parameter 'pos' has incorrect value: pos={str(pos)} (type={type(pos)})")
 
         if plan:
-            self._uid_set_remove(plan["plan_uid"])
+            self._uid_dict_remove(plan["plan_uid"])
 
         qsize = await self._get_plan_queue_size()
 
         return plan, qsize
 
-    async def pop_plan_from_queue(self, pos="back"):
+    async def pop_plan_from_queue(self, pos=None):
         """
         Pop a plan from the queue. Raises ``IndexError`` if plan with index ``pos`` is unavailable
         or if the queue is empty.
 
         Parameters
         ----------
-        pos: int or str
+        pos: int or str or None
             Integer index specified position in the queue. Available string values: "front" or "back".
             The range for the index is ``-qsize..qsize-1``: ``0, -qsize`` - front element of the queue,
-            ``-1, qsize-1`` - back element of the queue.
+            ``-1, qsize-1`` - back element of the queue. If ``pos`` is ``None``, then the plan is popped
+            from the back of the queue.
 
         Returns
         -------
@@ -460,7 +468,7 @@ class PlanQueueOperations:
         else:
             raise ValueError(f"Parameter 'pos' has incorrect value: pos='{str(pos)}' (type={type(pos)})")
 
-        self._uid_set_add(plan["plan_uid"])
+        self._uid_dict_add(plan["plan_uid"], plan)
         return plan, qsize
 
     async def add_plan_to_queue(self, plan, pos="back"):
@@ -595,7 +603,7 @@ class PlanQueueOperations:
         """
         See ``self.set_next_plan_as_running()`` method.
         """
-        # UID remains in the `self._uid_set` after this operation.
+        # UID remains in the `self._uid_dict` after this operation.
         if not await self._is_plan_running():
             plan_json = await self._r_pool.lpop(self._name_plan_queue)
             if plan_json:
@@ -610,7 +618,7 @@ class PlanQueueOperations:
     async def set_next_plan_as_running(self):
         """
         Sets the next plan from the queue as a running plan. The plan is removed
-        from the queue. UID remains in ``self._uid_set``, i.e. plan with the same UID
+        from the queue. UID remains in ``self._uid_dict``, i.e. plan with the same UID
         may not be added to the queue while it is being executed.
 
         Returns
@@ -626,12 +634,12 @@ class PlanQueueOperations:
         """
         See ``self.set_processed_plan_as_completed`` method.
         """
-        # Note: UID remains in the `self._uid_set` after this operation
+        # Note: UID remains in the `self._uid_dict` after this operation
         if await self._is_plan_running():
             plan = await self._get_running_plan_info()
             plan["exit_status"] = exit_status
             await self._clear_running_plan_info()
-            self._uid_set_remove(plan["plan_uid"])
+            self._uid_dict_remove(plan["plan_uid"])
             await self._add_plan_to_history(plan)
         else:
             plan = {}
@@ -640,7 +648,7 @@ class PlanQueueOperations:
     async def set_processed_plan_as_completed(self, exit_status):
         """
         Moves currently executed plan to history and sets ``exit_status`` key.
-        UID is removed from ``self._uid_set``, so a copy of the plan with
+        UID is removed from ``self._uid_dict``, so a copy of the plan with
         the same UID may be added to the queue.
 
         Parameters
@@ -661,12 +669,13 @@ class PlanQueueOperations:
         """
         See ``self.set_prcessed_plan_as_stopped()`` method.
         """
-        # Note: UID is removed from `self._uid_set`.
+        # Note: UID is removed from `self._uid_dict`.
         if await self._is_plan_running():
             plan = await self._get_running_plan_info()
+            plan["exit_status"] = exit_status
             await self._clear_running_plan_info()
             await self._r_pool.lpush(self._name_plan_queue, json.dumps(plan))
-            plan["exit_status"] = exit_status
+            self._uid_dict_update(plan["plan_uid"], plan)
             await self._add_plan_to_history(plan)
         else:
             plan = {}
@@ -676,7 +685,7 @@ class PlanQueueOperations:
         """
         Pushes currently executed plan to the beginning of the queue and adds
         it to history with additional sets ``exit_status`` key.
-        UID is remains in ``self._uid_set``.
+        UID is remains in ``self._uid_dict``.
 
         Parameters
         ----------

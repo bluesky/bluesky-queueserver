@@ -566,8 +566,7 @@ class PlanQueueOperations:
             Incorrect type of ``plan`` (should be dict)
         """
         async with self._lock:
-            return await self._add_plan_to_queue(plan, pos=pos,
-                                                 before_uid=before_uid, after_uid=after_uid)
+            return await self._add_plan_to_queue(plan, pos=pos, before_uid=before_uid, after_uid=after_uid)
 
     async def _clear_plan_queue(self):
         """

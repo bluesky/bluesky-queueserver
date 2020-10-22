@@ -104,7 +104,97 @@ def test_zmq_api_queue_plan_add_2(re_manager, pos, pos_result, success):  # noqa
         assert resp2["queue"][pos_result]["args"] == plan2["args"]
 
 
-def test_zmq_api_queue_plan_add_3_fail(re_manager):  # noqa F811
+def test_zmq_api_queue_plan_add_3(re_manager):  # noqa F811
+    plan1 = {"name": "count", "args": [["det1"]]}
+    plan2 = {"name": "count", "args": [["det1", "det2"]]}
+    plan3 = {"name": "count", "args": [["det2"]]}
+
+    params = {"plan": plan1, "user": _user, "user_group": _user_group}
+    zmq_single_request("queue_plan_add", params)
+    params = {"plan": plan2, "user": _user, "user_group": _user_group}
+    zmq_single_request("queue_plan_add", params)
+
+    base_plans = zmq_single_request("queue_get")[0]["queue"]
+
+    params = {"plan": plan3, "after_uid": base_plans[0]["plan_uid"], "user": _user, "user_group": _user_group}
+    resp1, _ = zmq_single_request("queue_plan_add", params)
+    assert resp1["success"] is True
+    assert resp1["qsize"] == 3
+    uid1 = resp1["plan"]["plan_uid"]
+    resp1a, _ = zmq_single_request("queue_get")
+    assert len(resp1a["queue"]) == 3
+    assert resp1a["queue"][1]["plan_uid"] == uid1
+    resp1b, _ = zmq_single_request("queue_plan_remove", {"uid": uid1})
+    assert resp1b["success"] is True
+
+    params = {"plan": plan3, "before_uid": base_plans[1]["plan_uid"], "user": _user, "user_group": _user_group}
+    resp2, _ = zmq_single_request("queue_plan_add", params)
+    assert resp2["success"] is True
+    uid2 = resp2["plan"]["plan_uid"]
+    resp2a, _ = zmq_single_request("queue_get")
+    assert len(resp2a["queue"]) == 3
+    assert resp2a["queue"][1]["plan_uid"] == uid2
+    resp2b, _ = zmq_single_request("queue_plan_remove", {"uid": uid2})
+    assert resp2b["success"] is True
+
+    # Non-existing uid
+    params = {"plan": plan3, "before_uid": "non-existing-uid", "user": _user, "user_group": _user_group}
+    resp2, _ = zmq_single_request("queue_plan_add", params)
+    assert resp2["success"] is False
+    assert "is not in the queue" in resp2["msg"]
+
+
+def test_zmq_api_queue_plan_add_4(re_manager):  # noqa F811
+    """
+    Try inserting plans before and after the running plan
+    """
+    params = {"plan": _plan3, "user": _user, "user_group": _user_group}
+    zmq_single_request("queue_plan_add", params)
+    params = {"plan": _plan3, "user": _user, "user_group": _user_group}
+    zmq_single_request("queue_plan_add", params)
+
+    base_plans = zmq_single_request("queue_get")[0]["queue"]
+    uid = base_plans[0]["plan_uid"]
+
+    # Start the first plan (this removes it from the queue)
+    #   Also the rest of the operations will be performed on a running queue.
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(
+        time=3, condition=condition_environment_created
+    ), "Timeout while waiting for environment to be opened"
+
+    resp2, _ = zmq_single_request("queue_start")
+    assert resp2["success"] is True
+
+    ttime.sleep(1)
+
+    # Try to insert a plan before the running plan
+    params = {"plan": _plan3, "before_uid": uid, "user": _user, "user_group": _user_group}
+    resp3, _ = zmq_single_request("queue_plan_add", params)
+    assert resp3["success"] is False
+    assert "Can not insert a plan in the queue before a currently running plan" in resp3["msg"]
+
+    # Insert the plan after the running plan
+    params = {"plan": _plan3, "after_uid": uid, "user": _user, "user_group": _user_group}
+    resp4, _ = zmq_single_request("queue_plan_add", params)
+    assert resp4["success"] is True
+
+    assert wait_for_condition(
+        time=20, condition=condition_queue_processing_finished
+    ), "Timeout while waiting for environment to be opened"
+
+    state = get_queue_state()
+    assert state["plans_in_queue"] == 0
+    assert state["plans_in_history"] == 3
+
+    # Close the environment
+    resp5, _ = zmq_single_request("environment_close")
+    assert resp5["success"] is True
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_queue_plan_add_5_fail(re_manager):  # noqa F811
 
     # Unknown plan name
     plan1 = {"name": "count_test", "args": [["det1", "det2"]]}

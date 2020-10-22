@@ -169,16 +169,16 @@ def test_uid_dict_1(pq):
 
     plan_b_updated = {"plan_uid": "b", "name": "name_b_updated"}
 
-    pq._uid_dict_add(plan_a["plan_uid"], plan_a)
-    pq._uid_dict_add(plan_b["plan_uid"], plan_b)
+    pq._uid_dict_add(plan_a)
+    pq._uid_dict_add(plan_b)
 
     assert pq._is_uid_in_dict(plan_a["plan_uid"]) is True
     assert pq._is_uid_in_dict(plan_b["plan_uid"]) is True
     assert pq._is_uid_in_dict(plan_c["plan_uid"]) is False
 
-    assert pq._uid_dict[plan_b["plan_uid"]] == plan_b
-    pq._uid_dict_update(plan_b_updated["plan_uid"], plan_b_updated)
-    assert pq._uid_dict[plan_b["plan_uid"]] == plan_b_updated
+    assert pq._uid_dict_get_plan(plan_b["plan_uid"]) == plan_b
+    pq._uid_dict_update(plan_b_updated)
+    assert pq._uid_dict_get_plan(plan_b["plan_uid"]) == plan_b_updated
 
     pq._uid_dict_remove(plan_a["plan_uid"])
     assert pq._is_uid_in_dict(plan_a["plan_uid"]) is False
@@ -215,12 +215,12 @@ def test_uid_dict_3_failing(pq):
     plan_b = {"plan_uid": "b", "name": "name_b"}
     plan_c = {"plan_uid": "c", "name": "name_c"}
 
-    pq._uid_dict_add(plan_a["plan_uid"], plan_a)
-    pq._uid_dict_add(plan_b["plan_uid"], plan_b)
+    pq._uid_dict_add(plan_a)
+    pq._uid_dict_add(plan_b)
 
     # Add plan with UID that already exists
     with pytest.raises(RuntimeError, match=f"'{plan_a['plan_uid']}', which is already in the queue"):
-        pq._uid_dict_add(plan_a["plan_uid"], plan_a)
+        pq._uid_dict_add(plan_a)
 
     assert len(pq._uid_dict) == 2
 
@@ -232,21 +232,9 @@ def test_uid_dict_3_failing(pq):
 
     # Update plan with UID does not exist exists
     with pytest.raises(RuntimeError, match=f"'{plan_c['plan_uid']}', which is not in the queue"):
-        pq._uid_dict_update(plan_c["plan_uid"], plan_c)
+        pq._uid_dict_update(plan_c)
 
     assert len(pq._uid_dict) == 2
-
-    # assert pq._is_uid_in_dict(plan_a["plan_uid"]) is True
-    # assert pq._is_uid_in_dict(plan_b["plan_uid"]) is True
-    # assert pq._is_uid_in_dict(plan_c["plan_uid"]) is False
-    #
-    # pq._uid_dict_remove(plan_a["plan_uid"])
-    # assert pq._is_uid_in_dict(plan_a["plan_uid"]) is False
-    # assert pq._is_uid_in_dict(plan_b["plan_uid"]) is True
-    #
-    # pq._uid_dict_clear()
-    # assert pq._is_uid_in_dict(plan_a["plan_uid"]) is False
-    # assert pq._is_uid_in_dict(plan_b["plan_uid"]) is False
 
 
 def test_remove_plan(pq):
@@ -415,7 +403,7 @@ def test_pop_plan_from_queue_1(pq, pos, name):
         assert await pq.get_plan_queue_size() == 3
 
         if name is not None:
-            plan, qsize = await pq.pop_plan_from_queue(pos)
+            plan, qsize = await pq.pop_plan_from_queue(pos=pos)
             assert plan["name"] == name
             assert qsize == 2
             assert await pq.get_plan_queue_size() == 2
@@ -424,7 +412,7 @@ def test_pop_plan_from_queue_1(pq, pos, name):
             assert await pq.get_plan_queue_size() == 3
         else:
             with pytest.raises(IndexError, match="Index .* is out of range"):
-                await pq.pop_plan_from_queue(pos)
+                await pq.pop_plan_from_queue(pos=pos)
 
     asyncio.run(testing())
 
@@ -439,12 +427,48 @@ def test_pop_plan_from_queue_2(pq, pos):
     async def testing():
         assert await pq.get_plan_queue_size() == 0
         with pytest.raises(IndexError, match="Index .* is out of range|Queue is empty"):
-            await pq.pop_plan_from_queue(pos)
+            await pq.pop_plan_from_queue(pos=pos)
 
     asyncio.run(testing())
 
 
-def test_pop_plan_from_queue_3_fail(pq):
+def test_pop_plan_from_queue_3(pq):
+    """
+    Pop plans by UID.
+    """
+
+    async def testing():
+        await pq.add_plan_to_queue({"name": "a"})
+        await pq.add_plan_to_queue({"name": "b"})
+        await pq.add_plan_to_queue({"name": "c"})
+        assert await pq.get_plan_queue_size() == 3
+
+        plans = await pq.get_plan_queue()
+        assert len(plans) == 3
+        plan_to_remove = [_ for _ in plans if _["name"] == "b"][0]
+
+        # Remove one plan
+        await pq.pop_plan_from_queue(uid=plan_to_remove["plan_uid"])
+        assert await pq.get_plan_queue_size() == 2
+
+        # Attempt to remove the plan again. This should raise an exception.
+        with pytest.raises(
+            IndexError, match=f"Plan with UID '{plan_to_remove['plan_uid']}' " f"is not in the queue"
+        ):
+            await pq.pop_plan_from_queue(uid=plan_to_remove["plan_uid"])
+        assert await pq.get_plan_queue_size() == 2
+
+        # Attempt to remove the plan that is running. This should raise an exception.
+        await pq.set_next_plan_as_running()
+        assert await pq.get_plan_queue_size() == 1
+        with pytest.raises(IndexError, match="Can not remove a plan which is currently running"):
+            await pq.pop_plan_from_queue(uid=plans[0]["plan_uid"])
+        assert await pq.get_plan_queue_size() == 1
+
+    asyncio.run(testing())
+
+
+def test_pop_plan_from_queue_4_fail(pq):
     """
     Failing tests for the function ``PlanQueueOperations.pop_plan_from_queue()``
     """

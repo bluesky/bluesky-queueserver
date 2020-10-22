@@ -174,10 +174,11 @@ class PlanQueueOperations:
         """
         return uid in self._uid_dict
 
-    def _uid_dict_add(self, uid, plan):
+    def _uid_dict_add(self, plan):
         """
         Add UID to ``self._uid_dict``.
         """
+        uid = plan["plan_uid"]
         if self._is_uid_in_dict(uid):
             raise RuntimeError(f"Trying to add plan with UID '{uid}', which is already in the queue")
         self._uid_dict.update({uid: plan})
@@ -190,10 +191,11 @@ class PlanQueueOperations:
             raise RuntimeError(f"Trying to remove plan with UID '{uid}', which is not in the queue")
         self._uid_dict.pop(uid)
 
-    def _uid_dict_update(self, uid, plan):
+    def _uid_dict_update(self, plan):
         """
         Update a plan with UID that is already in the dictionary.
         """
+        uid = plan["plan_uid"]
         if not self._is_uid_in_dict(uid):
             raise RuntimeError(f"Trying to update plan with UID '{uid}', which is not in the queue")
         self._uid_dict.update({uid: plan})
@@ -212,11 +214,11 @@ class PlanQueueOperations:
         self._uid_dict_clear()
         # Go over all plans in the queue
         for plan in pq:
-            self._uid_dict_add(plan["plan_uid"], plan)
+            self._uid_dict_add(plan)
         # If plan is currently running
         plan = await self._get_running_plan_info()
         if plan:
-            self._uid_dict_add(plan["plan_uid"], plan)
+            self._uid_dict_add(plan)
 
     # -------------------------------------------------------------
     #                   Currently Running Plan
@@ -390,7 +392,7 @@ class PlanQueueOperations:
                 f"The number of removed plans is {n_rem_plans}. One plans is expected to be removed."
             )
 
-    async def _pop_plan_from_queue(self, pos=None, uid=None):
+    async def _pop_plan_from_queue(self, *, pos=None, uid=None):
         """
         See ``self._pop_plan_from_queue()`` method
         """
@@ -400,12 +402,11 @@ class PlanQueueOperations:
             if not self._is_uid_in_dict(uid):
                 raise IndexError(f"Plan with UID '{uid}' is not in the queue.")
             running_plan = await self._get_running_plan_info()
-            if uid == running_plan["plan_uid"]:
+            if running_plan and (uid == running_plan["plan_uid"]):
                 raise IndexError("Can not remove a plan which is currently running.")
             plan = self._uid_dict_get_plan(uid)
             await self._remove_plan(plan)
-
-        if pos == "back":
+        elif pos == "back":
             plan_json = await self._r_pool.rpop(self._name_plan_queue)
             if plan_json is None:
                 raise IndexError("Queue is empty")
@@ -429,7 +430,7 @@ class PlanQueueOperations:
 
         return plan, qsize
 
-    async def pop_plan_from_queue(self, pos=None, uid=None):
+    async def pop_plan_from_queue(self, *, pos=None, uid=None):
         """
         Pop a plan from the queue. Raises ``IndexError`` if plan with index ``pos`` is unavailable
         or if the queue is empty.
@@ -483,7 +484,7 @@ class PlanQueueOperations:
         else:
             raise ValueError(f"Parameter 'pos' has incorrect value: pos='{str(pos)}' (type={type(pos)})")
 
-        self._uid_dict_add(plan["plan_uid"], plan)
+        self._uid_dict_add(plan)
         return plan, qsize
 
     async def add_plan_to_queue(self, plan, pos="back"):
@@ -690,7 +691,7 @@ class PlanQueueOperations:
             plan["exit_status"] = exit_status
             await self._clear_running_plan_info()
             await self._r_pool.lpush(self._name_plan_queue, json.dumps(plan))
-            self._uid_dict_update(plan["plan_uid"], plan)
+            self._uid_dict_update(plan)
             await self._add_plan_to_history(plan)
         else:
             plan = {}

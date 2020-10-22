@@ -841,13 +841,16 @@ class RunEngineManager(Process):
         """
         Removes (pops) item from the queue. The position of the item
         may be specified as an index (positive or negative) or a string
-        from the set {``front``, ``back``}. The default option is ``back``
+        from the set {``front``, ``back``}. The default option is ``back``.
+        If ``uid`` is specified, then the position is ignored. A plan with
+        the UID must exist in the queue, otherwise operation fails.
         """
         logger.info("Removing item from the queue.")
         try:
             plan, qsize, msg = {}, None, ""
             pos = request.get("pos", None)
-            plan, qsize = await self._plan_queue.pop_plan_from_queue(pos=pos)
+            uid = request.get("uid", None)
+            plan, qsize = await self._plan_queue.pop_plan_from_queue(pos=pos, uid=uid)
             success = True
         except Exception as ex:
             success = False

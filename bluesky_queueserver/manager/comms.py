@@ -3,6 +3,8 @@ import pprint
 import json
 import asyncio
 import uuid
+import zmq
+import zmq.asyncio
 from jsonrpc import JSONRPCResponseManager
 from jsonrpc.dispatcher import Dispatcher
 
@@ -412,3 +414,211 @@ class PipeJsonRpcSendAsync:
                     break
             if not self._thread_running:  # Exit thread
                 break
+
+
+class ZMQCommSendAsync:
+    """
+    API for communication with RE Manager via ZMQ. The object has to be created
+    from the running even loop or the loop has to be passed as a parameter during
+    initialization.
+
+    Parameters
+    ----------
+    loop: asyncio loop
+        Current event loop
+    zmq_server_address: str or None
+        Address of ZMQ server. If None, then the default address is ``tcp://localhost:5555``
+        is used.
+    timeout_recv: int
+        Timeout (in ms) for ZMQ receive operations.
+    timeout_send: int
+        Timeout (in ms) for ZMQ send operations.
+    raise_timeout_exceptions: bool
+        Tells if exceptions should be raised in case of communication errors (mostly timeouts)
+        when ``send_message()`` is executed. Exception``CommTimeoutError`` is raised if the
+        parameter is ``True``, otherwise error message is returned by ``send_message()``.
+
+    Examples
+    --------
+
+    .. code-block: python
+
+        async def communicate():
+            zmq_comm = ZMQCommSendAsync()
+            for n in range(10):
+                msg = await send_message(method="some_method", params={"some_value": n}
+                print(f"msg={msg}")
+            zmq_comm.close()
+
+        asyncio.run(communicate())
+    """
+
+    def __init__(
+        self,
+        *,
+        loop=None,
+        zmq_server_address=None,
+        timeout_recv=2000,
+        timeout_send=500,
+        raise_timeout_exceptions=False,
+    ):
+        self._loop = loop if loop else asyncio.get_event_loop()
+
+        zmq_server_address = zmq_server_address or "tcp://localhost:5555"
+
+        self._timeout_receive = timeout_recv  # Timeout for 'recv' operation (ms)
+        self._timeout_send = timeout_send  # # Timeout for 'send' operation (ms)
+        self._raise_timeout_exceptions = raise_timeout_exceptions
+
+        # ZeroMQ communication
+        self._ctx = zmq.asyncio.Context()
+        self._zmq_socket = None
+        self._zmq_server_address = zmq_server_address
+
+        self._zmq_socket_open()
+        self._lock_zmq = asyncio.Lock()
+
+    def __del__(self):
+        self.close()
+
+    def get_loop(self):
+        """
+        Returns the asyncio event loop.
+        """
+        return self._loop
+
+    async def _zmq_send(self, msg):
+        await self._zmq_socket.send_json(msg)
+
+    async def _zmq_receive(self):
+        try:
+            msg = await self._zmq_socket.recv_json()
+        except Exception as ex:
+            # Timeout occurred. Socket needs to be reset.
+            logger.exception("ZeroMQ communication failed: %s" % str(ex))
+            raise
+        return msg
+
+    async def _zmq_communicate(self, msg_out):
+        await self._zmq_send(msg_out)
+        msg_in = await self._zmq_receive()
+        return msg_in
+
+    def _zmq_socket_open(self):
+        self._zmq_socket = self._ctx.socket(zmq.REQ)
+        self._zmq_socket.RCVTIMEO = self._timeout_receive
+        self._zmq_socket.SNDTIMEO = self._timeout_send
+        # Clear the buffer quickly after the socket is closed
+        self._zmq_socket.setsockopt(zmq.LINGER, 100)
+
+        if self._zmq_socket.connect(self._zmq_server_address):
+            msg_err = f"Failed to connect to the server '{self._zmq_server_address}'"
+            raise RuntimeError(msg_err)
+
+        logger.info("Connected to ZeroMQ server '%s'" % str(self._zmq_server_address))
+
+    def _zmq_socket_restart(self):
+        self._zmq_socket.close()
+        self._zmq_socket_open()
+
+    def _create_msg(self, *, method, params=None):
+        return {"method": method, "params": params}
+
+    async def send_message(self, *, method, params=None, raise_exceptions=False):
+        """
+        Send message to ZMQ server and wait for the response. The message must contain
+        a name of a method supported by the server and a dictionary of parameters that
+        are required by the method. In case of communication error (timeout), the function
+        returns error message or raises ``CommTimeoutError`` exception depending on
+        the setting of ``raise_timeout_exceptions`` property.
+
+        Parameters
+        ----------
+        method: str
+            Name of the method to be invoked on the server. The method must be supported
+            by the server.
+        params: dict or None
+            Dictionary of parameters passed to the method. If ``None``, then an empty dictionary
+            is passed to the server.
+
+        Returns
+        -------
+        dict
+            Message returned by the server.
+
+        Raises
+        ------
+        CommTimeoutError
+            Raised if communication error occurs and ``raise_timeout_exceptions`` is set ``True``.
+        """
+
+        # Send empty dictionary if no parameters are passed
+        params = params or {}
+
+        async with self._lock_zmq:
+            try:
+                msg_out = self._create_msg(method=method, params=params)
+                msg_in = await self._zmq_communicate(msg_out)
+            except Exception as ex:
+                # This is very likely a timeout (RE Manager is not responding)
+                self._zmq_socket_restart()
+                errmsg = f"ZMQ communication error: {str(ex)}"
+                if self._raise_timeout_exceptions:
+                    raise CommTimeoutError(errmsg)
+                msg_in = {"success": False, "msg": errmsg}
+            return msg_in
+
+    def close(self):
+        """
+        Close ZMQ socket. Call to close socket if the object is no longer needed, but may
+        not be destroyed for some time.
+        """
+        self._zmq_socket.close()
+
+
+def zmq_single_request(method, params=None, *, zmq_server_address=None):
+    """
+    Send a single request to ZMQ server. The function opens the socket, sends
+    a single ZMQ request and closes the socket. The function is not expected
+    to raise exceptions. In case of communication error the return value
+    of ``msg`` is ``None`` and ``err_msg`` contains the error message. Otherwise
+    ``err_msg`` is empty and ``msg`` contains the dictionary returned by the server.
+
+    Parameters
+    ----------
+    method: str
+        Name of the method called in RE Manager
+    params: dict or None
+        Dictionary of parameters (payload of the message). If ``None`` then
+        the message is sent with empty payload: ``params = {}``.
+
+    Returns
+    -------
+    msg: dict or None
+        Message received from RE Manager in response to the request. None if communication
+        error (timeout) occurred.
+    err_msg: str
+        Contains a message in case communication error (timeout) occurs. Empty string otherwise.
+    """
+
+    msg_received = None
+
+    async def send_request(method, params):
+        nonlocal msg_received
+        zmq_to_manager = ZMQCommSendAsync(zmq_server_address=zmq_server_address)
+        msg_received = await zmq_to_manager.send_message(method=method, params=params)
+        zmq_to_manager.close()
+
+    try:
+        asyncio.run(send_request(method, params))
+
+        msg = msg_received
+        msg_err = ""
+    except Exception as ex:
+        msg = None
+        msg_err = str(ex)
+
+    if msg_err:
+        logger.warning("Communication with RE Manager failed: %s", str(msg_err))
+
+    return msg, msg_err

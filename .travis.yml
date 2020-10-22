@@ -36,6 +36,9 @@ jobs:
     # As of 2020-10-08, Python 3.9 distribution is not available in TravisCI's repos yet.
     # - python: 3.9
 
+  allow_failures:
+    - name: "Build/deploy docs"
+
 before_install:
   - |
     if [ "${FLAKE_8}" == "true" ]; then
@@ -62,12 +65,14 @@ before_script:
         echo "Docs build finished with the exit code ($res)."
 
         if [ $res -gt 0 ]; then
-            echo "Not attempting to run doctr due to the docs failed to build"
+            echo "Not attempting to run doctr."
         else
-            pip install doctr
-            doctr deploy --built-docs docs/build/html .
-            res=$?
-            echo "Docs deployment with 'doctr' finished with the exit code ($res)."
+            if [ "${TRAVIS_REPO_SLUG}" == "bluesky/bluesky-queueserver" ]; then
+                pip install doctr
+                doctr deploy --built-docs docs/build/html . --branch-whitelist main
+                res=$?
+                echo "Docs deployment with 'doctr' finished with the exit code ($res)."
+            fi
         fi
         exit $res
     fi

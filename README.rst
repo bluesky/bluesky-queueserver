@@ -317,3 +317,4 @@ is to test handling of communication timeouts, since RE Manager does not respond
 
   qserver -c test_manager_kill
   http POST http://localhost:60610/test/manager/kill
+

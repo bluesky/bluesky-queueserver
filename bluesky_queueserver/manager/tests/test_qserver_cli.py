@@ -117,6 +117,7 @@ def test_qserver_cli_and_manager(re_manager):  # noqa: F811
     assert subprocess.call(["qserver", "-c", "queue_start"]) == 0
     ttime.sleep(1)
     assert subprocess.call(["qserver", "-c", "manager_kill"]) != 0
+    ttime.sleep(6)  # Don't request the condition to avoid timeout error TODO: wait for the server
     assert wait_for_condition(
         time=60, condition=condition_queue_processing_finished
     ), "Timeout while waiting for process to finish"

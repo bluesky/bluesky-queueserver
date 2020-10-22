@@ -219,26 +219,22 @@ def test_uid_dict_3_failing(pq):
     pq._uid_dict_add(plan_b["plan_uid"], plan_b)
 
     # Add plan with UID that already exists
-    with pytest.raises(RuntimeError,
-                       match=f"'{plan_a['plan_uid']}', which is already in the queue"):
+    with pytest.raises(RuntimeError, match=f"'{plan_a['plan_uid']}', which is already in the queue"):
         pq._uid_dict_add(plan_a["plan_uid"], plan_a)
 
     assert len(pq._uid_dict) == 2
 
     # Remove plan with UID does not exist exists
-    with pytest.raises(RuntimeError,
-                       match=f"'{plan_c['plan_uid']}', which is not in the queue"):
+    with pytest.raises(RuntimeError, match=f"'{plan_c['plan_uid']}', which is not in the queue"):
         pq._uid_dict_remove(plan_c["plan_uid"])
 
     assert len(pq._uid_dict) == 2
 
     # Update plan with UID does not exist exists
-    with pytest.raises(RuntimeError,
-                       match=f"'{plan_c['plan_uid']}', which is not in the queue"):
+    with pytest.raises(RuntimeError, match=f"'{plan_c['plan_uid']}', which is not in the queue"):
         pq._uid_dict_update(plan_c["plan_uid"], plan_c)
 
     assert len(pq._uid_dict) == 2
-
 
     # assert pq._is_uid_in_dict(plan_a["plan_uid"]) is True
     # assert pq._is_uid_in_dict(plan_b["plan_uid"]) is True

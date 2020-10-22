@@ -198,6 +198,12 @@ class PlanQueueOperations:
             raise RuntimeError(f"Trying to update plan with UID '{uid}', which is not in the queue")
         self._uid_dict.update({uid: plan})
 
+    def _uid_dict_get_plan(self, uid):
+        """
+        Returns a plan with the given UID.
+        """
+        return self._uid_dict[uid]
+
     async def _uid_dict_initialize(self):
         """
         Initialize ``self._uid_dict`` with UIDs extracted from the plans in the queue.
@@ -384,11 +390,20 @@ class PlanQueueOperations:
                 f"The number of removed plans is {n_rem_plans}. One plans is expected to be removed."
             )
 
-    async def _pop_plan_from_queue(self, pos=None):
+    async def _pop_plan_from_queue(self, pos=None, uid=None):
         """
         See ``self._pop_plan_from_queue()`` method
         """
-        pos = pos or "back"
+        pos = pos if pos is not None else "back"
+
+        if uid is not None:
+            if not self._is_uid_in_dict(uid):
+                raise IndexError(f"Plan with UID '{uid}' is not in the queue.")
+            running_plan = await self._get_running_plan_info()
+            if uid == running_plan["plan_uid"]:
+                raise IndexError("Can not remove a plan which is currently running.")
+            plan = self._uid_dict_get_plan(uid)
+            await self._remove_plan(plan)
 
         if pos == "back":
             plan_json = await self._r_pool.rpop(self._name_plan_queue)
@@ -414,7 +429,7 @@ class PlanQueueOperations:
 
         return plan, qsize
 
-    async def pop_plan_from_queue(self, pos=None):
+    async def pop_plan_from_queue(self, pos=None, uid=None):
         """
         Pop a plan from the queue. Raises ``IndexError`` if plan with index ``pos`` is unavailable
         or if the queue is empty.
@@ -440,7 +455,7 @@ class PlanQueueOperations:
             Position ``pos`` does not exist or the queue is empty.
         """
         async with self._lock:
-            return await self._pop_plan_from_queue(pos=pos)
+            return await self._pop_plan_from_queue(pos=pos, uid=uid)
 
     async def _add_plan_to_queue(self, plan, pos="back"):
         """

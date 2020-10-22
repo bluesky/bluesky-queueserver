@@ -360,11 +360,11 @@ class PlanQueueOperations:
 
         Parameters
         ----------
-        pos: int or str
+        pos: int, str or None
             Position of the element ``(0, ..)`` or ``(-1, ..)``, ``front`` or ``back``.
 
-        uid: str
-            Plan UID of the plan to be retrieved
+        uid: str or None
+            Plan UID of the plan to be retrieved. UID always overrides position.
 
         Returns
         -------
@@ -475,17 +475,38 @@ class PlanQueueOperations:
         async with self._lock:
             return await self._pop_plan_from_queue(pos=pos, uid=uid)
 
-    async def _add_plan_to_queue(self, plan, pos="back"):
+    async def _add_plan_to_queue(self, plan, *, pos=None, before_uid=None, after_uid=None):
         """
         See ``self.add_plan_to_queue`` method.
         """
+        pos = pos if pos is not None else "back"
+
         if "plan_uid" not in plan:
             plan = self.set_new_plan_uuid(plan)
         else:
             self._verify_plan(plan)
 
         qsize0 = await self._get_plan_queue_size()
-        if pos == "back" or (isinstance(pos, int) and pos >= qsize0):
+        if (before_uid is not None) or (after_uid is not None):
+            uid = before_uid if before_uid is not None else after_uid
+            before = uid == before_uid
+
+            if not self._is_uid_in_dict(uid):
+                raise IndexError(f"Plan with UID '{uid}' is not in the queue.")
+            running_plan = await self._get_running_plan_info()
+            if running_plan and (uid == running_plan["plan_uid"]):
+                if before:
+                    raise IndexError("Can not insert a plan in the queue before a currently running plan.")
+                else:
+                    # Push to the plan front of the queue (after the running plan).
+                    qsize = await self._r_pool.lpush(self._name_plan_queue, json.dumps(plan))
+            else:
+                plan_to_displace = self._uid_dict_get_plan(uid)
+                before = uid == before_uid
+                qsize = await self._r_pool.linsert(
+                    self._name_plan_queue, json.dumps(plan_to_displace), json.dumps(plan), before=before
+                )
+        elif pos == "back" or (isinstance(pos, int) and pos >= qsize0):
             qsize = await self._r_pool.rpush(self._name_plan_queue, json.dumps(plan))
         elif pos == "front" or (isinstance(pos, int) and (pos == 0 or pos <= -qsize0)):
             qsize = await self._r_pool.lpush(self._name_plan_queue, json.dumps(plan))
@@ -504,7 +525,7 @@ class PlanQueueOperations:
         self._uid_dict_add(plan)
         return plan, qsize
 
-    async def add_plan_to_queue(self, plan, pos="back"):
+    async def add_plan_to_queue(self, plan, *, pos=None, before_uid=None, after_uid=None):
         """
         Add the plan to the back of the queue. If position is integer, it is
         clipped to fit within the range of meaningful indices. For the index
@@ -514,7 +535,8 @@ class PlanQueueOperations:
         ----------
         plan: dict
             Plan represented as a dictionary of parameters
-        pos: int or str
+
+        pos: int, str or None
             Integer that specifies the position index, "front" or "back".
             If ``pos`` is in the range ``1..qsize-1`` the plan is inserted
             to the specified position and plans at positions ``pos..qsize-1``
@@ -523,6 +545,13 @@ class PlanQueueOperations:
             (-1 - the last element of the queue). If ``pos>=qsize``,
             the plan is added to the back of the queue. If ``pos==0`` or
             ``pos<=-qsize``, the plan is pushed to the front of the queue.
+
+        before_uid: str or None
+            If UID is specified, then the plan is inserted before the plan with UID.
+            ``before_uid`` has precedence over ``after_uid``.
+
+        after_uid: str or None
+            If UID is specified, then the plan is inserted before the plan with UID.
 
         Returns
         -------
@@ -537,7 +566,8 @@ class PlanQueueOperations:
             Incorrect type of ``plan`` (should be dict)
         """
         async with self._lock:
-            return await self._add_plan_to_queue(plan, pos=pos)
+            return await self._add_plan_to_queue(plan, pos=pos,
+                                                 before_uid=before_uid, after_uid=after_uid)
 
     async def _clear_plan_queue(self):
         """

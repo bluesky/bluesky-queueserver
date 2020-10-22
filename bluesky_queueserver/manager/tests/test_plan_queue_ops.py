@@ -380,7 +380,51 @@ def test_add_plan_to_queue_1(pq):
     asyncio.run(testing())
 
 
-def test_add_plan_to_queue_2_fail(pq):
+def test_add_plan_to_queue_2(pq):
+    """
+    Basic test for the function ``PlanQueueOperations.add_plan_to_queue()``
+    """
+
+    async def add_plan(plan, n, **kwargs):
+        plan_added, qsize = await pq.add_plan_to_queue(plan, **kwargs)
+        assert plan_added["name"] == plan["name"], f"plan: {plan}"
+        assert qsize == n, f"plan: {plan}"
+
+    async def testing():
+        await add_plan({"name": "a"}, 1)
+        await add_plan({"name": "b"}, 2)
+        await add_plan({"name": "c"}, 3, pos="back")
+
+        plan_queue = await pq.get_plan_queue()
+        displaced_uid = plan_queue[1]["plan_uid"]
+
+        await add_plan({"name": "d"}, 4, before_uid=displaced_uid)
+        await add_plan({"name": "e"}, 5, after_uid=displaced_uid)
+
+        # This reduces the number of elements in the queue by one
+        await pq.set_next_plan_as_running()
+
+        displaced_uid = plan_queue[0]["plan_uid"]
+        await add_plan({"name": "f"}, 5, after_uid=displaced_uid)
+
+        with pytest.raises(IndexError, match="Can not insert a plan in the queue before a currently running plan"):
+            await add_plan({"name": "g"}, 5, before_uid=displaced_uid)
+
+        with pytest.raises(IndexError, match="is not in the queue"):
+            await add_plan({"name": "h"}, 5, before_uid="nonexistent_uid")
+
+        assert await pq.get_plan_queue_size() == 5
+
+        plans = await pq.get_plan_queue()
+        name_sequence = [_["name"] for _ in plans]
+        assert name_sequence == ["f", "d", "b", "e", "c"]
+
+        await pq.clear_plan_queue()
+
+    asyncio.run(testing())
+
+
+def test_add_plan_to_queue_3_fail(pq):
     """
     Failing tests for the function ``PlanQueueOperations.add_plan_to_queue()``
     """

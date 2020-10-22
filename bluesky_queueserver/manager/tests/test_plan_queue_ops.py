@@ -284,37 +284,63 @@ def test_remove_plan(pq):
 
 
 # fmt: off
-@pytest.mark.parametrize("pos, name", [
-    ("front", "a"),
-    ("back", "c"),
-    (0, "a"),
-    (1, "b"),
-    (2, "c"),
-    (3, None),  # Index out of range
-    (-1, "c"),
-    (-2, "b"),
-    (-3, "a"),
-    (-4, None)  # Index out of range
+@pytest.mark.parametrize("params, name", [
+    ({"pos": "front"}, "a"),
+    ({"pos": "back"}, "c"),
+    ({"pos": 0}, "a"),
+    ({"pos": 1}, "b"),
+    ({"pos": 2}, "c"),
+    ({"pos": 3}, None),  # Index out of range
+    ({"pos": -1}, "c"),
+    ({"pos": -2}, "b"),
+    ({"pos": -3}, "a"),
+    ({"pos": -4}, None),  # Index out of range
+    ({"uid": "one"}, "a"),
+    ({"uid": "two"}, "b"),
+    ({"uid": "nonexistent"}, None),
 ])
 # fmt: on
-def test_get_plan_1(pq, pos, name):
+def test_get_plan_1(pq, params, name):
     """
     Basic test for the function ``PlanQueueOperations.get_plan()``
     """
 
     async def testing():
 
-        await pq.add_plan_to_queue({"name": "a"})
-        await pq.add_plan_to_queue({"name": "b"})
-        await pq.add_plan_to_queue({"name": "c"})
+        await pq.add_plan_to_queue({"plan_uid": "one", "name": "a"})
+        await pq.add_plan_to_queue({"plan_uid": "two", "name": "b"})
+        await pq.add_plan_to_queue({"plan_uid": "three", "name": "c"})
         assert await pq.get_plan_queue_size() == 3
 
         if name is not None:
-            plan = await pq.get_plan(pos)
+            plan = await pq.get_plan(**params)
             assert plan["name"] == name
         else:
-            with pytest.raises(IndexError, match="Index .* is out of range"):
-                await pq.get_plan(pos)
+            msg = "Index .* is out of range" if "pos" in params else "is not in the queue"
+            with pytest.raises(IndexError, match=msg):
+                await pq.get_plan(**params)
+
+    asyncio.run(testing())
+
+
+def test_get_plan_2_fail(pq):
+    """
+    Basic test for the function ``PlanQueueOperations.get_plan()``.
+    Attempt to retrieve a running plan.
+    """
+
+    async def testing():
+
+        await pq.add_plan_to_queue({"plan_uid": "one", "name": "a"})
+        await pq.add_plan_to_queue({"plan_uid": "two", "name": "b"})
+        await pq.add_plan_to_queue({"plan_uid": "three", "name": "c"})
+        assert await pq.get_plan_queue_size() == 3
+
+        await pq.set_next_plan_as_running()
+        assert await pq.get_plan_queue_size() == 2
+
+        with pytest.raises(IndexError, match="is currently running"):
+            await pq.get_plan(uid="one")
 
     asyncio.run(testing())
 

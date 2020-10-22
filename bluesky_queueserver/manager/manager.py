@@ -828,8 +828,9 @@ class RunEngineManager(Process):
         logger.info("Getting an item from the queue.")
         try:
             plan, msg = {}, ""
-            pos = request.get("pos", "back")
-            plan = await self._plan_queue.get_plan(pos=pos)
+            pos = request.get("pos", None)
+            uid = request.get("uid", None)
+            plan = await self._plan_queue.get_plan(pos=pos, uid=uid)
             success = True
         except Exception as ex:
             success = False

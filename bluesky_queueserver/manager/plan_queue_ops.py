@@ -320,34 +320,51 @@ class PlanQueueOperations:
         async with self._lock:
             return await self._get_plan_queue()
 
-    async def _get_plan(self, pos):
+    async def _get_plan(self, *, pos=None, uid=None):
         """
-        See ``self._get_plan()`` method.
+        See ``self.get_plan()`` method.
         """
-        if pos == "back":
-            index = -1
-        elif pos == "front":
-            index = 0
-        elif isinstance(pos, int):
-            index = pos
+
+        if uid is not None:
+            if not self._is_uid_in_dict(uid):
+                raise IndexError(f"Plan with UID '{uid}' is not in the queue.")
+            running_plan = await self._get_running_plan_info()
+            if running_plan and (uid == running_plan["plan_uid"]):
+                raise IndexError("The plan with UID '{uid}' is currently running.")
+            plan = self._uid_dict_get_plan(uid)
+
         else:
-            raise TypeError(f"Parameter 'pos' has incorrect type: pos={str(pos)} (type={type(pos)})")
+            pos = pos if pos is not None else "back"
 
-        plan_json = await self._r_pool.lindex(self._name_plan_queue, index)
-        if plan_json is None:
-            raise IndexError(f"Index '{index}' is out of range (parameter pos = '{pos}')")
+            if pos == "back":
+                index = -1
+            elif pos == "front":
+                index = 0
+            elif isinstance(pos, int):
+                index = pos
+            else:
+                raise TypeError(f"Parameter 'pos' has incorrect type: pos={str(pos)} (type={type(pos)})")
 
-        plan = json.loads(plan_json) if plan_json else {}
+            plan_json = await self._r_pool.lindex(self._name_plan_queue, index)
+            if plan_json is None:
+                raise IndexError(f"Index '{index}' is out of range (parameter pos = '{pos}')")
+
+            plan = json.loads(plan_json) if plan_json else {}
+
         return plan
 
-    async def get_plan(self, pos):
+    async def get_plan(self, *, pos=None, uid=None):
         """
-        Get plan at a given position.
+        Get plan at a given position or with a given UID. If UID is specified, then
+        the position is ignored.
 
         Parameters
         ----------
         pos: int or str
             Position of the element ``(0, ..)`` or ``(-1, ..)``, ``front`` or ``back``.
+
+        uid: str
+            Plan UID of the plan to be retrieved
 
         Returns
         -------
@@ -362,7 +379,7 @@ class PlanQueueOperations:
             No element with position ``pos`` exists in the queue (index is out of range).
         """
         async with self._lock:
-            return await self._get_plan(pos)
+            return await self._get_plan(pos=pos, uid=uid)
 
     async def _remove_plan(self, plan, single=True):
         """
@@ -417,7 +434,7 @@ class PlanQueueOperations:
                 raise IndexError("Queue is empty")
             plan = json.loads(plan_json) if plan_json else {}
         elif isinstance(pos, int):
-            plan = await self._get_plan(pos)
+            plan = await self._get_plan(pos=pos)
             if plan:
                 await self._remove_plan(plan)
         else:
@@ -474,7 +491,7 @@ class PlanQueueOperations:
             qsize = await self._r_pool.lpush(self._name_plan_queue, json.dumps(plan))
         elif isinstance(pos, int):
             # Put the position in the range
-            plan_to_displace = await self._get_plan(pos)
+            plan_to_displace = await self._get_plan(pos=pos)
             if plan_to_displace:
                 qsize = await self._r_pool.linsert(
                     self._name_plan_queue, json.dumps(plan_to_displace), json.dumps(plan), before=True

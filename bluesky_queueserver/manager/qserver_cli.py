@@ -103,32 +103,6 @@ def create_msg(command, params=None):
         raise ValueError(f"Command '{command}' is not supported.")
 
 
-# def single_zmq_request(method, params, *, zmq_server_address=None):
-#
-#     msg_received = None
-#
-#     async def send_request(method, params):
-#         nonlocal msg_received
-#         zmq_to_manager = ZMQCommSendAsync(zmq_server_address=zmq_server_address)
-#         msg_received = await zmq_to_manager.send_message(method=method, params=params)
-#         del zmq_to_manager  # This will close the socket
-#
-#     try:
-#         method, params_out = create_msg(method, params)
-#         asyncio.run(send_request(method, params_out))
-#
-#         msg = msg_received
-#         msg_err = ""
-#     except Exception as ex:
-#         msg = None
-#         msg_err = str(ex)
-#
-#     if msg_err:
-#         logger.warning("Communication with RE Manager failed: %s", str(msg_err))
-#
-#     return msg, msg_err
-
-
 def qserver():
 
     logging.basicConfig(level=logging.WARNING)

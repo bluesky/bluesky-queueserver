@@ -136,7 +136,8 @@ class PlanQueueOperations:
         if self._is_uid_in_dict(plan["plan_uid"]):
             raise RuntimeError(f"Plan with UID {plan['plan_uid']} is already in the queue")
 
-    def _new_plan_uid(self):
+    @staticmethod
+    def new_plan_uid():
         """
         Generate UID for a plan.
         """
@@ -157,7 +158,7 @@ class PlanQueueOperations:
             Plan with new UID.
         """
         self._verify_plan_type(plan)
-        plan["plan_uid"] = self._new_plan_uid()
+        plan["plan_uid"] = self.new_plan_uid()
         return plan
 
     async def _get_index_by_uid(self, *, uid):

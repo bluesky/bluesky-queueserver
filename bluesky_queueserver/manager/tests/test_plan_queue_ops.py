@@ -136,7 +136,7 @@ def test_new_plan_uid(pq):
     """
     Smoke test for the method ``_new_plan_uid()``.
     """
-    assert isinstance(pq._new_plan_uid(), str)
+    assert isinstance(pq.new_plan_uid(), str)
 
 
 # fmt: off
@@ -157,6 +157,26 @@ def test_set_new_plan_uuid(pq, plan):
     assert "plan_uid" in new_plan
     assert isinstance(new_plan["plan_uid"], str)
     assert new_plan["plan_uid"] != uid
+
+
+def test_get_index_by_uid(pq):
+    """
+    Test for ``_get_index_by_uid()``
+    """
+    plans = [
+        {"plan_uid": "a", "name": "name_a"},
+        {"plan_uid": "b", "name": "name_b"},
+        {"plan_uid": "c", "name": "name_c"},
+    ]
+
+    async def testing():
+        for plan in plans:
+            await pq.add_plan_to_queue(plan)
+
+        assert await pq._get_index_by_uid("b") == 1
+
+        with pytest.raises(IndexError, match="No plan with UID 'nonexistent'"):
+            assert await pq._get_index_by_uid("nonexistent")
 
 
 def test_uid_dict_1(pq):

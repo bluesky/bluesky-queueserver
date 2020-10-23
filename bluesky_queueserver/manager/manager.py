@@ -806,6 +806,9 @@ class RunEngineManager(Process):
             plan["user"] = user
             plan["user_group"] = user_group
 
+            # Always generate a new UID for the added plan!!!
+            plan["plan_uid"] = PlanQueueOperations.new_plan_uid()
+
             # Adding plan to queue may raise an exception
             plan, qsize = await self._plan_queue.add_plan_to_queue(
                 plan, pos=pos, before_uid=before_uid, after_uid=after_uid
@@ -855,6 +858,32 @@ class RunEngineManager(Process):
         except Exception as ex:
             success = False
             msg = f"Failed to remove a plan: {str(ex)}"
+
+        return {"success": success, "msg": msg, "plan": plan, "qsize": qsize}
+
+    async def _queue_plan_move_handler(self, request):
+        """
+        Moves a plan to a new position in the queue. Source and destination
+        for the plan may be specified as position of the plan in the queue
+        (positive or negative integer, ``front`` or ``back``) or as a plan
+        UID. The 'source' plan is moved to the new position or placed before
+        or after the 'destination' plan. Both source and destination must be specified.
+        """
+        logger.info("Removing item from the queue.")
+        try:
+            plan, qsize, msg = {}, None, ""
+            pos = request.get("pos", None)
+            uid = request.get("uid", None)
+            pos_dest = request.get("pos_dest", None)
+            before_uid = request.get("before_uid", None)
+            after_uid = request.get("after_uid", None)
+            plan, qsize = await self._plan_queue.move_plan(
+                pos=pos, uid=uid, pos_dest=pos_dest, before_uid=before_uid, after_uid=after_uid
+            )
+            success = True
+        except Exception as ex:
+            success = False
+            msg = f"Failed to move the plan: {str(ex)}"
 
         return {"success": success, "msg": msg, "plan": plan, "qsize": qsize}
 
@@ -1057,6 +1086,7 @@ class RunEngineManager(Process):
             "queue_plan_add": "_queue_plan_add_handler",
             "queue_plan_get": "_queue_plan_get_handler",
             "queue_plan_remove": "_queue_plan_remove_handler",
+            "queue_plan_move": "_queue_plan_move_handler",
             "queue_clear": "_queue_clear_handler",
             "queue_start": "_queue_start_handler",
             "queue_stop": "_queue_stop_handler",

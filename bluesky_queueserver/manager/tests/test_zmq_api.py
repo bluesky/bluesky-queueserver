@@ -7,6 +7,8 @@ from bluesky_queueserver.manager.profile_ops import (
     load_allowed_plans_and_devices,
 )
 
+from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
+
 from ..comms import zmq_single_request
 
 from ._common import (
@@ -143,6 +145,18 @@ def test_zmq_api_queue_plan_add_3(re_manager):  # noqa F811
     assert resp2["success"] is False
     assert "is not in the queue" in resp2["msg"]
 
+    # Ambiguous parameters
+    params = {"plan": plan3, "pos": 1, "before_uid": uid2, "user": _user, "user_group": _user_group}
+    resp2, _ = zmq_single_request("queue_plan_add", params)
+    assert resp2["success"] is False
+    assert "Ambiguous parameters" in resp2["msg"]
+
+    # Ambiguous parameters
+    params = {"plan": plan3, "before_uid": uid2, "after_uid": uid2, "user": _user, "user_group": _user_group}
+    resp2, _ = zmq_single_request("queue_plan_add", params)
+    assert resp2["success"] is False
+    assert "Ambiguous parameters" in resp2["msg"]
+
 
 def test_zmq_api_queue_plan_add_4(re_manager):  # noqa F811
     """
@@ -194,7 +208,23 @@ def test_zmq_api_queue_plan_add_4(re_manager):  # noqa F811
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_queue_plan_add_5_fail(re_manager):  # noqa F811
+def test_zmq_api_queue_plan_add_5(re_manager):  # noqa: F811
+    """
+    Make sure that the new plan UID is generated when the plan is added
+    """
+    plan1 = {"name": "count", "args": [["det1", "det2"]]}
+
+    # Set plan UID. This UID is expected to be replaced when the plan is added
+    plan1["plan_uid"] = PlanQueueOperations.new_plan_uid()
+
+    params1 = {"plan": plan1, "user": _user, "user_group": _user_group}
+    resp1, _ = zmq_single_request("queue_plan_add", params1)
+    assert resp1["success"] is True
+    assert resp1["msg"] == ""
+    assert resp1["plan"]["plan_uid"] != plan1["plan_uid"]
+
+
+def test_zmq_api_queue_plan_add_6_fail(re_manager):  # noqa F811
 
     # Unknown plan name
     plan1 = {"name": "count_test", "args": [["det1", "det2"]]}
@@ -333,7 +363,7 @@ def test_zmq_api_plans_allowed_and_devices_allowed_3_fail(re_manager, params, me
 #                      Method 'queue_plan_get', 'queue_plan_remove'
 
 
-def test_zmq_api_queue_plan_get_remove_handler_1(re_manager):  # noqa F811
+def test_zmq_api_queue_plan_get_remove_1(re_manager):  # noqa F811
     """
     Get and remove a plan from the back of the queue
     """
@@ -382,7 +412,7 @@ def test_zmq_api_queue_plan_get_remove_handler_1(re_manager):  # noqa F811
     (-100, 0, False),
 ])
 # fmt: on
-def test_zmq_api_queue_plan_get_remove_handler_2(re_manager, pos, pos_result, success):  # noqa F811
+def test_zmq_api_queue_plan_get_remove_2(re_manager, pos, pos_result, success):  # noqa F811
     """
     Get and remove elements using element position in the queue.
     """
@@ -426,7 +456,7 @@ def test_zmq_api_queue_plan_get_remove_handler_2(re_manager, pos, pos_result, su
     assert resp3["running_plan"] == {}
 
 
-def test_zmq_api_queue_plan_get_remove_handler_3(re_manager):  # noqa F811
+def test_zmq_api_queue_plan_get_remove_3(re_manager):  # noqa F811
     """
     Get and remove elements using plan UID. Successful and failing cases.
     """
@@ -496,3 +526,90 @@ def test_zmq_api_queue_plan_get_remove_handler_3(re_manager):  # noqa F811
     resp8, _ = zmq_single_request("environment_close")
     assert resp8["success"] is True
     assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_queue_plan_get_remove_4_failing(re_manager):  # noqa F811
+    """
+    Failing cases that are not tested in other places.
+    """
+    # Ambiguous parameters
+    resp1, _ = zmq_single_request("queue_plan_get", {"pos": 5, "uid": "some_uid"})
+    assert resp1["success"] is False
+    assert "Ambiguous parameters" in resp1["msg"]
+
+
+# fmt: off
+@pytest.mark.parametrize("params, src, order, success, msg", [
+    ({"pos": 1, "pos_dest": 1}, 1, [0, 1, 2], True, ""),
+    ({"pos": 1, "pos_dest": 0}, 1, [1, 0, 2], True, ""),
+    ({"pos": 1, "pos_dest": 2}, 1, [0, 2, 1], True, ""),
+    ({"pos": "front", "pos_dest": "front"}, 0, [0, 1, 2], True, ""),
+    ({"pos": "back", "pos_dest": "back"}, 2, [0, 1, 2], True, ""),
+    ({"pos": "front", "pos_dest": "back"}, 0, [1, 2, 0], True, ""),
+    ({"pos": "back", "pos_dest": "front"}, 2, [2, 0, 1], True, ""),
+    ({"uid": 1, "pos_dest": 1}, 1, [0, 1, 2], True, ""),
+    ({"uid": 1, "pos_dest": 0}, 1, [1, 0, 2], True, ""),
+    ({"uid": 1, "pos_dest": 2}, 1, [0, 2, 1], True, ""),
+    ({"uid": 1, "pos_dest": 1}, 1, [0, 1, 2], True, ""),
+    ({"uid": 1, "pos_dest": "front"}, 1, [1, 0, 2], True, ""),
+    ({"uid": 1, "pos_dest": "back"}, 1, [0, 2, 1], True, ""),
+    ({"uid": 0, "pos_dest": "front"}, 0, [0, 1, 2], True, ""),
+    ({"uid": 2, "pos_dest": "back"}, 2, [0, 1, 2], True, ""),
+    ({"uid": 0, "before_uid": 0}, 0, [0, 1, 2], True, ""),
+    ({"uid": 0, "after_uid": 0}, 0, [0, 1, 2], True, ""),
+    ({"uid": 2, "before_uid": 2}, 2, [0, 1, 2], True, ""),
+    ({"uid": 2, "after_uid": 2}, 2, [0, 1, 2], True, ""),
+    ({"uid": 0, "before_uid": 2}, 0, [1, 0, 2], True, ""),
+    ({"uid": 0, "after_uid": 2}, 0, [1, 2, 0], True, ""),
+    ({"uid": 2, "before_uid": 0}, 2, [2, 0, 1], True, ""),
+    ({"uid": 2, "after_uid": 0}, 2, [0, 2, 1], True, ""),
+    ({"pos": 50, "after_uid": 0}, 2, [], False, "Source plan (position 50) was not found"),
+    ({"uid": 3, "after_uid": 0}, 2, [], False, "Source plan (UID 'nonexistent') was not found"),
+    ({"pos": 1, "pos_dest": 50}, 2, [], False, "Destination plan (position 50) was not found"),
+    ({"uid": 1, "after_uid": 3}, 2, [], False, "Destination plan (UID 'nonexistent') was not found"),
+    ({"uid": 1, "before_uid": 3}, 2, [], False, "Destination plan (UID 'nonexistent') was not found"),
+    ({"after_uid": 0}, 2, [], False, "Source position or UID is not specified"),
+    ({"pos": 1}, 2, [], False, "Destination position or UID is not specified"),
+    ({"pos": 1, "uid": 1, "after_uid": 0}, 2, [], False, "Ambiguous parameters"),
+    ({"pos": 1, "pos_dest": 1, "after_uid": 0}, 2, [], False, "Ambiguous parameters"),
+    ({"pos": 1, "before_uid": 0, "after_uid": 0}, 2, [], False, "Ambiguous parameters"),
+])
+# fmt: on
+def test_zmq_api_move_plan_1(re_manager, params, src, order, success, msg):  # noqa: F811
+    plans = [_plan1, _plan2, _plan3]
+    for plan in plans:
+        zmq_single_request("queue_plan_add", {"plan": plan, "user": _user, "user_group": _user_group})
+
+    resp1, _ = zmq_single_request("queue_get")
+    queue = resp1["queue"]
+    assert len(queue) == 3
+
+    plan_uids = [_["plan_uid"] for _ in queue]
+    # Add one more 'nonexistent' uid (that is not in the queue)
+    plan_uids.append("nonexistent")
+
+    # Replace indices with actual UIDs that will be sent to the function
+    if "uid" in params:
+        params["uid"] = plan_uids[params["uid"]]
+    if "before_uid" in params:
+        params["before_uid"] = plan_uids[params["before_uid"]]
+    if "after_uid" in params:
+        params["after_uid"] = plan_uids[params["after_uid"]]
+
+    resp2, _ = zmq_single_request("queue_plan_move", params)
+    if success:
+        assert resp2["success"] is True
+        assert resp2["plan"] == queue[src]
+        assert resp2["qsize"] == len(plans)
+        assert resp2["msg"] == ""
+
+        # Compare the order of UIDs in the queue with the expected order
+        plan_uids_reordered = [plan_uids[_] for _ in order]
+        resp3, _ = zmq_single_request("queue_get")
+        plan_uids_from_queue = [_["plan_uid"] for _ in resp3["queue"]]
+
+        assert plan_uids_from_queue == plan_uids_reordered
+
+    else:
+        assert resp2["success"] is False
+        assert msg in resp2["msg"]

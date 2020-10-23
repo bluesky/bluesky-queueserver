@@ -181,6 +181,17 @@ the back so that the new element is now previous to last::
   qserver -c queue_plan_add -p -1 '{"name":"count", "args":[["det1", "det2"]]}'
   http POST http://localhost:60610/queue/plan/add pos:=-1 plan:='{"name":"count", "args":[["det1", "det2"]]}'
 
+The plan can be inserted before or after an existing plan in the queue by specifying the UID of the plan.
+Insert the plan before an existing plan with <uid>::
+
+  qserver -c queue_plan_add -p before_uid '<uid>' '{"name":"count", "args":[["det1", "det2"]]}'
+  http POST http://localhost:60610/queue/plan/add before_uid:='<uid>' plan:='{"name":"count", "args":[["det1", "det2"]]}'
+
+Insert the plan after an existing plan with <uid>::
+
+  qserver -c queue_plan_add -p after_uid '<uid>' '{"name":"count", "args":[["det1", "det2"]]}'
+  http POST http://localhost:60610/queue/plan/add after_uid:='<uid>' plan:='{"name":"count", "args":[["det1", "det2"]]}'
+
 If the queue has 5 elements (0..4), then the following command pushes the new plan to the back of the queue::
 
   qserver -c queue_plan_add -p 5 '{"name":"count", "args":[["det1", "det2"]]}'
@@ -205,7 +216,10 @@ The contents of the queue may be fetched at any time::
 The last item can be removed (popped) from the back of the queue::
 
   qserver -c queue_plan_remove
+  qserver -c queue_plan_remove -p back
+
   echo '{}' | http POST http://localhost:60610/queue/plan/remove
+  http POST http://localhost:60610/queue/plan/remove pos:='"back"'
 
 The position of the removed element may be specified similarly to `queue_plan_add` request with the difference
 that the position index must point to the existing element, otherwise the request fails (returns 'success==False').
@@ -217,16 +231,38 @@ The following examples remove the plan from the front of the queue and the eleme
   http POST http://localhost:60610/queue/plan/remove pos:='"front"'
   http POST http://localhost:60610/queue/plan/remove pos:=-2
 
+The plans can also be addressed by UID. Remove the plan with <uid>::
+
+  qserver -c queue_plan_remove -p '<uid>'
+  http POST http://localhost:60610/queue/plan/remove uid:='<uid>'
+
 Plans can be read from the queue without changing it. `queue_plan_get` requests are formatted identically to
 `queue_plan_remove` requests::
 
   qserver -c queue_plan_get
+  qserver -c queue_plan_get -p back
   qserver -c queue_plan_get -p front
   qserver -c queue_plan_get -p -2
+  qserver -c queue_plan_get -p '<uid>'
 
   echo '{}' | http POST http://localhost:60610/queue/plan/get
+  http POST http://localhost:60610/queue/plan/get pos:='"back"'
   http POST http://localhost:60610/queue/plan/get pos:='"front"'
   http POST http://localhost:60610/queue/plan/get pos:=-2
+  http POST http://localhost:60610/queue/plan/get uid:='<uid>'
+
+Plans can be moved within the queue. Plans can be addressed by position or UID. If plans are
+addressed by position, then the plan is moved from 'source' position to 'destination' position.
+If plans are addressed by UID, then the plan with <uid_source> in inserted before or after
+the plan with <uid_dest>::
+
+  qserver -c queue_plan_move -p 3 5
+  qserver -c queue_plan_move -p <uid_source> before <uid_dest>
+  qserver -c queue_plan_move -p <uid_source> after <uid_dest>
+
+  http POST http://localhost:60610/queue/plan/move pos:=3 pos_dest:=5
+  http POST http://localhost:60610/queue/plan/move uid:='<uid_source>' before_uid:='<uid_dest>'
+  http POST http://localhost:60610/queue/plan/move uid:='<uid_source>' after_uid:='<uid_dest>'
 
 Remove all entries from the plan queue::
 

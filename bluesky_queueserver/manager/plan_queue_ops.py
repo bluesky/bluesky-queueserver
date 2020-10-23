@@ -160,6 +160,32 @@ class PlanQueueOperations:
         plan["plan_uid"] = self._new_plan_uid()
         return plan
 
+    async def _get_index_by_uid(self, *, uid):
+        """
+        Get index of a plan in Redis list by UID. This is inefficient operation and should
+        be avoided whenever possible. Raises an exception if the plan is not found.
+
+        Parameters
+        ----------
+        uid: str
+            UID of the plans to find.
+
+        Returns
+        -------
+        int
+            Index of the plan with given UID.
+
+        Raises
+        ------
+        IndexError
+            No plan is found.
+        """
+        queue = await self._get_plan_queue()
+        for n, plan in enumerate(queue):
+            if plan["plan_uid"] == uid:
+                return n
+        raise IndexError(f"No plan with UID '{uid}' was found in the list.")
+
     # --------------------------------------------------------------------------
     #                          Operations with UID set
     def _uid_dict_clear(self):
@@ -324,6 +350,8 @@ class PlanQueueOperations:
         """
         See ``self.get_plan()`` method.
         """
+        if (pos is not None) and (uid is not None):
+            raise ValueError("Ambiguous parameters: plan position and UID is specified")
 
         if uid is not None:
             if not self._is_uid_in_dict(uid):
@@ -413,6 +441,10 @@ class PlanQueueOperations:
         """
         See ``self._pop_plan_from_queue()`` method
         """
+
+        if (pos is not None) and (uid is not None):
+            raise ValueError("Ambiguous parameters: plan position and UID is specified")
+
         pos = pos if pos is not None else "back"
 
         if uid is not None:
@@ -477,8 +509,16 @@ class PlanQueueOperations:
 
     async def _add_plan_to_queue(self, plan, *, pos=None, before_uid=None, after_uid=None):
         """
-        See ``self.add_plan_to_queue`` method.
+        See ``self.add_plan_to_queue()`` method.
         """
+        if (pos is not None) and (before_uid is not None or after_uid is not None):
+            raise ValueError("Ambiguous parameters: plan position and UID is specified")
+
+        if (before_uid is not None) and (after_uid is not None):
+            raise ValueError(
+                "Ambiguous parameters: request to insert " "the plan before and after the reference plan"
+            )
+
         pos = pos if pos is not None else "back"
 
         if "plan_uid" not in plan:
@@ -555,8 +595,8 @@ class PlanQueueOperations:
 
         Returns
         -------
-        int
-            The new size of the queue.
+        dict, int
+            The dictionary that contains a plan that was added and the new size of the queue.
 
         Raises
         ------
@@ -567,6 +607,123 @@ class PlanQueueOperations:
         """
         async with self._lock:
             return await self._add_plan_to_queue(plan, pos=pos, before_uid=before_uid, after_uid=after_uid)
+
+    async def _move_plan(self, *, pos=None, uid=None, pos_dest=None, before_uid=None, after_uid=None):
+        """
+        See ``self.move_plan()`` method.
+        """
+        if (pos is None) and (uid is None):
+            raise ValueError("Source position or UID is not specified.")
+        if (pos_dest is None) and (before_uid is None) and (after_uid is None):
+            raise ValueError("Destination position or UID is not specified.")
+
+        if (pos is not None) and (uid is not None):
+            raise ValueError("Ambiguous parameters: Both position and uid is specified for the source plan.")
+        if (pos_dest is not None) and (before_uid is not None or after_uid is not None):
+            raise ValueError("Ambiguous parameters: Both position and uid is specified for the destination plan.")
+        if (before_uid is not None) and (after_uid is not None):
+            raise ValueError("Ambiguous parameters: source should be moved 'before' and 'after' the destination.")
+
+        queue_size = await self._get_plan_queue_size()
+
+        # Find the source plan
+        src_txt = ""
+        src_by_index = False  # Indicates that the source is addressed by index
+        try:
+            if uid is not None:
+                src_txt = f"UID '{uid}'"
+                plan_source = await self._get_plan(uid=uid)
+            else:
+                src_txt = f"position {pos}"
+                src_by_index = True
+                plan_source = await self._get_plan(pos=pos)
+        except Exception as ex:
+            raise IndexError(f"Source plan ({src_txt}) was not found: {str(ex)}.")
+
+        uid_source = plan_source["plan_uid"]
+
+        # Find the destination plan
+        dest_txt, before = "", True
+        try:
+            if (before_uid is not None) or (after_uid is not None):
+                uid_dest = before_uid if before_uid else after_uid
+                before = uid_dest == before_uid
+                dest_txt = f"UID '{uid_dest}'"
+                plan_dest = await self._get_plan(uid=uid_dest)
+            else:
+                dest_txt = f"position {pos_dest}"
+                plan_dest = await self._get_plan(pos=pos_dest)
+
+                # Find the index of the source in the most efficient way
+                src_index = pos if src_by_index else (await self._get_index_by_uid(uid=uid))
+                if src_index == "front":
+                    src_index = 0
+                elif src_index == "back":
+                    src_index = queue_size - 1
+
+                # Determine if the item must be inserted before or after the destination
+                if pos_dest == "front":
+                    before = True
+                elif pos_dest == "back":
+                    # This is one case when we need to insert the plan after the 'destination' plan.
+                    before = False
+                else:
+                    before = src_index > pos_dest
+
+        except Exception as ex:
+            raise IndexError(f"Destination plan ({dest_txt}) was not found: {str(ex)}.")
+
+        # Copy destination UID from the plan (we need it for the case of if addressing is positional
+        #   so we convert it to UID, but we can do it for the case of UID addressing as well)
+        #   In case of positional addressing 'before' is True, so the source is going to be
+        #   inserted in place of destination.
+        uid_dest = plan_dest["plan_uid"]
+
+        # If source and destination point to the same plan, then do nothing,
+        #   but consider it a valid operation.
+        if uid_source != uid_dest:
+            plan, _ = await self._pop_plan_from_queue(uid=uid_source)
+            kw = {"before_uid": uid_dest} if before else {"after_uid": uid_dest}
+            kw.update({"plan": plan})
+            plan, qsize = await self._add_plan_to_queue(**kw)
+        else:
+            plan = plan_dest
+            qsize = await self._get_plan_queue_size()
+        return plan, qsize
+
+    async def move_plan(self, *, pos=None, uid=None, pos_dest=None, before_uid=None, after_uid=None):
+        """
+        Move existing plan within the queue.
+
+        Parameters
+        ----------
+        pos: str or int
+            Position of the source plan: positive or negative integer that specifieds the index
+            of the plan in the queue or a string from the set {"back", "front"}.
+        uid: str
+            UID of the source plan. UID overrides the position
+        pos_dext: str or int
+            Index of the new position of the plan in the queue: positive or negative integer that
+            specifieds the index of the plan in the queue or a string from the set {"back", "front"}.
+        before_uid: str
+            Insert the plan before the plan with the given UID.
+        after_uid: str
+            Insert the plan after the plan with the given UID.
+
+        Returns
+        -------
+        dict, int
+            The dictionary that contains a plan that was moved and the size of the queue.
+
+        Raises
+        ------
+        ValueError
+            Error in specification of source or destination.
+        """
+        async with self._lock:
+            return await self._move_plan(
+                pos=pos, uid=uid, pos_dest=pos_dest, before_uid=before_uid, after_uid=after_uid
+            )
 
     async def _clear_plan_queue(self):
         """

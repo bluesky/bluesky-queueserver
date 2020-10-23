@@ -342,6 +342,10 @@ def test_get_plan_2_fail(pq):
         with pytest.raises(IndexError, match="is currently running"):
             await pq.get_plan(uid="one")
 
+        # Ambiguous parameters (position and UID is passed)
+        with pytest.raises(ValueError, match="Ambiguous parameters"):
+            await pq.get_plan(pos=5, uid="abc")
+
     asyncio.run(testing())
 
 
@@ -442,6 +446,91 @@ def test_add_plan_to_queue_3_fail(pq):
         await pq.add_plan_to_queue(plan)
         with pytest.raises(RuntimeError, match="Plan with UID .+ is already in the queue"):
             await pq.add_plan_to_queue(plan)
+
+        # Ambiguous parameters (position and UID is passed)
+        with pytest.raises(ValueError, match="Ambiguous parameters"):
+            await pq.add_plan_to_queue({"name": "abc"}, pos=5, before_uid="abc")
+
+        # Ambiguous parameters ('before_uid' and 'after_uid' is specified)
+        with pytest.raises(ValueError, match="Ambiguous parameters"):
+            await pq.add_plan_to_queue({"name": "abc"}, before_uid="abc", after_uid="abc")
+
+    asyncio.run(testing())
+
+
+# fmt: off
+@pytest.mark.parametrize("params, src, order, success, msg", [
+    ({"pos": 1, "pos_dest": 1}, 1, "abcde", True, ""),
+    ({"pos": "front", "pos_dest": "front"}, 0, "abcde", True, ""),
+    ({"pos": "back", "pos_dest": "back"}, 4, "abcde", True, ""),
+    ({"pos": "front", "pos_dest": "back"}, 0, "bcdea", True, ""),
+    ({"pos": "back", "pos_dest": "front"}, 4, "eabcd", True, ""),
+    ({"pos": 1, "pos_dest": 2}, 1, "acbde", True, ""),
+    ({"pos": 2, "pos_dest": 1}, 2, "acbde", True, ""),
+    ({"pos": 0, "pos_dest": 4}, 0, "bcdea", True, ""),
+    ({"pos": 4, "pos_dest": 0}, 4, "eabcd", True, ""),
+    ({"pos": 3, "pos_dest": "front"}, 3, "dabce", True, ""),
+    ({"pos": 2, "pos_dest": "back"}, 2, "abdec", True, ""),
+    ({"uid": "p3", "after_uid": "p3"}, 2, "abcde", True, ""),
+    ({"uid": "p1", "before_uid": "p2"}, 0, "abcde", True, ""),
+    ({"uid": "p1", "after_uid": "p2"}, 0, "bacde", True, ""),
+    ({"uid": "p2", "pos_dest": "front"}, 1, "bacde", True, ""),
+    ({"uid": "p2", "pos_dest": "back"}, 1, "acdeb", True, ""),
+    ({"uid": "p1", "pos_dest": "front"}, 0, "abcde", True, ""),
+    ({"uid": "p5", "pos_dest": "back"}, 4, "abcde", True, ""),
+    ({"pos": 1, "after_uid": "p4"}, 1, "acdbe", True, ""),
+    ({"pos": "front", "after_uid": "p4"}, 0, "bcdae", True, ""),
+    ({"pos": 3, "after_uid": "p1"}, 3, "adbce", True, ""),
+    ({"pos": "back", "after_uid": "p1"}, 4, "aebcd", True, ""),
+    ({"pos": 1, "before_uid": "p4"}, 1, "acbde", True, ""),
+    ({"pos": "front", "before_uid": "p4"}, 0, "bcade", True, ""),
+    ({"pos": 3, "before_uid": "p1"}, 3, "dabce", True, ""),
+    ({"pos": "back", "before_uid": "p1"}, 4, "eabcd", True, ""),
+    ({"pos": "back", "after_uid": "p5"}, 4, "abcde", True, ""),
+    ({"pos": "front", "before_uid": "p1"}, 0, "abcde", True, ""),
+    ({"pos": 50, "before_uid": "p1"}, 0, "", False, r"Source plan \(position 50\) was not found"),
+    ({"uid": "abc", "before_uid": "p1"}, 0, "", False, r"Source plan \(UID 'abc'\) was not found"),
+    ({"pos": 3, "pos_dest": 50}, 0, "", False, r"Destination plan \(position 50\) was not found"),
+    ({"uid": "p1", "before_uid": "abc"}, 0, "", False, r"Destination plan \(UID 'abc'\) was not found"),
+    ({"before_uid": "p1"}, 0, "", False, r"Source position or UID is not specified"),
+    ({"pos": 3}, 0, "", False, r"Destination position or UID is not specified"),
+    ({"pos": 1, "uid": "p1", "before_uid": "p4"}, 1, "", False, "Ambiguous parameters"),
+    ({"pos": 1, "pos_dest": 4, "before_uid": "p4"}, 1, "", False, "Ambiguous parameters"),
+    ({"pos": 1, "after_uid": "p4", "before_uid": "p4"}, 1, "", False, "Ambiguous parameters"),
+])
+# fmt: on
+def test_move_plan_1(pq, params, src, order, success, msg):
+    """
+    Basic tests for ``move_plans()``.
+    """
+
+    async def testing():
+        plans = [
+            {"plan_uid": "p1", "name": "a"},
+            {"plan_uid": "p2", "name": "b"},
+            {"plan_uid": "p3", "name": "c"},
+            {"plan_uid": "p4", "name": "d"},
+            {"plan_uid": "p5", "name": "e"},
+        ]
+
+        for plan in plans:
+            await pq.add_plan_to_queue(plan)
+
+        assert await pq.get_plan_queue_size() == len(plans)
+
+        if success:
+            plan, qsize = await pq.move_plan(**params)
+            assert qsize == len(plans)
+            assert plan["name"] == plans[src]["name"]
+
+            queue = await pq.get_plan_queue()
+            names = [_["name"] for _ in queue]
+            names = "".join(names)
+            assert names == order
+
+        else:
+            with pytest.raises(Exception, match=msg):
+                await pq.move_plan(**params)
 
     asyncio.run(testing())
 
@@ -546,6 +635,10 @@ def test_pop_plan_from_queue_4_fail(pq):
     async def testing():
         with pytest.raises(ValueError, match="Parameter 'pos' has incorrect value"):
             await pq.pop_plan_from_queue(pos="something")
+
+        # Ambiguous parameters (position and UID is passed)
+        with pytest.raises(ValueError, match="Ambiguous parameters"):
+            await pq.pop_plan_from_queue(pos=5, uid="abc")
 
     asyncio.run(testing())
 

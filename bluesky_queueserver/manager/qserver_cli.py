@@ -85,8 +85,16 @@ def create_msg(command, params=None):
             prms["user_group"] = "root"
 
         elif command in ("queue_plan_remove", "queue_plan_get"):
-            if 0 <= len(params) <= 1:
-                prms = {"pos": params[0]} if len(params) else {}
+            if len(params) == 0:
+                prms = {}
+            elif len(params) == 1:
+                v = params[0]
+                if isinstance(v, int) or v in ("front", "back"):
+                    prms = {"pos": v}
+                elif isinstance(v, str):
+                    prms = {"uid": v}
+                else:
+                    raise ValueError(f"Parameter must be an integer or a string: give {v} ({type(v)})")
             else:
                 raise ValueError("Invalid number of method arguments: '%s'", pprint.pformat(params))
 

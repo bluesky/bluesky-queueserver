@@ -714,24 +714,28 @@ def test_queue_plan_add_6_fail(re_manager, params, exit_code):  # noqa F811
 
 
 # fmt: off
-@pytest.mark.parametrize("pos, pos_result, success", [
-    (None, 2, True),
-    ("back", 2, True),
-    ("front", 0, True),
-    ("some", None, False),
-    (0, 0, True),
-    (1, 1, True),
-    (2, 2, True),
-    (3, None, False),
-    (100, None, False),
-    (-1, 2, True),
-    (-2, 1, True),
-    (-3, 0, True),
-    (-4, 0, False),
-    (-100, 0, False),
+@pytest.mark.parametrize("pos, uid_ind, pos_result, success", [
+    (None, None, 2, True),
+    ("back", None, 2, True),
+    ("front", None, 0, True),
+    ("some", None, None, False),
+    (0, None, 0, True),
+    (1, None, 1, True),
+    (2, None, 2, True),
+    (3, None, None, False),
+    (100, None, None, False),
+    (-1, None, 2, True),
+    (-2, None, 1, True),
+    (-3, None, 0, True),
+    (-4, None,  0, False),
+    (-100, None, 0, False),
+    (None, 0, 0, True),
+    (None, 1, 1, True),
+    (None, 2, 2, True),
+    (None, 3, 2, False),
 ])
 # fmt: on
-def test_queue_plan_get_remove(re_manager, pos, pos_result, success):  # noqa F811
+def test_queue_plan_get_remove(re_manager, pos, uid_ind, pos_result, success):  # noqa F811
     """
     Tests for ``queue_plan_get`` and ``queue_plan_remove`` requests.
     """
@@ -745,8 +749,17 @@ def test_queue_plan_get_remove(re_manager, pos, pos_result, success):  # noqa F8
     for plan in plans:
         assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan]) == 0
 
-    # Remove entry at the specified position
-    args = ["-p", str(pos)] if (pos is not None) else []
+    queue_1 = get_queue()["queue"]
+    assert len(queue_1) == 3
+    uids_1 = [_["plan_uid"] for _ in queue_1]
+    uids_1.append("unknown_uid")  # Extra element (for one of the tests)
+
+    if uid_ind is None:
+        # Remove entry at the specified position
+        args = ["-p", str(pos)] if (pos is not None) else []
+    else:
+        uid = uids_1[uid_ind]
+        args = ["-p", uid]
 
     # Testing 'queue_plan_get'. ONLY THE RETURN CODE IS TESTED.
     res = subprocess.call(["qserver", "-c", "queue_plan_get", *args])
@@ -762,14 +775,14 @@ def test_queue_plan_get_remove(re_manager, pos, pos_result, success):  # noqa F8
     else:
         assert res != 0
 
-    resp = get_queue()
-    assert len(resp["queue"]) == (2 if success else 3)
+    queue_2 = get_queue()["queue"]
+    assert len(queue_2) == (2 if success else 3)
     if success:
         ind = [0, 1, 2]
         ind.pop(pos_result)
         # Check that the right entry disappeared from the queue.
-        assert resp["queue"][0]["args"] == plans_args[ind[0]]
-        assert resp["queue"][1]["args"] == plans_args[ind[1]]
+        assert queue_2[0]["args"] == plans_args[ind[0]]
+        assert queue_2[1]["args"] == plans_args[ind[1]]
 
 
 # fmt: off

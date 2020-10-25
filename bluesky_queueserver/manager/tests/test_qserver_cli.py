@@ -585,7 +585,7 @@ def test_queue_plan_add_1(re_manager, pos, pos_result, success):  # noqa F811
     # Add another entry at the specified position
     params = [plan2]
     if pos is not None:
-        params.append(str(pos))
+        params.insert(0, str(pos))
 
     res = subprocess.call(["qserver", "-c", "queue_plan_add", "-p", *params])
     if success:
@@ -619,9 +619,49 @@ def test_queue_plan_add_2(re_manager):  # noqa F811
 
 
 # fmt: off
+@pytest.mark.parametrize("before, target_pos, result_order", [
+    (True, 0, [2, 0, 1]),
+    (False, 0, [0, 2, 1]),
+    (True, 1, [0, 2, 1]),
+    (False, 1, [0, 1, 2]),
+])
+# fmt: on
+def test_queue_plan_add_3(re_manager, before, target_pos, result_order):  # noqa F811
+    """
+    Insert an item before or after the element with a given UID
+    """
+    # Wait until RE Manager is started
+    assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+    plan1 = "{'name':'count', 'args':[['det1']]}"
+    plan2 = "{'name':'count', 'args':[['det1', 'det2']]}"
+    plan3 = "{'name':'count', 'args':[['det2']]}"
+
+    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan1]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan2]) == 0
+
+    # Read queue.
+    queue_1 = get_queue()["queue"]
+    assert len(queue_1) == 2
+    uids_1 = [_["plan_uid"] for _ in queue_1]
+
+    params = ["before_uid" if before else "after_uid", uids_1[target_pos], plan3]
+    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", *params]) == 0
+
+    # Check if the element was inserted in the right plance
+    queue_2 = get_queue()["queue"]
+    assert len(queue_2) == 3
+    uids_2 = [_["plan_uid"] for _ in queue_2]
+    for n, uid in enumerate(uids_2):
+        n_res = result_order[n]
+        if (n_res < 2) and (uid != uids_1[n_res]):
+            assert False, f"uids_1: {uids_1}, uids_2: {uids_2}, result_order: {result_order}"
+
+
+# fmt: off
 @pytest.mark.parametrize("pos", [None, "back"])
 # fmt: on
-def test_queue_plan_add_3_fail(re_manager, pos):  # noqa F811
+def test_queue_plan_add_4_fail(re_manager, pos):  # noqa F811
     """
     No plan is supplied.
     """
@@ -632,6 +672,45 @@ def test_queue_plan_add_3_fail(re_manager, pos):  # noqa F811
         assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", pos]) != 0
     else:
         assert subprocess.call(["qserver", "-c", "queue_plan_add"]) != 0
+
+
+# fmt: off
+@pytest.mark.parametrize("pos", [10, "front", "back"])
+# fmt: on
+def test_queue_plan_add_5_fail(re_manager, pos):  # noqa F811
+    """
+    Incorrect order of arguments (position is specified).
+    """
+    # Wait until RE Manager is started
+    assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+    pos, plan = 10, "{'name':'count', 'args':[['det1']]}"
+    params = [plan, str(pos)]
+    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", *params]) != 0
+
+
+# fmt: off
+@pytest.mark.parametrize("params, exit_code", [
+    # Error while processing message by the manager
+    (["before_uid", "some_uid", "plan"], 2),
+    # Unknown keyword
+    (["unknown_keyword", "some_uid", "plan"], 4),
+    # Incorrect order of arguments
+    (["plan", "before_uid", "some_uid"], 4),
+    (["some_uid", "before_uid", "plan"], 4),
+    (["some_uid", "plan", "before_uid"], 4),
+])
+# fmt: on
+def test_queue_plan_add_6_fail(re_manager, params, exit_code):  # noqa F811
+    """
+    Incorrect order of arguments (position is specified).
+    """
+    # Wait until RE Manager is started
+    assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+    plan = "{'name':'count', 'args':[['det1']]}"
+    params = [_ if _ != "plan" else plan for _ in params]
+    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", *params]) == exit_code
 
 
 # fmt: off

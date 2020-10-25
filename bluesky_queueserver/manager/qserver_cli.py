@@ -64,18 +64,20 @@ def create_msg(command, params=None):
         # Present value in the proper format. This will change as the format is changed.
         if command == "queue_plan_add":
             if (len(params) == 1) and isinstance(params[0], dict):
+                # Arguments: <plan>
                 prms = {"plan": params[0]}  # Value is dict
             elif len(params) == 2:
-                plan_found, pos_found = False, False
-                prms = {}
-                for n in range(2):
-                    if isinstance(params[n], dict):
-                        prms.update({"plan": params[n]})
-                        plan_found = True
-                    else:
-                        prms.update({"pos": params[n]})
-                        pos_found = True
-                if not plan_found or not pos_found:
+                # The order of arguments: <pos> <plan>
+                if isinstance(params[0], (int, str)) and isinstance(params[1], dict):
+                    prms = {"pos": params[0], "plan": params[1]}
+                else:
+                    raise ValueError("Invalid set of method arguments: '%s'", pprint.pformat(params))
+            elif len(params) == 3:
+                # The order of arguments: [before_uid, after_uid], <uid>, <plan>
+                kwds = {"before_uid", "after_uid"}
+                if (params[0] in kwds) and isinstance(params[1], str) and isinstance(params[2], dict):
+                    prms = {params[0]: params[1], "plan": params[2]}
+                else:
                     raise ValueError("Invalid set of method arguments: '%s'", pprint.pformat(params))
             else:
                 raise ValueError("Invalid number of method arguments: '%s'", pprint.pformat(params))
@@ -163,8 +165,8 @@ def qserver():
                 params[n] = ast.literal_eval(params[n])
             except Exception as ex:
                 # Failures to parse are OK (sometimes expected) unless the parameter is a dictionary.
-                # TODO: probably it's a good idea to check if it is a list. (List are not used
-                #     as parameter values at this point.)
+                # TODO: probably it's a good idea to check if it is a list. (Currently no parameters
+                #     accept lists.)
                 if ("{" in params[n]) or ("}" in params[n]):
                     print(
                         f"Failed to parse parameter string {params[n]}: {str(ex)}. "

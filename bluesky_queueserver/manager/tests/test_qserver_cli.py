@@ -786,6 +786,65 @@ def test_queue_plan_get_remove(re_manager, pos, uid_ind, pos_result, success):  
 
 
 # fmt: off
+@pytest.mark.parametrize("params, result_order, exit_code", [
+    # 'params': positions are always represented as str, all int's are UIDs.
+    (["0", "1"], [1, 0, 2], 0),
+    (["2", "0"], [2, 0, 1], 0),
+    (["2", "-3"], [2, 0, 1], 0),
+    (["-1", "-3"], [2, 0, 1], 0),
+    (["2", "-5"], [0, 1, 2], 2),  # Destination index out of range
+    (["1", "3"], [0, 1, 2], 2),  # Destination index out of range
+    (["front", "back"], [1, 2, 0], 0),
+    (["back", "front"], [2, 0, 1], 0),
+    ([1, "before", 0], [1, 0, 2], 0),
+    ([0, "after", 1], [1, 0, 2], 0),
+    (["1", "before", 0], [1, 0, 2], 0),  # Mixed pos->uid
+    (["0", "after", 1], [1, 0, 2], 0),  # Mixed pos->uid
+    ([1, "0"], [1, 0, 2], 0),  # Mixed uid->pos
+    ([1, "2"], [0, 2, 1], 0),  # Mixed uid->pos
+    (["1", "unknown_kwd", 0], [0, 1, 2], 4),  # Mixed pos->uid
+    (["0", "after"], [0, 1, 2], 2),  # Second parameter is considered as UID
+    (["0"], [0, 1, 2], 4),  # Not enough parameters
+
+])
+# fmt: on
+def test_queue_plan_get_move(re_manager, params, result_order, exit_code):  # noqa F811
+    """
+    Tests for ``queue_plan_get`` and ``queue_plan_remove`` requests.
+    """
+    plans = [
+        "{'name':'count', 'args':[['det1']]}",
+        "{'name':'count', 'args':[['det2']]}",
+        "{'name':'count', 'args':[['det1', 'det2']]}",
+    ]
+
+    for plan in plans:
+        assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan]) == 0
+
+    queue_1 = get_queue()["queue"]
+    assert len(queue_1) == 3
+    uids_1 = [_["plan_uid"] for _ in queue_1]
+    uids_1.append("unknown_uid")  # Extra element (for one of the tests)
+
+    # Replace ints with UIDs (positions are represented as strings)
+    params = params.copy()
+    for n, p in enumerate(params):
+        if isinstance(p, int):
+            params[n] = uids_1[p]
+
+    # Testing 'queue_plan_get'. ONLY THE RETURN CODE IS TESTED.
+    assert subprocess.call(["qserver", "-c", "queue_plan_move", "-p", *params]) == exit_code
+
+    queue_2 = get_queue()["queue"]
+    assert len(queue_2) == 3
+    uids_2 = [_["plan_uid"] for _ in queue_2]
+
+    # Compare the order of UIDs before and after moving the element
+    uids_1_reordered = [uids_1[_] for _ in result_order]
+    assert uids_1_reordered == uids_2
+
+
+# fmt: off
 @pytest.mark.parametrize("deactivate", [False, True])
 # fmt: on
 def test_qserver_queue_stop(re_manager, deactivate):  # noqa: F811

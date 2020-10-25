@@ -39,6 +39,7 @@ def get_supported_commands():
         "queue_plan_add": "queue_plan_add",
         "queue_plan_get": "queue_plan_get",
         "queue_plan_remove": "queue_plan_remove",
+        "queue_plan_move": "queue_plan_move",
         "queue_clear": "queue_clear",
         "queue_start": "queue_start",
         "queue_stop": "queue_stop",
@@ -58,6 +59,15 @@ def create_msg(command, params=None):
     # This function may transform human-friendly command names to API names
     params = params or []
 
+    def _pos_or_uid(v):
+        if isinstance(v, int) or v in ("front", "back"):
+            prms = {"pos": v}
+        elif isinstance(v, str):
+            prms = {"uid": v}
+        else:
+            raise ValueError(f"Parameter must be an integer or a string: give {v} ({type(v)})")
+        return prms
+
     command_dict = get_supported_commands()
     try:
         command = command_dict[command]
@@ -71,16 +81,18 @@ def create_msg(command, params=None):
                 if isinstance(params[0], (int, str)) and isinstance(params[1], dict):
                     prms = {"pos": params[0], "plan": params[1]}
                 else:
-                    raise ValueError("Invalid set of method arguments: '%s'", pprint.pformat(params))
+                    raise ValueError(f"Invalid set of method arguments: '{pprint.pformat(params)}'")
             elif len(params) == 3:
                 # The order of arguments: [before_uid, after_uid], <uid>, <plan>
                 kwds = {"before_uid", "after_uid"}
                 if (params[0] in kwds) and isinstance(params[1], str) and isinstance(params[2], dict):
                     prms = {params[0]: params[1], "plan": params[2]}
                 else:
-                    raise ValueError("Invalid set of method arguments: '%s'", pprint.pformat(params))
+                    raise ValueError(
+                        f"Invalid set of method arguments: '{pprint.pformat(params)}'",
+                    )
             else:
-                raise ValueError("Invalid number of method arguments: '%s'", pprint.pformat(params))
+                raise ValueError(f"Invalid number of method arguments: '{pprint.pformat(params)}'")
             prms["user"] = "qserver-cli"
             prms["user_group"] = "root"
 
@@ -88,15 +100,30 @@ def create_msg(command, params=None):
             if len(params) == 0:
                 prms = {}
             elif len(params) == 1:
-                v = params[0]
-                if isinstance(v, int) or v in ("front", "back"):
-                    prms = {"pos": v}
-                elif isinstance(v, str):
-                    prms = {"uid": v}
-                else:
-                    raise ValueError(f"Parameter must be an integer or a string: give {v} ({type(v)})")
+                prms = _pos_or_uid(params[0])
             else:
-                raise ValueError("Invalid number of method arguments: '%s'", pprint.pformat(params))
+                raise ValueError(f"Invalid number of method arguments: '{pprint.pformat(params)}'")
+
+        elif command == "queue_plan_move":
+            if len(params) == 2:
+                # Argument order: [<pos_source>, <uid_source>] <pos_dest>
+                prms = _pos_or_uid(params[0])
+                prms.update({"pos_dest": params[1]})
+
+            elif len(params) == 3:
+                # Argument order: [<pos_source>, <uid_source>] ["before", "after"] <uid_dest>
+                prms = _pos_or_uid(params[0])
+                if params[1] in ("before", "after") and isinstance(params[2], str):
+                    if params[1] == "before":
+                        prms.update({"before_uid": params[2]})
+                    else:
+                        prms.update({"after_uid": params[2]})
+                else:
+                    raise ValueError(
+                        f"Invalid set of method arguments: '{pprint.pformat(params)}'",
+                    )
+            else:
+                raise ValueError(f"Invalid number of method arguments: '{pprint.pformat(params)}'")
 
         elif command in ("plans_allowed", "devices_allowed"):
             prms = {"user_group": "root"}
@@ -105,7 +132,7 @@ def create_msg(command, params=None):
             if 0 <= len(params) <= 1:
                 prms = {"option": params[0]} if len(params) else {}  # Value is str
             else:
-                raise ValueError("Invalid number of method arguments: '%s'", pprint.pformat(params))
+                raise ValueError(f"Invalid number of method arguments: '{pprint.pformat(params)}'")
 
         return command, prms
 
@@ -116,7 +143,7 @@ def create_msg(command, params=None):
 def qserver():
 
     logging.basicConfig(level=logging.WARNING)
-    logging.getLogger("bluesky_queueserver").setLevel("CRITICAL")
+    logging.getLogger("bluesky_queueserver").setLevel("ERROR")
 
     supported_commands = list(get_supported_commands().keys())
     # Add the command 'monitor' to the list. This command is not sent to RE Manager.
@@ -210,7 +237,7 @@ def qserver():
                 break
             ttime.sleep(1)
     except Exception as ex:
-        logger.exception("Exception occurred: %s.", str(ex))
+        logger.error("Exception occurred: %s.", str(ex))
         exit_code = 4
     except KeyboardInterrupt:
         print("\nThe program was manually stopped.")

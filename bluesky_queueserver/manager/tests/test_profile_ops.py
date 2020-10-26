@@ -119,25 +119,37 @@ get_ipython().user_ns
 
 """, True, ""),
 
-    # Not patched ('get_ipython' is commented)
-    ("""
-\n
-from IPython # import get_ipython
-
-get_ipython().user_ns
-""", False, "Profile calls 'get_ipython' before the patch was applied"),
-
-    # using 'get_ipython' before it is patched
+    # Patched as expected ('get_ipython()' is not imported)
     ("""
 \n
 get_ipython().user_ns
+""", True, ""),
 
-""", False, "Profile calls 'get_ipython' before the patch was applied"),
+    # Patched as expected ('get_ipython' is commented in the import statement)
+    ("""
+\n
+from IPython import config #, get_ipython
+
+get_ipython().user_ns
+""", True, ""),
 
     # Commented 'get_ipython' -> OK
     ("""
 \n
 a = 10  # get_ipython().user_ns
+""", True, ""),
+
+    # Patched multiiple times
+    ("""
+\n
+get_ipython().user_ns
+from IPython import get_ipython
+get_ipython().user_ns
+from IPython import get_ipython
+get_ipython().user_ns
+from IPython import get_ipython
+get_ipython().user_ns
+
 """, True, ""),
 
     # Raise exception in the profile

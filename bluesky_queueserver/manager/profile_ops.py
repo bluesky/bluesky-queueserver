@@ -103,6 +103,41 @@ def _patch_profile(file_name):
     with open(file_name, "r") as fln_in:
         code = fln_in.readlines()
 
+    class GetIPythonUsed(enum.Enum):
+        NOT_PRESENT = 0
+        IMPORTED = 1
+        CALLED = 2
+
+    def is_get_ipython_in_line(line):
+        """Check if ``get_ipython()`` is imported or called in the line"""
+        # It is assumed that commenting is done using #
+        result = GetIPythonUsed.NOT_PRESENT
+        if re.search(r"^[^#]*IPython[^#]+get_ipython", line):
+            result = GetIPythonUsed.IMPORTED
+        elif re.search(r"^[^#]*get_ipython", line):
+            result = GetIPythonUsed.CALLED
+        return result
+
+    def patch_before_first_line(code):
+        """
+        Determine if the code file needs to be patched before the first line.
+        The file should be patched if ``get_ipython`` is called before it is imported.
+        Otherwise it should be patched each time it is imported
+        """
+        for line in code:
+            is_get_ipython = is_get_ipython_in_line(line)
+            if is_get_ipython == GetIPythonUsed.IMPORTED:
+                return False
+            elif is_get_ipython == GetIPythonUsed.CALLED:
+                return True
+        # 'get_ipython()' was not found.Don't patch the file.
+        return False
+
+    def apply_patch2(stream, prefix):
+        patch2_lines = _patch2.split("\n")
+        for lp in patch2_lines:
+            stream.write(prefix + lp + "\n")
+
     def get_prefix(s):
         # Returns the sequence of spaces and tabs at the beginning of the code line
         prefix = ""
@@ -111,26 +146,20 @@ def _patch_profile(file_name):
             s = s[1:]
         return prefix
 
+    patch_first = patch_before_first_line(code)
+
     with open(tmp_fln, "w") as fln_out:
         # insert 'try ..'
         fln_out.writelines(_patch1)
-        is_patched = False
+        if patch_first:
+            apply_patch2(fln_out, "")
         for line in code:
-            fln_out.write("    " + line)
-            # The following RE patterns cover only the cases of commenting with '#'.
-            if not is_patched:
-                if re.search(r"^[^#]*IPython[^#]+get_ipython", line):
-                    # Keep the same indentation as in the preceding line
-                    prefix = get_prefix(line)
-                    for lp in _patch2:
-                        fln_out.write(prefix + lp)
-                    is_patched = True  # Patch only once
-                elif re.search(r"^[^#]*get_ipython *\(", line):
-                    # 'get_ipython()' is called before the patch was applied
-                    raise RuntimeError(
-                        "Profile calls 'get_ipython' before the patch was "
-                        "applied. Inspect and correct the code."
-                    )
+            fln_out.write(" " * 4 + line)
+            if is_get_ipython_in_line(line) == GetIPythonUsed.IMPORTED:
+                # Keep the same indentation as in the preceding line
+                prefix = get_prefix(line)
+                prefix = prefix
+                apply_patch2(fln_out, prefix)
         # insert 'except ..'
         fln_out.writelines(_patch3)
 

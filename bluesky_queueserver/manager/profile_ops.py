@@ -217,9 +217,9 @@ def load_profile_collection(path, patch_profiles=True):
             fln_tmp = _patch_profile(file) if patch_profiles else file
             nspace = runpy.run_path(fln_tmp, nspace)
 
-        if "__plan_exc_info" in nspace:
-            exec_info = nspace["__plan_exc_info"]
-            raise exec_info[1].with_traceback(exec_info[2])
+            if "__plan_exc_info" in nspace:
+                exc_info = nspace["__plan_exc_info"]
+                raise exc_info[1].with_traceback(exc_info[2])
 
         # Discard RE and db from the profile namespace (if they exist).
         nspace.pop("RE", None)

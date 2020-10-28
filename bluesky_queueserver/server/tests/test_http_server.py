@@ -11,6 +11,11 @@ from bluesky_queueserver.server.tests.conftest import (  # noqa F401
     fastapi_server,
 )
 
+# Plans used in most of the tests: '_plan1' and '_plan2' are quickly executed '_plan3' runs for 5 seconds.
+_plan1 = {"name": "count", "args": [["det1", "det2"]]}
+_plan2 = {"name": "scan", "args": [["det1", "det2"], "motor", -1, 1, 10]}
+_plan3 = {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 5, "delay": 1}}
+
 
 def wait_for_environment_to_be_created(timeout, polling_period=0.2):
     """Wait for environment to be created with timeout."""
@@ -156,7 +161,7 @@ def test_http_server_queue_plan_add_handler_3(re_manager, fastapi_server):  # no
     assert resp4["running_plan"] == {}
 
 
-def test_http_server_queue_plan_add_handler_4_fail(re_manager, fastapi_server):  # noqa F811
+def test_http_server_queue_plan_add_handler_6_fail(re_manager, fastapi_server):  # noqa F811
     """
     Failing case: call without sending a plan.
     """
@@ -246,6 +251,156 @@ def test_http_server_queue_plan_get_remove_handler_2(
     resp3 = _request_to_json("get", "/queue/get")
     assert len(resp3["queue"]) == (2 if success else 3)
     assert resp3["running_plan"] == {}
+
+
+def test_http_server_queue_plan_get_remove_3(re_manager, fastapi_server):  # noqa F811
+    """
+    Get and remove elements using plan UID. Successful and failing cases.
+    Note: the test is derived from ZMQ API test ``test_zmq_api_queue_plan_get_remove_3()``
+    """
+    _request_to_json("post", "/queue/plan/add", json={"plan": _plan3})
+    _request_to_json("post", "/queue/plan/add", json={"plan": _plan2})
+    _request_to_json("post", "/queue/plan/add", json={"plan": _plan1})
+
+    resp1 = _request_to_json("get", "/queue/get")
+    plans_in_queue = resp1["queue"]
+    assert len(plans_in_queue) == 3
+
+    # Get and then remove plan 2 from the queue
+    uid = plans_in_queue[1]["plan_uid"]
+    resp2a = _request_to_json("post", "/queue/plan/get", json={"uid": uid})
+    assert resp2a["plan"]["plan_uid"] == plans_in_queue[1]["plan_uid"]
+    assert resp2a["plan"]["name"] == plans_in_queue[1]["name"]
+    assert resp2a["plan"]["args"] == plans_in_queue[1]["args"]
+    resp2b = _request_to_json("post", "/queue/plan/remove", json={"uid": uid})
+    assert resp2b["plan"]["plan_uid"] == plans_in_queue[1]["plan_uid"]
+    assert resp2b["plan"]["name"] == plans_in_queue[1]["name"]
+    assert resp2b["plan"]["args"] == plans_in_queue[1]["args"]
+
+    # Start the first plan (this removes it from the queue)
+    #   Also the rest of the operations will be performed on a running queue.
+    resp3 = _request_to_json("post", "/environment/open")
+    assert resp3["success"] is True
+    assert wait_for_environment_to_be_created(10)
+
+    resp4 = _request_to_json("post", "/queue/start")
+    assert resp4["success"] is True
+
+    ttime.sleep(1)
+    uid = plans_in_queue[0]["plan_uid"]
+    resp5a = _request_to_json("post", "/queue/plan/get", json={"uid": uid})
+    assert resp5a["success"] is False
+    assert "is currently running" in resp5a["msg"]
+    resp5b = _request_to_json("post", "/queue/plan/remove", json={"uid": uid})
+    assert resp5b["success"] is False
+    assert "Can not remove a plan which is currently running" in resp5b["msg"]
+
+    uid = "nonexistent"
+    resp6a = _request_to_json("post", "/queue/plan/get", json={"uid": uid})
+    assert resp6a["success"] is False
+    assert "not in the queue" in resp6a["msg"]
+    resp6b = _request_to_json("post", "/queue/plan/remove", json={"uid": uid})
+    assert resp6b["success"] is False
+    assert "not in the queue" in resp6b["msg"]
+
+    # Remove the last entry
+    uid = plans_in_queue[2]["plan_uid"]
+    resp7a = _request_to_json("post", "/queue/plan/get", json={"uid": uid})
+    assert resp7a["success"] is True
+    resp7b = _request_to_json("post", "/queue/plan/remove", json={"uid": uid})
+    assert resp7b["success"] is True
+
+    ttime.sleep(10)  # TODO: wait for the queue processing to be completed
+
+    state = _request_to_json("get", "/status")
+    assert state["plans_in_queue"] == 0
+    assert state["plans_in_history"] == 1
+
+
+def test_http_server_queue_plan_get_remove_4_failing(re_manager, fastapi_server):  # noqa F811
+    """
+    Failing cases that are not tested in other places.
+    Note: derived from ``test_zmq_api_queue_plan_get_remove_4_failing()``
+    """
+    # Ambiguous parameters
+    resp1 = _request_to_json("post", "/queue/plan/get", json={"pos": 5, "uid": "some_uid"})
+    assert resp1["success"] is False
+    assert "Ambiguous parameters" in resp1["msg"]
+
+
+# fmt: off
+@pytest.mark.parametrize("params, src, order, success, msg", [
+    ({"pos": 1, "pos_dest": 1}, 1, [0, 1, 2], True, ""),
+    ({"pos": 1, "pos_dest": 0}, 1, [1, 0, 2], True, ""),
+    ({"pos": 1, "pos_dest": 2}, 1, [0, 2, 1], True, ""),
+    ({"pos": "front", "pos_dest": "back"}, 0, [1, 2, 0], True, ""),
+    ({"pos": "back", "pos_dest": "front"}, 2, [2, 0, 1], True, ""),
+    ({"uid": 1, "pos_dest": 0}, 1, [1, 0, 2], True, ""),
+    ({"uid": 1, "pos_dest": 2}, 1, [0, 2, 1], True, ""),
+    ({"uid": 1, "pos_dest": "front"}, 1, [1, 0, 2], True, ""),
+    ({"uid": 1, "pos_dest": "back"}, 1, [0, 2, 1], True, ""),
+    ({"uid": 0, "before_uid": 0}, 0, [0, 1, 2], True, ""),
+    ({"uid": 0, "before_uid": 2}, 0, [1, 0, 2], True, ""),
+    ({"uid": 0, "after_uid": 2}, 0, [1, 2, 0], True, ""),
+    ({"uid": 2, "before_uid": 0}, 2, [2, 0, 1], True, ""),
+    ({"uid": 2, "after_uid": 0}, 2, [0, 2, 1], True, ""),
+    ({"pos": 50, "after_uid": 0}, 2, [], False, "Source plan (position 50) was not found"),
+    ({"uid": 3, "after_uid": 0}, 2, [], False, "Source plan (UID 'nonexistent') was not found"),
+    ({"pos": 1, "pos_dest": 50}, 2, [], False, "Destination plan (position 50) was not found"),
+    ({"uid": 1, "after_uid": 3}, 2, [], False, "Destination plan (UID 'nonexistent') was not found"),
+    ({"uid": 1, "before_uid": 3}, 2, [], False, "Destination plan (UID 'nonexistent') was not found"),
+    ({"after_uid": 0}, 2, [], False, "Source position or UID is not specified"),
+    ({"pos": 1}, 2, [], False, "Destination position or UID is not specified"),
+    ({"pos": 1, "uid": 1, "after_uid": 0}, 2, [], False, "Ambiguous parameters"),
+    ({"pos": 1, "pos_dest": 1, "after_uid": 0}, 2, [], False, "Ambiguous parameters"),
+    ({"pos": 1, "before_uid": 0, "after_uid": 0}, 2, [], False, "Ambiguous parameters"),
+])
+# fmt: on
+def test_http_server_move_plan_1(re_manager, fastapi_server, params, src, order, success, msg):  # noqa F811
+    """
+    The tests are derived from the ZMQ API tests. The number of tests are reduced to save time.
+    """
+    plans = [
+        {"name": "count", "args": [["det1"]]},
+        {"name": "count", "args": [["det2"]]},
+        {"name": "count", "args": [["det1", "det2"]]},
+    ]
+    for plan in plans:
+        _request_to_json("post", "/queue/plan/add", json={"plan": plan})
+
+    resp1 = _request_to_json("get", "/queue/get")
+    queue = resp1["queue"]
+    assert len(queue) == 3
+
+    plan_uids = [_["plan_uid"] for _ in queue]
+    # Add one more 'nonexistent' uid (that is not in the queue)
+    plan_uids.append("nonexistent")
+
+    # Replace indices with actual UIDs that will be sent to the function
+    if "uid" in params:
+        params["uid"] = plan_uids[params["uid"]]
+    if "before_uid" in params:
+        params["before_uid"] = plan_uids[params["before_uid"]]
+    if "after_uid" in params:
+        params["after_uid"] = plan_uids[params["after_uid"]]
+
+    resp2 = _request_to_json("post", "/queue/plan/move", json=params)
+    if success:
+        assert resp2["success"] is True
+        assert resp2["plan"] == queue[src]
+        assert resp2["qsize"] == len(plans)
+        assert resp2["msg"] == ""
+
+        # Compare the order of UIDs in the queue with the expected order
+        plan_uids_reordered = [plan_uids[_] for _ in order]
+        resp3 = _request_to_json("get", "/queue/get")
+        plan_uids_from_queue = [_["plan_uid"] for _ in resp3["queue"]]
+
+        assert plan_uids_from_queue == plan_uids_reordered
+
+    else:
+        assert resp2["success"] is False
+        assert msg in resp2["msg"]
 
 
 def test_http_server_open_environment_handler(re_manager, fastapi_server):  # noqa F811

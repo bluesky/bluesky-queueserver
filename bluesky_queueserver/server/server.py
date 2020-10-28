@@ -181,6 +181,15 @@ async def queue_plan_remove_handler(payload: dict):
     return msg
 
 
+@app.post("/queue/plan/move")
+async def queue_plan_move_handler(payload: dict):
+    """
+    Remove plan from the queue
+    """
+    msg = await zmq_to_manager.send_message(method="queue_plan_move", params=payload)
+    return msg
+
+
 @app.post("/queue/plan/get")
 async def queue_plan_get_handler(payload: dict):
     """

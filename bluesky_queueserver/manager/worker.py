@@ -68,7 +68,7 @@ class RunEngineWorker(Process):
         self._re_report_lock = None  # threading.Lock
 
         # Class that supports communication over the pipe
-        self._comm_to_manager = PipeJsonRpcReceive(conn=self._conn, name="RE Watchdog-Manager Comm")
+        self._comm_to_manager = PipeJsonRpcReceive(conn=self._conn, name="RE Worker-Manager Comm")
 
         self._db = None
         self._config = config or {}

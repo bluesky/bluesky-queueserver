@@ -1,13 +1,23 @@
 import pytest
 import os
+import time as ttime
 
 from bluesky_queueserver.manager.profile_ops import (
     get_default_profile_collection_dir,
     load_allowed_plans_and_devices,
 )
 
-from ._common import zmq_single_request
+from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
 
+from ..comms import zmq_single_request
+
+from ._common import (
+    wait_for_condition,
+    condition_environment_created,
+    condition_queue_processing_finished,
+    get_queue_state,
+    condition_environment_closed,
+)
 from ._common import re_manager, re_manager_pc_copy  # noqa: F401
 
 # Plans used in most of the tests: '_plan1' and '_plan2' are quickly executed '_plan3' runs for 5 seconds.
@@ -96,7 +106,125 @@ def test_zmq_api_queue_plan_add_2(re_manager, pos, pos_result, success):  # noqa
         assert resp2["queue"][pos_result]["args"] == plan2["args"]
 
 
-def test_zmq_api_queue_plan_add_3_fail(re_manager):  # noqa F811
+def test_zmq_api_queue_plan_add_3(re_manager):  # noqa F811
+    plan1 = {"name": "count", "args": [["det1"]]}
+    plan2 = {"name": "count", "args": [["det1", "det2"]]}
+    plan3 = {"name": "count", "args": [["det2"]]}
+
+    params = {"plan": plan1, "user": _user, "user_group": _user_group}
+    zmq_single_request("queue_plan_add", params)
+    params = {"plan": plan2, "user": _user, "user_group": _user_group}
+    zmq_single_request("queue_plan_add", params)
+
+    base_plans = zmq_single_request("queue_get")[0]["queue"]
+
+    params = {"plan": plan3, "after_uid": base_plans[0]["plan_uid"], "user": _user, "user_group": _user_group}
+    resp1, _ = zmq_single_request("queue_plan_add", params)
+    assert resp1["success"] is True
+    assert resp1["qsize"] == 3
+    uid1 = resp1["plan"]["plan_uid"]
+    resp1a, _ = zmq_single_request("queue_get")
+    assert len(resp1a["queue"]) == 3
+    assert resp1a["queue"][1]["plan_uid"] == uid1
+    resp1b, _ = zmq_single_request("queue_plan_remove", {"uid": uid1})
+    assert resp1b["success"] is True
+
+    params = {"plan": plan3, "before_uid": base_plans[1]["plan_uid"], "user": _user, "user_group": _user_group}
+    resp2, _ = zmq_single_request("queue_plan_add", params)
+    assert resp2["success"] is True
+    uid2 = resp2["plan"]["plan_uid"]
+    resp2a, _ = zmq_single_request("queue_get")
+    assert len(resp2a["queue"]) == 3
+    assert resp2a["queue"][1]["plan_uid"] == uid2
+    resp2b, _ = zmq_single_request("queue_plan_remove", {"uid": uid2})
+    assert resp2b["success"] is True
+
+    # Non-existing uid
+    params = {"plan": plan3, "before_uid": "non-existing-uid", "user": _user, "user_group": _user_group}
+    resp2, _ = zmq_single_request("queue_plan_add", params)
+    assert resp2["success"] is False
+    assert "is not in the queue" in resp2["msg"]
+
+    # Ambiguous parameters
+    params = {"plan": plan3, "pos": 1, "before_uid": uid2, "user": _user, "user_group": _user_group}
+    resp2, _ = zmq_single_request("queue_plan_add", params)
+    assert resp2["success"] is False
+    assert "Ambiguous parameters" in resp2["msg"]
+
+    # Ambiguous parameters
+    params = {"plan": plan3, "before_uid": uid2, "after_uid": uid2, "user": _user, "user_group": _user_group}
+    resp2, _ = zmq_single_request("queue_plan_add", params)
+    assert resp2["success"] is False
+    assert "Ambiguous parameters" in resp2["msg"]
+
+
+def test_zmq_api_queue_plan_add_4(re_manager):  # noqa F811
+    """
+    Try inserting plans before and after the running plan
+    """
+    params = {"plan": _plan3, "user": _user, "user_group": _user_group}
+    zmq_single_request("queue_plan_add", params)
+    params = {"plan": _plan3, "user": _user, "user_group": _user_group}
+    zmq_single_request("queue_plan_add", params)
+
+    base_plans = zmq_single_request("queue_get")[0]["queue"]
+    uid = base_plans[0]["plan_uid"]
+
+    # Start the first plan (this removes it from the queue)
+    #   Also the rest of the operations will be performed on a running queue.
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(
+        time=3, condition=condition_environment_created
+    ), "Timeout while waiting for environment to be opened"
+
+    resp2, _ = zmq_single_request("queue_start")
+    assert resp2["success"] is True
+
+    ttime.sleep(1)
+
+    # Try to insert a plan before the running plan
+    params = {"plan": _plan3, "before_uid": uid, "user": _user, "user_group": _user_group}
+    resp3, _ = zmq_single_request("queue_plan_add", params)
+    assert resp3["success"] is False
+    assert "Can not insert a plan in the queue before a currently running plan" in resp3["msg"]
+
+    # Insert the plan after the running plan
+    params = {"plan": _plan3, "after_uid": uid, "user": _user, "user_group": _user_group}
+    resp4, _ = zmq_single_request("queue_plan_add", params)
+    assert resp4["success"] is True
+
+    assert wait_for_condition(
+        time=20, condition=condition_queue_processing_finished
+    ), "Timeout while waiting for environment to be opened"
+
+    state = get_queue_state()
+    assert state["plans_in_queue"] == 0
+    assert state["plans_in_history"] == 3
+
+    # Close the environment
+    resp5, _ = zmq_single_request("environment_close")
+    assert resp5["success"] is True
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_queue_plan_add_5(re_manager):  # noqa: F811
+    """
+    Make sure that the new plan UID is generated when the plan is added
+    """
+    plan1 = {"name": "count", "args": [["det1", "det2"]]}
+
+    # Set plan UID. This UID is expected to be replaced when the plan is added
+    plan1["plan_uid"] = PlanQueueOperations.new_plan_uid()
+
+    params1 = {"plan": plan1, "user": _user, "user_group": _user_group}
+    resp1, _ = zmq_single_request("queue_plan_add", params1)
+    assert resp1["success"] is True
+    assert resp1["msg"] == ""
+    assert resp1["plan"]["plan_uid"] != plan1["plan_uid"]
+
+
+def test_zmq_api_queue_plan_add_6_fail(re_manager):  # noqa F811
 
     # Unknown plan name
     plan1 = {"name": "count_test", "args": [["det1", "det2"]]}
@@ -229,3 +357,259 @@ def test_zmq_api_plans_allowed_and_devices_allowed_3_fail(re_manager, params, me
     assert message in resp1["msg"]
     assert isinstance(resp2["devices_allowed"], dict)
     assert len(resp2["devices_allowed"]) == 0
+
+
+# =======================================================================================
+#                      Method 'queue_plan_get', 'queue_plan_remove'
+
+
+def test_zmq_api_queue_plan_get_remove_1(re_manager):  # noqa F811
+    """
+    Get and remove a plan from the back of the queue
+    """
+    zmq_single_request("queue_plan_add", {"plan": _plan1, "user": _user, "user_group": _user_group})
+    zmq_single_request("queue_plan_add", {"plan": _plan2, "user": _user, "user_group": _user_group})
+    zmq_single_request("queue_plan_add", {"plan": _plan3, "user": _user, "user_group": _user_group})
+
+    resp1, _ = zmq_single_request("queue_get")
+    assert resp1["queue"] != []
+    assert len(resp1["queue"]) == 3
+    assert resp1["running_plan"] == {}
+
+    # Get the last plan from the queue
+    resp2, _ = zmq_single_request("queue_plan_get")
+    assert resp2["success"] is True
+    assert resp2["plan"]["name"] == _plan3["name"]
+    assert resp2["plan"]["args"] == _plan3["args"]
+    assert resp2["plan"]["kwargs"] == _plan3["kwargs"]
+    assert "plan_uid" in resp2["plan"]
+
+    # Remove the last plan from the queue
+    resp3, _ = zmq_single_request("queue_plan_remove")
+    assert resp3["success"] is True
+    assert resp3["qsize"] == 2
+    assert resp3["plan"]["name"] == "count"
+    assert resp3["plan"]["args"] == [["det1", "det2"]]
+    assert resp2["plan"]["kwargs"] == _plan3["kwargs"]
+    assert "plan_uid" in resp3["plan"]
+
+
+# fmt: off
+@pytest.mark.parametrize("pos, pos_result, success", [
+    (None, 2, True),
+    ("back", 2, True),
+    ("front", 0, True),
+    ("some", None, False),
+    (0, 0, True),
+    (1, 1, True),
+    (2, 2, True),
+    (3, None, False),
+    (100, None, False),
+    (-1, 2, True),
+    (-2, 1, True),
+    (-3, 0, True),
+    (-4, 0, False),
+    (-100, 0, False),
+])
+# fmt: on
+def test_zmq_api_queue_plan_get_remove_2(re_manager, pos, pos_result, success):  # noqa F811
+    """
+    Get and remove elements using element position in the queue.
+    """
+
+    plans = [
+        {"plan_uid": "one", "name": "count", "args": [["det1"]]},
+        {"plan_uid": "two", "name": "count", "args": [["det2"]]},
+        {"plan_uid": "three", "name": "count", "args": [["det1", "det2"]]},
+    ]
+    for plan in plans:
+        zmq_single_request("queue_plan_add", {"plan": plan, "user": _user, "user_group": _user_group})
+
+    # Remove entry at the specified position
+    params = {} if pos is None else {"pos": pos}
+
+    # Testing '/queue/plan/get'
+    resp1, _ = zmq_single_request("queue_plan_get", params)
+    assert resp1["success"] is success
+    if success:
+        assert resp1["plan"]["args"] == plans[pos_result]["args"]
+        assert "plan_uid" in resp1["plan"]
+        assert resp1["msg"] == ""
+    else:
+        assert resp1["plan"] == {}
+        assert "Failed to get a plan" in resp1["msg"]
+
+    # Testing '/queue/plan/remove'
+    resp2, _ = zmq_single_request("queue_plan_remove", params)
+    assert resp2["success"] is success
+    assert resp2["qsize"] == (2 if success else None)
+    if success:
+        assert resp2["plan"]["args"] == plans[pos_result]["args"]
+        assert "plan_uid" in resp2["plan"]
+        assert resp2["msg"] == ""
+    else:
+        assert resp2["plan"] == {}
+        assert "Failed to remove a plan" in resp2["msg"]
+
+    resp3, _ = zmq_single_request("queue_get")
+    assert len(resp3["queue"]) == (2 if success else 3)
+    assert resp3["running_plan"] == {}
+
+
+def test_zmq_api_queue_plan_get_remove_3(re_manager):  # noqa F811
+    """
+    Get and remove elements using plan UID. Successful and failing cases.
+    """
+    zmq_single_request("queue_plan_add", {"plan": _plan3, "user": _user, "user_group": _user_group})
+    zmq_single_request("queue_plan_add", {"plan": _plan2, "user": _user, "user_group": _user_group})
+    zmq_single_request("queue_plan_add", {"plan": _plan1, "user": _user, "user_group": _user_group})
+
+    resp1, _ = zmq_single_request("queue_get")
+    plans_in_queue = resp1["queue"]
+    assert len(plans_in_queue) == 3
+
+    # Get and then remove plan 2 from the queue
+    uid = plans_in_queue[1]["plan_uid"]
+    resp2a, _ = zmq_single_request("queue_plan_get", {"uid": uid})
+    assert resp2a["plan"]["plan_uid"] == plans_in_queue[1]["plan_uid"]
+    assert resp2a["plan"]["name"] == plans_in_queue[1]["name"]
+    assert resp2a["plan"]["args"] == plans_in_queue[1]["args"]
+    resp2b, _ = zmq_single_request("queue_plan_remove", {"uid": uid})
+    assert resp2b["plan"]["plan_uid"] == plans_in_queue[1]["plan_uid"]
+    assert resp2b["plan"]["name"] == plans_in_queue[1]["name"]
+    assert resp2b["plan"]["args"] == plans_in_queue[1]["args"]
+
+    # Start the first plan (this removes it from the queue)
+    #   Also the rest of the operations will be performed on a running queue.
+    resp3, _ = zmq_single_request("environment_open")
+    assert resp3["success"] is True
+    assert wait_for_condition(
+        time=3, condition=condition_environment_created
+    ), "Timeout while waiting for environment to be opened"
+
+    resp4, _ = zmq_single_request("queue_start")
+    assert resp4["success"] is True
+
+    ttime.sleep(1)
+    uid = plans_in_queue[0]["plan_uid"]
+    resp5a, _ = zmq_single_request("queue_plan_get", {"uid": uid})
+    assert resp5a["success"] is False
+    assert "is currently running" in resp5a["msg"]
+    resp5b, _ = zmq_single_request("queue_plan_remove", {"uid": uid})
+    assert resp5b["success"] is False
+    assert "Can not remove a plan which is currently running" in resp5b["msg"]
+
+    uid = "nonexistent"
+    resp6a, _ = zmq_single_request("queue_plan_get", {"uid": uid})
+    assert resp6a["success"] is False
+    assert "not in the queue" in resp6a["msg"]
+    resp6b, _ = zmq_single_request("queue_plan_remove", {"uid": uid})
+    assert resp6b["success"] is False
+    assert "not in the queue" in resp6b["msg"]
+
+    # Remove the last entry
+    uid = plans_in_queue[2]["plan_uid"]
+    resp7a, _ = zmq_single_request("queue_plan_get", {"uid": uid})
+    assert resp7a["success"] is True
+    resp7b, _ = zmq_single_request("queue_plan_remove", {"uid": uid})
+    assert resp7b["success"] is True
+
+    assert wait_for_condition(
+        time=10, condition=condition_queue_processing_finished
+    ), "Timeout while waiting for environment to be opened"
+
+    state = get_queue_state()
+    assert state["plans_in_queue"] == 0
+    assert state["plans_in_history"] == 1
+
+    # Close the environment
+    resp8, _ = zmq_single_request("environment_close")
+    assert resp8["success"] is True
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_queue_plan_get_remove_4_failing(re_manager):  # noqa F811
+    """
+    Failing cases that are not tested in other places.
+    """
+    # Ambiguous parameters
+    resp1, _ = zmq_single_request("queue_plan_get", {"pos": 5, "uid": "some_uid"})
+    assert resp1["success"] is False
+    assert "Ambiguous parameters" in resp1["msg"]
+
+
+# fmt: off
+@pytest.mark.parametrize("params, src, order, success, msg", [
+    ({"pos": 1, "pos_dest": 1}, 1, [0, 1, 2], True, ""),
+    ({"pos": 1, "pos_dest": 0}, 1, [1, 0, 2], True, ""),
+    ({"pos": 1, "pos_dest": 2}, 1, [0, 2, 1], True, ""),
+    ({"pos": "front", "pos_dest": "front"}, 0, [0, 1, 2], True, ""),
+    ({"pos": "back", "pos_dest": "back"}, 2, [0, 1, 2], True, ""),
+    ({"pos": "front", "pos_dest": "back"}, 0, [1, 2, 0], True, ""),
+    ({"pos": "back", "pos_dest": "front"}, 2, [2, 0, 1], True, ""),
+    ({"uid": 1, "pos_dest": 1}, 1, [0, 1, 2], True, ""),
+    ({"uid": 1, "pos_dest": 0}, 1, [1, 0, 2], True, ""),
+    ({"uid": 1, "pos_dest": 2}, 1, [0, 2, 1], True, ""),
+    ({"uid": 1, "pos_dest": 1}, 1, [0, 1, 2], True, ""),
+    ({"uid": 1, "pos_dest": "front"}, 1, [1, 0, 2], True, ""),
+    ({"uid": 1, "pos_dest": "back"}, 1, [0, 2, 1], True, ""),
+    ({"uid": 0, "pos_dest": "front"}, 0, [0, 1, 2], True, ""),
+    ({"uid": 2, "pos_dest": "back"}, 2, [0, 1, 2], True, ""),
+    ({"uid": 0, "before_uid": 0}, 0, [0, 1, 2], True, ""),
+    ({"uid": 0, "after_uid": 0}, 0, [0, 1, 2], True, ""),
+    ({"uid": 2, "before_uid": 2}, 2, [0, 1, 2], True, ""),
+    ({"uid": 2, "after_uid": 2}, 2, [0, 1, 2], True, ""),
+    ({"uid": 0, "before_uid": 2}, 0, [1, 0, 2], True, ""),
+    ({"uid": 0, "after_uid": 2}, 0, [1, 2, 0], True, ""),
+    ({"uid": 2, "before_uid": 0}, 2, [2, 0, 1], True, ""),
+    ({"uid": 2, "after_uid": 0}, 2, [0, 2, 1], True, ""),
+    ({"pos": 50, "after_uid": 0}, 2, [], False, "Source plan (position 50) was not found"),
+    ({"uid": 3, "after_uid": 0}, 2, [], False, "Source plan (UID 'nonexistent') was not found"),
+    ({"pos": 1, "pos_dest": 50}, 2, [], False, "Destination plan (position 50) was not found"),
+    ({"uid": 1, "after_uid": 3}, 2, [], False, "Destination plan (UID 'nonexistent') was not found"),
+    ({"uid": 1, "before_uid": 3}, 2, [], False, "Destination plan (UID 'nonexistent') was not found"),
+    ({"after_uid": 0}, 2, [], False, "Source position or UID is not specified"),
+    ({"pos": 1}, 2, [], False, "Destination position or UID is not specified"),
+    ({"pos": 1, "uid": 1, "after_uid": 0}, 2, [], False, "Ambiguous parameters"),
+    ({"pos": 1, "pos_dest": 1, "after_uid": 0}, 2, [], False, "Ambiguous parameters"),
+    ({"pos": 1, "before_uid": 0, "after_uid": 0}, 2, [], False, "Ambiguous parameters"),
+])
+# fmt: on
+def test_zmq_api_move_plan_1(re_manager, params, src, order, success, msg):  # noqa: F811
+    plans = [_plan1, _plan2, _plan3]
+    for plan in plans:
+        zmq_single_request("queue_plan_add", {"plan": plan, "user": _user, "user_group": _user_group})
+
+    resp1, _ = zmq_single_request("queue_get")
+    queue = resp1["queue"]
+    assert len(queue) == 3
+
+    plan_uids = [_["plan_uid"] for _ in queue]
+    # Add one more 'nonexistent' uid (that is not in the queue)
+    plan_uids.append("nonexistent")
+
+    # Replace indices with actual UIDs that will be sent to the function
+    if "uid" in params:
+        params["uid"] = plan_uids[params["uid"]]
+    if "before_uid" in params:
+        params["before_uid"] = plan_uids[params["before_uid"]]
+    if "after_uid" in params:
+        params["after_uid"] = plan_uids[params["after_uid"]]
+
+    resp2, _ = zmq_single_request("queue_plan_move", params)
+    if success:
+        assert resp2["success"] is True
+        assert resp2["plan"] == queue[src]
+        assert resp2["qsize"] == len(plans)
+        assert resp2["msg"] == ""
+
+        # Compare the order of UIDs in the queue with the expected order
+        plan_uids_reordered = [plan_uids[_] for _ in order]
+        resp3, _ = zmq_single_request("queue_get")
+        plan_uids_from_queue = [_["plan_uid"] for _ in resp3["queue"]]
+
+        assert plan_uids_from_queue == plan_uids_reordered
+
+    else:
+        assert resp2["success"] is False
+        assert msg in resp2["msg"]

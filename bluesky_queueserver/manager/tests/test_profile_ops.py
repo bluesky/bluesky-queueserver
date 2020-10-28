@@ -770,6 +770,12 @@ def _some_strange_plan(
     ({"args": [("m1", "m2"), ("d1", "d2"), "p1", (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), True, ""),
 
+    # Position is passed as a string (validation should fail)
+    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",), ("10.0", 20.0)], "kwargs": {}},
+     ("m1", "m2", "d1", "d2"), False, "Incorrect parameter type"),
+    # Int instead of a motor name (validation should fail)
+    ({"args": [(0, "m2"), ("d1", "d2"), ("p1",), ("10.0", 20.0)], "kwargs": {}},
+     ("m1", "m2", "d1", "d2"), False, "value is not a valid enumeration member"),
 ])
 # fmt: on
 def test_validate_plan_3(plan, allowed_devices, success, errmsg):

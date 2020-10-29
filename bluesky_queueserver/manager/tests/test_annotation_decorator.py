@@ -1,6 +1,7 @@
 import typing
 import pytest
 import jsonschema
+import inspect
 from bluesky_queueserver.manager.annotation_decorator import (
     parameter_annotation_decorator,
     _convert_annotation_to_type,
@@ -520,3 +521,27 @@ def test_annotation_dectorator_8_fail(custom_annotation, ex_type, err_msg):
         @parameter_annotation_decorator(custom_annotation)
         def func():
             pass
+
+
+_trivial_annotation = {
+    "description": "Trivial annotation.",
+}
+
+
+def test_annotation_dectorator_9():
+    """
+    Test if decorated generator function is recognized as a generator function by ``inspect``.
+    """
+    # Apply decorator to a function
+    @parameter_annotation_decorator(_trivial_annotation)
+    def func():
+        return None
+
+    assert inspect.isgeneratorfunction(func) is False
+
+    # Apply decorator to a generator function
+    @parameter_annotation_decorator(_trivial_annotation)
+    def func():
+        yield from [1, 2, 3]
+
+    assert inspect.isgeneratorfunction(func) is True

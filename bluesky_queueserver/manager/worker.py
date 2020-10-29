@@ -479,6 +479,8 @@ class RunEngineWorker(Process):
         from bluesky_kafka import Publisher as kafkaPublisher
         from databroker import Broker
 
+        from .profile_tools import global_user_namespace
+
         # TODO: subscribe to local databroker (currently there is no way to access
         #    'temp' databroker from outside the process). Production version will use Kafka.
         self._db = Broker.named("temp")
@@ -529,7 +531,11 @@ class RunEngineWorker(Process):
             logger.info("Instantiating and configuring Run Engine ...")
 
             try:
+                # Make RE namespace available to the plan code.
+                global_user_namespace.user_ns = self._re_namespace
+
                 self._RE = RunEngine({})
+                self._re_namespace["RE"] = self._RE
 
                 bec = BestEffortCallback()
                 self._RE.subscribe(bec)

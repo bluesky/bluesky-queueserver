@@ -412,9 +412,17 @@ def parameter_annotation_decorator(annotation):
     """
 
     def function_wrap(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            return func(*args, **kwargs)
+        if inspect.isgeneratorfunction(func):
+
+            @functools.wraps(func)
+            def wrapper(*args, **kwargs):
+                yield from func(*args, **kwargs)
+
+        else:
+
+            @functools.wraps(func)
+            def wrapper(*args, **kwargs):
+                return func(*args, **kwargs)
 
         jsonschema.validate(instance=annotation, schema=_parameter_annotation_schema)
 

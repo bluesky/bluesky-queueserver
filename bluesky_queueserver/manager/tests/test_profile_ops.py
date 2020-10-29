@@ -119,6 +119,16 @@ get_ipython().user_ns
 
 """, True, ""),
 
+    # Patching an indented block (make sure that indentation is treated correctly)
+    ("""
+\n
+if True:
+    from IPython import get_ipython
+
+    get_ipython().user_ns
+
+""", True, ""),
+
     # Patched as expected ('get_ipython()' is not imported)
     ("""
 \n

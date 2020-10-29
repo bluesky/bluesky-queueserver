@@ -142,7 +142,7 @@ def _patch_profile(file_name):
     def get_prefix(s):
         # Returns the sequence of spaces and tabs at the beginning of the code line
         prefix = ""
-        while s and (s == " " or s == "\t"):
+        while s and (s[0] == " " or s[0] == "\t"):
             prefix += s[0]
             s = s[1:]
         return prefix
@@ -159,7 +159,6 @@ def _patch_profile(file_name):
             if is_get_ipython_in_line(line) == GetIPythonUsed.IMPORTED:
                 # Keep the same indentation as in the preceding line
                 prefix = get_prefix(line)
-                prefix = prefix
                 apply_patch2(fln_out, prefix)
         # insert 'except ..'
         fln_out.writelines(_patch3)
@@ -211,7 +210,7 @@ def load_profile_collection(path, patch_profiles=True):
 
     # Load the files into the namespace 'nspace'.
     try:
-        nspace = None
+        nspace = {}
         for file in file_list:
             logger.info(f"Loading startup file '{file}' ...")
             fln_tmp = _patch_profile(file) if patch_profiles else file
@@ -250,7 +249,7 @@ def plans_from_nspace(nspace):
     """
     plans = {}
     for name, obj in nspace.items():
-        if callable(obj) and obj.__module__ != "typing":
+        if inspect.isgeneratorfunction(obj):
             plans[name] = obj
     return plans
 

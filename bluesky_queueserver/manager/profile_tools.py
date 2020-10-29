@@ -35,9 +35,9 @@ def set_user_ns(func):
     the namespace can be (and often is) different than the one used during
     import.
 
-    The decorated function must have two kwargs: ``user_ns`` - reference
-    to RE namespace and ``ipython`` - reference to IPython, which is None
-    if the function called not from IPython.
+    The decorated function must have one kwargs: ``user_ns`` - reference
+    to RE namespace. An optional kwarg ``ipython`` is a reference to IPython,
+    which is None if the function called not from IPython.
     """
 
     def get_user_ns():
@@ -52,19 +52,28 @@ def set_user_ns(func):
             user_ns = global_user_namespace.user_ns
         return ip, user_ns
 
+    # Parameter 'ipython' is optional
+    is_ipython_in_sig = "ipython" in inspect.signature(func).parameters
+
     if inspect.isgeneratorfunction(func):
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             ip, user_ns = get_user_ns()
-            yield from func(*args, user_ns=user_ns, ipython=ip, **kwargs)
+            kwargs.update({"user_ns": user_ns})
+            if is_ipython_in_sig:
+                kwargs.update({"ipython": ip})
+            yield from func(*args, **kwargs)
 
     else:
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             ip, user_ns = get_user_ns()
-            return func(*args, user_ns=user_ns, ipython=ip, **kwargs)
+            kwargs.update({"user_ns": user_ns})
+            if is_ipython_in_sig:
+                kwargs.update({"ipython": ip})
+            return func(*args, **kwargs)
 
     params_to_remove = ("user_ns", "ipython")
     sig_params = inspect.signature(wrapper).parameters

@@ -16,10 +16,18 @@ def create_local_imports_files(tmp_path):
     code1 = """
 from bluesky_queueserver.manager.profile_tools import set_user_ns
 
+# Function that has the parameter 'ipython'
 @set_user_ns
 def f1(some_value, user_ns, ipython):
     user_ns["func_was_called"] = "func_was_called"
     return (some_value, user_ns["v_from_namespace"], bool(ipython))
+
+# Function that has no parameter 'ipython'
+@set_user_ns
+def f1a(some_value, user_ns):
+    user_ns["func_A_was_called"] = "func_was_called"
+    return (some_value, user_ns["v_from_namespace"])
+
 """
     with open(fln_func, "w") as f:
         f.writelines(code1)
@@ -28,18 +36,40 @@ def f1(some_value, user_ns, ipython):
     code2 = """
 from bluesky_queueserver.manager.profile_tools import set_user_ns
 
+# Function that has the parameter 'ipython'
 @set_user_ns
 def f2(some_value, user_ns, ipython):
     user_ns["gen_was_called"] = "gen_was_called"
     yield (some_value, user_ns["v_from_namespace"], bool(ipython))
+
+# Function that has no parameter 'ipython'
+@set_user_ns
+def f2a(some_value, user_ns):
+    user_ns["gen_A_was_called"] = "gen_was_called"
+    yield (some_value, user_ns["v_from_namespace"])
+
+@set_user_ns
+def f3(some_value, user_ns, ipython):
+    user_ns["value_f3"] = some_value
+
+f3(91)
+
 """
     with open(fln_gen, "w") as f:
         f.writelines(code2)
 
 
 patch_code = """
-from dir_local_imports.file_func import f1
-from dir_local_imports.file_gen import f2
+from dir_local_imports.file_func import f1, f1a
+from dir_local_imports.file_gen import f2, f2a
+
+from bluesky_queueserver.manager.profile_tools import set_user_ns
+
+@set_user_ns
+def f4(some_value, user_ns, ipython):
+    user_ns["value_f4"] = some_value
+
+f4(90)
 
 """
 
@@ -74,7 +104,12 @@ def test_set_user_ns_1(tmp_path):
         assert "ipython" not in params
 
     check_signature(nspace["f1"])
+    check_signature(nspace["f1a"])
     check_signature(nspace["f2"])
+    check_signature(nspace["f2a"])
+
+    assert nspace["value_f3"] == 91
+    assert nspace["value_f4"] == 90
 
     # Test function
     global_user_namespace.user_ns = nspace
@@ -87,6 +122,11 @@ def test_set_user_ns_1(tmp_path):
     assert result_func[1] == "value-sent-to-func"
     assert result_func[2] is False
 
+    result_func = nspace["f1a"](65)
+    assert nspace["func_A_was_called"] == "func_was_called"
+    assert result_func[0] == 65
+    assert result_func[1] == "value-sent-to-func"
+
     # Test generator
     global_user_namespace.user_ns["v_from_namespace"] = "value-sent-to-gen"
     result_func = list(nspace["f2"](110))[0]
@@ -94,3 +134,8 @@ def test_set_user_ns_1(tmp_path):
     assert result_func[0] == 110
     assert result_func[1] == "value-sent-to-gen"
     assert result_func[2] is False
+
+    result_func = list(nspace["f2a"](115))[0]
+    assert nspace["gen_A_was_called"] == "gen_was_called"
+    assert result_func[0] == 115
+    assert result_func[1] == "value-sent-to-gen"

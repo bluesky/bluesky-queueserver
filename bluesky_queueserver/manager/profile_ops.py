@@ -35,9 +35,10 @@ _patch1 = """
 
 import sys
 import logging
+from bluesky_queueserver.manager.profile_tools import global_user_namespace
 logger_patch = logging.Logger(__name__)
 
-__local_namespace = locals()
+global_user_namespace.user_ns = locals()
 
 try:
     pass  # Prevent errors when patching an empty file
@@ -55,7 +56,7 @@ _patch2 = """
 
 
     def get_ipython_patch():
-        ip_dummy = IPDummy(__local_namespace)
+        ip_dummy = IPDummy(global_user_namespace.user_ns)
         return ip_dummy
 
     get_ipython = get_ipython_patch

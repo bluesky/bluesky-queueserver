@@ -671,23 +671,6 @@ existing_plans:
       custom:
         annotation: typing.Generator[tuple, None, None]
         description: Yields a sequence of plan messages.
-  parameter_annotation_decorator:
-    name: parameter_annotation_decorator
-    parameters:
-    - annotation: ''
-      annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
-        00 2e
-      default: ''
-      default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
-        2e
-      kind:
-        name: POSITIONAL_OR_KEYWORD
-        value: 1
-      name: annotation
-    returns:
-      annotation: ''
-      annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
-        00 2e
   ramp_plan:
     name: ramp_plan
     parameters:

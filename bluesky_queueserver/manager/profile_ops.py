@@ -1130,8 +1130,8 @@ def load_profile_collection_from_ipython(path=None):
         from bluesky_queueserver.manager.profile_ops import load_profile_collection_from_ipython
         load_profile_collection_from_ipython()
     """
-    ip = get_ipython()
-    for f in sorted(glob.glob('[0-9][0-9]*.py')):
-        print(f'Executing {f} in TravisCI')
+    ip = get_ipython()  # noqa F821
+    for f in sorted(glob.glob("[0-9][0-9]*.py")):
+        print(f"Executing '{f}' in TravisCI")
         ip.parent._exec_file(f)
-    print(f"Profile collection was loaded successfully.")
+    print("Profile collection was loaded successfully.")

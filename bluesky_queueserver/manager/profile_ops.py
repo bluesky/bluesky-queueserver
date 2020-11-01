@@ -38,7 +38,7 @@ import logging
 from bluesky_queueserver.manager.profile_tools import global_user_namespace
 logger_patch = logging.Logger(__name__)
 
-global_user_namespace.user_ns = locals()
+global_user_namespace.set_user_namespace(user_ns=locals(), use_ipython=False)
 
 try:
     pass  # Prevent errors when patching an empty file

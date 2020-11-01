@@ -112,7 +112,7 @@ def test_set_user_ns_1(tmp_path):
     assert nspace["value_f4"] == 90
 
     # Test function
-    global_user_namespace.user_ns = nspace
+    global_user_namespace.set_user_namespace(user_ns=nspace, use_ipython=False)
     global_user_namespace.user_ns["v_from_namespace"] = "value-sent-to-func"
     assert nspace["v_from_namespace"] == "value-sent-to-func"
 

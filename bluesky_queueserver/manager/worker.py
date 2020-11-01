@@ -532,7 +532,7 @@ class RunEngineWorker(Process):
 
             try:
                 # Make RE namespace available to the plan code.
-                global_user_namespace.user_ns = self._re_namespace
+                global_user_namespace.set_user_namespace(user_ns=self._re_namespace, use_ipython=False)
 
                 self._RE = RunEngine({})
                 self._re_namespace["RE"] = self._RE

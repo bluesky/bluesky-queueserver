@@ -3,8 +3,16 @@ import inspect
 
 
 class UserNamespace:
+    """
+    Keeps reference to the global user namespace. The object is used to emulate
+    ``IPython.get_ipython().user_ns``. The attribute ``__use_ipython`` holds a
+    flag that tells if ``IPython`` (namespace etc.) should be used.
+    """
+
     def __init__(self):
+        # Default: use IPython if executed from IPython.
         self.__user_ns = {}
+        self.__use_ipython = True
 
     @property
     def user_ns(self):
@@ -12,9 +20,39 @@ class UserNamespace:
 
     @user_ns.setter
     def user_ns(self, ns):
-        if not isinstance(ns, dict):
-            raise TypeError(f"Parameter 'ns' must be of type 'dict': type(ns) is '{type(dict)}'")
-        self.__user_ns = ns
+        raise RuntimeError("Attempting to set read-only property ``user_ns``")
+
+    @property
+    def use_ipython(self):
+        return self.__use_ipython
+
+    @use_ipython.setter
+    def use_ipython(self, use_ipython):
+        raise RuntimeError("Attempting to set read-only property ``use_ipython``")
+
+    def set_user_namespace(self, *, user_ns, use_ipython=False):
+        """
+        Set reference to the user namespace. Typically the reference will point to
+        a dictionary, but it also may be pointed to IPython ``user_ns``. The second
+        parameter (``use_ipython``) indicates if IPython is used.
+
+        Parameters
+        ----------
+        user_ns: dict
+            Reference to the namespace.
+        use_ipython: boolean
+            Indicates if IPython is used. Typically it should be set ``False``.
+
+
+        Raises
+        ------
+        TypeError
+            Parameter ``user_ns`` is not a dictionary.
+        """
+        if not isinstance(user_ns, dict):
+            raise TypeError(f"Parameter 'user_ns' must be of type 'dict': type(ns) is '{type(dict)}'")
+        self.__user_ns = user_ns
+        self.__use_ipython = bool(use_ipython)
 
 
 global_user_namespace = UserNamespace()
@@ -44,6 +82,12 @@ def set_user_ns(func):
         from IPython import get_ipython
 
         ip = get_ipython()
+
+        # This is needed for the case when the functions are executed from IPython,
+        #   but we needed them to work exactly as if they were run without IPython.
+        if not global_user_namespace.use_ipython:
+            ip = None
+
         if ip:
             # Select IPython namespace (only if the code is run from IPython)
             user_ns = ip.user_ns

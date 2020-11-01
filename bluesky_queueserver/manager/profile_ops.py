@@ -917,7 +917,7 @@ def gen_list_of_plans_and_devices_cli():
 
     parser = argparse.ArgumentParser(
         description="Bluesky-QServer: CLI tool for generating the list of plans and devices\n"
-                    "  from beamline profile collection.",
+        "  from beamline profile collection.",
         epilog=f"Bluesky-QServer version {qserver_version}.",
     )
     parser.add_argument(
@@ -927,7 +927,7 @@ def gen_list_of_plans_and_devices_cli():
         action="store",
         required=False,
         default=None,
-        help=f"Path to profile collection. Current working directory is used if the path is not specified",
+        help="Path to profile collection. Current working directory is used if the path is not specified",
     )
 
     args = parser.parse_args()
@@ -939,10 +939,10 @@ def gen_list_of_plans_and_devices_cli():
 
     try:
         gen_list_of_plans_and_devices(path=path, overwrite=True)
-        print(f"The list of existing plans and devices was created successfully.")
+        print("The list of existing plans and devices was created successfully.")
         exit_code = 0
     except BaseException as ex:
-        logger.exception(f"Failed to create the list of plans and devices: %s", str(ex))
+        logger.exception("Failed to create the list of plans and devices: %s", str(ex))
         exit_code = 1
     return exit_code
 

@@ -327,8 +327,6 @@ def test_gen_list_of_plans_and_devices_cli(tmp_path, test, exit_code):
         assert not os.path.isfile(os.path.join(pc_path, fln_yaml))
 
 
-
-
 def test_load_existing_plans_and_devices():
     """
     Loads the list of allowed plans and devices from simulated profile collection.

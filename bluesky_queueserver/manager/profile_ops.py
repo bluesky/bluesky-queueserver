@@ -1117,3 +1117,21 @@ def load_allowed_plans_and_devices(path_existing_plans_and_devices=None, path_us
         allowed_devices["root"] = existing_devices
 
     return allowed_plans, allowed_devices
+
+
+def load_profile_collection_from_ipython(path=None):
+    """
+    Load profile collection from IPython. Useful utility function that may be used to
+    test if a profile collection can be loaded from IPython.
+    Manually run this function from IPython:
+
+    .. code-block:: python
+
+        from bluesky_queueserver.manager.profile_ops import load_profile_collection_from_ipython
+        load_profile_collection_from_ipython()
+    """
+    ip = get_ipython()
+    for f in sorted(glob.glob('[0-9][0-9]*.py')):
+        print(f'Executing {f} in TravisCI')
+        ip.parent._exec_file(f)
+    print(f"Profile collection was loaded successfully.")

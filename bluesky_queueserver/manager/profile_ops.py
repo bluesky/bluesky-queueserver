@@ -16,10 +16,13 @@ import typing
 import pydantic
 import enum
 import random
+import argparse
 
 import logging
+import bluesky_queueserver
 
 logger = logging.getLogger(__name__)
+qserver_version = bluesky_queueserver.__version__
 
 
 def get_default_profile_collection_dir():
@@ -185,6 +188,11 @@ def load_profile_collection(path, patch_profiles=True):
     -------
     nspace: dict
         namespace in which the profile collection was executed
+
+    Raises
+    ------
+    IOError
+        path does not exist or the profile collection contains no valid startup files
     """
 
     # Create the list of files to load
@@ -199,6 +207,11 @@ def load_profile_collection(path, patch_profiles=True):
     file_pattern = os.path.join(path, "[0-9][0-9]*.py")
     file_list = glob.glob(file_pattern)
     file_list.sort()  # Sort in alphabetical order
+
+    # If the profile collection contains no startup files, it is very likely
+    #   that the profile collection directory is specified incorrectly.
+    if not len(file_list):
+        raise IOError(f"The directory '{path}' contains no startup files (mask '[0-9][0-9]*.py').")
 
     # Add original path to the profile collection to allow local imports
     #   from the patched temporary file.
@@ -890,6 +903,50 @@ def gen_list_of_plans_and_devices(path=None, file_name="existing_plans_and_devic
         raise RuntimeError(f"Failed to create the list of devices and plans: {str(ex)}")
 
 
+def gen_list_of_plans_and_devices_cli():
+    """
+    'qserver_list_of_plans_and_devices'
+    CLI tool for generating the list of existing plans and devices based on profile collection.
+    The tool is supposed to be called as 'qserver_list_of_plans_and_devices' from command line.
+    The function will ALWAYS overwrite the existing list of plans and devices (the list
+    is automatically generated, so overwriting (updating) should be a safe operation that doesn't
+    lead to loss configuration data.
+    """
+    logging.basicConfig(level=logging.WARNING)
+    logging.getLogger("bluesky_queueserver").setLevel("INFO")
+
+    parser = argparse.ArgumentParser(
+        description="Bluesky-QServer: CLI tool for generating the list of plans and devices\n"
+                    "  from beamline profile collection.",
+        epilog=f"Bluesky-QServer version {qserver_version}.",
+    )
+    parser.add_argument(
+        "--path",
+        "-p",
+        dest="path",
+        action="store",
+        required=False,
+        default=None,
+        help=f"Path to profile collection. Current working directory is used if the path is not specified",
+    )
+
+    args = parser.parse_args()
+    path = args.path
+
+    if path is not None:
+        path = os.path.expanduser(path)
+        path = os.path.abspath(path)
+
+    try:
+        gen_list_of_plans_and_devices(path=path, overwrite=True)
+        print(f"The list of existing plans and devices was created successfully.")
+        exit_code = 0
+    except BaseException as ex:
+        logger.exception(f"Failed to create the list of plans and devices: %s", str(ex))
+        exit_code = 1
+    return exit_code
+
+
 def load_existing_plans_and_devices(path_to_file=None):
     """
     Load the lists of allowed plans and devices from YAML file. Returns empty lists
@@ -907,7 +964,7 @@ def load_existing_plans_and_devices(path_to_file=None):
 
     Raises
     ------
-    IOError in case the file does not exist.
+    IOError in case the file does not exist or no startup files were found.
     """
     if not path_to_file:
         return {}, {}

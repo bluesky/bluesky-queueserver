@@ -139,3 +139,21 @@ def test_set_user_ns_1(tmp_path):
     assert nspace["gen_A_was_called"] == "gen_was_called"
     assert result_func[0] == 115
     assert result_func[1] == "value-sent-to-gen"
+
+
+def test_global_user_namespace():
+    """
+    Basic test for ``global_user_namespace``.
+    """
+    ns = {"ab": 1, "cd": 2}
+    global_user_namespace.set_user_namespace(user_ns=ns)
+    assert global_user_namespace.user_ns == ns
+    assert global_user_namespace.use_ipython is False
+
+    global_user_namespace.set_user_namespace(user_ns={}, use_ipython=True)
+    assert global_user_namespace.user_ns == {}
+    assert global_user_namespace.use_ipython is True
+
+    global_user_namespace.set_user_namespace(user_ns=ns, use_ipython=False)
+    assert global_user_namespace.user_ns == ns
+    assert global_user_namespace.use_ipython is False

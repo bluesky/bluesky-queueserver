@@ -129,9 +129,10 @@ def _get_enclosed_str(text, prefix, suffix):
     text = text.strip()
     pattern = f"^{prefix}.+{suffix}$"
     if re.search(pattern, text):
-        len_prefix = len(prefix) - prefix.count("\\")
-        len_suffix = len(suffix) - suffix.count("\\")
-        text = text[len_prefix:-len_suffix]
+        pattern1 = f"^{prefix}"
+        pattern2 = f"{suffix}$"
+        text = re.sub(pattern1, "", text)
+        text = re.sub(pattern2, "", text)
         success = True
     return text, success
 

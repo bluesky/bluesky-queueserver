@@ -8,38 +8,31 @@ import jsonschema
 import textwrap
 import pprint
 import re
+import copy
 
 _parameter_annotation_schema = {
     "type": "object",
-    "required": ["description"],
     "properties": {
         "description": {"type": "string"},
         "parameters": {
             "type": "object",
             "additionalProperties": {
                 "type": "object",
-                "required": ["description"],
+                "additionalProperties": False,
                 "properties": {
                     "description": {"type": "string"},
-                },
-                "additionalProperties": {
                     "annotation": {"type": "string"},
                     "devices": {
-                        "type": "array",
-                        "items": [{"type": "string"}],
-                        "additionalItems": {"type": "string"},
+                        "$ref": "#/definitions/custom_types",
                     },
                     "plans": {
-                        "type": "array",
-                        "items": [{"type": "string"}],
-                        "additionalItems": {"type": "string"},
+                        "$ref": "#/definitions/custom_types",
                     },
                 },
             },
         },
         "returns": {
             "type": "object",
-            "required": ["description"],
             "properties": {
                 "description": {"type": "string"},
             },
@@ -49,6 +42,15 @@ _parameter_annotation_schema = {
         },
     },
     "additionalProperties": False,
+    "definitions": {
+        "custom_types": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "array",
+                "items": [{"type": "string"}],
+            },
+        },
+    },
 }
 
 
@@ -86,7 +88,7 @@ def _print_parameter_name_and_type(p_name, p_type):
     if p_name:
         s = f"{p_name}"
         if p_type:
-            s += f": {p_type}"
+            s += f" : {p_type}"
     return f"{s}\n"
 
 
@@ -192,8 +194,8 @@ def _collect_data_for_docstring(func, annotation):
     return_annotation = signature.return_annotation
 
     doc_params = dict()
-    # Description of the function (it must be present in annotation)
-    doc_params["description"] = annotation["description"]
+    # Description of the function
+    doc_params["description"] = annotation.get("description", "")
     # Flag that tells if the function is a generator. Title for returning
     #   values for generator is 'Yields' and for regular functions it is 'Returns'
     doc_params["is_generator"] = inspect.isgeneratorfunction(func)
@@ -213,7 +215,7 @@ def _collect_data_for_docstring(func, annotation):
             desc, an, plans, devices = "", "", {}, {}
             if ("parameters" in annotation) and (p_name in annotation["parameters"]):
                 p_an = annotation["parameters"][p_name]
-                desc = p_an["description"]  # Description MUST be there
+                desc = p_an.get("description", "")
                 if "annotation" in p_an:
                     an = p_an["annotation"]
                     # Ignore annotation if it is an empty string. Lists of plans
@@ -240,21 +242,21 @@ def _collect_data_for_docstring(func, annotation):
             #   in the docstring at all
             doc_params["parameters"][p_name]["default"] = v_default
 
-        # Print return value annotation and description. Again the annotation from
-        #   custom annotation overrides Python annotation.
-        doc_params["returns"] = {}
-        desc, an = "", ""
-        if "returns" in annotation or (return_annotation != inspect.Parameter.empty):
-            if "returns" in annotation:
-                desc = annotation["returns"]["description"]
-                an = annotation["returns"].get("annotation", "")
-            if not an:
-                if return_annotation != inspect.Signature.empty:
-                    an = str(return_annotation)
-        doc_params["returns"]["description"] = desc
-        if doc_params["is_generator"]:
-            an = _extract_yield_type(an)
-        doc_params["returns"]["annotation"] = _convert_annotation_to_type(an)
+    # Print return value annotation and description. Again the annotation from
+    #   custom annotation overrides Python annotation.
+    doc_params["returns"] = {}
+    desc, an = "", ""
+    if "returns" in annotation or (return_annotation != inspect.Parameter.empty):
+        if "returns" in annotation:
+            desc = annotation["returns"].get("description", "")
+            an = annotation["returns"].get("annotation", "")
+        if not an:
+            if return_annotation != inspect.Signature.empty:
+                an = str(return_annotation)
+    doc_params["returns"]["description"] = desc
+    if doc_params["is_generator"]:
+        an = _extract_yield_type(an)
+    doc_params["returns"]["annotation"] = _convert_annotation_to_type(an)
 
     return doc_params
 
@@ -278,7 +280,11 @@ def _format_docstring(doc_params):
     not_documented_str = "THE ITEM IS NOT DOCUMENTED YET ..."
     tab_size = 4
 
-    doc = _print_indented_block(doc_params["description"], indent=0, text_width=text_width)
+    doc = ""
+
+    func_desc = doc_params["description"]
+    if func_desc:
+        doc += _print_indented_block(func_desc, indent=0, text_width=text_width)
     # The function may have no parameters
     if doc_params["parameters"]:
         doc += _print_docstring_title("Parameters")
@@ -287,8 +293,8 @@ def _format_docstring(doc_params):
             doc += _print_parameter_name_and_type(p_name, p["annotation"])
 
             # Insert the description of the parameter
-            desc = p["description"]
-            desc = desc if desc else not_documented_str
+            desc = p.get("description", None)
+            desc = desc if desc else not_documented_str  # desc can be None or ""
             doc += _print_indented_block(desc, indent=tab_size, text_width=text_width)
 
             if p["plans"]:
@@ -310,20 +316,20 @@ def _format_docstring(doc_params):
                 s = f"Default: {p['default']}."
                 doc += _print_indented_block(s, indent=tab_size, text_width=text_width)
 
-        # Print return value type and description
-        if doc_params["returns"]["annotation"] or doc_params["returns"]["description"]:
-            title = "Yields" if doc_params["is_generator"] else "Returns"
-            doc += _print_docstring_title(title)
+    # Print return value type and description
+    if doc_params["returns"]["annotation"] or doc_params["returns"]["description"]:
+        title = "Yields" if doc_params["is_generator"] else "Returns"
+        doc += _print_docstring_title(title)
 
-            offset = 0
-            s = doc_params["returns"]["annotation"]
-            if s:
-                doc += _print_indented_block(s, indent=0, text_width=text_width)
-                offset = 1
+        offset = 0
+        s = doc_params["returns"]["annotation"]
+        if s:
+            doc += _print_indented_block(s, indent=0, text_width=text_width)
+            offset = 1
 
-            s = doc_params["returns"]["description"]
-            if s:
-                doc += _print_indented_block(s, indent=tab_size * offset, text_width=text_width)
+        s = doc_params["returns"]["description"]
+        if s:
+            doc += _print_indented_block(s, indent=tab_size * offset, text_width=text_width)
 
     return doc
 
@@ -424,7 +430,13 @@ def parameter_annotation_decorator(annotation):
             def wrapper(*args, **kwargs):
                 return func(*args, **kwargs)
 
-        jsonschema.validate(instance=annotation, schema=_parameter_annotation_schema)
+        # Always create the copy (annotation dictionary may be reused)
+        nonlocal annotation
+        annotation = copy.deepcopy(annotation)
+
+        jsonschema.validate(
+            instance=annotation, schema=_parameter_annotation_schema, types={"array": (list, tuple)}
+        )
 
         sig = inspect.signature(func)
         parameters = sig.parameters
@@ -440,12 +452,16 @@ def parameter_annotation_decorator(annotation):
                 f"in the signature of function '{func.__name__}'."
             )
             raise ValueError(msg)
-        setattr(wrapper, "_custom_parameter_annotation_", annotation)
 
         # Create a docstring from the annotation if the function does not have a docstring
         if not func.__doc__:
             doc_params = _collect_data_for_docstring(func, annotation)
             wrapper.__doc__ = _format_docstring(doc_params)
+            # Mark docstring as autogenerated. Autogenerated docstring should not be
+            #   used as independent source of parameter descriptions or any other data.
+            annotation["docstring_autogenerated"] = True
+
+        setattr(wrapper, "_custom_parameter_annotation_", annotation)
 
         return wrapper
 

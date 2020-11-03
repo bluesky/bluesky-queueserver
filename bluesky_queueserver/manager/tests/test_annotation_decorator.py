@@ -51,6 +51,48 @@ val_kwarg
     Default: 10.
 """
 
+
+_simple_annotation_no_fdesc = {
+    "parameters": {
+        "val_arg": {"description": "Parameter 'val_arg'"},
+        "val_kwarg": {"description": "Parameter 'val_kwarg'"},
+    },
+}
+
+_simple_annotation_no_fdesc_doc = """
+Parameters
+----------
+val_arg
+    Parameter 'val_arg'
+    Kind: positional or keyword.
+val_kwarg
+    Parameter 'val_kwarg'
+    Kind: keyword only.
+    Default: 10.
+"""
+
+_simple_annotation_no_pdesc = {
+    "description": "Simple generator function",
+    "parameters": {
+        "val_arg": {},
+        "val_kwarg": {},
+    },
+}
+
+_simple_annotation_no_pdesc_doc = """Simple generator function
+
+Parameters
+----------
+val_arg
+    THE ITEM IS NOT DOCUMENTED YET ...
+    Kind: positional or keyword.
+val_kwarg
+    THE ITEM IS NOT DOCUMENTED YET ...
+    Kind: keyword only.
+    Default: 10.
+"""
+
+
 _simple_annotation_with_return = {
     "description": "Simple function with return value",
     "parameters": {
@@ -77,6 +119,55 @@ Returns
 Return value
 """
 
+_simple_annotation_with_return_empty = {
+    "description": "Simple function with return value",
+    "parameters": {
+        "val_arg": {"description": "Parameter 'val_arg'"},
+        "val_kwarg": {"description": "Parameter 'val_kwarg'"},
+    },
+    "returns": {},
+}
+
+_simple_annotation_with_return_empty_doc = """Simple function with return value
+
+Parameters
+----------
+val_arg
+    Parameter 'val_arg'
+    Kind: positional or keyword.
+val_kwarg
+    Parameter 'val_kwarg'
+    Kind: keyword only.
+    Default: 10.
+"""
+
+_simple_annotation_with_return_type_only = {
+    "description": "Simple function with return value",
+    "parameters": {
+        "val_arg": {"description": "Parameter 'val_arg'"},
+        "val_kwarg": {"description": "Parameter 'val_kwarg'"},
+    },
+    "returns": {"annotation": "float"},
+}
+
+_simple_annotation_with_return_type_only_doc = """Simple function with return value
+
+Parameters
+----------
+val_arg
+    Parameter 'val_arg'
+    Kind: positional or keyword.
+val_kwarg
+    Parameter 'val_kwarg'
+    Kind: keyword only.
+    Default: 10.
+
+Returns
+-------
+float
+"""
+
+
 # Note: the types in the following annotation don't match the types in the function
 # parameter annotation on purpose. It allows to verify which types are actually placed
 # in the docstring.
@@ -94,11 +185,56 @@ _simple_annotation_with_types_doc = """Simple function with type annotations
 
 Parameters
 ----------
-val_arg: float
+val_arg : float
     Parameter 'val_arg'
     Kind: positional or keyword.
-val_kwarg: int
+val_kwarg : int
     Parameter 'val_kwarg'
+    Kind: keyword only.
+    Default: 10.
+
+Returns
+-------
+float
+    Return value
+"""
+
+
+_simple_annotation_list_devices_and_plans = {
+    "description": "Simple function with type annotations",
+    "parameters": {
+        "val_arg": {
+            "description": "Parameter 'val_arg'",
+            "annotation": "Motor",
+            "devices": {
+                "Motor": ("m1", "m2", "m3"),
+            },
+        },
+        "val_kwarg": {
+            "description": "Parameter 'val_kwarg'",
+            "annotation": "Plan",
+            "plans": {
+                "Plan": ("p1", "p2", "p3"),
+            },
+        },
+    },
+    "returns": {"description": "Return value", "annotation": "float"},
+}
+
+
+_simple_annotation_list_devices_and_plans_doc = """Simple function with type annotations
+
+Parameters
+----------
+val_arg : Motor
+    Parameter 'val_arg'
+    Allowed device names:
+        'Motor': ('m1', 'm2', 'm3')
+    Kind: positional or keyword.
+val_kwarg : Plan
+    Parameter 'val_kwarg'
+    Allowed plan names:
+        'Plan': ('p1', 'p2', 'p3')
     Kind: keyword only.
     Default: 10.
 
@@ -133,7 +269,7 @@ type annotations and long description.
 
 Parameters
 ----------
-val_arg: float
+val_arg : float
     Long description of the parameter 'val_arg'. Long description of the
     parameter 'val_arg'. Long description of the parameter 'val_arg'. Long
     description of the parameter 'val_arg'. Long description of the parameter
@@ -142,7 +278,7 @@ val_arg: float
     description of the parameter 'val_arg'. Long description of the parameter
     'val_arg'.
     Kind: positional or keyword.
-val_kwarg: int
+val_kwarg : int
     Long description of the parameter 'val_kwarg'. Long description of the
     parameter 'val_kwarg'. Long description of the parameter 'val_kwarg'. Long
     description of the parameter 'val_kwarg'. Long description of the parameter
@@ -168,10 +304,14 @@ float
 # fmt: off
 @pytest.mark.parametrize("custom_annotation, expected_docstring", [
     (_simple_annotation, _simple_annotation_doc),
+    (_simple_annotation_no_fdesc, _simple_annotation_no_fdesc_doc),
+    (_simple_annotation_no_pdesc, _simple_annotation_no_pdesc_doc),
     (_simple_annotation_with_return, _simple_annotation_with_return_doc),
+    (_simple_annotation_with_return_empty, _simple_annotation_with_return_empty_doc),
+    (_simple_annotation_with_return_type_only, _simple_annotation_with_return_type_only_doc),
     (_simple_annotation_with_types, _simple_annotation_with_types_doc),
+    (_simple_annotation_list_devices_and_plans, _simple_annotation_list_devices_and_plans_doc),
     (_simple_annotation_long_descriptions, _simple_annotation_long_descriptions_doc),
-
 ])
 # fmt: on
 def test_annotation_dectorator_1(custom_annotation, expected_docstring):
@@ -183,6 +323,8 @@ def test_annotation_dectorator_1(custom_annotation, expected_docstring):
     def func(val_arg, *, val_kwarg=10):
         return int(val_arg + val_kwarg)
 
+    assert func._custom_parameter_annotation_["docstring_autogenerated"] is True
+    func._custom_parameter_annotation_.pop("docstring_autogenerated")
     assert func._custom_parameter_annotation_ == custom_annotation
     assert func(10, val_kwarg=20) == 30
     assert func.__name__ == "func"
@@ -206,6 +348,8 @@ def test_annotation_dectorator_2(custom_annotation, expected_docstring):
     def func(val_arg: int, *, val_kwarg: float = 10):
         return int(val_arg + val_kwarg)
 
+    assert func._custom_parameter_annotation_["docstring_autogenerated"] is True
+    func._custom_parameter_annotation_.pop("docstring_autogenerated")
     assert func._custom_parameter_annotation_ == custom_annotation
     assert func(10, val_kwarg=20) == 30
     assert func.__name__ == "func"
@@ -226,10 +370,10 @@ _simple_annotation_no_types_doc = """Simple function with type annotations
 
 Parameters
 ----------
-val_arg: int
+val_arg : int
     Parameter 'val_arg'
     Kind: positional or keyword.
-val_kwarg: float
+val_kwarg : float
     Parameter 'val_kwarg'
     Kind: keyword only.
     Default: 10.
@@ -256,6 +400,8 @@ def test_annotation_dectorator_3(custom_annotation, expected_docstring):
     def func(val_arg: int, *, val_kwarg: float = 10) -> int:
         return int(val_arg + val_kwarg)
 
+    assert func._custom_parameter_annotation_["docstring_autogenerated"] is True
+    func._custom_parameter_annotation_.pop("docstring_autogenerated")
     assert func._custom_parameter_annotation_ == custom_annotation
     assert func(10, val_kwarg=20) == 30
     assert func.__name__ == "func"
@@ -278,6 +424,8 @@ def test_annotation_dectorator_4(custom_annotation, expected_docstring):
         for n in range(n_elements):
             yield n
 
+    assert func._custom_parameter_annotation_["docstring_autogenerated"] is True
+    func._custom_parameter_annotation_.pop("docstring_autogenerated")
     assert func._custom_parameter_annotation_ == custom_annotation
     assert list(func(10, val_kwarg=20)) == list(range(30))
     assert func.__name__ == "func"
@@ -306,13 +454,13 @@ _custom_annotation_plans_and_devices_doc = """Custom annotation with plans and d
 
 Parameters
 ----------
-val_arg: typing.Union(Plan1, Plan2)
+val_arg : typing.Union(Plan1, Plan2)
     Parameter that accepts a single plan.
     Allowed plan names:
         'Plan1': ('count', 'scan', 'gridscan')
         'Plan2': ('some', 'other', 'plans')
     Kind: positional or keyword.
-val_kwarg: typing.List(Device)
+val_kwarg : typing.List(Device)
     Parameter that accepts the list of devices.
     Allowed device names:
         'Device': ('det1', 'det2', 'det3')
@@ -342,6 +490,8 @@ def test_annotation_dectorator_5(custom_annotation, expected_docstring):
         for n in range(len(added_strings)):
             yield n
 
+    assert func._custom_parameter_annotation_["docstring_autogenerated"] is True
+    func._custom_parameter_annotation_.pop("docstring_autogenerated")
     assert func._custom_parameter_annotation_ == custom_annotation
     assert list(func("gridscan", val_kwarg="det2")) == list(range(len("gridscan") + len("det2")))
     assert func.__name__ == "func"
@@ -379,36 +529,36 @@ _more_complicated_annotation_doc = """Example of annotation with varargs and var
 
 Parameters
 ----------
-detector: Device
+detector : Device
     Device name
     Allowed device names:
         'Device': ('det1', 'det2', 'det3')
     Kind: positional or keyword.
-detectors: typing.List[typing.Union[Device, Motor]]
+detectors : typing.List[typing.Union[Device, Motor]]
     Device names
     Allowed device names:
         'Device': ('det1', 'det4')
         'Motor': ('motor10', 'motor12')
     Kind: positional or keyword.
-val1: float
+val1 : float
     THE ITEM IS NOT DOCUMENTED YET ...
     Kind: positional or keyword.
     Default: 10.
-args: typing.Union[Detector, Motor, int]
+args : typing.Union[Detector, Motor, int]
     Motors or ints
     Allowed device names:
         'Motor': ('motor1', 'motor2', 'motor3')
         'Detector': ('det30', 'det31')
     Kind: var positional.
-msg: str
+msg : str
     THE ITEM IS NOT DOCUMENTED YET ...
     Kind: keyword only.
     Default: 'default_string'.
-val2: typing.Union[int, float]
+val2 : typing.Union[int, float]
     THE ITEM IS NOT DOCUMENTED YET ...
     Kind: keyword only.
     Default: 6.
-kwargs: typing.Union[float, Detector]
+kwargs : typing.Union[float, Detector]
     Detectors or floats
     Allowed device names:
         'Detector': ('det50', 'det51')
@@ -446,6 +596,8 @@ def test_annotation_dectorator_6(custom_annotation, expected_docstring):
         for s in str_list:
             yield s
 
+    assert func._custom_parameter_annotation_["docstring_autogenerated"] is True
+    func._custom_parameter_annotation_.pop("docstring_autogenerated")
     assert func._custom_parameter_annotation_ == custom_annotation
     assert list(func("det1", ["det1", "det2"])) == ["str1", "str2", "str3"]
     assert func.__name__ == "func"
@@ -477,49 +629,118 @@ def test_annotation_dectorator_7(custom_annotation, expected_docstring):
         for s in str_list:
             yield s
 
+    assert func._custom_parameter_annotation_["docstring_autogenerated"] is True
+    func._custom_parameter_annotation_.pop("docstring_autogenerated")
     assert func._custom_parameter_annotation_ == custom_annotation
     assert list(func()) == ["str1", "str2", "str3"]
     assert func.__name__ == "func"
     assert func.__doc__ == expected_docstring
 
 
+# fmt: off
+@pytest.mark.parametrize("custom_annotation, expected_docstring", [
+    (_trivial_annotation, _trivial_annotation_doc),
+])
+# fmt: on
+def test_annotation_dectorator_8(custom_annotation, expected_docstring):
+    """
+    Don't generate docstring: a docstring already exists.
+    """
+
+    @parameter_annotation_decorator(custom_annotation)
+    def func():
+        """
+        Docstring for the function.
+        """
+        str_list = ["str1", "str2", "str3"]
+        for s in str_list:
+            yield s
+
+    assert "docstring_autogenerated" not in func._custom_parameter_annotation_
+    assert func._custom_parameter_annotation_ == custom_annotation
+    assert list(func()) == ["str1", "str2", "str3"]
+    assert func.__name__ == "func"
+    assert func.__doc__ != expected_docstring
+
+
 _trivial_annotation_error1 = {
     "descriptions": "Example of annotation with varargs and varkwargs.",
 }
 
-_trivial_annotation_error2 = {}
+_trivial_annotation_error2 = {
+    "description": "Example of annotation with varargs and varkwargs.",
+    "parameters": {"no_such_parameter": {"description": "The function has no such parameter"}},
+}
 
 _trivial_annotation_error3 = {
     "description": "Example of annotation with varargs and varkwargs.",
-    "parameters": {"no_such_parameter": {"description": "The function has no such parameter"}},
+    "parameters": {
+        "existing_param": {"descriptions": "Required key is 'discription'. Schema validation should fail."}
+    },
 }
 
 _trivial_annotation_error4 = {
     "description": "Example of annotation with varargs and varkwargs.",
     "parameters": {
-        "no_such_parameter4": {"descriptions": "Required key is 'discription'. Schema validation should fail."}
+        "existing_param": {
+            "description": "Required key is 'discription'. Schema validation should fail.",
+            "annotation": "Motor",
+            "some_devices": {  # No such keyword
+                "Motor": ("a", "b", "c"),
+            },
+        }
+    },
+}
+
+_trivial_annotation_error5 = {
+    "description": "Example of annotation with varargs and varkwargs.",
+    "parameters": {
+        "existing_param": {
+            "description": "Required key is 'discription'. Schema validation should fail.",
+            "annotation": "Motor",
+            "devices": {
+                "Motor": (1, 2, 3),  # Type must be 'str'
+            },
+        }
+    },
+}
+
+_trivial_annotation_error6 = {
+    "description": "Example of annotation with varargs and varkwargs.",
+    "parameters": {
+        "existing_param": {
+            "description": "Required key is 'discription'. Schema validation should fail.",
+            "annotation": "Motor",
+            "devices": {
+                "Motor": "abcde",  # Type must be 'array' (tuple or list)
+            },
+        }
     },
 }
 
 
 # fmt: off
 @pytest.mark.parametrize("custom_annotation, ex_type, err_msg", [
-    (_trivial_annotation_error1, jsonschema.ValidationError,  "'description' is a required property"),
-    (_trivial_annotation_error2, jsonschema.ValidationError, "'description' is a required property"),
-    (_trivial_annotation_error3, ValueError, r"\['no_such_parameter'] are not in the signature of function"),
+    (_trivial_annotation_error1, jsonschema.ValidationError,
+     r"Additional properties are not allowed \('descriptions' was unexpected\)"),
+    (_trivial_annotation_error2, ValueError, r"\['no_such_parameter'] are not in the signature of function"),
+    (_trivial_annotation_error3, jsonschema.ValidationError,
+     r"Additional properties are not allowed \('descriptions' was unexpected\)"),
     (_trivial_annotation_error4, jsonschema.ValidationError,
-     r"'description' is a required property"),
+     r"Additional properties are not allowed \('some_devices' was unexpected\)"),
+    (_trivial_annotation_error5, jsonschema.ValidationError, "is not of type 'string'"),
+    (_trivial_annotation_error6, jsonschema.ValidationError, "is not of type 'array'"),
 ])
 # fmt: on
-def test_annotation_dectorator_8_fail(custom_annotation, ex_type, err_msg):
+def test_annotation_dectorator_9_fail(custom_annotation, ex_type, err_msg):
     """
-    The trivial case of the decorator that only specifieds function description
+    The trivial case of the decorator that only specified function description
     and the function has no parameters.
     """
     with pytest.raises(ex_type, match=err_msg):
 
         @parameter_annotation_decorator(custom_annotation)
-        def func():
+        def func(existing_param):
             pass
 
 
@@ -528,7 +749,7 @@ _trivial_annotation = {
 }
 
 
-def test_annotation_dectorator_9():
+def test_annotation_dectorator__10():
     """
     Test if decorated generator function is recognized as a generator function by ``inspect``.
     """

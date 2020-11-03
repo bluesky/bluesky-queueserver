@@ -228,13 +228,57 @@ Parameters
 ----------
 val_arg : Motor
     Parameter 'val_arg'
-    Allowed device names:
-        'Motor': ('m1', 'm2', 'm3')
+    Allowed devices:
+        'Motor': m1, m2, m3
     Kind: positional or keyword.
 val_kwarg : Plan
     Parameter 'val_kwarg'
-    Allowed plan names:
-        'Plan': ('p1', 'p2', 'p3')
+    Allowed plans:
+        'Plan': p1, p2, p3
+    Kind: keyword only.
+    Default: 10.
+
+Returns
+-------
+float
+    Return value
+"""
+
+_simple_annotation_enums = {
+    "description": "Simple function with type annotations",
+    "parameters": {
+        "val_arg": {
+            "description": "Parameter 'val_arg'",
+            "annotation": "typing.List[CustomEnum]",
+            "enums": {
+                "CustomEnum": ("m1", "m2", "m3"),
+            },
+        },
+        "val_kwarg": {
+            "description": "Parameter 'val_kwarg'",
+            "annotation": "CustomEnum",
+            "enums": {
+                "CustomEnum": ("p1", "p2", "p3"),
+            },
+        },
+    },
+    "returns": {"description": "Return value", "annotation": "float"},
+}
+
+
+_simple_annotation_enums_doc = """Simple function with type annotations
+
+Parameters
+----------
+val_arg : typing.List[CustomEnum]
+    Parameter 'val_arg'
+    Allowed names:
+        'CustomEnum': 'm1', 'm2', 'm3'
+    Kind: positional or keyword.
+val_kwarg : CustomEnum
+    Parameter 'val_kwarg'
+    Allowed names:
+        'CustomEnum': 'p1', 'p2', 'p3'
     Kind: keyword only.
     Default: 10.
 
@@ -311,6 +355,7 @@ float
     (_simple_annotation_with_return_type_only, _simple_annotation_with_return_type_only_doc),
     (_simple_annotation_with_types, _simple_annotation_with_types_doc),
     (_simple_annotation_list_devices_and_plans, _simple_annotation_list_devices_and_plans_doc),
+    (_simple_annotation_enums, _simple_annotation_enums_doc),
     (_simple_annotation_long_descriptions, _simple_annotation_long_descriptions_doc),
 ])
 # fmt: on
@@ -456,14 +501,14 @@ Parameters
 ----------
 val_arg : typing.Union(Plan1, Plan2)
     Parameter that accepts a single plan.
-    Allowed plan names:
-        'Plan1': ('count', 'scan', 'gridscan')
-        'Plan2': ('some', 'other', 'plans')
+    Allowed plans:
+        'Plan1': count, scan, gridscan
+        'Plan2': some, other, plans
     Kind: positional or keyword.
 val_kwarg : typing.List(Device)
     Parameter that accepts the list of devices.
-    Allowed device names:
-        'Device': ('det1', 'det2', 'det3')
+    Allowed devices:
+        'Device': det1, det2, det3
     Kind: keyword only.
 
 Yields
@@ -531,14 +576,14 @@ Parameters
 ----------
 detector : Device
     Device name
-    Allowed device names:
-        'Device': ('det1', 'det2', 'det3')
+    Allowed devices:
+        'Device': det1, det2, det3
     Kind: positional or keyword.
 detectors : typing.List[typing.Union[Device, Motor]]
     Device names
-    Allowed device names:
-        'Device': ('det1', 'det4')
-        'Motor': ('motor10', 'motor12')
+    Allowed devices:
+        'Device': det1, det4
+        'Motor': motor10, motor12
     Kind: positional or keyword.
 val1 : float
     THE ITEM IS NOT DOCUMENTED YET ...
@@ -546,9 +591,9 @@ val1 : float
     Default: 10.
 args : typing.Union[Detector, Motor, int]
     Motors or ints
-    Allowed device names:
-        'Motor': ('motor1', 'motor2', 'motor3')
-        'Detector': ('det30', 'det31')
+    Allowed devices:
+        'Motor': motor1, motor2, motor3
+        'Detector': det30, det31
     Kind: var positional.
 msg : str
     THE ITEM IS NOT DOCUMENTED YET ...
@@ -560,8 +605,8 @@ val2 : typing.Union[int, float]
     Default: 6.
 kwargs : typing.Union[float, Detector]
     Detectors or floats
-    Allowed device names:
-        'Detector': ('det50', 'det51')
+    Allowed devices:
+        'Detector': det50, det51
     Kind: var keyword.
 
 Yields

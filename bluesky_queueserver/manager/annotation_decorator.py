@@ -28,6 +28,9 @@ _parameter_annotation_schema = {
                     "plans": {
                         "$ref": "#/definitions/custom_types",
                     },
+                    "enums": {
+                        "$ref": "#/definitions/custom_types",
+                    },
                 },
             },
         },
@@ -212,7 +215,7 @@ def _collect_data_for_docstring(func, annotation):
             kind = kind.lower().replace("_", " ")
             doc_params["parameters"][p_name]["kind"] = kind
 
-            desc, an, plans, devices = "", "", {}, {}
+            desc, an, plans, devices, enums = "", "", {}, {}, {}
             if ("parameters" in annotation) and (p_name in annotation["parameters"]):
                 p_an = annotation["parameters"][p_name]
                 desc = p_an.get("description", "")
@@ -224,6 +227,7 @@ def _collect_data_for_docstring(func, annotation):
                         # Now save the lists of plans and devices if any
                         plans = p_an.get("plans", {})
                         devices = p_an.get("devices", {})
+                        enums = p_an.get("enums", {})
 
             if not an and parameters[p_name].annotation != inspect.Parameter.empty:
                 an = str(parameters[p_name].annotation)
@@ -232,6 +236,7 @@ def _collect_data_for_docstring(func, annotation):
             doc_params["parameters"][p_name]["description"] = desc
             doc_params["parameters"][p_name]["plans"] = plans
             doc_params["parameters"][p_name]["devices"] = devices
+            doc_params["parameters"][p_name]["enums"] = enums
 
             if p.default != inspect.Parameter.empty:
                 # Print will print strings in quotes (desired behavior)
@@ -298,15 +303,24 @@ def _format_docstring(doc_params):
             doc += _print_indented_block(desc, indent=tab_size, text_width=text_width)
 
             if p["plans"]:
-                doc += _print_indented_block("Allowed plan names:", indent=tab_size, text_width=text_width)
+                doc += _print_indented_block("Allowed plans:", indent=tab_size, text_width=text_width)
                 for plan_group_name, plan_list in p["plans"].items():
-                    s = f"'{plan_group_name}': {plan_list}"
+                    plan_list_str = ", ".join([str(_) for _ in plan_list])  # Don't use quotes
+                    s = f"'{plan_group_name}': {plan_list_str}"
                     doc += _print_indented_block(s, indent=tab_size * 2, text_width=text_width)
 
             if p["devices"]:
-                doc += _print_indented_block("Allowed device names:", indent=tab_size, text_width=text_width)
+                doc += _print_indented_block("Allowed devices:", indent=tab_size, text_width=text_width)
                 for device_group_name, device_list in p["devices"].items():
-                    s = f"'{device_group_name}': {device_list}"
+                    device_list_str = ", ".join([str(_) for _ in device_list])  # Don't use quotes
+                    s = f"'{device_group_name}': {device_list_str}"
+                    doc += _print_indented_block(s, indent=tab_size * 2, text_width=text_width)
+
+            if p["enums"]:
+                doc += _print_indented_block("Allowed names:", indent=tab_size, text_width=text_width)
+                for enum_group_name, enum_list in p["enums"].items():
+                    enum_list_str = ", ".join([pprint.pformat(_) for _ in enum_list])  # Use quotes with 'str'
+                    s = f"'{enum_group_name}': {enum_list_str}"
                     doc += _print_indented_block(s, indent=tab_size * 2, text_width=text_width)
 
             s = f"Kind: {p['kind']}."

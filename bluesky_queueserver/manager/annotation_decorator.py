@@ -416,7 +416,7 @@ def parameter_annotation_decorator(annotation):
 
             @functools.wraps(func)
             def wrapper(*args, **kwargs):
-                yield from func(*args, **kwargs)
+                return (yield from func(*args, **kwargs))
 
         else:
 

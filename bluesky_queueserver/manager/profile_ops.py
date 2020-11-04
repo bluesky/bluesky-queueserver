@@ -16,10 +16,13 @@ import typing
 import pydantic
 import enum
 import random
+import argparse
 
 import logging
+import bluesky_queueserver
 
 logger = logging.getLogger(__name__)
+qserver_version = bluesky_queueserver.__version__
 
 
 def get_default_profile_collection_dir():
@@ -33,10 +36,12 @@ def get_default_profile_collection_dir():
 
 _patch1 = """
 
+import sys
 import logging
+from bluesky_queueserver.manager.profile_tools import global_user_namespace
 logger_patch = logging.Logger(__name__)
 
-__local_namespace = locals()
+global_user_namespace.set_user_namespace(user_ns=locals(), use_ipython=False)
 
 try:
     pass  # Prevent errors when patching an empty file
@@ -54,7 +59,7 @@ _patch2 = """
 
 
     def get_ipython_patch():
-        ip_dummy = IPDummy(__local_namespace)
+        ip_dummy = IPDummy(global_user_namespace.user_ns)
         return ip_dummy
 
     get_ipython = get_ipython_patch
@@ -64,8 +69,8 @@ _patch2 = """
 _patch3 = """
 
 except BaseException as ex:
-    logger_patch.exception("Exception while loading profile: '%s'", str(ex))
-    raise
+    # Save exception data
+    __plan_exc_info = sys.exc_info()
 
 """
 
@@ -103,34 +108,62 @@ def _patch_profile(file_name):
     with open(file_name, "r") as fln_in:
         code = fln_in.readlines()
 
+    class GetIPythonUsed(enum.Enum):
+        NOT_PRESENT = 0
+        IMPORTED = 1
+        CALLED = 2
+
+    def is_get_ipython_in_line(line):
+        """Check if ``get_ipython()`` is imported or called in the line"""
+        # It is assumed that commenting is done using #
+        result = GetIPythonUsed.NOT_PRESENT
+        if re.search(r"^[^#]*IPython[^#]+get_ipython", line):
+            result = GetIPythonUsed.IMPORTED
+        elif re.search(r"^[^#]*get_ipython", line):
+            result = GetIPythonUsed.CALLED
+        return result
+
+    def patch_before_first_line(code):
+        """
+        Determine if the code file needs to be patched before the first line.
+        The file should be patched if ``get_ipython`` is called before it is imported.
+        Otherwise it should be patched each time it is imported
+        """
+        for line in code:
+            is_get_ipython = is_get_ipython_in_line(line)
+            if is_get_ipython == GetIPythonUsed.IMPORTED:
+                return False
+            elif is_get_ipython == GetIPythonUsed.CALLED:
+                return True
+        # 'get_ipython()' was not found.Don't patch the file.
+        return False
+
+    def apply_patch2(stream, prefix):
+        patch2_lines = _patch2.split("\n")
+        for lp in patch2_lines:
+            stream.write(prefix + lp + "\n")
+
     def get_prefix(s):
         # Returns the sequence of spaces and tabs at the beginning of the code line
         prefix = ""
-        while s and (s == " " or s == "\t"):
+        while s and (s[0] == " " or s[0] == "\t"):
             prefix += s[0]
             s = s[1:]
         return prefix
 
+    patch_first = patch_before_first_line(code)
+
     with open(tmp_fln, "w") as fln_out:
         # insert 'try ..'
         fln_out.writelines(_patch1)
-        is_patched = False
+        if patch_first:
+            apply_patch2(fln_out, "")
         for line in code:
-            fln_out.write("    " + line)
-            # The following RE patterns cover only the cases of commenting with '#'.
-            if not is_patched:
-                if re.search(r"^[^#]*IPython[^#]+get_ipython", line):
-                    # Keep the same indentation as in the preceding line
-                    prefix = get_prefix(line)
-                    for lp in _patch2:
-                        fln_out.write(prefix + lp)
-                    is_patched = True  # Patch only once
-                elif re.search(r"^[^#]*get_ipython *\(", line):
-                    # 'get_ipython()' is called before the patch was applied
-                    raise RuntimeError(
-                        "Profile calls 'get_ipython' before the patch was "
-                        "applied. Inspect and correct the code."
-                    )
+            fln_out.write(" " * 4 + line)
+            if is_get_ipython_in_line(line) == GetIPythonUsed.IMPORTED:
+                # Keep the same indentation as in the preceding line
+                prefix = get_prefix(line)
+                apply_patch2(fln_out, prefix)
         # insert 'except ..'
         fln_out.writelines(_patch3)
 
@@ -155,6 +188,11 @@ def load_profile_collection(path, patch_profiles=True):
     -------
     nspace: dict
         namespace in which the profile collection was executed
+
+    Raises
+    ------
+    IOError
+        path does not exist or the profile collection contains no valid startup files
     """
 
     # Create the list of files to load
@@ -170,6 +208,11 @@ def load_profile_collection(path, patch_profiles=True):
     file_list = glob.glob(file_pattern)
     file_list.sort()  # Sort in alphabetical order
 
+    # If the profile collection contains no startup files, it is very likely
+    #   that the profile collection directory is specified incorrectly.
+    if not len(file_list):
+        raise IOError(f"The directory '{path}' contains no startup files (mask '[0-9][0-9]*.py').")
+
     # Add original path to the profile collection to allow local imports
     #   from the patched temporary file.
     if path not in sys.path:
@@ -181,11 +224,15 @@ def load_profile_collection(path, patch_profiles=True):
 
     # Load the files into the namespace 'nspace'.
     try:
-        nspace = None
+        nspace = {}
         for file in file_list:
             logger.info(f"Loading startup file '{file}' ...")
             fln_tmp = _patch_profile(file) if patch_profiles else file
             nspace = runpy.run_path(fln_tmp, nspace)
+
+            if "__plan_exc_info" in nspace:
+                exc_info = nspace["__plan_exc_info"]
+                raise exc_info[1].with_traceback(exc_info[2])
 
         # Discard RE and db from the profile namespace (if they exist).
         nspace.pop("RE", None)
@@ -216,7 +263,7 @@ def plans_from_nspace(nspace):
     """
     plans = {}
     for name, obj in nspace.items():
-        if callable(obj) and obj.__module__ != "typing":
+        if inspect.isgeneratorfunction(obj):
             plans[name] = obj
     return plans
 
@@ -856,6 +903,50 @@ def gen_list_of_plans_and_devices(path=None, file_name="existing_plans_and_devic
         raise RuntimeError(f"Failed to create the list of devices and plans: {str(ex)}")
 
 
+def gen_list_of_plans_and_devices_cli():
+    """
+    'qserver_list_of_plans_and_devices'
+    CLI tool for generating the list of existing plans and devices based on profile collection.
+    The tool is supposed to be called as 'qserver_list_of_plans_and_devices' from command line.
+    The function will ALWAYS overwrite the existing list of plans and devices (the list
+    is automatically generated, so overwriting (updating) should be a safe operation that doesn't
+    lead to loss configuration data.
+    """
+    logging.basicConfig(level=logging.WARNING)
+    logging.getLogger("bluesky_queueserver").setLevel("INFO")
+
+    parser = argparse.ArgumentParser(
+        description="Bluesky-QServer: CLI tool for generating the list of plans and devices\n"
+        "  from beamline profile collection.",
+        epilog=f"Bluesky-QServer version {qserver_version}.",
+    )
+    parser.add_argument(
+        "--path",
+        "-p",
+        dest="path",
+        action="store",
+        required=False,
+        default=None,
+        help="Path to profile collection. Current working directory is used if the path is not specified",
+    )
+
+    args = parser.parse_args()
+    path = args.path
+
+    if path is not None:
+        path = os.path.expanduser(path)
+        path = os.path.abspath(path)
+
+    try:
+        gen_list_of_plans_and_devices(path=path, overwrite=True)
+        print("The list of existing plans and devices was created successfully.")
+        exit_code = 0
+    except BaseException as ex:
+        logger.exception("Failed to create the list of plans and devices: %s", str(ex))
+        exit_code = 1
+    return exit_code
+
+
 def load_existing_plans_and_devices(path_to_file=None):
     """
     Load the lists of allowed plans and devices from YAML file. Returns empty lists
@@ -873,7 +964,7 @@ def load_existing_plans_and_devices(path_to_file=None):
 
     Raises
     ------
-    IOError in case the file does not exist.
+    IOError in case the file does not exist or no startup files were found.
     """
     if not path_to_file:
         return {}, {}
@@ -1083,3 +1174,21 @@ def load_allowed_plans_and_devices(path_existing_plans_and_devices=None, path_us
         allowed_devices["root"] = existing_devices
 
     return allowed_plans, allowed_devices
+
+
+def load_profile_collection_from_ipython(path=None):
+    """
+    Load profile collection from IPython. Useful utility function that may be used to
+    test if a profile collection can be loaded from IPython.
+    Manually run this function from IPython:
+
+    .. code-block:: python
+
+        from bluesky_queueserver.manager.profile_ops import load_profile_collection_from_ipython
+        load_profile_collection_from_ipython()
+    """
+    ip = get_ipython()  # noqa F821
+    for f in sorted(glob.glob("[0-9][0-9]*.py")):
+        print(f"Executing '{f}' in TravisCI")
+        ip.parent._exec_file(f)
+    print("Profile collection was loaded successfully.")

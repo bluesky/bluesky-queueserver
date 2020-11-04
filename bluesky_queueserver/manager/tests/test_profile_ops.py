@@ -4,6 +4,7 @@ import copy
 import yaml
 import pickle
 import typing
+import subprocess
 
 import ophyd
 
@@ -119,25 +120,47 @@ get_ipython().user_ns
 
 """, True, ""),
 
-    # Not patched ('get_ipython' is commented)
+    # Patching an indented block (make sure that indentation is treated correctly)
     ("""
 \n
-from IPython # import get_ipython
+if True:
+    from IPython import get_ipython
 
-get_ipython().user_ns
-""", False, "Profile calls 'get_ipython' before the patch was applied"),
+    get_ipython().user_ns
 
-    # using 'get_ipython' before it is patched
+""", True, ""),
+
+    # Patched as expected ('get_ipython()' is not imported)
     ("""
 \n
 get_ipython().user_ns
+""", True, ""),
 
-""", False, "Profile calls 'get_ipython' before the patch was applied"),
+    # Patched as expected ('get_ipython' is commented in the import statement)
+    ("""
+\n
+from IPython import config #, get_ipython
+
+get_ipython().user_ns
+""", True, ""),
 
     # Commented 'get_ipython' -> OK
     ("""
 \n
 a = 10  # get_ipython().user_ns
+""", True, ""),
+
+    # Patched multiiple times
+    ("""
+\n
+get_ipython().user_ns
+from IPython import get_ipython
+get_ipython().user_ns
+from IPython import get_ipython
+get_ipython().user_ns
+from IPython import get_ipython
+get_ipython().user_ns
+
 """, True, ""),
 
     # Raise exception in the profile
@@ -181,6 +204,10 @@ def test_load_profile_collection_4_fail(tmp_path):
     pc_path = os.path.join(tmp_path, "abc")
     with pytest.raises(IOError, match="Path .+ does not exist"):
         load_profile_collection(pc_path)
+
+    # 'Empty' profile collection (no startup files)
+    with pytest.raises(IOError, match="The directory .+ contains no startup files"):
+        load_profile_collection(tmp_path)
 
     pc_path = os.path.join(tmp_path, "test.txt")
     # Create a file
@@ -242,7 +269,7 @@ def test_parse_plan(plan, success, err_msg):
             parse_plan(plan, allowed_plans=plans, allowed_devices=devices)
 
 
-def test_gen_list_of_plans_and_devices(tmp_path):
+def test_gen_list_of_plans_and_devices_1(tmp_path):
     """
     Copy simulated profile collection and generate the list of allowed (in this case available)
     plans and devices based on the profile collection
@@ -259,6 +286,45 @@ def test_gen_list_of_plans_and_devices(tmp_path):
 
     # Allow file overwrite
     gen_list_of_plans_and_devices(pc_path, file_name=fln_yaml, overwrite=True)
+
+
+# fmt: off
+@pytest.mark.parametrize("test, exit_code", [
+    ("default_path", 0),
+    ("specify_path", 0),
+    ("incorrect_path", 1),
+])
+# fmt: on
+def test_gen_list_of_plans_and_devices_cli(tmp_path, test, exit_code):
+    """
+    Copy simulated profile collection and generate the list of allowed (in this case available)
+    plans and devices based on the profile collection
+    """
+    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
+
+    fln_yaml = "existing_plans_and_devices.yaml"
+    assert not os.path.isfile(os.path.join(pc_path, fln_yaml))
+
+    os.chdir(tmp_path)
+
+    if test == "default_path":
+        os.chdir(pc_path)
+        assert subprocess.call(["qserver_list_of_plans_and_devices"]) == exit_code
+    elif test == "specify_path":
+        assert subprocess.call(["qserver_list_of_plans_and_devices", "-p", pc_path]) == exit_code
+    elif test == "incorrect_path":
+        # Path exists (default path is used), but there are no startup files (fails)
+        assert subprocess.call(["qserver_list_of_plans_and_devices"]) == exit_code
+        # Path does not exist
+        path_nonexisting = os.path.join(tmp_path, "abcde")
+        assert subprocess.call(["qserver_list_of_plans_and_devices", "-p", path_nonexisting]) == exit_code
+    else:
+        assert False, f"Unknown test '{test}'"
+
+    if exit_code == 0:
+        assert os.path.isfile(os.path.join(pc_path, fln_yaml))
+    else:
+        assert not os.path.isfile(os.path.join(pc_path, fln_yaml))
 
 
 def test_load_existing_plans_and_devices():

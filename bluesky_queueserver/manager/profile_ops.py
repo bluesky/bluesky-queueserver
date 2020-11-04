@@ -17,6 +17,7 @@ import pydantic
 import enum
 import random
 import argparse
+from numpydoc.docscrape import NumpyDocString
 
 import logging
 import bluesky_queueserver
@@ -712,12 +713,6 @@ def validate_plan(plan, *, allowed_plans, allowed_devices):
     return success, msg
 
 
-# TODO: it may be a good idea to implement 'gen_list_of_plans_and_devices' as a separate CLI tool.
-#       For now it can be called from IPython. It shouldn't be called automatically
-#       at any time, since it loads profile collection. The list of allowed plans
-#       and devices can be also typed manually, since it shouldn't be very large.
-
-
 def bytes2hex(bytes_array):
     """
     Converts byte array (output of ``pickle.dumps()``) to spaced hexadecimal string representation.
@@ -756,6 +751,104 @@ def hex2bytes(hex_str):
     return bytes.fromhex(hex_str)
 
 
+def _parse_docstring(docstring):
+    """
+    Parse docstring of a function using ``numpydoc``.
+
+    Parameters
+    ----------
+    docstring: str or None
+        Docstring to be parsed.
+
+    Returns
+    -------
+    dict
+        Dictionary that contains the extracted data. Returns ``{}`` if ``docstring`` is ``None``.
+    """
+    doc_annotation = {}
+    if docstring:
+
+        # Make sure that the first line of the docstring is properly indented, otherwise it is
+        #   incorrectly parsed by 'numpydoc' (new line is optional).
+        # Find the minimum
+        ds_split = docstring.split("\n")
+        ds_split = ds_split[1:]  # Ignore the first line
+        n_indent = None
+        for s in ds_split:
+            if s.strip():  # Don't process empty strings (that contain only spaces)
+                n = None
+                for i, ch in enumerate(s):
+                    if ch != " ":
+                        n = i
+                        break
+                if n is not None:
+                    n_indent = n if n_indent is None else min(n, n_indent)
+
+        if n_indent is not None:
+            docstring = "\n" + " " * n_indent + docstring.strip() + "\n"
+
+        doc = NumpyDocString(docstring)
+
+        summary = doc["Summary"]
+        if summary:
+            doc_annotation["description"] = "\n".join(summary)
+
+        params = doc["Parameters"]
+        doc_annotation["parameters"] = {}
+        for p in params:
+            names = p.name
+            desc = p.desc
+            if ":" in names:
+                n = names.index(":")
+                names = names[:n]
+            names = names.split(",")
+            # Remove '*' (should not be part of the name, but used in some plan annotations)
+            names = [_.replace("*", "") for _ in names]
+            for name in names:
+                name = name.strip()
+                if name:
+                    doc_annotation["parameters"][name] = {}
+                    doc_annotation["parameters"][name]["description"] = "\n".join(desc)
+
+        def params_to_str(params):
+            """
+            Assembles return type info into one string. This joins the description
+            of return parameters into one string.
+            """
+            p_list = []
+            for p in params:
+                s = ""
+                indent = 0
+                if p.name:
+                    s += f"{p.name}"
+                if p.name and p.type:
+                    s += " : "
+                if p.type:
+                    s += f"{p.type}"
+                if (p.name or p.type) and p.desc:
+                    s += "\n"
+                    indent = 4
+                if p.desc:
+                    lines = p.desc
+                    lines = [" " * indent + _ if _.strip() else _ for _ in lines]
+                    s += "\n".join(lines)
+                p_list.append(s)
+            return "\n".join(p_list)
+
+        returns = doc["Returns"]
+        yields = doc["Yields"]
+        doc_annotation["returns"] = {}
+        p_str = None
+        if yields:
+            p_str = params_to_str(yields)
+        elif returns:
+            p_str = params_to_str(returns)
+        if p_str:
+            doc_annotation["returns"]["description"] = p_str
+
+    return doc_annotation
+
+
 def _process_plan(plan):
     """
     Returns parameters of a plan.
@@ -780,22 +873,32 @@ def _process_plan(plan):
         return str(v)
 
     sig = inspect.signature(plan)
+    docstring = getattr(plan, "__doc__", None)
 
-    if hasattr(plan, "_custom_parameter_annotation_"):
-        param_annotation = plan._custom_parameter_annotation_
-    else:
-        param_annotation = None
+    param_annotation = getattr(plan, "_custom_parameter_annotation_", None)
+    doc_annotation = _parse_docstring(docstring)
 
     ret = {"name": plan.__name__, "parameters": []}
 
+    desc = None
     if param_annotation:
-        # The function description should always be present
-        ret["description"] = param_annotation.get("description", "")
+        desc = param_annotation.get("description", "")
+
+    # Try extracting description from docstring data
+    if not desc and doc_annotation:
+        desc = doc_annotation.get("description", "")
+
+    ret["description"] = desc
 
     # Function parameters
     for p in sig.parameters.values():
         working_dict = {"name": p.name}
         ret["parameters"].append(working_dict)
+
+        if ("parameters" in doc_annotation) and (p.name in doc_annotation["parameters"]):
+            desc = doc_annotation["parameters"][p.name].get("description", None)
+            if desc:
+                working_dict["description"] = desc
 
         working_dict["kind"] = {"name": p.kind.name, "value": p.kind.value}
 
@@ -810,6 +913,12 @@ def _process_plan(plan):
 
     # Return value
     return_info = {}
+
+    if "returns" in doc_annotation:
+        desc = doc_annotation["returns"].get("description", None)
+        if desc:
+            return_info["description"] = desc
+
     return_info["annotation"] = str(filter_values(sig.return_annotation))
     return_info["annotation_pickled"] = bytes2hex(pickle.dumps(sig.return_annotation))
     if param_annotation and ("returns" in param_annotation):

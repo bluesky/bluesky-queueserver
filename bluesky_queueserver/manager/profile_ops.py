@@ -1262,18 +1262,39 @@ def load_allowed_plans_and_devices(path_existing_plans_and_devices=None, path_us
     if user_group_permissions:
         user_groups = list(user_group_permissions["user_groups"].keys())
 
+        # First filter the plans and devices based on the permissions for 'root' user group.
+        #   The 'root' user group permissions should be used to exclude all 'junk', i.e.
+        #   unused/outdated/not functioning plans and devices collected from namespace, from
+        #   the lists available to ALL the users.
+        plans_root, devices_root = existing_plans, existing_devices
+        if "root" in user_groups:
+            group_permissions_root = user_group_permissions["user_groups"]["root"]
+            if existing_plans:
+                plans_root = _select_allowed_items(
+                    existing_plans,
+                    group_permissions_root["allowed_plans"],
+                    group_permissions_root["forbidden_plans"],
+                )
+            if existing_devices:
+                devices_root = _select_allowed_items(
+                    existing_devices,
+                    group_permissions_root["allowed_devices"],
+                    group_permissions_root["forbidden_devices"],
+                )
+
+        # Now create lists of allowed devices and plans based on the lists for the 'root' user group
         for group in user_groups:
             group_permissions = user_group_permissions["user_groups"][group]
 
             if existing_plans:
                 selected_plans = _select_allowed_items(
-                    existing_plans, group_permissions["allowed_plans"], group_permissions["forbidden_plans"]
+                    plans_root, group_permissions["allowed_plans"], group_permissions["forbidden_plans"]
                 )
                 allowed_plans[group] = selected_plans
 
             if existing_devices:
                 selected_devices = _select_allowed_items(
-                    existing_devices, group_permissions["allowed_devices"], group_permissions["forbidden_devices"]
+                    devices_root, group_permissions["allowed_devices"], group_permissions["forbidden_devices"]
                 )
                 allowed_devices[group] = selected_devices
 

@@ -477,13 +477,8 @@ class RunEngineWorker(Process):
         from bluesky.run_engine import get_bluesky_event_loop
         from bluesky.callbacks.best_effort import BestEffortCallback
         from bluesky_kafka import Publisher as kafkaPublisher
-        from databroker import Broker
 
         from .profile_tools import global_user_namespace
-
-        # TODO: subscribe to local databroker (currently there is no way to access
-        #    'temp' databroker from outside the process). Production version will use Kafka.
-        self._db = Broker.named("temp")
 
         # TODO: TC - Do you think that the following code may be included in RE.__init__()
         #   (for Python 3.8 and above)
@@ -540,7 +535,16 @@ class RunEngineWorker(Process):
                 bec = BestEffortCallback()
                 self._RE.subscribe(bec)
 
-                self._RE.subscribe(self._db.insert)
+                # Subscribe RE to databroker if config file name is provided
+                self._db = None
+                if "databroker" in self._config:
+                    config_name = self._config["databroker"].get("config", None)
+                    if config_name:
+                        logger.info("Subscribing RE to Data Broker using configuration '%s'.", config_name)
+                        from databroker import Broker
+
+                        self._db = Broker.named(config_name)
+                        self._RE.subscribe(self._db.insert)
 
                 if "kafka" in self._config:
                     logger.info(

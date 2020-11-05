@@ -209,6 +209,12 @@ def start_manager():
         "If the path is a directory, then the default file name "
         "'user_group_permissions.yaml' is used.",
     )
+    parser.add_argument(
+        "--databroker_config",
+        dest="databroker_config",
+        type=str,
+        help="Name of the Data Broker configuration file.",
+    )
 
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger("bluesky_queueserver").setLevel("DEBUG")
@@ -234,6 +240,10 @@ def start_manager():
         # The default collection is the collection of simulated Ophyd devices
         #   and built-in Bluesky plans.
         pc_path = get_default_profile_collection_dir()
+
+    config_worker["databroker"] = {}
+    if args.databroker_config:
+        config_worker["databroker"]["config"] = args.databroker_config
 
     config_worker["profile_collection_path"] = pc_path
 

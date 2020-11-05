@@ -4,6 +4,7 @@ from enum import Enum
 from fastapi import FastAPI, HTTPException
 
 from ..manager.comms import ZMQCommSendAsync
+from .conversion import filter_plan_descriptions
 
 logger = logging.getLogger(__name__)
 
@@ -308,6 +309,8 @@ async def plans_allowed_handler():
     """
     params = {"user_group": _login_data["user_group"]}
     msg = await zmq_to_manager.send_message(method="plans_allowed", params=params)
+    if "plans_allowed" in msg:
+        msg["plans_allowed"] = filter_plan_descriptions(msg["plans_allowed"])
     return msg
 
 

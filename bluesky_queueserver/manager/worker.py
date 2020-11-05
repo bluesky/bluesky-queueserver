@@ -2,6 +2,7 @@ from multiprocessing import Process
 import threading
 import queue
 import time as ttime
+import os
 import asyncio
 from functools import partial
 import logging
@@ -477,6 +478,7 @@ class RunEngineWorker(Process):
         from bluesky.run_engine import get_bluesky_event_loop
         from bluesky.callbacks.best_effort import BestEffortCallback
         from bluesky_kafka import Publisher as kafkaPublisher
+        from bluesky.utils import PersistentDict
 
         from .profile_tools import global_user_namespace
 
@@ -529,7 +531,14 @@ class RunEngineWorker(Process):
                 # Make RE namespace available to the plan code.
                 global_user_namespace.set_user_namespace(user_ns=self._re_namespace, use_ipython=False)
 
-                self._RE = RunEngine({})
+                # This code is temporarily copied from 'nslsii'.
+                # TODO: mechanism for tracking current Run ID so that it is persistent between
+                #   Run Engine restarts. Keep the existing mechanism for metadata storage for now.
+                directory = os.path.expanduser("~/.config/bluesky/md")
+                os.makedirs(directory, exist_ok=True)
+                md = PersistentDict(directory)
+
+                self._RE = RunEngine(md)
                 self._re_namespace["RE"] = self._RE
 
                 bec = BestEffortCallback()

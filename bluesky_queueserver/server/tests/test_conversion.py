@@ -9,8 +9,8 @@ from bluesky_queueserver.server.conversion import filter_plan_descriptions
     ({"plan1": {"name": "plan1"},
       "plan2": {"name": "plan1"}},
 
-      {"plan1": {"name": "plan1"},
-       "plan2": {"name": "plan1"}}),
+     {"plan1": {"name": "plan1"},
+      "plan2": {"name": "plan1"}}),
 
     # Check recognition of 'int' scalar type
     ({"plan1": {"name": "plan1",
@@ -42,8 +42,22 @@ from bluesky_queueserver.server.conversion import filter_plan_descriptions
                      "custom": {
                          "description": "Description for parameter 'p1'.",
                          "annotation": "typing.List[float]",
-                     }}
-                ]}},
+                     }},
+                    {"name": "p2",
+                     "kind": "POSITIONAL_OR_KEYWORD",
+                     "annotation": "int",  # This is ignored, because custom annotation overrides it.
+                     "default": 10,
+                     "custom": {
+                         "description": "Description for parameter 'p2'.",
+                         "annotation": "List[float]",
+                     }},
+                    {"name": "p3",
+                     "default": 10,
+                     "custom": {
+                         "description": "Description for parameter 'p3'.",
+                     }},
+                ]},
+      },
      {"plan1": {"name": "plan1",
                 "description": "Description of Plan 1.",
                 "parameters": [
@@ -53,8 +67,20 @@ from bluesky_queueserver.server.conversion import filter_plan_descriptions
                      "type": "float",
                      "default": 10,
                      "is_list": True,
-                     "is_optional": True}
-                ]}},
+                     "is_optional": True},
+                    {"name": "p2",
+                     "description": "Description for parameter 'p2'.",
+                     "kind": "POSITIONAL_OR_KEYWORD",
+                     "type": "float",
+                     "default": 10,
+                     "is_list": True,
+                     "is_optional": True},
+                    {"name": "p3",
+                     "description": "Description for parameter 'p3'.",
+                     "default": 10,
+                     "is_optional": True},
+                ]},
+      },
      ),
 
     # Check enum

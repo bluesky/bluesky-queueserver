@@ -13,6 +13,11 @@ def filter_plan_descriptions(plans_source):
     ----------
     plan_source : dict
         Dictionary of plans: key - plan name, value - plan parameters.
+
+    Returns
+    -------
+    dict
+        Dictionary of plans with reduced set of parameters.
     """
 
     plans_filtered = {}
@@ -78,10 +83,11 @@ def filter_plan_descriptions(plans_source):
                             p["type"] = "str"
 
                 # Determine if the parameter is list
-                if re.search(r"^typing.list\[.+]$", an.lower()) or re.search(r"^list\[.+]$", an.lower()):
-                    p["is_list"] = True
-                else:
-                    p["is_list"] = False
+                if an:
+                    if re.search(r"^typing.list\[.+]$", an.lower()) or re.search(r"^list\[.+]$", an.lower()):
+                        p["is_list"] = True
+                    else:
+                        p["is_list"] = False
 
                 # Set the default value (optional) and decide if the parameter is optional
                 if "default" in param:

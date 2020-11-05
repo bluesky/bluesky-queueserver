@@ -1,6 +1,6 @@
 import pytest
 
-from ..server import validate_payload_keys, filter_plan_descriptions
+from ..server import validate_payload_keys
 
 
 # fmt: off
@@ -23,5 +23,3 @@ def test_validate_payload_keys(payload, req_keys, opt_keys, success):
     else:
         with pytest.raises(ValueError):
             validate_payload_keys(payload, required_keys=req_keys, optional_keys=opt_keys)
-
-

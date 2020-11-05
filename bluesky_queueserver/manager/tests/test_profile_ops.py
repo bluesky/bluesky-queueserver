@@ -887,12 +887,10 @@ def test_load_allowed_plans_and_devices_1(fln_existing_items, fln_user_groups, e
 
 _patch_junk_plan_and_device = """
 
-from ophyd import Device, EpicsMotor
-from ophyd import Component as Cpt
+from ophyd import Device
 
 class JunkDevice(Device):
-    x = Cpt(EpicsMotor, ':X')
-    y = Cpt(EpicsMotor, ':Y')
+    ...
 
 junk_device = JunkDevice('ABC', name='stage')
 

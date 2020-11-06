@@ -236,7 +236,7 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
                 raise exc_info[1].with_traceback(exc_info[2])
 
         # Discard RE and db from the profile namespace (if they exist).
-        if keep_re:
+        if not keep_re:
             nspace.pop("RE", None)
             nspace.pop("db", None)
     finally:

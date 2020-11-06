@@ -217,6 +217,31 @@ def test_load_profile_collection_4_fail(tmp_path):
         load_profile_collection(pc_path)
 
 
+@pytest.mark.parametrize("keep_re", [True, False])
+def test_load_profile_collection_5(tmp_path, keep_re):
+    """
+    Loading a copy of the default profile collection
+    """
+    pc_path = copy_default_profile_collection(tmp_path)
+
+    patch = """
+from bluesky import RunEngine
+RE = RunEngine({})
+from databroker import Broker
+db = Broker.named('temp')
+RE.subscribe(db.insert)
+"""
+    patch_first_startup_file(pc_path, patch)
+
+    nspace = load_profile_collection(pc_path, keep_re=keep_re)
+    if keep_re:
+        assert "RE" in nspace
+        assert "db" in nspace
+    else:
+        assert "RE" not in nspace
+        assert "db" not in nspace
+
+
 # ---------------------------------------------------------------------------------
 #                          Tests for '_process_plan'
 

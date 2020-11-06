@@ -69,6 +69,9 @@ class RunEngineManager(Process):
         self._ctx = None
         self._zmq_socket = None
         self._ip_zmq_server = "tcp://*:5555"
+        if config and ("zmq_addr" in config):
+            self._ip_zmq_server = config["zmq_addr"]
+        logger.info("Starting ZMQ server at '%s'", self._ip_zmq_server)
 
         self._plan_queue = None  # Object of class plan_queue_ops.PlanQueueOperations
 

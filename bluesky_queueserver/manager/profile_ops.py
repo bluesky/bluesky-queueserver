@@ -171,7 +171,7 @@ def _patch_profile(file_name):
     return tmp_fln
 
 
-def load_profile_collection(path, patch_profiles=True):
+def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
     """
     Load profile collection located at the specified path. The collection consists of
     .py files started with 'DD-', where D is a digit (e.g. 05-file.py). The files
@@ -236,8 +236,9 @@ def load_profile_collection(path, patch_profiles=True):
                 raise exc_info[1].with_traceback(exc_info[2])
 
         # Discard RE and db from the profile namespace (if they exist).
-        nspace.pop("RE", None)
-        nspace.pop("db", None)
+        if keep_re:
+            nspace.pop("RE", None)
+            nspace.pop("db", None)
     finally:
         try:
             if path_is_set:

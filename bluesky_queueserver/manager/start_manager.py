@@ -180,9 +180,12 @@ def start_manager():
     parser = argparse.ArgumentParser(
         description="Start a RE Manager", epilog=f"blueksy-queueserver version {__version__}"
     )
-    parser.add_argument("--kafka_topic", type=str, help="The kafka topic to publish to.")
     parser.add_argument(
-        "--kafka_server", type=str, help="Bootstrap server to connect to.", default="127.0.0.1:9092"
+        "--zmq_addr",
+        dest="zmq_addr",
+        type=str,
+        default="tcp://*:5555",
+        help="The address of ZMQ server.",
     )
     parser.add_argument(
         "--profile_collection",
@@ -208,6 +211,26 @@ def start_manager():
         "The path may be a relative path to the profile collection directory. "
         "If the path is a directory, then the default file name "
         "'user_group_permissions.yaml' is used.",
+    )
+    parser.add_argument("--kafka_topic", type=str, help="The kafka topic to publish to.")
+    parser.add_argument(
+        "--kafka_server", type=str, help="Bootstrap server to connect to.", default="127.0.0.1:9092"
+    )
+    parser.add_argument(
+        "--keep_re",
+        action="store_true",
+        help="Keep RE created in profile collection. If the flag is set, RE must be "
+        "created in the profile collection for the plans to run. RE will also "
+        "keep all its subscriptions. Also must be subscribed to the Data Broker "
+        "inside the profile collection, since '--databroker_config' argument "
+        "is ignored.",
+    )
+    parser.add_argument(
+        "--use_mpack",
+        action="store_true",
+        help="Use msgpack-based persistent storage for scan metadata. Currently this "
+        "is the preferred method to keep continuously incremented sequence of "
+        "Run IDs between restarts of RE.",
     )
     parser.add_argument(
         "--databroker_config",
@@ -240,6 +263,9 @@ def start_manager():
         # The default collection is the collection of simulated Ophyd devices
         #   and built-in Bluesky plans.
         pc_path = get_default_profile_collection_dir()
+
+    config_worker["keep_re"] = args.keep_re
+    config_worker["use_mpack"] = args.use_mpack
 
     config_worker["databroker"] = {}
     if args.databroker_config:
@@ -285,6 +311,8 @@ def start_manager():
     config_manager["existing_plans_and_devices_path"] = existing_pd_path
     config_worker["user_group_permissions_path"] = user_group_pd_path
     config_manager["user_group_permissions_path"] = user_group_pd_path
+
+    config_manager["zmq_addr"] = args.zmq_addr
 
     wp = WatchdogProcess(config_worker=config_worker, config_manager=config_manager)
     try:

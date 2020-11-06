@@ -500,7 +500,12 @@ class RunEngineWorker(Process):
             path = self._config["profile_collection_path"]
             logger.info("Loading beamline profile collection from directory '%s' ...", path)
             try:
-                self._re_namespace = load_profile_collection(path)
+                keep_re = self._config["keep_re"]
+                self._re_namespace = load_profile_collection(path, keep_re=keep_re)
+                if keep_re and ("RE" not in self._re_namespace):
+                    raise RuntimeError(
+                        "Run Engine is not created in the profile collection " "and 'keep_re' option is activated."
+                    )
                 self._existing_plans = plans_from_nspace(self._re_namespace)
                 self._existing_devices = devices_from_nspace(self._re_namespace)
                 logger.info("Beamline profile collection was loaded completed.")
@@ -531,29 +536,36 @@ class RunEngineWorker(Process):
                 # Make RE namespace available to the plan code.
                 global_user_namespace.set_user_namespace(user_ns=self._re_namespace, use_ipython=False)
 
-                # This code is temporarily copied from 'nslsii'.
-                # TODO: mechanism for tracking current Run ID so that it is persistent between
-                #   Run Engine restarts. Keep the existing mechanism for metadata storage for now.
-                directory = os.path.expanduser("~/.config/bluesky/md")
-                os.makedirs(directory, exist_ok=True)
-                md = PersistentDict(directory)
+                if self._config["keep_re"]:
+                    # Copy references from the namespace
+                    self._RE = self._re_namespace["RE"]
+                    self._db = self._re_namespace.get("RE", None)
+                else:
+                    # Instantiate a new Run Engine and Data Broker (if needed)
+                    md = {}
+                    if self._config["use_mpack"]:
+                        # This code is temporarily copied from 'nslsii' before better solution for keeping
+                        #   continuous sequence Run ID is found. TODO: continuous sequence of Run IDs.
+                        directory = os.path.expanduser("~/.config/bluesky/md")
+                        os.makedirs(directory, exist_ok=True)
+                        md = PersistentDict(directory)
 
-                self._RE = RunEngine(md)
-                self._re_namespace["RE"] = self._RE
+                    self._RE = RunEngine(md)
+                    self._re_namespace["RE"] = self._RE
 
-                bec = BestEffortCallback()
-                self._RE.subscribe(bec)
+                    bec = BestEffortCallback()
+                    self._RE.subscribe(bec)
 
-                # Subscribe RE to databroker if config file name is provided
-                self._db = None
-                if "databroker" in self._config:
-                    config_name = self._config["databroker"].get("config", None)
-                    if config_name:
-                        logger.info("Subscribing RE to Data Broker using configuration '%s'.", config_name)
-                        from databroker import Broker
+                    # Subscribe RE to databroker if config file name is provided
+                    self._db = None
+                    if "databroker" in self._config:
+                        config_name = self._config["databroker"].get("config", None)
+                        if config_name:
+                            logger.info("Subscribing RE to Data Broker using configuration '%s'.", config_name)
+                            from databroker import Broker
 
-                        self._db = Broker.named(config_name)
-                        self._RE.subscribe(self._db.insert)
+                            self._db = Broker.named(config_name)
+                            self._RE.subscribe(self._db.insert)
 
                 if "kafka" in self._config:
                     logger.info(

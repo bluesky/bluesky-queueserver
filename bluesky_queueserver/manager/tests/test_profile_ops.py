@@ -217,6 +217,224 @@ def test_load_profile_collection_4_fail(tmp_path):
         load_profile_collection(pc_path)
 
 
+# ---------------------------------------------------------------------------------
+#                          Tests for '_process_plan'
+
+
+def _pf1a(val1, val2):
+    """
+    Some function description.
+
+    Parameters
+    ----------
+    val1 : float
+        Description of the parameter Value 1.
+    val2 : list(str)
+        Description of the parameter Value 2.
+
+    Returns
+    -------
+    v : int
+        Description for the return statement
+    """
+    return int(val1 + int(val2[0]))
+
+
+def _pf1a1(val1, val2):
+    """Some function description.
+
+    Parameters
+    ----------
+    val1 : float
+        Description of the parameter Value 1.
+    val2 : list(str)
+        Description of the parameter Value 2.
+
+    Returns
+    -------
+    v : int
+        Description for the return statement
+    """
+    return int(val1 + int(val2[0]))
+
+
+# Docstring is incorrectly indented
+# fmt: off
+def _pf1a2(val1, val2):
+        """
+        Some function description.
+
+        Parameters
+        ----------
+        val1 : float
+            Description of the parameter Value 1.
+        val2 : list(str)
+            Description of the parameter Value 2.
+    
+        Returns
+        -------
+        v : int
+            Description for the return statement
+        """  # noqa E117
+        return int(val1 + int(val2[0]))
+# fmt: on
+
+
+# This test is 'artificial'. Make sure that the names preceded by '*' are still recognized.
+def _pf1a3(val1, val2):
+    """
+    Some function description.
+
+    Parameters
+    ----------
+    *val1 : float
+        Description of the parameter Value 1.
+    **val2 : list(str)
+        Description of the parameter Value 2.
+
+    Returns
+    -------
+    v : int
+        Description for the return statement
+    """
+    return int(val1 + int(val2[0]))
+
+
+_pf1a_processed = {
+    "description": "Some function description.",
+    "parameters": [
+        {
+            "name": "val1",
+            "description": "Description of the parameter Value 1.",
+        },
+        {
+            "name": "val2",
+            "description": "Description of the parameter Value 2.",
+        },
+    ],
+    "returns": {"description": "v : int\n    Description for the return statement"},
+}
+
+
+def _pf1b(val1, val2):
+    """
+    Returns
+    -------
+    int
+        Description for the return statement
+    """
+    return int(val1 + int(val2[0]))
+
+
+_pf1b_processed = {
+    "returns": {"description": "int\n    Description for the return statement"},
+}
+
+
+def _pf1c(val1, val2):
+    """
+    Returns
+    -------
+    Description for the return statement
+    """
+    return int(val1 + int(val2[0]))
+
+
+_pf1c_processed = {
+    "returns": {"description": "Description for the return statement"},
+}
+
+
+def _pf1d(val1, val2):
+    """
+    Returns
+    -------
+    int
+        Description for the return statement - Line 1
+        Description for the return statement - Line 2
+
+        Description for the return statement - Line 3
+
+    """
+    return int(val1 + int(val2[0]))
+
+
+_pf1d_processed = {
+    "returns": {
+        "description": "int\n    Description for the return statement - Line 1\n"
+        "    Description for the return statement - Line 2\n\n"
+        "    Description for the return statement - Line 3"
+    },
+}
+
+
+def _pf1e(val1, val2):
+    """
+    Parameters
+    ----------
+    val1 : float
+        Description of the parameter Value 1 - Line 1.
+        Description of the parameter Value 1 - Line 2.
+
+        Description of the parameter Value 1 - Line 3.
+    val2 : list(str)
+        Description of the parameter Value 2 - Line 1.
+        Description of the parameter Value 2 - Line 2.
+
+        Description of the parameter Value 2 - Line 3.
+
+    """
+    return int(val1 + int(val2[0]))
+
+
+_pf1e_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "description": "Description of the parameter Value 1 - Line 1.\n"
+            "Description of the parameter Value 1 - Line 2.\n\n"
+            "Description of the parameter Value 1 - Line 3.",
+        },
+        {
+            "name": "val2",
+            "description": "Description of the parameter Value 2 - Line 1.\n"
+            "Description of the parameter Value 2 - Line 2.\n\n"
+            "Description of the parameter Value 2 - Line 3.",
+        },
+    ],
+}
+
+
+# fmt: off
+@pytest.mark.parametrize("plan_func, plan_info_expected", [
+    (_pf1a, _pf1a_processed),
+    (_pf1a1, _pf1a_processed),
+    (_pf1a2, _pf1a_processed),
+    (_pf1a3, _pf1a_processed),
+    (_pf1b, _pf1b_processed),
+    (_pf1c, _pf1c_processed),
+    (_pf1d, _pf1d_processed),
+    (_pf1e, _pf1e_processed),
+])
+# fmt: on
+def test_process_plan_1(plan_func, plan_info_expected):
+    def compare_values(pf_info, plan_info_expected):
+        if isinstance(plan_info_expected, (tuple, list)):
+            for pfp, pfe in zip(pf_info, plan_info_expected):
+                compare_values(pfp, pfe)
+        elif isinstance(plan_info_expected, dict):
+            for name in plan_info_expected:
+                compare_values(pf_info[name], plan_info_expected[name])
+        else:
+            assert pf_info == plan_info_expected
+
+    pf_info = _process_plan(plan_func)
+    compare_values(pf_info, plan_info_expected)
+
+
+# ---------------------------------------------------------------------------------
+
+
 def test_plans_from_nspace():
     """
     Function 'plans_from_nspace' is extracting a subset of callable items from the namespace

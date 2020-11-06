@@ -80,6 +80,7 @@ existing_devices:
     module: ophyd.sim
 existing_plans:
   adaptive_scan:
+    description: Scan over one variable with adaptively tuned step size.
     name: adaptive_scan
     parameters:
     - annotation: ''
@@ -88,6 +89,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: list of 'readable' objects
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -98,6 +100,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: data field whose output is the focus of the adaptive tuning
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -108,6 +111,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: any 'settable' object (motor, temp controller, etc.)
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -118,6 +122,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: starting position of motor
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -128,6 +133,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: ending position of motor
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -138,6 +144,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: smallest step for fast-changing regions
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -148,6 +155,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: largest step for slow-chaning regions
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -158,6 +166,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: desired fractional change in detector signal between steps
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -168,6 +177,8 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: whether backward steps are allowed -- this is concern with some
+        motors
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -177,6 +188,8 @@ existing_plans:
         00 2e
       default: '0.8'
       default_pickled: 80 03 47 3f e9 99 99 99 99 99 9a 2e
+      description: threshold for going backward and rescanning a region, default is
+        0.8
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -186,6 +199,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -195,6 +209,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   count:
+    description: Take one or more readings from detectors.
     name: count
     parameters:
     - annotation: ''
@@ -203,6 +218,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: list of 'readable' objects
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -212,6 +228,10 @@ existing_plans:
         00 2e
       default: '1'
       default_pickled: 80 03 4b 01 2e
+      description: 'number of readings to take; default is 1
+
+
+        If None, capture data until canceled'
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -221,6 +241,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: Time delay in seconds between successive readings; default is 0.
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -230,6 +251,9 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: "hook for customizing action of inner loop (messages per step)\n\
+        Expected signature ::\n\n   def f(detectors: Iterable[OphydObj]) -> Generator[Msg]:\n\
+        \       ..."
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -239,6 +263,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -248,6 +273,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   fly:
+    description: Perform a fly scan with one or more 'flyers'.
     name: fly
     parameters:
     - annotation: ''
@@ -256,6 +282,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: objects that support the flyer interface
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -265,6 +292,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -273,7 +301,10 @@ existing_plans:
       annotation: ''
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
+      description: "msg : Msg\n    'kickoff', 'wait', 'complete, 'wait', 'collect'\
+        \ messages"
   grid_scan:
+    description: Scan over a mesh; each motor is on an independent trajectory.
     name: grid_scan
     parameters:
     - annotation: ''
@@ -282,6 +313,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: list of 'readable' objects
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -301,6 +333,18 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'which axes should be snaked, either ``False`` (do not snake any
+        axes),
+
+        ``True`` (snake all axes) or a list of axes to snake. "Snaking" an axis
+
+        is defined as following snake-like, winding trajectory instead of a
+
+        simple left-to-right trajectory. The elements of the list are motors
+
+        that are listed in `args`. The list must not contain the slowest
+
+        (first) motor, since it can''t be snaked.'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -310,6 +354,11 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'hook for customizing action of inner loop (messages per step).
+
+        See docstring of :func:`bluesky.plan_stubs.one_nd_step` (the default)
+
+        for details.'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -319,6 +368,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -328,6 +378,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   inner_product_scan:
+    description: null
     name: inner_product_scan
     parameters:
     - annotation: ''
@@ -383,6 +434,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   list_grid_scan:
+    description: Scan over a mesh; each motor is on an independent trajectory.
     name: list_grid_scan
     parameters:
     - annotation: ''
@@ -391,6 +443,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: list of 'readable' objects
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -401,6 +454,12 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: "patterned like (``motor1, position_list1,``\n                ``motor2,\
+        \ position_list2,``\n                ``motor3, position_list3,``\n       \
+        \         ``...,``\n                ``motorN, position_listN``)\n\nThe first\
+        \ motor is the \"slowest\", the outer loop. ``position_list``'s\nare lists\
+        \ of positions, all lists must have the same length. Motors\ncan be any 'settable'\
+        \ object (motor, temp controller, etc.)."
       kind:
         name: VAR_POSITIONAL
         value: 2
@@ -410,6 +469,18 @@ existing_plans:
         00 2e
       default: 'False'
       default_pickled: 80 03 89 2e
+      description: 'which axes should be snaked, either ``False`` (do not snake any
+        axes),
+
+        ``True`` (snake all axes) or a list of axes to snake. "Snaking" an axis
+
+        is defined as following snake-like, winding trajectory instead of a
+
+        simple left-to-right trajectory.The elements of the list are motors
+
+        that are listed in `args`. The list must not contain the slowest
+
+        (first) motor, since it can''t be snaked.'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -419,6 +490,11 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'hook for customizing action of inner loop (messages per step).
+
+        See docstring of :func:`bluesky.plan_stubs.one_nd_step` (the default)
+
+        for details.'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -428,6 +504,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -437,6 +514,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   list_scan:
+    description: Scan over one or more variables in steps simultaneously (inner product).
     name: list_scan
     parameters:
     - annotation: ''
@@ -445,6 +523,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: list of 'readable' objects
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -455,6 +534,10 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: "For one dimension, ``motor, [point1, point2, ....]``.\nIn general:\n\
+        \n.. code-block:: python\n\n    motor1, [point1, point2, ...],\n    motor2,\
+        \ [point1, point2, ...],\n    ...,\n    motorN, [point1, point2, ...]\n\n\
+        Motors can be any 'settable' object (motor, temp controller, etc.)"
       kind:
         name: VAR_POSITIONAL
         value: 2
@@ -464,6 +547,11 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'hook for customizing action of inner loop (messages per step)
+
+        Expected signature:
+
+        ``f(detectors, motor, step) -> plan (a generator)``'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -473,6 +561,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -482,6 +571,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   log_scan:
+    description: Scan over one variable in log-spaced steps.
     name: log_scan
     parameters:
     - annotation: ''
@@ -490,6 +580,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: list of 'readable' objects
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -500,6 +591,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: any 'settable' object (motor, temp controller, etc.)
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -510,6 +602,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: starting position of motor
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -520,6 +613,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: ending position of motor
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -530,6 +624,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: number of steps
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -539,6 +634,9 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'hook for customizing action of inner loop (messages per step)
+
+        Expected signature: ``f(detectors, motor, step)``'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -548,6 +646,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -557,6 +656,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   marked_up_count:
+    description: null
     name: marked_up_count
     parameters:
     - annotation: typing.List
@@ -623,6 +723,9 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: "List of motors to be moved into specified positions before the\
+        \ measurement\nAllowed devices:\n    'Motors': motor1, motor2\nKind: positional\
+        \ or keyword."
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -642,6 +745,8 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: "Detectors to use for measurement.\nAllowed devices:\n    'Detectors':\
+        \ det1, det2, det3\nKind: positional or keyword."
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -657,6 +762,12 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: 'Motor positions. The number of positions must be equal to the
+        number of the
+
+        motors.
+
+        Kind: positional or keyword.'
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -671,7 +782,9 @@ existing_plans:
       custom:
         annotation: typing.Generator[tuple, None, None]
         description: Yields a sequence of plan messages.
+      description: "tuple\n    Yields a sequence of plan messages."
   ramp_plan:
+    description: Take data while ramping one or more positioners.
     name: ramp_plan
     parameters:
     - annotation: ''
@@ -680,6 +793,12 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: 'plan to start the ramp.  This will be run inside of a open/close
+
+        run.
+
+
+        This plan must return a `ophyd.StatusBase` object.'
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -700,6 +819,12 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: 'generator which takes no input
+
+
+        This will be called for every data point.  This should create
+
+        one or more events.'
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -709,6 +834,7 @@ existing_plans:
         00 2e
       default: 'True'
       default_pickled: 80 03 88 2e
+      description: If True, add a pre data at beginning
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -718,6 +844,10 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'If not None, the maximum time the ramp can run.
+
+
+        In seconds'
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -727,6 +857,17 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'If not None, take data no faster than this.  If None, take
+
+        data as fast as possible
+
+
+        If running the inner plan takes longer than `period` than take
+
+        data with no dead time.
+
+
+        In seconds.'
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -745,6 +886,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   rel_adaptive_scan:
+    description: Relative scan over one variable with adaptively tuned step size.
     name: rel_adaptive_scan
     parameters:
     - annotation: ''
@@ -753,6 +895,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: list of 'readable' objects
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -763,6 +906,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: data field whose output is the focus of the adaptive tuning
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -773,6 +917,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: any 'settable' object (motor, temp controller, etc.)
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -783,6 +928,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: starting position of motor
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -793,6 +939,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: ending position of motor
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -803,6 +950,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: smallest step for fast-changing regions
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -813,6 +961,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: largest step for slow-chaning regions
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -823,6 +972,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: desired fractional change in detector signal between steps
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -833,6 +983,8 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: whether backward steps are allowed -- this is concern with some
+        motors
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -842,6 +994,8 @@ existing_plans:
         00 2e
       default: '0.8'
       default_pickled: 80 03 47 3f e9 99 99 99 99 99 9a 2e
+      description: threshold for going backward and rescanning a region, default is
+        0.8
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -851,6 +1005,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -860,6 +1015,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   rel_grid_scan:
+    description: Scan over a mesh relative to current position.
     name: rel_grid_scan
     parameters:
     - annotation: ''
@@ -868,6 +1024,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: list of 'readable' objects
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -887,6 +1044,18 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'which axes should be snaked, either ``False`` (do not snake any
+        axes),
+
+        ``True`` (snake all axes) or a list of axes to snake. "Snaking" an axis
+
+        is defined as following snake-like, winding trajectory instead of a
+
+        simple left-to-right trajectory. The elements of the list are motors
+
+        that are listed in `args`. The list must not contain the slowest
+
+        (first) motor, since it can''t be snaked.'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -896,6 +1065,11 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'hook for customizing action of inner loop (messages per step).
+
+        See docstring of :func:`bluesky.plan_stubs.one_nd_step` (the default)
+
+        for details.'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -905,6 +1079,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -914,6 +1089,10 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   rel_list_grid_scan:
+    description: 'Scan over a mesh; each motor is on an independent trajectory. Each
+      point is
+
+      relative to the current position.'
     name: rel_list_grid_scan
     parameters:
     - annotation: ''
@@ -922,6 +1101,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: list of 'readable' objects
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -932,6 +1112,12 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: "patterned like (``motor1, position_list1,``\n                ``motor2,\
+        \ position_list2,``\n                ``motor3, position_list3,``\n       \
+        \         ``...,``\n                ``motorN, position_listN``)\n\nThe first\
+        \ motor is the \"slowest\", the outer loop. ``position_list``'s\nare lists\
+        \ of positions, all lists must have the same length. Motors\ncan be any 'settable'\
+        \ object (motor, temp controller, etc.)."
       kind:
         name: VAR_POSITIONAL
         value: 2
@@ -941,6 +1127,18 @@ existing_plans:
         00 2e
       default: 'False'
       default_pickled: 80 03 89 2e
+      description: 'which axes should be snaked, either ``False`` (do not snake any
+        axes),
+
+        ``True`` (snake all axes) or a list of axes to snake. "Snaking" an axis
+
+        is defined as following snake-like, winding trajectory instead of a
+
+        simple left-to-right trajectory.The elements of the list are motors
+
+        that are listed in `args`. The list must not contain the slowest
+
+        (first) motor, since it can''t be snaked.'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -950,6 +1148,11 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'hook for customizing action of inner loop (messages per step).
+
+        See docstring of :func:`bluesky.plan_stubs.one_nd_step` (the default)
+
+        for details.'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -959,6 +1162,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -968,6 +1172,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   rel_list_scan:
+    description: Scan over one variable in steps relative to current position.
     name: rel_list_scan
     parameters:
     - annotation: ''
@@ -976,6 +1181,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: list of 'readable' objects
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -986,6 +1192,11 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: "For one dimension, ``motor, [point1, point2, ....]``.\nIn general:\n\
+        \n.. code-block:: python\n\n    motor1, [point1, point2, ...],\n    motor2,\
+        \ [point1, point2, ...],\n    ...,\n    motorN, [point1, point2, ...]\n\n\
+        Motors can be any 'settable' object (motor, temp controller, etc.)\npoint1,\
+        \ point2 etc are relative to the current location."
       kind:
         name: VAR_POSITIONAL
         value: 2
@@ -995,6 +1206,9 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'hook for customizing action of inner loop (messages per step)
+
+        Expected signature: ``f(detectors, motor, step)``'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1004,6 +1218,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1013,6 +1228,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   rel_log_scan:
+    description: Scan over one variable in log-spaced steps relative to current position.
     name: rel_log_scan
     parameters:
     - annotation: ''
@@ -1021,6 +1237,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: list of 'readable' objects
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1031,6 +1248,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: any 'settable' object (motor, temp controller, etc.)
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1041,6 +1259,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: starting position of motor
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1051,6 +1270,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: ending position of motor
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1061,6 +1281,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: number of steps
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1070,6 +1291,9 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'hook for customizing action of inner loop (messages per step)
+
+        Expected signature: ``f(detectors, motor, step)``'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1079,6 +1303,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1088,6 +1313,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   rel_scan:
+    description: Scan over one multi-motor trajectory relative to current position.
     name: rel_scan
     parameters:
     - annotation: ''
@@ -1096,6 +1322,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: list of 'readable' objects
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1106,6 +1333,10 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: "For one dimension, ``motor, start, stop``.\nIn general:\n\n..\
+        \ code-block:: python\n\n    motor1, start1, stop1,\n    motor2, start2, start2,\n\
+        \    ...,\n    motorN, startN, stopN,\n\nMotors can be any 'settable' object\
+        \ (motor, temp controller, etc.)"
       kind:
         name: VAR_POSITIONAL
         value: 2
@@ -1115,6 +1346,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: number of points
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1124,6 +1356,11 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'hook for customizing action of inner loop (messages per step).
+
+        See docstring of :func:`bluesky.plan_stubs.one_nd_step` (the default)
+
+        for details.'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1133,6 +1370,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1142,6 +1380,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   rel_spiral:
+    description: Relative spiral scan
     name: rel_spiral
     parameters:
     - annotation: ''
@@ -1160,6 +1399,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: any 'settable' object (motor, temp controller, etc.)
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1170,6 +1410,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: any 'settable' object (motor, temp controller, etc.)
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1180,6 +1421,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: x width of spiral
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1190,6 +1432,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: y width of spiral
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1200,6 +1443,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: Delta radius along the minor axis of the ellipse.
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1210,6 +1454,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: Number of theta steps
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1219,6 +1464,9 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'Delta radius along the major axis of the ellipse. If None, it
+
+        defaults to dr.'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1228,6 +1476,7 @@ existing_plans:
         00 2e
       default: '0.0'
       default_pickled: 80 03 47 00 00 00 00 00 00 00 00 2e
+      description: Tilt angle in radians, default 0.0
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1237,6 +1486,11 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'hook for customizing action of inner loop (messages per step).
+
+        See docstring of :func:`bluesky.plan_stubs.one_nd_step` (the default)
+
+        for details.'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1246,6 +1500,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1255,6 +1510,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   rel_spiral_fermat:
+    description: Relative fermat spiral scan
     name: rel_spiral_fermat
     parameters:
     - annotation: ''
@@ -1263,6 +1519,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: list of 'readable' objects
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1273,6 +1530,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: any 'settable' object (motor, temp controller, etc.)
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1283,6 +1541,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: any 'settable' object (motor, temp controller, etc.)
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1293,6 +1552,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: x width of spiral
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1303,6 +1563,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: y width of spiral
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1313,6 +1574,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: delta radius
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1323,6 +1585,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: radius gets divided by this
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1332,6 +1595,9 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'Delta radius along the major axis of the ellipse, if not specifed
+
+        defaults to dr'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1341,6 +1607,7 @@ existing_plans:
         00 2e
       default: '0.0'
       default_pickled: 80 03 47 00 00 00 00 00 00 00 00 2e
+      description: Tilt angle in radians, default 0.0
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1350,6 +1617,11 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'hook for customizing action of inner loop (messages per step).
+
+        See docstring of :func:`bluesky.plan_stubs.one_nd_step` (the default)
+
+        for details.'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1359,6 +1631,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1368,6 +1641,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   rel_spiral_square:
+    description: Relative square spiral scan, centered around current (x, y) position.
     name: rel_spiral_square
     parameters:
     - annotation: ''
@@ -1376,6 +1650,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: list of 'readable' objects
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1386,6 +1661,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: any 'settable' object (motor, temp controller, etc.)
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1396,6 +1672,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: any 'settable' object (motor, temp controller, etc.)
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1406,6 +1683,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: x width of spiral
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1416,6 +1694,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: y width of spiral
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1426,6 +1705,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: number of x axis points
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1436,6 +1716,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: Number of y axis points.
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1445,6 +1726,11 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'hook for cutomizing action of inner loop (messages per step).
+
+        See docstring of :func:`bluesky.plans.one_nd_step` (the default) for
+
+        details.'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1454,6 +1740,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1463,6 +1750,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   relative_inner_product_scan:
+    description: null
     name: relative_inner_product_scan
     parameters:
     - annotation: ''
@@ -1518,6 +1806,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   scan:
+    description: Scan over one multi-motor trajectory.
     name: scan
     parameters:
     - annotation: ''
@@ -1526,6 +1815,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: list of 'readable' objects
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1536,6 +1826,10 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: "For one dimension, ``motor, start, stop``.\nIn general:\n\n..\
+        \ code-block:: python\n\n    motor1, start1, stop1,\n    motor2, start2, start2,\n\
+        \    ...,\n    motorN, startN, stopN\n\nMotors can be any 'settable' object\
+        \ (motor, temp controller, etc.)"
       kind:
         name: VAR_POSITIONAL
         value: 2
@@ -1545,6 +1839,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: number of points
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1554,6 +1849,11 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'hook for customizing action of inner loop (messages per step).
+
+        See docstring of :func:`bluesky.plan_stubs.one_nd_step` (the default)
+
+        for details.'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1563,6 +1863,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1572,6 +1873,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   scan_nd:
+    description: Scan over an arbitrary N-dimensional trajectory.
     name: scan_nd
     parameters:
     - annotation: ''
@@ -1590,6 +1892,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: cycler.Cycler object mapping movable interfaces to positions
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1599,6 +1902,11 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'hook for customizing action of inner loop (messages per step).
+
+        See docstring of :func:`bluesky.plan_stubs.one_nd_step` (the default)
+
+        for details.'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1608,6 +1916,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1617,6 +1926,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   spiral:
+    description: Spiral scan, centered around (x_start, y_start)
     name: spiral
     parameters:
     - annotation: ''
@@ -1635,6 +1945,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: any 'settable' object (motor, temp controller, etc.)
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1645,6 +1956,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: any 'settable' object (motor, temp controller, etc.)
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1655,6 +1967,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: x center
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1665,6 +1978,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: y center
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1675,6 +1989,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: x width of spiral
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1685,6 +2000,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: y width of spiral
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1695,6 +2011,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: Delta radius along the minor axis of the ellipse.
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1705,6 +2022,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: Number of theta steps
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1714,6 +2032,10 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'Delta radius along the major axis of the ellipse. If None, defaults
+        to
+
+        dr.'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1723,6 +2045,7 @@ existing_plans:
         00 2e
       default: '0.0'
       default_pickled: 80 03 47 00 00 00 00 00 00 00 00 2e
+      description: Tilt angle in radians, default 0.0
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1732,6 +2055,11 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'hook for customizing action of inner loop (messages per step).
+
+        See docstring of :func:`bluesky.plan_stubs.one_nd_step` (the default)
+
+        for details.'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1741,6 +2069,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1750,6 +2079,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   spiral_fermat:
+    description: Absolute fermat spiral scan, centered around (x_start, y_start)
     name: spiral_fermat
     parameters:
     - annotation: ''
@@ -1758,6 +2088,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: list of 'readable' objects
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1768,6 +2099,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: any 'settable' object (motor, temp controller, etc.)
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1778,6 +2110,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: any 'settable' object (motor, temp controller, etc.)
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1788,6 +2121,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: x center
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1798,6 +2132,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: y center
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1808,6 +2143,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: x width of spiral
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1818,6 +2154,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: y width of spiral
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1828,6 +2165,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: delta radius
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1838,6 +2176,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: radius gets divided by this
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1847,6 +2186,9 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'Delta radius along the major axis of the ellipse, if not specifed
+
+        defaults to dr.'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1856,6 +2198,7 @@ existing_plans:
         00 2e
       default: '0.0'
       default_pickled: 80 03 47 00 00 00 00 00 00 00 00 2e
+      description: Tilt angle in radians, default 0.0
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1865,6 +2208,11 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'hook for customizing action of inner loop (messages per step).
+
+        See docstring of :func:`bluesky.plan_stubs.one_nd_step` (the default)
+
+        for details.'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1874,6 +2222,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1883,6 +2232,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   spiral_square:
+    description: Absolute square spiral scan, centered around (x_center, y_center)
     name: spiral_square
     parameters:
     - annotation: ''
@@ -1891,6 +2241,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: list of 'readable' objects
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1901,6 +2252,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: any 'settable' object (motor, temp controller, etc.)
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1911,6 +2263,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: any 'settable' object (motor, temp controller, etc.)
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1921,6 +2274,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: x center
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1931,6 +2285,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: y center
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1941,6 +2296,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: x width of spiral
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1951,6 +2307,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: y width of spiral
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1961,6 +2318,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: number of x axis points
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1971,6 +2329,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: Number of y axis points.
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -1980,6 +2339,11 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'hook for cutomizing action of inner loop (messages per step).
+
+        See docstring of :func:`bluesky.plans.one_nd_step` (the default) for
+
+        details.'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1989,6 +2353,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -1998,6 +2363,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   tune_centroid:
+    description: 'plan: tune a motor to the centroid of signal(motor)'
     name: tune_centroid
     parameters:
     - annotation: ''
@@ -2006,6 +2372,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: list of 'readable' objects
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -2016,6 +2383,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: detector field whose output is to maximize
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -2026,6 +2394,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: any 'settable' object (motor, temp controller, etc.)
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -2036,6 +2405,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: start of range
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -2046,6 +2416,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: 'end of range, note: start < stop'
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -2056,6 +2427,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: smallest step size to use.
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -2065,6 +2437,7 @@ existing_plans:
         00 2e
       default: '10'
       default_pickled: 80 03 4b 0a 2e
+      description: number of points with each traversal, default = 10
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -2074,6 +2447,10 @@ existing_plans:
         00 2e
       default: '3.0'
       default_pickled: 80 03 47 40 08 00 00 00 00 00 00 2e
+      description: 'used in calculating new range after each pass
+
+
+        note: step_factor > 1.0, default = 3'
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -2083,6 +2460,7 @@ existing_plans:
         00 2e
       default: 'False'
       default_pickled: 80 03 89 2e
+      description: if False (default), always scan from start to stop
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -2092,6 +2470,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -2101,6 +2480,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   tweak:
+    description: Move and motor and read a detector with an interactive prompt.
     name: tweak
     parameters:
     - annotation: ''
@@ -2119,6 +2499,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: data field whose output is the focus of the adaptive tuning
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -2139,6 +2520,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: initial suggestion for step size
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -2148,6 +2530,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -2157,6 +2540,7 @@ existing_plans:
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
         00 2e
   x2x_scan:
+    description: Relatively scan over two motors in a 2:1 ratio
     name: x2x_scan
     parameters:
     - annotation: ''
@@ -2165,6 +2549,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: list of 'readable' objects
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -2175,6 +2560,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: The second motor will move half as much as the first
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -2185,6 +2571,7 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: The second motor will move half as much as the first
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -2195,6 +2582,9 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: 'The relative limits of the first motor.  The second motor
+
+        will move between ``start / 2`` and ``stop / 2``'
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -2205,6 +2595,9 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
+      description: 'The relative limits of the first motor.  The second motor
+
+        will move between ``start / 2`` and ``stop / 2``'
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -2224,6 +2617,11 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: 'hook for cutomizing action of inner loop (messages per step).
+
+        See docstring of :func:`bluesky.plan_stubs.one_nd_step` (the default)
+
+        for details.'
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -2233,6 +2631,7 @@ existing_plans:
         00 2e
       default: None
       default_pickled: 80 03 4e 2e
+      description: metadata
       kind:
         name: KEYWORD_ONLY
         value: 3

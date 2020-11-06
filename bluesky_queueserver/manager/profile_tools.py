@@ -107,7 +107,7 @@ def set_user_ns(func):
             kwargs.update({"user_ns": user_ns})
             if is_ipython_in_sig:
                 kwargs.update({"ipython": ip})
-            yield from func(*args, **kwargs)
+            return (yield from func(*args, **kwargs))
 
     else:
 

@@ -1,6 +1,6 @@
 import pytest
 
-from bluesky_queueserver.server.conversion import filter_plan_descriptions
+from bluesky_queueserver.server.conversions import filter_plan_descriptions
 
 
 # fmt: off
@@ -113,6 +113,8 @@ from bluesky_queueserver.server.conversion import filter_plan_descriptions
 ])
 # fmt: on
 def test_filter_plan_descriptions_1(plans_in, plans_out_expected):
-
+    """
+    Function ``filter_plan_descriptions``. Basic test.
+    """
     plans_out = filter_plan_descriptions((plans_in))
     assert plans_out == plans_out_expected

@@ -4,7 +4,7 @@ from enum import Enum
 from fastapi import FastAPI, HTTPException
 
 from ..manager.comms import ZMQCommSendAsync
-from .conversion import filter_plan_descriptions
+from .conversions import filter_plan_descriptions
 
 logger = logging.getLogger(__name__)
 

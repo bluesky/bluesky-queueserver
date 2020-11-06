@@ -3,11 +3,44 @@ import re
 
 def filter_plan_descriptions(plans_source):
     """
-    Filter the descriptions of the allowed plan to make them easier to use by the web client.
-    There are some assumptions that are made when reducing complex types that are used
-    for parameter validation by the RE Manager to simple types. Those assumptions may not
-    always be valid, therefore operation of the function should always be validated when
-    working with the plans that require complex types.
+    Convert descriptions of the allowed plans to satisfy requirements of the web client.
+    The conversion accurately supports only simple data types: ``int``, ``float``, ``str``,
+    lists of ints, floats or strings (expressed as ``List[int]`` or ``typing.List[int]``),
+    enums and lists of enums. Enum can be specified in custom description of plan
+    parameter with enum values which are string or names of plans or devices.
+
+    The limitation on processed types is based on potential capabilities of the web client.
+    Complex type hints may also be processed correctly if the result could be expressed
+    in terms of the supported types. The performance of the conversion function must
+    be checked with the plans using complex types before deployement.
+
+    The converted plan parameters represent the following dictionary:
+
+    .. code-block:: python
+
+        {
+            "name": "<plan_name>",  # required
+            "description": "<plan_description>",  # optional
+            "parameters": {
+                "name": "<parameter_name>",  # required
+                "description": "<parameter_description>",  # optional
+                "kind": <parameter_kind>,  # e.g. POSITIONAL_OR_KEYWORD, optional
+                "type": <parameter_type>,  # "int", "float" or "str", optional
+                "enum": ["..", "..", ".."],  # List of enum values (strings) if the parameter is enum, optional
+                "is_list": True,  # True or False, optional
+                "default": <default_value>,  # Default value (if available), optional
+                "is_optional": True,  # True or False, indicates if the parameter is optional, optional
+                "min": <min_parameter_value>,  # optional
+                "max": <max_parameter_value>,  # optional
+                "step": <step_value>,  # optional
+            },
+        }
+
+    Missing ``type`` means that type is unknown. If the parameter is enum, then ``type`` is
+    always ``str``. Missing ``is_list`` means that it is unknown if the parameter accepts a list.
+    The parameter is optional (``is_optional is True``) if the default value is specified.
+    Step value may be specified in the custom parameter annotation if the value is discrete
+    and changes from ``min`` to ``max`` value with fixed ``step``.
 
     Parameters
     ----------

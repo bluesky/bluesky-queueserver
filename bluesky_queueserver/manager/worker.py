@@ -2,6 +2,7 @@ from multiprocessing import Process
 import threading
 import queue
 import time as ttime
+import os
 import asyncio
 from functools import partial
 import logging
@@ -477,13 +478,9 @@ class RunEngineWorker(Process):
         from bluesky.run_engine import get_bluesky_event_loop
         from bluesky.callbacks.best_effort import BestEffortCallback
         from bluesky_kafka import Publisher as kafkaPublisher
-        from databroker import Broker
+        from bluesky.utils import PersistentDict
 
         from .profile_tools import global_user_namespace
-
-        # TODO: subscribe to local databroker (currently there is no way to access
-        #    'temp' databroker from outside the process). Production version will use Kafka.
-        self._db = Broker.named("temp")
 
         # TODO: TC - Do you think that the following code may be included in RE.__init__()
         #   (for Python 3.8 and above)
@@ -503,7 +500,12 @@ class RunEngineWorker(Process):
             path = self._config["profile_collection_path"]
             logger.info("Loading beamline profile collection from directory '%s' ...", path)
             try:
-                self._re_namespace = load_profile_collection(path)
+                keep_re = self._config["keep_re"]
+                self._re_namespace = load_profile_collection(path, keep_re=keep_re)
+                if keep_re and ("RE" not in self._re_namespace):
+                    raise RuntimeError(
+                        "Run Engine is not created in the profile collection " "and 'keep_re' option is activated."
+                    )
                 self._existing_plans = plans_from_nspace(self._re_namespace)
                 self._existing_devices = devices_from_nspace(self._re_namespace)
                 logger.info("Beamline profile collection was loaded completed.")
@@ -534,13 +536,36 @@ class RunEngineWorker(Process):
                 # Make RE namespace available to the plan code.
                 global_user_namespace.set_user_namespace(user_ns=self._re_namespace, use_ipython=False)
 
-                self._RE = RunEngine({})
-                self._re_namespace["RE"] = self._RE
+                if self._config["keep_re"]:
+                    # Copy references from the namespace
+                    self._RE = self._re_namespace["RE"]
+                    self._db = self._re_namespace.get("RE", None)
+                else:
+                    # Instantiate a new Run Engine and Data Broker (if needed)
+                    md = {}
+                    if self._config["use_mpack"]:
+                        # This code is temporarily copied from 'nslsii' before better solution for keeping
+                        #   continuous sequence Run ID is found. TODO: continuous sequence of Run IDs.
+                        directory = os.path.expanduser("~/.config/bluesky/md")
+                        os.makedirs(directory, exist_ok=True)
+                        md = PersistentDict(directory)
 
-                bec = BestEffortCallback()
-                self._RE.subscribe(bec)
+                    self._RE = RunEngine(md)
+                    self._re_namespace["RE"] = self._RE
 
-                self._RE.subscribe(self._db.insert)
+                    bec = BestEffortCallback()
+                    self._RE.subscribe(bec)
+
+                    # Subscribe RE to databroker if config file name is provided
+                    self._db = None
+                    if "databroker" in self._config:
+                        config_name = self._config["databroker"].get("config", None)
+                        if config_name:
+                            logger.info("Subscribing RE to Data Broker using configuration '%s'.", config_name)
+                            from databroker import Broker
+
+                            self._db = Broker.named(config_name)
+                            self._RE.subscribe(self._db.insert)
 
                 if "kafka" in self._config:
                     logger.info(

@@ -4,7 +4,7 @@
    contain the root `toctree` directive.
 
 ===================================
- Bluesky-queueserver Documentation
+ Bluesky-Queueserver Documentation
 ===================================
 
 .. toctree::

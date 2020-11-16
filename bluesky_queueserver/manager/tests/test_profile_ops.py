@@ -849,7 +849,7 @@ def test_select_allowed_items(item_dict, allow_patterns, disallow_patterns, resu
     (None, None, True, False),
 ])
 # fmt: on
-def test_load_allowed_plans_and_devices(fln_existing_items, fln_user_groups, empty_dict, all_users):
+def test_load_allowed_plans_and_devices_1(fln_existing_items, fln_user_groups, empty_dict, all_users):
     """"""
     pc_path = get_default_profile_collection_dir()
 
@@ -883,6 +883,128 @@ def test_load_allowed_plans_and_devices(fln_existing_items, fln_user_groups, emp
             assert "admin" not in allowed_devices
             assert "test_user" not in allowed_plans
             assert "test_user" not in allowed_devices
+
+
+_patch_junk_plan_and_device = """
+
+from ophyd import Device
+
+class JunkDevice(Device):
+    ...
+
+junk_device = JunkDevice('ABC', name='stage')
+
+def junk_plan():
+    yield None
+
+"""
+
+
+_user_permissions_clear = """user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - null  # Allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - null  # Allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - ".*"  # A different way to allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - ".*"  # A different way to allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+"""
+
+_user_permissions_excluding_junk1 = """user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - null  # Allow all
+    forbidden_plans:
+      - "^junk_plan$"
+    allowed_devices:
+      - null  # Allow all
+    forbidden_devices:
+      - "^junk_device$"
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - ".*"  # A different way to allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - ".*"  # A different way to allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+"""
+
+_user_permissions_excluding_junk2 = """user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - "^(?!.*junk)"  # Allow all plans that don't contain 'junk' in their names
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - "^(?!.*junk)"  # Allow all devices that don't contain 'junk' in their names
+    forbidden_devices:
+      - null  # Nothing is forbidden
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - ".*"  # A different way to allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - ".*"  # A different way to allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("permissions_str, items_are_removed", [
+    (_user_permissions_clear, False),
+    (_user_permissions_excluding_junk1, True),
+    (_user_permissions_excluding_junk2, True),
+])
+# fmt: on
+def test_load_allowed_plans_and_devices_2(tmp_path, permissions_str, items_are_removed):
+    """
+    Tests if filtering settings for the "root" group are also applied to other groups.
+    The purpose of the "root" group is to filter junk from the list of existing devices and
+    plans.
+    """
+    pc_path = copy_default_profile_collection(tmp_path)
+    create_local_imports_dirs(pc_path)
+    patch_first_startup_file(pc_path, _patch_junk_plan_and_device)
+
+    # Generate list of plans and devices for the patched profile collection
+    gen_list_of_plans_and_devices(path=pc_path, overwrite=True)
+
+    permissions_fln = os.path.join(pc_path, "user_group_permissions.yaml")
+    with open(permissions_fln, "w") as f:
+        f.write(permissions_str)
+
+    plans_and_devices_fln = os.path.join(pc_path, "existing_plans_and_devices.yaml")
+
+    allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+        path_existing_plans_and_devices=plans_and_devices_fln,
+        path_user_group_permissions=permissions_fln,
+    )
+
+    if items_are_removed:
+        assert "junk_device" not in allowed_devices["root"]
+        assert "junk_device" not in allowed_devices["admin"]
+        assert "junk_plan" not in allowed_plans["root"]
+        assert "junk_plan" not in allowed_plans["admin"]
+    else:
+        assert "junk_device" in allowed_devices["root"]
+        assert "junk_device" in allowed_devices["admin"]
+        assert "junk_plan" in allowed_plans["root"]
+        assert "junk_plan" in allowed_plans["admin"]
 
 
 def _f1(a, b, c):

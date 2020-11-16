@@ -12,7 +12,7 @@ def filter_plan_descriptions(plans_source):
     The limitation on processed types is based on potential capabilities of the web client.
     Complex type hints may also be processed correctly if the result could be expressed
     in terms of the supported types. The performance of the conversion function must
-    be checked with the plans using complex types before deployement.
+    be checked with the plans using complex types before deployment.
 
     The converted plan parameters represent the following dictionary:
 

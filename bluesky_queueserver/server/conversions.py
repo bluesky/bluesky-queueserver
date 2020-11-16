@@ -57,7 +57,7 @@ def filter_plan_descriptions(plans_source):
     for p_name, p_items in plans_source.items():
 
         plan = dict()
-        # Plan name - mandatory (actually it is always equals 'pname')
+        # Plan name - mandatory (actually it always equals 'pname')
         plan["name"] = p_items["name"]
         # "description" is optional, don't include empty description.
         if "description" in p_items and p_items["description"]:

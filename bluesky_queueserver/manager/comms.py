@@ -511,9 +511,8 @@ class ZMQCommSendAsync:
         # Clear the buffer quickly after the socket is closed
         self._zmq_socket.setsockopt(zmq.LINGER, 100)
 
-        if self._zmq_socket.connect(self._zmq_server_address):
-            msg_err = f"Failed to connect to the server '{self._zmq_server_address}'"
-            raise RuntimeError(msg_err)
+        # Successful connection does not mean that the socket exists
+        self._zmq_socket.connect(self._zmq_server_address)
 
         logger.info("Connected to ZeroMQ server '%s'" % str(self._zmq_server_address))
 

@@ -87,7 +87,8 @@ def test_zmq_api_environment_open_close_2(re_manager):  # noqa F811
 
 def test_zmq_api_environment_open_close_3(re_manager):  # noqa F811
     """
-    Basic test for `environment_open` and `environment_close` methods.
+    Test for `environment_open` and `environment_close` methods.
+    Closing the environment while a plan is running.
     """
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True

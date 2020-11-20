@@ -149,7 +149,7 @@ class RunEngineManager(Process):
         elif self._manager_state is MState.CREATING_ENVIRONMENT:
             accepted, msg = False, "Manager is already in the process of creating the RE Worker environment."
         elif self._manager_state is not MState.IDLE:
-            accepted, msg = False, f"Manager state was {self._manager_state.value}"
+            accepted, msg = False, f"Manager state is not idle. Current state: {self._manager_state.value}"
         else:
             accepted, msg = True, ""
             self._manager_state = MState.CREATING_ENVIRONMENT
@@ -160,8 +160,12 @@ class RunEngineManager(Process):
         """
         Creates worker process.
         """
+        # Repeat the checks, since it is important for the manager to be in the correct state.
         if self._environment_exists:
             return False, "Rejected: RE Worker environment already exists"
+
+        if self._manager_state is not MState.IDLE and self._manager_state is not MState.CREATING_ENVIRONMENT:
+            return False, f"Manager state is {self._manager_state.value}"
 
         self._fut_manager_task_completed = self._loop.create_future()
 
@@ -199,9 +203,12 @@ class RunEngineManager(Process):
         elif self._manager_state is MState.CLOSING_ENVIRONMENT:
             accepted = False
             err_msg = "Manager is already in the process of closing the RE Worker environment."
+        elif self._manager_state is MState.EXECUTING_QUEUE:
+            accepted = False
+            err_msg = "Queue execution is in progress."
         elif self._manager_state != MState.IDLE:
             accepted = False
-            err_msg = "A plan is currently running"
+            err_msg = f"Manager state is not idle. Current state: {self._manager_state.value}"
         else:
             accepted = True
             self._manager_state = MState.CLOSING_ENVIRONMENT
@@ -213,12 +220,10 @@ class RunEngineManager(Process):
         """
         Closing of the RE Worker.
         """
+        # Repeat the checks, since it is important for the manager to be in the correct state.
         if not self._environment_exists:
             self._manager_state = MState.IDLE
             return False, "Environment does not exist"
-
-        if self._manager_state is MState.EXECUTING_QUEUE:
-            return False, "A plan is currently running"
 
         if self._manager_state is not MState.IDLE and self._manager_state is not MState.CLOSING_ENVIRONMENT:
             return False, f"Manager state was {self._manager_state.value}"

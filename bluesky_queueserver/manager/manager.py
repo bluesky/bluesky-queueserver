@@ -145,21 +145,29 @@ class RunEngineManager(Process):
         the command is accepted.
         """
         if self._environment_exists:
-            accepted = False
+            accepted, msg = False, "RE Worker environment already exists."
+        elif self._manager_state is MState.CREATING_ENVIRONMENT:
+            accepted, msg = False, "Manager is already in the process of creating the RE Worker environment."
+        elif self._manager_state is not MState.IDLE:
+            accepted, msg = False, f"Manager state is not idle. Current state: {self._manager_state.value}"
         else:
-            accepted = True
+            accepted, msg = True, ""
+            self._manager_state = MState.CREATING_ENVIRONMENT
             asyncio.ensure_future(self._execute_background_task(self._start_re_worker_task()))
-        return accepted
+        return accepted, msg
 
     async def _start_re_worker_task(self):
         """
         Creates worker process.
         """
+        # Repeat the checks, since it is important for the manager to be in the correct state.
         if self._environment_exists:
-            return False, "Rejected: environment already exists"
+            return False, "Rejected: RE Worker environment already exists"
+
+        if self._manager_state not in [MState.IDLE, MState.CREATING_ENVIRONMENT]:
+            return False, f"Manager state is {self._manager_state.value}"
 
         self._fut_manager_task_completed = self._loop.create_future()
-        self._manager_state = MState.CREATING_ENVIRONMENT
 
         try:
             success = await self._watchdog_start_re_worker()
@@ -192,11 +200,18 @@ class RunEngineManager(Process):
         if not self._environment_exists:
             accepted = False
             err_msg = "RE Worker environment does not exist."
+        elif self._manager_state is MState.CLOSING_ENVIRONMENT:
+            accepted = False
+            err_msg = "Manager is already in the process of closing the RE Worker environment."
+        elif self._manager_state is MState.EXECUTING_QUEUE:
+            accepted = False
+            err_msg = "Queue execution is in progress."
         elif self._manager_state != MState.IDLE:
             accepted = False
-            err_msg = "A plan is currently running"
+            err_msg = f"Manager state is not idle. Current state: {self._manager_state.value}"
         else:
             accepted = True
+            self._manager_state = MState.CLOSING_ENVIRONMENT
             err_msg = ""
             asyncio.ensure_future(self._execute_background_task(self._stop_re_worker_task()))
         return accepted, err_msg
@@ -205,11 +220,13 @@ class RunEngineManager(Process):
         """
         Closing of the RE Worker.
         """
+        # Repeat the checks, since it is important for the manager to be in the correct state.
         if not self._environment_exists:
-            return False, "Environment does not exists"
+            self._manager_state = MState.IDLE
+            return False, "Environment does not exist"
 
-        if self._manager_state != MState.IDLE:
-            return False, "A plan is currently running"
+        if self._manager_state not in [MState.IDLE, MState.CLOSING_ENVIRONMENT]:
+            return False, f"Manager state was {self._manager_state.value}"
 
         self._fut_manager_task_completed = self._loop.create_future()
 
@@ -220,12 +237,12 @@ class RunEngineManager(Process):
 
             self._manager_state = MState.CLOSING_ENVIRONMENT
             await self._fut_manager_task_completed  # TODO: timeout may be needed here
-            self._manager_state = MState.IDLE
 
             if not await self._confirm_re_worker_exit():
                 success = False
                 err_msg = "Failed to confirm closing of RE Worker thread"
 
+        self._manager_state = MState.IDLE
         return success, err_msg
 
     async def _kill_re_worker(self):
@@ -920,8 +937,7 @@ class RunEngineManager(Process):
         Creates RE environment: creates RE Worker process, starts and configures Run Engine.
         """
         logger.info("Opening the new RE environment ...")
-        success = await self._start_re_worker()
-        msg = "Environment already exists." if not success else ""
+        success, msg = await self._start_re_worker()
         return {"success": success, "msg": msg}
 
     async def _environment_close_handler(self, request):

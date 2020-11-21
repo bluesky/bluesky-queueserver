@@ -410,7 +410,7 @@ def test_http_server_open_environment_handler(re_manager, fastapi_server):  # no
     assert wait_for_environment_to_be_created(10), "Timeout"
 
     resp2 = _request_to_json("post", "/environment/open")
-    assert resp2 == {"success": False, "msg": "Environment already exists."}
+    assert resp2 == {"success": False, "msg": "RE Worker environment already exists."}
 
 
 def test_http_server_close_environment_handler(re_manager, fastapi_server):  # noqa F811

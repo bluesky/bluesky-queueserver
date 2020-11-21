@@ -31,6 +31,91 @@ _user, _user_group = "Testing Script", "admin"
 _existing_plans_and_devices_fln = "existing_plans_and_devices.yaml"
 _user_group_permissions_fln = "user_group_permissions.yaml"
 
+
+# =======================================================================================
+#                   Methods 'environment_open', 'environment_close'
+def test_zmq_api_environment_open_close_1(re_manager):  # noqa F811
+    """
+    Basic test for `environment_open` and `environment_close` methods.
+    """
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert resp1["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_created)
+
+    resp2, _ = zmq_single_request("environment_close")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+
+def test_zmq_api_environment_open_close_2(re_manager):  # noqa F811
+    """
+    Test for `environment_open` and `environment_close` methods.
+    Opening/closing the environment while it is being opened/closed.
+    Opening the environment that already exists.
+    Closing the environment that does not exist.
+    """
+    zmq_single_request("environment_open")
+    # Attempt to open the environment before the previous operation is completed
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is False
+    assert "in the process of creating the RE Worker environment" in resp1["msg"]
+
+    assert wait_for_condition(time=3, condition=condition_environment_created)
+
+    # Attempt to open the environment while it already exists
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is False
+    assert "RE Worker environment already exists" in resp2["msg"]
+
+    zmq_single_request("environment_close")
+    # The environment is being closed.
+    resp3, _ = zmq_single_request("environment_close")
+    assert resp3["success"] is False
+    assert "in the process of closing the RE Worker environment" in resp3["msg"]
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+    # The environment is already closed.
+    resp4, _ = zmq_single_request("environment_close")
+    assert resp4["success"] is False
+    assert "RE Worker environment does not exist" in resp4["msg"]
+
+
+def test_zmq_api_environment_open_close_3(re_manager):  # noqa F811
+    """
+    Test for `environment_open` and `environment_close` methods.
+    Closing the environment while a plan is running.
+    """
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert resp1["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_created)
+
+    # Start a plan
+    resp2, _ = zmq_single_request("queue_plan_add", {"plan": _plan3, "user": _user, "user_group": _user_group})
+    assert resp2["success"] is True
+    resp3, _ = zmq_single_request("queue_start")
+    assert resp3["success"] is True
+
+    # Try to close the environment while the plan is running
+    resp4, _ = zmq_single_request("environment_close")
+    assert resp4["success"] is False
+    assert "Queue execution is in progress" in resp4["msg"]
+
+    assert wait_for_condition(time=20, condition=condition_queue_processing_finished)
+
+    resp2, _ = zmq_single_request("environment_close")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+
 # =======================================================================================
 #                             Method 'queue_plan_add'
 

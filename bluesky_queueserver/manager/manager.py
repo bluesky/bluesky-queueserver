@@ -225,7 +225,7 @@ class RunEngineManager(Process):
             self._manager_state = MState.IDLE
             return False, "Environment does not exist"
 
-        if self._manager_state is not MState.IDLE and self._manager_state is not MState.CLOSING_ENVIRONMENT:
+        if self._manager_state not in [MState.IDLE, MState.CLOSING_ENVIRONMENT]:
             return False, f"Manager state was {self._manager_state.value}"
 
         self._fut_manager_task_completed = self._loop.create_future()

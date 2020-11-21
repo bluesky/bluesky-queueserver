@@ -164,7 +164,7 @@ class RunEngineManager(Process):
         if self._environment_exists:
             return False, "Rejected: RE Worker environment already exists"
 
-        if self._manager_state is not MState.IDLE and self._manager_state is not MState.CREATING_ENVIRONMENT:
+        if self._manager_state not in [MState.IDLE, MState.CREATING_ENVIRONMENT]:
             return False, f"Manager state is {self._manager_state.value}"
 
         self._fut_manager_task_completed = self._loop.create_future()

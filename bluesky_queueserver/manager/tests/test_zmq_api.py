@@ -58,11 +58,12 @@ def test_zmq_api_environment_open_close_2(re_manager):  # noqa F811
     Opening the environment that already exists.
     Closing the environment that does not exist.
     """
-    zmq_single_request("environment_open")
+    resp1a, _ = zmq_single_request("environment_open")
+    assert resp1a["success"] is True
     # Attempt to open the environment before the previous operation is completed
-    resp1, _ = zmq_single_request("environment_open")
-    assert resp1["success"] is False
-    assert "in the process of creating the RE Worker environment" in resp1["msg"]
+    resp1b, _ = zmq_single_request("environment_open")
+    assert resp1b["success"] is False
+    assert "in the process of creating the RE Worker environment" in resp1b["msg"]
 
     assert wait_for_condition(time=3, condition=condition_environment_created)
 
@@ -71,11 +72,12 @@ def test_zmq_api_environment_open_close_2(re_manager):  # noqa F811
     assert resp2["success"] is False
     assert "RE Worker environment already exists" in resp2["msg"]
 
-    zmq_single_request("environment_close")
+    resp3a, _ = zmq_single_request("environment_close")
+    assert resp3a["success"] is True
     # The environment is being closed.
-    resp3, _ = zmq_single_request("environment_close")
-    assert resp3["success"] is False
-    assert "in the process of closing the RE Worker environment" in resp3["msg"]
+    resp3b, _ = zmq_single_request("environment_close")
+    assert resp3b["success"] is False
+    assert "in the process of closing the RE Worker environment" in resp3b["msg"]
 
     assert wait_for_condition(time=3, condition=condition_environment_closed)
 
@@ -164,8 +166,10 @@ def test_zmq_api_queue_plan_add_2(re_manager, pos, pos_result, success):  # noqa
 
     # Create the queue with 2 entries
     params1 = {"plan": plan1, "user": _user, "user_group": _user_group}
-    zmq_single_request("queue_plan_add", params1)
-    zmq_single_request("queue_plan_add", params1)
+    resp0a, _ = zmq_single_request("queue_plan_add", params1)
+    assert resp0a["success"] is True
+    resp0b, _ = zmq_single_request("queue_plan_add", params1)
+    assert resp0b["success"] is True
 
     # Add another entry at the specified position
     params2 = {"plan": plan2, "user": _user, "user_group": _user_group}
@@ -197,9 +201,11 @@ def test_zmq_api_queue_plan_add_3(re_manager):  # noqa F811
     plan3 = {"name": "count", "args": [["det2"]]}
 
     params = {"plan": plan1, "user": _user, "user_group": _user_group}
-    zmq_single_request("queue_plan_add", params)
+    resp0a, _ = zmq_single_request("queue_plan_add", params)
+    assert resp0a["success"] is True
     params = {"plan": plan2, "user": _user, "user_group": _user_group}
-    zmq_single_request("queue_plan_add", params)
+    resp0b, _ = zmq_single_request("queue_plan_add", params)
+    assert resp0b["success"] is True
 
     base_plans = zmq_single_request("queue_get")[0]["queue"]
 
@@ -248,9 +254,11 @@ def test_zmq_api_queue_plan_add_4(re_manager):  # noqa F811
     Try inserting plans before and after the running plan
     """
     params = {"plan": _plan3, "user": _user, "user_group": _user_group}
-    zmq_single_request("queue_plan_add", params)
+    resp0a, _ = zmq_single_request("queue_plan_add", params)
+    assert resp0a["success"] is True
     params = {"plan": _plan3, "user": _user, "user_group": _user_group}
-    zmq_single_request("queue_plan_add", params)
+    resp0b, _ = zmq_single_request("queue_plan_add", params)
+    assert resp0b["success"] is True
 
     base_plans = zmq_single_request("queue_get")[0]["queue"]
     uid = base_plans[0]["plan_uid"]
@@ -452,9 +460,10 @@ def test_zmq_api_queue_plan_get_remove_1(re_manager):  # noqa F811
     """
     Get and remove a plan from the back of the queue
     """
-    zmq_single_request("queue_plan_add", {"plan": _plan1, "user": _user, "user_group": _user_group})
-    zmq_single_request("queue_plan_add", {"plan": _plan2, "user": _user, "user_group": _user_group})
-    zmq_single_request("queue_plan_add", {"plan": _plan3, "user": _user, "user_group": _user_group})
+    plans = [_plan1, _plan2, _plan3]
+    for plan in plans:
+        resp0, _ = zmq_single_request("queue_plan_add", {"plan": plan, "user": _user, "user_group": _user_group})
+        assert resp0["success"] is True
 
     resp1, _ = zmq_single_request("queue_get")
     assert resp1["queue"] != []
@@ -508,7 +517,8 @@ def test_zmq_api_queue_plan_get_remove_2(re_manager, pos, pos_result, success): 
         {"plan_uid": "three", "name": "count", "args": [["det1", "det2"]]},
     ]
     for plan in plans:
-        zmq_single_request("queue_plan_add", {"plan": plan, "user": _user, "user_group": _user_group})
+        resp0, _ = zmq_single_request("queue_plan_add", {"plan": plan, "user": _user, "user_group": _user_group})
+        assert resp0["success"] is True
 
     # Remove entry at the specified position
     params = {} if pos is None else {"pos": pos}
@@ -545,9 +555,10 @@ def test_zmq_api_queue_plan_get_remove_3(re_manager):  # noqa F811
     """
     Get and remove elements using plan UID. Successful and failing cases.
     """
-    zmq_single_request("queue_plan_add", {"plan": _plan3, "user": _user, "user_group": _user_group})
-    zmq_single_request("queue_plan_add", {"plan": _plan2, "user": _user, "user_group": _user_group})
-    zmq_single_request("queue_plan_add", {"plan": _plan1, "user": _user, "user_group": _user_group})
+    plans = [_plan3, _plan2, _plan1]
+    for plan in plans:
+        resp0, _ = zmq_single_request("queue_plan_add", {"plan": plan, "user": _user, "user_group": _user_group})
+        assert resp0["success"] is True
 
     resp1, _ = zmq_single_request("queue_get")
     plans_in_queue = resp1["queue"]
@@ -663,7 +674,8 @@ def test_zmq_api_queue_plan_get_remove_4_failing(re_manager):  # noqa F811
 def test_zmq_api_move_plan_1(re_manager, params, src, order, success, msg):  # noqa: F811
     plans = [_plan1, _plan2, _plan3]
     for plan in plans:
-        zmq_single_request("queue_plan_add", {"plan": plan, "user": _user, "user_group": _user_group})
+        resp0, _ = zmq_single_request("queue_plan_add", {"plan": plan, "user": _user, "user_group": _user_group})
+        assert resp0["success"] is True
 
     resp1, _ = zmq_single_request("queue_get")
     queue = resp1["queue"]
@@ -698,3 +710,14 @@ def test_zmq_api_move_plan_1(re_manager, params, src, order, success, msg):  # n
     else:
         assert resp2["success"] is False
         assert msg in resp2["msg"]
+
+
+"""
+@pytest.mark.parametrize("a", [0] * 100)
+def test_qserver_communication_reliability(re_manager, a):  # noqa: F811
+    for i in range(10):
+        print(f"i={i}")
+        resp0, _ = zmq_single_request("status")
+        assert resp0["manager_state"] == "idle"
+        print(f"status: {resp0}")
+"""

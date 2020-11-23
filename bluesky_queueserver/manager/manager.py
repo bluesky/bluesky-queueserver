@@ -1237,6 +1237,12 @@ class RunEngineManager(Process):
             await self._zmq_send(msg_out)
 
             if self._manager_stopping:
+                # The pause is needed for reliable execution of unit tests. When unit tests
+                #   are executed with GitHub actions, the socket is often destroyed before
+                #   the confirmation message is delivered via ZMQ, causing tests to fail with
+                #   substantial probability.
+                await asyncio.sleep(0.1)
+
                 # This should stop RE Worker if no plan is currently running
                 success, _ = await self._stop_re_worker_task()  # Quitting RE Manager
                 if not success and self._environment_exists:

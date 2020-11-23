@@ -712,9 +712,12 @@ def test_zmq_api_move_plan_1(re_manager, params, src, order, success, msg):  # n
         assert msg in resp2["msg"]
 
 
-@pytest.mark.parametrize("a", [0] * 1000)
+"""
+@pytest.mark.parametrize("a", [0] * 100)
 def test_qserver_communication_reliability(re_manager, a):  # noqa: F811
     for i in range(10):
         print(f"i={i}")
         resp0, _ = zmq_single_request("status")
         assert resp0["manager_state"] == "idle"
+        print(f"status: {resp0}")
+"""

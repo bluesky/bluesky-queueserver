@@ -565,6 +565,8 @@ class RunEngineWorker(Process):
                             from databroker import Broker
 
                             self._db = Broker.named(config_name)
+                            self._re_namespace["db"] = self._db
+
                             self._RE.subscribe(self._db.insert)
 
                 if "kafka" in self._config:

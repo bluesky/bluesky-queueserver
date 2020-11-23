@@ -27,5 +27,5 @@ jobs:
         pip list
     - name: Test with pytest
       run: |
-        coverage run -m pytest -vv
+        coverage run -m pytest -vv -k test_qserver_communication_reliability
         coverage report -m

@@ -115,7 +115,7 @@ def get_reduced_state_info():
 
 
 def condition_manager_idle(msg):
-    return msg["manager_state"] == "idle"
+    return ("manager_state" in msg) and (msg["manager_state"] == "idle")
 
 
 def condition_manager_paused(msg):
@@ -123,11 +123,11 @@ def condition_manager_paused(msg):
 
 
 def condition_environment_created(msg):
-    return msg["worker_environment_exists"]
+    return msg["worker_environment_exists"] and (msg["manager_state"] == "idle")
 
 
 def condition_environment_closed(msg):
-    return not msg["worker_environment_exists"]
+    return (not msg["worker_environment_exists"]) and (msg["manager_state"] == "idle")
 
 
 def condition_queue_processing_finished(msg):
@@ -209,7 +209,7 @@ class ReManager:
         except subprocess.TimeoutExpired:
             return False
 
-    def stop_manager(self, timeout=5):
+    def stop_manager(self, timeout=10):
         """
         Attempt to exit the subprocess that is running manager in orderly way and kill it
         after timeout.
@@ -222,17 +222,19 @@ class ReManager:
             Timeout in seconds.
         """
         if self._p:
-            # Try to stop the manager in a nice way first by sending the command
-            zmq_single_request(method="manager_stop", params=None)
             try:
+                # Try to stop the manager in a nice way first by sending the command
+                resp, _ = zmq_single_request(method="manager_stop", params=None)
+                assert resp["success"] is True, f"Request to stop the manager failed: {resp['msg']}."
+
                 self._p.wait(timeout)
                 clear_redis_pool()
 
-            except subprocess.TimeoutExpired:
+            except Exception as ex:
                 # The manager is not responsive, so just kill the process.
                 self._p.kill()
                 clear_redis_pool()
-                assert False, "RE Manager failed to stop"
+                assert False, f"RE Manager failed to stop: {str(ex)}"
 
             self._p = None
 
@@ -243,6 +245,10 @@ def re_manager():
     Start RE Manager as a subprocess. Tests will communicate with RE Manager via ZeroMQ.
     """
     re = ReManager()
+
+    # Wait until RE Manager is started
+    assert wait_for_condition(time=10, condition=condition_manager_idle), "Timeout: RE Manager failed to start."
+
     yield re  # Nothing to return
     re.stop_manager()
 
@@ -255,5 +261,9 @@ def re_manager_pc_copy(tmp_path):
     """
     pc_path = copy_default_profile_collection(tmp_path)
     re = ReManager(["-p", pc_path])
+
+    # Wait until RE Manager is started
+    assert wait_for_condition(time=10, condition=condition_manager_idle), "Timeout: RE Manager failed to start."
+
     yield re, pc_path  # Location of the copy of the default profile collection.
     re.stop_manager()

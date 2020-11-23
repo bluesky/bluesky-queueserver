@@ -1250,7 +1250,7 @@ class RunEngineManager(Process):
                 await self._watchdog_manager_stopping()
                 self._comm_to_watchdog.stop()
                 self._comm_to_worker.stop()
-                self._zmq_socket.close()
+                self._zmq_socket.close(linger=1000)
                 logger.info("RE Manager was stopped by ZMQ command.")
                 break
 

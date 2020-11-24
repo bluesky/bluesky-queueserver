@@ -321,7 +321,7 @@ def test_zmq_api_queue_plan_add_5(re_manager):  # noqa: F811
 
 def test_zmq_api_queue_plan_add_6(re_manager):  # noqa: F811
     """
-    Add instruction ('queue_stop') to the queue. Execute the queue.
+    Add instruction ('queue_stop') to the queue.
     """
 
     params1a = {"plan": _plan1, "user": _user, "user_group": _user_group}

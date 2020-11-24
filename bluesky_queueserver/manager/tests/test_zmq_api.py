@@ -17,6 +17,7 @@ from ._common import (
     condition_queue_processing_finished,
     get_queue_state,
     condition_environment_closed,
+    condition_manager_idle,
 )
 from ._common import re_manager, re_manager_pc_copy  # noqa: F401
 
@@ -24,6 +25,7 @@ from ._common import re_manager, re_manager_pc_copy  # noqa: F401
 _plan1 = {"name": "count", "args": [["det1", "det2"]]}
 _plan2 = {"name": "scan", "args": [["det1", "det2"], "motor", -1, 1, 10]}
 _plan3 = {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 5, "delay": 1}}
+_instruction_stop = {"action": "queue_stop"}
 
 # User name and user group name used throughout most of the tests.
 _user, _user_group = "Testing Script", "admin"
@@ -317,7 +319,33 @@ def test_zmq_api_queue_plan_add_5(re_manager):  # noqa: F811
     assert resp1["plan"]["plan_uid"] != plan1["plan_uid"]
 
 
-def test_zmq_api_queue_plan_add_6_fail(re_manager):  # noqa F811
+def test_zmq_api_queue_plan_add_6(re_manager):  # noqa: F811
+    """
+    Add instruction ('queue_stop') to the queue. Execute the queue.
+    """
+
+    params1a = {"plan": _plan1, "user": _user, "user_group": _user_group}
+    resp1a, _ = zmq_single_request("queue_plan_add", params1a)
+    assert resp1a["success"] is True, f"resp={resp1a}"
+
+    params1 = {"instruction": _instruction_stop, "user": _user, "user_group": _user_group}
+    resp1, _ = zmq_single_request("queue_plan_add", params1)
+    assert resp1["success"] is True, f"resp={resp1}"
+    assert resp1["msg"] == ""
+    assert resp1["instruction"]["action"] == "queue_stop"
+
+    params1c = {"plan": _plan2, "user": _user, "user_group": _user_group}
+    resp1c, _ = zmq_single_request("queue_plan_add", params1c)
+    assert resp1c["success"] is True, f"resp={resp1c}"
+
+    resp2, _ = zmq_single_request("queue_get")
+    assert len(resp2["queue"]) == 3
+    assert resp2["queue"][0]["item_type"] == "plan"
+    assert resp2["queue"][1]["item_type"] == "instruction"
+    assert resp2["queue"][2]["item_type"] == "plan"
+
+
+def test_zmq_api_queue_plan_add_7_fail(re_manager):  # noqa F811
 
     # Unknown plan name
     plan1 = {"name": "count_test", "args": [["det1", "det2"]]}
@@ -355,7 +383,9 @@ def test_zmq_api_queue_plan_add_6_fail(re_manager):  # noqa F811
     params6 = {"user": _user, "user_group": "no_such_group"}
     resp6, _ = zmq_single_request("queue_plan_add", params6)
     assert resp6["success"] is False
-    assert "no plan is specified" in resp6["msg"]
+    assert "plan" not in resp6
+    assert "instruction" not in resp6
+    assert "Incorrect request format: request contains no item info." in resp6["msg"]
 
     # Valid plan
     plan7 = {"name": "count", "args": [["det1", "det2"]]}
@@ -710,6 +740,81 @@ def test_zmq_api_move_plan_1(re_manager, params, src, order, success, msg):  # n
     else:
         assert resp2["success"] is False
         assert msg in resp2["msg"]
+
+
+# =======================================================================================
+#                 Tests for different scenarios of queue execution
+
+
+def test_zmq_api_queue_execution_1(re_manager):  # noqa: F811
+    """
+    Execution of a queue that contains an instruction ('queue_stop').
+    """
+
+    # Instruction STOP
+    params1a = {"instruction": _instruction_stop, "user": _user, "user_group": _user_group}
+    resp1a, _ = zmq_single_request("queue_plan_add", params1a)
+    assert resp1a["success"] is True, f"resp={resp1a}"
+    assert resp1a["msg"] == ""
+    assert resp1a["instruction"]["action"] == "queue_stop"
+
+    # Plan
+    params1b = {"plan": _plan1, "user": _user, "user_group": _user_group}
+    resp1b, _ = zmq_single_request("queue_plan_add", params1b)
+    assert resp1b["success"] is True, f"resp={resp1b}"
+
+    # Instruction STOP
+    params1c = {"instruction": _instruction_stop, "user": _user, "user_group": _user_group}
+    resp1c, _ = zmq_single_request("queue_plan_add", params1c)
+    assert resp1c["success"] is True, f"resp={resp1c}"
+    assert resp1c["msg"] == ""
+    assert resp1c["instruction"]["action"] == "queue_stop"
+
+    # Plan
+    params1d = {"plan": _plan2, "user": _user, "user_group": _user_group}
+    resp1d, _ = zmq_single_request("queue_plan_add", params1d)
+    assert resp1d["success"] is True, f"resp={resp1d}"
+
+    # The queue contains only a single instruction (stop the queue).
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    resp2a, _ = zmq_single_request("status")
+    assert resp2a["plans_in_queue"] == 4
+    assert resp2a["plans_in_history"] == 0
+
+    resp3, _ = zmq_single_request("queue_start")
+    assert resp3["success"] is True
+
+    assert wait_for_condition(time=5, condition=condition_manager_idle)
+
+    resp3a, _ = zmq_single_request("status")
+    assert resp3a["plans_in_queue"] == 3
+    assert resp3a["plans_in_history"] == 0
+
+    resp4, _ = zmq_single_request("queue_start")
+    assert resp4["success"] is True
+
+    assert wait_for_condition(time=5, condition=condition_manager_idle)
+
+    resp4a, _ = zmq_single_request("status")
+    assert resp4a["plans_in_queue"] == 1
+    assert resp4a["plans_in_history"] == 1
+
+    resp5, _ = zmq_single_request("queue_start")
+    assert resp5["success"] is True
+
+    assert wait_for_condition(time=5, condition=condition_queue_processing_finished)
+
+    resp5a, _ = zmq_single_request("status")
+    assert resp5a["plans_in_queue"] == 0
+    assert resp5a["plans_in_history"] == 2
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
 """

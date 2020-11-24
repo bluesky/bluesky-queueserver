@@ -168,8 +168,9 @@ def test_http_server_queue_plan_add_handler_6_fail(re_manager, fastapi_server): 
     resp1 = _request_to_json("post", "/queue/plan/add", json={})
     assert resp1["success"] is False
     assert resp1["qsize"] is None
-    assert resp1["plan"] == {}
-    assert "no plan is specified" in resp1["msg"]
+    assert "plan" not in resp1
+    assert "instruction" not in resp1
+    assert "Incorrect request format: request contains no item info." in resp1["msg"]
 
 
 def test_http_server_queue_plan_get_remove_handler_1(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811

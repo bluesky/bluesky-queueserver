@@ -879,7 +879,7 @@ class RunEngineManager(Process):
             item["plan_uid"] = PlanQueueOperations.new_plan_uid()
 
             # Adding plan to queue may raise an exception
-            item, qsize = await self._plan_queue.add_plan_to_queue(
+            item, qsize = await self._plan_queue.add_item_to_queue(
                 item, pos=pos, before_uid=before_uid, after_uid=after_uid
             )
             success = True

@@ -23,9 +23,10 @@ class PlanQueueOperations:
         await pq.start()
 
         # Fill queue
-        await pq.add_plan_to_queue(<plan1>)
-        await pq.add_plan_to_queue(<plan2>)
-        await pq.add_plan_to_queue(<plan3>)
+        await pq.add_item_to_queue(<plan1>)
+        await pq.add_item_to_queue(<plan2>)
+        await pq.add_item_to_queue(<instruction1>)
+        await pq.add_item_to_queue(<plan3>)
 
         # Number of plans in the queue
         qsize = await pq.get_plan_queue_size()
@@ -508,9 +509,9 @@ class PlanQueueOperations:
         async with self._lock:
             return await self._pop_plan_from_queue(pos=pos, uid=uid)
 
-    async def _add_plan_to_queue(self, plan, *, pos=None, before_uid=None, after_uid=None):
+    async def _add_item_to_queue(self, item, *, pos=None, before_uid=None, after_uid=None):
         """
-        See ``self.add_plan_to_queue()`` method.
+        See ``self.add_item_to_queue()`` method.
         """
         if (pos is not None) and (before_uid is not None or after_uid is not None):
             raise ValueError("Ambiguous parameters: plan position and UID is specified")
@@ -522,10 +523,10 @@ class PlanQueueOperations:
 
         pos = pos if pos is not None else "back"
 
-        if "plan_uid" not in plan:
-            plan = self.set_new_plan_uuid(plan)
+        if "plan_uid" not in item:
+            item = self.set_new_plan_uuid(item)
         else:
-            self._verify_plan(plan)
+            self._verify_plan(item)
 
         qsize0 = await self._get_plan_queue_size()
         if (before_uid is not None) or (after_uid is not None):
@@ -540,74 +541,74 @@ class PlanQueueOperations:
                     raise IndexError("Can not insert a plan in the queue before a currently running plan.")
                 else:
                     # Push to the plan front of the queue (after the running plan).
-                    qsize = await self._r_pool.lpush(self._name_plan_queue, json.dumps(plan))
+                    qsize = await self._r_pool.lpush(self._name_plan_queue, json.dumps(item))
             else:
-                plan_to_displace = self._uid_dict_get_plan(uid)
+                item_to_displace = self._uid_dict_get_plan(uid)
                 before = uid == before_uid
                 qsize = await self._r_pool.linsert(
-                    self._name_plan_queue, json.dumps(plan_to_displace), json.dumps(plan), before=before
+                    self._name_plan_queue, json.dumps(item_to_displace), json.dumps(item), before=before
                 )
         elif pos == "back" or (isinstance(pos, int) and pos >= qsize0):
-            qsize = await self._r_pool.rpush(self._name_plan_queue, json.dumps(plan))
+            qsize = await self._r_pool.rpush(self._name_plan_queue, json.dumps(item))
         elif pos == "front" or (isinstance(pos, int) and (pos == 0 or pos <= -qsize0)):
-            qsize = await self._r_pool.lpush(self._name_plan_queue, json.dumps(plan))
+            qsize = await self._r_pool.lpush(self._name_plan_queue, json.dumps(item))
         elif isinstance(pos, int):
             # Put the position in the range
-            plan_to_displace = await self._get_plan(pos=pos)
-            if plan_to_displace:
+            item_to_displace = await self._get_plan(pos=pos)
+            if item_to_displace:
                 qsize = await self._r_pool.linsert(
-                    self._name_plan_queue, json.dumps(plan_to_displace), json.dumps(plan), before=True
+                    self._name_plan_queue, json.dumps(item_to_displace), json.dumps(item), before=True
                 )
             else:
                 raise RuntimeError(f"Could not find an existing plan at {pos}. Queue size: {qsize0}")
         else:
             raise ValueError(f"Parameter 'pos' has incorrect value: pos='{str(pos)}' (type={type(pos)})")
 
-        self._uid_dict_add(plan)
-        return plan, qsize
+        self._uid_dict_add(item)
+        return item, qsize
 
-    async def add_plan_to_queue(self, plan, *, pos=None, before_uid=None, after_uid=None):
+    async def add_item_to_queue(self, item, *, pos=None, before_uid=None, after_uid=None):
         """
-        Add the plan to the back of the queue. If position is integer, it is
-        clipped to fit within the range of meaningful indices. For the index
-        too large or too low, the plan is pushed to the front or the back of the queue.
+        Add an item to the queue. By default, the item is added to the back of the queue.
+        If position is integer, it is clipped to fit within the range of meaningful indices.
+        For the index too large or too low, the plan is pushed to the front or the back of the queue.
 
         Parameters
         ----------
-        plan: dict
-            Plan represented as a dictionary of parameters
+        item: dict
+            Item (plan or instruction) represented as a dictionary of parameters
 
         pos: int, str or None
             Integer that specifies the position index, "front" or "back".
-            If ``pos`` is in the range ``1..qsize-1`` the plan is inserted
-            to the specified position and plans at positions ``pos..qsize-1``
+            If ``pos`` is in the range ``1..qsize-1`` the item is inserted
+            to the specified position and items at positions ``pos..qsize-1``
             are shifted by one position to the right. If ``-qsize<pos<0`` the
-            plan is inserted at the positon counting from the back of the queue
+            item is inserted at the positon counted from the back of the queue
             (-1 - the last element of the queue). If ``pos>=qsize``,
             the plan is added to the back of the queue. If ``pos==0`` or
             ``pos<=-qsize``, the plan is pushed to the front of the queue.
 
         before_uid: str or None
-            If UID is specified, then the plan is inserted before the plan with UID.
+            If UID is specified, then the item is inserted before the plan with UID.
             ``before_uid`` has precedence over ``after_uid``.
 
         after_uid: str or None
-            If UID is specified, then the plan is inserted before the plan with UID.
+            If UID is specified, then the item is inserted before the plan with UID.
 
         Returns
         -------
         dict, int
-            The dictionary that contains a plan that was added and the new size of the queue.
+            The dictionary that contains the item that was added and the new size of the queue.
 
         Raises
         ------
         ValueError
             Incorrect value of the parameter ``pos`` (typically unrecognized string).
         TypeError
-            Incorrect type of ``plan`` (should be dict)
+            Incorrect type of ``item`` (should be dict)
         """
         async with self._lock:
-            return await self._add_plan_to_queue(plan, pos=pos, before_uid=before_uid, after_uid=after_uid)
+            return await self._add_item_to_queue(item, pos=pos, before_uid=before_uid, after_uid=after_uid)
 
     async def _move_plan(self, *, pos=None, uid=None, pos_dest=None, before_uid=None, after_uid=None):
         """
@@ -633,15 +634,15 @@ class PlanQueueOperations:
         try:
             if uid is not None:
                 src_txt = f"UID '{uid}'"
-                plan_source = await self._get_plan(uid=uid)
+                item_source = await self._get_plan(uid=uid)
             else:
                 src_txt = f"position {pos}"
                 src_by_index = True
-                plan_source = await self._get_plan(pos=pos)
+                item_source = await self._get_plan(pos=pos)
         except Exception as ex:
             raise IndexError(f"Source plan ({src_txt}) was not found: {str(ex)}.")
 
-        uid_source = plan_source["plan_uid"]
+        uid_source = item_source["plan_uid"]
 
         # Find the destination plan
         dest_txt, before = "", True
@@ -650,10 +651,10 @@ class PlanQueueOperations:
                 uid_dest = before_uid if before_uid else after_uid
                 before = uid_dest == before_uid
                 dest_txt = f"UID '{uid_dest}'"
-                plan_dest = await self._get_plan(uid=uid_dest)
+                item_dest = await self._get_plan(uid=uid_dest)
             else:
                 dest_txt = f"position {pos_dest}"
-                plan_dest = await self._get_plan(pos=pos_dest)
+                item_dest = await self._get_plan(pos=pos_dest)
 
                 # Find the index of the source in the most efficient way
                 src_index = pos if src_by_index else (await self._get_index_by_uid(uid=uid))
@@ -678,19 +679,19 @@ class PlanQueueOperations:
         #   so we convert it to UID, but we can do it for the case of UID addressing as well)
         #   In case of positional addressing 'before' is True, so the source is going to be
         #   inserted in place of destination.
-        uid_dest = plan_dest["plan_uid"]
+        uid_dest = item_dest["plan_uid"]
 
         # If source and destination point to the same plan, then do nothing,
         #   but consider it a valid operation.
         if uid_source != uid_dest:
-            plan, _ = await self._pop_plan_from_queue(uid=uid_source)
+            item, _ = await self._pop_plan_from_queue(uid=uid_source)
             kw = {"before_uid": uid_dest} if before else {"after_uid": uid_dest}
-            kw.update({"plan": plan})
-            plan, qsize = await self._add_plan_to_queue(**kw)
+            kw.update({"item": item})
+            item, qsize = await self._add_item_to_queue(**kw)
         else:
-            plan = plan_dest
+            item = item_dest
             qsize = await self._get_plan_queue_size()
-        return plan, qsize
+        return item, qsize
 
     async def move_plan(self, *, pos=None, uid=None, pos_dest=None, before_uid=None, after_uid=None):
         """

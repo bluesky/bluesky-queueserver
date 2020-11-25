@@ -83,13 +83,13 @@ class PlanQueueOperations:
         """
         pq = await self._get_queue()
 
-        def verify_plan(item):
+        def verify_item(item):
             # The criteria may be changed.
             return "plan_uid" in item
 
         items_to_remove = []
         for item in pq:
-            if not verify_plan(item):
+            if not verify_item(item):
                 items_to_remove.append(item)
 
         for item in items_to_remove:
@@ -97,8 +97,8 @@ class PlanQueueOperations:
 
         # Clean running plan info also (on the development computer it may contain garbage)
         item = await self._get_running_item_info()
-        if item and not verify_plan(item):
-            await self._clear_running_plan_info()
+        if item and not verify_item(item):
+            await self._clear_running_item_info()
 
     async def _delete_pool_entries(self):
         """
@@ -117,30 +117,30 @@ class PlanQueueOperations:
         async with self._lock:
             await self._delete_pool_entries()
 
-    def _verify_plan_type(self, plan):
+    def _verify_item_type(self, item):
         """
-        Check that the plan is a dictionary.
+        Check that the item (plan) is a dictionary.
         """
-        if not isinstance(plan, dict):
-            raise TypeError(f"Parameter 'plan' should be a dictionary: '{plan}', (type '{type(plan)}')")
+        if not isinstance(item, dict):
+            raise TypeError(f"Parameter 'item' should be a dictionary: '{item}', (type '{type(item)}')")
 
-    def _verify_plan(self, plan):
+    def _verify_item(self, item):
         """
-        Verify that plan structure is valid enough to be put in the queue.
-        Current checks: plan is a dictionary, ``plan_uid`` key is present, Plan with the UID is not in
+        Verify that item (plan) structure is valid enough to be put in the queue.
+        Current checks: item is a dictionary, ``plan_uid`` key is present, Plan with the UID is not in
         the queue or currently running.
         """
-        self._verify_plan_type(plan)
+        self._verify_item_type(item)
         # Verify plan UID
-        if "plan_uid" not in plan:
-            raise ValueError("Plan does not have UID.")
-        if self._is_uid_in_dict(plan["plan_uid"]):
-            raise RuntimeError(f"Plan with UID {plan['plan_uid']} is already in the queue")
+        if "plan_uid" not in item:
+            raise ValueError("Item does not have UID.")
+        if self._is_uid_in_dict(item["plan_uid"]):
+            raise RuntimeError(f"Item with UID {item['plan_uid']} is already in the queue")
 
     @staticmethod
-    def new_plan_uid():
+    def new_item_uid():
         """
-        Generate UID for a plan.
+        Generate UID for an item (plan).
         """
         return str(uuid.uuid4())
 
@@ -158,8 +158,8 @@ class PlanQueueOperations:
         dict
             Plan with new UID.
         """
-        self._verify_plan_type(plan)
-        plan["plan_uid"] = self.new_plan_uid()
+        self._verify_item_type(plan)
+        plan["plan_uid"] = self.new_item_uid()
         return plan
 
     async def _get_index_by_uid(self, *, uid):
@@ -300,9 +300,9 @@ class PlanQueueOperations:
         """
         await self._r_pool.set(self._name_running_plan, json.dumps(plan))
 
-    async def _clear_running_plan_info(self):
+    async def _clear_running_item_info(self):
         """
-        Clear info on the currently running plan in Redis.
+        Clear info on the currently running item (plan) in Redis.
         """
         await self._set_running_item_info({})
 
@@ -526,7 +526,7 @@ class PlanQueueOperations:
         if "plan_uid" not in item:
             item = self.set_new_plan_uuid(item)
         else:
-            self._verify_plan(item)
+            self._verify_item(item)
 
         qsize0 = await self._get_queue_size()
         if (before_uid is not None) or (after_uid is not None):
@@ -859,7 +859,7 @@ class PlanQueueOperations:
         if await self._is_item_running():
             plan = await self._get_running_item_info()
             plan["exit_status"] = exit_status
-            await self._clear_running_plan_info()
+            await self._clear_running_item_info()
             self._uid_dict_remove(plan["plan_uid"])
             await self._add_plan_to_history(plan)
         else:
@@ -894,7 +894,7 @@ class PlanQueueOperations:
         if await self._is_item_running():
             plan = await self._get_running_item_info()
             plan["exit_status"] = exit_status
-            await self._clear_running_plan_info()
+            await self._clear_running_item_info()
             await self._r_pool.lpush(self._name_plan_queue, json.dumps(plan))
             self._uid_dict_update(plan)
             await self._add_plan_to_history(plan)

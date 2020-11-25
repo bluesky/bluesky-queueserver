@@ -876,7 +876,7 @@ class RunEngineManager(Process):
             item["user_group"] = user_group
 
             # Always generate a new UID for the added plan!!!
-            item["plan_uid"] = PlanQueueOperations.new_plan_uid()
+            item["plan_uid"] = PlanQueueOperations.new_item_uid()
 
             # Adding plan to queue may raise an exception
             item, qsize = await self._plan_queue.add_item_to_queue(

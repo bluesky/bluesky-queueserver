@@ -310,7 +310,7 @@ def test_zmq_api_queue_plan_add_5(re_manager):  # noqa: F811
     plan1 = {"name": "count", "args": [["det1", "det2"]]}
 
     # Set plan UID. This UID is expected to be replaced when the plan is added
-    plan1["plan_uid"] = PlanQueueOperations.new_plan_uid()
+    plan1["plan_uid"] = PlanQueueOperations.new_item_uid()
 
     params1 = {"plan": plan1, "user": _user, "user_group": _user_group}
     resp1, _ = zmq_single_request("queue_plan_add", params1)

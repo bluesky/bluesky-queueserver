@@ -5,7 +5,7 @@ import copy
 from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
 
 
-errmsg_wrong_plan_type = "Parameter 'plan' should be a dictionary"
+errmsg_wrong_plan_type = "Parameter 'item' should be a dictionary"
 
 
 @pytest.fixture
@@ -38,7 +38,7 @@ def test_running_plan_info(pq):
 
         assert await pq.is_item_running() is True
 
-        await pq._clear_running_plan_info()
+        await pq._clear_running_item_info()
         assert await pq.get_running_item_info() == {}
         assert await pq.is_item_running() is False
 
@@ -88,26 +88,26 @@ def test_queue_clean(pq, plan_running, plans, result_running, result_plans):
                           (50, False),
                           ("abc", False)])
 # fmt: on
-def test_verify_plan_type(pq, plan, result):
+def test_verify_item_type(pq, plan, result):
     if result:
-        pq._verify_plan_type(plan)
+        pq._verify_item_type(plan)
     else:
         with pytest.raises(TypeError, match=errmsg_wrong_plan_type):
-            pq._verify_plan_type(plan)
+            pq._verify_item_type(plan)
 
 
 # fmt: off
 @pytest.mark.parametrize(
     "plan, result, errmsg",
-    [({"a": 10}, False, "Plan does not have UID"),
+    [({"a": 10}, False, "Item does not have UID"),
      ([10, 20], False, errmsg_wrong_plan_type),
      ({"plan_uid": "one"}, True, ""),
-     ({"plan_uid": "two"}, False, "Plan with UID .+ is already in the queue"),
-     ({"plan_uid": "three"}, False, "Plan with UID .+ is already in the queue")])
+     ({"plan_uid": "two"}, False, "Item with UID .+ is already in the queue"),
+     ({"plan_uid": "three"}, False, "Item with UID .+ is already in the queue")])
 # fmt: on
-def test_verify_plan(pq, plan, result, errmsg):
+def test_verify_item(pq, plan, result, errmsg):
     """
-    Tests for method ``_verify_plan()``.
+    Tests for method ``_verify_item()``.
     """
     # Set two existiing plans and then set one of them as running
     existing_plans = [{"plan_uid": "two"}, {"plan_uid": "three"}]
@@ -126,17 +126,17 @@ def test_verify_plan(pq, plan, result, errmsg):
     asyncio.run(set_plans())
 
     if result:
-        pq._verify_plan(plan)
+        pq._verify_item(plan)
     else:
         with pytest.raises(Exception, match=errmsg):
-            pq._verify_plan(plan)
+            pq._verify_item(plan)
 
 
-def test_new_plan_uid(pq):
+def test_new_item_uid(pq):
     """
-    Smoke test for the method ``_new_plan_uid()``.
+    Smoke test for the method ``new_item_uid()``.
     """
-    assert isinstance(pq.new_plan_uid(), str)
+    assert isinstance(pq.new_item_uid(), str)
 
 
 # fmt: off
@@ -464,7 +464,7 @@ def test_add_item_to_queue_3_fail(pq):
         # Duplicate plan UID
         plan = {"plan_uid": "abc", "name": "a"}
         await pq.add_item_to_queue(plan)
-        with pytest.raises(RuntimeError, match="Plan with UID .+ is already in the queue"):
+        with pytest.raises(RuntimeError, match="Item with UID .+ is already in the queue"):
             await pq.add_item_to_queue(plan)
 
         # Ambiguous parameters (position and UID is passed)

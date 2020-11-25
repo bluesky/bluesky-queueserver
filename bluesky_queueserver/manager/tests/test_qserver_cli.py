@@ -735,9 +735,9 @@ def test_queue_item_add_6_fail(re_manager, params, exit_code):  # noqa F811
     (None, 3, 2, False),
 ])
 # fmt: on
-def test_queue_plan_get_remove(re_manager, pos, uid_ind, pos_result, success):  # noqa F811
+def test_queue_item_get_remove(re_manager, pos, uid_ind, pos_result, success):  # noqa F811
     """
-    Tests for ``queue_plan_get`` and ``queue_plan_remove`` requests.
+    Tests for ``queue_item_get`` and ``queue_plan_remove`` requests.
     """
     plans = [
         "{'name':'count', 'args':[['det1']]}",
@@ -761,8 +761,8 @@ def test_queue_plan_get_remove(re_manager, pos, uid_ind, pos_result, success):  
         uid = uids_1[uid_ind]
         args = ["-p", uid]
 
-    # Testing 'queue_plan_get'. ONLY THE RETURN CODE IS TESTED.
-    res = subprocess.call(["qserver", "-c", "queue_plan_get", *args])
+    # Testing 'queue_item_get'. ONLY THE RETURN CODE IS TESTED.
+    res = subprocess.call(["qserver", "-c", "queue_item_get", *args])
     if success:
         assert res == 0
     else:
@@ -808,9 +808,9 @@ def test_queue_plan_get_remove(re_manager, pos, uid_ind, pos_result, success):  
 
 ])
 # fmt: on
-def test_queue_plan_get_move(re_manager, params, result_order, exit_code):  # noqa F811
+def test_queue_item_get_move(re_manager, params, result_order, exit_code):  # noqa F811
     """
-    Tests for ``queue_plan_get`` and ``queue_plan_remove`` requests.
+    Tests for ``queue_item_get`` and ``queue_plan_remove`` requests.
     """
     plans = [
         "{'name':'count', 'args':[['det1']]}",
@@ -832,7 +832,7 @@ def test_queue_plan_get_move(re_manager, params, result_order, exit_code):  # no
         if isinstance(p, int):
             params[n] = uids_1[p]
 
-    # Testing 'queue_plan_get'. ONLY THE RETURN CODE IS TESTED.
+    # Testing 'queue_item_get'. ONLY THE RETURN CODE IS TESTED.
     assert subprocess.call(["qserver", "-c", "queue_plan_move", "-p", *params]) == exit_code
 
     queue_2 = get_queue()["queue"]

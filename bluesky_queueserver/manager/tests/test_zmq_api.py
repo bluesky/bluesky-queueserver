@@ -483,10 +483,10 @@ def test_zmq_api_plans_allowed_and_devices_allowed_3_fail(re_manager, params, me
 
 
 # =======================================================================================
-#                      Method 'queue_plan_get', 'queue_plan_remove'
+#                      Method 'queue_item_get', 'queue_plan_remove'
 
 
-def test_zmq_api_queue_plan_get_remove_1(re_manager):  # noqa F811
+def test_zmq_api_queue_item_get_remove_1(re_manager):  # noqa F811
     """
     Get and remove a plan from the back of the queue
     """
@@ -501,7 +501,7 @@ def test_zmq_api_queue_plan_get_remove_1(re_manager):  # noqa F811
     assert resp1["running_plan"] == {}
 
     # Get the last plan from the queue
-    resp2, _ = zmq_single_request("queue_plan_get")
+    resp2, _ = zmq_single_request("queue_item_get")
     assert resp2["success"] is True
     assert resp2["plan"]["name"] == _plan3["name"]
     assert resp2["plan"]["args"] == _plan3["args"]
@@ -536,7 +536,7 @@ def test_zmq_api_queue_plan_get_remove_1(re_manager):  # noqa F811
     (-100, 0, False),
 ])
 # fmt: on
-def test_zmq_api_queue_plan_get_remove_2(re_manager, pos, pos_result, success):  # noqa F811
+def test_zmq_api_queue_item_get_remove_2(re_manager, pos, pos_result, success):  # noqa F811
     """
     Get and remove elements using element position in the queue.
     """
@@ -554,7 +554,7 @@ def test_zmq_api_queue_plan_get_remove_2(re_manager, pos, pos_result, success): 
     params = {} if pos is None else {"pos": pos}
 
     # Testing '/queue/plan/get'
-    resp1, _ = zmq_single_request("queue_plan_get", params)
+    resp1, _ = zmq_single_request("queue_item_get", params)
     assert resp1["success"] is success
     if success:
         assert resp1["plan"]["args"] == plans[pos_result]["args"]
@@ -581,7 +581,7 @@ def test_zmq_api_queue_plan_get_remove_2(re_manager, pos, pos_result, success): 
     assert resp3["running_plan"] == {}
 
 
-def test_zmq_api_queue_plan_get_remove_3(re_manager):  # noqa F811
+def test_zmq_api_queue_item_get_remove_3(re_manager):  # noqa F811
     """
     Get and remove elements using plan UID. Successful and failing cases.
     """
@@ -596,7 +596,7 @@ def test_zmq_api_queue_plan_get_remove_3(re_manager):  # noqa F811
 
     # Get and then remove plan 2 from the queue
     uid = plans_in_queue[1]["plan_uid"]
-    resp2a, _ = zmq_single_request("queue_plan_get", {"uid": uid})
+    resp2a, _ = zmq_single_request("queue_item_get", {"uid": uid})
     assert resp2a["plan"]["plan_uid"] == plans_in_queue[1]["plan_uid"]
     assert resp2a["plan"]["name"] == plans_in_queue[1]["name"]
     assert resp2a["plan"]["args"] == plans_in_queue[1]["args"]
@@ -618,7 +618,7 @@ def test_zmq_api_queue_plan_get_remove_3(re_manager):  # noqa F811
 
     ttime.sleep(1)
     uid = plans_in_queue[0]["plan_uid"]
-    resp5a, _ = zmq_single_request("queue_plan_get", {"uid": uid})
+    resp5a, _ = zmq_single_request("queue_item_get", {"uid": uid})
     assert resp5a["success"] is False
     assert "is currently running" in resp5a["msg"]
     resp5b, _ = zmq_single_request("queue_plan_remove", {"uid": uid})
@@ -626,7 +626,7 @@ def test_zmq_api_queue_plan_get_remove_3(re_manager):  # noqa F811
     assert "Can not remove a plan which is currently running" in resp5b["msg"]
 
     uid = "nonexistent"
-    resp6a, _ = zmq_single_request("queue_plan_get", {"uid": uid})
+    resp6a, _ = zmq_single_request("queue_item_get", {"uid": uid})
     assert resp6a["success"] is False
     assert "not in the queue" in resp6a["msg"]
     resp6b, _ = zmq_single_request("queue_plan_remove", {"uid": uid})
@@ -635,7 +635,7 @@ def test_zmq_api_queue_plan_get_remove_3(re_manager):  # noqa F811
 
     # Remove the last entry
     uid = plans_in_queue[2]["plan_uid"]
-    resp7a, _ = zmq_single_request("queue_plan_get", {"uid": uid})
+    resp7a, _ = zmq_single_request("queue_item_get", {"uid": uid})
     assert resp7a["success"] is True
     resp7b, _ = zmq_single_request("queue_plan_remove", {"uid": uid})
     assert resp7b["success"] is True
@@ -654,12 +654,12 @@ def test_zmq_api_queue_plan_get_remove_3(re_manager):  # noqa F811
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_queue_plan_get_remove_4_failing(re_manager):  # noqa F811
+def test_zmq_api_queue_item_get_remove_4_failing(re_manager):  # noqa F811
     """
     Failing cases that are not tested in other places.
     """
     # Ambiguous parameters
-    resp1, _ = zmq_single_request("queue_plan_get", {"pos": 5, "uid": "some_uid"})
+    resp1, _ = zmq_single_request("queue_item_get", {"pos": 5, "uid": "some_uid"})
     assert resp1["success"] is False
     assert "Ambiguous parameters" in resp1["msg"]
 

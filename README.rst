@@ -236,14 +236,14 @@ The plans can also be addressed by UID. Remove the plan with <uid>::
   qserver -c queue_plan_remove -p '<uid>'
   http POST http://localhost:60610/queue/plan/remove uid:='<uid>'
 
-Plans can be read from the queue without changing it. `queue_plan_get` requests are formatted identically to
+Plans can be read from the queue without changing it. `queue_item_get` requests are formatted identically to
 `queue_plan_remove` requests::
 
-  qserver -c queue_plan_get
-  qserver -c queue_plan_get -p back
-  qserver -c queue_plan_get -p front
-  qserver -c queue_plan_get -p -2
-  qserver -c queue_plan_get -p '<uid>'
+  qserver -c queue_item_get
+  qserver -c queue_item_get -p back
+  qserver -c queue_item_get -p front
+  qserver -c queue_item_get -p -2
+  qserver -c queue_item_get -p '<uid>'
 
   echo '{}' | http POST http://localhost:60610/queue/plan/get
   http POST http://localhost:60610/queue/plan/get pos:='"back"'

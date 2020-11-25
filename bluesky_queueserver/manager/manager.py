@@ -894,7 +894,7 @@ class RunEngineManager(Process):
 
         return rdict
 
-    async def _queue_plan_get_handler(self, request):
+    async def _queue_item_get_handler(self, request):
         """
         Returns an item from the queue. The position of the item
         may be specified as an index (positive or negative) or a string
@@ -1156,7 +1156,7 @@ class RunEngineManager(Process):
             "environment_close": "_environment_close_handler",
             "environment_destroy": "_environment_destroy_handler",
             "queue_item_add": "_queue_item_add_handler",
-            "queue_plan_get": "_queue_plan_get_handler",
+            "queue_item_get": "_queue_item_get_handler",
             "queue_plan_remove": "_queue_plan_remove_handler",
             "queue_plan_move": "_queue_plan_move_handler",
             "queue_clear": "_queue_clear_handler",

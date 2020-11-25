@@ -435,9 +435,7 @@ class PlanQueueOperations:
         """
         n_rem_items = await self._r_pool.lrem(self._name_plan_queue, 0, json.dumps(item))
         if (n_rem_items != 1) and single:
-            raise RuntimeError(
-                f"The number of removed items is {n_rem_items}. One item is expected."
-            )
+            raise RuntimeError(f"The number of removed items is {n_rem_items}. One item is expected.")
 
     async def _pop_item_from_queue(self, *, pos=None, uid=None):
         """

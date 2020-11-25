@@ -197,7 +197,7 @@ def test_http_server_queue_item_add_handler_6_fail(re_manager, fastapi_server): 
     assert "Incorrect request format: request contains no item info." in resp1["msg"]
 
 
-def test_http_server_queue_plan_get_remove_handler_1(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
+def test_http_server_queue_item_get_remove_handler_1(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
 
     resp1 = _request_to_json("get", "/queue/get")
     assert resp1["queue"] != []
@@ -236,7 +236,7 @@ def test_http_server_queue_plan_get_remove_handler_1(re_manager, fastapi_server,
     (-100, 0, False),
 ])
 # fmt: on
-def test_http_server_queue_plan_get_remove_handler_2(
+def test_http_server_queue_item_get_remove_handler_2(
     re_manager, fastapi_server, pos, pos_result, success  # noqa F811
 ):
     plans = [
@@ -278,10 +278,10 @@ def test_http_server_queue_plan_get_remove_handler_2(
     assert resp3["running_plan"] == {}
 
 
-def test_http_server_queue_plan_get_remove_3(re_manager, fastapi_server):  # noqa F811
+def test_http_server_queue_item_get_remove_3(re_manager, fastapi_server):  # noqa F811
     """
     Get and remove elements using plan UID. Successful and failing cases.
-    Note: the test is derived from ZMQ API test ``test_zmq_api_queue_plan_get_remove_3()``
+    Note: the test is derived from ZMQ API test ``test_zmq_api_queue_item_get_remove_3()``
     """
     _request_to_json("post", "/queue/plan/add", json={"plan": _plan3})
     _request_to_json("post", "/queue/plan/add", json={"plan": _plan2})
@@ -342,10 +342,10 @@ def test_http_server_queue_plan_get_remove_3(re_manager, fastapi_server):  # noq
     assert state["plans_in_history"] == 1
 
 
-def test_http_server_queue_plan_get_remove_4_failing(re_manager, fastapi_server):  # noqa F811
+def test_http_server_queue_item_get_remove_4_failing(re_manager, fastapi_server):  # noqa F811
     """
     Failing cases that are not tested in other places.
-    Note: derived from ``test_zmq_api_queue_plan_get_remove_4_failing()``
+    Note: derived from ``test_zmq_api_queue_item_get_remove_4_failing()``
     """
     # Ambiguous parameters
     resp1 = _request_to_json("post", "/queue/plan/get", json={"pos": 5, "uid": "some_uid"})

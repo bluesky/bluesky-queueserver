@@ -192,11 +192,11 @@ async def queue_plan_move_handler(payload: dict):
 
 
 @app.post("/queue/plan/get")
-async def queue_plan_get_handler(payload: dict):
+async def queue_item_get_handler(payload: dict):
     """
     Get a plan from the queue
     """
-    msg = await zmq_to_manager.send_message(method="queue_plan_get", params=payload)
+    msg = await zmq_to_manager.send_message(method="queue_item_get", params=payload)
     return msg
 
 

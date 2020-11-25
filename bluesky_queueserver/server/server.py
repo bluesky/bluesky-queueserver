@@ -161,7 +161,7 @@ async def queue_stop_cancel():
 
 
 @app.post("/queue/plan/add")
-async def queue_plan_add_handler(payload: dict):
+async def queue_item_add_handler(payload: dict):
     """
     Adds new plan to the queue
     """
@@ -169,7 +169,7 @@ async def queue_plan_add_handler(payload: dict):
     params = payload
     params["user"] = _login_data["user"]
     params["user_group"] = _login_data["user_group"]
-    msg = await zmq_to_manager.send_message(method="queue_plan_add", params=params)
+    msg = await zmq_to_manager.send_message(method="queue_item_add", params=params)
     return msg
 
 

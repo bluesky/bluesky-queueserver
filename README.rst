@@ -154,9 +154,9 @@ Get the lists (JSON) of allowed plans and devices::
 
 Push a new plan to the back of the queue::
 
-  qserver -c queue_plan_add -p '{"name":"count", "args":[["det1", "det2"]]}'
-  qserver -c queue_plan_add -p '{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
-  qserver -c queue_plan_add -p '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
+  qserver -c queue_item_add -p '{"name":"count", "args":[["det1", "det2"]]}'
+  qserver -c queue_item_add -p '{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
+  qserver -c queue_item_add -p '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
 
   http POST http://localhost:60610/queue/plan/add plan:='{"name":"count", "args":[["det1", "det2"]]}'
   http POST http://localhost:60610/queue/plan/add plan:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
@@ -167,9 +167,9 @@ pausing/resuming/stopping of experimental plans.
 
 The plan to be added at any position of the queue including pushing to the front or back of the queue::
 
-  qserver -c queue_plan_add -p front '{"name":"count", "args":[["det1", "det2"]]}'
-  qserver -c queue_plan_add -p back '{"name":"count", "args":[["det1", "det2"]]}'
-  qserver -c queue_plan_add -p 2 '{"name":"count", "args":[["det1", "det2"]]}'  # Inserted at pos #2 (0-based)
+  qserver -c queue_item_add -p front '{"name":"count", "args":[["det1", "det2"]]}'
+  qserver -c queue_item_add -p back '{"name":"count", "args":[["det1", "det2"]]}'
+  qserver -c queue_item_add -p 2 '{"name":"count", "args":[["det1", "det2"]]}'  # Inserted at pos #2 (0-based)
 
   http POST http://localhost:60610/queue/plan/add pos:='"front"' plan:='{"name":"count", "args":[["det1", "det2"]]}'
   http POST http://localhost:60610/queue/plan/add pos:='"back"' plan:='{"name":"count", "args":[["det1", "det2"]]}'
@@ -178,26 +178,26 @@ The plan to be added at any position of the queue including pushing to the front
 The following command will insert the plan in place of the last element and shift the last element to
 the back so that the new element is now previous to last::
 
-  qserver -c queue_plan_add -p -1 '{"name":"count", "args":[["det1", "det2"]]}'
+  qserver -c queue_item_add -p -1 '{"name":"count", "args":[["det1", "det2"]]}'
   http POST http://localhost:60610/queue/plan/add pos:=-1 plan:='{"name":"count", "args":[["det1", "det2"]]}'
 
 The plan can be inserted before or after an existing plan in the queue by specifying the UID of the plan.
 Insert the plan before an existing plan with <uid>::
 
-  qserver -c queue_plan_add -p before_uid '<uid>' '{"name":"count", "args":[["det1", "det2"]]}'
+  qserver -c queue_item_add -p before_uid '<uid>' '{"name":"count", "args":[["det1", "det2"]]}'
   http POST http://localhost:60610/queue/plan/add before_uid:='<uid>' plan:='{"name":"count", "args":[["det1", "det2"]]}'
 
 Insert the plan after an existing plan with <uid>::
 
-  qserver -c queue_plan_add -p after_uid '<uid>' '{"name":"count", "args":[["det1", "det2"]]}'
+  qserver -c queue_item_add -p after_uid '<uid>' '{"name":"count", "args":[["det1", "det2"]]}'
   http POST http://localhost:60610/queue/plan/add after_uid:='<uid>' plan:='{"name":"count", "args":[["det1", "det2"]]}'
 
 If the queue has 5 elements (0..4), then the following command pushes the new plan to the back of the queue::
 
-  qserver -c queue_plan_add -p 5 '{"name":"count", "args":[["det1", "det2"]]}'
+  qserver -c queue_item_add -p 5 '{"name":"count", "args":[["det1", "det2"]]}'
   http POST http://localhost:60610/queue/plan/add pos:=5 plan:='{"name":"count", "args":[["det1", "det2"]]}'
 
-The 'queue_plan_add' request will accept any index value. If the index is out of range, then the plan will
+The 'queue_item_add' request will accept any index value. If the index is out of range, then the plan will
 be pushed to the front or the back of the queue. If the queue is currently running, then it is recommended
 to access elements using negative indices (counted from the back of the queue).
 
@@ -221,7 +221,7 @@ The last item can be removed (popped) from the back of the queue::
   echo '{}' | http POST http://localhost:60610/queue/plan/remove
   http POST http://localhost:60610/queue/plan/remove pos:='"back"'
 
-The position of the removed element may be specified similarly to `queue_plan_add` request with the difference
+The position of the removed element may be specified similarly to `queue_item_add` request with the difference
 that the position index must point to the existing element, otherwise the request fails (returns 'success==False').
 The following examples remove the plan from the front of the queue and the element previous to last::
 

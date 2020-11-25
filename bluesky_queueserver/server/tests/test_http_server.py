@@ -67,7 +67,7 @@ def test_http_server_plans_allowed_and_devices(re_manager, fastapi_server):  # n
     assert len(resp2["devices_allowed"]) > 0
 
 
-def test_http_server_queue_plan_add_handler_1(re_manager, fastapi_server):  # noqa F811
+def test_http_server_queue_item_add_handler_1(re_manager, fastapi_server):  # noqa F811
     resp1 = _request_to_json(
         "post", "/queue/plan/add", json={"plan": {"name": "count", "args": [["det1", "det2"]]}}
     )
@@ -101,7 +101,7 @@ def test_http_server_queue_plan_add_handler_1(re_manager, fastapi_server):  # no
     (-100, 0, True),
 ])
 # fmt: on
-def test_http_server_queue_plan_add_handler_2(re_manager, fastapi_server, pos, pos_result, success):  # noqa F811
+def test_http_server_queue_item_add_handler_2(re_manager, fastapi_server, pos, pos_result, success):  # noqa F811
 
     plan1 = {"name": "count", "args": [["det1"]]}
     plan2 = {"name": "count", "args": [["det1", "det2"]]}
@@ -131,7 +131,7 @@ def test_http_server_queue_plan_add_handler_2(re_manager, fastapi_server, pos, p
         assert resp2["queue"][pos_result]["args"] == plan2["args"]
 
 
-def test_http_server_queue_plan_add_handler_3(re_manager, fastapi_server):  # noqa F811
+def test_http_server_queue_item_add_handler_3(re_manager, fastapi_server):  # noqa F811
 
     # Unknown plan name
     plan1 = {"plan": {"name": "count_test", "args": [["det1", "det2"]]}}
@@ -161,7 +161,7 @@ def test_http_server_queue_plan_add_handler_3(re_manager, fastapi_server):  # no
     assert resp4["running_plan"] == {}
 
 
-def test_http_server_queue_plan_add_handler_4(re_manager, fastapi_server):  # noqa: F811
+def test_http_server_queue_item_add_handler_4(re_manager, fastapi_server):  # noqa: F811
     """
     Add instruction ('queue_stop') to the queue.
     """
@@ -185,7 +185,7 @@ def test_http_server_queue_plan_add_handler_4(re_manager, fastapi_server):  # no
     assert resp4["queue"][2]["item_type"] == "plan"
 
 
-def test_http_server_queue_plan_add_handler_6_fail(re_manager, fastapi_server):  # noqa F811
+def test_http_server_queue_item_add_handler_6_fail(re_manager, fastapi_server):  # noqa F811
     """
     Failing case: call without sending a plan.
     """

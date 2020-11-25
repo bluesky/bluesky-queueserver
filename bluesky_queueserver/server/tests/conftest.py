@@ -33,13 +33,13 @@ def add_plans_to_queue():
         [
             "qserver",
             "-c",
-            "queue_plan_add",
+            "queue_item_add",
             "-p",
             "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num':10, 'delay':1}}",
         ]
     )
-    subprocess.call(["qserver", "-c", "queue_plan_add", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"])
-    subprocess.call(["qserver", "-c", "queue_plan_add", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"])
+    subprocess.call(["qserver", "-c", "queue_item_add", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"])
+    subprocess.call(["qserver", "-c", "queue_item_add", "-p", "{'name':'count', 'args':[['det1', 'det2']]}"])
 
     yield
 

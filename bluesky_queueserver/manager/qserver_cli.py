@@ -36,7 +36,7 @@ def get_supported_commands():
         "environment_close": "environment_close",
         "environment_destroy": "environment_destroy",
         "queue_get": "queue_get",
-        "queue_plan_add": "queue_plan_add",
+        "queue_item_add": "queue_item_add",
         "queue_plan_get": "queue_plan_get",
         "queue_plan_remove": "queue_plan_remove",
         "queue_plan_move": "queue_plan_move",
@@ -72,7 +72,7 @@ def create_msg(command, params=None):
     try:
         command = command_dict[command]
         # Present value in the proper format. This will change as the format is changed.
-        if command == "queue_plan_add":
+        if command == "queue_item_add":
             if (len(params) == 1) and isinstance(params[0], dict):
                 # Arguments: <plan>
                 prms = {"plan": params[0]}  # Value is dict

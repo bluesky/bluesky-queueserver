@@ -38,9 +38,9 @@ def test_qserver_cli_and_manager(re_manager):  # noqa: F811
     plan_1 = "{'name':'count', 'args':[['det1', 'det2']]}"
     plan_2 = "{'name':'scan', 'args':[['det1', 'det2'], 'motor', -1, 1, 10]}"
     plan_3 = "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num':10, 'delay':1}}"
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan_1]) == 0
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan_2]) == 0
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan_3]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan_1]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan_2]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan_3]) == 0
 
     n_plans, is_plan_running, _ = get_reduced_state_info()
     assert n_plans == 3, "Incorrect number of plans in the queue"
@@ -68,7 +68,7 @@ def test_qserver_cli_and_manager(re_manager):  # noqa: F811
     assert subprocess.call(["qserver", "-c", "history_clear"]) == 0
 
     # Queue is expected to be empty (processed). Load one more plan.
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan_3]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan_3]) == 0
 
     n_plans, is_plan_running, _ = get_reduced_state_info()
     assert n_plans == 1, "Incorrect number of plans in the queue"
@@ -93,8 +93,8 @@ def test_qserver_cli_and_manager(re_manager):  # noqa: F811
         time=60, condition=condition_queue_processing_finished
     ), "Timeout while waiting for process to finish"
 
-    subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan_1])
-    subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan_1])
+    subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan_1])
+    subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan_1])
 
     n_plans, is_plan_running, _ = get_reduced_state_info()
     assert n_plans == 2, "Incorrect number of plans in the queue"
@@ -108,9 +108,9 @@ def test_qserver_cli_and_manager(re_manager):  # noqa: F811
     # Test 'killing' the manager during running plan. Load long plan and two short ones.
     #   The tests checks if execution of the queue is continued uninterrupted after
     #   the manager restart
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan_3]) == 0
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan_3]) == 0
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan_3]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan_3]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan_3]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan_3]) == 0
     n_plans, is_plan_running, _ = get_reduced_state_info()
     assert n_plans == 3, "Incorrect number of plans in the queue"
 
@@ -140,7 +140,7 @@ def test_qserver_environment_close(re_manager):  # noqa: F811
     assert subprocess.call(["qserver", "-c", "queue_clear"]) == 0
 
     plan = "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num':5, 'delay':1}}"
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan]) == 0
 
     n_plans, is_plan_running, _ = get_reduced_state_info()
     assert n_plans == 1, "Incorrect number of plans in the queue"
@@ -188,7 +188,7 @@ def test_qserver_environment_destroy(re_manager):  # noqa: F811
     assert subprocess.call(["qserver", "-c", "queue_clear"]) == 0
 
     plan = "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num':5, 'delay':1}}"
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan]) == 0
 
     n_plans, is_plan_running, _ = get_reduced_state_info()
     assert n_plans == 1, "Incorrect number of plans in the queue"
@@ -267,8 +267,8 @@ def test_qserver_re_pause_continue(re_manager, option_pause, option_continue):  
     assert subprocess.call(["qserver", "-c", "queue_clear"]) == 0
 
     plan = "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num': 10, 'delay': 1}}"
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan]) == 0
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan]) == 0
 
     n_plans, is_plan_running, _ = get_reduced_state_info()
     assert n_plans == 2, "Incorrect number of plans in the queue"
@@ -366,8 +366,8 @@ def test_qserver_manager_kill(re_manager, time_kill):  # noqa: F811
     assert subprocess.call(["qserver", "-c", "queue_clear"]) == 0
 
     plan = "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num': 10, 'delay': 1}}"
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan]) == 0
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan]) == 0
 
     assert subprocess.call(["qserver", "-c", "environment_open"]) == 0
     assert wait_for_condition(
@@ -468,7 +468,7 @@ def test_qserver_env_open_various_cases(re_manager_pc_copy, additional_code, suc
 
     # Run a plan to make sure RE Manager is functional after the startup.
     plan = "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num': 10, 'delay': 1}}"
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan]) == 0
 
     # Start queue processing
     assert subprocess.call(["qserver", "-c", "queue_start"]) == 0
@@ -525,8 +525,8 @@ def test_qserver_manager_stop_2(re_manager, option):  # noqa: F811
     assert wait_for_condition(time=30, condition=condition_manager_idle)
 
     plan = "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num': 10, 'delay': 1}}"
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan]) == 0
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan]) == 0
 
     assert subprocess.call(["qserver", "-c", "queue_start"]) == 0
     ttime.sleep(2)
@@ -570,7 +570,7 @@ def test_qserver_manager_stop_2(re_manager, option):  # noqa: F811
     (-100, 0, True),
 ])
 # fmt: on
-def test_queue_plan_add_1(re_manager, pos, pos_result, success):  # noqa F811
+def test_queue_item_add_1(re_manager, pos, pos_result, success):  # noqa F811
 
     # Wait until RE Manager is started
     assert wait_for_condition(time=10, condition=condition_manager_idle)
@@ -579,15 +579,15 @@ def test_queue_plan_add_1(re_manager, pos, pos_result, success):  # noqa F811
     plan2 = "{'name':'count', 'args':[['det1', 'det2']]}"
 
     # Create the queue with 2 entries
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan1]) == 0
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan1]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan1]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan1]) == 0
 
     # Add another entry at the specified position
     params = [plan2]
     if pos is not None:
         params.insert(0, str(pos))
 
-    res = subprocess.call(["qserver", "-c", "queue_plan_add", "-p", *params])
+    res = subprocess.call(["qserver", "-c", "queue_item_add", "-p", *params])
     if success:
         assert res == 0
     else:
@@ -601,7 +601,7 @@ def test_queue_plan_add_1(re_manager, pos, pos_result, success):  # noqa F811
         assert "plan_uid" in resp["queue"][pos_result]
 
 
-def test_queue_plan_add_2(re_manager):  # noqa F811
+def test_queue_item_add_2(re_manager):  # noqa F811
     """
     Failing cases: adding the plans that are expected to fail validation.
     """
@@ -614,8 +614,8 @@ def test_queue_plan_add_2(re_manager):  # noqa F811
     plan2 = "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'abc': 10}}"
 
     # Both calls are expected to fail
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan1]) != 0
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan2]) != 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan1]) != 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan2]) != 0
 
 
 # fmt: off
@@ -626,7 +626,7 @@ def test_queue_plan_add_2(re_manager):  # noqa F811
     (False, 1, [0, 1, 2]),
 ])
 # fmt: on
-def test_queue_plan_add_3(re_manager, before, target_pos, result_order):  # noqa F811
+def test_queue_item_add_3(re_manager, before, target_pos, result_order):  # noqa F811
     """
     Insert an item before or after the element with a given UID
     """
@@ -637,8 +637,8 @@ def test_queue_plan_add_3(re_manager, before, target_pos, result_order):  # noqa
     plan2 = "{'name':'count', 'args':[['det1', 'det2']]}"
     plan3 = "{'name':'count', 'args':[['det2']]}"
 
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan1]) == 0
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan2]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan1]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan2]) == 0
 
     # Read queue.
     queue_1 = get_queue()["queue"]
@@ -646,7 +646,7 @@ def test_queue_plan_add_3(re_manager, before, target_pos, result_order):  # noqa
     uids_1 = [_["plan_uid"] for _ in queue_1]
 
     params = ["before_uid" if before else "after_uid", uids_1[target_pos], plan3]
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", *params]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", *params]) == 0
 
     # Check if the element was inserted in the right plance
     queue_2 = get_queue()["queue"]
@@ -661,7 +661,7 @@ def test_queue_plan_add_3(re_manager, before, target_pos, result_order):  # noqa
 # fmt: off
 @pytest.mark.parametrize("pos", [None, "back"])
 # fmt: on
-def test_queue_plan_add_4_fail(re_manager, pos):  # noqa F811
+def test_queue_item_add_4_fail(re_manager, pos):  # noqa F811
     """
     No plan is supplied.
     """
@@ -669,15 +669,15 @@ def test_queue_plan_add_4_fail(re_manager, pos):  # noqa F811
     assert wait_for_condition(time=10, condition=condition_manager_idle)
 
     if pos:
-        assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", pos]) != 0
+        assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", pos]) != 0
     else:
-        assert subprocess.call(["qserver", "-c", "queue_plan_add"]) != 0
+        assert subprocess.call(["qserver", "-c", "queue_item_add"]) != 0
 
 
 # fmt: off
 @pytest.mark.parametrize("pos", [10, "front", "back"])
 # fmt: on
-def test_queue_plan_add_5_fail(re_manager, pos):  # noqa F811
+def test_queue_item_add_5_fail(re_manager, pos):  # noqa F811
     """
     Incorrect order of arguments (position is specified).
     """
@@ -686,7 +686,7 @@ def test_queue_plan_add_5_fail(re_manager, pos):  # noqa F811
 
     pos, plan = 10, "{'name':'count', 'args':[['det1']]}"
     params = [plan, str(pos)]
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", *params]) != 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", *params]) != 0
 
 
 # fmt: off
@@ -701,7 +701,7 @@ def test_queue_plan_add_5_fail(re_manager, pos):  # noqa F811
     (["some_uid", "plan", "before_uid"], 4),
 ])
 # fmt: on
-def test_queue_plan_add_6_fail(re_manager, params, exit_code):  # noqa F811
+def test_queue_item_add_6_fail(re_manager, params, exit_code):  # noqa F811
     """
     Incorrect order of arguments (position is specified).
     """
@@ -710,7 +710,7 @@ def test_queue_plan_add_6_fail(re_manager, params, exit_code):  # noqa F811
 
     plan = "{'name':'count', 'args':[['det1']]}"
     params = [_ if _ != "plan" else plan for _ in params]
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", *params]) == exit_code
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", *params]) == exit_code
 
 
 # fmt: off
@@ -747,7 +747,7 @@ def test_queue_plan_get_remove(re_manager, pos, uid_ind, pos_result, success):  
     plans_args = [[["det1"]], [["det2"]], [["det1", "det2"]]]
 
     for plan in plans:
-        assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan]) == 0
+        assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan]) == 0
 
     queue_1 = get_queue()["queue"]
     assert len(queue_1) == 3
@@ -819,7 +819,7 @@ def test_queue_plan_get_move(re_manager, params, result_order, exit_code):  # no
     ]
 
     for plan in plans:
-        assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan]) == 0
+        assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan]) == 0
 
     queue_1 = get_queue()["queue"]
     assert len(queue_1) == 3
@@ -859,8 +859,8 @@ def test_qserver_queue_stop(re_manager, deactivate):  # noqa: F811
     assert wait_for_condition(time=10, condition=condition_manager_idle)
 
     plan = "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num': 10, 'delay': 1}}"
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan]) == 0
-    assert subprocess.call(["qserver", "-c", "queue_plan_add", "-p", plan]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan]) == 0
 
     # Queue is not running, so the request is expected to fail
     assert subprocess.call(["qserver", "-c", "queue_stop"]) != 0

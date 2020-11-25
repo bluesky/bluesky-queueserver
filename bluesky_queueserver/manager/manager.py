@@ -798,7 +798,7 @@ class RunEngineManager(Process):
 
         return {"queue": plan_queue, "running_plan": running_plan}
 
-    async def _queue_plan_add_handler(self, request):
+    async def _queue_item_add_handler(self, request):
         """
         Adds new item to the the queue. Item may be a plan or an instruction. Request must
         include the element with the key ``plan`` if the added item is a plan or ``instruction``
@@ -1155,7 +1155,7 @@ class RunEngineManager(Process):
             "environment_open": "_environment_open_handler",
             "environment_close": "_environment_close_handler",
             "environment_destroy": "_environment_destroy_handler",
-            "queue_plan_add": "_queue_plan_add_handler",
+            "queue_item_add": "_queue_item_add_handler",
             "queue_plan_get": "_queue_plan_get_handler",
             "queue_plan_remove": "_queue_plan_remove_handler",
             "queue_plan_move": "_queue_plan_move_handler",

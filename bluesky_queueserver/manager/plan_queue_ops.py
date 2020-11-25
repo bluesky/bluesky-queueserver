@@ -535,8 +535,8 @@ class PlanQueueOperations:
 
             if not self._is_uid_in_dict(uid):
                 raise IndexError(f"Plan with UID '{uid}' is not in the queue.")
-            running_plan = await self._get_running_item_info()
-            if running_plan and (uid == running_plan["plan_uid"]):
+            running_item = await self._get_running_item_info()
+            if running_item and (uid == running_item["plan_uid"]):
                 if before:
                     raise IndexError("Can not insert a plan in the queue before a currently running plan.")
                 else:

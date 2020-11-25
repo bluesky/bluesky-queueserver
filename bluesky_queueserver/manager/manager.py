@@ -434,39 +434,61 @@ class RunEngineManager(Process):
             logger.info(err_msg)
 
         else:
-            # Reset RE environment (worker)
-            success, err_msg = await self._worker_command_reset_worker()
-            if not success:
-                self._manager_state = MState.IDLE
-                err_msg = f"Failed to reset RE Worker: {err_msg}"
-                logger.error(err_msg)
-                return success, err_msg
+            next_item = await self._plan_queue.get_plan(pos="front")
 
-            self._manager_state = MState.EXECUTING_QUEUE
+            # The next items is PLAN
+            if next_item["item_type"] == "plan":
 
-            new_plan = await self._plan_queue.set_next_plan_as_running()
+                # Reset RE environment (worker)
+                success, err_msg = await self._worker_command_reset_worker()
+                if not success:
+                    self._manager_state = MState.IDLE
+                    err_msg = f"Failed to reset RE Worker: {err_msg}"
+                    logger.error(err_msg)
+                    return success, err_msg
 
-            plan_name = new_plan["name"]
-            args = new_plan["args"] if "args" in new_plan else []
-            kwargs = new_plan["kwargs"] if "kwargs" in new_plan else {}
-            plan_uid = new_plan["plan_uid"]
+                self._manager_state = MState.EXECUTING_QUEUE
 
-            plan_info = {
-                "name": plan_name,
-                "args": args,
-                "kwargs": kwargs,
-                "plan_uid": plan_uid,
-            }
+                new_plan = await self._plan_queue.set_next_plan_as_running()
 
-            success, err_msg = await self._worker_command_run_plan(plan_info)
-            if not success:
-                self._manager_state = MState.IDLE
-                logger.error(
-                    "Failed to start the plan %s.\nError: %s",
-                    pprint.pformat(plan_info),
-                    err_msg,
-                )
-                err_msg = f"Failed to start the plan: {err_msg}"
+                plan_name = new_plan["name"]
+                args = new_plan["args"] if "args" in new_plan else []
+                kwargs = new_plan["kwargs"] if "kwargs" in new_plan else {}
+                plan_uid = new_plan["plan_uid"]
+
+                plan_info = {
+                    "name": plan_name,
+                    "args": args,
+                    "kwargs": kwargs,
+                    "plan_uid": plan_uid,
+                }
+
+                success, err_msg = await self._worker_command_run_plan(plan_info)
+                if not success:
+                    self._manager_state = MState.IDLE
+                    logger.error(
+                        "Failed to start the plan %s.\nError: %s",
+                        pprint.pformat(plan_info),
+                        err_msg,
+                    )
+                    err_msg = f"Failed to start the plan: {err_msg}"
+
+            # The next items is INSTRUCTION
+            elif next_item["item_type"] == "instruction":
+                if next_item["action"] == "queue_stop":
+                    # Pop the instruction from the queue
+                    await self._plan_queue.pop_plan_from_queue(pos="front")
+                    self._manager_state = MState.EXECUTING_QUEUE
+                    self._queue_stop_pending = True
+                    asyncio.ensure_future(self._start_plan_task())
+                    success, err_msg = True, ""
+                else:
+                    success = False
+                    err_msg = f"Unsupported action: '{next_item['action']}' (item {next_item})"
+
+            else:
+                success = False
+                err_msg = f"Unrecognized item type: '{next_item['item_type']}' (item {next_item})"
 
         if self._manager_state == MState.IDLE:
             # No plans are running: deactivate the stop sequence.
@@ -778,11 +800,13 @@ class RunEngineManager(Process):
 
     async def _queue_plan_add_handler(self, request):
         """
-        Adds new plan to the end of the queue. Required parameter ``plan`` must
-        contains a dictionary with plan parameters. The plan parameters may not include
-        UID, because the function always overwrites plan UID. If a plan already contains
-        UID, then it is replaced with the new one. The returned plan contains new UID
-        even if the function failed to add the plan to the queue.
+        Adds new item to the the queue. Item may be a plan or an instruction. Request must
+        include the element with the key ``plan`` if the added item is a plan or ``instruction``
+        if it is an instruction. The element with the key is a dictionary of plan or instruction
+        parameters. The parameters may not include UID, because the function always overwrites
+        plan UID. If an item is already assigned UID, it is replaced with the new one.
+        The returned plan/instruction contains new UID even if the function failed to add
+        the plan to the queue.
 
         Optional key ``pos`` may be a string (choices "front", "back") or integer (positive
         or negative) that specifies the desired position in the queue. The default value
@@ -794,10 +818,22 @@ class RunEngineManager(Process):
         when modifying a running queue.
         """
         logger.info("Adding new plan to the queue: %s", pprint.pformat(request))
+
+        item_type, item, qsize, msg = None, None, None, ""
+
         try:
-            plan, qsize, msg = {}, None, ""
-            if "plan" not in request:
-                raise Exception("Incorrect request format: no plan is specified")
+            item_types = ("plan", "instruction")
+            for itype in item_types:
+                if itype in request:
+                    item_type = itype
+                    item = request[itype]
+                    break
+
+            if item_type is None:
+                raise Exception(
+                    "Incorrect request format: request contains no item info. "
+                    f"Supported item types: {item_types}"
+                )
 
             if "user_group" not in request:
                 raise Exception("Incorrect request format: user group is not specified")
@@ -811,27 +847,40 @@ class RunEngineManager(Process):
             if user_group not in self._allowed_plans:
                 raise Exception(f"Unknown user group: '{user_group}'")
 
-            plan = request["plan"]
             pos = request.get("pos", None)  # Position is optional
             before_uid = request.get("before_uid", None)
             after_uid = request.get("after_uid", None)
 
-            allowed_plans = self._allowed_plans[user_group] if self._allowed_plans else self._allowed_plans
-            allowed_devices = self._allowed_devices[user_group] if self._allowed_devices else self._allowed_devices
-            success, msg = validate_plan(plan, allowed_plans=allowed_plans, allowed_devices=allowed_devices)
+            if item_type == "plan":
+                allowed_plans = self._allowed_plans[user_group] if self._allowed_plans else self._allowed_plans
+                allowed_devices = (
+                    self._allowed_devices[user_group] if self._allowed_devices else self._allowed_devices
+                )
+                success, msg = validate_plan(item, allowed_plans=allowed_plans, allowed_devices=allowed_devices)
+            elif item_type == "instruction":
+                # At this point we support only one instruction ('queue_stop'), so validation is trivial.
+                if ("action" in item) and (item["action"] == "queue_stop"):
+                    success, msg = True, ""
+                else:
+                    success, msg = False, f"Unrecognized instruction: {item}"
+            else:
+                success, msg = False, f"Invalid item: {item}"
+
             if not success:
                 raise Exception(msg)
 
+            item["item_type"] = item_type
+
             # Add user name and user_id to the plan (for later reference)
-            plan["user"] = user
-            plan["user_group"] = user_group
+            item["user"] = user
+            item["user_group"] = user_group
 
             # Always generate a new UID for the added plan!!!
-            plan["plan_uid"] = PlanQueueOperations.new_plan_uid()
+            item["plan_uid"] = PlanQueueOperations.new_plan_uid()
 
             # Adding plan to queue may raise an exception
-            plan, qsize = await self._plan_queue.add_plan_to_queue(
-                plan, pos=pos, before_uid=before_uid, after_uid=after_uid
+            item, qsize = await self._plan_queue.add_plan_to_queue(
+                item, pos=pos, before_uid=before_uid, after_uid=after_uid
             )
             success = True
 
@@ -839,7 +888,11 @@ class RunEngineManager(Process):
             success = False
             msg = f"Failed to add a plan: {str(ex)}"
 
-        return {"success": success, "msg": msg, "plan": plan, "qsize": qsize}
+        rdict = {"success": success, "msg": msg, "qsize": qsize}
+        if item_type:
+            rdict[item_type] = item
+
+        return rdict
 
     async def _queue_plan_get_handler(self, request):
         """

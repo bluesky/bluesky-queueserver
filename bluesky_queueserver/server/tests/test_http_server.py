@@ -161,6 +161,30 @@ def test_http_server_queue_plan_add_handler_3(re_manager, fastapi_server):  # no
     assert resp4["running_plan"] == {}
 
 
+def test_http_server_queue_plan_add_handler_4(re_manager, fastapi_server):  # noqa: F811
+    """
+    Add instruction ('queue_stop') to the queue.
+    """
+
+    plan1 = {"name": "count", "args": [["det1"]]}
+    plan2 = {"name": "count", "args": [["det1", "det2"]]}
+    instruction = {"action": "queue_stop"}
+
+    # Create the queue with 2 entries
+    resp1 = _request_to_json("post", "/queue/plan/add", json={"plan": plan1})
+    assert resp1["success"] is True, f"resp={resp1}"
+    resp2 = _request_to_json("post", "/queue/plan/add", json={"instruction": instruction})
+    assert resp2["success"] is True, f"resp={resp2}"
+    resp3 = _request_to_json("post", "/queue/plan/add", json={"plan": plan2})
+    assert resp3["success"] is True, f"resp={resp3}"
+
+    resp4 = _request_to_json("get", "/queue/get")
+    assert len(resp4["queue"]) == 3
+    assert resp4["queue"][0]["item_type"] == "plan"
+    assert resp4["queue"][1]["item_type"] == "instruction"
+    assert resp4["queue"][2]["item_type"] == "plan"
+
+
 def test_http_server_queue_plan_add_handler_6_fail(re_manager, fastapi_server):  # noqa F811
     """
     Failing case: call without sending a plan.
@@ -168,8 +192,9 @@ def test_http_server_queue_plan_add_handler_6_fail(re_manager, fastapi_server): 
     resp1 = _request_to_json("post", "/queue/plan/add", json={})
     assert resp1["success"] is False
     assert resp1["qsize"] is None
-    assert resp1["plan"] == {}
-    assert "no plan is specified" in resp1["msg"]
+    assert "plan" not in resp1
+    assert "instruction" not in resp1
+    assert "Incorrect request format: request contains no item info." in resp1["msg"]
 
 
 def test_http_server_queue_plan_get_remove_handler_1(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811

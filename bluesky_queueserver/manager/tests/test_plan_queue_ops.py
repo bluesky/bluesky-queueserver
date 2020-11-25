@@ -690,27 +690,27 @@ def test_clear_queue(pq):
     asyncio.run(testing())
 
 
-def test_plan_to_history_functions(pq):
+def test_add_to_history_functions(pq):
     """
-    Test for ``PlanQueueOperations._add_plan_to_history()`` method.
+    Test for ``PlanQueueOperations._add_to_history()`` method.
     """
 
     async def testing():
-        assert await pq.get_plan_history_size() == 0
+        assert await pq.get_history_size() == 0
 
         plans = [{"name": "a"}, {"name": "b"}, {"name": "c"}]
         for plan in plans:
-            await pq._add_plan_to_history(plan)
-        assert await pq.get_plan_history_size() == 3
+            await pq._add_to_history(plan)
+        assert await pq.get_history_size() == 3
 
-        plan_history = await pq.get_plan_history()
+        plan_history = await pq.get_history()
 
         assert len(plan_history) == 3
         assert plan_history == plans
 
-        await pq.clear_plan_history()
+        await pq.clear_history()
 
-        plan_history = await pq.get_plan_history()
+        plan_history = await pq.get_history()
         assert plan_history == []
 
     asyncio.run(testing())
@@ -747,9 +747,9 @@ def test_set_next_item_as_running(pq):
     asyncio.run(testing())
 
 
-def test_set_processed_plan_as_completed(pq):
+def test_set_processed_item_as_completed(pq):
     """
-    Test for ``PlanQueueOperations.set_processed_plan_as_completed()`` function.
+    Test for ``PlanQueueOperations.set_processed_item_as_completed()`` function.
     The function moves currently running plan to history.
     """
 
@@ -768,41 +768,41 @@ def test_set_processed_plan_as_completed(pq):
             await pq.add_item_to_queue(plan)
 
         # No plan is running
-        plan = await pq.set_processed_plan_as_completed(exit_status="completed")
+        plan = await pq.set_processed_item_as_completed(exit_status="completed")
         assert plan == {}
 
         # Execute the first plan
         await pq.set_next_item_as_running()
-        plan = await pq.set_processed_plan_as_completed(exit_status="completed")
+        plan = await pq.set_processed_item_as_completed(exit_status="completed")
 
         assert await pq.get_queue_size() == 2
-        assert await pq.get_plan_history_size() == 1
+        assert await pq.get_history_size() == 1
         assert plan["name"] == plans[0]["name"]
         assert plan["exit_status"] == "completed"
 
-        plan_history = await pq.get_plan_history()
+        plan_history = await pq.get_history()
         plan_history_expected = add_status_to_plans(plans[0:1], "completed")
         assert plan_history == plan_history_expected
 
         # Execute the second plan
         await pq.set_next_item_as_running()
-        plan = await pq.set_processed_plan_as_completed(exit_status="completed")
+        plan = await pq.set_processed_item_as_completed(exit_status="completed")
 
         assert await pq.get_queue_size() == 1
-        assert await pq.get_plan_history_size() == 2
+        assert await pq.get_history_size() == 2
         assert plan["name"] == plans[1]["name"]
         assert plan["exit_status"] == "completed"
 
-        plan_history = await pq.get_plan_history()
+        plan_history = await pq.get_history()
         plan_history_expected = add_status_to_plans(plans[0:2], "completed")
         assert plan_history == plan_history_expected
 
     asyncio.run(testing())
 
 
-def test_set_processed_plan_as_stopped(pq):
+def test_set_processed_item_as_stopped(pq):
     """
-    Test for ``PlanQueueOperations.set_processed_plan_as_stopped()`` function.
+    Test for ``PlanQueueOperations.set_processed_item_as_stopped()`` function.
     The function pushes running plan back to the queue and saves it in history as well.
     """
     plans = [{"plan_uid": 1, "name": "a"}, {"plan_uid": 2, "name": "b"}, {"plan_uid": 3, "name": "c"}]
@@ -820,32 +820,32 @@ def test_set_processed_plan_as_stopped(pq):
             await pq.add_item_to_queue(plan)
 
         # No plan is running
-        plan = await pq.set_processed_plan_as_stopped(exit_status="stopped")
+        plan = await pq.set_processed_item_as_stopped(exit_status="stopped")
         assert plan == {}
 
         # Execute the first plan
         await pq.set_next_item_as_running()
-        plan = await pq.set_processed_plan_as_stopped(exit_status="stopped")
+        plan = await pq.set_processed_item_as_stopped(exit_status="stopped")
 
         assert await pq.get_queue_size() == 3
-        assert await pq.get_plan_history_size() == 1
+        assert await pq.get_history_size() == 1
         assert plan["name"] == plans[0]["name"]
         assert plan["exit_status"] == "stopped"
 
-        plan_history = await pq.get_plan_history()
+        plan_history = await pq.get_history()
         plan_history_expected = add_status_to_plans([plans[0]], "stopped")
         assert plan_history == plan_history_expected
 
         # Execute the second plan
         await pq.set_next_item_as_running()
-        plan = await pq.set_processed_plan_as_stopped(exit_status="stopped")
+        plan = await pq.set_processed_item_as_stopped(exit_status="stopped")
 
         assert await pq.get_queue_size() == 3
-        assert await pq.get_plan_history_size() == 2
+        assert await pq.get_history_size() == 2
         assert plan["name"] == plans[0]["name"]
         assert plan["exit_status"] == "stopped"
 
-        plan_history = await pq.get_plan_history()
+        plan_history = await pq.get_history()
         plan_history_expected = add_status_to_plans([plans[0], plans[0]], "stopped")
         assert plan_history == plan_history_expected
 

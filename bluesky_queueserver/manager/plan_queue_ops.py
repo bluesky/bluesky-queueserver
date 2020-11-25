@@ -45,14 +45,14 @@ class PlanQueueOperations:
 
         # Assume that plan execution is completed, so move the plan to history
         #   This also clears the currently processed plan.
-        plan = await pq.set_processed_plan_as_completed(exit_status="completed")
+        plan = await pq.set_processed_item_as_completed(exit_status="completed")
 
         # We are ready to start the next plan
         plan = await pq.set_next_item_as_running()
 
         # Assume that we paused and then stopped the plan. Clear the running plan and
         #   push it back to the queue. Also create the respective history entry.
-        plan = await pq.set_processed_plan_as_stopped(exit_status="stopped")
+        plan = await pq.set_processed_item_as_stopped(exit_status="stopped")
     """
 
     def __init__(self, redis_host="localhost"):
@@ -745,13 +745,13 @@ class PlanQueueOperations:
     # -----------------------------------------------------------------------
     #                          Plan History
 
-    async def _add_plan_to_history(self, plan):
+    async def _add_to_history(self, item):
         """
-        Add the plan to history.
+        Add an item to history.
 
         Parameters
         ----------
-        plan: dict
+        item: dict
             Plan represented as a dictionary of parameters. No verifications are performed
             on the plan. The function is not intended to be used outside of this class.
 
@@ -760,16 +760,16 @@ class PlanQueueOperations:
         int
             The new size of the history.
         """
-        history_size = await self._r_pool.rpush(self._name_plan_history, json.dumps(plan))
+        history_size = await self._r_pool.rpush(self._name_plan_history, json.dumps(item))
         return history_size
 
-    async def _get_plan_history_size(self):
+    async def _get_history_size(self):
         """
-        See ``self.get_plan_history_size()`` method.
+        See ``self.get_history_size()`` method.
         """
         return await self._r_pool.llen(self._name_plan_history)
 
-    async def get_plan_history_size(self):
+    async def get_history_size(self):
         """
         Get the number of items in the plan history.
 
@@ -779,43 +779,43 @@ class PlanQueueOperations:
             The number of plans in the history.
         """
         async with self._lock:
-            return await self._get_plan_history_size()
+            return await self._get_history_size()
 
-    async def _get_plan_history(self):
+    async def _get_history(self):
         """
-        See ``self.get_plan_history()`` method.
+        See ``self.get_history()`` method.
         """
         all_plans_json = await self._r_pool.lrange(self._name_plan_history, 0, -1)
         return [json.loads(_) for _ in all_plans_json]
 
-    async def get_plan_history(self):
+    async def get_history(self):
         """
-        Get the list of all plans in the history. The first element of the list is
+        Get the list of all items in the plan history. The first element of the list is
         the oldest history entry.
 
         Returns
         -------
         list(dict)
-            The list of plans in the queue. Each plan is represented as a dictionary.
+            The list of items in the plan history. Each plan is represented as a dictionary.
             Empty list is returned if the queue is empty.
         """
         async with self._lock:
-            return await self._get_plan_history()
+            return await self._get_history()
 
-    async def _clear_plan_history(self):
+    async def _clear_history(self):
         """
-        See ``self.clear_plan_history()`` method.
+        See ``self.clear_history()`` method.
         """
-        while await self._get_plan_history_size():
+        while await self._get_history_size():
             await self._r_pool.rpop(self._name_plan_history)
 
-    async def clear_plan_history(self):
+    async def clear_history(self):
         """
         Remove all entries from the plan queue. Does not touch the running plan.
         The plan may be pushed back into the queue if it is stopped.
         """
         async with self._lock:
-            await self._clear_plan_history()
+            await self._clear_history()
 
     # ----------------------------------------------------------------------
     #          Standard plan operations during queue execution
@@ -851,25 +851,25 @@ class PlanQueueOperations:
         async with self._lock:
             return await self._set_next_item_as_running()
 
-    async def _set_processed_plan_as_completed(self, exit_status):
+    async def _set_processed_item_as_completed(self, exit_status):
         """
-        See ``self.set_processed_plan_as_completed`` method.
+        See ``self.set_processed_item_as_completed`` method.
         """
         # Note: UID remains in the `self._uid_dict` after this operation
         if await self._is_item_running():
-            plan = await self._get_running_item_info()
-            plan["exit_status"] = exit_status
+            item = await self._get_running_item_info()
+            item["exit_status"] = exit_status
             await self._clear_running_item_info()
-            self._uid_dict_remove(plan["plan_uid"])
-            await self._add_plan_to_history(plan)
+            self._uid_dict_remove(item["plan_uid"])
+            await self._add_to_history(item)
         else:
-            plan = {}
-        return plan
+            item = {}
+        return item
 
-    async def set_processed_plan_as_completed(self, exit_status):
+    async def set_processed_item_as_completed(self, exit_status):
         """
-        Moves currently executed plan to history and sets ``exit_status`` key.
-        UID is removed from ``self._uid_dict``, so a copy of the plan with
+        Moves currently executed item (plan) to history and sets ``exit_status`` key.
+        UID is removed from ``self._uid_dict``, so a copy of the item with
         the same UID may be added to the queue.
 
         Parameters
@@ -880,31 +880,31 @@ class PlanQueueOperations:
         Returns
         -------
         dict
-            The plan added to the history including ``exit_status``. If another no plan is currently
-            running, then ``{}`` is returned.
+            The item added to the history including ``exit_status``. If another item (plan)
+            is currently running, then ``{}`` is returned.
         """
         async with self._lock:
-            return await self._set_processed_plan_as_completed(exit_status=exit_status)
+            return await self._set_processed_item_as_completed(exit_status=exit_status)
 
-    async def _set_processed_plan_as_stopped(self, exit_status):
+    async def _set_processed_item_as_stopped(self, exit_status):
         """
-        See ``self.set_prcessed_plan_as_stopped()`` method.
+        See ``self.set_processed_item_as_stopped()`` method.
         """
         # Note: UID is removed from `self._uid_dict`.
         if await self._is_item_running():
-            plan = await self._get_running_item_info()
-            plan["exit_status"] = exit_status
+            item = await self._get_running_item_info()
+            item["exit_status"] = exit_status
             await self._clear_running_item_info()
-            await self._r_pool.lpush(self._name_plan_queue, json.dumps(plan))
-            self._uid_dict_update(plan)
-            await self._add_plan_to_history(plan)
+            await self._r_pool.lpush(self._name_plan_queue, json.dumps(item))
+            self._uid_dict_update(item)
+            await self._add_to_history(item)
         else:
-            plan = {}
-        return plan
+            item = {}
+        return item
 
-    async def set_processed_plan_as_stopped(self, exit_status):
+    async def set_processed_item_as_stopped(self, exit_status):
         """
-        Pushes currently executed plan to the beginning of the queue and adds
+        Pushes currently executed item to the beginning of the queue and adds
         it to history with additional sets ``exit_status`` key.
         UID is remains in ``self._uid_dict``.
 
@@ -916,8 +916,8 @@ class PlanQueueOperations:
         Returns
         -------
         dict
-            The plan added to the history including ``exit_status``. If another no plan is currently
-            running, then ``{}`` is returned.
+            The plan added to the history including ``exit_status``. If another item (plan)
+            is currently running, then ``{}`` is returned.
         """
         async with self._lock:
-            return await self._set_processed_plan_as_stopped(exit_status=exit_status)
+            return await self._set_processed_item_as_stopped(exit_status=exit_status)

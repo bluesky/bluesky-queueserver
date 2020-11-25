@@ -934,7 +934,7 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg, "plan": plan, "qsize": qsize}
 
-    async def _queue_plan_move_handler(self, request):
+    async def _queue_item_move_handler(self, request):
         """
         Moves a plan to a new position in the queue. Source and destination
         for the plan may be specified as position of the plan in the queue
@@ -1158,7 +1158,7 @@ class RunEngineManager(Process):
             "queue_item_add": "_queue_item_add_handler",
             "queue_item_get": "_queue_item_get_handler",
             "queue_item_remove": "_queue_item_remove_handler",
-            "queue_plan_move": "_queue_plan_move_handler",
+            "queue_item_move": "_queue_item_move_handler",
             "queue_clear": "_queue_clear_handler",
             "queue_start": "_queue_start_handler",
             "queue_stop": "_queue_stop_handler",

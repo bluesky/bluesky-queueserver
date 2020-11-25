@@ -39,7 +39,7 @@ def get_supported_commands():
         "queue_item_add": "queue_item_add",
         "queue_item_get": "queue_item_get",
         "queue_item_remove": "queue_item_remove",
-        "queue_plan_move": "queue_plan_move",
+        "queue_item_move": "queue_item_move",
         "queue_clear": "queue_clear",
         "queue_start": "queue_start",
         "queue_stop": "queue_stop",
@@ -104,7 +104,7 @@ def create_msg(command, params=None):
             else:
                 raise ValueError(f"Invalid number of method arguments: '{pprint.pformat(params)}'")
 
-        elif command == "queue_plan_move":
+        elif command == "queue_item_move":
             if len(params) == 2:
                 # Argument order: [<pos_source>, <uid_source>] <pos_dest>
                 prms = _pos_or_uid(params[0])

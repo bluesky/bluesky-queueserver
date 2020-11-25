@@ -833,7 +833,7 @@ def test_queue_item_get_move(re_manager, params, result_order, exit_code):  # no
             params[n] = uids_1[p]
 
     # Testing 'queue_item_get'. ONLY THE RETURN CODE IS TESTED.
-    assert subprocess.call(["qserver", "-c", "queue_plan_move", "-p", *params]) == exit_code
+    assert subprocess.call(["qserver", "-c", "queue_item_move", "-p", *params]) == exit_code
 
     queue_2 = get_queue()["queue"]
     assert len(queue_2) == 3

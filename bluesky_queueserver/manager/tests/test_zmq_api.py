@@ -723,7 +723,7 @@ def test_zmq_api_move_plan_1(re_manager, params, src, order, success, msg):  # n
     if "after_uid" in params:
         params["after_uid"] = plan_uids[params["after_uid"]]
 
-    resp2, _ = zmq_single_request("queue_plan_move", params)
+    resp2, _ = zmq_single_request("queue_item_move", params)
     if success:
         assert resp2["success"] is True
         assert resp2["plan"] == queue[src]

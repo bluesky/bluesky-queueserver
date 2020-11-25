@@ -257,7 +257,7 @@ def test_uid_dict_3_failing(pq):
     assert len(pq._uid_dict) == 2
 
 
-def test_remove_plan(pq):
+def test_remove_item(pq):
     """
     Basic test for functions associated with ``_remove_plan()``
     """
@@ -271,7 +271,7 @@ def test_remove_plan(pq):
         plan_to_remove = [_ for _ in plans if _["name"] == "b"][0]
 
         # Remove one plan
-        await pq._remove_plan(plan_to_remove)
+        await pq._remove_item(plan_to_remove)
         plans = await pq.get_queue()
         assert len(plans) == 2
 
@@ -279,15 +279,15 @@ def test_remove_plan(pq):
         plan_to_add = plans[0]
         await pq._r_pool.lpush(pq._name_plan_queue, json.dumps(plan_to_add))
         # Now remove both plans
-        await pq._remove_plan(plan_to_add, single=False)  # Allow deleting multiple or no plans
+        await pq._remove_item(plan_to_add, single=False)  # Allow deleting multiple or no plans
         assert await pq.get_queue_size() == 1
 
         # Delete the plan again (the plan is not in the queue, but it shouldn't raise an exception)
-        await pq._remove_plan(plan_to_add, single=False)  # Allow deleting multiple or no plans
+        await pq._remove_item(plan_to_add, single=False)  # Allow deleting multiple or no plans
         assert await pq.get_queue_size() == 1
 
-        with pytest.raises(RuntimeError, match="One plans is expected to be removed"):
-            await pq._remove_plan(plan_to_add)
+        with pytest.raises(RuntimeError, match="One item is expected"):
+            await pq._remove_item(plan_to_add)
         assert await pq.get_queue_size() == 1
 
         # Now add 'plan_to_add' twice (create two copies)
@@ -295,8 +295,8 @@ def test_remove_plan(pq):
         await pq._r_pool.lpush(pq._name_plan_queue, json.dumps(plan_to_add))
         assert await pq.get_queue_size() == 3
         # Attempt to delete two copies
-        with pytest.raises(RuntimeError, match="One plans is expected to be removed"):
-            await pq._remove_plan(plan_to_add)
+        with pytest.raises(RuntimeError, match="One item is expected"):
+            await pq._remove_item(plan_to_add)
         # Exception is raised, but both copies are deleted
         assert await pq.get_queue_size() == 1
 

@@ -83,21 +83,21 @@ class PlanQueueOperations:
         """
         pq = await self._get_queue()
 
-        def verify_plan(plan):
+        def verify_plan(item):
             # The criteria may be changed.
-            return "plan_uid" in plan
+            return "plan_uid" in item
 
-        plans_to_remove = []
-        for plan in pq:
-            if not verify_plan(plan):
-                plans_to_remove.append(plan)
+        items_to_remove = []
+        for item in pq:
+            if not verify_plan(item):
+                items_to_remove.append(item)
 
-        for plan in plans_to_remove:
-            await self._remove_plan(plan, single=False)
+        for item in items_to_remove:
+            await self._remove_item(item, single=False)
 
         # Clean running plan info also (on the development computer it may contain garbage)
-        plan = await self._get_running_item_info()
-        if plan and not verify_plan(plan):
+        item = await self._get_running_item_info()
+        if item and not verify_plan(item):
             await self._clear_running_plan_info()
 
     async def _delete_pool_entries(self):
@@ -411,9 +411,9 @@ class PlanQueueOperations:
         async with self._lock:
             return await self._get_plan(pos=pos, uid=uid)
 
-    async def _remove_plan(self, plan, single=True):
+    async def _remove_item(self, item, single=True):
         """
-        Remove exactly a plan from the queue. If ``single=True`` then the exception is
+        Remove an item from the queue. If ``single=True`` then the exception is
         raised in case of no or multiple matching plans are found in the queue.
         The function is not part of user API and shouldn't be used on exception from
         the other methods of the class.
@@ -433,10 +433,10 @@ class PlanQueueOperations:
         RuntimeError
             No or multiple matching plans are removed and ``single=True``.
         """
-        n_rem_plans = await self._r_pool.lrem(self._name_plan_queue, 0, json.dumps(plan))
-        if (n_rem_plans != 1) and single:
+        n_rem_items = await self._r_pool.lrem(self._name_plan_queue, 0, json.dumps(item))
+        if (n_rem_items != 1) and single:
             raise RuntimeError(
-                f"The number of removed plans is {n_rem_plans}. One plans is expected to be removed."
+                f"The number of removed items is {n_rem_items}. One item is expected."
             )
 
     async def _pop_item_from_queue(self, *, pos=None, uid=None):
@@ -456,7 +456,7 @@ class PlanQueueOperations:
             if running_item and (uid == running_item["plan_uid"]):
                 raise IndexError("Can not remove a plan which is currently running.")
             item = self._uid_dict_get_plan(uid)
-            await self._remove_plan(item)
+            await self._remove_item(item)
         elif pos == "back":
             item_json = await self._r_pool.rpop(self._name_plan_queue)
             if item_json is None:
@@ -470,7 +470,7 @@ class PlanQueueOperations:
         elif isinstance(pos, int):
             item = await self._get_plan(pos=pos)
             if item:
-                await self._remove_plan(item)
+                await self._remove_item(item)
         else:
             raise ValueError(f"Parameter 'pos' has incorrect value: pos={str(pos)} (type={type(pos)})")
 

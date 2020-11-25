@@ -35,7 +35,7 @@ class PlanQueueOperations:
         queue = await pq.get_queue()
 
         # Start the first plan (This doesn't actually execute the plan. It is just for bookkeeping.)
-        plan = await pq.set_next_plan_as_running()
+        plan = await pq.set_next_item_as_running()
         # ...
         # Here place the code for executing the plan in dictionary `plan`
 
@@ -48,7 +48,7 @@ class PlanQueueOperations:
         plan = await pq.set_processed_plan_as_completed(exit_status="completed")
 
         # We are ready to start the next plan
-        plan = await pq.set_next_plan_as_running()
+        plan = await pq.set_next_item_as_running()
 
         # Assume that we paused and then stopped the plan. Clear the running plan and
         #   push it back to the queue. Also create the respective history entry.
@@ -820,9 +820,9 @@ class PlanQueueOperations:
     # ----------------------------------------------------------------------
     #          Standard plan operations during queue execution
 
-    async def _set_next_plan_as_running(self):
+    async def _set_next_item_as_running(self):
         """
-        See ``self.set_next_plan_as_running()`` method.
+        See ``self.set_next_item_as_running()`` method.
         """
         # UID remains in the `self._uid_dict` after this operation.
         if not await self._is_plan_running():
@@ -836,20 +836,20 @@ class PlanQueueOperations:
             plan = {}
         return plan
 
-    async def set_next_plan_as_running(self):
+    async def set_next_item_as_running(self):
         """
-        Sets the next plan from the queue as a running plan. The plan is removed
-        from the queue. UID remains in ``self._uid_dict``, i.e. plan with the same UID
+        Sets the next item from the queue as 'running'. The item is removed
+        from the queue. UID remains in ``self._uid_dict``, i.e. item with the same UID
         may not be added to the queue while it is being executed.
 
         Returns
         -------
         dict
-            The plan that was set as currently running. If another plan is currently
-            running or the queue is empty, then ``{}`` is returned.
+            The item that was set as currently running. If another item is currently
+            set as 'running' or the queue is empty, then ``{}`` is returned.
         """
         async with self._lock:
-            return await self._set_next_plan_as_running()
+            return await self._set_next_item_as_running()
 
     async def _set_processed_plan_as_completed(self, exit_status):
         """

@@ -449,7 +449,7 @@ class RunEngineManager(Process):
 
                 self._manager_state = MState.EXECUTING_QUEUE
 
-                new_plan = await self._plan_queue.set_next_plan_as_running()
+                new_plan = await self._plan_queue.set_next_item_as_running()
 
                 plan_name = new_plan["name"]
                 args = new_plan["args"] if "args" in new_plan else []

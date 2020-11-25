@@ -38,7 +38,7 @@ def get_supported_commands():
         "queue_get": "queue_get",
         "queue_item_add": "queue_item_add",
         "queue_item_get": "queue_item_get",
-        "queue_plan_remove": "queue_plan_remove",
+        "queue_item_remove": "queue_item_remove",
         "queue_plan_move": "queue_plan_move",
         "queue_clear": "queue_clear",
         "queue_start": "queue_start",
@@ -96,7 +96,7 @@ def create_msg(command, params=None):
             prms["user"] = "qserver-cli"
             prms["user_group"] = "root"
 
-        elif command in ("queue_plan_remove", "queue_item_get"):
+        elif command in ("queue_item_remove", "queue_item_get"):
             if len(params) == 0:
                 prms = {}
             elif len(params) == 1:

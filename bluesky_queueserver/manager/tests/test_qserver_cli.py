@@ -47,7 +47,7 @@ def test_qserver_cli_and_manager(re_manager):  # noqa: F811
     assert not is_plan_running, "Plan is executed while it shouldn't"
 
     assert subprocess.call(["qserver", "-c", "queue_get"]) == 0
-    assert subprocess.call(["qserver", "-c", "queue_plan_remove"]) == 0
+    assert subprocess.call(["qserver", "-c", "queue_item_remove"]) == 0
 
     n_plans, is_plan_running, _ = get_reduced_state_info()
     assert n_plans == 2, "Incorrect number of plans in the queue"
@@ -737,7 +737,7 @@ def test_queue_item_add_6_fail(re_manager, params, exit_code):  # noqa F811
 # fmt: on
 def test_queue_item_get_remove(re_manager, pos, uid_ind, pos_result, success):  # noqa F811
     """
-    Tests for ``queue_item_get`` and ``queue_plan_remove`` requests.
+    Tests for ``queue_item_get`` and ``queue_item_remove`` requests.
     """
     plans = [
         "{'name':'count', 'args':[['det1']]}",
@@ -768,8 +768,8 @@ def test_queue_item_get_remove(re_manager, pos, uid_ind, pos_result, success):  
     else:
         assert res != 0
 
-    # Testing 'queue_plan_remove'.
-    res = subprocess.call(["qserver", "-c", "queue_plan_remove", *args])
+    # Testing 'queue_item_remove'.
+    res = subprocess.call(["qserver", "-c", "queue_item_remove", *args])
     if success:
         assert res == 0
     else:
@@ -810,7 +810,7 @@ def test_queue_item_get_remove(re_manager, pos, uid_ind, pos_result, success):  
 # fmt: on
 def test_queue_item_get_move(re_manager, params, result_order, exit_code):  # noqa F811
     """
-    Tests for ``queue_item_get`` and ``queue_plan_remove`` requests.
+    Tests for ``queue_item_get`` and ``queue_item_remove`` requests.
     """
     plans = [
         "{'name':'count', 'args':[['det1']]}",

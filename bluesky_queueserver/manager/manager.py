@@ -913,7 +913,7 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg, "plan": plan}
 
-    async def _queue_plan_remove_handler(self, request):
+    async def _queue_item_remove_handler(self, request):
         """
         Removes (pops) item from the queue. The position of the item
         may be specified as an index (positive or negative) or a string
@@ -1157,7 +1157,7 @@ class RunEngineManager(Process):
             "environment_destroy": "_environment_destroy_handler",
             "queue_item_add": "_queue_item_add_handler",
             "queue_item_get": "_queue_item_get_handler",
-            "queue_plan_remove": "_queue_plan_remove_handler",
+            "queue_item_remove": "_queue_item_remove_handler",
             "queue_plan_move": "_queue_plan_move_handler",
             "queue_clear": "_queue_clear_handler",
             "queue_start": "_queue_start_handler",

@@ -219,7 +219,7 @@ def test_zmq_api_queue_item_add_3(re_manager):  # noqa F811
     resp1a, _ = zmq_single_request("queue_get")
     assert len(resp1a["queue"]) == 3
     assert resp1a["queue"][1]["plan_uid"] == uid1
-    resp1b, _ = zmq_single_request("queue_plan_remove", {"uid": uid1})
+    resp1b, _ = zmq_single_request("queue_item_remove", {"uid": uid1})
     assert resp1b["success"] is True
 
     params = {"plan": plan3, "before_uid": base_plans[1]["plan_uid"], "user": _user, "user_group": _user_group}
@@ -229,7 +229,7 @@ def test_zmq_api_queue_item_add_3(re_manager):  # noqa F811
     resp2a, _ = zmq_single_request("queue_get")
     assert len(resp2a["queue"]) == 3
     assert resp2a["queue"][1]["plan_uid"] == uid2
-    resp2b, _ = zmq_single_request("queue_plan_remove", {"uid": uid2})
+    resp2b, _ = zmq_single_request("queue_item_remove", {"uid": uid2})
     assert resp2b["success"] is True
 
     # Non-existing uid
@@ -483,7 +483,7 @@ def test_zmq_api_plans_allowed_and_devices_allowed_3_fail(re_manager, params, me
 
 
 # =======================================================================================
-#                      Method 'queue_item_get', 'queue_plan_remove'
+#                      Method 'queue_item_get', 'queue_item_remove'
 
 
 def test_zmq_api_queue_item_get_remove_1(re_manager):  # noqa F811
@@ -509,7 +509,7 @@ def test_zmq_api_queue_item_get_remove_1(re_manager):  # noqa F811
     assert "plan_uid" in resp2["plan"]
 
     # Remove the last plan from the queue
-    resp3, _ = zmq_single_request("queue_plan_remove")
+    resp3, _ = zmq_single_request("queue_item_remove")
     assert resp3["success"] is True
     assert resp3["qsize"] == 2
     assert resp3["plan"]["name"] == "count"
@@ -565,7 +565,7 @@ def test_zmq_api_queue_item_get_remove_2(re_manager, pos, pos_result, success): 
         assert "Failed to get a plan" in resp1["msg"]
 
     # Testing '/queue/plan/remove'
-    resp2, _ = zmq_single_request("queue_plan_remove", params)
+    resp2, _ = zmq_single_request("queue_item_remove", params)
     assert resp2["success"] is success
     assert resp2["qsize"] == (2 if success else None)
     if success:
@@ -600,7 +600,7 @@ def test_zmq_api_queue_item_get_remove_3(re_manager):  # noqa F811
     assert resp2a["plan"]["plan_uid"] == plans_in_queue[1]["plan_uid"]
     assert resp2a["plan"]["name"] == plans_in_queue[1]["name"]
     assert resp2a["plan"]["args"] == plans_in_queue[1]["args"]
-    resp2b, _ = zmq_single_request("queue_plan_remove", {"uid": uid})
+    resp2b, _ = zmq_single_request("queue_item_remove", {"uid": uid})
     assert resp2b["plan"]["plan_uid"] == plans_in_queue[1]["plan_uid"]
     assert resp2b["plan"]["name"] == plans_in_queue[1]["name"]
     assert resp2b["plan"]["args"] == plans_in_queue[1]["args"]
@@ -621,7 +621,7 @@ def test_zmq_api_queue_item_get_remove_3(re_manager):  # noqa F811
     resp5a, _ = zmq_single_request("queue_item_get", {"uid": uid})
     assert resp5a["success"] is False
     assert "is currently running" in resp5a["msg"]
-    resp5b, _ = zmq_single_request("queue_plan_remove", {"uid": uid})
+    resp5b, _ = zmq_single_request("queue_item_remove", {"uid": uid})
     assert resp5b["success"] is False
     assert "Can not remove a plan which is currently running" in resp5b["msg"]
 
@@ -629,7 +629,7 @@ def test_zmq_api_queue_item_get_remove_3(re_manager):  # noqa F811
     resp6a, _ = zmq_single_request("queue_item_get", {"uid": uid})
     assert resp6a["success"] is False
     assert "not in the queue" in resp6a["msg"]
-    resp6b, _ = zmq_single_request("queue_plan_remove", {"uid": uid})
+    resp6b, _ = zmq_single_request("queue_item_remove", {"uid": uid})
     assert resp6b["success"] is False
     assert "not in the queue" in resp6b["msg"]
 
@@ -637,7 +637,7 @@ def test_zmq_api_queue_item_get_remove_3(re_manager):  # noqa F811
     uid = plans_in_queue[2]["plan_uid"]
     resp7a, _ = zmq_single_request("queue_item_get", {"uid": uid})
     assert resp7a["success"] is True
-    resp7b, _ = zmq_single_request("queue_plan_remove", {"uid": uid})
+    resp7b, _ = zmq_single_request("queue_item_remove", {"uid": uid})
     assert resp7b["success"] is True
 
     assert wait_for_condition(

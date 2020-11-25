@@ -215,8 +215,8 @@ The contents of the queue may be fetched at any time::
 
 The last item can be removed (popped) from the back of the queue::
 
-  qserver -c queue_plan_remove
-  qserver -c queue_plan_remove -p back
+  qserver -c queue_item_remove
+  qserver -c queue_item_remove -p back
 
   echo '{}' | http POST http://localhost:60610/queue/plan/remove
   http POST http://localhost:60610/queue/plan/remove pos:='"back"'
@@ -225,19 +225,19 @@ The position of the removed element may be specified similarly to `queue_item_ad
 that the position index must point to the existing element, otherwise the request fails (returns 'success==False').
 The following examples remove the plan from the front of the queue and the element previous to last::
 
-  qserver -c queue_plan_remove -p front
-  qserver -c queue_plan_remove -p -2
+  qserver -c queue_item_remove -p front
+  qserver -c queue_item_remove -p -2
 
   http POST http://localhost:60610/queue/plan/remove pos:='"front"'
   http POST http://localhost:60610/queue/plan/remove pos:=-2
 
 The plans can also be addressed by UID. Remove the plan with <uid>::
 
-  qserver -c queue_plan_remove -p '<uid>'
+  qserver -c queue_item_remove -p '<uid>'
   http POST http://localhost:60610/queue/plan/remove uid:='<uid>'
 
 Plans can be read from the queue without changing it. `queue_item_get` requests are formatted identically to
-`queue_plan_remove` requests::
+`queue_item_remove` requests::
 
   qserver -c queue_item_get
   qserver -c queue_item_get -p back

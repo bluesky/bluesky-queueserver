@@ -294,8 +294,8 @@ def test_zmq_api_queue_item_add_4(re_manager):  # noqa F811
     ), "Timeout while waiting for environment to be opened"
 
     state = get_queue_state()
-    assert state["plans_in_queue"] == 0
-    assert state["plans_in_history"] == 3
+    assert state["items_in_queue"] == 0
+    assert state["items_in_history"] == 3
 
     # Close the environment
     resp5, _ = zmq_single_request("environment_close")
@@ -359,7 +359,7 @@ def test_zmq_api_queue_item_add_7_fail(re_manager):  # noqa F811
     params2 = {"plan": plan2, "user": _user, "user_group": _user_group}
     resp2, _ = zmq_single_request("queue_item_add", params2)
     assert resp2["success"] is False
-    assert "Failed to add a plan: Plan validation failed: got an unexpected keyword argument 'abc'" in resp2["msg"]
+    assert "Failed to add an item: Plan validation failed: got an unexpected keyword argument 'abc'" in resp2["msg"]
 
     # User name is not specified
     params3 = {"plan": plan2, "user_group": _user_group}
@@ -562,7 +562,7 @@ def test_zmq_api_queue_item_get_remove_2(re_manager, pos, pos_result, success): 
         assert resp1["msg"] == ""
     else:
         assert resp1["plan"] == {}
-        assert "Failed to get a plan" in resp1["msg"]
+        assert "Failed to get an item" in resp1["msg"]
 
     # Testing '/queue/plan/remove'
     resp2, _ = zmq_single_request("queue_item_remove", params)
@@ -574,7 +574,7 @@ def test_zmq_api_queue_item_get_remove_2(re_manager, pos, pos_result, success): 
         assert resp2["msg"] == ""
     else:
         assert resp2["plan"] == {}
-        assert "Failed to remove a plan" in resp2["msg"]
+        assert "Failed to remove an item" in resp2["msg"]
 
     resp3, _ = zmq_single_request("queue_get")
     assert len(resp3["queue"]) == (2 if success else 3)
@@ -645,8 +645,8 @@ def test_zmq_api_queue_item_get_remove_3(re_manager):  # noqa F811
     ), "Timeout while waiting for environment to be opened"
 
     state = get_queue_state()
-    assert state["plans_in_queue"] == 0
-    assert state["plans_in_history"] == 1
+    assert state["items_in_queue"] == 0
+    assert state["items_in_history"] == 1
 
     # Close the environment
     resp8, _ = zmq_single_request("environment_close")
@@ -781,8 +781,8 @@ def test_zmq_api_queue_execution_1(re_manager):  # noqa: F811
     assert wait_for_condition(time=10, condition=condition_environment_created)
 
     resp2a, _ = zmq_single_request("status")
-    assert resp2a["plans_in_queue"] == 4
-    assert resp2a["plans_in_history"] == 0
+    assert resp2a["items_in_queue"] == 4
+    assert resp2a["items_in_history"] == 0
 
     resp3, _ = zmq_single_request("queue_start")
     assert resp3["success"] is True
@@ -790,8 +790,8 @@ def test_zmq_api_queue_execution_1(re_manager):  # noqa: F811
     assert wait_for_condition(time=5, condition=condition_manager_idle)
 
     resp3a, _ = zmq_single_request("status")
-    assert resp3a["plans_in_queue"] == 3
-    assert resp3a["plans_in_history"] == 0
+    assert resp3a["items_in_queue"] == 3
+    assert resp3a["items_in_history"] == 0
 
     resp4, _ = zmq_single_request("queue_start")
     assert resp4["success"] is True
@@ -799,8 +799,8 @@ def test_zmq_api_queue_execution_1(re_manager):  # noqa: F811
     assert wait_for_condition(time=5, condition=condition_manager_idle)
 
     resp4a, _ = zmq_single_request("status")
-    assert resp4a["plans_in_queue"] == 1
-    assert resp4a["plans_in_history"] == 1
+    assert resp4a["items_in_queue"] == 1
+    assert resp4a["items_in_history"] == 1
 
     resp5, _ = zmq_single_request("queue_start")
     assert resp5["success"] is True
@@ -808,8 +808,8 @@ def test_zmq_api_queue_execution_1(re_manager):  # noqa: F811
     assert wait_for_condition(time=5, condition=condition_queue_processing_finished)
 
     resp5a, _ = zmq_single_request("status")
-    assert resp5a["plans_in_queue"] == 0
-    assert resp5a["plans_in_history"] == 2
+    assert resp5a["items_in_queue"] == 0
+    assert resp5a["items_in_history"] == 2
 
     # Close the environment
     resp6, _ = zmq_single_request("environment_close")

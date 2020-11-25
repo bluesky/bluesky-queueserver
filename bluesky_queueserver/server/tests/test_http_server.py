@@ -38,8 +38,8 @@ def test_http_server_ping_handler(re_manager, fastapi_server):  # noqa F811
     resp = _request_to_json("get", "/")
     assert resp["msg"] == "RE Manager"
     assert resp["manager_state"] == "idle"
-    assert resp["plans_in_queue"] == 0
-    assert resp["running_plan_uid"] is None
+    assert resp["items_in_queue"] == 0
+    assert resp["running_item_uid"] is None
     assert resp["worker_environment_exists"] is False
 
 
@@ -47,8 +47,8 @@ def test_http_server_status_handler(re_manager, fastapi_server):  # noqa F811
     resp = _request_to_json("get", "/status")
     assert resp["msg"] == "RE Manager"
     assert resp["manager_state"] == "idle"
-    assert resp["plans_in_queue"] == 0
-    assert resp["running_plan_uid"] is None
+    assert resp["items_in_queue"] == 0
+    assert resp["running_item_uid"] is None
     assert resp["worker_environment_exists"] is False
 
 
@@ -143,7 +143,7 @@ def test_http_server_queue_item_add_handler_3(re_manager, fastapi_server):  # no
     plan2 = {"plan": {"name": "count", "args": [["det1", "det2"]], "kwargs": {"abc": 10}}}
     resp2 = _request_to_json("post", "/queue/plan/add", json=plan2)
     assert resp2["success"] is False
-    assert "Failed to add a plan: Plan validation failed: got an unexpected keyword argument 'abc'" in resp2["msg"]
+    assert "Failed to add an item: Plan validation failed: got an unexpected keyword argument 'abc'" in resp2["msg"]
 
     # Valid plan
     plan3 = {"plan": {"name": "count", "args": [["det1", "det2"]]}}
@@ -259,7 +259,7 @@ def test_http_server_queue_item_get_remove_handler_2(
         assert resp1["msg"] == ""
     else:
         assert resp1["plan"] == {}
-        assert "Failed to get a plan" in resp1["msg"]
+        assert "Failed to get an item" in resp1["msg"]
 
     # Testing '/queue/plan/remove'
     resp2 = _request_to_json("post", "/queue/plan/remove", json=params)
@@ -271,7 +271,7 @@ def test_http_server_queue_item_get_remove_handler_2(
         assert resp2["msg"] == ""
     else:
         assert resp2["plan"] == {}
-        assert "Failed to remove a plan" in resp2["msg"]
+        assert "Failed to remove an item" in resp2["msg"]
 
     resp3 = _request_to_json("get", "/queue/get")
     assert len(resp3["queue"]) == (2 if success else 3)
@@ -338,8 +338,8 @@ def test_http_server_queue_item_get_remove_3(re_manager, fastapi_server):  # noq
     ttime.sleep(10)  # TODO: wait for the queue processing to be completed
 
     state = _request_to_json("get", "/status")
-    assert state["plans_in_queue"] == 0
-    assert state["plans_in_history"] == 1
+    assert state["items_in_queue"] == 0
+    assert state["items_in_history"] == 1
 
 
 def test_http_server_queue_item_get_remove_4_failing(re_manager, fastapi_server):  # noqa F811
@@ -596,8 +596,8 @@ def test_http_server_manager_kill(re_manager, fastapi_server):  # noqa F811
     resp = _request_to_json("get", "/status")
     assert resp["msg"] == "RE Manager"
     assert resp["manager_state"] == "idle"
-    assert resp["plans_in_queue"] == 0
-    assert resp["running_plan_uid"] is None
+    assert resp["items_in_queue"] == 0
+    assert resp["running_item_uid"] is None
     assert resp["worker_environment_exists"] is True
 
 
@@ -630,9 +630,9 @@ def test_http_server_clear_queue_handler_2(re_manager, fastapi_server, add_plans
     resp = _request_to_json("get", "/status")
     assert resp["msg"] == "RE Manager"
     assert resp["manager_state"] == "executing_queue"
-    assert resp["plans_in_queue"] == 2
-    assert resp["running_plan_uid"] is not None
-    assert resp["plans_in_history"] == 0
+    assert resp["items_in_queue"] == 2
+    assert resp["running_item_uid"] is not None
+    assert resp["items_in_history"] == 0
     assert resp["worker_environment_exists"] is True
 
     # Attempt to stop
@@ -649,9 +649,9 @@ def test_http_server_clear_queue_handler_2(re_manager, fastapi_server, add_plans
         resp = _request_to_json("get", "/status")
         assert resp["msg"] == "RE Manager"
         assert resp["manager_state"] == "idle"
-        assert resp["plans_in_queue"] == 0
-        assert resp["plans_in_history"] == 3
-        assert resp["running_plan_uid"] is None
+        assert resp["items_in_queue"] == 0
+        assert resp["items_in_history"] == 3
+        assert resp["running_item_uid"] is None
         assert resp["worker_environment_exists"] is True
 
 
@@ -693,8 +693,8 @@ def test_http_server_queue_stop(re_manager, fastapi_server, add_plans_to_queue, 
 
     status = _request_to_json("get", "/status")
     assert status["manager_state"] == "idle"
-    assert status["plans_in_queue"] == (0 if deactivate else 2)
-    assert status["plans_in_history"] == (3 if deactivate else 1)
-    assert status["running_plan_uid"] is None
+    assert status["items_in_queue"] == (0 if deactivate else 2)
+    assert status["items_in_history"] == (3 if deactivate else 1)
+    assert status["running_item_uid"] is None
     assert status["worker_environment_exists"] is True
     assert status["queue_stop_pending"] is False

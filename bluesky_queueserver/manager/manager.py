@@ -707,14 +707,14 @@ class RunEngineManager(Process):
         logger.info("Processing 'status' request.")
 
         # Computed/retrieved data
-        n_pending_plans = await self._plan_queue.get_queue_size()
-        running_plan_info = await self._plan_queue.get_running_item_info()
-        n_plans_in_history = await self._plan_queue.get_history_size()
+        n_pending_items = await self._plan_queue.get_queue_size()
+        running_item_info = await self._plan_queue.get_running_item_info()
+        n_items_in_history = await self._plan_queue.get_history_size()
 
         # Prepared output data
-        plans_in_queue = n_pending_plans
-        plans_in_history = n_plans_in_history
-        running_plan_uid = running_plan_info["plan_uid"] if running_plan_info else None
+        items_in_queue = n_pending_items
+        items_in_history = n_items_in_history
+        running_item_uid = running_item_info["plan_uid"] if running_item_info else None
         manager_state = self._manager_state.value
         queue_stop_pending = self._queue_stop_pending
         worker_environment_exists = self._environment_exists
@@ -724,9 +724,9 @@ class RunEngineManager(Process):
         #       retrieve detailed status.
         msg = {
             "msg": "RE Manager",
-            "plans_in_queue": plans_in_queue,
-            "plans_in_history": plans_in_history,
-            "running_plan_uid": running_plan_uid,
+            "items_in_queue": items_in_queue,
+            "items_in_history": items_in_history,
+            "running_item_uid": running_item_uid,
             "manager_state": manager_state,
             "queue_stop_pending": queue_stop_pending,
             "worker_environment_exists": worker_environment_exists,
@@ -886,7 +886,7 @@ class RunEngineManager(Process):
 
         except Exception as ex:
             success = False
-            msg = f"Failed to add a plan: {str(ex)}"
+            msg = f"Failed to add an item: {str(ex)}"
 
         rdict = {"success": success, "msg": msg, "qsize": qsize}
         if item_type:
@@ -909,7 +909,7 @@ class RunEngineManager(Process):
             success = True
         except Exception as ex:
             success = False
-            msg = f"Failed to get a plan: {str(ex)}"
+            msg = f"Failed to get an item: {str(ex)}"
 
         return {"success": success, "msg": msg, "plan": plan}
 
@@ -930,7 +930,7 @@ class RunEngineManager(Process):
             success = True
         except Exception as ex:
             success = False
-            msg = f"Failed to remove a plan: {str(ex)}"
+            msg = f"Failed to remove an item: {str(ex)}"
 
         return {"success": success, "msg": msg, "plan": plan, "qsize": qsize}
 
@@ -956,7 +956,7 @@ class RunEngineManager(Process):
             success = True
         except Exception as ex:
             success = False
-            msg = f"Failed to move the plan: {str(ex)}"
+            msg = f"Failed to move the item: {str(ex)}"
 
         return {"success": success, "msg": msg, "plan": plan, "qsize": qsize}
 

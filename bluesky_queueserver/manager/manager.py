@@ -793,7 +793,7 @@ class RunEngineManager(Process):
         Returns the contents of the current queue.
         """
         logger.info("Returning current queue and running plan.")
-        plan_queue = await self._plan_queue.get_plan_queue()
+        plan_queue = await self._plan_queue.get_queue()
         running_plan = await self._plan_queue.get_running_plan_info()
 
         return {"queue": plan_queue, "running_plan": running_plan}

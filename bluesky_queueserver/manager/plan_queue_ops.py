@@ -32,7 +32,7 @@ class PlanQueueOperations:
         qsize = await pq.get_queue_size()
 
         # Read the queue (as a list)
-        queue = await pq.get_plan_queue()
+        queue = await pq.get_queue()
 
         # Start the first plan (This doesn't actually execute the plan. It is just for bookkeeping.)
         plan = await pq.set_next_plan_as_running()
@@ -81,7 +81,7 @@ class PlanQueueOperations:
         """
         Delete all the invalid queue entries (there could be some entries from failed unit tests).
         """
-        pq = await self._get_plan_queue()
+        pq = await self._get_queue()
 
         def verify_plan(plan):
             # The criteria may be changed.
@@ -182,7 +182,7 @@ class PlanQueueOperations:
         IndexError
             No plan is found.
         """
-        queue = await self._get_plan_queue()
+        queue = await self._get_queue()
         for n, plan in enumerate(queue):
             if plan["plan_uid"] == uid:
                 return n
@@ -238,7 +238,7 @@ class PlanQueueOperations:
         """
         Initialize ``self._uid_dict`` with UIDs extracted from the plans in the queue.
         """
-        pq = await self._get_plan_queue()
+        pq = await self._get_queue()
         self._uid_dict_clear()
         # Go over all plans in the queue
         for plan in pq:
@@ -327,26 +327,26 @@ class PlanQueueOperations:
         async with self._lock:
             return await self._get_queue_size()
 
-    async def _get_plan_queue(self):
+    async def _get_queue(self):
         """
-        See ``self.get_plan_queue()`` method.
+        See ``self.get_queue()`` method.
         """
         all_plans_json = await self._r_pool.lrange(self._name_plan_queue, 0, -1)
         return [json.loads(_) for _ in all_plans_json]
 
-    async def get_plan_queue(self):
+    async def get_queue(self):
         """
-        Get the list of all plans in the queue. The first element of the list is the first
-        plan in the queue.
+        Get the list of all items in the queue. The first element of the list is the first
+        item in the queue.
 
         Returns
         -------
         list(dict)
-            The list of plans in the queue. Each plan is represented as a dictionary.
+            The list of items in the queue. Each item is represented as a dictionary.
             Empty list is returned if the queue is empty.
         """
         async with self._lock:
-            return await self._get_plan_queue()
+            return await self._get_queue()
 
     async def _get_plan(self, *, pos=None, uid=None):
         """

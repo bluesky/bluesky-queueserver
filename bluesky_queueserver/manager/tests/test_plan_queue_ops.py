@@ -71,12 +71,12 @@ def test_queue_clean(pq, plan_running, plans, result_running, result_plans):
             await pq._r_pool.rpush(pq._name_plan_queue, json.dumps(plan))
 
         assert await pq.get_running_plan_info() == plan_running
-        assert await pq.get_plan_queue() == plans
+        assert await pq.get_queue() == plans
 
         await pq._queue_clean()
 
         assert await pq.get_running_plan_info() == result_running
-        assert await pq.get_plan_queue() == result_plans
+        assert await pq.get_queue() == result_plans
 
     asyncio.run(testing())
 
@@ -218,7 +218,7 @@ def test_uid_dict_2_initialize(pq):
         await pq.add_item_to_queue({"name": "a"})
         await pq.add_item_to_queue({"name": "b"})
         await pq.add_item_to_queue({"name": "c"})
-        plans = await pq.get_plan_queue()
+        plans = await pq.get_queue()
         uid_dict = {_["plan_uid"]: _ for _ in plans}
 
         await pq._uid_dict_initialize()
@@ -267,12 +267,12 @@ def test_remove_plan(pq):
         for plan in plan_list:
             await pq.add_item_to_queue(plan)
 
-        plans = await pq.get_plan_queue()
+        plans = await pq.get_queue()
         plan_to_remove = [_ for _ in plans if _["name"] == "b"][0]
 
         # Remove one plan
         await pq._remove_plan(plan_to_remove)
-        plans = await pq.get_plan_queue()
+        plans = await pq.get_queue()
         assert len(plans) == 2
 
         # Add a copy of a plan (queue is not supposed to have copies in real life)
@@ -395,7 +395,7 @@ def test_add_item_to_queue_1(pq):
 
         assert await pq.get_queue_size() == 12
 
-        plans = await pq.get_plan_queue()
+        plans = await pq.get_queue()
         name_sequence = [_["name"] for _ in plans]
         assert name_sequence == ["l", "k", "e", "d", "a", "i", "b", "c", "g", "h", "f", "j"]
 
@@ -419,7 +419,7 @@ def test_add_item_to_queue_2(pq):
         await add_plan({"name": "b"}, 2)
         await add_plan({"name": "c"}, 3, pos="back")
 
-        plan_queue = await pq.get_plan_queue()
+        plan_queue = await pq.get_queue()
         displaced_uid = plan_queue[1]["plan_uid"]
 
         await add_plan({"name": "d"}, 4, before_uid=displaced_uid)
@@ -439,7 +439,7 @@ def test_add_item_to_queue_2(pq):
 
         assert await pq.get_queue_size() == 5
 
-        plans = await pq.get_plan_queue()
+        plans = await pq.get_queue()
         name_sequence = [_["name"] for _ in plans]
         assert name_sequence == ["f", "d", "b", "e", "c"]
 
@@ -543,7 +543,7 @@ def test_move_item_1(pq, params, src, order, success, msg):
             assert qsize == len(plans)
             assert plan["name"] == plans[src]["name"]
 
-            queue = await pq.get_plan_queue()
+            queue = await pq.get_queue()
             names = [_["name"] for _ in queue]
             names = "".join(names)
             assert names == order
@@ -622,7 +622,7 @@ def test_pop_plan_from_queue_3(pq):
         await pq.add_item_to_queue({"name": "c"})
         assert await pq.get_queue_size() == 3
 
-        plans = await pq.get_plan_queue()
+        plans = await pq.get_queue()
         assert len(plans) == 3
         plan_to_remove = [_ for _ in plans if _["name"] == "b"][0]
 

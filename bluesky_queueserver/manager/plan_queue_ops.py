@@ -228,7 +228,7 @@ class PlanQueueOperations:
             raise RuntimeError(f"Trying to update plan with UID '{uid}', which is not in the queue")
         self._uid_dict.update({uid: plan})
 
-    def _uid_dict_get_plan(self, uid):
+    def _uid_dict_get_item(self, uid):
         """
         Returns a plan with the given UID.
         """
@@ -241,12 +241,12 @@ class PlanQueueOperations:
         pq = await self._get_queue()
         self._uid_dict_clear()
         # Go over all plans in the queue
-        for plan in pq:
-            self._uid_dict_add(plan)
+        for item in pq:
+            self._uid_dict_add(item)
         # If plan is currently running
-        plan = await self._get_running_item_info()
-        if plan:
-            self._uid_dict_add(plan)
+        item = await self._get_running_item_info()
+        if item:
+            self._uid_dict_add(item)
 
     # -------------------------------------------------------------
     #                   Currently Running Plan
@@ -361,7 +361,7 @@ class PlanQueueOperations:
             running_item = await self._get_running_item_info()
             if running_item and (uid == running_item["plan_uid"]):
                 raise IndexError("The item with UID '{uid}' is currently running.")
-            item = self._uid_dict_get_plan(uid)
+            item = self._uid_dict_get_item(uid)
 
         else:
             pos = pos if pos is not None else "back"
@@ -455,7 +455,7 @@ class PlanQueueOperations:
             running_item = await self._get_running_item_info()
             if running_item and (uid == running_item["plan_uid"]):
                 raise IndexError("Can not remove a plan which is currently running.")
-            item = self._uid_dict_get_plan(uid)
+            item = self._uid_dict_get_item(uid)
             await self._remove_item(item)
         elif pos == "back":
             item_json = await self._r_pool.rpop(self._name_plan_queue)
@@ -543,7 +543,7 @@ class PlanQueueOperations:
                     # Push to the plan front of the queue (after the running plan).
                     qsize = await self._r_pool.lpush(self._name_plan_queue, json.dumps(item))
             else:
-                item_to_displace = self._uid_dict_get_plan(uid)
+                item_to_displace = self._uid_dict_get_item(uid)
                 before = uid == before_uid
                 qsize = await self._r_pool.linsert(
                     self._name_plan_queue, json.dumps(item_to_displace), json.dumps(item), before=before

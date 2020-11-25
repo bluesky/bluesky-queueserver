@@ -196,9 +196,9 @@ def test_uid_dict_1(pq):
     assert pq._is_uid_in_dict(plan_b["plan_uid"]) is True
     assert pq._is_uid_in_dict(plan_c["plan_uid"]) is False
 
-    assert pq._uid_dict_get_plan(plan_b["plan_uid"]) == plan_b
+    assert pq._uid_dict_get_item(plan_b["plan_uid"]) == plan_b
     pq._uid_dict_update(plan_b_updated)
-    assert pq._uid_dict_get_plan(plan_b["plan_uid"]) == plan_b_updated
+    assert pq._uid_dict_get_item(plan_b["plan_uid"]) == plan_b_updated
 
     pq._uid_dict_remove(plan_a["plan_uid"])
     assert pq._is_uid_in_dict(plan_a["plan_uid"]) is False

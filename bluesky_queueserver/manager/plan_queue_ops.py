@@ -727,20 +727,20 @@ class PlanQueueOperations:
                 pos=pos, uid=uid, pos_dest=pos_dest, before_uid=before_uid, after_uid=after_uid
             )
 
-    async def _clear_plan_queue(self):
+    async def _clear_queue(self):
         """
-        See ``self.clear_plan_queue()`` method.
+        See ``self.clear_queue()`` method.
         """
         while await self._get_queue_size():
             await self._pop_plan_from_queue()
 
-    async def clear_plan_queue(self):
+    async def clear_queue(self):
         """
-        Remove all entries from the plan queue. Does not touch the running plan.
-        The plan may be pushed back into the queue if it is stopped.
+        Remove all entries from the plan queue. Does not touch the running item (plan).
+        The item may be pushed back into the queue if it is stopped.
         """
         async with self._lock:
-            await self._clear_plan_queue()
+            await self._clear_queue()
 
     # -----------------------------------------------------------------------
     #                          Plan History

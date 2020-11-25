@@ -399,7 +399,7 @@ def test_add_item_to_queue_1(pq):
         name_sequence = [_["name"] for _ in plans]
         assert name_sequence == ["l", "k", "e", "d", "a", "i", "b", "c", "g", "h", "f", "j"]
 
-        await pq.clear_plan_queue()
+        await pq.clear_queue()
 
     asyncio.run(testing())
 
@@ -443,7 +443,7 @@ def test_add_item_to_queue_2(pq):
         name_sequence = [_["name"] for _ in plans]
         assert name_sequence == ["f", "d", "b", "e", "c"]
 
-        await pq.clear_plan_queue()
+        await pq.clear_queue()
 
     asyncio.run(testing())
 
@@ -663,9 +663,9 @@ def test_pop_plan_from_queue_4_fail(pq):
     asyncio.run(testing())
 
 
-def test_clear_plan_queue(pq):
+def test_clear_queue(pq):
     """
-    Test for ``PlanQueueOperations.clear_plan_queue`` function
+    Test for ``PlanQueueOperations.clear_queue`` function
     """
 
     async def testing():
@@ -679,7 +679,7 @@ def test_clear_plan_queue(pq):
         assert len(pq._uid_dict) == 3
 
         # Clears the queue only (doesn't touch the running plan)
-        await pq.clear_plan_queue()
+        await pq.clear_queue()
 
         assert await pq.get_queue_size() == 0
         assert len(pq._uid_dict) == 1

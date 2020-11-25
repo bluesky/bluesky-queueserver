@@ -965,7 +965,7 @@ class RunEngineManager(Process):
         Remove all entries from the plan queue (does not affect currently executed run)
         """
         logger.info("Clearing the queue")
-        await self._plan_queue.clear_plan_queue()
+        await self._plan_queue.clear_queue()
         return {"success": True, "msg": "Plan queue is now empty."}
 
     async def _history_get_handler(self, request):

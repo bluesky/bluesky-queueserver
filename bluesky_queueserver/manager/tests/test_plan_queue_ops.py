@@ -519,9 +519,9 @@ def test_add_item_to_queue_3_fail(pq):
     ({"pos": 1, "after_uid": "p4", "before_uid": "p4"}, 1, "", False, "Ambiguous parameters"),
 ])
 # fmt: on
-def test_move_plan_1(pq, params, src, order, success, msg):
+def test_move_item_1(pq, params, src, order, success, msg):
     """
-    Basic tests for ``move_plans()``.
+    Basic tests for ``move_item()``.
     """
 
     async def testing():
@@ -539,7 +539,7 @@ def test_move_plan_1(pq, params, src, order, success, msg):
         assert await pq.get_plan_queue_size() == len(plans)
 
         if success:
-            plan, qsize = await pq.move_plan(**params)
+            plan, qsize = await pq.move_item(**params)
             assert qsize == len(plans)
             assert plan["name"] == plans[src]["name"]
 
@@ -550,7 +550,7 @@ def test_move_plan_1(pq, params, src, order, success, msg):
 
         else:
             with pytest.raises(Exception, match=msg):
-                await pq.move_plan(**params)
+                await pq.move_item(**params)
 
     asyncio.run(testing())
 

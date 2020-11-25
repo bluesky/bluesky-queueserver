@@ -950,7 +950,7 @@ class RunEngineManager(Process):
             pos_dest = request.get("pos_dest", None)
             before_uid = request.get("before_uid", None)
             after_uid = request.get("after_uid", None)
-            plan, qsize = await self._plan_queue.move_plan(
+            plan, qsize = await self._plan_queue.move_item(
                 pos=pos, uid=uid, pos_dest=pos_dest, before_uid=before_uid, after_uid=after_uid
             )
             success = True

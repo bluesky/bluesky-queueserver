@@ -610,7 +610,7 @@ class PlanQueueOperations:
         async with self._lock:
             return await self._add_item_to_queue(item, pos=pos, before_uid=before_uid, after_uid=after_uid)
 
-    async def _move_plan(self, *, pos=None, uid=None, pos_dest=None, before_uid=None, after_uid=None):
+    async def _move_item(self, *, pos=None, uid=None, pos_dest=None, before_uid=None, after_uid=None):
         """
         See ``self.move_plan()`` method.
         """
@@ -693,29 +693,29 @@ class PlanQueueOperations:
             qsize = await self._get_plan_queue_size()
         return item, qsize
 
-    async def move_plan(self, *, pos=None, uid=None, pos_dest=None, before_uid=None, after_uid=None):
+    async def move_item(self, *, pos=None, uid=None, pos_dest=None, before_uid=None, after_uid=None):
         """
-        Move existing plan within the queue.
+        Move existing item within the queue.
 
         Parameters
         ----------
         pos: str or int
-            Position of the source plan: positive or negative integer that specifieds the index
-            of the plan in the queue or a string from the set {"back", "front"}.
+            Position of the source item: positive or negative integer that specifieds the index
+            of the item in the queue or a string from the set {"back", "front"}.
         uid: str
-            UID of the source plan. UID overrides the position
+            UID of the source item. UID overrides the position
         pos_dext: str or int
-            Index of the new position of the plan in the queue: positive or negative integer that
-            specifieds the index of the plan in the queue or a string from the set {"back", "front"}.
+            Index of the new position of the item in the queue: positive or negative integer that
+            specifieds the index of the item in the queue or a string from the set {"back", "front"}.
         before_uid: str
-            Insert the plan before the plan with the given UID.
+            Insert the item before the item with the given UID.
         after_uid: str
-            Insert the plan after the plan with the given UID.
+            Insert the item after the item with the given UID.
 
         Returns
         -------
         dict, int
-            The dictionary that contains a plan that was moved and the size of the queue.
+            The dictionary that contains a item that was moved and the size of the queue.
 
         Raises
         ------
@@ -723,7 +723,7 @@ class PlanQueueOperations:
             Error in specification of source or destination.
         """
         async with self._lock:
-            return await self._move_plan(
+            return await self._move_item(
                 pos=pos, uid=uid, pos_dest=pos_dest, before_uid=before_uid, after_uid=after_uid
             )
 

@@ -33,7 +33,7 @@ def test_running_plan_info(pq):
         assert await pq.is_item_running() is False
 
         some_plan = {"some_key": "some_value"}
-        await pq._set_running_plan_info(some_plan)
+        await pq._set_running_item_info(some_plan)
         assert await pq.get_running_item_info() == some_plan
 
         assert await pq.is_item_running() is True
@@ -42,7 +42,7 @@ def test_running_plan_info(pq):
         assert await pq.get_running_item_info() == {}
         assert await pq.is_item_running() is False
 
-        await pq._set_running_plan_info(some_plan)
+        await pq._set_running_item_info(some_plan)
         await pq.delete_pool_entries()
         assert await pq.get_running_item_info() == {}
         assert await pq.is_item_running() is False
@@ -66,7 +66,7 @@ def test_queue_clean(pq, plan_running, plans, result_running, result_plans):
     """
 
     async def testing():
-        await pq._set_running_plan_info(plan_running)
+        await pq._set_running_item_info(plan_running)
         for plan in plans:
             await pq._r_pool.rpush(pq._name_plan_queue, json.dumps(plan))
 

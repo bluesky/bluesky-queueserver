@@ -289,9 +289,9 @@ class PlanQueueOperations:
         async with self._lock:
             return await self._get_running_item_info()
 
-    async def _set_running_plan_info(self, plan):
+    async def _set_running_item_info(self, plan):
         """
-        Write info on the currently running plan to Redis
+        Write info on the currently running item (plan) to Redis
 
         Parameters
         ----------
@@ -304,7 +304,7 @@ class PlanQueueOperations:
         """
         Clear info on the currently running plan in Redis.
         """
-        await self._set_running_plan_info({})
+        await self._set_running_item_info({})
 
     # -------------------------------------------------------------
     #                       Plan Queue
@@ -829,7 +829,7 @@ class PlanQueueOperations:
             plan_json = await self._r_pool.lpop(self._name_plan_queue)
             if plan_json:
                 plan = json.loads(plan_json)
-                await self._set_running_plan_info(plan)
+                await self._set_running_item_info(plan)
             else:
                 plan = {}
         else:

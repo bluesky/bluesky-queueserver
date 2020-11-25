@@ -708,7 +708,7 @@ class RunEngineManager(Process):
 
         # Computed/retrieved data
         n_pending_plans = await self._plan_queue.get_queue_size()
-        running_plan_info = await self._plan_queue.get_running_plan_info()
+        running_plan_info = await self._plan_queue.get_running_item_info()
         n_plans_in_history = await self._plan_queue.get_plan_history_size()
 
         # Prepared output data
@@ -794,7 +794,7 @@ class RunEngineManager(Process):
         """
         logger.info("Returning current queue and running plan.")
         plan_queue = await self._plan_queue.get_queue()
-        running_plan = await self._plan_queue.get_running_plan_info()
+        running_plan = await self._plan_queue.get_running_item_info()
 
         return {"queue": plan_queue, "running_plan": running_plan}
 
@@ -1244,7 +1244,7 @@ class RunEngineManager(Process):
                 re_state = self._worker_state_info["re_state"]
                 if plan_uid_running:
                     # Plan is running. Check if it is the same plan as in redis.
-                    plan_stored = await self._plan_queue.get_running_plan_info()
+                    plan_stored = await self._plan_queue.get_running_item_info()
                     if "plan_uid" in plan_stored:
                         plan_uid_stored = plan_stored["plan_uid"]
                         if re_state in ("paused", "pausing"):

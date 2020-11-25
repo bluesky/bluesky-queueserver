@@ -41,7 +41,7 @@ class PlanQueueOperations:
 
         # Again this only shows whether a plan was set as running. Expected to be True in
         #   this example.
-        is_running = await pq.is_plan_running()
+        is_running = await pq.is_item_running()
 
         # Assume that plan execution is completed, so move the plan to history
         #   This also clears the currently processed plan.
@@ -96,7 +96,7 @@ class PlanQueueOperations:
             await self._remove_plan(plan, single=False)
 
         # Clean running plan info also (on the development computer it may contain garbage)
-        plan = await self._get_running_plan_info()
+        plan = await self._get_running_item_info()
         if plan and not verify_plan(plan):
             await self._clear_running_plan_info()
 
@@ -244,41 +244,41 @@ class PlanQueueOperations:
         for plan in pq:
             self._uid_dict_add(plan)
         # If plan is currently running
-        plan = await self._get_running_plan_info()
+        plan = await self._get_running_item_info()
         if plan:
             self._uid_dict_add(plan)
 
     # -------------------------------------------------------------
     #                   Currently Running Plan
 
-    async def _is_plan_running(self):
+    async def _is_item_running(self):
         """
-        See ``self.is_plan_running()`` method.
+        See ``self.is_item_running()`` method.
         """
-        return bool(await self._get_running_plan_info())
+        return bool(await self._get_running_item_info())
 
-    async def is_plan_running(self):
+    async def is_item_running(self):
         """
-        Check if a plan is set as running. True does not indicate that the plan is actually running.
+        Check if an item is set as running. True does not indicate that the plan is actually running.
 
         Returns
         -------
         boolean
-            True - a plan is set as running, False otherwise.
+            True - an item is set as running, False otherwise.
         """
         async with self._lock:
-            return await self._is_plan_running()
+            return await self._is_item_running()
 
-    async def _get_running_plan_info(self):
+    async def _get_running_item_info(self):
         """
-        See ``self._get_running_plan_info()`` method.
+        See ``self._get_running_item_info()`` method.
         """
         plan = await self._r_pool.get(self._name_running_plan)
         return json.loads(plan) if plan else {}
 
-    async def get_running_plan_info(self):
+    async def get_running_item_info(self):
         """
-        Read info on the currently running plan from Redis.
+        Read info on the currently running item (plan) from Redis.
 
         Returns
         -------
@@ -287,7 +287,7 @@ class PlanQueueOperations:
             no plan is currently running (key value is ``{}`` or the key does not exist).
         """
         async with self._lock:
-            return await self._get_running_plan_info()
+            return await self._get_running_item_info()
 
     async def _set_running_plan_info(self, plan):
         """
@@ -358,7 +358,7 @@ class PlanQueueOperations:
         if uid is not None:
             if not self._is_uid_in_dict(uid):
                 raise IndexError(f"Plan with UID '{uid}' is not in the queue.")
-            running_plan = await self._get_running_plan_info()
+            running_plan = await self._get_running_item_info()
             if running_plan and (uid == running_plan["plan_uid"]):
                 raise IndexError("The plan with UID '{uid}' is currently running.")
             plan = self._uid_dict_get_plan(uid)
@@ -452,7 +452,7 @@ class PlanQueueOperations:
         if uid is not None:
             if not self._is_uid_in_dict(uid):
                 raise IndexError(f"Plan with UID '{uid}' is not in the queue.")
-            running_plan = await self._get_running_plan_info()
+            running_plan = await self._get_running_item_info()
             if running_plan and (uid == running_plan["plan_uid"]):
                 raise IndexError("Can not remove a plan which is currently running.")
             plan = self._uid_dict_get_plan(uid)
@@ -535,7 +535,7 @@ class PlanQueueOperations:
 
             if not self._is_uid_in_dict(uid):
                 raise IndexError(f"Plan with UID '{uid}' is not in the queue.")
-            running_plan = await self._get_running_plan_info()
+            running_plan = await self._get_running_item_info()
             if running_plan and (uid == running_plan["plan_uid"]):
                 if before:
                     raise IndexError("Can not insert a plan in the queue before a currently running plan.")
@@ -825,7 +825,7 @@ class PlanQueueOperations:
         See ``self.set_next_item_as_running()`` method.
         """
         # UID remains in the `self._uid_dict` after this operation.
-        if not await self._is_plan_running():
+        if not await self._is_item_running():
             plan_json = await self._r_pool.lpop(self._name_plan_queue)
             if plan_json:
                 plan = json.loads(plan_json)
@@ -856,8 +856,8 @@ class PlanQueueOperations:
         See ``self.set_processed_plan_as_completed`` method.
         """
         # Note: UID remains in the `self._uid_dict` after this operation
-        if await self._is_plan_running():
-            plan = await self._get_running_plan_info()
+        if await self._is_item_running():
+            plan = await self._get_running_item_info()
             plan["exit_status"] = exit_status
             await self._clear_running_plan_info()
             self._uid_dict_remove(plan["plan_uid"])
@@ -891,8 +891,8 @@ class PlanQueueOperations:
         See ``self.set_prcessed_plan_as_stopped()`` method.
         """
         # Note: UID is removed from `self._uid_dict`.
-        if await self._is_plan_running():
-            plan = await self._get_running_plan_info()
+        if await self._is_item_running():
+            plan = await self._get_running_item_info()
             plan["exit_status"] = exit_status
             await self._clear_running_plan_info()
             await self._r_pool.lpush(self._name_plan_queue, json.dumps(plan))

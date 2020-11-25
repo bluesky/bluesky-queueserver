@@ -439,9 +439,9 @@ class PlanQueueOperations:
                 f"The number of removed plans is {n_rem_plans}. One plans is expected to be removed."
             )
 
-    async def _pop_plan_from_queue(self, *, pos=None, uid=None):
+    async def _pop_item_from_queue(self, *, pos=None, uid=None):
         """
-        See ``self._pop_plan_from_queue()`` method
+        See ``self._pop_item_from_queue()`` method
         """
 
         if (pos is not None) and (uid is not None):
@@ -452,36 +452,36 @@ class PlanQueueOperations:
         if uid is not None:
             if not self._is_uid_in_dict(uid):
                 raise IndexError(f"Plan with UID '{uid}' is not in the queue.")
-            running_plan = await self._get_running_item_info()
-            if running_plan and (uid == running_plan["plan_uid"]):
+            running_item = await self._get_running_item_info()
+            if running_item and (uid == running_item["plan_uid"]):
                 raise IndexError("Can not remove a plan which is currently running.")
-            plan = self._uid_dict_get_plan(uid)
-            await self._remove_plan(plan)
+            item = self._uid_dict_get_plan(uid)
+            await self._remove_plan(item)
         elif pos == "back":
-            plan_json = await self._r_pool.rpop(self._name_plan_queue)
-            if plan_json is None:
+            item_json = await self._r_pool.rpop(self._name_plan_queue)
+            if item_json is None:
                 raise IndexError("Queue is empty")
-            plan = json.loads(plan_json) if plan_json else {}
+            item = json.loads(item_json) if item_json else {}
         elif pos == "front":
-            plan_json = await self._r_pool.lpop(self._name_plan_queue)
-            if plan_json is None:
+            item_json = await self._r_pool.lpop(self._name_plan_queue)
+            if item_json is None:
                 raise IndexError("Queue is empty")
-            plan = json.loads(plan_json) if plan_json else {}
+            item = json.loads(item_json) if item_json else {}
         elif isinstance(pos, int):
-            plan = await self._get_plan(pos=pos)
-            if plan:
-                await self._remove_plan(plan)
+            item = await self._get_plan(pos=pos)
+            if item:
+                await self._remove_plan(item)
         else:
             raise ValueError(f"Parameter 'pos' has incorrect value: pos={str(pos)} (type={type(pos)})")
 
-        if plan:
-            self._uid_dict_remove(plan["plan_uid"])
+        if item:
+            self._uid_dict_remove(item["plan_uid"])
 
         qsize = await self._get_queue_size()
 
-        return plan, qsize
+        return item, qsize
 
-    async def pop_plan_from_queue(self, *, pos=None, uid=None):
+    async def pop_item_from_queue(self, *, pos=None, uid=None):
         """
         Pop a plan from the queue. Raises ``IndexError`` if plan with index ``pos`` is unavailable
         or if the queue is empty.
@@ -507,7 +507,7 @@ class PlanQueueOperations:
             Position ``pos`` does not exist or the queue is empty.
         """
         async with self._lock:
-            return await self._pop_plan_from_queue(pos=pos, uid=uid)
+            return await self._pop_item_from_queue(pos=pos, uid=uid)
 
     async def _add_item_to_queue(self, item, *, pos=None, before_uid=None, after_uid=None):
         """
@@ -684,7 +684,7 @@ class PlanQueueOperations:
         # If source and destination point to the same plan, then do nothing,
         #   but consider it a valid operation.
         if uid_source != uid_dest:
-            item, _ = await self._pop_plan_from_queue(uid=uid_source)
+            item, _ = await self._pop_item_from_queue(uid=uid_source)
             kw = {"before_uid": uid_dest} if before else {"after_uid": uid_dest}
             kw.update({"item": item})
             item, qsize = await self._add_item_to_queue(**kw)
@@ -732,7 +732,7 @@ class PlanQueueOperations:
         See ``self.clear_queue()`` method.
         """
         while await self._get_queue_size():
-            await self._pop_plan_from_queue()
+            await self._pop_item_from_queue()
 
     async def clear_queue(self):
         """

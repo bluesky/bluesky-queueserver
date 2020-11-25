@@ -477,7 +477,7 @@ class RunEngineManager(Process):
             elif next_item["item_type"] == "instruction":
                 if next_item["action"] == "queue_stop":
                     # Pop the instruction from the queue
-                    await self._plan_queue.pop_plan_from_queue(pos="front")
+                    await self._plan_queue.pop_item_from_queue(pos="front")
                     self._manager_state = MState.EXECUTING_QUEUE
                     self._queue_stop_pending = True
                     asyncio.ensure_future(self._start_plan_task())
@@ -926,7 +926,7 @@ class RunEngineManager(Process):
             plan, qsize, msg = {}, None, ""
             pos = request.get("pos", None)
             uid = request.get("uid", None)
-            plan, qsize = await self._plan_queue.pop_plan_from_queue(pos=pos, uid=uid)
+            plan, qsize = await self._plan_queue.pop_item_from_queue(pos=pos, uid=uid)
             success = True
         except Exception as ex:
             success = False

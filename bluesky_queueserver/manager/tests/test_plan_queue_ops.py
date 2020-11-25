@@ -569,9 +569,9 @@ def test_move_item_1(pq, params, src, order, success, msg):
     (-4, None)  # Index out of range
 ])
 # fmt: on
-def test_pop_plan_from_queue_1(pq, pos, name):
+def test_pop_item_from_queue_1(pq, pos, name):
     """
-    Basic test for the function ``PlanQueueOperations.pop_plan_from_queue()``
+    Basic test for the function ``PlanQueueOperations.pop_item_from_queue()``
     """
 
     async def testing():
@@ -582,7 +582,7 @@ def test_pop_plan_from_queue_1(pq, pos, name):
         assert await pq.get_queue_size() == 3
 
         if name is not None:
-            plan, qsize = await pq.pop_plan_from_queue(pos=pos)
+            plan, qsize = await pq.pop_item_from_queue(pos=pos)
             assert plan["name"] == name
             assert qsize == 2
             assert await pq.get_queue_size() == 2
@@ -591,27 +591,27 @@ def test_pop_plan_from_queue_1(pq, pos, name):
             assert await pq.get_queue_size() == 3
         else:
             with pytest.raises(IndexError, match="Index .* is out of range"):
-                await pq.pop_plan_from_queue(pos=pos)
+                await pq.pop_item_from_queue(pos=pos)
 
     asyncio.run(testing())
 
 
 @pytest.mark.parametrize("pos", ["front", "back", 0, 1, -1])
-def test_pop_plan_from_queue_2(pq, pos):
+def test_pop_item_from_queue_2(pq, pos):
     """
-    Test for the function ``PlanQueueOperations.pop_plan_from_queue()``:
+    Test for the function ``PlanQueueOperations.pop_item_from_queue()``:
     the case of empty queue.
     """
 
     async def testing():
         assert await pq.get_queue_size() == 0
         with pytest.raises(IndexError, match="Index .* is out of range|Queue is empty"):
-            await pq.pop_plan_from_queue(pos=pos)
+            await pq.pop_item_from_queue(pos=pos)
 
     asyncio.run(testing())
 
 
-def test_pop_plan_from_queue_3(pq):
+def test_pop_item_from_queue_3(pq):
     """
     Pop plans by UID.
     """
@@ -627,38 +627,38 @@ def test_pop_plan_from_queue_3(pq):
         plan_to_remove = [_ for _ in plans if _["name"] == "b"][0]
 
         # Remove one plan
-        await pq.pop_plan_from_queue(uid=plan_to_remove["plan_uid"])
+        await pq.pop_item_from_queue(uid=plan_to_remove["plan_uid"])
         assert await pq.get_queue_size() == 2
 
         # Attempt to remove the plan again. This should raise an exception.
         with pytest.raises(
             IndexError, match=f"Plan with UID '{plan_to_remove['plan_uid']}' " f"is not in the queue"
         ):
-            await pq.pop_plan_from_queue(uid=plan_to_remove["plan_uid"])
+            await pq.pop_item_from_queue(uid=plan_to_remove["plan_uid"])
         assert await pq.get_queue_size() == 2
 
         # Attempt to remove the plan that is running. This should raise an exception.
         await pq.set_next_item_as_running()
         assert await pq.get_queue_size() == 1
         with pytest.raises(IndexError, match="Can not remove a plan which is currently running"):
-            await pq.pop_plan_from_queue(uid=plans[0]["plan_uid"])
+            await pq.pop_item_from_queue(uid=plans[0]["plan_uid"])
         assert await pq.get_queue_size() == 1
 
     asyncio.run(testing())
 
 
-def test_pop_plan_from_queue_4_fail(pq):
+def test_pop_item_from_queue_4_fail(pq):
     """
-    Failing tests for the function ``PlanQueueOperations.pop_plan_from_queue()``
+    Failing tests for the function ``PlanQueueOperations.pop_item_from_queue()``
     """
 
     async def testing():
         with pytest.raises(ValueError, match="Parameter 'pos' has incorrect value"):
-            await pq.pop_plan_from_queue(pos="something")
+            await pq.pop_item_from_queue(pos="something")
 
         # Ambiguous parameters (position and UID is passed)
         with pytest.raises(ValueError, match="Ambiguous parameters"):
-            await pq.pop_plan_from_queue(pos=5, uid="abc")
+            await pq.pop_item_from_queue(pos=5, uid="abc")
 
     asyncio.run(testing())
 
@@ -685,7 +685,7 @@ def test_clear_queue(pq):
         assert len(pq._uid_dict) == 1
 
         with pytest.raises(ValueError, match="Parameter 'pos' has incorrect value"):
-            await pq.pop_plan_from_queue(pos="something")
+            await pq.pop_item_from_queue(pos="something")
 
     asyncio.run(testing())
 

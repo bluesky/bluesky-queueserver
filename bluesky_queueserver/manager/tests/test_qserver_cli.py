@@ -598,7 +598,7 @@ def test_queue_item_add_1(re_manager, pos, pos_result, success):  # noqa F811
 
     if success:
         assert resp["queue"][pos_result]["args"] == [["det1", "det2"]]
-        assert "plan_uid" in resp["queue"][pos_result]
+        assert "item_uid" in resp["queue"][pos_result]
 
 
 def test_queue_item_add_2(re_manager):  # noqa F811
@@ -643,7 +643,7 @@ def test_queue_item_add_3(re_manager, before, target_pos, result_order):  # noqa
     # Read queue.
     queue_1 = get_queue()["queue"]
     assert len(queue_1) == 2
-    uids_1 = [_["plan_uid"] for _ in queue_1]
+    uids_1 = [_["item_uid"] for _ in queue_1]
 
     params = ["before_uid" if before else "after_uid", uids_1[target_pos], plan3]
     assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", *params]) == 0
@@ -651,7 +651,7 @@ def test_queue_item_add_3(re_manager, before, target_pos, result_order):  # noqa
     # Check if the element was inserted in the right plance
     queue_2 = get_queue()["queue"]
     assert len(queue_2) == 3
-    uids_2 = [_["plan_uid"] for _ in queue_2]
+    uids_2 = [_["item_uid"] for _ in queue_2]
     for n, uid in enumerate(uids_2):
         n_res = result_order[n]
         if (n_res < 2) and (uid != uids_1[n_res]):
@@ -751,7 +751,7 @@ def test_queue_item_get_remove(re_manager, pos, uid_ind, pos_result, success):  
 
     queue_1 = get_queue()["queue"]
     assert len(queue_1) == 3
-    uids_1 = [_["plan_uid"] for _ in queue_1]
+    uids_1 = [_["item_uid"] for _ in queue_1]
     uids_1.append("unknown_uid")  # Extra element (for one of the tests)
 
     if uid_ind is None:
@@ -823,7 +823,7 @@ def test_queue_item_get_move(re_manager, params, result_order, exit_code):  # no
 
     queue_1 = get_queue()["queue"]
     assert len(queue_1) == 3
-    uids_1 = [_["plan_uid"] for _ in queue_1]
+    uids_1 = [_["item_uid"] for _ in queue_1]
     uids_1.append("unknown_uid")  # Extra element (for one of the tests)
 
     # Replace ints with UIDs (positions are represented as strings)
@@ -837,7 +837,7 @@ def test_queue_item_get_move(re_manager, params, result_order, exit_code):  # no
 
     queue_2 = get_queue()["queue"]
     assert len(queue_2) == 3
-    uids_2 = [_["plan_uid"] for _ in queue_2]
+    uids_2 = [_["item_uid"] for _ in queue_2]
 
     # Compare the order of UIDs before and after moving the element
     uids_1_reordered = [uids_1[_] for _ in result_order]

@@ -248,13 +248,13 @@ class RunEngineWorker(Process):
         """
         Returns the state information of RE Worker environment.
         """
-        plan_uid = self._state["running_plan"]["plan_uid"] if self._state["running_plan"] else None
+        item_uid = self._state["running_plan"]["item_uid"] if self._state["running_plan"] else None
         plan_completed = self._state["running_plan_completed"]
         re_state = str(self._RE._state) if self._RE else "null"
         env_state = self._state["environment_state"]
         re_report_available = self._re_report is not None
         msg_out = {
-            "running_plan_uid": plan_uid,
+            "running_item_uid": item_uid,
             "running_plan_completed": plan_completed,
             "re_report_available": re_report_available,
             "re_state": re_state,

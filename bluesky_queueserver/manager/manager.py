@@ -454,13 +454,13 @@ class RunEngineManager(Process):
                 plan_name = new_plan["name"]
                 args = new_plan["args"] if "args" in new_plan else []
                 kwargs = new_plan["kwargs"] if "kwargs" in new_plan else {}
-                plan_uid = new_plan["plan_uid"]
+                item_uid = new_plan["item_uid"]
 
                 plan_info = {
                     "name": plan_name,
                     "args": args,
                     "kwargs": kwargs,
-                    "plan_uid": plan_uid,
+                    "item_uid": item_uid,
                 }
 
                 success, err_msg = await self._worker_command_run_plan(plan_info)
@@ -714,7 +714,7 @@ class RunEngineManager(Process):
         # Prepared output data
         items_in_queue = n_pending_items
         items_in_history = n_items_in_history
-        running_item_uid = running_item_info["plan_uid"] if running_item_info else None
+        running_item_uid = running_item_info["item_uid"] if running_item_info else None
         manager_state = self._manager_state.value
         queue_stop_pending = self._queue_stop_pending
         worker_environment_exists = self._environment_exists
@@ -876,7 +876,7 @@ class RunEngineManager(Process):
             item["user_group"] = user_group
 
             # Always generate a new UID for the added plan!!!
-            item["plan_uid"] = PlanQueueOperations.new_item_uid()
+            item["item_uid"] = PlanQueueOperations.new_item_uid()
 
             # Adding plan to queue may raise an exception
             item, qsize = await self._plan_queue.add_item_to_queue(
@@ -1240,18 +1240,18 @@ class RunEngineManager(Process):
         if self._environment_exists:
             self._worker_state_info, err_msg = await self._worker_request_state()
             if self._worker_state_info:
-                plan_uid_running = self._worker_state_info["running_plan_uid"]
+                item_uid_running = self._worker_state_info["running_item_uid"]
                 re_state = self._worker_state_info["re_state"]
-                if plan_uid_running:
+                if item_uid_running:
                     # Plan is running. Check if it is the same plan as in redis.
                     plan_stored = await self._plan_queue.get_running_item_info()
-                    if "plan_uid" in plan_stored:
-                        plan_uid_stored = plan_stored["plan_uid"]
+                    if "item_uid" in plan_stored:
+                        item_uid_stored = plan_stored["item_uid"]
                         if re_state in ("paused", "pausing"):
                             self._manager_state = MState.PAUSED  # Paused and can be resumed
                         else:
                             self._manager_state = MState.EXECUTING_QUEUE  # Wait for plan completion
-                        if plan_uid_stored != plan_uid_running:
+                        if item_uid_stored != item_uid_running:
                             # Guess is that the environment may still work, so restart is
                             #   only recommended if it is convenient.
                             logger.warning(
@@ -1260,8 +1260,8 @@ class RunEngineManager(Process):
                                 "instead of '%s'.\n"
                                 "RE execution environment may need to be closed and created again \n"
                                 "to restore data integrity.",
-                                plan_uid_running,
-                                plan_uid_stored,
+                                item_uid_running,
+                                item_uid_stored,
                             )
             else:
                 logger.error("Error while reading RE Worker status: %s", err_msg)

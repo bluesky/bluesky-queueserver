@@ -75,7 +75,7 @@ def test_http_server_queue_item_add_handler_1(re_manager, fastapi_server):  # no
     assert resp1["qsize"] == 1
     assert resp1["plan"]["name"] == "count"
     assert resp1["plan"]["args"] == [["det1", "det2"]]
-    assert "plan_uid" in resp1["plan"]
+    assert "item_uid" in resp1["plan"]
 
     resp2 = _request_to_json("get", "/queue/get")
     assert resp2["queue"] != []
@@ -120,7 +120,7 @@ def test_http_server_queue_item_add_handler_2(re_manager, fastapi_server, pos, p
     assert resp1["qsize"] == (3 if success else None)
     assert resp1["plan"]["name"] == "count"
     assert resp1["plan"]["args"] == plan2["args"]
-    assert "plan_uid" in resp1["plan"]
+    assert "item_uid" in resp1["plan"]
 
     resp2 = _request_to_json("get", "/queue/get")
 
@@ -152,7 +152,7 @@ def test_http_server_queue_item_add_handler_3(re_manager, fastapi_server):  # no
     assert resp3["qsize"] == 1
     assert resp3["plan"]["name"] == "count"
     assert resp3["plan"]["args"] == [["det1", "det2"]]
-    assert "plan_uid" in resp3["plan"]
+    assert "item_uid" in resp3["plan"]
 
     resp4 = _request_to_json("get", "/queue/get")
     assert resp4["queue"] != []
@@ -208,14 +208,14 @@ def test_http_server_queue_item_get_remove_handler_1(re_manager, fastapi_server,
     assert resp2["success"] is True
     assert resp2["plan"]["name"] == "count"
     assert resp2["plan"]["args"] == [["det1", "det2"]]
-    assert "plan_uid" in resp2["plan"]
+    assert "item_uid" in resp2["plan"]
 
     resp3 = _request_to_json("post", "/queue/plan/remove", json={})
     assert resp3["success"] is True
     assert resp3["qsize"] == 2
     assert resp3["plan"]["name"] == "count"
     assert resp3["plan"]["args"] == [["det1", "det2"]]
-    assert "plan_uid" in resp3["plan"]
+    assert "item_uid" in resp3["plan"]
 
 
 # fmt: off
@@ -255,7 +255,7 @@ def test_http_server_queue_item_get_remove_handler_2(
     assert resp1["success"] is success
     if success:
         assert resp1["plan"]["args"] == plans[pos_result]["args"]
-        assert "plan_uid" in resp1["plan"]
+        assert "item_uid" in resp1["plan"]
         assert resp1["msg"] == ""
     else:
         assert resp1["plan"] == {}
@@ -267,7 +267,7 @@ def test_http_server_queue_item_get_remove_handler_2(
     assert resp2["qsize"] == (2 if success else None)
     if success:
         assert resp2["plan"]["args"] == plans[pos_result]["args"]
-        assert "plan_uid" in resp2["plan"]
+        assert "item_uid" in resp2["plan"]
         assert resp2["msg"] == ""
     else:
         assert resp2["plan"] == {}
@@ -292,13 +292,13 @@ def test_http_server_queue_item_get_remove_3(re_manager, fastapi_server):  # noq
     assert len(plans_in_queue) == 3
 
     # Get and then remove plan 2 from the queue
-    uid = plans_in_queue[1]["plan_uid"]
+    uid = plans_in_queue[1]["item_uid"]
     resp2a = _request_to_json("post", "/queue/plan/get", json={"uid": uid})
-    assert resp2a["plan"]["plan_uid"] == plans_in_queue[1]["plan_uid"]
+    assert resp2a["plan"]["item_uid"] == plans_in_queue[1]["item_uid"]
     assert resp2a["plan"]["name"] == plans_in_queue[1]["name"]
     assert resp2a["plan"]["args"] == plans_in_queue[1]["args"]
     resp2b = _request_to_json("post", "/queue/plan/remove", json={"uid": uid})
-    assert resp2b["plan"]["plan_uid"] == plans_in_queue[1]["plan_uid"]
+    assert resp2b["plan"]["item_uid"] == plans_in_queue[1]["item_uid"]
     assert resp2b["plan"]["name"] == plans_in_queue[1]["name"]
     assert resp2b["plan"]["args"] == plans_in_queue[1]["args"]
 
@@ -312,7 +312,7 @@ def test_http_server_queue_item_get_remove_3(re_manager, fastapi_server):  # noq
     assert resp4["success"] is True
 
     ttime.sleep(1)
-    uid = plans_in_queue[0]["plan_uid"]
+    uid = plans_in_queue[0]["item_uid"]
     resp5a = _request_to_json("post", "/queue/plan/get", json={"uid": uid})
     assert resp5a["success"] is False
     assert "is currently running" in resp5a["msg"]
@@ -329,7 +329,7 @@ def test_http_server_queue_item_get_remove_3(re_manager, fastapi_server):  # noq
     assert "not in the queue" in resp6b["msg"]
 
     # Remove the last entry
-    uid = plans_in_queue[2]["plan_uid"]
+    uid = plans_in_queue[2]["item_uid"]
     resp7a = _request_to_json("post", "/queue/plan/get", json={"uid": uid})
     assert resp7a["success"] is True
     resp7b = _request_to_json("post", "/queue/plan/remove", json={"uid": uid})
@@ -397,17 +397,17 @@ def test_http_server_move_plan_1(re_manager, fastapi_server, params, src, order,
     queue = resp1["queue"]
     assert len(queue) == 3
 
-    plan_uids = [_["plan_uid"] for _ in queue]
+    item_uids = [_["item_uid"] for _ in queue]
     # Add one more 'nonexistent' uid (that is not in the queue)
-    plan_uids.append("nonexistent")
+    item_uids.append("nonexistent")
 
     # Replace indices with actual UIDs that will be sent to the function
     if "uid" in params:
-        params["uid"] = plan_uids[params["uid"]]
+        params["uid"] = item_uids[params["uid"]]
     if "before_uid" in params:
-        params["before_uid"] = plan_uids[params["before_uid"]]
+        params["before_uid"] = item_uids[params["before_uid"]]
     if "after_uid" in params:
-        params["after_uid"] = plan_uids[params["after_uid"]]
+        params["after_uid"] = item_uids[params["after_uid"]]
 
     resp2 = _request_to_json("post", "/queue/plan/move", json=params)
     if success:
@@ -417,11 +417,11 @@ def test_http_server_move_plan_1(re_manager, fastapi_server, params, src, order,
         assert resp2["msg"] == ""
 
         # Compare the order of UIDs in the queue with the expected order
-        plan_uids_reordered = [plan_uids[_] for _ in order]
+        item_uids_reordered = [item_uids[_] for _ in order]
         resp3 = _request_to_json("get", "/queue/get")
-        plan_uids_from_queue = [_["plan_uid"] for _ in resp3["queue"]]
+        item_uids_from_queue = [_["item_uid"] for _ in resp3["queue"]]
 
-        assert plan_uids_from_queue == plan_uids_reordered
+        assert item_uids_from_queue == item_uids_reordered
 
     else:
         assert resp2["success"] is False
@@ -507,7 +507,7 @@ def test_http_server_re_pause_continue_handlers(
     assert resp2["qsize"] == 1
     assert resp2["plan"]["name"] == "count"
     assert resp2["plan"]["args"] == [["det1", "det2"]]
-    assert "plan_uid" in resp2["plan"]
+    assert "item_uid" in resp2["plan"]
 
     resp3 = _request_to_json("post", "/queue/start")
     assert resp3 == {"success": True, "msg": ""}

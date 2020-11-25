@@ -52,12 +52,12 @@ def test_running_plan_info(pq):
 
 # fmt: off
 @pytest.mark.parametrize("plan_running, plans, result_running, result_plans", [
-    ({"testing": 1}, [{"testing": 2}, {"plan_uid": "ab", "name": "nm"}, {"testing": 2}],
-     {}, [{"plan_uid": "ab", "name": "nm"}]),
-    ({"testing": 1}, [{"testing": 2}, {"plan_uid": "ab", "name": "nm"}, {"testing": 3}],
-     {}, [{"plan_uid": "ab", "name": "nm"}]),
-    ({"plan_uid": "a"}, [{"plan_uid": "a1"}, {"plan_uid": "a2"}, {"plan_uid": "a3"}],
-     {"plan_uid": "a"}, [{"plan_uid": "a1"}, {"plan_uid": "a2"}, {"plan_uid": "a3"}]),
+    ({"testing": 1}, [{"testing": 2}, {"item_uid": "ab", "name": "nm"}, {"testing": 2}],
+     {}, [{"item_uid": "ab", "name": "nm"}]),
+    ({"testing": 1}, [{"testing": 2}, {"item_uid": "ab", "name": "nm"}, {"testing": 3}],
+     {}, [{"item_uid": "ab", "name": "nm"}]),
+    ({"item_uid": "a"}, [{"item_uid": "a1"}, {"item_uid": "a2"}, {"item_uid": "a3"}],
+     {"item_uid": "a"}, [{"item_uid": "a1"}, {"item_uid": "a2"}, {"item_uid": "a3"}]),
 ])
 # fmt: on
 def test_queue_clean(pq, plan_running, plans, result_running, result_plans):
@@ -101,16 +101,16 @@ def test_verify_item_type(pq, plan, result):
     "plan, result, errmsg",
     [({"a": 10}, False, "Item does not have UID"),
      ([10, 20], False, errmsg_wrong_plan_type),
-     ({"plan_uid": "one"}, True, ""),
-     ({"plan_uid": "two"}, False, "Item with UID .+ is already in the queue"),
-     ({"plan_uid": "three"}, False, "Item with UID .+ is already in the queue")])
+     ({"item_uid": "one"}, True, ""),
+     ({"item_uid": "two"}, False, "Item with UID .+ is already in the queue"),
+     ({"item_uid": "three"}, False, "Item with UID .+ is already in the queue")])
 # fmt: on
 def test_verify_item(pq, plan, result, errmsg):
     """
     Tests for method ``_verify_item()``.
     """
     # Set two existiing plans and then set one of them as running
-    existing_plans = [{"plan_uid": "two"}, {"plan_uid": "three"}]
+    existing_plans = [{"item_uid": "two"}, {"item_uid": "three"}]
 
     async def set_plans():
         # Add plan to queue
@@ -142,21 +142,21 @@ def test_new_item_uid(pq):
 # fmt: off
 @pytest.mark.parametrize("plan", [
     {"name": "a"},
-    {"plan_uid": "some_uid", "name": "a"},
+    {"item_uid": "some_uid", "name": "a"},
 ])
 # fmt: on
 def test_set_new_item_uuid(pq, plan):
     """
     Basic test for the method ``set_new_item_uuid()``.
     """
-    uid = plan.get("plan_uid", None)
+    uid = plan.get("item_uid", None)
 
     # The function is supposed to create or replace UID
     new_plan = pq.set_new_item_uuid(plan)
 
-    assert "plan_uid" in new_plan
-    assert isinstance(new_plan["plan_uid"], str)
-    assert new_plan["plan_uid"] != uid
+    assert "item_uid" in new_plan
+    assert isinstance(new_plan["item_uid"], str)
+    assert new_plan["item_uid"] != uid
 
 
 def test_get_index_by_uid(pq):
@@ -164,9 +164,9 @@ def test_get_index_by_uid(pq):
     Test for ``_get_index_by_uid()``
     """
     plans = [
-        {"plan_uid": "a", "name": "name_a"},
-        {"plan_uid": "b", "name": "name_b"},
-        {"plan_uid": "c", "name": "name_c"},
+        {"item_uid": "a", "name": "name_a"},
+        {"item_uid": "b", "name": "name_b"},
+        {"item_uid": "c", "name": "name_c"},
     ]
 
     async def testing():
@@ -183,30 +183,30 @@ def test_uid_dict_1(pq):
     """
     Basic test for functions associated with `_uid_dict`
     """
-    plan_a = {"plan_uid": "a", "name": "name_a"}
-    plan_b = {"plan_uid": "b", "name": "name_b"}
-    plan_c = {"plan_uid": "c", "name": "name_c"}
+    plan_a = {"item_uid": "a", "name": "name_a"}
+    plan_b = {"item_uid": "b", "name": "name_b"}
+    plan_c = {"item_uid": "c", "name": "name_c"}
 
-    plan_b_updated = {"plan_uid": "b", "name": "name_b_updated"}
+    plan_b_updated = {"item_uid": "b", "name": "name_b_updated"}
 
     pq._uid_dict_add(plan_a)
     pq._uid_dict_add(plan_b)
 
-    assert pq._is_uid_in_dict(plan_a["plan_uid"]) is True
-    assert pq._is_uid_in_dict(plan_b["plan_uid"]) is True
-    assert pq._is_uid_in_dict(plan_c["plan_uid"]) is False
+    assert pq._is_uid_in_dict(plan_a["item_uid"]) is True
+    assert pq._is_uid_in_dict(plan_b["item_uid"]) is True
+    assert pq._is_uid_in_dict(plan_c["item_uid"]) is False
 
-    assert pq._uid_dict_get_item(plan_b["plan_uid"]) == plan_b
+    assert pq._uid_dict_get_item(plan_b["item_uid"]) == plan_b
     pq._uid_dict_update(plan_b_updated)
-    assert pq._uid_dict_get_item(plan_b["plan_uid"]) == plan_b_updated
+    assert pq._uid_dict_get_item(plan_b["item_uid"]) == plan_b_updated
 
-    pq._uid_dict_remove(plan_a["plan_uid"])
-    assert pq._is_uid_in_dict(plan_a["plan_uid"]) is False
-    assert pq._is_uid_in_dict(plan_b["plan_uid"]) is True
+    pq._uid_dict_remove(plan_a["item_uid"])
+    assert pq._is_uid_in_dict(plan_a["item_uid"]) is False
+    assert pq._is_uid_in_dict(plan_b["item_uid"]) is True
 
     pq._uid_dict_clear()
-    assert pq._is_uid_in_dict(plan_a["plan_uid"]) is False
-    assert pq._is_uid_in_dict(plan_b["plan_uid"]) is False
+    assert pq._is_uid_in_dict(plan_a["item_uid"]) is False
+    assert pq._is_uid_in_dict(plan_b["item_uid"]) is False
 
 
 def test_uid_dict_2_initialize(pq):
@@ -219,7 +219,7 @@ def test_uid_dict_2_initialize(pq):
         await pq.add_item_to_queue({"name": "b"})
         await pq.add_item_to_queue({"name": "c"})
         plans = await pq.get_queue()
-        uid_dict = {_["plan_uid"]: _ for _ in plans}
+        uid_dict = {_["item_uid"]: _ for _ in plans}
 
         await pq._uid_dict_initialize()
         assert pq._uid_dict == uid_dict
@@ -231,27 +231,27 @@ def test_uid_dict_3_failing(pq):
     """
     Failing cases for functions associated with `_uid_dict`
     """
-    plan_a = {"plan_uid": "a", "name": "name_a"}
-    plan_b = {"plan_uid": "b", "name": "name_b"}
-    plan_c = {"plan_uid": "c", "name": "name_c"}
+    plan_a = {"item_uid": "a", "name": "name_a"}
+    plan_b = {"item_uid": "b", "name": "name_b"}
+    plan_c = {"item_uid": "c", "name": "name_c"}
 
     pq._uid_dict_add(plan_a)
     pq._uid_dict_add(plan_b)
 
     # Add plan with UID that already exists
-    with pytest.raises(RuntimeError, match=f"'{plan_a['plan_uid']}', which is already in the queue"):
+    with pytest.raises(RuntimeError, match=f"'{plan_a['item_uid']}', which is already in the queue"):
         pq._uid_dict_add(plan_a)
 
     assert len(pq._uid_dict) == 2
 
     # Remove plan with UID does not exist exists
-    with pytest.raises(RuntimeError, match=f"'{plan_c['plan_uid']}', which is not in the queue"):
-        pq._uid_dict_remove(plan_c["plan_uid"])
+    with pytest.raises(RuntimeError, match=f"'{plan_c['item_uid']}', which is not in the queue"):
+        pq._uid_dict_remove(plan_c["item_uid"])
 
     assert len(pq._uid_dict) == 2
 
     # Update plan with UID does not exist exists
-    with pytest.raises(RuntimeError, match=f"'{plan_c['plan_uid']}', which is not in the queue"):
+    with pytest.raises(RuntimeError, match=f"'{plan_c['item_uid']}', which is not in the queue"):
         pq._uid_dict_update(plan_c)
 
     assert len(pq._uid_dict) == 2
@@ -327,9 +327,9 @@ def test_get_item_1(pq, params, name):
 
     async def testing():
 
-        await pq.add_item_to_queue({"plan_uid": "one", "name": "a"})
-        await pq.add_item_to_queue({"plan_uid": "two", "name": "b"})
-        await pq.add_item_to_queue({"plan_uid": "three", "name": "c"})
+        await pq.add_item_to_queue({"item_uid": "one", "name": "a"})
+        await pq.add_item_to_queue({"item_uid": "two", "name": "b"})
+        await pq.add_item_to_queue({"item_uid": "three", "name": "c"})
         assert await pq.get_queue_size() == 3
 
         if name is not None:
@@ -351,9 +351,9 @@ def test_get_item_2_fail(pq):
 
     async def testing():
 
-        await pq.add_item_to_queue({"plan_uid": "one", "name": "a"})
-        await pq.add_item_to_queue({"plan_uid": "two", "name": "b"})
-        await pq.add_item_to_queue({"plan_uid": "three", "name": "c"})
+        await pq.add_item_to_queue({"item_uid": "one", "name": "a"})
+        await pq.add_item_to_queue({"item_uid": "two", "name": "b"})
+        await pq.add_item_to_queue({"item_uid": "three", "name": "c"})
         assert await pq.get_queue_size() == 3
 
         await pq.set_next_item_as_running()
@@ -420,7 +420,7 @@ def test_add_item_to_queue_2(pq):
         await add_plan({"name": "c"}, 3, pos="back")
 
         plan_queue = await pq.get_queue()
-        displaced_uid = plan_queue[1]["plan_uid"]
+        displaced_uid = plan_queue[1]["item_uid"]
 
         await add_plan({"name": "d"}, 4, before_uid=displaced_uid)
         await add_plan({"name": "e"}, 5, after_uid=displaced_uid)
@@ -428,7 +428,7 @@ def test_add_item_to_queue_2(pq):
         # This reduces the number of elements in the queue by one
         await pq.set_next_item_as_running()
 
-        displaced_uid = plan_queue[0]["plan_uid"]
+        displaced_uid = plan_queue[0]["item_uid"]
         await add_plan({"name": "f"}, 5, after_uid=displaced_uid)
 
         with pytest.raises(IndexError, match="Can not insert a plan in the queue before a currently running plan"):
@@ -462,7 +462,7 @@ def test_add_item_to_queue_3_fail(pq):
             await pq.add_item_to_queue("plan_is_not_string")
 
         # Duplicate plan UID
-        plan = {"plan_uid": "abc", "name": "a"}
+        plan = {"item_uid": "abc", "name": "a"}
         await pq.add_item_to_queue(plan)
         with pytest.raises(RuntimeError, match="Item with UID .+ is already in the queue"):
             await pq.add_item_to_queue(plan)
@@ -526,11 +526,11 @@ def test_move_item_1(pq, params, src, order, success, msg):
 
     async def testing():
         plans = [
-            {"plan_uid": "p1", "name": "a"},
-            {"plan_uid": "p2", "name": "b"},
-            {"plan_uid": "p3", "name": "c"},
-            {"plan_uid": "p4", "name": "d"},
-            {"plan_uid": "p5", "name": "e"},
+            {"item_uid": "p1", "name": "a"},
+            {"item_uid": "p2", "name": "b"},
+            {"item_uid": "p3", "name": "c"},
+            {"item_uid": "p4", "name": "d"},
+            {"item_uid": "p5", "name": "e"},
         ]
 
         for plan in plans:
@@ -627,21 +627,21 @@ def test_pop_item_from_queue_3(pq):
         plan_to_remove = [_ for _ in plans if _["name"] == "b"][0]
 
         # Remove one plan
-        await pq.pop_item_from_queue(uid=plan_to_remove["plan_uid"])
+        await pq.pop_item_from_queue(uid=plan_to_remove["item_uid"])
         assert await pq.get_queue_size() == 2
 
         # Attempt to remove the plan again. This should raise an exception.
         with pytest.raises(
-            IndexError, match=f"Plan with UID '{plan_to_remove['plan_uid']}' " f"is not in the queue"
+            IndexError, match=f"Plan with UID '{plan_to_remove['item_uid']}' " f"is not in the queue"
         ):
-            await pq.pop_item_from_queue(uid=plan_to_remove["plan_uid"])
+            await pq.pop_item_from_queue(uid=plan_to_remove["item_uid"])
         assert await pq.get_queue_size() == 2
 
         # Attempt to remove the plan that is running. This should raise an exception.
         await pq.set_next_item_as_running()
         assert await pq.get_queue_size() == 1
         with pytest.raises(IndexError, match="Can not remove a plan which is currently running"):
-            await pq.pop_item_from_queue(uid=plans[0]["plan_uid"])
+            await pq.pop_item_from_queue(uid=plans[0]["item_uid"])
         assert await pq.get_queue_size() == 1
 
     asyncio.run(testing())
@@ -753,7 +753,7 @@ def test_set_processed_item_as_completed(pq):
     The function moves currently running plan to history.
     """
 
-    plans = [{"plan_uid": 1, "name": "a"}, {"plan_uid": 2, "name": "b"}, {"plan_uid": 3, "name": "c"}]
+    plans = [{"item_uid": 1, "name": "a"}, {"item_uid": 2, "name": "b"}, {"item_uid": 3, "name": "c"}]
 
     def add_status_to_plans(plans, exit_status):
         plans = copy.deepcopy(plans)
@@ -805,7 +805,7 @@ def test_set_processed_item_as_stopped(pq):
     Test for ``PlanQueueOperations.set_processed_item_as_stopped()`` function.
     The function pushes running plan back to the queue and saves it in history as well.
     """
-    plans = [{"plan_uid": 1, "name": "a"}, {"plan_uid": 2, "name": "b"}, {"plan_uid": 3, "name": "c"}]
+    plans = [{"item_uid": 1, "name": "a"}, {"item_uid": 2, "name": "b"}, {"item_uid": 3, "name": "c"}]
 
     def add_status_to_plans(plans, exit_status):
         plans = copy.deepcopy(plans)

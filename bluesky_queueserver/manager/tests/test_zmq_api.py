@@ -135,7 +135,7 @@ def test_zmq_api_queue_item_add_1(re_manager):  # noqa F811
     assert resp1["plan"]["args"] == _plan1["args"]
     assert resp1["plan"]["user"] == _user
     assert resp1["plan"]["user_group"] == _user_group
-    assert "plan_uid" in resp1["plan"]
+    assert "item_uid" in resp1["plan"]
 
     resp2, _ = zmq_single_request("queue_get")
     assert resp2["queue"] != []
@@ -186,7 +186,7 @@ def test_zmq_api_queue_item_add_2(re_manager, pos, pos_result, success):  # noqa
     assert resp1["plan"]["args"] == plan2["args"]
     assert resp1["plan"]["user"] == _user
     assert resp1["plan"]["user_group"] == _user_group
-    assert "plan_uid" in resp1["plan"]
+    assert "item_uid" in resp1["plan"]
 
     resp2, _ = zmq_single_request("queue_get")
 
@@ -211,24 +211,24 @@ def test_zmq_api_queue_item_add_3(re_manager):  # noqa F811
 
     base_plans = zmq_single_request("queue_get")[0]["queue"]
 
-    params = {"plan": plan3, "after_uid": base_plans[0]["plan_uid"], "user": _user, "user_group": _user_group}
+    params = {"plan": plan3, "after_uid": base_plans[0]["item_uid"], "user": _user, "user_group": _user_group}
     resp1, _ = zmq_single_request("queue_item_add", params)
     assert resp1["success"] is True
     assert resp1["qsize"] == 3
-    uid1 = resp1["plan"]["plan_uid"]
+    uid1 = resp1["plan"]["item_uid"]
     resp1a, _ = zmq_single_request("queue_get")
     assert len(resp1a["queue"]) == 3
-    assert resp1a["queue"][1]["plan_uid"] == uid1
+    assert resp1a["queue"][1]["item_uid"] == uid1
     resp1b, _ = zmq_single_request("queue_item_remove", {"uid": uid1})
     assert resp1b["success"] is True
 
-    params = {"plan": plan3, "before_uid": base_plans[1]["plan_uid"], "user": _user, "user_group": _user_group}
+    params = {"plan": plan3, "before_uid": base_plans[1]["item_uid"], "user": _user, "user_group": _user_group}
     resp2, _ = zmq_single_request("queue_item_add", params)
     assert resp2["success"] is True
-    uid2 = resp2["plan"]["plan_uid"]
+    uid2 = resp2["plan"]["item_uid"]
     resp2a, _ = zmq_single_request("queue_get")
     assert len(resp2a["queue"]) == 3
-    assert resp2a["queue"][1]["plan_uid"] == uid2
+    assert resp2a["queue"][1]["item_uid"] == uid2
     resp2b, _ = zmq_single_request("queue_item_remove", {"uid": uid2})
     assert resp2b["success"] is True
 
@@ -263,7 +263,7 @@ def test_zmq_api_queue_item_add_4(re_manager):  # noqa F811
     assert resp0b["success"] is True
 
     base_plans = zmq_single_request("queue_get")[0]["queue"]
-    uid = base_plans[0]["plan_uid"]
+    uid = base_plans[0]["item_uid"]
 
     # Start the first plan (this removes it from the queue)
     #   Also the rest of the operations will be performed on a running queue.
@@ -310,13 +310,13 @@ def test_zmq_api_queue_item_add_5(re_manager):  # noqa: F811
     plan1 = {"name": "count", "args": [["det1", "det2"]]}
 
     # Set plan UID. This UID is expected to be replaced when the plan is added
-    plan1["plan_uid"] = PlanQueueOperations.new_item_uid()
+    plan1["item_uid"] = PlanQueueOperations.new_item_uid()
 
     params1 = {"plan": plan1, "user": _user, "user_group": _user_group}
     resp1, _ = zmq_single_request("queue_item_add", params1)
     assert resp1["success"] is True
     assert resp1["msg"] == ""
-    assert resp1["plan"]["plan_uid"] != plan1["plan_uid"]
+    assert resp1["plan"]["item_uid"] != plan1["item_uid"]
 
 
 def test_zmq_api_queue_item_add_6(re_manager):  # noqa: F811
@@ -397,7 +397,7 @@ def test_zmq_api_queue_item_add_7_fail(re_manager):  # noqa F811
     assert resp7["plan"]["args"] == [["det1", "det2"]]
     assert resp7["plan"]["user"] == _user
     assert resp7["plan"]["user_group"] == _user_group
-    assert "plan_uid" in resp7["plan"]
+    assert "item_uid" in resp7["plan"]
 
     resp8, _ = zmq_single_request("queue_get")
     assert resp8["queue"] != []
@@ -506,7 +506,7 @@ def test_zmq_api_queue_item_get_remove_1(re_manager):  # noqa F811
     assert resp2["plan"]["name"] == _plan3["name"]
     assert resp2["plan"]["args"] == _plan3["args"]
     assert resp2["plan"]["kwargs"] == _plan3["kwargs"]
-    assert "plan_uid" in resp2["plan"]
+    assert "item_uid" in resp2["plan"]
 
     # Remove the last plan from the queue
     resp3, _ = zmq_single_request("queue_item_remove")
@@ -515,7 +515,7 @@ def test_zmq_api_queue_item_get_remove_1(re_manager):  # noqa F811
     assert resp3["plan"]["name"] == "count"
     assert resp3["plan"]["args"] == [["det1", "det2"]]
     assert resp2["plan"]["kwargs"] == _plan3["kwargs"]
-    assert "plan_uid" in resp3["plan"]
+    assert "item_uid" in resp3["plan"]
 
 
 # fmt: off
@@ -542,9 +542,9 @@ def test_zmq_api_queue_item_get_remove_2(re_manager, pos, pos_result, success): 
     """
 
     plans = [
-        {"plan_uid": "one", "name": "count", "args": [["det1"]]},
-        {"plan_uid": "two", "name": "count", "args": [["det2"]]},
-        {"plan_uid": "three", "name": "count", "args": [["det1", "det2"]]},
+        {"item_uid": "one", "name": "count", "args": [["det1"]]},
+        {"item_uid": "two", "name": "count", "args": [["det2"]]},
+        {"item_uid": "three", "name": "count", "args": [["det1", "det2"]]},
     ]
     for plan in plans:
         resp0, _ = zmq_single_request("queue_item_add", {"plan": plan, "user": _user, "user_group": _user_group})
@@ -558,7 +558,7 @@ def test_zmq_api_queue_item_get_remove_2(re_manager, pos, pos_result, success): 
     assert resp1["success"] is success
     if success:
         assert resp1["plan"]["args"] == plans[pos_result]["args"]
-        assert "plan_uid" in resp1["plan"]
+        assert "item_uid" in resp1["plan"]
         assert resp1["msg"] == ""
     else:
         assert resp1["plan"] == {}
@@ -570,7 +570,7 @@ def test_zmq_api_queue_item_get_remove_2(re_manager, pos, pos_result, success): 
     assert resp2["qsize"] == (2 if success else None)
     if success:
         assert resp2["plan"]["args"] == plans[pos_result]["args"]
-        assert "plan_uid" in resp2["plan"]
+        assert "item_uid" in resp2["plan"]
         assert resp2["msg"] == ""
     else:
         assert resp2["plan"] == {}
@@ -595,13 +595,13 @@ def test_zmq_api_queue_item_get_remove_3(re_manager):  # noqa F811
     assert len(plans_in_queue) == 3
 
     # Get and then remove plan 2 from the queue
-    uid = plans_in_queue[1]["plan_uid"]
+    uid = plans_in_queue[1]["item_uid"]
     resp2a, _ = zmq_single_request("queue_item_get", {"uid": uid})
-    assert resp2a["plan"]["plan_uid"] == plans_in_queue[1]["plan_uid"]
+    assert resp2a["plan"]["item_uid"] == plans_in_queue[1]["item_uid"]
     assert resp2a["plan"]["name"] == plans_in_queue[1]["name"]
     assert resp2a["plan"]["args"] == plans_in_queue[1]["args"]
     resp2b, _ = zmq_single_request("queue_item_remove", {"uid": uid})
-    assert resp2b["plan"]["plan_uid"] == plans_in_queue[1]["plan_uid"]
+    assert resp2b["plan"]["item_uid"] == plans_in_queue[1]["item_uid"]
     assert resp2b["plan"]["name"] == plans_in_queue[1]["name"]
     assert resp2b["plan"]["args"] == plans_in_queue[1]["args"]
 
@@ -617,7 +617,7 @@ def test_zmq_api_queue_item_get_remove_3(re_manager):  # noqa F811
     assert resp4["success"] is True
 
     ttime.sleep(1)
-    uid = plans_in_queue[0]["plan_uid"]
+    uid = plans_in_queue[0]["item_uid"]
     resp5a, _ = zmq_single_request("queue_item_get", {"uid": uid})
     assert resp5a["success"] is False
     assert "is currently running" in resp5a["msg"]
@@ -634,7 +634,7 @@ def test_zmq_api_queue_item_get_remove_3(re_manager):  # noqa F811
     assert "not in the queue" in resp6b["msg"]
 
     # Remove the last entry
-    uid = plans_in_queue[2]["plan_uid"]
+    uid = plans_in_queue[2]["item_uid"]
     resp7a, _ = zmq_single_request("queue_item_get", {"uid": uid})
     assert resp7a["success"] is True
     resp7b, _ = zmq_single_request("queue_item_remove", {"uid": uid})
@@ -711,17 +711,17 @@ def test_zmq_api_move_plan_1(re_manager, params, src, order, success, msg):  # n
     queue = resp1["queue"]
     assert len(queue) == 3
 
-    plan_uids = [_["plan_uid"] for _ in queue]
+    item_uids = [_["item_uid"] for _ in queue]
     # Add one more 'nonexistent' uid (that is not in the queue)
-    plan_uids.append("nonexistent")
+    item_uids.append("nonexistent")
 
     # Replace indices with actual UIDs that will be sent to the function
     if "uid" in params:
-        params["uid"] = plan_uids[params["uid"]]
+        params["uid"] = item_uids[params["uid"]]
     if "before_uid" in params:
-        params["before_uid"] = plan_uids[params["before_uid"]]
+        params["before_uid"] = item_uids[params["before_uid"]]
     if "after_uid" in params:
-        params["after_uid"] = plan_uids[params["after_uid"]]
+        params["after_uid"] = item_uids[params["after_uid"]]
 
     resp2, _ = zmq_single_request("queue_item_move", params)
     if success:
@@ -731,11 +731,11 @@ def test_zmq_api_move_plan_1(re_manager, params, src, order, success, msg):  # n
         assert resp2["msg"] == ""
 
         # Compare the order of UIDs in the queue with the expected order
-        plan_uids_reordered = [plan_uids[_] for _ in order]
+        item_uids_reordered = [item_uids[_] for _ in order]
         resp3, _ = zmq_single_request("queue_get")
-        plan_uids_from_queue = [_["plan_uid"] for _ in resp3["queue"]]
+        item_uids_from_queue = [_["item_uid"] for _ in resp3["queue"]]
 
-        assert plan_uids_from_queue == plan_uids_reordered
+        assert item_uids_from_queue == item_uids_reordered
 
     else:
         assert resp2["success"] is False

@@ -85,7 +85,7 @@ class PlanQueueOperations:
 
         def verify_item(item):
             # The criteria may be changed.
-            return "plan_uid" in item
+            return "item_uid" in item
 
         items_to_remove = []
         for item in pq:
@@ -127,15 +127,15 @@ class PlanQueueOperations:
     def _verify_item(self, item):
         """
         Verify that item (plan) structure is valid enough to be put in the queue.
-        Current checks: item is a dictionary, ``plan_uid`` key is present, Plan with the UID is not in
+        Current checks: item is a dictionary, ``item_uid`` key is present, Plan with the UID is not in
         the queue or currently running.
         """
         self._verify_item_type(item)
         # Verify plan UID
-        if "plan_uid" not in item:
+        if "item_uid" not in item:
             raise ValueError("Item does not have UID.")
-        if self._is_uid_in_dict(item["plan_uid"]):
-            raise RuntimeError(f"Item with UID {item['plan_uid']} is already in the queue")
+        if self._is_uid_in_dict(item["item_uid"]):
+            raise RuntimeError(f"Item with UID {item['item_uid']} is already in the queue")
 
     @staticmethod
     def new_item_uid():
@@ -151,7 +151,7 @@ class PlanQueueOperations:
         Parameters
         ----------
         item: dict
-            Dictionary of item parameters. The dictionary may or may not have the key ``plan_uid``.
+            Dictionary of item parameters. The dictionary may or may not have the key ``item_uid``.
 
         Returns
         -------
@@ -159,7 +159,7 @@ class PlanQueueOperations:
             Plan with new UID.
         """
         self._verify_item_type(item)
-        item["plan_uid"] = self.new_item_uid()
+        item["item_uid"] = self.new_item_uid()
         return item
 
     async def _get_index_by_uid(self, *, uid):
@@ -184,7 +184,7 @@ class PlanQueueOperations:
         """
         queue = await self._get_queue()
         for n, plan in enumerate(queue):
-            if plan["plan_uid"] == uid:
+            if plan["item_uid"] == uid:
                 return n
         raise IndexError(f"No plan with UID '{uid}' was found in the list.")
 
@@ -206,7 +206,7 @@ class PlanQueueOperations:
         """
         Add UID to ``self._uid_dict``.
         """
-        uid = plan["plan_uid"]
+        uid = plan["item_uid"]
         if self._is_uid_in_dict(uid):
             raise RuntimeError(f"Trying to add plan with UID '{uid}', which is already in the queue")
         self._uid_dict.update({uid: plan})
@@ -223,7 +223,7 @@ class PlanQueueOperations:
         """
         Update a plan with UID that is already in the dictionary.
         """
-        uid = plan["plan_uid"]
+        uid = plan["item_uid"]
         if not self._is_uid_in_dict(uid):
             raise RuntimeError(f"Trying to update plan with UID '{uid}', which is not in the queue")
         self._uid_dict.update({uid: plan})
@@ -359,7 +359,7 @@ class PlanQueueOperations:
             if not self._is_uid_in_dict(uid):
                 raise IndexError(f"Item with UID '{uid}' is not in the queue.")
             running_item = await self._get_running_item_info()
-            if running_item and (uid == running_item["plan_uid"]):
+            if running_item and (uid == running_item["item_uid"]):
                 raise IndexError("The item with UID '{uid}' is currently running.")
             item = self._uid_dict_get_item(uid)
 
@@ -451,7 +451,7 @@ class PlanQueueOperations:
             if not self._is_uid_in_dict(uid):
                 raise IndexError(f"Plan with UID '{uid}' is not in the queue.")
             running_item = await self._get_running_item_info()
-            if running_item and (uid == running_item["plan_uid"]):
+            if running_item and (uid == running_item["item_uid"]):
                 raise IndexError("Can not remove a plan which is currently running.")
             item = self._uid_dict_get_item(uid)
             await self._remove_item(item)
@@ -473,7 +473,7 @@ class PlanQueueOperations:
             raise ValueError(f"Parameter 'pos' has incorrect value: pos={str(pos)} (type={type(pos)})")
 
         if item:
-            self._uid_dict_remove(item["plan_uid"])
+            self._uid_dict_remove(item["item_uid"])
 
         qsize = await self._get_queue_size()
 
@@ -521,7 +521,7 @@ class PlanQueueOperations:
 
         pos = pos if pos is not None else "back"
 
-        if "plan_uid" not in item:
+        if "item_uid" not in item:
             item = self.set_new_item_uuid(item)
         else:
             self._verify_item(item)
@@ -534,7 +534,7 @@ class PlanQueueOperations:
             if not self._is_uid_in_dict(uid):
                 raise IndexError(f"Plan with UID '{uid}' is not in the queue.")
             running_item = await self._get_running_item_info()
-            if running_item and (uid == running_item["plan_uid"]):
+            if running_item and (uid == running_item["item_uid"]):
                 if before:
                     raise IndexError("Can not insert a plan in the queue before a currently running plan.")
                 else:
@@ -640,7 +640,7 @@ class PlanQueueOperations:
         except Exception as ex:
             raise IndexError(f"Source plan ({src_txt}) was not found: {str(ex)}.")
 
-        uid_source = item_source["plan_uid"]
+        uid_source = item_source["item_uid"]
 
         # Find the destination plan
         dest_txt, before = "", True
@@ -677,7 +677,7 @@ class PlanQueueOperations:
         #   so we convert it to UID, but we can do it for the case of UID addressing as well)
         #   In case of positional addressing 'before' is True, so the source is going to be
         #   inserted in place of destination.
-        uid_dest = item_dest["plan_uid"]
+        uid_dest = item_dest["item_uid"]
 
         # If source and destination point to the same plan, then do nothing,
         #   but consider it a valid operation.
@@ -858,7 +858,7 @@ class PlanQueueOperations:
             item = await self._get_running_item_info()
             item["exit_status"] = exit_status
             await self._clear_running_item_info()
-            self._uid_dict_remove(item["plan_uid"])
+            self._uid_dict_remove(item["item_uid"])
             await self._add_to_history(item)
         else:
             item = {}

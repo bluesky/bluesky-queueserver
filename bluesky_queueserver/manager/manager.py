@@ -434,7 +434,7 @@ class RunEngineManager(Process):
             logger.info(err_msg)
 
         else:
-            next_item = await self._plan_queue.get_plan(pos="front")
+            next_item = await self._plan_queue.get_item(pos="front")
 
             # The next items is PLAN
             if next_item["item_type"] == "plan":
@@ -905,7 +905,7 @@ class RunEngineManager(Process):
             plan, msg = {}, ""
             pos = request.get("pos", None)
             uid = request.get("uid", None)
-            plan = await self._plan_queue.get_plan(pos=pos, uid=uid)
+            plan = await self._plan_queue.get_item(pos=pos, uid=uid)
             success = True
         except Exception as ex:
             success = False

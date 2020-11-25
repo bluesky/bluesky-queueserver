@@ -144,23 +144,23 @@ class PlanQueueOperations:
         """
         return str(uuid.uuid4())
 
-    def set_new_plan_uuid(self, plan):
+    def set_new_item_uuid(self, item):
         """
-        Replaces Plan UID with a new one or creates a new UID.
+        Replaces Item UID with a new one or creates a new UID.
 
         Parameters
         ----------
-        plan: dict
-            Dictionary of plan parameters. The dictionary may or may not have the key ``plan_uid``.
+        item: dict
+            Dictionary of item parameters. The dictionary may or may not have the key ``plan_uid``.
 
         Returns
         -------
         dict
             Plan with new UID.
         """
-        self._verify_item_type(plan)
-        plan["plan_uid"] = self.new_item_uid()
-        return plan
+        self._verify_item_type(item)
+        item["plan_uid"] = self.new_item_uid()
+        return item
 
     async def _get_index_by_uid(self, *, uid):
         """
@@ -348,20 +348,20 @@ class PlanQueueOperations:
         async with self._lock:
             return await self._get_queue()
 
-    async def _get_plan(self, *, pos=None, uid=None):
+    async def _get_item(self, *, pos=None, uid=None):
         """
-        See ``self.get_plan()`` method.
+        See ``self.get_item()`` method.
         """
         if (pos is not None) and (uid is not None):
             raise ValueError("Ambiguous parameters: plan position and UID is specified")
 
         if uid is not None:
             if not self._is_uid_in_dict(uid):
-                raise IndexError(f"Plan with UID '{uid}' is not in the queue.")
-            running_plan = await self._get_running_item_info()
-            if running_plan and (uid == running_plan["plan_uid"]):
-                raise IndexError("The plan with UID '{uid}' is currently running.")
-            plan = self._uid_dict_get_plan(uid)
+                raise IndexError(f"Item with UID '{uid}' is not in the queue.")
+            running_item = await self._get_running_item_info()
+            if running_item and (uid == running_item["plan_uid"]):
+                raise IndexError("The item with UID '{uid}' is currently running.")
+            item = self._uid_dict_get_plan(uid)
 
         else:
             pos = pos if pos is not None else "back"
@@ -375,17 +375,17 @@ class PlanQueueOperations:
             else:
                 raise TypeError(f"Parameter 'pos' has incorrect type: pos={str(pos)} (type={type(pos)})")
 
-            plan_json = await self._r_pool.lindex(self._name_plan_queue, index)
-            if plan_json is None:
+            item_json = await self._r_pool.lindex(self._name_plan_queue, index)
+            if item_json is None:
                 raise IndexError(f"Index '{index}' is out of range (parameter pos = '{pos}')")
 
-            plan = json.loads(plan_json) if plan_json else {}
+            item = json.loads(item_json) if item_json else {}
 
-        return plan
+        return item
 
-    async def get_plan(self, *, pos=None, uid=None):
+    async def get_item(self, *, pos=None, uid=None):
         """
-        Get plan at a given position or with a given UID. If UID is specified, then
+        Get item at a given position or with a given UID. If UID is specified, then
         the position is ignored.
 
         Parameters
@@ -399,7 +399,7 @@ class PlanQueueOperations:
         Returns
         -------
         dict
-            Dictionary of plan parameters.
+            Dictionary of item parameters.
 
         Raises
         ------
@@ -409,7 +409,7 @@ class PlanQueueOperations:
             No element with position ``pos`` exists in the queue (index is out of range).
         """
         async with self._lock:
-            return await self._get_plan(pos=pos, uid=uid)
+            return await self._get_item(pos=pos, uid=uid)
 
     async def _remove_item(self, item, single=True):
         """
@@ -468,7 +468,7 @@ class PlanQueueOperations:
                 raise IndexError("Queue is empty")
             item = json.loads(item_json) if item_json else {}
         elif isinstance(pos, int):
-            item = await self._get_plan(pos=pos)
+            item = await self._get_item(pos=pos)
             if item:
                 await self._remove_item(item)
         else:
@@ -524,7 +524,7 @@ class PlanQueueOperations:
         pos = pos if pos is not None else "back"
 
         if "plan_uid" not in item:
-            item = self.set_new_plan_uuid(item)
+            item = self.set_new_item_uuid(item)
         else:
             self._verify_item(item)
 
@@ -554,7 +554,7 @@ class PlanQueueOperations:
             qsize = await self._r_pool.lpush(self._name_plan_queue, json.dumps(item))
         elif isinstance(pos, int):
             # Put the position in the range
-            item_to_displace = await self._get_plan(pos=pos)
+            item_to_displace = await self._get_item(pos=pos)
             if item_to_displace:
                 qsize = await self._r_pool.linsert(
                     self._name_plan_queue, json.dumps(item_to_displace), json.dumps(item), before=True
@@ -634,11 +634,11 @@ class PlanQueueOperations:
         try:
             if uid is not None:
                 src_txt = f"UID '{uid}'"
-                item_source = await self._get_plan(uid=uid)
+                item_source = await self._get_item(uid=uid)
             else:
                 src_txt = f"position {pos}"
                 src_by_index = True
-                item_source = await self._get_plan(pos=pos)
+                item_source = await self._get_item(pos=pos)
         except Exception as ex:
             raise IndexError(f"Source plan ({src_txt}) was not found: {str(ex)}.")
 
@@ -651,10 +651,10 @@ class PlanQueueOperations:
                 uid_dest = before_uid if before_uid else after_uid
                 before = uid_dest == before_uid
                 dest_txt = f"UID '{uid_dest}'"
-                item_dest = await self._get_plan(uid=uid_dest)
+                item_dest = await self._get_item(uid=uid_dest)
             else:
                 dest_txt = f"position {pos_dest}"
-                item_dest = await self._get_plan(pos=pos_dest)
+                item_dest = await self._get_item(pos=pos_dest)
 
                 # Find the index of the source in the most efficient way
                 src_index = pos if src_by_index else (await self._get_index_by_uid(uid=uid))

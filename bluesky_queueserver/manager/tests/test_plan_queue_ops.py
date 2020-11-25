@@ -145,14 +145,14 @@ def test_new_item_uid(pq):
     {"plan_uid": "some_uid", "name": "a"},
 ])
 # fmt: on
-def test_set_new_plan_uuid(pq, plan):
+def test_set_new_item_uuid(pq, plan):
     """
-    Basic test for the method ``set_new_plan_uuid()``.
+    Basic test for the method ``set_new_item_uuid()``.
     """
     uid = plan.get("plan_uid", None)
 
     # The function is supposed to create or replace UID
-    new_plan = pq.set_new_plan_uuid(plan)
+    new_plan = pq.set_new_item_uuid(plan)
 
     assert "plan_uid" in new_plan
     assert isinstance(new_plan["plan_uid"], str)
@@ -320,9 +320,9 @@ def test_remove_item(pq):
     ({"uid": "nonexistent"}, None),
 ])
 # fmt: on
-def test_get_plan_1(pq, params, name):
+def test_get_item_1(pq, params, name):
     """
-    Basic test for the function ``PlanQueueOperations.get_plan()``
+    Basic test for the function ``PlanQueueOperations.get_item()``
     """
 
     async def testing():
@@ -333,19 +333,19 @@ def test_get_plan_1(pq, params, name):
         assert await pq.get_queue_size() == 3
 
         if name is not None:
-            plan = await pq.get_plan(**params)
+            plan = await pq.get_item(**params)
             assert plan["name"] == name
         else:
             msg = "Index .* is out of range" if "pos" in params else "is not in the queue"
             with pytest.raises(IndexError, match=msg):
-                await pq.get_plan(**params)
+                await pq.get_item(**params)
 
     asyncio.run(testing())
 
 
-def test_get_plan_2_fail(pq):
+def test_get_item_2_fail(pq):
     """
-    Basic test for the function ``PlanQueueOperations.get_plan()``.
+    Basic test for the function ``PlanQueueOperations.get_item()``.
     Attempt to retrieve a running plan.
     """
 
@@ -360,11 +360,11 @@ def test_get_plan_2_fail(pq):
         assert await pq.get_queue_size() == 2
 
         with pytest.raises(IndexError, match="is currently running"):
-            await pq.get_plan(uid="one")
+            await pq.get_item(uid="one")
 
         # Ambiguous parameters (position and UID is passed)
         with pytest.raises(ValueError, match="Ambiguous parameters"):
-            await pq.get_plan(pos=5, uid="abc")
+            await pq.get_item(pos=5, uid="abc")
 
     asyncio.run(testing())
 

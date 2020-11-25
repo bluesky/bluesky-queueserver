@@ -29,7 +29,7 @@ class PlanQueueOperations:
         await pq.add_item_to_queue(<plan3>)
 
         # Number of plans in the queue
-        qsize = await pq.get_plan_queue_size()
+        qsize = await pq.get_queue_size()
 
         # Read the queue (as a list)
         queue = await pq.get_plan_queue()
@@ -309,13 +309,13 @@ class PlanQueueOperations:
     # -------------------------------------------------------------
     #                       Plan Queue
 
-    async def _get_plan_queue_size(self):
+    async def _get_queue_size(self):
         """
-        See ``self.get_plan_queue_size()`` method.
+        See ``self.get_queue_size()`` method.
         """
         return await self._r_pool.llen(self._name_plan_queue)
 
-    async def get_plan_queue_size(self):
+    async def get_queue_size(self):
         """
         Get the number of plans in the queue.
 
@@ -325,7 +325,7 @@ class PlanQueueOperations:
             The number of plans in the queue.
         """
         async with self._lock:
-            return await self._get_plan_queue_size()
+            return await self._get_queue_size()
 
     async def _get_plan_queue(self):
         """
@@ -477,7 +477,7 @@ class PlanQueueOperations:
         if plan:
             self._uid_dict_remove(plan["plan_uid"])
 
-        qsize = await self._get_plan_queue_size()
+        qsize = await self._get_queue_size()
 
         return plan, qsize
 
@@ -528,7 +528,7 @@ class PlanQueueOperations:
         else:
             self._verify_plan(item)
 
-        qsize0 = await self._get_plan_queue_size()
+        qsize0 = await self._get_queue_size()
         if (before_uid is not None) or (after_uid is not None):
             uid = before_uid if before_uid is not None else after_uid
             before = uid == before_uid
@@ -626,7 +626,7 @@ class PlanQueueOperations:
         if (before_uid is not None) and (after_uid is not None):
             raise ValueError("Ambiguous parameters: source should be moved 'before' and 'after' the destination.")
 
-        queue_size = await self._get_plan_queue_size()
+        queue_size = await self._get_queue_size()
 
         # Find the source plan
         src_txt = ""
@@ -690,7 +690,7 @@ class PlanQueueOperations:
             item, qsize = await self._add_item_to_queue(**kw)
         else:
             item = item_dest
-            qsize = await self._get_plan_queue_size()
+            qsize = await self._get_queue_size()
         return item, qsize
 
     async def move_item(self, *, pos=None, uid=None, pos_dest=None, before_uid=None, after_uid=None):
@@ -731,7 +731,7 @@ class PlanQueueOperations:
         """
         See ``self.clear_plan_queue()`` method.
         """
-        while await self._get_plan_queue_size():
+        while await self._get_queue_size():
             await self._pop_plan_from_queue()
 
     async def clear_plan_queue(self):

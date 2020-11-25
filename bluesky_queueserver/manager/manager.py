@@ -420,7 +420,7 @@ class RunEngineManager(Process):
         "args" (list of args), "kwargs" (list of kwargs). Only the plan name is mandatory.
         Names of plans and devices are strings.
         """
-        n_pending_plans = await self._plan_queue.get_plan_queue_size()
+        n_pending_plans = await self._plan_queue.get_queue_size()
         logger.info("Starting a new plan: %d plans are left in the queue", n_pending_plans)
 
         if not n_pending_plans:
@@ -707,7 +707,7 @@ class RunEngineManager(Process):
         logger.info("Processing 'status' request.")
 
         # Computed/retrieved data
-        n_pending_plans = await self._plan_queue.get_plan_queue_size()
+        n_pending_plans = await self._plan_queue.get_queue_size()
         running_plan_info = await self._plan_queue.get_running_plan_info()
         n_plans_in_history = await self._plan_queue.get_plan_history_size()
 

@@ -121,7 +121,7 @@ def test_verify_plan(pq, plan, result, errmsg):
 
         # Verify that setup is correct
         assert await pq.is_plan_running() is True
-        assert await pq.get_plan_queue_size() == 1
+        assert await pq.get_queue_size() == 1
 
     asyncio.run(set_plans())
 
@@ -280,25 +280,25 @@ def test_remove_plan(pq):
         await pq._r_pool.lpush(pq._name_plan_queue, json.dumps(plan_to_add))
         # Now remove both plans
         await pq._remove_plan(plan_to_add, single=False)  # Allow deleting multiple or no plans
-        assert await pq.get_plan_queue_size() == 1
+        assert await pq.get_queue_size() == 1
 
         # Delete the plan again (the plan is not in the queue, but it shouldn't raise an exception)
         await pq._remove_plan(plan_to_add, single=False)  # Allow deleting multiple or no plans
-        assert await pq.get_plan_queue_size() == 1
+        assert await pq.get_queue_size() == 1
 
         with pytest.raises(RuntimeError, match="One plans is expected to be removed"):
             await pq._remove_plan(plan_to_add)
-        assert await pq.get_plan_queue_size() == 1
+        assert await pq.get_queue_size() == 1
 
         # Now add 'plan_to_add' twice (create two copies)
         await pq._r_pool.lpush(pq._name_plan_queue, json.dumps(plan_to_add))
         await pq._r_pool.lpush(pq._name_plan_queue, json.dumps(plan_to_add))
-        assert await pq.get_plan_queue_size() == 3
+        assert await pq.get_queue_size() == 3
         # Attempt to delete two copies
         with pytest.raises(RuntimeError, match="One plans is expected to be removed"):
             await pq._remove_plan(plan_to_add)
         # Exception is raised, but both copies are deleted
-        assert await pq.get_plan_queue_size() == 1
+        assert await pq.get_queue_size() == 1
 
     asyncio.run(testing())
 
@@ -330,7 +330,7 @@ def test_get_plan_1(pq, params, name):
         await pq.add_item_to_queue({"plan_uid": "one", "name": "a"})
         await pq.add_item_to_queue({"plan_uid": "two", "name": "b"})
         await pq.add_item_to_queue({"plan_uid": "three", "name": "c"})
-        assert await pq.get_plan_queue_size() == 3
+        assert await pq.get_queue_size() == 3
 
         if name is not None:
             plan = await pq.get_plan(**params)
@@ -354,10 +354,10 @@ def test_get_plan_2_fail(pq):
         await pq.add_item_to_queue({"plan_uid": "one", "name": "a"})
         await pq.add_item_to_queue({"plan_uid": "two", "name": "b"})
         await pq.add_item_to_queue({"plan_uid": "three", "name": "c"})
-        assert await pq.get_plan_queue_size() == 3
+        assert await pq.get_queue_size() == 3
 
         await pq.set_next_plan_as_running()
-        assert await pq.get_plan_queue_size() == 2
+        assert await pq.get_queue_size() == 2
 
         with pytest.raises(IndexError, match="is currently running"):
             await pq.get_plan(uid="one")
@@ -393,7 +393,7 @@ def test_add_item_to_queue_1(pq):
         await add_plan({"name": "k"}, 11, pos=-10)  # front (precisely negative queue size)
         await add_plan({"name": "l"}, 12, pos=-100)  # front (index some large negative number)
 
-        assert await pq.get_plan_queue_size() == 12
+        assert await pq.get_queue_size() == 12
 
         plans = await pq.get_plan_queue()
         name_sequence = [_["name"] for _ in plans]
@@ -437,7 +437,7 @@ def test_add_item_to_queue_2(pq):
         with pytest.raises(IndexError, match="is not in the queue"):
             await add_plan({"name": "h"}, 5, before_uid="nonexistent_uid")
 
-        assert await pq.get_plan_queue_size() == 5
+        assert await pq.get_queue_size() == 5
 
         plans = await pq.get_plan_queue()
         name_sequence = [_["name"] for _ in plans]
@@ -536,7 +536,7 @@ def test_move_item_1(pq, params, src, order, success, msg):
         for plan in plans:
             await pq.add_item_to_queue(plan)
 
-        assert await pq.get_plan_queue_size() == len(plans)
+        assert await pq.get_queue_size() == len(plans)
 
         if success:
             plan, qsize = await pq.move_item(**params)
@@ -579,16 +579,16 @@ def test_pop_plan_from_queue_1(pq, pos, name):
         await pq.add_item_to_queue({"name": "a"})
         await pq.add_item_to_queue({"name": "b"})
         await pq.add_item_to_queue({"name": "c"})
-        assert await pq.get_plan_queue_size() == 3
+        assert await pq.get_queue_size() == 3
 
         if name is not None:
             plan, qsize = await pq.pop_plan_from_queue(pos=pos)
             assert plan["name"] == name
             assert qsize == 2
-            assert await pq.get_plan_queue_size() == 2
+            assert await pq.get_queue_size() == 2
             # Push the plan back to the queue (proves that UID is removed from '_uid_dict')
             await pq.add_item_to_queue(plan)
-            assert await pq.get_plan_queue_size() == 3
+            assert await pq.get_queue_size() == 3
         else:
             with pytest.raises(IndexError, match="Index .* is out of range"):
                 await pq.pop_plan_from_queue(pos=pos)
@@ -604,7 +604,7 @@ def test_pop_plan_from_queue_2(pq, pos):
     """
 
     async def testing():
-        assert await pq.get_plan_queue_size() == 0
+        assert await pq.get_queue_size() == 0
         with pytest.raises(IndexError, match="Index .* is out of range|Queue is empty"):
             await pq.pop_plan_from_queue(pos=pos)
 
@@ -620,7 +620,7 @@ def test_pop_plan_from_queue_3(pq):
         await pq.add_item_to_queue({"name": "a"})
         await pq.add_item_to_queue({"name": "b"})
         await pq.add_item_to_queue({"name": "c"})
-        assert await pq.get_plan_queue_size() == 3
+        assert await pq.get_queue_size() == 3
 
         plans = await pq.get_plan_queue()
         assert len(plans) == 3
@@ -628,21 +628,21 @@ def test_pop_plan_from_queue_3(pq):
 
         # Remove one plan
         await pq.pop_plan_from_queue(uid=plan_to_remove["plan_uid"])
-        assert await pq.get_plan_queue_size() == 2
+        assert await pq.get_queue_size() == 2
 
         # Attempt to remove the plan again. This should raise an exception.
         with pytest.raises(
             IndexError, match=f"Plan with UID '{plan_to_remove['plan_uid']}' " f"is not in the queue"
         ):
             await pq.pop_plan_from_queue(uid=plan_to_remove["plan_uid"])
-        assert await pq.get_plan_queue_size() == 2
+        assert await pq.get_queue_size() == 2
 
         # Attempt to remove the plan that is running. This should raise an exception.
         await pq.set_next_plan_as_running()
-        assert await pq.get_plan_queue_size() == 1
+        assert await pq.get_queue_size() == 1
         with pytest.raises(IndexError, match="Can not remove a plan which is currently running"):
             await pq.pop_plan_from_queue(uid=plans[0]["plan_uid"])
-        assert await pq.get_plan_queue_size() == 1
+        assert await pq.get_queue_size() == 1
 
     asyncio.run(testing())
 
@@ -675,13 +675,13 @@ def test_clear_plan_queue(pq):
         # Set one of 3 plans as running (removes it from the queue)
         await pq.set_next_plan_as_running()
 
-        assert await pq.get_plan_queue_size() == 2
+        assert await pq.get_queue_size() == 2
         assert len(pq._uid_dict) == 3
 
         # Clears the queue only (doesn't touch the running plan)
         await pq.clear_plan_queue()
 
-        assert await pq.get_plan_queue_size() == 0
+        assert await pq.get_queue_size() == 0
         assert len(pq._uid_dict) == 1
 
         with pytest.raises(ValueError, match="Parameter 'pos' has incorrect value"):
@@ -723,10 +723,10 @@ def test_set_next_plan_as_running(pq):
 
     async def testing():
         # Apply to empty queue
-        assert await pq.get_plan_queue_size() == 0
+        assert await pq.get_queue_size() == 0
         assert await pq.is_plan_running() is False
         assert await pq.set_next_plan_as_running() == {}
-        assert await pq.get_plan_queue_size() == 0
+        assert await pq.get_queue_size() == 0
         assert await pq.is_plan_running() is False
 
         # Apply to a queue with several plans
@@ -736,12 +736,12 @@ def test_set_next_plan_as_running(pq):
         # Set one of 3 plans as running (removes it from the queue)
         assert await pq.set_next_plan_as_running() != {}
 
-        assert await pq.get_plan_queue_size() == 2
+        assert await pq.get_queue_size() == 2
         assert len(pq._uid_dict) == 3
 
         # Apply if a plan is already running
         assert await pq.set_next_plan_as_running() == {}
-        assert await pq.get_plan_queue_size() == 2
+        assert await pq.get_queue_size() == 2
         assert len(pq._uid_dict) == 3
 
     asyncio.run(testing())
@@ -775,7 +775,7 @@ def test_set_processed_plan_as_completed(pq):
         await pq.set_next_plan_as_running()
         plan = await pq.set_processed_plan_as_completed(exit_status="completed")
 
-        assert await pq.get_plan_queue_size() == 2
+        assert await pq.get_queue_size() == 2
         assert await pq.get_plan_history_size() == 1
         assert plan["name"] == plans[0]["name"]
         assert plan["exit_status"] == "completed"
@@ -788,7 +788,7 @@ def test_set_processed_plan_as_completed(pq):
         await pq.set_next_plan_as_running()
         plan = await pq.set_processed_plan_as_completed(exit_status="completed")
 
-        assert await pq.get_plan_queue_size() == 1
+        assert await pq.get_queue_size() == 1
         assert await pq.get_plan_history_size() == 2
         assert plan["name"] == plans[1]["name"]
         assert plan["exit_status"] == "completed"
@@ -827,7 +827,7 @@ def test_set_processed_plan_as_stopped(pq):
         await pq.set_next_plan_as_running()
         plan = await pq.set_processed_plan_as_stopped(exit_status="stopped")
 
-        assert await pq.get_plan_queue_size() == 3
+        assert await pq.get_queue_size() == 3
         assert await pq.get_plan_history_size() == 1
         assert plan["name"] == plans[0]["name"]
         assert plan["exit_status"] == "stopped"
@@ -840,7 +840,7 @@ def test_set_processed_plan_as_stopped(pq):
         await pq.set_next_plan_as_running()
         plan = await pq.set_processed_plan_as_stopped(exit_status="stopped")
 
-        assert await pq.get_plan_queue_size() == 3
+        assert await pq.get_queue_size() == 3
         assert await pq.get_plan_history_size() == 2
         assert plan["name"] == plans[0]["name"]
         assert plan["exit_status"] == "stopped"

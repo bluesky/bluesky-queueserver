@@ -143,7 +143,9 @@ def test_http_server_queue_item_add_handler_3(re_manager, fastapi_server):  # no
     plan2 = {"plan": {"name": "count", "args": [["det1", "det2"]], "kwargs": {"abc": 10}}}
     resp2 = _request_to_json("post", "/queue/plan/add", json=plan2)
     assert resp2["success"] is False
-    assert "Failed to add an item: Plan validation failed: got an unexpected keyword argument 'abc'" in resp2["msg"]
+    assert (
+        "Failed to add an item: Plan validation failed: got an unexpected keyword argument 'abc'" in resp2["msg"]
+    )
 
     # Valid plan
     plan3 = {"plan": {"name": "count", "args": [["det1", "det2"]]}}

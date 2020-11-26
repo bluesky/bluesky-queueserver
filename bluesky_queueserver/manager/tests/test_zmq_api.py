@@ -359,7 +359,9 @@ def test_zmq_api_queue_item_add_7_fail(re_manager):  # noqa F811
     params2 = {"plan": plan2, "user": _user, "user_group": _user_group}
     resp2, _ = zmq_single_request("queue_item_add", params2)
     assert resp2["success"] is False
-    assert "Failed to add an item: Plan validation failed: got an unexpected keyword argument 'abc'" in resp2["msg"]
+    assert (
+        "Failed to add an item: Plan validation failed: got an unexpected keyword argument 'abc'" in resp2["msg"]
+    )
 
     # User name is not specified
     params3 = {"plan": plan2, "user_group": _user_group}

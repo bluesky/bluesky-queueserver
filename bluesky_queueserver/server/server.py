@@ -191,7 +191,7 @@ async def queue_item_move_handler(payload: dict):
     return msg
 
 
-@app.post("/queue/plan/get")
+@app.post("/queue/item/get")
 async def queue_item_get_handler(payload: dict):
     """
     Get a plan from the queue

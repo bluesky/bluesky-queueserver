@@ -206,7 +206,7 @@ def test_http_server_queue_item_get_remove_handler_1(re_manager, fastapi_server,
     assert len(resp1["queue"]) == 3
     assert resp1["running_plan"] == {}
 
-    resp2 = _request_to_json("post", "/queue/plan/get", json={})
+    resp2 = _request_to_json("post", "/queue/item/get", json={})
     assert resp2["success"] is True
     assert resp2["plan"]["name"] == "count"
     assert resp2["plan"]["args"] == [["det1", "det2"]]
@@ -252,8 +252,8 @@ def test_http_server_queue_item_get_remove_handler_2(
     # Remove entry at the specified position
     params = {} if pos is None else {"pos": pos}
 
-    # Testing '/queue/plan/get'
-    resp1 = _request_to_json("post", "/queue/plan/get", json=params)
+    # Testing '/queue/item/get'
+    resp1 = _request_to_json("post", "/queue/item/get", json=params)
     assert resp1["success"] is success
     if success:
         assert resp1["plan"]["args"] == plans[pos_result]["args"]
@@ -295,7 +295,7 @@ def test_http_server_queue_item_get_remove_3(re_manager, fastapi_server):  # noq
 
     # Get and then remove plan 2 from the queue
     uid = plans_in_queue[1]["item_uid"]
-    resp2a = _request_to_json("post", "/queue/plan/get", json={"uid": uid})
+    resp2a = _request_to_json("post", "/queue/item/get", json={"uid": uid})
     assert resp2a["plan"]["item_uid"] == plans_in_queue[1]["item_uid"]
     assert resp2a["plan"]["name"] == plans_in_queue[1]["name"]
     assert resp2a["plan"]["args"] == plans_in_queue[1]["args"]
@@ -315,7 +315,7 @@ def test_http_server_queue_item_get_remove_3(re_manager, fastapi_server):  # noq
 
     ttime.sleep(1)
     uid = plans_in_queue[0]["item_uid"]
-    resp5a = _request_to_json("post", "/queue/plan/get", json={"uid": uid})
+    resp5a = _request_to_json("post", "/queue/item/get", json={"uid": uid})
     assert resp5a["success"] is False
     assert "is currently running" in resp5a["msg"]
     resp5b = _request_to_json("post", "/queue/item/remove", json={"uid": uid})
@@ -323,7 +323,7 @@ def test_http_server_queue_item_get_remove_3(re_manager, fastapi_server):  # noq
     assert "Can not remove a plan which is currently running" in resp5b["msg"]
 
     uid = "nonexistent"
-    resp6a = _request_to_json("post", "/queue/plan/get", json={"uid": uid})
+    resp6a = _request_to_json("post", "/queue/item/get", json={"uid": uid})
     assert resp6a["success"] is False
     assert "not in the queue" in resp6a["msg"]
     resp6b = _request_to_json("post", "/queue/item/remove", json={"uid": uid})
@@ -332,7 +332,7 @@ def test_http_server_queue_item_get_remove_3(re_manager, fastapi_server):  # noq
 
     # Remove the last entry
     uid = plans_in_queue[2]["item_uid"]
-    resp7a = _request_to_json("post", "/queue/plan/get", json={"uid": uid})
+    resp7a = _request_to_json("post", "/queue/item/get", json={"uid": uid})
     assert resp7a["success"] is True
     resp7b = _request_to_json("post", "/queue/item/remove", json={"uid": uid})
     assert resp7b["success"] is True
@@ -350,7 +350,7 @@ def test_http_server_queue_item_get_remove_4_failing(re_manager, fastapi_server)
     Note: derived from ``test_zmq_api_queue_item_get_remove_4_failing()``
     """
     # Ambiguous parameters
-    resp1 = _request_to_json("post", "/queue/plan/get", json={"pos": 5, "uid": "some_uid"})
+    resp1 = _request_to_json("post", "/queue/item/get", json={"pos": 5, "uid": "some_uid"})
     assert resp1["success"] is False
     assert "Ambiguous parameters" in resp1["msg"]
 

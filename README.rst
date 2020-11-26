@@ -245,11 +245,11 @@ Plans can be read from the queue without changing it. `queue_item_get` requests 
   qserver -c queue_item_get -p -2
   qserver -c queue_item_get -p '<uid>'
 
-  echo '{}' | http POST http://localhost:60610/queue/plan/get
-  http POST http://localhost:60610/queue/plan/get pos:='"back"'
-  http POST http://localhost:60610/queue/plan/get pos:='"front"'
-  http POST http://localhost:60610/queue/plan/get pos:=-2
-  http POST http://localhost:60610/queue/plan/get uid:='<uid>'
+  echo '{}' | http POST http://localhost:60610/queue/item/get
+  http POST http://localhost:60610/queue/item/get pos:='"back"'
+  http POST http://localhost:60610/queue/item/get pos:='"front"'
+  http POST http://localhost:60610/queue/item/get pos:=-2
+  http POST http://localhost:60610/queue/item/get uid:='<uid>'
 
 Plans can be moved within the queue. Plans can be addressed by position or UID. If plans are
 addressed by position, then the plan is moved from 'source' position to 'destination' position.

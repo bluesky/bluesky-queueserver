@@ -411,7 +411,7 @@ def test_http_server_move_plan_1(re_manager, fastapi_server, params, src, order,
     if "after_uid" in params:
         params["after_uid"] = item_uids[params["after_uid"]]
 
-    resp2 = _request_to_json("post", "/queue/plan/move", json=params)
+    resp2 = _request_to_json("post", "/queue/item/move", json=params)
     if success:
         assert resp2["success"] is True
         assert resp2["plan"] == queue[src]

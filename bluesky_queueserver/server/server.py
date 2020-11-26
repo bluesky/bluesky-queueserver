@@ -182,7 +182,7 @@ async def qqueue_item_remove_handler(payload: dict):
     return msg
 
 
-@app.post("/queue/plan/move")
+@app.post("/queue/item/move")
 async def queue_item_move_handler(payload: dict):
     """
     Remove plan from the queue

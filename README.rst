@@ -260,20 +260,20 @@ the plan with <uid_dest>::
   qserver -c queue_item_move -p <uid_source> before <uid_dest>
   qserver -c queue_item_move -p <uid_source> after <uid_dest>
 
-  http POST http://localhost:60610/queue/plan/move pos:=3 pos_dest:=5
-  http POST http://localhost:60610/queue/plan/move uid:='<uid_source>' before_uid:='<uid_dest>'
-  http POST http://localhost:60610/queue/plan/move uid:='<uid_source>' after_uid:='<uid_dest>'
+  http POST http://localhost:60610/queue/item/move pos:=3 pos_dest:=5
+  http POST http://localhost:60610/queue/item/move uid:='<uid_source>' before_uid:='<uid_dest>'
+  http POST http://localhost:60610/queue/item/move uid:='<uid_source>' after_uid:='<uid_dest>'
 
 Addressing by position and UID may be mixed. The following instruction will move queue item #3
 to the position following an item with <uid_dest>::
 
   qserver -c queue_item_move -p 3 after <uid_dest>
-  http POST http://localhost:60610/queue/plan/move pos:=3 after_uid:='<uid_dest>'
+  http POST http://localhost:60610/queue/item/move pos:=3 after_uid:='<uid_dest>'
 
 The following instruction moves item with <uid_source> to the front of the queue::
 
   qserver -c queue_item_move -p <uid_source> "front"
-  http POST http://localhost:60610/queue/plan/move uid:='<uid_source>' pos_dest:='"front"'
+  http POST http://localhost:60610/queue/item/move uid:='<uid_source>' pos_dest:='"front"'
 
 Remove all entries from the plan queue::
 

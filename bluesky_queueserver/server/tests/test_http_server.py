@@ -69,7 +69,7 @@ def test_http_server_plans_allowed_and_devices(re_manager, fastapi_server):  # n
 
 def test_http_server_queue_item_add_handler_1(re_manager, fastapi_server):  # noqa F811
     resp1 = _request_to_json(
-        "post", "/queue/plan/add", json={"plan": {"name": "count", "args": [["det1", "det2"]]}}
+        "post", "/queue/item/add", json={"plan": {"name": "count", "args": [["det1", "det2"]]}}
     )
     assert resp1["success"] is True
     assert resp1["qsize"] == 1
@@ -107,14 +107,14 @@ def test_http_server_queue_item_add_handler_2(re_manager, fastapi_server, pos, p
     plan2 = {"name": "count", "args": [["det1", "det2"]]}
 
     # Create the queue with 2 entries
-    _request_to_json("post", "/queue/plan/add", json={"plan": plan1})
-    _request_to_json("post", "/queue/plan/add", json={"plan": plan1})
+    _request_to_json("post", "/queue/item/add", json={"plan": plan1})
+    _request_to_json("post", "/queue/item/add", json={"plan": plan1})
 
     # Add another entry at the specified position
     params = {"plan": plan2}
     if pos is not None:
         params.update({"pos": pos})
-    resp1 = _request_to_json("post", "/queue/plan/add", json=params)
+    resp1 = _request_to_json("post", "/queue/item/add", json=params)
 
     assert resp1["success"] is success
     assert resp1["qsize"] == (3 if success else None)
@@ -135,13 +135,13 @@ def test_http_server_queue_item_add_handler_3(re_manager, fastapi_server):  # no
 
     # Unknown plan name
     plan1 = {"plan": {"name": "count_test", "args": [["det1", "det2"]]}}
-    resp1 = _request_to_json("post", "/queue/plan/add", json=plan1)
+    resp1 = _request_to_json("post", "/queue/item/add", json=plan1)
     assert resp1["success"] is False
     assert "Plan 'count_test' is not in the list of allowed plans" in resp1["msg"]
 
     # Unknown kwarg
     plan2 = {"plan": {"name": "count", "args": [["det1", "det2"]], "kwargs": {"abc": 10}}}
-    resp2 = _request_to_json("post", "/queue/plan/add", json=plan2)
+    resp2 = _request_to_json("post", "/queue/item/add", json=plan2)
     assert resp2["success"] is False
     assert (
         "Failed to add an item: Plan validation failed: got an unexpected keyword argument 'abc'" in resp2["msg"]
@@ -149,7 +149,7 @@ def test_http_server_queue_item_add_handler_3(re_manager, fastapi_server):  # no
 
     # Valid plan
     plan3 = {"plan": {"name": "count", "args": [["det1", "det2"]]}}
-    resp3 = _request_to_json("post", "/queue/plan/add", json=plan3)
+    resp3 = _request_to_json("post", "/queue/item/add", json=plan3)
     assert resp3["success"] is True
     assert resp3["qsize"] == 1
     assert resp3["plan"]["name"] == "count"
@@ -173,11 +173,11 @@ def test_http_server_queue_item_add_handler_4(re_manager, fastapi_server):  # no
     instruction = {"action": "queue_stop"}
 
     # Create the queue with 2 entries
-    resp1 = _request_to_json("post", "/queue/plan/add", json={"plan": plan1})
+    resp1 = _request_to_json("post", "/queue/item/add", json={"plan": plan1})
     assert resp1["success"] is True, f"resp={resp1}"
-    resp2 = _request_to_json("post", "/queue/plan/add", json={"instruction": instruction})
+    resp2 = _request_to_json("post", "/queue/item/add", json={"instruction": instruction})
     assert resp2["success"] is True, f"resp={resp2}"
-    resp3 = _request_to_json("post", "/queue/plan/add", json={"plan": plan2})
+    resp3 = _request_to_json("post", "/queue/item/add", json={"plan": plan2})
     assert resp3["success"] is True, f"resp={resp3}"
 
     resp4 = _request_to_json("get", "/queue/get")
@@ -191,7 +191,7 @@ def test_http_server_queue_item_add_handler_6_fail(re_manager, fastapi_server): 
     """
     Failing case: call without sending a plan.
     """
-    resp1 = _request_to_json("post", "/queue/plan/add", json={})
+    resp1 = _request_to_json("post", "/queue/item/add", json={})
     assert resp1["success"] is False
     assert resp1["qsize"] is None
     assert "plan" not in resp1
@@ -212,7 +212,7 @@ def test_http_server_queue_item_get_remove_handler_1(re_manager, fastapi_server,
     assert resp2["plan"]["args"] == [["det1", "det2"]]
     assert "item_uid" in resp2["plan"]
 
-    resp3 = _request_to_json("post", "/queue/plan/remove", json={})
+    resp3 = _request_to_json("post", "/queue/item/remove", json={})
     assert resp3["success"] is True
     assert resp3["qsize"] == 2
     assert resp3["plan"]["name"] == "count"
@@ -247,7 +247,7 @@ def test_http_server_queue_item_get_remove_handler_2(
         {"name": "count", "args": [["det1", "det2"]]},
     ]
     for plan in plans:
-        _request_to_json("post", "/queue/plan/add", json={"plan": plan})
+        _request_to_json("post", "/queue/item/add", json={"plan": plan})
 
     # Remove entry at the specified position
     params = {} if pos is None else {"pos": pos}
@@ -263,8 +263,8 @@ def test_http_server_queue_item_get_remove_handler_2(
         assert resp1["plan"] == {}
         assert "Failed to get an item" in resp1["msg"]
 
-    # Testing '/queue/plan/remove'
-    resp2 = _request_to_json("post", "/queue/plan/remove", json=params)
+    # Testing '/queue/item/remove'
+    resp2 = _request_to_json("post", "/queue/item/remove", json=params)
     assert resp2["success"] is success
     assert resp2["qsize"] == (2 if success else None)
     if success:
@@ -285,9 +285,9 @@ def test_http_server_queue_item_get_remove_3(re_manager, fastapi_server):  # noq
     Get and remove elements using plan UID. Successful and failing cases.
     Note: the test is derived from ZMQ API test ``test_zmq_api_queue_item_get_remove_3()``
     """
-    _request_to_json("post", "/queue/plan/add", json={"plan": _plan3})
-    _request_to_json("post", "/queue/plan/add", json={"plan": _plan2})
-    _request_to_json("post", "/queue/plan/add", json={"plan": _plan1})
+    _request_to_json("post", "/queue/item/add", json={"plan": _plan3})
+    _request_to_json("post", "/queue/item/add", json={"plan": _plan2})
+    _request_to_json("post", "/queue/item/add", json={"plan": _plan1})
 
     resp1 = _request_to_json("get", "/queue/get")
     plans_in_queue = resp1["queue"]
@@ -299,7 +299,7 @@ def test_http_server_queue_item_get_remove_3(re_manager, fastapi_server):  # noq
     assert resp2a["plan"]["item_uid"] == plans_in_queue[1]["item_uid"]
     assert resp2a["plan"]["name"] == plans_in_queue[1]["name"]
     assert resp2a["plan"]["args"] == plans_in_queue[1]["args"]
-    resp2b = _request_to_json("post", "/queue/plan/remove", json={"uid": uid})
+    resp2b = _request_to_json("post", "/queue/item/remove", json={"uid": uid})
     assert resp2b["plan"]["item_uid"] == plans_in_queue[1]["item_uid"]
     assert resp2b["plan"]["name"] == plans_in_queue[1]["name"]
     assert resp2b["plan"]["args"] == plans_in_queue[1]["args"]
@@ -318,7 +318,7 @@ def test_http_server_queue_item_get_remove_3(re_manager, fastapi_server):  # noq
     resp5a = _request_to_json("post", "/queue/plan/get", json={"uid": uid})
     assert resp5a["success"] is False
     assert "is currently running" in resp5a["msg"]
-    resp5b = _request_to_json("post", "/queue/plan/remove", json={"uid": uid})
+    resp5b = _request_to_json("post", "/queue/item/remove", json={"uid": uid})
     assert resp5b["success"] is False
     assert "Can not remove a plan which is currently running" in resp5b["msg"]
 
@@ -326,7 +326,7 @@ def test_http_server_queue_item_get_remove_3(re_manager, fastapi_server):  # noq
     resp6a = _request_to_json("post", "/queue/plan/get", json={"uid": uid})
     assert resp6a["success"] is False
     assert "not in the queue" in resp6a["msg"]
-    resp6b = _request_to_json("post", "/queue/plan/remove", json={"uid": uid})
+    resp6b = _request_to_json("post", "/queue/item/remove", json={"uid": uid})
     assert resp6b["success"] is False
     assert "not in the queue" in resp6b["msg"]
 
@@ -334,7 +334,7 @@ def test_http_server_queue_item_get_remove_3(re_manager, fastapi_server):  # noq
     uid = plans_in_queue[2]["item_uid"]
     resp7a = _request_to_json("post", "/queue/plan/get", json={"uid": uid})
     assert resp7a["success"] is True
-    resp7b = _request_to_json("post", "/queue/plan/remove", json={"uid": uid})
+    resp7b = _request_to_json("post", "/queue/item/remove", json={"uid": uid})
     assert resp7b["success"] is True
 
     ttime.sleep(10)  # TODO: wait for the queue processing to be completed
@@ -393,7 +393,7 @@ def test_http_server_move_plan_1(re_manager, fastapi_server, params, src, order,
         {"name": "count", "args": [["det1", "det2"]]},
     ]
     for plan in plans:
-        _request_to_json("post", "/queue/plan/add", json={"plan": plan})
+        _request_to_json("post", "/queue/item/add", json={"plan": plan})
 
     resp1 = _request_to_json("get", "/queue/get")
     queue = resp1["queue"]
@@ -502,7 +502,7 @@ def test_http_server_re_pause_continue_handlers(
 
     resp2 = _request_to_json(
         "post",
-        "/queue/plan/add",
+        "/queue/item/add",
         json={"plan": {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}},
     )
     assert resp2["success"] is True
@@ -563,9 +563,9 @@ def test_http_server_clear_queue_handler(re_manager, fastapi_server, add_plans_t
 def test_http_server_plan_history(re_manager, fastapi_server):  # noqa F811
     # Select very short plan
     plan = {"plan": {"name": "count", "args": [["det1", "det2"]]}}
-    _request_to_json("post", "/queue/plan/add", json=plan)
-    _request_to_json("post", "/queue/plan/add", json=plan)
-    _request_to_json("post", "/queue/plan/add", json=plan)
+    _request_to_json("post", "/queue/item/add", json=plan)
+    _request_to_json("post", "/queue/item/add", json=plan)
+    _request_to_json("post", "/queue/item/add", json=plan)
 
     _request_to_json("post", "/environment/open")
     assert wait_for_environment_to_be_created(10), "Timeout"

@@ -555,7 +555,7 @@ def test_zmq_api_queue_item_get_remove_2(re_manager, pos, pos_result, success): 
     # Remove entry at the specified position
     params = {} if pos is None else {"pos": pos}
 
-    # Testing '/queue/plan/get'
+    # Testing 'queue_item_get'
     resp1, _ = zmq_single_request("queue_item_get", params)
     assert resp1["success"] is success
     if success:
@@ -566,7 +566,7 @@ def test_zmq_api_queue_item_get_remove_2(re_manager, pos, pos_result, success): 
         assert resp1["plan"] == {}
         assert "Failed to get an item" in resp1["msg"]
 
-    # Testing '/queue/plan/remove'
+    # Testing 'queue_item_remove'
     resp2, _ = zmq_single_request("queue_item_remove", params)
     assert resp2["success"] is success
     assert resp2["qsize"] == (2 if success else None)

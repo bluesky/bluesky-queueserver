@@ -33,13 +33,14 @@ QueueServer is supporting the following functions:
 
 - Loading beamlines' startup files from the corresponding ``profile_collection`` repositories.
 
-- Adding and removing plans from the queue.
+- Adding and removing plans from the queue; rearranging plans in the queue.
 
-- Starting the queue.
+- Starting/stopping execution of the queue.
 
-- Pausing (immediate and deferred), resuming and stopping (stop, abort and halt) the running plan.
+- Control of the running plans: pausing (immediate and deferred), resuming and stopping
+  (stop, abort and halt) the running plan.
 
-- Saving data to Databroker (some more work is needed).
+- Saving data to Databroker.
 
 - Streaming documents via Kafka.
 
@@ -48,26 +49,36 @@ In some cases the program may crash and leave some sockets open. This may preven
 restarting. To close the sockets (we are interested in sockets on ports 5555 and 60610), find
 PIDs of the processes::
 
-  $ sudo netstat -ltnp
+  $ netstat -ltnp
 
 and then kill the processes::
 
   $ kill -9 <pid>
 
 
-Setup redis linux::
+Installation
+------------
+
+**Install Redis.** On Linux::
 
   sudo apt install redis
 
-Setup redis mac::
+On Mac OS::
 
   https://gist.github.com/tomysmile/1b8a321e7c58499ef9f9441b2faa0aa8
 
-Installation of QueueServer from source::
+**Install QueueServer** (from source)::
 
   pip install -e .
 
-This also sets up an entry point for the 'qserver' CLI tool.
+This also sets up an entry points for the 'qserver' and 'qserver_list_of_plans_and_devices' CLI tools.
+
+**Install httpie (optional)**::
+
+  https://httpie.org/docs#installation
+
+Starting QueueServer
+--------------------
 
 The RE Manager and Web Server are running as two separate applications. To run the demo you will need to open
 three shells: the first for RE Manager, the second for Web Server and the third to send HTTP requests to
@@ -77,12 +88,15 @@ In the first shell start RE Manager::
 
   start-re-manager
 
+RE Manager supports a number of command line options. Use 'start-re-manager -h' to view
+the available options.
+
 The Web Server should be started from the second shell as follows::
 
   uvicorn bluesky_queueserver.server.server:app --host localhost --port 60610
 
 The third shell will be used to send HTTP requests. RE Manager can also be controlled using 'qserver' CLI
-tool. If only CLI tool will be used, then there is no need to start the Web Server. In the following manual
+tool. If only CLI tool will be used, then there is no need to start the Web Server. The following manual
 demostrates how to control RE Manager using CLI commands and HTTP requests. The CLI tool commands will be
 shown alongside with HTTP requests.
 
@@ -90,13 +104,12 @@ To view interactive API docs, visit::
 
   http://localhost:60610/docs
 
-The 'qserver' CLI tool can be started from a separate shell. Display help options::
+The 'qserver' CLI should be used in a separate shell. To display available options use::
 
   qserver -h
 
-Install httpie::
-
-  https://httpie.org/docs#installation
+Interacting with RE Manager using 'qserver' CLI tool and HTTP requests
+----------------------------------------------------------------------
 
 The most basic request is 'ping' intended to fetch some response from RE Manager::
 
@@ -152,6 +165,11 @@ Get the lists (JSON) of allowed plans and devices::
   http GET http://localhost:60610/plans/allowed
   http GET http://localhost:60610/devices/allowed
 
+Before plans could be executed they should be placed in the **plan queue**. The plan queue contains
+**items**. The items are **plans** that could be executed by Run Engine or **instructions** that
+can modify the state of the queue or RE Manager. Currently only one instruction ('queue_stop' - stops
+execution of the queue) is supported.
+
 Push a new plan to the back of the queue::
 
   qserver -c queue_item_add -p '{"name":"count", "args":[["det1", "det2"]]}'
@@ -165,7 +183,12 @@ Push a new plan to the back of the queue::
 It takes 10 second to execute the third plan in the group above, so it is may be the most convenient for testing
 pausing/resuming/stopping of experimental plans.
 
-The plan to be added at any position of the queue including pushing to the front or back of the queue::
+API for queue operations are designed work identically with items of all types. For example, a 'queue_stop`
+instruction can be added to the queue `queue_item_add` API (not supported by CLI yet)::
+
+  http POST http://localhost:60610/queue/item/add instruction:='{"action":"queue_stop"}'
+
+An item can be added at any position of the queue. Push a plan to the front or the back of the queue::
 
   qserver -c queue_item_add -p front '{"name":"count", "args":[["det1", "det2"]]}'
   qserver -c queue_item_add -p back '{"name":"count", "args":[["det1", "det2"]]}'
@@ -175,29 +198,29 @@ The plan to be added at any position of the queue including pushing to the front
   http POST http://localhost:60610/queue/item/add pos:='"back"' plan:='{"name":"count", "args":[["det1", "det2"]]}'
   http POST http://localhost:60610/queue/item/add pos:=2 plan:='{"name":"count", "args":[["det1", "det2"]]}'
 
-The following command will insert the plan in place of the last element and shift the last element to
-the back so that the new element is now previous to last::
+The following command will insert an item in place of the last item in the queue; the last item remains
+the last item in the queue::
 
   qserver -c queue_item_add -p -1 '{"name":"count", "args":[["det1", "det2"]]}'
   http POST http://localhost:60610/queue/item/add pos:=-1 plan:='{"name":"count", "args":[["det1", "det2"]]}'
 
-The plan can be inserted before or after an existing plan in the queue by specifying the UID of the plan.
-Insert the plan before an existing plan with <uid>::
+An item can be inserted before or after an existing item with given Item UID.
+Insert the plan before an existing item with <uid>::
 
   qserver -c queue_item_add -p before_uid '<uid>' '{"name":"count", "args":[["det1", "det2"]]}'
   http POST http://localhost:60610/queue/item/add before_uid:='<uid>' plan:='{"name":"count", "args":[["det1", "det2"]]}'
 
-Insert the plan after an existing plan with <uid>::
+Insert the plan after an existing item with <uid>::
 
   qserver -c queue_item_add -p after_uid '<uid>' '{"name":"count", "args":[["det1", "det2"]]}'
   http POST http://localhost:60610/queue/item/add after_uid:='<uid>' plan:='{"name":"count", "args":[["det1", "det2"]]}'
 
-If the queue has 5 elements (0..4), then the following command pushes the new plan to the back of the queue::
+If the queue has 5 items (0..4), then the following command pushes the new plan to the back of the queue::
 
   qserver -c queue_item_add -p 5 '{"name":"count", "args":[["det1", "det2"]]}'
   http POST http://localhost:60610/queue/item/add pos:=5 plan:='{"name":"count", "args":[["det1", "det2"]]}'
 
-The 'queue_item_add' request will accept any index value. If the index is out of range, then the plan will
+The 'queue_item_add' request will accept any index value. If the index is out of range, then the item will
 be pushed to the front or the back of the queue. If the queue is currently running, then it is recommended
 to access elements using negative indices (counted from the back of the queue).
 
@@ -221,7 +244,7 @@ The last item can be removed (popped) from the back of the queue::
   echo '{}' | http POST http://localhost:60610/queue/item/remove
   http POST http://localhost:60610/queue/item/remove pos:='"back"'
 
-The position of the removed element may be specified similarly to `queue_item_add` request with the difference
+The position of the removed item may be specified similarly to `queue_item_add` request with the difference
 that the position index must point to the existing element, otherwise the request fails (returns 'success==False').
 The following examples remove the plan from the front of the queue and the element previous to last::
 
@@ -231,12 +254,12 @@ The following examples remove the plan from the front of the queue and the eleme
   http POST http://localhost:60610/queue/item/remove pos:='"front"'
   http POST http://localhost:60610/queue/item/remove pos:=-2
 
-The plans can also be addressed by UID. Remove the plan with <uid>::
+The items can also be addressed by UID. Remove the item with <uid>::
 
   qserver -c queue_item_remove -p '<uid>'
   http POST http://localhost:60610/queue/item/remove uid:='<uid>'
 
-Plans can be read from the queue without changing it. `queue_item_get` requests are formatted identically to
+Items can be read from the queue without changing it. `queue_item_get` requests are formatted identically to
 `queue_item_remove` requests::
 
   qserver -c queue_item_get
@@ -251,10 +274,10 @@ Plans can be read from the queue without changing it. `queue_item_get` requests 
   http POST http://localhost:60610/queue/item/get pos:=-2
   http POST http://localhost:60610/queue/item/get uid:='<uid>'
 
-Plans can be moved within the queue. Plans can be addressed by position or UID. If plans are
-addressed by position, then the plan is moved from 'source' position to 'destination' position.
-If plans are addressed by UID, then the plan with <uid_source> in inserted before or after
-the plan with <uid_dest>::
+Items can be moved within the queue. Items can be addressed by position or UID. If positional addressing
+is used then items are moved from 'source' position to 'destination' position.
+If items are addressed by UID, then the item with <uid_source> in inserted before or after
+the item with <uid_dest>::
 
   qserver -c queue_item_move -p 3 5
   qserver -c queue_item_move -p <uid_source> before <uid_dest>
@@ -264,7 +287,7 @@ the plan with <uid_dest>::
   http POST http://localhost:60610/queue/item/move uid:='<uid_source>' before_uid:='<uid_dest>'
   http POST http://localhost:60610/queue/item/move uid:='<uid_source>' after_uid:='<uid_dest>'
 
-Addressing by position and UID may be mixed. The following instruction will move queue item #3
+Addressing by position and UID can be mixed. The following instruction will move queue item #3
 to the position following an item with <uid_dest>::
 
   qserver -c queue_item_move -p 3 after <uid_dest>

@@ -625,7 +625,7 @@ def test_zmq_api_queue_item_get_remove_3(re_manager):  # noqa F811
     assert "is currently running" in resp5a["msg"]
     resp5b, _ = zmq_single_request("queue_item_remove", {"uid": uid})
     assert resp5b["success"] is False
-    assert "Can not remove a plan which is currently running" in resp5b["msg"]
+    assert "Can not remove an item which is currently running" in resp5b["msg"]
 
     uid = "nonexistent"
     resp6a, _ = zmq_single_request("queue_item_get", {"uid": uid})

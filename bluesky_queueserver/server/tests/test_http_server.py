@@ -320,7 +320,7 @@ def test_http_server_queue_item_get_remove_3(re_manager, fastapi_server):  # noq
     assert "is currently running" in resp5a["msg"]
     resp5b = _request_to_json("post", "/queue/item/remove", json={"uid": uid})
     assert resp5b["success"] is False
-    assert "Can not remove a plan which is currently running" in resp5b["msg"]
+    assert "Can not remove an item which is currently running" in resp5b["msg"]
 
     uid = "nonexistent"
     resp6a = _request_to_json("post", "/queue/item/get", json={"uid": uid})

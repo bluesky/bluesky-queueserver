@@ -452,7 +452,7 @@ class PlanQueueOperations:
                 raise IndexError(f"Plan with UID '{uid}' is not in the queue.")
             running_item = await self._get_running_item_info()
             if running_item and (uid == running_item["item_uid"]):
-                raise IndexError("Can not remove a plan which is currently running.")
+                raise IndexError("Can not remove an item which is currently running.")
             item = self._uid_dict_get_item(uid)
             await self._remove_item(item)
         elif pos == "back":

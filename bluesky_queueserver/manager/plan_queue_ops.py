@@ -809,7 +809,7 @@ class PlanQueueOperations:
 
     async def clear_history(self):
         """
-        Remove all entries from the plan queue. Does not touch the running plan.
+        Remove all entries from the plan queue. Does not touch the running item.
         The plan may be pushed back into the queue if it is stopped.
         """
         async with self._lock:

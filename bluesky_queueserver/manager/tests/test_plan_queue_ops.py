@@ -640,7 +640,7 @@ def test_pop_item_from_queue_3(pq):
         # Attempt to remove the plan that is running. This should raise an exception.
         await pq.set_next_item_as_running()
         assert await pq.get_queue_size() == 1
-        with pytest.raises(IndexError, match="Can not remove a plan which is currently running"):
+        with pytest.raises(IndexError, match="Can not remove an item which is currently running"):
             await pq.pop_item_from_queue(uid=plans[0]["item_uid"])
         assert await pq.get_queue_size() == 1
 

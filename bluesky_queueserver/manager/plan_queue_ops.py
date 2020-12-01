@@ -914,7 +914,7 @@ class PlanQueueOperations:
         Returns
         -------
         dict
-            The plan added to the history including ``exit_status``. If another item (plan)
+            The item (plan) added to the history including ``exit_status``. If another item (plan)
             is currently running, then ``{}`` is returned.
         """
         async with self._lock:

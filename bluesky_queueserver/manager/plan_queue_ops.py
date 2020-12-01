@@ -750,7 +750,7 @@ class PlanQueueOperations:
         Parameters
         ----------
         item: dict
-            Plan represented as a dictionary of parameters. No verifications are performed
+            Item (plan) represented as a dictionary of parameters. No verifications are performed
             on the plan. The function is not intended to be used outside of this class.
 
         Returns

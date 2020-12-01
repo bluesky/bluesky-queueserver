@@ -810,7 +810,7 @@ class PlanQueueOperations:
     async def clear_history(self):
         """
         Remove all entries from the plan queue. Does not touch the running item.
-        The plan may be pushed back into the queue if it is stopped.
+        The item (plan) may be pushed back into the queue if it is stopped.
         """
         async with self._lock:
             await self._clear_history()

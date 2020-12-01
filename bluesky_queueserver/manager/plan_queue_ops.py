@@ -23,35 +23,36 @@ class PlanQueueOperations:
         await pq.start()
 
         # Fill queue
-        await pq.add_plan_to_queue(<plan1>)
-        await pq.add_plan_to_queue(<plan2>)
-        await pq.add_plan_to_queue(<plan3>)
+        await pq.add_item_to_queue(<plan1>)
+        await pq.add_item_to_queue(<plan2>)
+        await pq.add_item_to_queue(<instruction1>)
+        await pq.add_item_to_queue(<plan3>)
 
         # Number of plans in the queue
-        qsize = await pq.get_plan_queue_size()
+        qsize = await pq.get_queue_size()
 
         # Read the queue (as a list)
-        queue = await pq.get_plan_queue()
+        queue = await pq.get_queue()
 
         # Start the first plan (This doesn't actually execute the plan. It is just for bookkeeping.)
-        plan = await pq.set_next_plan_as_running()
+        plan = await pq.set_next_item_as_running()
         # ...
         # Here place the code for executing the plan in dictionary `plan`
 
         # Again this only shows whether a plan was set as running. Expected to be True in
         #   this example.
-        is_running = await pq.is_plan_running()
+        is_running = await pq.is_item_running()
 
         # Assume that plan execution is completed, so move the plan to history
         #   This also clears the currently processed plan.
-        plan = await pq.set_processed_plan_as_completed(exit_status="completed")
+        plan = await pq.set_processed_item_as_completed(exit_status="completed")
 
         # We are ready to start the next plan
-        plan = await pq.set_next_plan_as_running()
+        plan = await pq.set_next_item_as_running()
 
         # Assume that we paused and then stopped the plan. Clear the running plan and
         #   push it back to the queue. Also create the respective history entry.
-        plan = await pq.set_processed_plan_as_stopped(exit_status="stopped")
+        plan = await pq.set_processed_item_as_stopped(exit_status="stopped")
     """
 
     def __init__(self, redis_host="localhost"):
@@ -80,24 +81,24 @@ class PlanQueueOperations:
         """
         Delete all the invalid queue entries (there could be some entries from failed unit tests).
         """
-        pq = await self._get_plan_queue()
+        pq = await self._get_queue()
 
-        def verify_plan(plan):
+        def verify_item(item):
             # The criteria may be changed.
-            return "plan_uid" in plan
+            return "item_uid" in item
 
-        plans_to_remove = []
-        for plan in pq:
-            if not verify_plan(plan):
-                plans_to_remove.append(plan)
+        items_to_remove = []
+        for item in pq:
+            if not verify_item(item):
+                items_to_remove.append(item)
 
-        for plan in plans_to_remove:
-            await self._remove_plan(plan, single=False)
+        for item in items_to_remove:
+            await self._remove_item(item, single=False)
 
         # Clean running plan info also (on the development computer it may contain garbage)
-        plan = await self._get_running_plan_info()
-        if plan and not verify_plan(plan):
-            await self._clear_running_plan_info()
+        item = await self._get_running_item_info()
+        if item and not verify_item(item):
+            await self._clear_running_item_info()
 
     async def _delete_pool_entries(self):
         """
@@ -116,50 +117,50 @@ class PlanQueueOperations:
         async with self._lock:
             await self._delete_pool_entries()
 
-    def _verify_plan_type(self, plan):
+    def _verify_item_type(self, item):
         """
-        Check that the plan is a dictionary.
+        Check that the item (plan) is a dictionary.
         """
-        if not isinstance(plan, dict):
-            raise TypeError(f"Parameter 'plan' should be a dictionary: '{plan}', (type '{type(plan)}')")
+        if not isinstance(item, dict):
+            raise TypeError(f"Parameter 'item' should be a dictionary: '{item}', (type '{type(item)}')")
 
-    def _verify_plan(self, plan):
+    def _verify_item(self, item):
         """
-        Verify that plan structure is valid enough to be put in the queue.
-        Current checks: plan is a dictionary, ``plan_uid`` key is present, Plan with the UID is not in
+        Verify that item (plan) structure is valid enough to be put in the queue.
+        Current checks: item is a dictionary, ``item_uid`` key is present, Plan with the UID is not in
         the queue or currently running.
         """
-        self._verify_plan_type(plan)
+        self._verify_item_type(item)
         # Verify plan UID
-        if "plan_uid" not in plan:
-            raise ValueError("Plan does not have UID.")
-        if self._is_uid_in_dict(plan["plan_uid"]):
-            raise RuntimeError(f"Plan with UID {plan['plan_uid']} is already in the queue")
+        if "item_uid" not in item:
+            raise ValueError("Item does not have UID.")
+        if self._is_uid_in_dict(item["item_uid"]):
+            raise RuntimeError(f"Item with UID {item['item_uid']} is already in the queue")
 
     @staticmethod
-    def new_plan_uid():
+    def new_item_uid():
         """
-        Generate UID for a plan.
+        Generate UID for an item (plan).
         """
         return str(uuid.uuid4())
 
-    def set_new_plan_uuid(self, plan):
+    def set_new_item_uuid(self, item):
         """
-        Replaces Plan UID with a new one or creates a new UID.
+        Replaces Item UID with a new one or creates a new UID.
 
         Parameters
         ----------
-        plan: dict
-            Dictionary of plan parameters. The dictionary may or may not have the key ``plan_uid``.
+        item: dict
+            Dictionary of item parameters. The dictionary may or may not have the key ``item_uid``.
 
         Returns
         -------
         dict
             Plan with new UID.
         """
-        self._verify_plan_type(plan)
-        plan["plan_uid"] = self.new_plan_uid()
-        return plan
+        self._verify_item_type(item)
+        item["item_uid"] = self.new_item_uid()
+        return item
 
     async def _get_index_by_uid(self, *, uid):
         """
@@ -181,9 +182,9 @@ class PlanQueueOperations:
         IndexError
             No plan is found.
         """
-        queue = await self._get_plan_queue()
+        queue = await self._get_queue()
         for n, plan in enumerate(queue):
-            if plan["plan_uid"] == uid:
+            if plan["item_uid"] == uid:
                 return n
         raise IndexError(f"No plan with UID '{uid}' was found in the list.")
 
@@ -205,7 +206,7 @@ class PlanQueueOperations:
         """
         Add UID to ``self._uid_dict``.
         """
-        uid = plan["plan_uid"]
+        uid = plan["item_uid"]
         if self._is_uid_in_dict(uid):
             raise RuntimeError(f"Trying to add plan with UID '{uid}', which is already in the queue")
         self._uid_dict.update({uid: plan})
@@ -222,12 +223,12 @@ class PlanQueueOperations:
         """
         Update a plan with UID that is already in the dictionary.
         """
-        uid = plan["plan_uid"]
+        uid = plan["item_uid"]
         if not self._is_uid_in_dict(uid):
             raise RuntimeError(f"Trying to update plan with UID '{uid}', which is not in the queue")
         self._uid_dict.update({uid: plan})
 
-    def _uid_dict_get_plan(self, uid):
+    def _uid_dict_get_item(self, uid):
         """
         Returns a plan with the given UID.
         """
@@ -237,47 +238,47 @@ class PlanQueueOperations:
         """
         Initialize ``self._uid_dict`` with UIDs extracted from the plans in the queue.
         """
-        pq = await self._get_plan_queue()
+        pq = await self._get_queue()
         self._uid_dict_clear()
         # Go over all plans in the queue
-        for plan in pq:
-            self._uid_dict_add(plan)
+        for item in pq:
+            self._uid_dict_add(item)
         # If plan is currently running
-        plan = await self._get_running_plan_info()
-        if plan:
-            self._uid_dict_add(plan)
+        item = await self._get_running_item_info()
+        if item:
+            self._uid_dict_add(item)
 
     # -------------------------------------------------------------
     #                   Currently Running Plan
 
-    async def _is_plan_running(self):
+    async def _is_item_running(self):
         """
-        See ``self.is_plan_running()`` method.
+        See ``self.is_item_running()`` method.
         """
-        return bool(await self._get_running_plan_info())
+        return bool(await self._get_running_item_info())
 
-    async def is_plan_running(self):
+    async def is_item_running(self):
         """
-        Check if a plan is set as running. True does not indicate that the plan is actually running.
+        Check if an item is set as running. True does not indicate that the plan is actually running.
 
         Returns
         -------
         boolean
-            True - a plan is set as running, False otherwise.
+            True - an item is set as running, False otherwise.
         """
         async with self._lock:
-            return await self._is_plan_running()
+            return await self._is_item_running()
 
-    async def _get_running_plan_info(self):
+    async def _get_running_item_info(self):
         """
-        See ``self._get_running_plan_info()`` method.
+        See ``self._get_running_item_info()`` method.
         """
         plan = await self._r_pool.get(self._name_running_plan)
         return json.loads(plan) if plan else {}
 
-    async def get_running_plan_info(self):
+    async def get_running_item_info(self):
         """
-        Read info on the currently running plan from Redis.
+        Read info on the currently running item (plan) from Redis.
 
         Returns
         -------
@@ -286,11 +287,11 @@ class PlanQueueOperations:
             no plan is currently running (key value is ``{}`` or the key does not exist).
         """
         async with self._lock:
-            return await self._get_running_plan_info()
+            return await self._get_running_item_info()
 
-    async def _set_running_plan_info(self, plan):
+    async def _set_running_item_info(self, plan):
         """
-        Write info on the currently running plan to Redis
+        Write info on the currently running item (plan) to Redis
 
         Parameters
         ----------
@@ -299,22 +300,22 @@ class PlanQueueOperations:
         """
         await self._r_pool.set(self._name_running_plan, json.dumps(plan))
 
-    async def _clear_running_plan_info(self):
+    async def _clear_running_item_info(self):
         """
-        Clear info on the currently running plan in Redis.
+        Clear info on the currently running item (plan) in Redis.
         """
-        await self._set_running_plan_info({})
+        await self._set_running_item_info({})
 
     # -------------------------------------------------------------
     #                       Plan Queue
 
-    async def _get_plan_queue_size(self):
+    async def _get_queue_size(self):
         """
-        See ``self.get_plan_queue_size()`` method.
+        See ``self.get_queue_size()`` method.
         """
         return await self._r_pool.llen(self._name_plan_queue)
 
-    async def get_plan_queue_size(self):
+    async def get_queue_size(self):
         """
         Get the number of plans in the queue.
 
@@ -324,43 +325,43 @@ class PlanQueueOperations:
             The number of plans in the queue.
         """
         async with self._lock:
-            return await self._get_plan_queue_size()
+            return await self._get_queue_size()
 
-    async def _get_plan_queue(self):
+    async def _get_queue(self):
         """
-        See ``self.get_plan_queue()`` method.
+        See ``self.get_queue()`` method.
         """
         all_plans_json = await self._r_pool.lrange(self._name_plan_queue, 0, -1)
         return [json.loads(_) for _ in all_plans_json]
 
-    async def get_plan_queue(self):
+    async def get_queue(self):
         """
-        Get the list of all plans in the queue. The first element of the list is the first
-        plan in the queue.
+        Get the list of all items in the queue. The first element of the list is the first
+        item in the queue.
 
         Returns
         -------
         list(dict)
-            The list of plans in the queue. Each plan is represented as a dictionary.
+            The list of items in the queue. Each item is represented as a dictionary.
             Empty list is returned if the queue is empty.
         """
         async with self._lock:
-            return await self._get_plan_queue()
+            return await self._get_queue()
 
-    async def _get_plan(self, *, pos=None, uid=None):
+    async def _get_item(self, *, pos=None, uid=None):
         """
-        See ``self.get_plan()`` method.
+        See ``self.get_item()`` method.
         """
         if (pos is not None) and (uid is not None):
             raise ValueError("Ambiguous parameters: plan position and UID is specified")
 
         if uid is not None:
             if not self._is_uid_in_dict(uid):
-                raise IndexError(f"Plan with UID '{uid}' is not in the queue.")
-            running_plan = await self._get_running_plan_info()
-            if running_plan and (uid == running_plan["plan_uid"]):
-                raise IndexError("The plan with UID '{uid}' is currently running.")
-            plan = self._uid_dict_get_plan(uid)
+                raise IndexError(f"Item with UID '{uid}' is not in the queue.")
+            running_item = await self._get_running_item_info()
+            if running_item and (uid == running_item["item_uid"]):
+                raise IndexError("The item with UID '{uid}' is currently running.")
+            item = self._uid_dict_get_item(uid)
 
         else:
             pos = pos if pos is not None else "back"
@@ -374,17 +375,17 @@ class PlanQueueOperations:
             else:
                 raise TypeError(f"Parameter 'pos' has incorrect type: pos={str(pos)} (type={type(pos)})")
 
-            plan_json = await self._r_pool.lindex(self._name_plan_queue, index)
-            if plan_json is None:
+            item_json = await self._r_pool.lindex(self._name_plan_queue, index)
+            if item_json is None:
                 raise IndexError(f"Index '{index}' is out of range (parameter pos = '{pos}')")
 
-            plan = json.loads(plan_json) if plan_json else {}
+            item = json.loads(item_json) if item_json else {}
 
-        return plan
+        return item
 
-    async def get_plan(self, *, pos=None, uid=None):
+    async def get_item(self, *, pos=None, uid=None):
         """
-        Get plan at a given position or with a given UID. If UID is specified, then
+        Get item at a given position or with a given UID. If UID is specified, then
         the position is ignored.
 
         Parameters
@@ -398,7 +399,7 @@ class PlanQueueOperations:
         Returns
         -------
         dict
-            Dictionary of plan parameters.
+            Dictionary of item parameters.
 
         Raises
         ------
@@ -408,11 +409,11 @@ class PlanQueueOperations:
             No element with position ``pos`` exists in the queue (index is out of range).
         """
         async with self._lock:
-            return await self._get_plan(pos=pos, uid=uid)
+            return await self._get_item(pos=pos, uid=uid)
 
-    async def _remove_plan(self, plan, single=True):
+    async def _remove_item(self, item, single=True):
         """
-        Remove exactly a plan from the queue. If ``single=True`` then the exception is
+        Remove an item from the queue. If ``single=True`` then the exception is
         raised in case of no or multiple matching plans are found in the queue.
         The function is not part of user API and shouldn't be used on exception from
         the other methods of the class.
@@ -432,15 +433,13 @@ class PlanQueueOperations:
         RuntimeError
             No or multiple matching plans are removed and ``single=True``.
         """
-        n_rem_plans = await self._r_pool.lrem(self._name_plan_queue, 0, json.dumps(plan))
-        if (n_rem_plans != 1) and single:
-            raise RuntimeError(
-                f"The number of removed plans is {n_rem_plans}. One plans is expected to be removed."
-            )
+        n_rem_items = await self._r_pool.lrem(self._name_plan_queue, 0, json.dumps(item))
+        if (n_rem_items != 1) and single:
+            raise RuntimeError(f"The number of removed items is {n_rem_items}. One item is expected.")
 
-    async def _pop_plan_from_queue(self, *, pos=None, uid=None):
+    async def _pop_item_from_queue(self, *, pos=None, uid=None):
         """
-        See ``self._pop_plan_from_queue()`` method
+        See ``self._pop_item_from_queue()`` method
         """
 
         if (pos is not None) and (uid is not None):
@@ -451,36 +450,36 @@ class PlanQueueOperations:
         if uid is not None:
             if not self._is_uid_in_dict(uid):
                 raise IndexError(f"Plan with UID '{uid}' is not in the queue.")
-            running_plan = await self._get_running_plan_info()
-            if running_plan and (uid == running_plan["plan_uid"]):
-                raise IndexError("Can not remove a plan which is currently running.")
-            plan = self._uid_dict_get_plan(uid)
-            await self._remove_plan(plan)
+            running_item = await self._get_running_item_info()
+            if running_item and (uid == running_item["item_uid"]):
+                raise IndexError("Can not remove an item which is currently running.")
+            item = self._uid_dict_get_item(uid)
+            await self._remove_item(item)
         elif pos == "back":
-            plan_json = await self._r_pool.rpop(self._name_plan_queue)
-            if plan_json is None:
+            item_json = await self._r_pool.rpop(self._name_plan_queue)
+            if item_json is None:
                 raise IndexError("Queue is empty")
-            plan = json.loads(plan_json) if plan_json else {}
+            item = json.loads(item_json) if item_json else {}
         elif pos == "front":
-            plan_json = await self._r_pool.lpop(self._name_plan_queue)
-            if plan_json is None:
+            item_json = await self._r_pool.lpop(self._name_plan_queue)
+            if item_json is None:
                 raise IndexError("Queue is empty")
-            plan = json.loads(plan_json) if plan_json else {}
+            item = json.loads(item_json) if item_json else {}
         elif isinstance(pos, int):
-            plan = await self._get_plan(pos=pos)
-            if plan:
-                await self._remove_plan(plan)
+            item = await self._get_item(pos=pos)
+            if item:
+                await self._remove_item(item)
         else:
             raise ValueError(f"Parameter 'pos' has incorrect value: pos={str(pos)} (type={type(pos)})")
 
-        if plan:
-            self._uid_dict_remove(plan["plan_uid"])
+        if item:
+            self._uid_dict_remove(item["item_uid"])
 
-        qsize = await self._get_plan_queue_size()
+        qsize = await self._get_queue_size()
 
-        return plan, qsize
+        return item, qsize
 
-    async def pop_plan_from_queue(self, *, pos=None, uid=None):
+    async def pop_item_from_queue(self, *, pos=None, uid=None):
         """
         Pop a plan from the queue. Raises ``IndexError`` if plan with index ``pos`` is unavailable
         or if the queue is empty.
@@ -506,11 +505,11 @@ class PlanQueueOperations:
             Position ``pos`` does not exist or the queue is empty.
         """
         async with self._lock:
-            return await self._pop_plan_from_queue(pos=pos, uid=uid)
+            return await self._pop_item_from_queue(pos=pos, uid=uid)
 
-    async def _add_plan_to_queue(self, plan, *, pos=None, before_uid=None, after_uid=None):
+    async def _add_item_to_queue(self, item, *, pos=None, before_uid=None, after_uid=None):
         """
-        See ``self.add_plan_to_queue()`` method.
+        See ``self.add_item_to_queue()`` method.
         """
         if (pos is not None) and (before_uid is not None or after_uid is not None):
             raise ValueError("Ambiguous parameters: plan position and UID is specified")
@@ -522,94 +521,94 @@ class PlanQueueOperations:
 
         pos = pos if pos is not None else "back"
 
-        if "plan_uid" not in plan:
-            plan = self.set_new_plan_uuid(plan)
+        if "item_uid" not in item:
+            item = self.set_new_item_uuid(item)
         else:
-            self._verify_plan(plan)
+            self._verify_item(item)
 
-        qsize0 = await self._get_plan_queue_size()
+        qsize0 = await self._get_queue_size()
         if (before_uid is not None) or (after_uid is not None):
             uid = before_uid if before_uid is not None else after_uid
             before = uid == before_uid
 
             if not self._is_uid_in_dict(uid):
                 raise IndexError(f"Plan with UID '{uid}' is not in the queue.")
-            running_plan = await self._get_running_plan_info()
-            if running_plan and (uid == running_plan["plan_uid"]):
+            running_item = await self._get_running_item_info()
+            if running_item and (uid == running_item["item_uid"]):
                 if before:
                     raise IndexError("Can not insert a plan in the queue before a currently running plan.")
                 else:
                     # Push to the plan front of the queue (after the running plan).
-                    qsize = await self._r_pool.lpush(self._name_plan_queue, json.dumps(plan))
+                    qsize = await self._r_pool.lpush(self._name_plan_queue, json.dumps(item))
             else:
-                plan_to_displace = self._uid_dict_get_plan(uid)
+                item_to_displace = self._uid_dict_get_item(uid)
                 before = uid == before_uid
                 qsize = await self._r_pool.linsert(
-                    self._name_plan_queue, json.dumps(plan_to_displace), json.dumps(plan), before=before
+                    self._name_plan_queue, json.dumps(item_to_displace), json.dumps(item), before=before
                 )
         elif pos == "back" or (isinstance(pos, int) and pos >= qsize0):
-            qsize = await self._r_pool.rpush(self._name_plan_queue, json.dumps(plan))
+            qsize = await self._r_pool.rpush(self._name_plan_queue, json.dumps(item))
         elif pos == "front" or (isinstance(pos, int) and (pos == 0 or pos <= -qsize0)):
-            qsize = await self._r_pool.lpush(self._name_plan_queue, json.dumps(plan))
+            qsize = await self._r_pool.lpush(self._name_plan_queue, json.dumps(item))
         elif isinstance(pos, int):
             # Put the position in the range
-            plan_to_displace = await self._get_plan(pos=pos)
-            if plan_to_displace:
+            item_to_displace = await self._get_item(pos=pos)
+            if item_to_displace:
                 qsize = await self._r_pool.linsert(
-                    self._name_plan_queue, json.dumps(plan_to_displace), json.dumps(plan), before=True
+                    self._name_plan_queue, json.dumps(item_to_displace), json.dumps(item), before=True
                 )
             else:
                 raise RuntimeError(f"Could not find an existing plan at {pos}. Queue size: {qsize0}")
         else:
             raise ValueError(f"Parameter 'pos' has incorrect value: pos='{str(pos)}' (type={type(pos)})")
 
-        self._uid_dict_add(plan)
-        return plan, qsize
+        self._uid_dict_add(item)
+        return item, qsize
 
-    async def add_plan_to_queue(self, plan, *, pos=None, before_uid=None, after_uid=None):
+    async def add_item_to_queue(self, item, *, pos=None, before_uid=None, after_uid=None):
         """
-        Add the plan to the back of the queue. If position is integer, it is
-        clipped to fit within the range of meaningful indices. For the index
-        too large or too low, the plan is pushed to the front or the back of the queue.
+        Add an item to the queue. By default, the item is added to the back of the queue.
+        If position is integer, it is clipped to fit within the range of meaningful indices.
+        For the index too large or too low, the plan is pushed to the front or the back of the queue.
 
         Parameters
         ----------
-        plan: dict
-            Plan represented as a dictionary of parameters
+        item: dict
+            Item (plan or instruction) represented as a dictionary of parameters
 
         pos: int, str or None
             Integer that specifies the position index, "front" or "back".
-            If ``pos`` is in the range ``1..qsize-1`` the plan is inserted
-            to the specified position and plans at positions ``pos..qsize-1``
+            If ``pos`` is in the range ``1..qsize-1`` the item is inserted
+            to the specified position and items at positions ``pos..qsize-1``
             are shifted by one position to the right. If ``-qsize<pos<0`` the
-            plan is inserted at the positon counting from the back of the queue
+            item is inserted at the positon counted from the back of the queue
             (-1 - the last element of the queue). If ``pos>=qsize``,
             the plan is added to the back of the queue. If ``pos==0`` or
             ``pos<=-qsize``, the plan is pushed to the front of the queue.
 
         before_uid: str or None
-            If UID is specified, then the plan is inserted before the plan with UID.
+            If UID is specified, then the item is inserted before the plan with UID.
             ``before_uid`` has precedence over ``after_uid``.
 
         after_uid: str or None
-            If UID is specified, then the plan is inserted before the plan with UID.
+            If UID is specified, then the item is inserted before the plan with UID.
 
         Returns
         -------
         dict, int
-            The dictionary that contains a plan that was added and the new size of the queue.
+            The dictionary that contains the item that was added and the new size of the queue.
 
         Raises
         ------
         ValueError
             Incorrect value of the parameter ``pos`` (typically unrecognized string).
         TypeError
-            Incorrect type of ``plan`` (should be dict)
+            Incorrect type of ``item`` (should be dict)
         """
         async with self._lock:
-            return await self._add_plan_to_queue(plan, pos=pos, before_uid=before_uid, after_uid=after_uid)
+            return await self._add_item_to_queue(item, pos=pos, before_uid=before_uid, after_uid=after_uid)
 
-    async def _move_plan(self, *, pos=None, uid=None, pos_dest=None, before_uid=None, after_uid=None):
+    async def _move_item(self, *, pos=None, uid=None, pos_dest=None, before_uid=None, after_uid=None):
         """
         See ``self.move_plan()`` method.
         """
@@ -625,7 +624,7 @@ class PlanQueueOperations:
         if (before_uid is not None) and (after_uid is not None):
             raise ValueError("Ambiguous parameters: source should be moved 'before' and 'after' the destination.")
 
-        queue_size = await self._get_plan_queue_size()
+        queue_size = await self._get_queue_size()
 
         # Find the source plan
         src_txt = ""
@@ -633,15 +632,15 @@ class PlanQueueOperations:
         try:
             if uid is not None:
                 src_txt = f"UID '{uid}'"
-                plan_source = await self._get_plan(uid=uid)
+                item_source = await self._get_item(uid=uid)
             else:
                 src_txt = f"position {pos}"
                 src_by_index = True
-                plan_source = await self._get_plan(pos=pos)
+                item_source = await self._get_item(pos=pos)
         except Exception as ex:
             raise IndexError(f"Source plan ({src_txt}) was not found: {str(ex)}.")
 
-        uid_source = plan_source["plan_uid"]
+        uid_source = item_source["item_uid"]
 
         # Find the destination plan
         dest_txt, before = "", True
@@ -650,10 +649,10 @@ class PlanQueueOperations:
                 uid_dest = before_uid if before_uid else after_uid
                 before = uid_dest == before_uid
                 dest_txt = f"UID '{uid_dest}'"
-                plan_dest = await self._get_plan(uid=uid_dest)
+                item_dest = await self._get_item(uid=uid_dest)
             else:
                 dest_txt = f"position {pos_dest}"
-                plan_dest = await self._get_plan(pos=pos_dest)
+                item_dest = await self._get_item(pos=pos_dest)
 
                 # Find the index of the source in the most efficient way
                 src_index = pos if src_by_index else (await self._get_index_by_uid(uid=uid))
@@ -678,43 +677,43 @@ class PlanQueueOperations:
         #   so we convert it to UID, but we can do it for the case of UID addressing as well)
         #   In case of positional addressing 'before' is True, so the source is going to be
         #   inserted in place of destination.
-        uid_dest = plan_dest["plan_uid"]
+        uid_dest = item_dest["item_uid"]
 
         # If source and destination point to the same plan, then do nothing,
         #   but consider it a valid operation.
         if uid_source != uid_dest:
-            plan, _ = await self._pop_plan_from_queue(uid=uid_source)
+            item, _ = await self._pop_item_from_queue(uid=uid_source)
             kw = {"before_uid": uid_dest} if before else {"after_uid": uid_dest}
-            kw.update({"plan": plan})
-            plan, qsize = await self._add_plan_to_queue(**kw)
+            kw.update({"item": item})
+            item, qsize = await self._add_item_to_queue(**kw)
         else:
-            plan = plan_dest
-            qsize = await self._get_plan_queue_size()
-        return plan, qsize
+            item = item_dest
+            qsize = await self._get_queue_size()
+        return item, qsize
 
-    async def move_plan(self, *, pos=None, uid=None, pos_dest=None, before_uid=None, after_uid=None):
+    async def move_item(self, *, pos=None, uid=None, pos_dest=None, before_uid=None, after_uid=None):
         """
-        Move existing plan within the queue.
+        Move existing item within the queue.
 
         Parameters
         ----------
         pos: str or int
-            Position of the source plan: positive or negative integer that specifieds the index
-            of the plan in the queue or a string from the set {"back", "front"}.
+            Position of the source item: positive or negative integer that specifieds the index
+            of the item in the queue or a string from the set {"back", "front"}.
         uid: str
-            UID of the source plan. UID overrides the position
+            UID of the source item. UID overrides the position
         pos_dext: str or int
-            Index of the new position of the plan in the queue: positive or negative integer that
-            specifieds the index of the plan in the queue or a string from the set {"back", "front"}.
+            Index of the new position of the item in the queue: positive or negative integer that
+            specifieds the index of the item in the queue or a string from the set {"back", "front"}.
         before_uid: str
-            Insert the plan before the plan with the given UID.
+            Insert the item before the item with the given UID.
         after_uid: str
-            Insert the plan after the plan with the given UID.
+            Insert the item after the item with the given UID.
 
         Returns
         -------
         dict, int
-            The dictionary that contains a plan that was moved and the size of the queue.
+            The dictionary that contains a item that was moved and the size of the queue.
 
         Raises
         ------
@@ -722,36 +721,36 @@ class PlanQueueOperations:
             Error in specification of source or destination.
         """
         async with self._lock:
-            return await self._move_plan(
+            return await self._move_item(
                 pos=pos, uid=uid, pos_dest=pos_dest, before_uid=before_uid, after_uid=after_uid
             )
 
-    async def _clear_plan_queue(self):
+    async def _clear_queue(self):
         """
-        See ``self.clear_plan_queue()`` method.
+        See ``self.clear_queue()`` method.
         """
-        while await self._get_plan_queue_size():
-            await self._pop_plan_from_queue()
+        while await self._get_queue_size():
+            await self._pop_item_from_queue()
 
-    async def clear_plan_queue(self):
+    async def clear_queue(self):
         """
-        Remove all entries from the plan queue. Does not touch the running plan.
-        The plan may be pushed back into the queue if it is stopped.
+        Remove all entries from the plan queue. Does not touch the running item (plan).
+        The item may be pushed back into the queue if it is stopped.
         """
         async with self._lock:
-            await self._clear_plan_queue()
+            await self._clear_queue()
 
     # -----------------------------------------------------------------------
     #                          Plan History
 
-    async def _add_plan_to_history(self, plan):
+    async def _add_to_history(self, item):
         """
-        Add the plan to history.
+        Add an item to history.
 
         Parameters
         ----------
-        plan: dict
-            Plan represented as a dictionary of parameters. No verifications are performed
+        item: dict
+            Item (plan) represented as a dictionary of parameters. No verifications are performed
             on the plan. The function is not intended to be used outside of this class.
 
         Returns
@@ -759,16 +758,16 @@ class PlanQueueOperations:
         int
             The new size of the history.
         """
-        history_size = await self._r_pool.rpush(self._name_plan_history, json.dumps(plan))
+        history_size = await self._r_pool.rpush(self._name_plan_history, json.dumps(item))
         return history_size
 
-    async def _get_plan_history_size(self):
+    async def _get_history_size(self):
         """
-        See ``self.get_plan_history_size()`` method.
+        See ``self.get_history_size()`` method.
         """
         return await self._r_pool.llen(self._name_plan_history)
 
-    async def get_plan_history_size(self):
+    async def get_history_size(self):
         """
         Get the number of items in the plan history.
 
@@ -778,97 +777,97 @@ class PlanQueueOperations:
             The number of plans in the history.
         """
         async with self._lock:
-            return await self._get_plan_history_size()
+            return await self._get_history_size()
 
-    async def _get_plan_history(self):
+    async def _get_history(self):
         """
-        See ``self.get_plan_history()`` method.
+        See ``self.get_history()`` method.
         """
         all_plans_json = await self._r_pool.lrange(self._name_plan_history, 0, -1)
         return [json.loads(_) for _ in all_plans_json]
 
-    async def get_plan_history(self):
+    async def get_history(self):
         """
-        Get the list of all plans in the history. The first element of the list is
+        Get the list of all items in the plan history. The first element of the list is
         the oldest history entry.
 
         Returns
         -------
         list(dict)
-            The list of plans in the queue. Each plan is represented as a dictionary.
+            The list of items in the plan history. Each plan is represented as a dictionary.
             Empty list is returned if the queue is empty.
         """
         async with self._lock:
-            return await self._get_plan_history()
+            return await self._get_history()
 
-    async def _clear_plan_history(self):
+    async def _clear_history(self):
         """
-        See ``self.clear_plan_history()`` method.
+        See ``self.clear_history()`` method.
         """
-        while await self._get_plan_history_size():
+        while await self._get_history_size():
             await self._r_pool.rpop(self._name_plan_history)
 
-    async def clear_plan_history(self):
+    async def clear_history(self):
         """
-        Remove all entries from the plan queue. Does not touch the running plan.
-        The plan may be pushed back into the queue if it is stopped.
+        Remove all entries from the plan queue. Does not touch the running item.
+        The item (plan) may be pushed back into the queue if it is stopped.
         """
         async with self._lock:
-            await self._clear_plan_history()
+            await self._clear_history()
 
     # ----------------------------------------------------------------------
     #          Standard plan operations during queue execution
 
-    async def _set_next_plan_as_running(self):
+    async def _set_next_item_as_running(self):
         """
-        See ``self.set_next_plan_as_running()`` method.
+        See ``self.set_next_item_as_running()`` method.
         """
         # UID remains in the `self._uid_dict` after this operation.
-        if not await self._is_plan_running():
+        if not await self._is_item_running():
             plan_json = await self._r_pool.lpop(self._name_plan_queue)
             if plan_json:
                 plan = json.loads(plan_json)
-                await self._set_running_plan_info(plan)
+                await self._set_running_item_info(plan)
             else:
                 plan = {}
         else:
             plan = {}
         return plan
 
-    async def set_next_plan_as_running(self):
+    async def set_next_item_as_running(self):
         """
-        Sets the next plan from the queue as a running plan. The plan is removed
-        from the queue. UID remains in ``self._uid_dict``, i.e. plan with the same UID
+        Sets the next item from the queue as 'running'. The item is removed
+        from the queue. UID remains in ``self._uid_dict``, i.e. item with the same UID
         may not be added to the queue while it is being executed.
 
         Returns
         -------
         dict
-            The plan that was set as currently running. If another plan is currently
-            running or the queue is empty, then ``{}`` is returned.
+            The item that was set as currently running. If another item is currently
+            set as 'running' or the queue is empty, then ``{}`` is returned.
         """
         async with self._lock:
-            return await self._set_next_plan_as_running()
+            return await self._set_next_item_as_running()
 
-    async def _set_processed_plan_as_completed(self, exit_status):
+    async def _set_processed_item_as_completed(self, exit_status):
         """
-        See ``self.set_processed_plan_as_completed`` method.
+        See ``self.set_processed_item_as_completed`` method.
         """
         # Note: UID remains in the `self._uid_dict` after this operation
-        if await self._is_plan_running():
-            plan = await self._get_running_plan_info()
-            plan["exit_status"] = exit_status
-            await self._clear_running_plan_info()
-            self._uid_dict_remove(plan["plan_uid"])
-            await self._add_plan_to_history(plan)
+        if await self._is_item_running():
+            item = await self._get_running_item_info()
+            item["exit_status"] = exit_status
+            await self._clear_running_item_info()
+            self._uid_dict_remove(item["item_uid"])
+            await self._add_to_history(item)
         else:
-            plan = {}
-        return plan
+            item = {}
+        return item
 
-    async def set_processed_plan_as_completed(self, exit_status):
+    async def set_processed_item_as_completed(self, exit_status):
         """
-        Moves currently executed plan to history and sets ``exit_status`` key.
-        UID is removed from ``self._uid_dict``, so a copy of the plan with
+        Moves currently executed item (plan) to history and sets ``exit_status`` key.
+        UID is removed from ``self._uid_dict``, so a copy of the item with
         the same UID may be added to the queue.
 
         Parameters
@@ -879,31 +878,31 @@ class PlanQueueOperations:
         Returns
         -------
         dict
-            The plan added to the history including ``exit_status``. If another no plan is currently
-            running, then ``{}`` is returned.
+            The item added to the history including ``exit_status``. If another item (plan)
+            is currently running, then ``{}`` is returned.
         """
         async with self._lock:
-            return await self._set_processed_plan_as_completed(exit_status=exit_status)
+            return await self._set_processed_item_as_completed(exit_status=exit_status)
 
-    async def _set_processed_plan_as_stopped(self, exit_status):
+    async def _set_processed_item_as_stopped(self, exit_status):
         """
-        See ``self.set_prcessed_plan_as_stopped()`` method.
+        See ``self.set_processed_item_as_stopped()`` method.
         """
         # Note: UID is removed from `self._uid_dict`.
-        if await self._is_plan_running():
-            plan = await self._get_running_plan_info()
-            plan["exit_status"] = exit_status
-            await self._clear_running_plan_info()
-            await self._r_pool.lpush(self._name_plan_queue, json.dumps(plan))
-            self._uid_dict_update(plan)
-            await self._add_plan_to_history(plan)
+        if await self._is_item_running():
+            item = await self._get_running_item_info()
+            item["exit_status"] = exit_status
+            await self._clear_running_item_info()
+            await self._r_pool.lpush(self._name_plan_queue, json.dumps(item))
+            self._uid_dict_update(item)
+            await self._add_to_history(item)
         else:
-            plan = {}
-        return plan
+            item = {}
+        return item
 
-    async def set_processed_plan_as_stopped(self, exit_status):
+    async def set_processed_item_as_stopped(self, exit_status):
         """
-        Pushes currently executed plan to the beginning of the queue and adds
+        Pushes currently executed item to the beginning of the queue and adds
         it to history with additional sets ``exit_status`` key.
         UID is remains in ``self._uid_dict``.
 
@@ -915,8 +914,8 @@ class PlanQueueOperations:
         Returns
         -------
         dict
-            The plan added to the history including ``exit_status``. If another no plan is currently
-            running, then ``{}`` is returned.
+            The item (plan) added to the history including ``exit_status``. If another item (plan)
+            is currently running, then ``{}`` is returned.
         """
         async with self._lock:
-            return await self._set_processed_plan_as_stopped(exit_status=exit_status)
+            return await self._set_processed_item_as_stopped(exit_status=exit_status)

@@ -278,7 +278,7 @@ class RunEngineManager(Process):
         self._manager_state = MState.IDLE
         self._environment_exists = False
         # If a plan is running, it needs to be pushed back into the queue
-        await self._plan_queue.set_processed_plan_as_stopped(exit_status="environment_destroyed")
+        await self._plan_queue.set_processed_item_as_stopped(exit_status="environment_destroyed")
 
         err_msg = "" if success else "Failed to properly destroy RE Worker environment."
         logger.info("RE Worker environment is destroyed")
@@ -352,7 +352,7 @@ class RunEngineManager(Process):
         """
         Process plan report. Called when plan report is available.
         """
-        # TODO: `set_processed_plan_as_stopped` needs more precise exit status
+        # TODO: `set_processed_item_as_stopped` needs more precise exit status
         #   current values are not final selection, they are just temporarily for the demo
         # Read report first
         plan_report, err_msg = await self._worker_request_plan_report()
@@ -360,7 +360,7 @@ class RunEngineManager(Process):
             # TODO: this would typically mean a bug (communciation error). Probably more
             #       complicated processing is needed
             logger.error(f"Failed to download plan report: {err_msg}. Stopping queue processing.")
-            await self._plan_queue.set_processed_plan_as_stopped(exit_status="manager_error")
+            await self._plan_queue.set_processed_item_as_stopped(exit_status="manager_error")
             self._manager_state = MState.IDLE
         else:
             plan_state = plan_report["plan_state"]
@@ -381,11 +381,11 @@ class RunEngineManager(Process):
                 # If a plan was not completed or not successful (exception was raised), then
                 # execution of the queue is stopped. It can be restarted later (failed or
                 # interrupted plan will still be in the queue.
-                await self._plan_queue.set_processed_plan_as_completed(exit_status=plan_state)
+                await self._plan_queue.set_processed_item_as_completed(exit_status=plan_state)
                 await self._start_plan_task()
             elif plan_state in ("stopped", "error"):
                 # Paused plan was stopped/aborted/halted
-                await self._plan_queue.set_processed_plan_as_stopped(exit_status=plan_state)
+                await self._plan_queue.set_processed_item_as_stopped(exit_status=plan_state)
                 self._manager_state = MState.IDLE
             elif plan_state == "paused":
                 # The plan was paused (nothing should be done).
@@ -420,7 +420,7 @@ class RunEngineManager(Process):
         "args" (list of args), "kwargs" (list of kwargs). Only the plan name is mandatory.
         Names of plans and devices are strings.
         """
-        n_pending_plans = await self._plan_queue.get_plan_queue_size()
+        n_pending_plans = await self._plan_queue.get_queue_size()
         logger.info("Starting a new plan: %d plans are left in the queue", n_pending_plans)
 
         if not n_pending_plans:
@@ -434,7 +434,7 @@ class RunEngineManager(Process):
             logger.info(err_msg)
 
         else:
-            next_item = await self._plan_queue.get_plan(pos="front")
+            next_item = await self._plan_queue.get_item(pos="front")
 
             # The next items is PLAN
             if next_item["item_type"] == "plan":
@@ -449,18 +449,18 @@ class RunEngineManager(Process):
 
                 self._manager_state = MState.EXECUTING_QUEUE
 
-                new_plan = await self._plan_queue.set_next_plan_as_running()
+                new_plan = await self._plan_queue.set_next_item_as_running()
 
                 plan_name = new_plan["name"]
                 args = new_plan["args"] if "args" in new_plan else []
                 kwargs = new_plan["kwargs"] if "kwargs" in new_plan else {}
-                plan_uid = new_plan["plan_uid"]
+                item_uid = new_plan["item_uid"]
 
                 plan_info = {
                     "name": plan_name,
                     "args": args,
                     "kwargs": kwargs,
-                    "plan_uid": plan_uid,
+                    "item_uid": item_uid,
                 }
 
                 success, err_msg = await self._worker_command_run_plan(plan_info)
@@ -477,7 +477,7 @@ class RunEngineManager(Process):
             elif next_item["item_type"] == "instruction":
                 if next_item["action"] == "queue_stop":
                     # Pop the instruction from the queue
-                    await self._plan_queue.pop_plan_from_queue(pos="front")
+                    await self._plan_queue.pop_item_from_queue(pos="front")
                     self._manager_state = MState.EXECUTING_QUEUE
                     self._queue_stop_pending = True
                     asyncio.ensure_future(self._start_plan_task())
@@ -707,14 +707,14 @@ class RunEngineManager(Process):
         logger.info("Processing 'status' request.")
 
         # Computed/retrieved data
-        n_pending_plans = await self._plan_queue.get_plan_queue_size()
-        running_plan_info = await self._plan_queue.get_running_plan_info()
-        n_plans_in_history = await self._plan_queue.get_plan_history_size()
+        n_pending_items = await self._plan_queue.get_queue_size()
+        running_item_info = await self._plan_queue.get_running_item_info()
+        n_items_in_history = await self._plan_queue.get_history_size()
 
         # Prepared output data
-        plans_in_queue = n_pending_plans
-        plans_in_history = n_plans_in_history
-        running_plan_uid = running_plan_info["plan_uid"] if running_plan_info else None
+        items_in_queue = n_pending_items
+        items_in_history = n_items_in_history
+        running_item_uid = running_item_info["item_uid"] if running_item_info else None
         manager_state = self._manager_state.value
         queue_stop_pending = self._queue_stop_pending
         worker_environment_exists = self._environment_exists
@@ -724,9 +724,9 @@ class RunEngineManager(Process):
         #       retrieve detailed status.
         msg = {
             "msg": "RE Manager",
-            "plans_in_queue": plans_in_queue,
-            "plans_in_history": plans_in_history,
-            "running_plan_uid": running_plan_uid,
+            "items_in_queue": items_in_queue,
+            "items_in_history": items_in_history,
+            "running_item_uid": running_item_uid,
             "manager_state": manager_state,
             "queue_stop_pending": queue_stop_pending,
             "worker_environment_exists": worker_environment_exists,
@@ -793,12 +793,12 @@ class RunEngineManager(Process):
         Returns the contents of the current queue.
         """
         logger.info("Returning current queue and running plan.")
-        plan_queue = await self._plan_queue.get_plan_queue()
-        running_plan = await self._plan_queue.get_running_plan_info()
+        plan_queue = await self._plan_queue.get_queue()
+        running_plan = await self._plan_queue.get_running_item_info()
 
         return {"queue": plan_queue, "running_plan": running_plan}
 
-    async def _queue_plan_add_handler(self, request):
+    async def _queue_item_add_handler(self, request):
         """
         Adds new item to the the queue. Item may be a plan or an instruction. Request must
         include the element with the key ``plan`` if the added item is a plan or ``instruction``
@@ -876,17 +876,17 @@ class RunEngineManager(Process):
             item["user_group"] = user_group
 
             # Always generate a new UID for the added plan!!!
-            item["plan_uid"] = PlanQueueOperations.new_plan_uid()
+            item["item_uid"] = PlanQueueOperations.new_item_uid()
 
             # Adding plan to queue may raise an exception
-            item, qsize = await self._plan_queue.add_plan_to_queue(
+            item, qsize = await self._plan_queue.add_item_to_queue(
                 item, pos=pos, before_uid=before_uid, after_uid=after_uid
             )
             success = True
 
         except Exception as ex:
             success = False
-            msg = f"Failed to add a plan: {str(ex)}"
+            msg = f"Failed to add an item: {str(ex)}"
 
         rdict = {"success": success, "msg": msg, "qsize": qsize}
         if item_type:
@@ -894,7 +894,7 @@ class RunEngineManager(Process):
 
         return rdict
 
-    async def _queue_plan_get_handler(self, request):
+    async def _queue_item_get_handler(self, request):
         """
         Returns an item from the queue. The position of the item
         may be specified as an index (positive or negative) or a string
@@ -905,15 +905,15 @@ class RunEngineManager(Process):
             plan, msg = {}, ""
             pos = request.get("pos", None)
             uid = request.get("uid", None)
-            plan = await self._plan_queue.get_plan(pos=pos, uid=uid)
+            plan = await self._plan_queue.get_item(pos=pos, uid=uid)
             success = True
         except Exception as ex:
             success = False
-            msg = f"Failed to get a plan: {str(ex)}"
+            msg = f"Failed to get an item: {str(ex)}"
 
         return {"success": success, "msg": msg, "plan": plan}
 
-    async def _queue_plan_remove_handler(self, request):
+    async def _queue_item_remove_handler(self, request):
         """
         Removes (pops) item from the queue. The position of the item
         may be specified as an index (positive or negative) or a string
@@ -926,15 +926,15 @@ class RunEngineManager(Process):
             plan, qsize, msg = {}, None, ""
             pos = request.get("pos", None)
             uid = request.get("uid", None)
-            plan, qsize = await self._plan_queue.pop_plan_from_queue(pos=pos, uid=uid)
+            plan, qsize = await self._plan_queue.pop_item_from_queue(pos=pos, uid=uid)
             success = True
         except Exception as ex:
             success = False
-            msg = f"Failed to remove a plan: {str(ex)}"
+            msg = f"Failed to remove an item: {str(ex)}"
 
         return {"success": success, "msg": msg, "plan": plan, "qsize": qsize}
 
-    async def _queue_plan_move_handler(self, request):
+    async def _queue_item_move_handler(self, request):
         """
         Moves a plan to a new position in the queue. Source and destination
         for the plan may be specified as position of the plan in the queue
@@ -950,13 +950,13 @@ class RunEngineManager(Process):
             pos_dest = request.get("pos_dest", None)
             before_uid = request.get("before_uid", None)
             after_uid = request.get("after_uid", None)
-            plan, qsize = await self._plan_queue.move_plan(
+            plan, qsize = await self._plan_queue.move_item(
                 pos=pos, uid=uid, pos_dest=pos_dest, before_uid=before_uid, after_uid=after_uid
             )
             success = True
         except Exception as ex:
             success = False
-            msg = f"Failed to move the plan: {str(ex)}"
+            msg = f"Failed to move the item: {str(ex)}"
 
         return {"success": success, "msg": msg, "plan": plan, "qsize": qsize}
 
@@ -965,7 +965,7 @@ class RunEngineManager(Process):
         Remove all entries from the plan queue (does not affect currently executed run)
         """
         logger.info("Clearing the queue")
-        await self._plan_queue.clear_plan_queue()
+        await self._plan_queue.clear_queue()
         return {"success": True, "msg": "Plan queue is now empty."}
 
     async def _history_get_handler(self, request):
@@ -973,7 +973,7 @@ class RunEngineManager(Process):
         Returns the contents of the plan history.
         """
         logger.info("Returning plan history.")
-        plan_history = await self._plan_queue.get_plan_history()
+        plan_history = await self._plan_queue.get_history()
 
         return {"history": plan_history}
 
@@ -982,7 +982,7 @@ class RunEngineManager(Process):
         Remove all entries from the plan history
         """
         logger.info("Clearing the plan execution history")
-        await self._plan_queue.clear_plan_history()
+        await self._plan_queue.clear_history()
         return {"success": True, "msg": "Plan history is now empty."}
 
     async def _environment_open_handler(self, request):
@@ -1155,10 +1155,10 @@ class RunEngineManager(Process):
             "environment_open": "_environment_open_handler",
             "environment_close": "_environment_close_handler",
             "environment_destroy": "_environment_destroy_handler",
-            "queue_plan_add": "_queue_plan_add_handler",
-            "queue_plan_get": "_queue_plan_get_handler",
-            "queue_plan_remove": "_queue_plan_remove_handler",
-            "queue_plan_move": "_queue_plan_move_handler",
+            "queue_item_add": "_queue_item_add_handler",
+            "queue_item_get": "_queue_item_get_handler",
+            "queue_item_remove": "_queue_item_remove_handler",
+            "queue_item_move": "_queue_item_move_handler",
             "queue_clear": "_queue_clear_handler",
             "queue_start": "_queue_start_handler",
             "queue_stop": "_queue_stop_handler",
@@ -1240,18 +1240,18 @@ class RunEngineManager(Process):
         if self._environment_exists:
             self._worker_state_info, err_msg = await self._worker_request_state()
             if self._worker_state_info:
-                plan_uid_running = self._worker_state_info["running_plan_uid"]
+                item_uid_running = self._worker_state_info["running_item_uid"]
                 re_state = self._worker_state_info["re_state"]
-                if plan_uid_running:
+                if item_uid_running:
                     # Plan is running. Check if it is the same plan as in redis.
-                    plan_stored = await self._plan_queue.get_running_plan_info()
-                    if "plan_uid" in plan_stored:
-                        plan_uid_stored = plan_stored["plan_uid"]
+                    plan_stored = await self._plan_queue.get_running_item_info()
+                    if "item_uid" in plan_stored:
+                        item_uid_stored = plan_stored["item_uid"]
                         if re_state in ("paused", "pausing"):
                             self._manager_state = MState.PAUSED  # Paused and can be resumed
                         else:
                             self._manager_state = MState.EXECUTING_QUEUE  # Wait for plan completion
-                        if plan_uid_stored != plan_uid_running:
+                        if item_uid_stored != item_uid_running:
                             # Guess is that the environment may still work, so restart is
                             #   only recommended if it is convenient.
                             logger.warning(
@@ -1260,15 +1260,15 @@ class RunEngineManager(Process):
                                 "instead of '%s'.\n"
                                 "RE execution environment may need to be closed and created again \n"
                                 "to restore data integrity.",
-                                plan_uid_running,
-                                plan_uid_stored,
+                                item_uid_running,
+                                item_uid_stored,
                             )
             else:
                 logger.error("Error while reading RE Worker status: %s", err_msg)
         if not self._manager_state == MState.EXECUTING_QUEUE:
             # TODO: there is no 'unknown' status. This is here temporarily. Different logic
             #   has to be applied here.
-            await self._plan_queue.set_processed_plan_as_completed(exit_status="unknown")
+            await self._plan_queue.set_processed_item_as_completed(exit_status="unknown")
 
         logger.info("Starting ZeroMQ server")
         self._zmq_socket = self._ctx.socket(zmq.REP)

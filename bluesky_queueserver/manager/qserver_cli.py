@@ -36,10 +36,10 @@ def get_supported_commands():
         "environment_close": "environment_close",
         "environment_destroy": "environment_destroy",
         "queue_get": "queue_get",
-        "queue_plan_add": "queue_plan_add",
-        "queue_plan_get": "queue_plan_get",
-        "queue_plan_remove": "queue_plan_remove",
-        "queue_plan_move": "queue_plan_move",
+        "queue_item_add": "queue_item_add",
+        "queue_item_get": "queue_item_get",
+        "queue_item_remove": "queue_item_remove",
+        "queue_item_move": "queue_item_move",
         "queue_clear": "queue_clear",
         "queue_start": "queue_start",
         "queue_stop": "queue_stop",
@@ -72,7 +72,7 @@ def create_msg(command, params=None):
     try:
         command = command_dict[command]
         # Present value in the proper format. This will change as the format is changed.
-        if command == "queue_plan_add":
+        if command == "queue_item_add":
             if (len(params) == 1) and isinstance(params[0], dict):
                 # Arguments: <plan>
                 prms = {"plan": params[0]}  # Value is dict
@@ -96,7 +96,7 @@ def create_msg(command, params=None):
             prms["user"] = "qserver-cli"
             prms["user_group"] = "root"
 
-        elif command in ("queue_plan_remove", "queue_plan_get"):
+        elif command in ("queue_item_remove", "queue_item_get"):
             if len(params) == 0:
                 prms = {}
             elif len(params) == 1:
@@ -104,7 +104,7 @@ def create_msg(command, params=None):
             else:
                 raise ValueError(f"Invalid number of method arguments: '{pprint.pformat(params)}'")
 
-        elif command == "queue_plan_move":
+        elif command == "queue_item_move":
             if len(params) == 2:
                 # Argument order: [<pos_source>, <uid_source>] <pos_dest>
                 prms = _pos_or_uid(params[0])

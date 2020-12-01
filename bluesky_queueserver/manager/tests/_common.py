@@ -108,10 +108,10 @@ def get_queue():
 
 def get_reduced_state_info():
     msg = get_queue_state()
-    plans_in_queue = msg["plans_in_queue"]
+    items_in_queue = msg["items_in_queue"]
     queue_is_running = msg["manager_state"] == "executing_queue"
-    plans_in_history = msg["plans_in_history"]
-    return plans_in_queue, queue_is_running, plans_in_history
+    items_in_history = msg["items_in_history"]
+    return items_in_queue, queue_is_running, items_in_history
 
 
 def condition_manager_idle(msg):
@@ -131,9 +131,9 @@ def condition_environment_closed(msg):
 
 
 def condition_queue_processing_finished(msg):
-    plans_in_queue = msg["plans_in_queue"]
+    items_in_queue = msg["items_in_queue"]
     queue_is_running = msg["manager_state"] == "executing_queue"
-    return (plans_in_queue == 0) and not queue_is_running
+    return (items_in_queue == 0) and not queue_is_running
 
 
 def wait_for_condition(time, condition):

@@ -160,8 +160,8 @@ async def queue_stop_cancel():
     return msg
 
 
-@app.post("/queue/plan/add")
-async def queue_plan_add_handler(payload: dict):
+@app.post("/queue/item/add")
+async def queue_item_add_handler(payload: dict):
     """
     Adds new plan to the queue
     """
@@ -169,34 +169,34 @@ async def queue_plan_add_handler(payload: dict):
     params = payload
     params["user"] = _login_data["user"]
     params["user_group"] = _login_data["user_group"]
-    msg = await zmq_to_manager.send_message(method="queue_plan_add", params=params)
+    msg = await zmq_to_manager.send_message(method="queue_item_add", params=params)
     return msg
 
 
-@app.post("/queue/plan/remove")
-async def queue_plan_remove_handler(payload: dict):
+@app.post("/queue/item/remove")
+async def qqueue_item_remove_handler(payload: dict):
     """
     Remove plan from the queue
     """
-    msg = await zmq_to_manager.send_message(method="queue_plan_remove", params=payload)
+    msg = await zmq_to_manager.send_message(method="queue_item_remove", params=payload)
     return msg
 
 
-@app.post("/queue/plan/move")
-async def queue_plan_move_handler(payload: dict):
+@app.post("/queue/item/move")
+async def queue_item_move_handler(payload: dict):
     """
     Remove plan from the queue
     """
-    msg = await zmq_to_manager.send_message(method="queue_plan_move", params=payload)
+    msg = await zmq_to_manager.send_message(method="queue_item_move", params=payload)
     return msg
 
 
-@app.post("/queue/plan/get")
-async def queue_plan_get_handler(payload: dict):
+@app.post("/queue/item/get")
+async def queue_item_get_handler(payload: dict):
     """
     Get a plan from the queue
     """
-    msg = await zmq_to_manager.send_message(method="queue_plan_get", params=payload)
+    msg = await zmq_to_manager.send_message(method="queue_item_get", params=payload)
     return msg
 
 

@@ -18,6 +18,15 @@ from ._common import (
 
 from ._common import re_manager, re_manager_pc_copy  # noqa: F401
 
+from ..qserver_cli import QServerExitCodes
+
+# Exit codes for CLI tool
+SUCCESS = QServerExitCodes.SUCCESS.value
+PARAM_ERROR = QServerExitCodes.PARAMETER_ERROR.value
+REQ_FAILED = QServerExitCodes.REQUEST_FAILED.value
+COM_ERROR = QServerExitCodes.COMMUNICATION_ERROR.value
+EXCEPTION_OCCURRED = QServerExitCodes.EXCEPTION_OCCURRED.value
+
 
 def test_qserver_cli_and_manager(re_manager):  # noqa: F811
     """
@@ -28,78 +37,78 @@ def test_qserver_cli_and_manager(re_manager):  # noqa: F811
     ), "Timeout while waiting for manager to initialize."
 
     # Clear queue
-    assert subprocess.call(["qserver", "-c", "queue_clear"]) == 0
+    assert subprocess.call(["qserver", "queue", "clear"]) == SUCCESS
 
     # Request the list of allowed plans and devices (we don't check what is returned)
-    assert subprocess.call(["qserver", "-c", "plans_allowed"], stdout=subprocess.DEVNULL) == 0
-    assert subprocess.call(["qserver", "-c", "devices_allowed"], stdout=subprocess.DEVNULL) == 0
+    assert subprocess.call(["qserver", "allowed", "plans"], stdout=subprocess.DEVNULL) == SUCCESS
+    assert subprocess.call(["qserver", "allowed", "devices"], stdout=subprocess.DEVNULL) == SUCCESS
 
     # Add a number of plans
     plan_1 = "{'name':'count', 'args':[['det1', 'det2']]}"
     plan_2 = "{'name':'scan', 'args':[['det1', 'det2'], 'motor', -1, 1, 10]}"
     plan_3 = "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num':10, 'delay':1}}"
-    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan_1]) == 0
-    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan_2]) == 0
-    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan_3]) == 0
+    assert subprocess.call(["qserver", "queue", "add", "plan", plan_1]) == SUCCESS
+    assert subprocess.call(["qserver", "queue", "add", "plan", plan_2]) == SUCCESS
+    assert subprocess.call(["qserver", "queue", "add", "plan", plan_3]) == SUCCESS
 
     n_plans, is_plan_running, _ = get_reduced_state_info()
     assert n_plans == 3, "Incorrect number of plans in the queue"
     assert not is_plan_running, "Plan is executed while it shouldn't"
 
-    assert subprocess.call(["qserver", "-c", "queue_get"]) == 0
-    assert subprocess.call(["qserver", "-c", "queue_item_remove"]) == 0
+    assert subprocess.call(["qserver", "queue", "get"]) == SUCCESS
+    assert subprocess.call(["qserver", "queue", "item", "remove"]) == SUCCESS
 
     n_plans, is_plan_running, _ = get_reduced_state_info()
     assert n_plans == 2, "Incorrect number of plans in the queue"
 
-    assert subprocess.call(["qserver", "-c", "environment_open"]) == 0
+    assert subprocess.call(["qserver", "environment", "open"]) == SUCCESS
     assert wait_for_condition(
         time=3, condition=condition_environment_created
     ), "Timeout while waiting for environment to be created"
 
-    assert subprocess.call(["qserver", "-c", "queue_start"]) == 0
+    assert subprocess.call(["qserver", "queue", "start"]) == SUCCESS
 
     assert wait_for_condition(
         time=60, condition=condition_queue_processing_finished
     ), "Timeout while waiting for process to finish"
 
     # Smoke test for 'history_get' and 'history_clear'
-    assert subprocess.call(["qserver", "-c", "history_get"]) == 0
-    assert subprocess.call(["qserver", "-c", "history_clear"]) == 0
+    assert subprocess.call(["qserver", "history", "get"]) == SUCCESS
+    assert subprocess.call(["qserver", "history", "clear"]) == SUCCESS
 
     # Queue is expected to be empty (processed). Load one more plan.
-    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan_3]) == 0
+    assert subprocess.call(["qserver", "queue", "add", "plan", plan_3]) == SUCCESS
 
     n_plans, is_plan_running, _ = get_reduced_state_info()
     assert n_plans == 1, "Incorrect number of plans in the queue"
 
-    assert subprocess.call(["qserver", "-c", "queue_start"]) == 0
+    assert subprocess.call(["qserver", "queue", "start"]) == SUCCESS
     ttime.sleep(1)
-    assert subprocess.call(["qserver", "-c", "re_pause", "-p", "immediate"]) == 0
+    assert subprocess.call(["qserver", "re", "pause", "immediate"]) == SUCCESS
     assert wait_for_condition(
         time=60, condition=condition_manager_paused
     ), "Timeout while waiting for manager to pause"
 
-    assert subprocess.call(["qserver", "-c", "re_resume"]) == 0
+    assert subprocess.call(["qserver", "re", "resume"]) == SUCCESS
     ttime.sleep(1)
-    assert subprocess.call(["qserver", "-c", "re_pause", "-p", "deferred"]) == 0
+    assert subprocess.call(["qserver", "re", "pause", "deferred"]) == SUCCESS
     assert wait_for_condition(
         time=60, condition=condition_manager_paused
     ), "Timeout while waiting for manager to pause"
 
-    assert subprocess.call(["qserver", "-c", "re_resume"]) == 0
+    assert subprocess.call(["qserver", "re", "resume"]) == SUCCESS
 
     assert wait_for_condition(
         time=60, condition=condition_queue_processing_finished
     ), "Timeout while waiting for process to finish"
 
-    subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan_1])
-    subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan_1])
+    assert subprocess.call(["qserver", "queue", "add", "plan", plan_1]) == SUCCESS
+    assert subprocess.call(["qserver", "queue", "add", "plan", plan_1]) == SUCCESS
 
     n_plans, is_plan_running, _ = get_reduced_state_info()
     assert n_plans == 2, "Incorrect number of plans in the queue"
 
-    assert subprocess.call(["qserver", "-c", "queue_start"]) == 0
+    assert subprocess.call(["qserver", "queue", "start"]) == SUCCESS
 
     assert wait_for_condition(
         time=60, condition=condition_queue_processing_finished
@@ -108,21 +117,21 @@ def test_qserver_cli_and_manager(re_manager):  # noqa: F811
     # Test 'killing' the manager during running plan. Load long plan and two short ones.
     #   The tests checks if execution of the queue is continued uninterrupted after
     #   the manager restart
-    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan_3]) == 0
-    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan_3]) == 0
-    assert subprocess.call(["qserver", "-c", "queue_item_add", "-p", plan_3]) == 0
+    assert subprocess.call(["qserver", "queue", "add", "plan", plan_3]) == SUCCESS
+    assert subprocess.call(["qserver", "queue", "add", "plan", plan_3]) == SUCCESS
+    assert subprocess.call(["qserver", "queue", "add", "plan", plan_3]) == SUCCESS
     n_plans, is_plan_running, _ = get_reduced_state_info()
     assert n_plans == 3, "Incorrect number of plans in the queue"
 
-    assert subprocess.call(["qserver", "-c", "queue_start"]) == 0
+    assert subprocess.call(["qserver", "queue", "start"]) == SUCCESS
     ttime.sleep(1)
-    assert subprocess.call(["qserver", "-c", "manager_kill"]) != 0
+    assert subprocess.call(["qserver", "manager", "kill", "test"]) != SUCCESS
     ttime.sleep(6)  # Don't request the condition to avoid timeout error TODO: wait for the server
     assert wait_for_condition(
         time=60, condition=condition_queue_processing_finished
     ), "Timeout while waiting for process to finish"
 
-    assert subprocess.call(["qserver", "-c", "environment_close"]) == 0
+    assert subprocess.call(["qserver", "environment", "close"]) == SUCCESS
     assert wait_for_condition(
         time=5, condition=condition_environment_closed
     ), "Timeout while waiting for environment to be closed"

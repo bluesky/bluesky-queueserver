@@ -409,21 +409,27 @@ def msg_queue_item(params):
     expected_p0 = "item"
     if params[0] != expected_p0:
         raise ValueError(f"Incorrect parameter value '{params[0]}'. Expected value: '{expected_p0}'")
-    if len(params) < 3:
+    if len(params) < 2:
         raise CommandParameterError(f"Item type and options are not specified '{command} {params[0]}'")
     p_item_type = params[1]
     if p_item_type not in ("get", "remove", "move"):
         raise_request_not_supported([command, params[0], params[1]])
     try:
         if p_item_type in ("get", "remove"):
-            addr_param_src, p_item = extract_source_address(params[2:])
-            # There should be no parameters left
-            check_number_of_parameters(p_item, 0, 0, params)
-            if not addr_param_src:
-                raise CommandParameterError(
-                    f"Source address could not be found: '{format_list_as_command(params)}'"
-                )
-            addr_param = addr_param_src
+            if len(params) >= 3:
+                addr_param_src, p_item = extract_source_address(params[2:])
+                # There should be no parameters left
+                check_number_of_parameters(p_item, 0, 0, params)
+                if not addr_param_src:
+                    raise CommandParameterError(
+                        f"Source address could not be found: '{format_list_as_command(params)}'"
+                    )
+
+                addr_param = addr_param_src
+            else:
+                # Default: operation with the element at the back of the queue.
+                #   We don't need to pass the item address explicitly.
+                addr_param = {}
 
         elif p_item_type == "move":
             addr_param_src, p_item = extract_source_address(params[2:])

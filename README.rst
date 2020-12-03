@@ -174,7 +174,7 @@ Push a new plan to the back of the queue::
 
   qserver queue add plan '{"name":"count", "args":[["det1", "det2"]]}'
   qserver queue add plan '{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
-  qserver queue add plan -p '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
+  qserver queue add plan '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
 
   http POST http://localhost:60610/queue/item/add plan:='{"name":"count", "args":[["det1", "det2"]]}'
   http POST http://localhost:60610/queue/item/add plan:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'

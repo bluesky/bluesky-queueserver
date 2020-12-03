@@ -295,7 +295,7 @@ def extract_destination_address(params):
             ...
 
     if pos is not None:
-        addr_param = {"pos_dest": pos}
+        addr_param = {"pos": pos}
     elif uid is not None:
         addr_param = {uid_key: uid}
     else:
@@ -359,6 +359,7 @@ def msg_queue_add(params):
         raise_request_not_supported([command, params[0], params[1]])
     try:
         addr_param, p_item = extract_destination_address(params[2:])
+        print(f"addr_param = {addr_param}  p_item = {p_item}")
         if p_item_type == "plan":
             check_number_of_parameters(p_item, 1, 1, params)
             try:
@@ -434,6 +435,7 @@ def msg_queue_item(params):
         elif p_item_type == "move":
             addr_param_src, p_item = extract_source_address(params[2:])
             addr_param_dest, p_item = extract_destination_address(p_item)
+
             # There should be no parameters left
             check_number_of_parameters(p_item, 0, 0, params)
             if not addr_param_src:
@@ -444,6 +446,12 @@ def msg_queue_item(params):
                 raise CommandParameterError(
                     f"Destination address could not be found: '{format_list_as_command(params)}'"
                 )
+
+            # Change the key from 'pos' to 'pos_dest'
+            pos_dest = addr_param_dest.pop("pos", None)
+            if pos_dest is not None:
+                addr_param_dest["pos_dest"] = pos_dest
+
             addr_param = addr_param_src
             addr_param.update(addr_param_dest)
 
@@ -724,12 +732,12 @@ def qserver():
             if not msg_err:
                 print(f"{current_time} - MESSAGE: {pprint.pformat(msg)}")
                 if isinstance(msg, dict) and ("success" in msg) and (msg["success"] is False):
-                    exit_code = QServerExitCodes.COMMUNICATION_ERROR
+                    exit_code = QServerExitCodes.REQUEST_FAILED
                 else:
                     exit_code = QServerExitCodes.SUCCESS
             else:
                 print(f"{current_time} - ERROR: {msg_err}")
-                exit_code = QServerExitCodes.REQUEST_FAILED
+                exit_code = QServerExitCodes.COMMUNICATION_ERROR
 
             if not monitoring_mode:
                 break

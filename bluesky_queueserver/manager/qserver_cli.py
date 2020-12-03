@@ -242,6 +242,36 @@ def _create_msg2(command, params=None):  ## Delete later
         raise ValueError(f"Command '{command}' is not supported.")
 
 
+def extract_source_address(params):
+    """
+    The function will raise 'IndexError' if there is insufficient number of parameters
+    """
+    n_used = 0
+
+    pos, uid, uid_key = None, None, None
+    if params[0] in ("front", "back"):
+        pos = params[0]
+        n_used = 1
+    else:
+        try:
+            pos = int(params[0])
+            n_used = 1
+        except Exception:
+            ...
+
+        if pos is None:
+            uid = params[0]
+            n_used = 1
+
+    if pos is not None:
+        addr_param = {"pos": pos}
+    elif uid is not None:
+        addr_param = {"uid": uid}
+    else:
+        addr_param = {}
+    return addr_param, params[n_used:]
+
+
 def extract_destination_address(params):
     """
     The function will raise 'IndexError' if there is insufficient number of parameters
@@ -265,7 +295,7 @@ def extract_destination_address(params):
             ...
 
     if pos is not None:
-        addr_param = {"pos": pos}
+        addr_param = {"pos_dest": pos}
     elif uid is not None:
         addr_param = {uid_key: uid}
     else:
@@ -344,7 +374,7 @@ def msg_queue_add(params):
                 raise CommandParameterError(f"Unsupported instruction type: {p_item[0]}")
             addr_param.update({"instruction": instruction})
         else:
-            # This verifies agains the bugs that could be introduced in the future.
+            # This indicates a bug in the program. It should not occur in normal operation.
             raise ValueError(f"Unknown item type: {p_item_type}")
     except IndexError as ex:
         raise CommandParameterError(f"The command '{params}' contain insufficient number of parameters")
@@ -364,7 +394,7 @@ def msg_queue_stop(params):
     Parameters
     ----------
     params : list
-        List of parameters of the command. The first element of the list is expected to be ``add`` keyword.
+        List of parameters of the command. The first element of the list is expected to be ``stop`` keyword.
 
     Returns
     -------
@@ -390,6 +420,73 @@ def msg_queue_stop(params):
             raise CommandParameterError(f"Unknown option '{params[1]}' in the command '{cmd}'")
 
     prms = {}
+    return method, prms
+
+
+def msg_queue_item(params):
+    """
+    Generate outgoing message for `queue item` command. The supported options are ``get``,
+    ``move`` and ``remove``.
+
+    Parameters
+    ----------
+    params : list
+        List of parameters of the command. The first element of the list is expected to be ``get`` keyword.
+
+    Returns
+    -------
+    str
+        Name of the method from RE Manager API
+    dict
+        Dictionary of the method parameters
+
+    """
+    command = "queue"
+    expected_p0 = "item"
+    if params[0] != expected_p0:
+        raise ValueError(f"Incorrect parameter value '{params[0]}'. Expected value: '{expected_p0}'")
+    if len(params) < 3:
+        raise CommandParameterError(f"Item type and options are not specified '{command} {params[0]}'")
+    p_item_type = params[1]
+    if p_item_type not in ("get", "remove", "move"):
+        raise_request_not_supported([command, params[0], params[1]])
+    try:
+        if p_item_type in ("get", "remove"):
+            addr_param_src, p_item = extract_source_address(params[2:])
+            # There should be no parameters left
+            check_number_of_parameters(p_item, 0, 0, params)
+            if not addr_param_src:
+                raise CommandParameterError(
+                    f"Source address could not be found: '{format_list_as_command(params)}'"
+                )
+            addr_param = addr_param_src
+
+        elif p_item_type == "move":
+            addr_param_src, p_item = extract_source_address(params[2:])
+            addr_param_dest, p_item = extract_destination_address(p_item)
+            # There should be no parameters left
+            check_number_of_parameters(p_item, 0, 0, params)
+            if not addr_param_src:
+                raise CommandParameterError(
+                    f"Source address could not be found: '{format_list_as_command(params)}'"
+                )
+            if not addr_param_dest:
+                raise CommandParameterError(
+                    f"Destination address could not be found: '{format_list_as_command(params)}'"
+                )
+            addr_param = addr_param_src
+            addr_param.update(addr_param_dest)
+
+        else:
+            # This indicates a bug in the program. It should not occur in normal operation.
+            raise ValueError(f"Unknown item type: {p_item_type}")
+
+    except IndexError as ex:
+        raise CommandParameterError(f"The command '{params}' contain insufficient number of parameters")
+
+    method = f"{command}_{params[0]}_{params[1]}"
+    prms = addr_param
+
     return method, prms
 
 
@@ -463,6 +560,9 @@ def create_msg(params):
 
             elif params[0] == "stop":
                 method, prms = msg_queue_stop(params)
+
+            elif params[0] == "item":
+                method, prms = msg_queue_item(params)
 
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")

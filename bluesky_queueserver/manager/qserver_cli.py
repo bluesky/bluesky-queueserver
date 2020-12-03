@@ -617,6 +617,31 @@ def create_msg(params):
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
 
+    elif command == "history":
+        if len(params) < 1:
+            raise CommandParameterError(f"Request '{command}' must include at least one parameter")
+        supported_params = ("get", "clear")
+        if params[0] in supported_params:
+            method, prms = f"{command}_{params[0]}", {}
+        else:
+            raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
+
+    elif command == "manager":
+        if len(params) < 1:
+            raise CommandParameterError(f"Request '{command}' must include at least one parameter")
+        if params[0] == "stop":
+            method = f"{command}_{params[0]}"
+            if len(params) == 1:
+                prms = {}
+            elif (len(params) == 3) and (params[1] == "safe") and (params[2] in ("on", "off")):
+                option = f"{params[1]}_{params[2]}"
+                prms = {"option": option}
+            else:
+                raise CommandParameterError(
+                    f"Unsupported number or combination of parameters: {format_list_as_command(params)}"
+                )
+        else:
+            raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
 
     else:
         raise CommandParameterError(f"Unrecognized command '{command}'")

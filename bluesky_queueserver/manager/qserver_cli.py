@@ -640,6 +640,14 @@ def create_msg(params):
                 raise CommandParameterError(
                     f"Unsupported number or combination of parameters: {format_list_as_command(params)}"
                 )
+        elif params[0] == "kill":
+            if params == ["kill", "test"]:
+                method = f"{command}_{params[0]}"
+                prms = {}
+            else:
+                raise CommandParameterError(
+                    f"Unsupported number or combination of parameters: {format_list_as_command(params)}"
+                )
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
 

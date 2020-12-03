@@ -387,42 +387,6 @@ def msg_queue_add(params):
     return method, prms
 
 
-def msg_queue_stop(params):
-    """
-    Generate outgoing message for `queue stop` command.
-
-    Parameters
-    ----------
-    params : list
-        List of parameters of the command. The first element of the list is expected to be ``stop`` keyword.
-
-    Returns
-    -------
-    str
-        Name of the method from RE Manager API
-    dict
-        Dictionary of the method parameters
-
-    """
-    command = "queue"
-    expected_p0 = "stop"
-    if params[0] != expected_p0:
-        raise ValueError(f"Incorrect parameter value '{params[0]}'. Expected value: '{expected_p0}'")
-
-    check_number_of_parameters(params, 1, 2, params)
-
-    method = f"{command}_{params[0]}"
-    if len(params) == 2:
-        if params[1] == "cancel":
-            method = f"{command}_{params[0]}_{params[1]}"
-        else:
-            cmd = format_list_as_command([command] + params)
-            raise CommandParameterError(f"Unknown option '{params[1]}' in the command '{cmd}'")
-
-    prms = {}
-    return method, prms
-
-
 def msg_queue_item(params):
     """
     Generate outgoing message for `queue item` command. The supported options are ``get``,
@@ -486,6 +450,80 @@ def msg_queue_item(params):
 
     method = f"{command}_{params[0]}_{params[1]}"
     prms = addr_param
+
+    return method, prms
+
+
+def msg_queue_stop(params):
+    """
+    Generate outgoing message for `queue stop` command.
+
+    Parameters
+    ----------
+    params : list
+        List of parameters of the command. The first element of the list is expected to be ``stop`` keyword.
+
+    Returns
+    -------
+    str
+        Name of the method from RE Manager API
+    dict
+        Dictionary of the method parameters
+
+    """
+    command = "queue"
+    expected_p0 = "stop"
+    if params[0] != expected_p0:
+        raise ValueError(f"Incorrect parameter value '{params[0]}'. Expected value: '{expected_p0}'")
+
+    check_number_of_parameters(params, 1, 2, params)
+
+    method = f"{command}_{params[0]}"
+    if len(params) == 2:
+        if params[1] == "cancel":
+            method = f"{command}_{params[0]}_{params[1]}"
+        else:
+            cmd = format_list_as_command([command] + params)
+            raise CommandParameterError(f"Unknown option '{params[1]}' in the command '{cmd}'")
+
+    prms = {}
+    return method, prms
+
+
+def msg_re_pause(params):
+    """
+    Generate outgoing message for `re pause` command.
+
+    Parameters
+    ----------
+    params : list
+        List of parameters of the command. The first element of the list is expected to be ``pause`` keyword.
+
+    Returns
+    -------
+    str
+        Name of the method from RE Manager API
+    dict
+        Dictionary of the method parameters
+
+    """
+    command = "re"
+    expected_p0 = "pause"
+    if params[0] != expected_p0:
+        raise ValueError(f"Incorrect parameter value '{params[0]}'. Expected value: '{expected_p0}'")
+
+    check_number_of_parameters(params, 1, 2, params)
+
+    method = f"{command}_{params[0]}"
+    option = "deferred"
+    if len(params) == 2:
+        if params[1] in ("deferred", "immediate"):
+            option = params[1]
+        else:
+            cmd = format_list_as_command([command] + params)
+            raise CommandParameterError(f"Unknown option '{params[1]}' in the command '{cmd}'")
+
+    prms = {"option": option}
 
     return method, prms
 
@@ -566,6 +604,19 @@ def create_msg(params):
 
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
+
+    elif command == "re":
+        if len(params) < 1:
+            raise CommandParameterError(f"Request '{command}' must include at least one parameter")
+        supported_params = ("pause", "resume", "stop", "abort", "halt")
+        if params[0] in supported_params:
+            if params[0] == "pause":
+                method, prms = msg_re_pause(params)
+            else:
+                method, prms = f"{command}_{params[0]}", {}
+        else:
+            raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
+
 
     else:
         raise CommandParameterError(f"Unrecognized command '{command}'")

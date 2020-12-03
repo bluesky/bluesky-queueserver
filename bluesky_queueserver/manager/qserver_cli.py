@@ -2,7 +2,6 @@ import ast
 import time as ttime
 from datetime import datetime
 import pprint
-import sys
 import argparse
 import enum
 
@@ -59,7 +58,7 @@ qserver queue add plan before '<uid>' '<plan-params>'  # Insert the plan before 
 qserver queue add plan after '<uid>' '<plan-params>'   # Insert the plan after the plan with given UID
 NOTE: Position indexes are 0-based. Inserting a plan to position 0 pushes it to the font of the queue.
       Negative position indexes are counted from the back of the queue. Request for a plan with index -1
-      returns the last plan of the queue. Inserting a plan at position -1 makes it previous to last. 
+      returns the last plan of the queue. Inserting a plan at position -1 makes it previous to last.
 
 Example of JSON specification of a plan:
     '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
@@ -100,7 +99,7 @@ qserver re pause deferred  # Request to PAUSE currently executed plan at the nex
 qserver re pause immediate # Request to immediately PAUSE currently executed plan
 qserver re resume          # RESUME execution of a paused plan
 qserver re stop            # STOP execution of a paused plan
-qserver re abort           # ABORT execution of a paused plan 
+qserver re abort           # ABORT execution of a paused plan
 qserver re halt            # HALT execution of a paused plan
 
 qserver history get        # Request plan history
@@ -117,129 +116,129 @@ qserver manager kill test  # Kills RE Manager by stopping asyncio event loop. Us
 """
 
 
-def get_supported_commands():
-    """
-    Get the dictionary that maps command names supported by the cli tool to
-    the command names in RE Manager API.
-
-    Returns
-    -------
-    dict(str, str)
-        Dictionary that maps supported commands to commands from RE Manager API.
-    """
-    command_dict = {
-        "ping": "",
-        "status": "status",
-        "plans_allowed": "plans_allowed",
-        "devices_allowed": "devices_allowed",
-        "history_get": "history_get",
-        "history_clear": "history_clear",
-        "environment_open": "environment_open",
-        "environment_close": "environment_close",
-        "environment_destroy": "environment_destroy",
-        "queue_get": "queue_get",
-        "queue_item_add": "queue_item_add",
-        "queue_item_get": "queue_item_get",
-        "queue_item_remove": "queue_item_remove",
-        "queue_item_move": "queue_item_move",
-        "queue_clear": "queue_clear",
-        "queue_start": "queue_start",
-        "queue_stop": "queue_stop",
-        "queue_stop_cancel": "queue_stop_cancel",
-        "re_pause": "re_pause",
-        "re_resume": "re_resume",
-        "re_stop": "re_stop",
-        "re_abort": "re_abort",
-        "re_halt": "re_halt",
-        "manager_stop": "manager_stop",
-        "manager_kill": "manager_kill",
-    }
-    return command_dict
-
-
-def _create_msg2(command, params=None):  ## Delete later
-    # This function may transform human-friendly command names to API names
-    params = params or []
-
-    def _pos_or_uid(v):
-        if isinstance(v, int) or v in ("front", "back"):
-            prms = {"pos": v}
-        elif isinstance(v, str):
-            prms = {"uid": v}
-        else:
-            raise ValueError(f"Parameter must be an integer or a string: give {v} ({type(v)})")
-        return prms
-
-    command_dict = get_supported_commands()
-    try:
-        command = command_dict[command]
-        # Present value in the proper format. This will change as the format is changed.
-        if command == "queue_item_add":
-            if (len(params) == 1) and isinstance(params[0], dict):
-                # Arguments: <plan>
-                prms = {"plan": params[0]}  # Value is dict
-            elif len(params) == 2:
-                # The order of arguments: <pos> <plan>
-                if isinstance(params[0], (int, str)) and isinstance(params[1], dict):
-                    prms = {"pos": params[0], "plan": params[1]}
-                else:
-                    raise ValueError(f"Invalid set of method arguments: '{pprint.pformat(params)}'")
-            elif len(params) == 3:
-                # The order of arguments: [before_uid, after_uid], <uid>, <plan>
-                kwds = {"before_uid", "after_uid"}
-                if (params[0] in kwds) and isinstance(params[1], str) and isinstance(params[2], dict):
-                    prms = {params[0]: params[1], "plan": params[2]}
-                else:
-                    raise ValueError(
-                        f"Invalid set of method arguments: '{pprint.pformat(params)}'",
-                    )
-            else:
-                raise ValueError(f"Invalid number of method arguments: '{pprint.pformat(params)}'")
-            prms["user"] = "qserver-cli"
-            prms["user_group"] = "root"
-
-        elif command in ("queue_item_remove", "queue_item_get"):
-            if len(params) == 0:
-                prms = {}
-            elif len(params) == 1:
-                prms = _pos_or_uid(params[0])
-            else:
-                raise ValueError(f"Invalid number of method arguments: '{pprint.pformat(params)}'")
-
-        elif command == "queue_item_move":
-            if len(params) == 2:
-                # Argument order: [<pos_source>, <uid_source>] <pos_dest>
-                prms = _pos_or_uid(params[0])
-                prms.update({"pos_dest": params[1]})
-
-            elif len(params) == 3:
-                # Argument order: [<pos_source>, <uid_source>] ["before", "after"] <uid_dest>
-                prms = _pos_or_uid(params[0])
-                if params[1] in ("before", "after") and isinstance(params[2], str):
-                    if params[1] == "before":
-                        prms.update({"before_uid": params[2]})
-                    else:
-                        prms.update({"after_uid": params[2]})
-                else:
-                    raise ValueError(
-                        f"Invalid set of method arguments: '{pprint.pformat(params)}'",
-                    )
-            else:
-                raise ValueError(f"Invalid number of method arguments: '{pprint.pformat(params)}'")
-
-        elif command in ("plans_allowed", "devices_allowed"):
-            prms = {"user_group": "root"}
-
-        else:
-            if 0 <= len(params) <= 1:
-                prms = {"option": params[0]} if len(params) else {}  # Value is str
-            else:
-                raise ValueError(f"Invalid number of method arguments: '{pprint.pformat(params)}'")
-
-        return command, prms
-
-    except KeyError:
-        raise ValueError(f"Command '{command}' is not supported.")
+# def get_supported_commands():
+#     """
+#     Get the dictionary that maps command names supported by the cli tool to
+#     the command names in RE Manager API.
+#
+#     Returns
+#     -------
+#     dict(str, str)
+#         Dictionary that maps supported commands to commands from RE Manager API.
+#     """
+#     command_dict = {
+#         "ping": "",
+#         "status": "status",
+#         "plans_allowed": "plans_allowed",
+#         "devices_allowed": "devices_allowed",
+#         "history_get": "history_get",
+#         "history_clear": "history_clear",
+#         "environment_open": "environment_open",
+#         "environment_close": "environment_close",
+#         "environment_destroy": "environment_destroy",
+#         "queue_get": "queue_get",
+#         "queue_item_add": "queue_item_add",
+#         "queue_item_get": "queue_item_get",
+#         "queue_item_remove": "queue_item_remove",
+#         "queue_item_move": "queue_item_move",
+#         "queue_clear": "queue_clear",
+#         "queue_start": "queue_start",
+#         "queue_stop": "queue_stop",
+#         "queue_stop_cancel": "queue_stop_cancel",
+#         "re_pause": "re_pause",
+#         "re_resume": "re_resume",
+#         "re_stop": "re_stop",
+#         "re_abort": "re_abort",
+#         "re_halt": "re_halt",
+#         "manager_stop": "manager_stop",
+#         "manager_kill": "manager_kill",
+#     }
+#     return command_dict
+#
+#
+# def _create_msg2(command, params=None):  ## Delete later
+#     # This function may transform human-friendly command names to API names
+#     params = params or []
+#
+#     def _pos_or_uid(v):
+#         if isinstance(v, int) or v in ("front", "back"):
+#             prms = {"pos": v}
+#         elif isinstance(v, str):
+#             prms = {"uid": v}
+#         else:
+#             raise ValueError(f"Parameter must be an integer or a string: give {v} ({type(v)})")
+#         return prms
+#
+#     command_dict = get_supported_commands()
+#     try:
+#         command = command_dict[command]
+#         # Present value in the proper format. This will change as the format is changed.
+#         if command == "queue_item_add":
+#             if (len(params) == 1) and isinstance(params[0], dict):
+#                 # Arguments: <plan>
+#                 prms = {"plan": params[0]}  # Value is dict
+#             elif len(params) == 2:
+#                 # The order of arguments: <pos> <plan>
+#                 if isinstance(params[0], (int, str)) and isinstance(params[1], dict):
+#                     prms = {"pos": params[0], "plan": params[1]}
+#                 else:
+#                     raise ValueError(f"Invalid set of method arguments: '{pprint.pformat(params)}'")
+#             elif len(params) == 3:
+#                 # The order of arguments: [before_uid, after_uid], <uid>, <plan>
+#                 kwds = {"before_uid", "after_uid"}
+#                 if (params[0] in kwds) and isinstance(params[1], str) and isinstance(params[2], dict):
+#                     prms = {params[0]: params[1], "plan": params[2]}
+#                 else:
+#                     raise ValueError(
+#                         f"Invalid set of method arguments: '{pprint.pformat(params)}'",
+#                     )
+#             else:
+#                 raise ValueError(f"Invalid number of method arguments: '{pprint.pformat(params)}'")
+#             prms["user"] = "qserver-cli"
+#             prms["user_group"] = "root"
+#
+#         elif command in ("queue_item_remove", "queue_item_get"):
+#             if len(params) == 0:
+#                 prms = {}
+#             elif len(params) == 1:
+#                 prms = _pos_or_uid(params[0])
+#             else:
+#                 raise ValueError(f"Invalid number of method arguments: '{pprint.pformat(params)}'")
+#
+#         elif command == "queue_item_move":
+#             if len(params) == 2:
+#                 # Argument order: [<pos_source>, <uid_source>] <pos_dest>
+#                 prms = _pos_or_uid(params[0])
+#                 prms.update({"pos_dest": params[1]})
+#
+#             elif len(params) == 3:
+#                 # Argument order: [<pos_source>, <uid_source>] ["before", "after"] <uid_dest>
+#                 prms = _pos_or_uid(params[0])
+#                 if params[1] in ("before", "after") and isinstance(params[2], str):
+#                     if params[1] == "before":
+#                         prms.update({"before_uid": params[2]})
+#                     else:
+#                         prms.update({"after_uid": params[2]})
+#                 else:
+#                     raise ValueError(
+#                         f"Invalid set of method arguments: '{pprint.pformat(params)}'",
+#                     )
+#             else:
+#                 raise ValueError(f"Invalid number of method arguments: '{pprint.pformat(params)}'")
+#
+#         elif command in ("plans_allowed", "devices_allowed"):
+#             prms = {"user_group": "root"}
+#
+#         else:
+#             if 0 <= len(params) <= 1:
+#                 prms = {"option": params[0]} if len(params) else {}  # Value is str
+#             else:
+#                 raise ValueError(f"Invalid number of method arguments: '{pprint.pformat(params)}'")
+#
+#         return command, prms
+#
+#     except KeyError:
+#         raise ValueError(f"Command '{command}' is not supported.")
 
 
 def extract_source_address(params):
@@ -248,7 +247,7 @@ def extract_source_address(params):
     """
     n_used = 0
 
-    pos, uid, uid_key = None, None, None
+    pos, uid = None, None
     if params[0] in ("front", "back"):
         pos = params[0]
         n_used = 1
@@ -315,14 +314,14 @@ def raise_request_not_supported(params):
 def check_number_of_parameters(params, n_min, n_max, params_report=None):
     s = format_list_as_command(params_report) if params_report is not None else None
     if len(params) < n_min:
-        err_msg = f"Some parameters are missing in request"
+        err_msg = "Some parameters are missing in request"
         if params_report is not None:
             err_msg += f" '{s}'"
         if params_report == params:
             err_msg += f": Minimum number of parameters: {n_min}"
         raise CommandParameterError(err_msg)
     if len(params) > n_max:
-        err_msg = f"Request"
+        err_msg = "Request"
         if params_report is not None:
             err_msg += f" '{s}'"
         err_msg += " contains extra parameters"
@@ -359,7 +358,6 @@ def msg_queue_add(params):
         raise_request_not_supported([command, params[0], params[1]])
     try:
         addr_param, p_item = extract_destination_address(params[2:])
-        print(f"addr_param = {addr_param}  p_item = {p_item}")
         if p_item_type == "plan":
             check_number_of_parameters(p_item, 1, 1, params)
             try:
@@ -377,7 +375,7 @@ def msg_queue_add(params):
         else:
             # This indicates a bug in the program. It should not occur in normal operation.
             raise ValueError(f"Unknown item type: {p_item_type}")
-    except IndexError as ex:
+    except IndexError:
         raise CommandParameterError(f"The command '{params}' contain insufficient number of parameters")
 
     method = f"{command}_item_{params[0]}"
@@ -459,7 +457,7 @@ def msg_queue_item(params):
             # This indicates a bug in the program. It should not occur in normal operation.
             raise ValueError(f"Unknown item type: {p_item_type}")
 
-    except IndexError as ex:
+    except IndexError:
         raise CommandParameterError(f"The command '{params}' contain insufficient number of parameters")
 
     method = f"{command}_{params[0]}_{params[1]}"
@@ -744,7 +742,7 @@ def qserver():
             ttime.sleep(1)
 
     except CommandParameterError as ex:
-        logger.error(f"Invalid command or parameters: %s.", str(ex))
+        logger.error("Invalid command or parameters: %s.", str(ex))
         exit_code = QServerExitCodes.PARAMETER_ERROR
     except Exception as ex:
         logger.exception("Exception occurred: %s.", str(ex))

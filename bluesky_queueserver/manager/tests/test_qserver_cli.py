@@ -262,8 +262,6 @@ def test_qserver_re_pause_continue(re_manager, option_pause, option_continue):  
     """
     Test for `re_pause`, `re_resume`, `re_stop`, `re_abort` and `re_halt` commands
     """
-    ##re_continue = f"{option_continue}"
-
     assert wait_for_condition(
         time=3, condition=condition_manager_idle
     ), "Timeout while waiting for manager to initialize."
@@ -654,8 +652,8 @@ def test_queue_item_add_3(re_manager, before, target_pos, result_order):  # noqa
     assert len(queue_1) == 2
     uids_1 = [_["item_uid"] for _ in queue_1]
 
-    params = ["before_uid" if before else "after_uid", uids_1[target_pos], plan3]
-    assert subprocess.call(["qserver", "queue", "add", "plan",  *params]) == SUCCESS
+    params = ["before" if before else "after", uids_1[target_pos], plan3]
+    assert subprocess.call(["qserver", "queue", "add", "plan", *params]) == SUCCESS
 
     # Check if the element was inserted in the right plance
     queue_2 = get_queue()["queue"]

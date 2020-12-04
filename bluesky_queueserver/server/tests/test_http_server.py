@@ -199,7 +199,9 @@ def test_http_server_queue_item_add_handler_6_fail(re_manager, fastapi_server): 
     assert "Incorrect request format: request contains no item info." in resp1["msg"]
 
 
-def test_http_server_queue_item_get_remove_handler_1(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
+def test_http_server_queue_item_get_remove_handler_1(re_manager, fastapi_server):  # noqa F811
+
+    add_plans_to_queue()
 
     resp1 = _request_to_json("get", "/queue/get")
     assert resp1["queue"] != []
@@ -455,7 +457,10 @@ def test_http_server_close_environment_handler(re_manager, fastapi_server):  # n
     assert resp3 == {"success": False, "msg": "RE Worker environment does not exist."}
 
 
-def test_http_server_queue_start_handler(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
+def test_http_server_queue_start_handler(re_manager, fastapi_server):  # noqa F811
+
+    add_plans_to_queue()
+
     resp1 = _request_to_json("post", "/queue/start")
     assert resp1 == {"success": False, "msg": "RE Worker environment does not exist."}
 
@@ -532,7 +537,10 @@ def test_http_server_re_pause_continue_handlers(
     assert resp4a["running_plan"] == {}
 
 
-def test_http_server_close_print_db_uids_handler(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
+def test_http_server_close_print_db_uids_handler(re_manager, fastapi_server):  # noqa F811
+
+    add_plans_to_queue()
+
     resp1 = _request_to_json("post", "/environment/open")
     assert resp1 == {"success": True, "msg": ""}
 
@@ -548,7 +556,10 @@ def test_http_server_close_print_db_uids_handler(re_manager, fastapi_server, add
     assert resp2a["running_plan"] == {}
 
 
-def test_http_server_clear_queue_handler(re_manager, fastapi_server, add_plans_to_queue):  # noqa F811
+def test_http_server_clear_queue_handler(re_manager, fastapi_server):  # noqa F811
+
+    add_plans_to_queue()
+
     resp1 = _request_to_json("get", "/queue/get")
     assert len(resp1["queue"]) == 3
 
@@ -621,7 +632,9 @@ def test_http_server_clear_queue_handler_1(re_manager, fastapi_server, option): 
 # fmt: off
 @pytest.mark.parametrize("option", [None, "safe_on", "safe_off"])
 # fmt: on
-def test_http_server_clear_queue_handler_2(re_manager, fastapi_server, add_plans_to_queue, option):  # noqa F811
+def test_http_server_clear_queue_handler_2(re_manager, fastapi_server, option):  # noqa F811
+
+    add_plans_to_queue()
 
     _request_to_json("post", "/environment/open")
     assert wait_for_environment_to_be_created(10), "Timeout"
@@ -660,10 +673,12 @@ def test_http_server_clear_queue_handler_2(re_manager, fastapi_server, add_plans
 # fmt: off
 @pytest.mark.parametrize("deactivate", [False, True])
 # fmt: on
-def test_http_server_queue_stop(re_manager, fastapi_server, add_plans_to_queue, deactivate):  # noqa F811
+def test_http_server_queue_stop(re_manager, fastapi_server, deactivate):  # noqa F811
     """
     Methods ``queue_stop_activate`` and ``queue_stop_deactivate``.
     """
+    add_plans_to_queue()
+
     _request_to_json("post", "/environment/open")
     assert wait_for_environment_to_be_created(10), "Timeout"
 

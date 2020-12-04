@@ -118,7 +118,30 @@ qserver manager kill test  # Kills RE Manager by stopping asyncio event loop. Us
 
 def extract_source_address(params):
     """
-    The function will raise 'IndexError' if there is insufficient number of parameters
+    Extract 'source' item address (index or UID) from the list of parameters. Returns
+    the list of remaining parameters. The source address is represented by 1 parameter:
+    keywords ``front`` ``back`` or integer number represent a positional address (index),
+    any other string is interpreted as UID.
+
+    Parameters
+    ----------
+    params : list(str)
+         List of parameters. The first parameter is interpreted as a source address.
+
+    Returns
+    -------
+    dict
+        Dictionary that contains source address. Elements: ``pos`` - positional address
+        (value is int or a string from the set ``front``, ``back``), ``uid`` - uid of
+        the item (value is a string representing UID). Empty dictionary if no address
+        is found.
+    list(str)
+        List of the remaining parameters
+
+    Raises
+    ------
+    IndexError
+        Insufficient number of parameters are provided (less than 1)
     """
     n_used = 0
 
@@ -148,7 +171,34 @@ def extract_source_address(params):
 
 def extract_destination_address(params):
     """
-    The function will raise 'IndexError' if there is insufficient number of parameters
+    Extract 'destination' item address (index or UID) from the list of parameters. Returns
+    the list of remaining parameters. The source address is represented by 1 or 2 parameters:
+    if 1st parameter is a keywords ``front`` ``back`` or integer number, then the parameter
+    represents a positional address (index); if the 1st parameter is a keyword ``before`` or
+    ``after``, the 2nd parameter is considered to represent item UID (string). If the 1st
+    parameter can not be converted to ``int`` or equal to one of the keywords, it is considered
+    that the address is not found
+
+    Parameters
+    ----------
+    params : list(str)
+         List of parameters. The 1st and optionally 2nd parameter are interpreted as a destination
+         address.
+
+    Returns
+    -------
+    dict
+        Dictionary that contains destination address. Elements: ``pos`` - positional address
+        (value is int or a string from the set ``front``, ``back``), ``before_uid`` or ``after_uid``
+        - uid of the item preceding or following the destination for the item in the queue (value
+        is a string representing UID).  Empty dictionary if no address is found.
+    list(str)
+        List of the remaining parameters.
+
+    Raises
+    ------
+    IndexError
+        Insufficient number of parameters are provided.
     """
     n_used = 0
 
@@ -178,15 +228,61 @@ def extract_destination_address(params):
 
 
 def format_list_as_command(params):
+    """
+    Format list of items as a string. Restores the look of the parameters as they appear in command
+    line. Used for printing error messages.
+
+    Parameters
+    ----------
+    params : list
+        List of parameters to print
+
+    Returns
+    -------
+    str
+        Representation of the list as a formatted string
+    """
     return " ".join([str(_) for _ in params])
 
 
 def raise_request_not_supported(params):
+    """
+    Raises ``CommandParameterError`` exception with ``request is not supported`` message.
+
+    Parameters
+    ----------
+    params : list
+        List of parameters that represent the request. The request will be included in the error
+        message
+
+    Raises
+    ------
+    CommandParameterError
+    """
     s = format_list_as_command(params)
     raise CommandParameterError(f"Request '{s}' is not supported")
 
 
 def check_number_of_parameters(params, n_min, n_max, params_report=None):
+    """
+    Checks if the number of parameters in ``params`` list is in the range ``[n_min, n_max]``.
+    Raises exception if the number of parameters is less than ``n_min`` or more than ``n_max``.
+
+    Parameters
+    ----------
+    params : list
+        The list of parameters. If the number of parameters in the list is outside the
+        range ``[n_min, n_max]``, then ``CommandParameterError`` exception is raised.
+    n_min, n_max : int
+        The range for the number of parameters in ``params`` list.
+    params_report : list
+        The list of parameters that is included in the error message. If the value is
+        ``None``, then parameters are not included in the error message.
+
+    Raises
+    ------
+    CommandParameterError
+    """
     s = format_list_as_command(params_report) if params_report is not None else None
     if len(params) < n_min:
         err_msg = "Some parameters are missing in request"
@@ -207,7 +303,8 @@ def check_number_of_parameters(params, n_min, n_max, params_report=None):
 
 def msg_queue_add(params):
     """
-    Generate outgoing message for `queue add` command.
+    Generate outgoing message for `queue add` command. See ``cli_examples`` for supported formats
+    for the command.
 
     Parameters
     ----------
@@ -221,37 +318,48 @@ def msg_queue_add(params):
     dict
         Dictionary of the method parameters
 
+    Raises
+    ------
+    CommandParameterError
     """
+    # Check if the function was called for the appropriate command
     command = "queue"
     expected_p0 = "add"
     if params[0] != expected_p0:
         raise ValueError(f"Incorrect parameter value '{params[0]}'. Expected value: '{expected_p0}'")
+
+    # Make sure that there are sufficient number of parameters to start processing
     if len(params) < 3:
         raise CommandParameterError(f"Item type and value are not specified '{command} {params[0]}'")
+
     p_item_type = params[1]
     if p_item_type not in ("plan", "instruction"):
         raise_request_not_supported([command, params[0], params[1]])
     try:
+        # Destination address is optional. If no destination index or UID found, then
+        #   'addr_param' is {}.
         addr_param, p_item = extract_destination_address(params[2:])
+        # There should be exactly 1 parameter left. This parameter should contain a plan
+        #   or an instruction.
+        check_number_of_parameters(p_item, 1, 1, params)
         if p_item_type == "plan":
-            check_number_of_parameters(p_item, 1, 1, params)
             try:
+                # Convert quoted string to dictionary.
                 plan = ast.literal_eval(p_item[0])
             except Exception:
                 raise CommandParameterError(f"Error occurred while parsing the plan '{p_item[0]}'")
             addr_param.update({"plan": plan})
         elif p_item_type == "instruction":
             if p_item[0] == "queue-stop":
-                check_number_of_parameters(p_item, 1, 1, params)
                 instruction = {"action": "queue_stop"}
             else:
                 raise CommandParameterError(f"Unsupported instruction type: {p_item[0]}")
             addr_param.update({"instruction": instruction})
         else:
-            # This indicates a bug in the program. It should not occur in normal operation.
+            # This indicates a bug in the program.
             raise ValueError(f"Unknown item type: {p_item_type}")
     except IndexError:
-        raise CommandParameterError(f"The command '{params}' contain insufficient number of parameters")
+        raise CommandParameterError(f"The command '{params}' contains insufficient number of parameters")
 
     method = f"{command}_item_{params[0]}"
     prms = addr_param
@@ -279,12 +387,16 @@ def msg_queue_item(params):
         Dictionary of the method parameters
 
     """
+    # Check if the function was called for the appropriate command
     command = "queue"
     expected_p0 = "item"
     if params[0] != expected_p0:
         raise ValueError(f"Incorrect parameter value '{params[0]}'. Expected value: '{expected_p0}'")
+
+    # Make sure that there are sufficient number of parameters to start processing
     if len(params) < 2:
         raise CommandParameterError(f"Item type and options are not specified '{command} {params[0]}'")
+
     p_item_type = params[1]
     if p_item_type not in ("get", "remove", "move"):
         raise_request_not_supported([command, params[0], params[1]])
@@ -313,14 +425,14 @@ def msg_queue_item(params):
             check_number_of_parameters(p_item, 0, 0, params)
             if not addr_param_src:
                 raise CommandParameterError(
-                    f"Source address could not be found: '{format_list_as_command(params)}'"
+                    f"Source index or UID is not found: '{format_list_as_command(params)}'"
                 )
             if not addr_param_dest:
                 raise CommandParameterError(
-                    f"Destination address could not be found: '{format_list_as_command(params)}'"
+                    f"Destination aindex or UID is not found: '{format_list_as_command(params)}'"
                 )
 
-            # Change the key from 'pos' to 'pos_dest'
+            # Change the key from 'pos' to 'pos_dest' ('pos' is used for 'source' position)
             pos_dest = addr_param_dest.pop("pos", None)
             if pos_dest is not None:
                 addr_param_dest["pos_dest"] = pos_dest
@@ -329,7 +441,7 @@ def msg_queue_item(params):
             addr_param.update(addr_param_dest)
 
         else:
-            # This indicates a bug in the program. It should not occur in normal operation.
+            # This indicates a bug in the program.
             raise ValueError(f"Unknown item type: {p_item_type}")
 
     except IndexError:
@@ -358,6 +470,7 @@ def msg_queue_stop(params):
         Dictionary of the method parameters
 
     """
+    # Check if the function was called for the appropriate command
     command = "queue"
     expected_p0 = "stop"
     if params[0] != expected_p0:
@@ -394,6 +507,7 @@ def msg_re_pause(params):
         Dictionary of the method parameters
 
     """
+    # Check if the function was called for the appropriate command
     command = "re"
     expected_p0 = "pause"
     if params[0] != expected_p0:
@@ -416,6 +530,28 @@ def msg_re_pause(params):
 
 
 def create_msg(params):
+    """
+    Create outgoing message based on command-line arguments.
+
+    Parameters
+    ----------
+    params : list
+        List of parameters (positional arguments) supplied via command line.
+
+    Returns
+    -------
+    method : str
+        The name of the method.
+    prms : dict
+        The dictionary of method parameters.
+    monitoring_mode : bool
+        Indicates if monitoring mode is enabled.
+
+    Raises
+    ------
+    CommandParameterError
+        Failure to generate consistent outgoing message based on provided list of parameters.
+    """
     if not params:
         raise CommandParameterError("Command is not specified")
 
@@ -540,21 +676,6 @@ def create_msg(params):
 
     else:
         raise CommandParameterError(f"Unrecognized command '{command}'")
-
-    # Some string parameters may represent dictionaries. We need to convert it into dictionaries.
-    # for key in prms.keys():
-    #     if prms[key] is not None:
-    #         try:
-    #             prms[key] = ast.literal_eval(prms[key])
-    #         except Exception as ex:
-    #             # Failures to parse are OK (sometimes expected) unless the parameter is a dictionary.
-    #             # TODO: probably it's a good idea to check if it is a list. (Currently no parameters
-    #             #     accept lists.)
-    #             if ("{" in prms[key]) or ("}" in prms[key]):
-    #                 raise CommandParameterError(
-    #                     f"Failed to parse parameter string {prms[key]}: {str(ex)}. "
-    #                     f"The parameters must represent a valid Python dictionary"
-    #                 )
 
     return method, prms, monitoring_mode
 

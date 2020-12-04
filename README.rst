@@ -377,7 +377,7 @@ when the queue is running or a plan is paused::
 Manager can be also stopped at any time using unsafe stop, which causes current RE Worker to be
 destroyed even if a plan is running::
 
-  qserver manager_stop safe_off
+  qserver manager stop safe_off
   http POST http://localhost:60610/manager/stop option="safe_off"
 
 The 'test_manager_kill' request is designed specifically for testing ability of RE Watchdog

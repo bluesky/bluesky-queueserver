@@ -665,10 +665,29 @@ def test_queue_item_add_3(re_manager, before, target_pos, result_order):  # noqa
             assert False, f"uids_1: {uids_1}, uids_2: {uids_2}, result_order: {result_order}"
 
 
+def test_queue_item_add_4(re_manager):  # noqa F811
+    """
+    Add instruction to the queue
+    """
+    plan1 = "{'name':'count', 'args':[['det1']]}"
+    plan2 = "{'name':'count', 'args':[['det1', 'det2']]}"
+    instruction = "queue-stop"
+
+    assert subprocess.call(["qserver", "queue", "add", "plan", plan1]) == SUCCESS
+    assert subprocess.call(["qserver", "queue", "add", "instruction", instruction]) == SUCCESS
+    assert subprocess.call(["qserver", "queue", "add", "plan", plan2]) == SUCCESS
+
+    queue_1 = get_queue()["queue"]
+    assert len(queue_1) == 3
+    assert queue_1[0]["item_type"] == "plan", str(queue_1[0])
+    assert queue_1[1]["item_type"] == "instruction", str(queue_1[1])
+    assert queue_1[2]["item_type"] == "plan", str(queue_1[2])
+
+
 # fmt: off
 @pytest.mark.parametrize("pos", [None, "back"])
 # fmt: on
-def test_queue_item_add_4_fail(re_manager, pos):  # noqa F811
+def test_queue_item_add_5_fail(re_manager, pos):  # noqa F811
     """
     No plan is supplied.
     """
@@ -684,7 +703,7 @@ def test_queue_item_add_4_fail(re_manager, pos):  # noqa F811
 # fmt: off
 @pytest.mark.parametrize("pos", [10, "front", "back"])
 # fmt: on
-def test_queue_item_add_5_fail(re_manager, pos):  # noqa F811
+def test_queue_item_add_6_fail(re_manager, pos):  # noqa F811
     """
     Incorrect order of arguments (position is specified).
     """
@@ -708,7 +727,7 @@ def test_queue_item_add_5_fail(re_manager, pos):  # noqa F811
     (["some_uid", "plan", "before_uid"], PARAM_ERROR),
 ])
 # fmt: on
-def test_queue_item_add_6_fail(re_manager, params, exit_code):  # noqa F811
+def test_queue_item_add_7_fail(re_manager, params, exit_code):  # noqa F811
     """
     Incorrect order of arguments (position is specified).
     """

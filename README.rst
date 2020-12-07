@@ -183,7 +183,7 @@ Push a new plan to the back of the queue::
 It takes 10 second to execute the third plan in the group above, so it is may be the most convenient for testing
 pausing/resuming/stopping of experimental plans.
 
-API for queue operations are designed work identically with items of all types. For example, a 'queue_stop`
+API for queue operations is designed to work identically with items of all types. For example, a 'queue_stop`
 instruction can be added to the queue `queue_item_add` API::
 
   qserver queue add instruction queue-stop
@@ -277,7 +277,7 @@ Items can be read from the queue without changing it. `queue_item_get` requests 
 
 Items can be moved within the queue. Items can be addressed by position or UID. If positional addressing
 is used then items are moved from 'source' position to 'destination' position.
-If items are addressed by UID, then the item with <uid_source> in inserted before or after
+If items are addressed by UID, then the item with <uid_source> is inserted before or after
 the item with <uid_dest>::
 
   qserver queue item move 3 5

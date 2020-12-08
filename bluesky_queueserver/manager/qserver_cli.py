@@ -141,7 +141,7 @@ def extract_source_address(params):
     Raises
     ------
     IndexError
-        Insufficient number of parameters are provided (less than 1)
+        Insufficient number of parameters is provided (less than 1)
     """
     n_used = 0
 

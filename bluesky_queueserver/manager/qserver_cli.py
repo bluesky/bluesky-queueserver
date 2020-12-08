@@ -198,7 +198,7 @@ def extract_destination_address(params):
     Raises
     ------
     IndexError
-        Insufficient number of parameters are provided.
+        Insufficient number of parameters is provided.
     """
     n_used = 0
 

@@ -93,7 +93,7 @@ qserver queue start        # Start execution of the queue
 qserver queue stop         # Request execition of the queue to stop after current plan
 qserver queue stop cancel  # Cancel request to stop execution of the queue
 
-# The following requests are forwarded to the Run Engine
+# The following requests are forwarded to the Run Engine:
 qserver re pause           # Request to PAUSE currently executed plan at the next checkpoint
 qserver re pause deferred  # Request to PAUSE currently executed plan at the next checkpoint
 qserver re pause immediate # Request to immediately PAUSE currently executed plan

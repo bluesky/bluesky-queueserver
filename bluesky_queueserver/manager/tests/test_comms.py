@@ -4,11 +4,15 @@ import json
 import multiprocessing
 import threading
 import asyncio
+import zmq
+
 from bluesky_queueserver.manager.comms import (
     PipeJsonRpcReceive,
     PipeJsonRpcSendAsync,
     CommTimeoutError,
     CommJsonRpcError,
+    ZMQCommSendThreads,
+    ZMQCommSendAsync,
 )
 from bluesky_queueserver.tests.common import format_jsonrpc_msg
 
@@ -617,3 +621,425 @@ def test_PipeJsonRpcSendAsync_7_fail():
 
     asyncio.run(send_messages())
     pc.stop()
+
+
+# =======================================================================
+#                       Class ZMQCommSendThreads
+
+
+def _zmq_server_1msg():
+    # ZMQ server that provides single response
+    ctx = zmq.Context()
+    zmq_socket = ctx.socket(zmq.REP)
+    zmq_socket.bind("tcp://*:5555")
+    msg_in = zmq_socket.recv_json()
+    msg_out = {"success": True, "some_data": 10, "msg_in": msg_in}
+    zmq_socket.send_json(msg_out)
+    zmq_socket.close(linger=10)
+
+
+# fmt: off
+@pytest.mark.parametrize("is_blocking", [True, False])
+# fmt: on
+def test_ZMQCommSendThreads_1(is_blocking):
+    """
+    Basic test of ZMQCommSendThreads class: single communication with the
+    server both in blocking and non-blocking mode.
+    """
+
+    thread = threading.Thread(target=_zmq_server_1msg)
+    thread.start()
+
+    zmq_comm = ZMQCommSendThreads()
+    method, params = "testing", {"p1": 10, "p2": "abc"}
+
+    msg_recv, msg_recv_err = {}, ""
+
+    if is_blocking:
+        msg_recv = zmq_comm.send_message(method=method, params=params)
+    else:
+        done = False
+
+        def cb(msg, msg_err):
+            nonlocal msg_recv, msg_recv_err, done
+            msg_recv = msg
+            msg_recv_err = msg_err
+            done = True
+
+        zmq_comm.send_message(method=method, params=params, cb=cb)
+        # Implement primitive polling of 'done' flag
+        while not done:
+            ttime.sleep(0.1)
+
+    assert msg_recv["success"] is True, str(msg_recv)
+    assert msg_recv["some_data"] == 10, str(msg_recv)
+    assert msg_recv["msg_in"] == {"method": method, "params": params}, str(msg_recv)
+    assert msg_recv_err == ""
+
+    thread.join()
+
+
+def _zmq_server_2msg():
+    # ZMQ server: provides ability to communicate twice
+    ctx = zmq.Context()
+    zmq_socket = ctx.socket(zmq.REP)
+    zmq_socket.bind("tcp://*:5555")
+    msg_in = zmq_socket.recv_json()
+    msg_out = {"success": True, "some_data": 10, "msg_in": msg_in}
+    zmq_socket.send_json(msg_out)
+    msg_in = zmq_socket.recv_json()
+    msg_out = {"success": True, "some_data": 20, "msg_in": msg_in}
+    zmq_socket.send_json(msg_out)
+    zmq_socket.close(linger=10)
+
+
+# fmt: off
+@pytest.mark.parametrize("is_blocking", [True, False])
+# fmt: on
+def test_ZMQCommSendThreads_2(is_blocking):
+    """
+    Basic test of ZMQCommSendThreads class: two consecutive communications with the
+    server both in blocking and non-blocking mode.
+    """
+
+    thread = threading.Thread(target=_zmq_server_2msg)
+    thread.start()
+
+    zmq_comm = ZMQCommSendThreads()
+    method, params = "testing", {"p1": 10, "p2": "abc"}
+
+    msg_recv, msg_recv_err = {}, ""
+
+    for val in (10, 20):
+        if is_blocking:
+            msg_recv = zmq_comm.send_message(method=method, params=params)
+        else:
+            done = False
+
+            def cb(msg, msg_err):
+                nonlocal msg_recv, msg_recv_err, done
+                msg_recv = msg
+                msg_recv_err = msg_err
+                done = True
+
+            zmq_comm.send_message(method=method, params=params, cb=cb)
+            # Implement primitive polling of 'done' flag
+            while not done:
+                ttime.sleep(0.1)
+
+        assert msg_recv["success"] is True, str(msg_recv)
+        assert msg_recv["some_data"] == val, str(msg_recv)
+        assert msg_recv["msg_in"] == {"method": method, "params": params}, str(msg_recv)
+        assert msg_recv_err == ""
+
+    thread.join()
+
+
+def _zmq_server_2msg_delay1():
+    # ZMQ server: provides ability to communicate twice
+    ctx = zmq.Context()
+    zmq_socket = ctx.socket(zmq.REP)
+    zmq_socket.bind("tcp://*:5555")
+    msg_in = zmq_socket.recv_json()
+    ttime.sleep(0.1)  # Delay before the 1st response
+    msg_out = {"success": True, "some_data": 10, "msg_in": msg_in}
+    zmq_socket.send_json(msg_out)
+    msg_in = zmq_socket.recv_json()
+    msg_out = {"success": True, "some_data": 20, "msg_in": msg_in}
+    zmq_socket.send_json(msg_out)
+    zmq_socket.close(linger=10)
+
+
+# fmt: off
+@pytest.mark.parametrize("is_blocking", [True, False])
+# fmt: on
+def test_ZMQCommSendThreads_3(is_blocking):
+    """
+    Testing protection of '_zmq_communicate` with lock. In this test the function
+    ``send_message` is called twice so that the second call is submitted before
+    the response to the first message is received. The server waits for 0.1 seconds
+    before responding to the 1st message to emulate delay in processing. Since
+    ``_zmq_communicate`` is protected by a lock, the second request will not
+    be sent until the first message is processed.
+    """
+
+    thread = threading.Thread(target=_zmq_server_2msg_delay1)
+    thread.start()
+
+    zmq_comm = ZMQCommSendThreads()
+    method, params = "testing", {"p1": 10, "p2": "abc"}
+
+    msg_recv, msg_recv_err = [], []
+    n_done = 0
+
+    def cb(msg, msg_err):
+        nonlocal msg_recv, msg_recv_err, n_done
+        msg_recv.append(msg)
+        msg_recv_err.append(msg_err)
+        n_done += 1
+
+    vals = (10, 20)
+
+    if is_blocking:
+        # In case of blocking call the lock can only be tested using threads
+        def thread_request():
+            nonlocal msg_recv, msg_recv_err, n_done
+            _ = zmq_comm.send_message(method=method, params=params)
+            msg_recv.append(_)
+            msg_recv_err.append("")
+            n_done += 1
+
+        th_request = threading.Thread(target=thread_request)
+        th_request.start()
+
+        # Call the same function in the main thread (send 2nd message to the server)
+        thread_request()
+
+        th_request.join()
+
+    else:
+        for n in range(len(vals)):
+            zmq_comm.send_message(method=method, params=params, cb=cb)
+
+    while n_done < 2:
+        ttime.sleep(0.1)
+
+    for n, val in enumerate(vals):
+        assert msg_recv[n]["success"] is True, str(msg_recv)
+        assert msg_recv[n]["some_data"] == val, str(msg_recv)
+        assert msg_recv[n]["msg_in"] == {"method": method, "params": params}, str(msg_recv)
+        assert msg_recv_err[n] == ""
+
+    thread.join()
+
+
+def _zmq_server_delay2():
+    # ZMQ server: provides ability to communicate twice
+    ctx = zmq.Context()
+    zmq_socket = ctx.socket(zmq.REP)
+    zmq_socket.bind("tcp://*:5555")
+    msg_in = zmq_socket.recv_json()
+    ttime.sleep(3)  # Generate timeout at the client
+    msg_out = {"success": True, "some_data": 10, "msg_in": msg_in}
+    zmq_socket.send_json(msg_out)
+    msg_in = zmq_socket.recv_json()
+    msg_out = {"success": True, "some_data": 20, "msg_in": msg_in}
+    zmq_socket.send_json(msg_out)
+    zmq_socket.close(linger=10)
+
+
+# fmt: off
+@pytest.mark.parametrize(
+    "is_blocking, raise_exception",
+    [(True, False),  # Repeated test are intentional
+     (True, False),
+     (True, None),
+     (True, True),
+     (False, False),
+     (False, False)]
+)
+@pytest.mark.parametrize("delay_between_reads", [2, 0.1])
+# fmt: on
+def test_ZMQCommSendThreads_4(is_blocking, raise_exception, delay_between_reads):
+    """
+    ZMQCommSendThreads: Timeout at the server.
+    """
+
+    thread = threading.Thread(target=_zmq_server_delay2)
+    thread.start()
+
+    zmq_comm = ZMQCommSendThreads()
+    method, params = "testing", {"p1": 10, "p2": "abc"}
+
+    msg_recv, msg_recv_err = {}, ""
+
+    for val in (10, 20):
+        if is_blocking:
+            if (raise_exception in (True, None)) and (val == 10):
+                # The case when timeout is expected for blocking operation
+                with pytest.raises(CommTimeoutError, match="timeout occurred"):
+                    zmq_comm.send_message(method=method, params=params, raise_exceptions=raise_exception)
+            else:
+                msg_recv = zmq_comm.send_message(method=method, params=params, raise_exceptions=raise_exception)
+        else:
+            done = False
+
+            def cb(msg, msg_err):
+                nonlocal msg_recv, msg_recv_err, done
+                msg_recv = msg
+                msg_recv_err = msg_err
+                done = True
+
+            zmq_comm.send_message(method=method, params=params, cb=cb, raise_exceptions=raise_exception)
+
+            # Implement primitive polling of 'done' flag
+            while not done:
+                ttime.sleep(0.1)
+
+        if val == 10:
+            if is_blocking:
+                if raise_exception not in (True, None):
+                    assert msg_recv["success"] is False, str(msg_recv)
+                    assert "timeout occurred" in msg_recv["msg"], str(msg_recv)
+            else:
+                assert msg_recv == {}
+                assert "timeout occurred" in msg_recv_err
+
+            # Delay between consecutive reads. Test cases when read is initiated before and
+            #   after the server restored operation and sent the response.
+            ttime.sleep(delay_between_reads)
+
+        else:
+            assert msg_recv["success"] is True, str(msg_recv)
+            assert msg_recv["some_data"] == val, str(msg_recv)
+            assert msg_recv["msg_in"] == {"method": method, "params": params}, str(msg_recv)
+            assert msg_recv_err == ""
+
+    thread.join()
+
+
+# =======================================================================
+#                       Class ZMQCommSendAsync
+
+
+def test_ZMQCommSendAsync_1():
+    """
+    Basic test of ZMQCommSendAsync class: send one message to the server and receive response.
+    """
+    thread = threading.Thread(target=_zmq_server_1msg)
+    thread.start()
+
+    async def testing():
+        zmq_comm = ZMQCommSendAsync()
+        method, params = "testing", {"p1": 10, "p2": "abc"}
+
+        msg_recv = await zmq_comm.send_message(method=method, params=params)
+
+        assert msg_recv["success"] is True, str(msg_recv)
+        assert msg_recv["some_data"] == 10, str(msg_recv)
+        assert msg_recv["msg_in"] == {"method": method, "params": params}, str(msg_recv)
+
+    asyncio.run(testing())
+
+    thread.join()
+
+
+def test_ZMQCommSendAsync_2():
+    """
+    Basic test of ZMQCommSendAsync class: two consecutive communications with the
+    server both in blocking and non-blocking mode.
+    """
+
+    thread = threading.Thread(target=_zmq_server_2msg)
+    thread.start()
+
+    async def testing():
+        zmq_comm = ZMQCommSendAsync()
+        method, params = "testing", {"p1": 10, "p2": "abc"}
+
+        for val in (10, 20):
+            msg_recv = await zmq_comm.send_message(method=method, params=params)
+
+            assert msg_recv["success"] is True, str(msg_recv)
+            assert msg_recv["some_data"] == val, str(msg_recv)
+            assert msg_recv["msg_in"] == {"method": method, "params": params}, str(msg_recv)
+
+    asyncio.run(testing())
+
+    thread.join()
+
+
+def test_ZMQCommSendAsync_3():
+    """
+    Testing protection of '_zmq_communicate` with lock. In this test the function
+    ``send_message` is called twice so that the second call is submitted before
+    the response to the first message is received. The server waits for 0.1 seconds
+    before responding to the 1st message to emulate delay in processing. Since
+    ``_zmq_communicate`` is protected by a lock, the second request will not
+    be sent until the first message is processed.
+    """
+
+    thread = threading.Thread(target=_zmq_server_2msg_delay1)
+    thread.start()
+
+    async def testing():
+
+        zmq_comm = ZMQCommSendAsync()
+        method, params = "testing", {"p1": 10, "p2": "abc"}
+
+        vals = (10, 20)
+
+        tasks = []
+        for n in range(len(vals)):
+            tsk = asyncio.ensure_future(zmq_comm.send_message(method=method, params=params))
+            tasks.append(tsk)
+
+        for tsk in tasks:
+            await tsk
+
+        for n, val in enumerate(vals):
+            res = tasks[n].result()
+            assert res["success"] is True, str(res)
+            assert res["some_data"] == val, str(res)
+            assert res["msg_in"] == {"method": method, "params": params}, str(res)
+
+    asyncio.run(testing())
+
+    thread.join()
+
+
+# fmt: off
+@pytest.mark.parametrize(
+    "raise_exception",
+    [False,  # Repeated tests are intentional
+     False,
+     None,
+     True,
+     False,
+     False]
+)
+@pytest.mark.parametrize("delay_between_reads", [2, 0.1])
+# fmt: on
+def test_ZMQCommSendAsync_4(raise_exception, delay_between_reads):
+    """
+    ZMQCommSendAsync: Timeout at the server.
+    """
+
+    thread = threading.Thread(target=_zmq_server_delay2)
+    thread.start()
+
+    async def testing():
+
+        zmq_comm = ZMQCommSendAsync()
+        method, params = "testing", {"p1": 10, "p2": "abc"}
+
+        msg_recv, msg_recv_err = {}, ""
+
+        for val in (10, 20):
+            if (raise_exception in (True, None)) and (val == 10):
+                # The case when timeout is expected for blocking operation
+                with pytest.raises(CommTimeoutError, match="Resource temporarily unavailable"):
+                    await zmq_comm.send_message(method=method, params=params, raise_exceptions=raise_exception)
+            else:
+                msg_recv = await zmq_comm.send_message(
+                    method=method, params=params, raise_exceptions=raise_exception
+                )
+
+            if val == 10:
+                if raise_exception not in (True, None):
+                    assert msg_recv["success"] is False, str(msg_recv)
+                    assert "Resource temporarily unavailable" in msg_recv["msg"], str(msg_recv)
+
+                # Delay between consecutive reads. Test cases when read is initiated before and
+                #   after the server restored operation and sent the response.
+                await asyncio.sleep(delay_between_reads)
+
+            else:
+                assert msg_recv["success"] is True, str(msg_recv)
+                assert msg_recv["some_data"] == val, str(msg_recv)
+                assert msg_recv["msg_in"] == {"method": method, "params": params}, str(msg_recv)
+                assert msg_recv_err == ""
+
+    asyncio.run(testing())
+
+    thread.join()

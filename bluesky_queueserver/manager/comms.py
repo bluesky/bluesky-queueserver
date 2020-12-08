@@ -442,11 +442,35 @@ class ZMQCommSendThreads:
     .. code-block: python
 
         zmq_comm = ZMQCommSendThreads()
+
+        # Blocking call
         try:
-            msg = await zmq_comm.send_message(method="some_method", params={"some_value": n})
+            msg = zmq_comm.send_message(method="some_method", params={"some_value": n})
             # Code that uses msg
         except CommTimeoutError as ex:
             logger.exception("Exception occurred: %s", str(ex)
+
+        # Non-blocking call (trivial example)
+        msg_received, msg_err_received = [], []
+
+        def cb(msg, msg_err):
+            # msg - dict of parameters ({} if communication failed,
+            # msg_err - string ("" if communication is successful)
+
+            # In QT application, 'cb' would typically send a signal. There should be
+            #   very limited amount of processing done in the callback, since it would
+            #   block ZMQ communication.
+
+            msg_received.append(msg)
+            msg_err_received.append(msg_err)
+
+        zmq_comm.send_message(method="some_method", params={"some_value": n}, cb=cb)
+
+        # Wait for the message.
+        while not msg_received:
+            time.sleep(0.01)
+
+        # Code to process received 'msg'
     """
 
     def __init__(
@@ -501,11 +525,9 @@ class ZMQCommSendThreads:
                         msg = self._zmq_socket.recv_json()
                     else:
                         # This is very likely a timeout (RE Manager is not responding)
-                        msg_err = "ZMQ timeout occurred"
+                        raise Exception("timeout occurred")
                 except Exception as ex:
-                    msg_err = f"Exception occurred: {str(ex)}"
-
-                if msg_err:
+                    msg_err = f"ZeroMQ communication failed: {str(ex)}"
                     self._zmq_error_occurred = True
 
                 if self._cb:
@@ -630,10 +652,9 @@ class ZMQCommSendThreads:
         Open ZMQ socket.
         """
         self._zmq_socket = self._ctx.socket(zmq.REQ)
-        # TODO: RCVTIME0 and SNDTIME0 were used in ``asyncio`` based code to control
-        #  timeout, but they don't seem to make any difference here. The code doesn't cause
-        #   any problems, so let's leave it for now.
-        self._zmq_socket.RCVTIMEO = self._timeout_receive
+        # Increment `self._timeout_receive` so that timeout supplied to `self._zmq_socket.poll`
+        #   expires first so that correct message is produced.
+        self._zmq_socket.RCVTIMEO = self._timeout_receive + 1
         self._zmq_socket.SNDTIMEO = self._timeout_send
         # Clear the buffer quickly after the socket is closed
         self._zmq_socket.setsockopt(zmq.LINGER, 100)
@@ -808,7 +829,11 @@ class ZMQCommSendAsync:
 
     async def _zmq_receive(self):
         try:
-            msg = await self._zmq_socket.recv_json()
+            if await self._zmq_socket.poll(timeout=self._timeout_receive):
+                msg = await self._zmq_socket.recv_json()
+            else:
+                # This is very likely a timeout (RE Manager is not responding)
+                raise Exception("timeout occurred")
         except Exception as ex:
             # Timeout occurred. Socket needs to be reset.
             logger.exception("ZeroMQ communication failed: %s" % str(ex))
@@ -822,7 +847,9 @@ class ZMQCommSendAsync:
 
     def _zmq_socket_open(self):
         self._zmq_socket = self._ctx.socket(zmq.REQ)
-        self._zmq_socket.RCVTIMEO = self._timeout_receive
+        # Increment `self._timeout_receive` so that timeout supplied to `self._zmq_socket.poll`
+        #   expires first so that correct message is produced.
+        self._zmq_socket.RCVTIMEO = self._timeout_receive + 1
         self._zmq_socket.SNDTIMEO = self._timeout_send
         # Clear the buffer quickly after the socket is closed
         self._zmq_socket.setsockopt(zmq.LINGER, 100)

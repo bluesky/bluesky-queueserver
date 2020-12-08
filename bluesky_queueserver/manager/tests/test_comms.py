@@ -1004,7 +1004,6 @@ def test_ZMQCommSendAsync_4(raise_exception, delay_between_reads):
     """
     ZMQCommSendAsync: Timeout at the server.
     """
-
     thread = threading.Thread(target=_zmq_server_delay2)
     thread.start()
 
@@ -1018,7 +1017,7 @@ def test_ZMQCommSendAsync_4(raise_exception, delay_between_reads):
         for val in (10, 20):
             if (raise_exception in (True, None)) and (val == 10):
                 # The case when timeout is expected for blocking operation
-                with pytest.raises(CommTimeoutError, match="Resource temporarily unavailable"):
+                with pytest.raises(CommTimeoutError, match="timeout occurred"):
                     await zmq_comm.send_message(method=method, params=params, raise_exceptions=raise_exception)
             else:
                 msg_recv = await zmq_comm.send_message(
@@ -1028,7 +1027,7 @@ def test_ZMQCommSendAsync_4(raise_exception, delay_between_reads):
             if val == 10:
                 if raise_exception not in (True, None):
                     assert msg_recv["success"] is False, str(msg_recv)
-                    assert "Resource temporarily unavailable" in msg_recv["msg"], str(msg_recv)
+                    assert "timeout occurred" in msg_recv["msg"], str(msg_recv)
 
                 # Delay between consecutive reads. Test cases when read is initiated before and
                 #   after the server restored operation and sent the response.

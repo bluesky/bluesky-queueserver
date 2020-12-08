@@ -715,7 +715,7 @@ def qserver():
         method, params, monitoring_mode = create_msg(args.command)
 
         if monitoring_mode:
-            print("Running QSever monitor. Press Ctrl-C to exit ...")
+            print("Running QServer monitor. Press Ctrl-C to exit ...")
 
         while True:
             msg, msg_err = zmq_single_request(method, params, zmq_server_address=args.address)

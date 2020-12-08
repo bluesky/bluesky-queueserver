@@ -61,7 +61,7 @@ NOTE: Position indices are 0-based. Inserting a plan to position 0 pushes it to 
       returns the last plan of the queue. Inserting a plan at position -1 makes it previous to last.
 
 Example of JSON specification of a plan:
-    '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
+    '{"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}'
 
 Supported queue instructions:
     queue-stop  # stops execution of the queue

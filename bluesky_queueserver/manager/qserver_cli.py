@@ -182,7 +182,7 @@ def extract_destination_address(params):
     Parameters
     ----------
     params : list(str)
-         List of parameters. The 1st and optionally 2nd parameter are interpreted as a destination
+         List of parameters. The 1st and optionally the 2nd parameters are interpreted as a destination
          address.
 
     Returns

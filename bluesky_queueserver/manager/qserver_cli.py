@@ -120,7 +120,7 @@ def extract_source_address(params):
     """
     Extract 'source' item address (index or UID) from the list of parameters. Returns
     the list of remaining parameters. The source address is represented by 1 parameter:
-    keywords ``front`` ``back`` or integer number represent a positional address (index),
+    keywords ``front``, ``back``, or integer number represent a positional address (index),
     any other string is interpreted as UID.
 
     Parameters

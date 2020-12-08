@@ -177,7 +177,7 @@ def extract_destination_address(params):
     represents a positional address (index); if the 1st parameter is a keyword ``before`` or
     ``after``, the 2nd parameter is considered to represent item UID (string). If the 1st
     parameter can not be converted to ``int`` or equal to one of the keywords, it is considered
-    that the address is not found
+    that the address is not found.
 
     Parameters
     ----------

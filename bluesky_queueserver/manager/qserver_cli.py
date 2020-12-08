@@ -173,7 +173,7 @@ def extract_destination_address(params):
     """
     Extract 'destination' item address (index or UID) from the list of parameters. Returns
     the list of remaining parameters. The source address is represented by 1 or 2 parameters:
-    if 1st parameter is a keywords ``front`` ``back`` or integer number, then the parameter
+    if 1st parameter is a keywords ``front``, ``back``, or integer number, then the parameter
     represents a positional address (index); if the 1st parameter is a keyword ``before`` or
     ``after``, the 2nd parameter is considered to represent item UID (string). If the 1st
     parameter can not be converted to ``int`` or equal to one of the keywords, it is considered

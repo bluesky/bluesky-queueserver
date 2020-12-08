@@ -64,7 +64,7 @@ def test_zmq_api_thread_based(re_manager):  # noqa F811
     assert resp2["queue"][0] == resp1["plan"]
     assert resp2["running_plan"] == {}
 
-    with pytest.raises(CommTimeoutError, match="ZMQ timeout occurred"):
+    with pytest.raises(CommTimeoutError, match="timeout occurred"):
         client.send_message(method="manager_kill")
 
     # Wait until the manager is restarted

@@ -56,7 +56,7 @@ qserver queue add instruction 2 <instruction>          # Insert instruction at p
 qserver queue add plan -1 '<plan-params>'              # Insert plan at position -1
 qserver queue add plan before '<uid>' '<plan-params>'  # Insert the plan before the plan with given UID
 qserver queue add plan after '<uid>' '<plan-params>'   # Insert the plan after the plan with given UID
-NOTE: Position indexes are 0-based. Inserting a plan to position 0 pushes it to the font of the queue.
+NOTE: Position indices are 0-based. Inserting a plan to position 0 pushes it to the front of the queue.
       Negative position indexes are counted from the back of the queue. Request for a plan with index -1
       returns the last plan of the queue. Inserting a plan at position -1 makes it previous to last.
 

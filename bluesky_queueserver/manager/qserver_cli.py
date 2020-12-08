@@ -393,7 +393,7 @@ def msg_queue_item(params):
     if params[0] != expected_p0:
         raise ValueError(f"Incorrect parameter value '{params[0]}'. Expected value: '{expected_p0}'")
 
-    # Make sure that there are sufficient number of parameters to start processing
+    # Make sure that there is a sufficient number of parameters to start processing
     if len(params) < 2:
         raise CommandParameterError(f"Item type and options are not specified '{command} {params[0]}'")
 

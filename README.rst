@@ -110,22 +110,22 @@ Interacting with RE Manager using 'qserver' CLI tool and HTTP requests
 
 The most basic request is 'ping' intended to fetch some response from RE Manager::
 
-  qserver -c ping
+  qserver ping
   http GET http://localhost:60610
 
 Current default address of RE Manager is set to tcp://localhost:5555, but different
 address may be passed as a parameter to CLI tool::
 
-  qserver -c ping -a "tcp://localhost:5555"
+  qserver ping -a "tcp://localhost:5555"
 
 The 'qserver' CLI tool may run in the monitoring mode (send 'ping' request to RE Manager every second)::
 
-  qserver -c monitor
+  qserver monitor
 
 Currently 'ping' request returns the status of RE Manager, but the returned data may change. The recommended
 way to fetch status of RE Manager is to use 'status' request::
 
-  qserver -c status
+  qserver status
   http GET http://localhost:60610/status
 
 Before plans could be executed, the RE Worker environment must be opened. Opening RE Worker environment
@@ -141,23 +141,23 @@ the environment is opened.
 
 Open the new RE environment::
 
-  qserver -c environment_open
+  qserver environment open
   http POST http://localhost:60610/environment/open
 
 Close RE environment::
 
-  qserver -c environment_close
+  qserver environment close
   http POST http://localhost:60610/environment/close
 
 Destroy RE environment::
 
-  qserver -c environment_destroy
+  qserver environment destroy
   http POST http://localhost:60610/environment/destroy
 
 Get the lists (JSON) of allowed plans and devices::
 
-  qserver -c plans_allowed
-  qserver -c devices_allowed
+  qserver allowed plans
+  qserver allowed devices
 
   http GET http://localhost:60610/plans/allowed
   http GET http://localhost:60610/devices/allowed
@@ -169,9 +169,9 @@ execution of the queue) is supported.
 
 Push a new plan to the back of the queue::
 
-  qserver -c queue_item_add -p '{"name":"count", "args":[["det1", "det2"]]}'
-  qserver -c queue_item_add -p '{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
-  qserver -c queue_item_add -p '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
+  qserver queue add plan '{"name":"count", "args":[["det1", "det2"]]}'
+  qserver queue add plan '{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
+  qserver queue add plan '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
 
   http POST http://localhost:60610/queue/item/add plan:='{"name":"count", "args":[["det1", "det2"]]}'
   http POST http://localhost:60610/queue/item/add plan:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
@@ -180,16 +180,17 @@ Push a new plan to the back of the queue::
 It takes 10 second to execute the third plan in the group above, so it is may be the most convenient for testing
 pausing/resuming/stopping of experimental plans.
 
-API for queue operations are designed work identically with items of all types. For example, a 'queue_stop`
-instruction can be added to the queue `queue_item_add` API (not supported by CLI yet)::
+API for queue operations is designed to work identically with items of all types. For example, a 'queue_stop`
+instruction can be added to the queue `queue_item_add` API::
 
+  qserver queue add instruction queue-stop
   http POST http://localhost:60610/queue/item/add instruction:='{"action":"queue_stop"}'
 
 An item can be added at any position of the queue. Push a plan to the front or the back of the queue::
 
-  qserver -c queue_item_add -p front '{"name":"count", "args":[["det1", "det2"]]}'
-  qserver -c queue_item_add -p back '{"name":"count", "args":[["det1", "det2"]]}'
-  qserver -c queue_item_add -p 2 '{"name":"count", "args":[["det1", "det2"]]}'  # Inserted at pos #2 (0-based)
+  qserver queue add plan front '{"name":"count", "args":[["det1", "det2"]]}'
+  qserver queue add plan back '{"name":"count", "args":[["det1", "det2"]]}'
+  qserver queue add plan 2 '{"name":"count", "args":[["det1", "det2"]]}'  # Inserted at pos #2 (0-based)
 
   http POST http://localhost:60610/queue/item/add pos:='"front"' plan:='{"name":"count", "args":[["det1", "det2"]]}'
   http POST http://localhost:60610/queue/item/add pos:='"back"' plan:='{"name":"count", "args":[["det1", "det2"]]}'
@@ -198,23 +199,23 @@ An item can be added at any position of the queue. Push a plan to the front or t
 The following command will insert an item in place of the last item in the queue; the last item remains
 the last item in the queue::
 
-  qserver -c queue_item_add -p -1 '{"name":"count", "args":[["det1", "det2"]]}'
+  qserver queue add plan -1 '{"name":"count", "args":[["det1", "det2"]]}'
   http POST http://localhost:60610/queue/item/add pos:=-1 plan:='{"name":"count", "args":[["det1", "det2"]]}'
 
 An item can be inserted before or after an existing item with given Item UID.
 Insert the plan before an existing item with <uid>::
 
-  qserver -c queue_item_add -p before_uid '<uid>' '{"name":"count", "args":[["det1", "det2"]]}'
+  qserver queue add plan before_uid '<uid>' '{"name":"count", "args":[["det1", "det2"]]}'
   http POST http://localhost:60610/queue/item/add before_uid:='<uid>' plan:='{"name":"count", "args":[["det1", "det2"]]}'
 
 Insert the plan after an existing item with <uid>::
 
-  qserver -c queue_item_add -p after_uid '<uid>' '{"name":"count", "args":[["det1", "det2"]]}'
+  qserver queue add plan after_uid '<uid>' '{"name":"count", "args":[["det1", "det2"]]}'
   http POST http://localhost:60610/queue/item/add after_uid:='<uid>' plan:='{"name":"count", "args":[["det1", "det2"]]}'
 
 If the queue has 5 items (0..4), then the following command pushes the new plan to the back of the queue::
 
-  qserver -c queue_item_add -p 5 '{"name":"count", "args":[["det1", "det2"]]}'
+  qserver queue add plan 5 '{"name":"count", "args":[["det1", "det2"]]}'
   http POST http://localhost:60610/queue/item/add pos:=5 plan:='{"name":"count", "args":[["det1", "det2"]]}'
 
 The 'queue_item_add' request will accept any index value. If the index is out of range, then the item will
@@ -230,13 +231,13 @@ performed. As the currently running plan is finished, the new plan is popped fro
 
 The contents of the queue may be fetched at any time::
 
-  qserver -c queue_get
+  qserver queue get
   http GET http://localhost:60610/queue/get
 
 The last item can be removed (popped) from the back of the queue::
 
-  qserver -c queue_item_remove
-  qserver -c queue_item_remove -p back
+  qserver queue item remove
+  qserver queue item remove back
 
   echo '{}' | http POST http://localhost:60610/queue/item/remove
   http POST http://localhost:60610/queue/item/remove pos:='"back"'
@@ -245,25 +246,25 @@ The position of the removed item may be specified similarly to `queue_item_add` 
 that the position index must point to the existing element, otherwise the request fails (returns 'success==False').
 The following examples remove the plan from the front of the queue and the element previous to last::
 
-  qserver -c queue_item_remove -p front
-  qserver -c queue_item_remove -p -2
+  qserver queue item remove front
+  qserver queue item remove -p -2
 
   http POST http://localhost:60610/queue/item/remove pos:='"front"'
   http POST http://localhost:60610/queue/item/remove pos:=-2
 
 The items can also be addressed by UID. Remove the item with <uid>::
 
-  qserver -c queue_item_remove -p '<uid>'
+  qserver queue item remove '<uid>'
   http POST http://localhost:60610/queue/item/remove uid:='<uid>'
 
 Items can be read from the queue without changing it. `queue_item_get` requests are formatted identically to
 `queue_item_remove` requests::
 
-  qserver -c queue_item_get
-  qserver -c queue_item_get -p back
-  qserver -c queue_item_get -p front
-  qserver -c queue_item_get -p -2
-  qserver -c queue_item_get -p '<uid>'
+  qserver queue item get
+  qserver queue item get back
+  qserver queue item get front
+  qserver queue item get -2
+  qserver queue item get '<uid>'
 
   echo '{}' | http POST http://localhost:60610/queue/item/get
   http POST http://localhost:60610/queue/item/get pos:='"back"'
@@ -273,12 +274,12 @@ Items can be read from the queue without changing it. `queue_item_get` requests 
 
 Items can be moved within the queue. Items can be addressed by position or UID. If positional addressing
 is used then items are moved from 'source' position to 'destination' position.
-If items are addressed by UID, then the item with <uid_source> in inserted before or after
+If items are addressed by UID, then the item with <uid_source> is inserted before or after
 the item with <uid_dest>::
 
-  qserver -c queue_item_move -p 3 5
-  qserver -c queue_item_move -p <uid_source> before <uid_dest>
-  qserver -c queue_item_move -p <uid_source> after <uid_dest>
+  qserver queue item move 3 5
+  qserver queue item move <uid_source> before <uid_dest>
+  qserver queue item move <uid_source> after <uid_dest>
 
   http POST http://localhost:60610/queue/item/move pos:=3 pos_dest:=5
   http POST http://localhost:60610/queue/item/move uid:='<uid_source>' before_uid:='<uid_dest>'
@@ -287,22 +288,22 @@ the item with <uid_dest>::
 Addressing by position and UID can be mixed. The following instruction will move queue item #3
 to the position following an item with <uid_dest>::
 
-  qserver -c queue_item_move -p 3 after <uid_dest>
+  qserver queue item move 3 after <uid_dest>
   http POST http://localhost:60610/queue/item/move pos:=3 after_uid:='<uid_dest>'
 
 The following instruction moves item with <uid_source> to the front of the queue::
 
-  qserver -c queue_item_move -p <uid_source> "front"
+  qserver queue item move <uid_source> "front"
   http POST http://localhost:60610/queue/item/move uid:='<uid_source>' pos_dest:='"front"'
 
 Remove all entries from the plan queue::
 
-  qserver -c queue-clear
+  qserver queue clear
   http POST http://localhost:60610/queue/clear
 
 Start execution of the plan queue. The environment MUST be opened before queue could be started::
 
-  qserver -c queue_start
+  qserver queue start
   http POST http://localhost:60610/queue/start
 
 Request to execute an empty queue is a valid operation that does nothing.
@@ -311,8 +312,8 @@ The queue can be stopped at any time. Stopping the queue is a safe operation. Wh
 sequence is initiated, the currently running plan is finished and the next plan is not be started.
 The stopping sequence can be cancelled if it was activated by mistake or decision was changed::
 
-  qserver -c queue_stop
-  qserver -c queue_stop_cancel
+  qserver queue stop
+  qserver queue stop cancel
 
   http POST http://localhost:60610/queue/stop
   http POST http://localhost:60610/queue/stop/cancel
@@ -327,18 +328,19 @@ of the queue is stopped. Execution of the queue may be started again if needed.
 Running plan can be paused immediately (returns to the last checkpoint in the plan) or at the next
 checkpoint (deferred pause)::
 
-  qserver -c re_pause -p immediate
-  qserver -c re_pause -p deferred
+  qserver re pause
+  qserver re pause deferred
+  qserver re pause immediate
 
-  http POST http://localhost:60610/re/pause option="immediate"
   http POST http://localhost:60610/re/pause option="deferred"
+  http POST http://localhost:60610/re/pause option="immediate"
 
 Resuming, aborting, stopping or halting of currently executed plan::
 
-  qserver -c re_resume
-  qserver -c re_stop
-  qserver -c re_abort
-  qserver -c re_halt
+  qserver re resume
+  qserver re stop
+  qserver re abort
+  qserver re halt
 
   http POST http://localhost:60610/re/resume
   http POST http://localhost:60610/re/stop
@@ -352,19 +354,19 @@ in the terminal that is running the server along with output of Run Engine.
 Data on executed plans, including stopped plans, is recorded in the history. History can
 be downloaded at any time::
 
-  qserver -c history_get
+  qserver history get
   http GET http://localhost:60610/history/get
 
 History is not intended for long-term storage. It can be cleared at any time::
 
-  qserver -c history_clear
+  qserver history clear
   http POST http://localhost:60610/history/clear
 
 Stop RE Manager (exit RE Manager application). There are two options: safe request that is rejected
 when the queue is running or a plan is paused::
 
-  qserver -c manager_stop
-  qserver -c manager_stop -p safe_on
+  qserver manager stop
+  qserver manager stop safe_on
 
   echo '{}' | http POST http://localhost:60610/manager/stop
   http POST http://localhost:60610/manager/stop option="safe_on"
@@ -372,7 +374,7 @@ when the queue is running or a plan is paused::
 Manager can be also stopped at any time using unsafe stop, which causes current RE Worker to be
 destroyed even if a plan is running::
 
-  qserver -c manager_stop -p safe_off
+  qserver manager stop safe_off
   http POST http://localhost:60610/manager/stop option="safe_off"
 
 The 'test_manager_kill' request is designed specifically for testing ability of RE Watchdog
@@ -382,6 +384,6 @@ process is expected to fully recover its state, so that the restart does not aff
 running or paused plans or the state of the queue. Another potential use of the request
 is to test handling of communication timeouts, since RE Manager does not respond to the request::
 
-  qserver -c test_manager_kill
+  qserver manager kill test
   http POST http://localhost:60610/test/manager/kill
 

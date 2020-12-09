@@ -562,7 +562,7 @@ class ZMQCommSendAsync:
                 # This is very likely a timeout (RE Manager is not responding)
                 self._zmq_socket_restart()
                 errmsg = f"ZMQ communication error: {str(ex)}"
-                if self._raise_timeout_exceptions:
+                if self._raise_timeout_exceptions or raise_exceptions:
                     raise CommTimeoutError(errmsg)
                 msg_in = {"success": False, "msg": errmsg}
             return msg_in
@@ -605,7 +605,7 @@ def zmq_single_request(method, params=None, *, zmq_server_address=None):
     async def send_request(method, params):
         nonlocal msg_received
         zmq_to_manager = ZMQCommSendAsync(zmq_server_address=zmq_server_address)
-        msg_received = await zmq_to_manager.send_message(method=method, params=params)
+        msg_received = await zmq_to_manager.send_message(method=method, params=params, raise_exceptions=True)
         zmq_to_manager.close()
 
     try:

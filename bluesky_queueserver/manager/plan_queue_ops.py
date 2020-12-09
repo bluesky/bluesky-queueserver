@@ -45,7 +45,7 @@ class PlanQueueOperations:
 
         # Assume that plan execution is completed, so move the plan to history
         #   This also clears the currently processed plan.
-        plan = await pq.set_processed_item_as_completed(exit_status="completed")
+        plan = await pq.set_processed_item_as_completed(exit_status="completed", run_uids=[])
 
         # We are ready to start the next plan
         plan = await pq.set_next_item_as_running()
@@ -849,14 +849,16 @@ class PlanQueueOperations:
         async with self._lock:
             return await self._set_next_item_as_running()
 
-    async def _set_processed_item_as_completed(self, exit_status):
+    async def _set_processed_item_as_completed(self, exit_status, run_uids):
         """
         See ``self.set_processed_item_as_completed`` method.
         """
         # Note: UID remains in the `self._uid_dict` after this operation
         if await self._is_item_running():
             item = await self._get_running_item_info()
-            item["exit_status"] = exit_status
+            item.setdefault("result", {})
+            item["result"]["exit_status"] = exit_status
+            item["result"]["run_uids"] = run_uids
             await self._clear_running_item_info()
             self._uid_dict_remove(item["item_uid"])
             await self._add_to_history(item)
@@ -864,7 +866,7 @@ class PlanQueueOperations:
             item = {}
         return item
 
-    async def set_processed_item_as_completed(self, exit_status):
+    async def set_processed_item_as_completed(self, exit_status, run_uids):
         """
         Moves currently executed item (plan) to history and sets ``exit_status`` key.
         UID is removed from ``self._uid_dict``, so a copy of the item with
@@ -874,6 +876,8 @@ class PlanQueueOperations:
         ----------
         exit_status: str
             Completion status of the plan.
+        run_uids: list(str)
+            A list of uids of completed runs.
 
         Returns
         -------
@@ -882,16 +886,18 @@ class PlanQueueOperations:
             is currently running, then ``{}`` is returned.
         """
         async with self._lock:
-            return await self._set_processed_item_as_completed(exit_status=exit_status)
+            return await self._set_processed_item_as_completed(exit_status=exit_status, run_uids=run_uids)
 
-    async def _set_processed_item_as_stopped(self, exit_status):
+    async def _set_processed_item_as_stopped(self, exit_status, run_uids):
         """
         See ``self.set_processed_item_as_stopped()`` method.
         """
         # Note: UID is removed from `self._uid_dict`.
         if await self._is_item_running():
             item = await self._get_running_item_info()
-            item["exit_status"] = exit_status
+            item.setdefault("result", {})
+            item["result"]["exit_status"] = exit_status
+            item["result"]["run_uids"] = run_uids
             await self._clear_running_item_info()
             await self._r_pool.lpush(self._name_plan_queue, json.dumps(item))
             self._uid_dict_update(item)
@@ -900,7 +906,7 @@ class PlanQueueOperations:
             item = {}
         return item
 
-    async def set_processed_item_as_stopped(self, exit_status):
+    async def set_processed_item_as_stopped(self, exit_status, run_uids):
         """
         Pushes currently executed item to the beginning of the queue and adds
         it to history with additional sets ``exit_status`` key.
@@ -910,6 +916,8 @@ class PlanQueueOperations:
         ----------
         exit_status: str
             Completion status of the plan.
+        run_uids: list(str)
+            A list of uids of completed runs.
 
         Returns
         -------
@@ -918,4 +926,4 @@ class PlanQueueOperations:
             is currently running, then ``{}`` is returned.
         """
         async with self._lock:
-            return await self._set_processed_item_as_stopped(exit_status=exit_status)
+            return await self._set_processed_item_as_stopped(exit_status=exit_status, run_uids=run_uids)

@@ -42,7 +42,7 @@ _user_group_permissions_fln = "user_group_permissions.yaml"
 def test_zmq_api_thread_based(re_manager):  # noqa F811
     """
     Communicate with the server using thread-based API. The purpose of the test is make
-    sure that the API is compatible with the client. It is sufficiently to test only
+    sure that the API is compatible with the client. It is sufficient to test only
     the blocking call, since it is still using callbacks mechanism.
     """
     client = ZMQCommSendThreads()

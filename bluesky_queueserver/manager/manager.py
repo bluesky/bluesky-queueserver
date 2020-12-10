@@ -905,13 +905,13 @@ class RunEngineManager(Process):
             plan, msg = {}, ""
             pos = request.get("pos", None)
             uid = request.get("uid", None)
-            plan = await self._plan_queue.get_item(pos=pos, uid=uid)
+            item = await self._plan_queue.get_item(pos=pos, uid=uid)
             success = True
         except Exception as ex:
             success = False
             msg = f"Failed to get an item: {str(ex)}"
 
-        return {"success": success, "msg": msg, "plan": plan}
+        return {"success": success, "msg": msg, "item": item}
 
     async def _queue_item_remove_handler(self, request):
         """

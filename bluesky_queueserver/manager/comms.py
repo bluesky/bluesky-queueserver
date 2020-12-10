@@ -691,7 +691,7 @@ class ZMQCommSendThreads:
         a name of a method supported by the server and a dictionary of parameters that
         are required by the method. In case of communication error (timeout), the function
         returns error message or raises ``CommTimeoutError`` exception depending on
-        the setting of ``raise_timeout_exceptions`` property.
+        the values ``raise_exceptions`` parameter in this function and class constructor.
 
         Parameters
         ----------
@@ -872,7 +872,7 @@ class ZMQCommSendAsync:
         a name of a method supported by the server and a dictionary of parameters that
         are required by the method. In case of communication error (timeout), the function
         returns error message or raises ``CommTimeoutError`` exception depending on
-        the setting of ``raise_timeout_exceptions`` property.
+        the values ``raise_exceptions`` parameter in this function and class constructor.
 
         Parameters
         ----------

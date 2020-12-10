@@ -724,7 +724,7 @@ class ZMQCommSendThreads:
         Raises
         ------
         CommTimeoutError
-            Raised if communication error occurs and ``raise_timeout_exceptions`` is set ``True``.
+            Raised if communication error occurs and ``raise_exceptions`` is set ``True``.
         """
 
         # Send empty dictionary if no parameters are passed

@@ -794,9 +794,9 @@ class RunEngineManager(Process):
         """
         logger.info("Returning current queue and running plan.")
         plan_queue = await self._plan_queue.get_queue()
-        running_plan = await self._plan_queue.get_running_item_info()
+        running_item = await self._plan_queue.get_running_item_info()
 
-        return {"queue": plan_queue, "running_plan": running_plan}
+        return {"success": True, "msg": "", "queue": plan_queue, "running_item": running_item}
 
     async def _queue_item_add_handler(self, request):
         """
@@ -902,16 +902,16 @@ class RunEngineManager(Process):
         """
         logger.info("Getting an item from the queue.")
         try:
-            plan, msg = {}, ""
+            item, msg = {}, ""
             pos = request.get("pos", None)
             uid = request.get("uid", None)
-            plan = await self._plan_queue.get_item(pos=pos, uid=uid)
+            item = await self._plan_queue.get_item(pos=pos, uid=uid)
             success = True
         except Exception as ex:
             success = False
             msg = f"Failed to get an item: {str(ex)}"
 
-        return {"success": success, "msg": msg, "plan": plan}
+        return {"success": success, "msg": msg, "item": item}
 
     async def _queue_item_remove_handler(self, request):
         """
@@ -923,16 +923,16 @@ class RunEngineManager(Process):
         """
         logger.info("Removing item from the queue.")
         try:
-            plan, qsize, msg = {}, None, ""
+            item, qsize, msg = {}, None, ""
             pos = request.get("pos", None)
             uid = request.get("uid", None)
-            plan, qsize = await self._plan_queue.pop_item_from_queue(pos=pos, uid=uid)
+            item, qsize = await self._plan_queue.pop_item_from_queue(pos=pos, uid=uid)
             success = True
         except Exception as ex:
             success = False
             msg = f"Failed to remove an item: {str(ex)}"
 
-        return {"success": success, "msg": msg, "plan": plan, "qsize": qsize}
+        return {"success": success, "msg": msg, "item": item, "qsize": qsize}
 
     async def _queue_item_move_handler(self, request):
         """
@@ -944,13 +944,13 @@ class RunEngineManager(Process):
         """
         logger.info("Removing item from the queue.")
         try:
-            plan, qsize, msg = {}, None, ""
+            item, qsize, msg = {}, None, ""
             pos = request.get("pos", None)
             uid = request.get("uid", None)
             pos_dest = request.get("pos_dest", None)
             before_uid = request.get("before_uid", None)
             after_uid = request.get("after_uid", None)
-            plan, qsize = await self._plan_queue.move_item(
+            item, qsize = await self._plan_queue.move_item(
                 pos=pos, uid=uid, pos_dest=pos_dest, before_uid=before_uid, after_uid=after_uid
             )
             success = True
@@ -958,7 +958,7 @@ class RunEngineManager(Process):
             success = False
             msg = f"Failed to move the item: {str(ex)}"
 
-        return {"success": success, "msg": msg, "plan": plan, "qsize": qsize}
+        return {"success": success, "msg": msg, "item": item, "qsize": qsize}
 
     async def _queue_clear_handler(self, request):
         """
@@ -966,7 +966,7 @@ class RunEngineManager(Process):
         """
         logger.info("Clearing the queue")
         await self._plan_queue.clear_queue()
-        return {"success": True, "msg": "Plan queue is now empty."}
+        return {"success": True, "msg": ""}
 
     async def _history_get_handler(self, request):
         """
@@ -975,7 +975,7 @@ class RunEngineManager(Process):
         logger.info("Returning plan history.")
         plan_history = await self._plan_queue.get_history()
 
-        return {"history": plan_history}
+        return {"success": True, "msg": "", "history": plan_history}
 
     async def _history_clear_handler(self, request):
         """
@@ -983,7 +983,7 @@ class RunEngineManager(Process):
         """
         logger.info("Clearing the plan execution history")
         await self._plan_queue.clear_history()
-        return {"success": True, "msg": "Plan history is now empty."}
+        return {"success": True, "msg": ""}
 
     async def _environment_open_handler(self, request):
         """

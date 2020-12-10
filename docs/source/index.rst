@@ -11,8 +11,10 @@ Bluesky-QueueServer Documentation
 
    installation
    usage
+   re_manager_api
    release-history
    min_versions
+
 
 
 .. warning::

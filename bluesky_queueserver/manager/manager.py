@@ -983,7 +983,7 @@ class RunEngineManager(Process):
         """
         logger.info("Clearing the plan execution history")
         await self._plan_queue.clear_history()
-        return {"success": True, "msg": "Plan history is now empty."}
+        return {"success": True, "msg": ""}
 
     async def _environment_open_handler(self, request):
         """

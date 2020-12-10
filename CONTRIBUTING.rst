@@ -75,7 +75,7 @@ Ready to contribute? Here's how to set up `bluesky-queueserver` for local develo
 
 5. When you're done making changes, check that your changes pass flake8 and the tests, including testing other Python versions with tox::
 
-    $ flake8 bluesky_queueserver/tests
+    $ flake8
     $ python setup.py test
     $ tox
 
@@ -101,4 +101,3 @@ Before you submit a pull request, check that it meets these guidelines:
 3. The pull request should work for Python 2.7, 3.3, 3.4, 3.5 and for PyPy. Check
    https://travis-ci.org/tacaswell/bluesky-queueserver/pull_requests
    and make sure that the tests pass for all supported Python versions.
-

@@ -1,6 +1,7 @@
 import pytest
 import os
 import time as ttime
+import asyncio
 
 from bluesky_queueserver.manager.profile_ops import (
     get_default_profile_collection_dir,
@@ -9,7 +10,7 @@ from bluesky_queueserver.manager.profile_ops import (
 
 from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
 
-from ..comms import zmq_single_request
+from ..comms import zmq_single_request, ZMQCommSendThreads, ZMQCommSendAsync, CommTimeoutError
 
 from ._common import (
     wait_for_condition,
@@ -35,7 +36,94 @@ _user_group_permissions_fln = "user_group_permissions.yaml"
 
 
 # =======================================================================================
+#                   Thread-based ZMQ API - ZMQCommSendThreads
+
+
+def test_zmq_api_thread_based(re_manager):  # noqa F811
+    """
+    Communicate with the server using the thread-based API. The purpose of the test is to make
+    sure that the API is compatible with the client. It is sufficient to test only
+    the blocking call, since it is still using callbacks mechanism.
+    """
+    client = ZMQCommSendThreads()
+
+    resp1 = client.send_message(
+        method="queue_item_add", params={"plan": _plan1, "user": _user, "user_group": _user_group}
+    )
+    assert resp1["success"] is True
+    assert resp1["qsize"] == 1
+    assert resp1["plan"]["name"] == _plan1["name"]
+    assert resp1["plan"]["args"] == _plan1["args"]
+    assert resp1["plan"]["user"] == _user
+    assert resp1["plan"]["user_group"] == _user_group
+    assert "item_uid" in resp1["plan"]
+
+    resp2 = client.send_message(method="queue_get")
+    assert resp2["queue"] != []
+    assert len(resp2["queue"]) == 1
+    assert resp2["queue"][0] == resp1["plan"]
+    assert resp2["running_plan"] == {}
+
+    with pytest.raises(CommTimeoutError, match="timeout occurred"):
+        client.send_message(method="manager_kill")
+
+    # Wait until the manager is restarted
+    ttime.sleep(6)
+
+    resp3 = client.send_message(method="status")
+    assert resp3["manager_state"] == "idle"
+    assert resp3["items_in_queue"] == 1
+    assert resp3["items_in_history"] == 0
+
+
+# =======================================================================================
+#                   Thread-based ZMQ API - ZMQCommSendThreads
+
+
+def test_zmq_api_asyncio_based(re_manager):  # noqa F811
+    """
+    Communicate with the server using asyncio-based API. The purpose of the test is make
+    sure that the API is compatible with the client.
+    """
+
+    async def testing():
+        client = ZMQCommSendAsync()
+
+        resp1 = await client.send_message(
+            method="queue_item_add", params={"plan": _plan1, "user": _user, "user_group": _user_group}
+        )
+        assert resp1["success"] is True
+        assert resp1["qsize"] == 1
+        assert resp1["plan"]["name"] == _plan1["name"]
+        assert resp1["plan"]["args"] == _plan1["args"]
+        assert resp1["plan"]["user"] == _user
+        assert resp1["plan"]["user_group"] == _user_group
+        assert "item_uid" in resp1["plan"]
+
+        resp2 = await client.send_message(method="queue_get")
+        assert resp2["queue"] != []
+        assert len(resp2["queue"]) == 1
+        assert resp2["queue"][0] == resp1["plan"]
+        assert resp2["running_plan"] == {}
+
+        with pytest.raises(CommTimeoutError, match="timeout occurred"):
+            await client.send_message(method="manager_kill")
+
+        # Wait until the manager is restarted
+        await asyncio.sleep(6)
+
+        resp3 = await client.send_message(method="status")
+        assert resp3["manager_state"] == "idle"
+        assert resp3["items_in_queue"] == 1
+        assert resp3["items_in_history"] == 0
+
+    asyncio.run(testing())
+
+
+# =======================================================================================
 #                   Methods 'environment_open', 'environment_close'
+
+
 def test_zmq_api_environment_open_close_1(re_manager):  # noqa F811
     """
     Basic test for `environment_open` and `environment_close` methods.

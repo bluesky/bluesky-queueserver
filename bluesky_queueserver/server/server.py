@@ -25,7 +25,7 @@ zmq_to_manager = None
 async def startup_event():
     global zmq_to_manager
     # ZMQCommSendAsync should be created from the event loop of FastAPI server.
-    zmq_to_manager = ZMQCommSendAsync()
+    zmq_to_manager = ZMQCommSendAsync(raise_exceptions=False)
 
 
 @app.on_event("shutdown")

@@ -966,7 +966,7 @@ class RunEngineManager(Process):
         """
         logger.info("Clearing the queue")
         await self._plan_queue.clear_queue()
-        return {"success": True, "msg": "Plan queue is now empty."}
+        return {"success": True, "msg": ""}
 
     async def _history_get_handler(self, request):
         """

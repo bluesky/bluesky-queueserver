@@ -902,7 +902,7 @@ class RunEngineManager(Process):
         """
         logger.info("Getting an item from the queue.")
         try:
-            plan, msg = {}, ""
+            item, msg = {}, ""
             pos = request.get("pos", None)
             uid = request.get("uid", None)
             item = await self._plan_queue.get_item(pos=pos, uid=uid)
@@ -923,16 +923,16 @@ class RunEngineManager(Process):
         """
         logger.info("Removing item from the queue.")
         try:
-            plan, qsize, msg = {}, None, ""
+            item, qsize, msg = {}, None, ""
             pos = request.get("pos", None)
             uid = request.get("uid", None)
-            plan, qsize = await self._plan_queue.pop_item_from_queue(pos=pos, uid=uid)
+            item, qsize = await self._plan_queue.pop_item_from_queue(pos=pos, uid=uid)
             success = True
         except Exception as ex:
             success = False
             msg = f"Failed to remove an item: {str(ex)}"
 
-        return {"success": success, "msg": msg, "plan": plan, "qsize": qsize}
+        return {"success": success, "msg": msg, "item": item, "qsize": qsize}
 
     async def _queue_item_move_handler(self, request):
         """

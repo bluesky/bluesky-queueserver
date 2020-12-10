@@ -944,13 +944,13 @@ class RunEngineManager(Process):
         """
         logger.info("Removing item from the queue.")
         try:
-            plan, qsize, msg = {}, None, ""
+            item, qsize, msg = {}, None, ""
             pos = request.get("pos", None)
             uid = request.get("uid", None)
             pos_dest = request.get("pos_dest", None)
             before_uid = request.get("before_uid", None)
             after_uid = request.get("after_uid", None)
-            plan, qsize = await self._plan_queue.move_item(
+            item, qsize = await self._plan_queue.move_item(
                 pos=pos, uid=uid, pos_dest=pos_dest, before_uid=before_uid, after_uid=after_uid
             )
             success = True
@@ -958,7 +958,7 @@ class RunEngineManager(Process):
             success = False
             msg = f"Failed to move the item: {str(ex)}"
 
-        return {"success": success, "msg": msg, "plan": plan, "qsize": qsize}
+        return {"success": success, "msg": msg, "item": item, "qsize": qsize}
 
     async def _queue_clear_handler(self, request):
         """

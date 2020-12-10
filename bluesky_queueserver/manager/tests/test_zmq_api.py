@@ -62,7 +62,7 @@ def test_zmq_api_thread_based(re_manager):  # noqa F811
     assert resp2["queue"] != []
     assert len(resp2["queue"]) == 1
     assert resp2["queue"][0] == resp1["plan"]
-    assert resp2["running_plan"] == {}
+    assert resp2["running_item"] == {}
 
     with pytest.raises(CommTimeoutError, match="timeout occurred"):
         client.send_message(method="manager_kill")
@@ -104,7 +104,7 @@ def test_zmq_api_asyncio_based(re_manager):  # noqa F811
         assert resp2["queue"] != []
         assert len(resp2["queue"]) == 1
         assert resp2["queue"][0] == resp1["plan"]
-        assert resp2["running_plan"] == {}
+        assert resp2["running_item"] == {}
 
         with pytest.raises(CommTimeoutError, match="timeout occurred"):
             await client.send_message(method="manager_kill")
@@ -229,7 +229,7 @@ def test_zmq_api_queue_item_add_1(re_manager):  # noqa F811
     assert resp2["queue"] != []
     assert len(resp2["queue"]) == 1
     assert resp2["queue"][0] == resp1["plan"]
-    assert resp2["running_plan"] == {}
+    assert resp2["running_item"] == {}
 
 
 # fmt: off
@@ -279,7 +279,7 @@ def test_zmq_api_queue_item_add_2(re_manager, pos, pos_result, success):  # noqa
     resp2, _ = zmq_single_request("queue_get")
 
     assert len(resp2["queue"]) == (3 if success else 2)
-    assert resp2["running_plan"] == {}
+    assert resp2["running_item"] == {}
 
     if success:
         assert resp2["queue"][pos_result]["args"] == plan2["args"]
@@ -493,7 +493,7 @@ def test_zmq_api_queue_item_add_7_fail(re_manager):  # noqa F811
     assert resp8["queue"] != []
     assert len(resp8["queue"]) == 1
     assert resp8["queue"][0] == resp7["plan"]
-    assert resp8["running_plan"] == {}
+    assert resp8["running_item"] == {}
 
 
 # =======================================================================================
@@ -588,7 +588,7 @@ def test_zmq_api_queue_item_get_remove_1(re_manager):  # noqa F811
     resp1, _ = zmq_single_request("queue_get")
     assert resp1["queue"] != []
     assert len(resp1["queue"]) == 3
-    assert resp1["running_plan"] == {}
+    assert resp1["running_item"] == {}
 
     # Get the last plan from the queue
     resp2, _ = zmq_single_request("queue_item_get")
@@ -668,7 +668,7 @@ def test_zmq_api_queue_item_get_remove_2(re_manager, pos, pos_result, success): 
 
     resp3, _ = zmq_single_request("queue_get")
     assert len(resp3["queue"]) == (2 if success else 3)
-    assert resp3["running_plan"] == {}
+    assert resp3["running_item"] == {}
 
 
 def test_zmq_api_queue_item_get_remove_3(re_manager):  # noqa F811

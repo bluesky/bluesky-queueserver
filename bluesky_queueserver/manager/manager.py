@@ -794,9 +794,9 @@ class RunEngineManager(Process):
         """
         logger.info("Returning current queue and running plan.")
         plan_queue = await self._plan_queue.get_queue()
-        running_plan = await self._plan_queue.get_running_item_info()
+        running_item = await self._plan_queue.get_running_item_info()
 
-        return {"queue": plan_queue, "running_plan": running_plan}
+        return {"success": True, "msg": "", "queue": plan_queue, "running_item": running_item}
 
     async def _queue_item_add_handler(self, request):
         """
@@ -975,7 +975,7 @@ class RunEngineManager(Process):
         logger.info("Returning plan history.")
         plan_history = await self._plan_queue.get_history()
 
-        return {"history": plan_history}
+        return {"success": True, "msg": "", "history": plan_history}
 
     async def _history_clear_handler(self, request):
         """

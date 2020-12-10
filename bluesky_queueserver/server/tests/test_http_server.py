@@ -55,7 +55,7 @@ def test_http_server_status_handler(re_manager, fastapi_server):  # noqa F811
 def test_http_server_queue_get_handler(re_manager, fastapi_server):  # noqa F811
     resp = _request_to_json("get", "/queue/get")
     assert resp["queue"] == []
-    assert resp["running_plan"] == {}
+    assert resp["running_item"] == {}
 
 
 def test_http_server_plans_allowed_and_devices(re_manager, fastapi_server):  # noqa F811
@@ -81,7 +81,7 @@ def test_http_server_queue_item_add_handler_1(re_manager, fastapi_server):  # no
     assert resp2["queue"] != []
     assert len(resp2["queue"]) == 1
     assert resp2["queue"][0] == resp1["plan"]
-    assert resp2["running_plan"] == {}
+    assert resp2["running_item"] == {}
 
 
 # fmt: off
@@ -125,7 +125,7 @@ def test_http_server_queue_item_add_handler_2(re_manager, fastapi_server, pos, p
     resp2 = _request_to_json("get", "/queue/get")
 
     assert len(resp2["queue"]) == (3 if success else 2)
-    assert resp2["running_plan"] == {}
+    assert resp2["running_item"] == {}
 
     if success:
         assert resp2["queue"][pos_result]["args"] == plan2["args"]
@@ -160,7 +160,7 @@ def test_http_server_queue_item_add_handler_3(re_manager, fastapi_server):  # no
     assert resp4["queue"] != []
     assert len(resp4["queue"]) == 1
     assert resp4["queue"][0] == resp3["plan"]
-    assert resp4["running_plan"] == {}
+    assert resp4["running_item"] == {}
 
 
 def test_http_server_queue_item_add_handler_4(re_manager, fastapi_server):  # noqa: F811
@@ -206,7 +206,7 @@ def test_http_server_queue_item_get_remove_handler_1(re_manager, fastapi_server)
     resp1 = _request_to_json("get", "/queue/get")
     assert resp1["queue"] != []
     assert len(resp1["queue"]) == 3
-    assert resp1["running_plan"] == {}
+    assert resp1["running_item"] == {}
 
     resp2 = _request_to_json("post", "/queue/item/get", json={})
     assert resp2["success"] is True
@@ -279,7 +279,7 @@ def test_http_server_queue_item_get_remove_handler_2(
 
     resp3 = _request_to_json("get", "/queue/get")
     assert len(resp3["queue"]) == (2 if success else 3)
-    assert resp3["running_plan"] == {}
+    assert resp3["running_item"] == {}
 
 
 def test_http_server_queue_item_get_remove_3(re_manager, fastapi_server):  # noqa F811
@@ -468,7 +468,7 @@ def test_http_server_queue_start_handler(re_manager, fastapi_server):  # noqa F8
     assert resp2 == {"success": True, "msg": ""}
     resp2a = _request_to_json("get", "/queue/get")
     assert len(resp2a["queue"]) == 3
-    assert resp2a["running_plan"] == {}
+    assert resp2a["running_item"] == {}
 
     assert wait_for_environment_to_be_created(10), "Timeout"
 
@@ -479,13 +479,13 @@ def test_http_server_queue_start_handler(re_manager, fastapi_server):  # noqa F8
     # The plan is currently being executed. 'get_queue' is expected to return currently executed plan.
     resp4 = _request_to_json("get", "/queue/get")
     assert len(resp4["queue"]) == 2
-    assert resp4["running_plan"]["name"] == "count"  # Check name of the running plan
+    assert resp4["running_item"]["name"] == "count"  # Check name of the running plan
 
     ttime.sleep(25)  # Wait until all plans are executed
 
     resp4 = _request_to_json("get", "/queue/get")
     assert len(resp4["queue"]) == 0
-    assert resp2a["running_plan"] == {}
+    assert resp2a["running_item"] == {}
 
 
 # fmt: off
@@ -524,7 +524,7 @@ def test_http_server_re_pause_continue_handlers(
     ttime.sleep(2)  # TODO: API is needed
     resp3b = _request_to_json("get", "/queue/get")
     assert len(resp3b["queue"]) == 0  # The plan is paused, but it is not in the queue
-    assert resp3b["running_plan"] != {}  # Running plan is set
+    assert resp3b["running_item"] != {}  # Running plan is set
 
     resp4 = _request_to_json("post", f"/re/{option_continue}")
     assert resp4 == {"msg": "", "success": True}
@@ -534,7 +534,7 @@ def test_http_server_re_pause_continue_handlers(
     resp4a = _request_to_json("get", "/queue/get")
     # The plan returns to the queue if it is stopped
     assert len(resp4a["queue"]) == 0 if option_continue == "resume" else 1
-    assert resp4a["running_plan"] == {}
+    assert resp4a["running_item"] == {}
 
 
 def test_http_server_close_print_db_uids_handler(re_manager, fastapi_server):  # noqa F811
@@ -553,7 +553,7 @@ def test_http_server_close_print_db_uids_handler(re_manager, fastapi_server):  #
 
     resp2a = _request_to_json("get", "/queue/get")
     assert len(resp2a["queue"]) == 0
-    assert resp2a["running_plan"] == {}
+    assert resp2a["running_item"] == {}
 
 
 def test_http_server_clear_queue_handler(re_manager, fastapi_server):  # noqa F811

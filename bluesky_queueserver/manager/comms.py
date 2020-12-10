@@ -885,7 +885,7 @@ class ZMQCommSendAsync:
         raise_exceptions: bool or None
             The flag indicates if exception should be raised in case of communication error
             (such as timeout). If ``False``, then error message is returned instead.
-            If None, then the field value ``self._raise_timeout_exceptions`` is used to
+            If None, then the field value ``self._raise_exceptions`` is used to
             determine if the exception needs to be raised. Non-blocking calls do not raise
             the exception. Instead, callback function receives the error message as one of the
             parameters

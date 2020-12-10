@@ -754,12 +754,15 @@ def test_set_processed_item_as_completed(pq):
     """
 
     plans = [{"item_uid": 1, "name": "a"}, {"item_uid": 2, "name": "b"}, {"item_uid": 3, "name": "c"}]
+    plans_run_uids = [["abc1"], ["abc2", "abc3"], []]
 
-    def add_status_to_plans(plans, exit_status):
+    def add_status_to_plans(plans, run_uids, exit_status):
         plans = copy.deepcopy(plans)
         plans_modified = []
-        for plan in plans:
-            plan["exit_status"] = exit_status
+        for plan, run_uid in zip(plans, run_uids):
+            plan.setdefault("result", {})
+            plan["result"]["exit_status"] = exit_status
+            plan["result"]["run_uids"] = run_uid
             plans_modified.append(plan)
         return plans_modified
 
@@ -768,33 +771,35 @@ def test_set_processed_item_as_completed(pq):
             await pq.add_item_to_queue(plan)
 
         # No plan is running
-        plan = await pq.set_processed_item_as_completed(exit_status="completed")
+        plan = await pq.set_processed_item_as_completed(exit_status="completed", run_uids=plans_run_uids[0])
         assert plan == {}
 
         # Execute the first plan
         await pq.set_next_item_as_running()
-        plan = await pq.set_processed_item_as_completed(exit_status="completed")
+        plan = await pq.set_processed_item_as_completed(exit_status="completed", run_uids=plans_run_uids[0])
 
         assert await pq.get_queue_size() == 2
         assert await pq.get_history_size() == 1
         assert plan["name"] == plans[0]["name"]
-        assert plan["exit_status"] == "completed"
+        assert plan["result"]["exit_status"] == "completed"
+        assert plan["result"]["run_uids"] == plans_run_uids[0]
 
         plan_history = await pq.get_history()
-        plan_history_expected = add_status_to_plans(plans[0:1], "completed")
+        plan_history_expected = add_status_to_plans(plans[0:1], plans_run_uids[0:1], "completed")
         assert plan_history == plan_history_expected
 
         # Execute the second plan
         await pq.set_next_item_as_running()
-        plan = await pq.set_processed_item_as_completed(exit_status="completed")
+        plan = await pq.set_processed_item_as_completed(exit_status="completed", run_uids=plans_run_uids[1])
 
         assert await pq.get_queue_size() == 1
         assert await pq.get_history_size() == 2
         assert plan["name"] == plans[1]["name"]
-        assert plan["exit_status"] == "completed"
+        assert plan["result"]["exit_status"] == "completed"
+        assert plan["result"]["run_uids"] == plans_run_uids[1]
 
         plan_history = await pq.get_history()
-        plan_history_expected = add_status_to_plans(plans[0:2], "completed")
+        plan_history_expected = add_status_to_plans(plans[0:2], plans_run_uids[0:2], "completed")
         assert plan_history == plan_history_expected
 
     asyncio.run(testing())
@@ -804,14 +809,20 @@ def test_set_processed_item_as_stopped(pq):
     """
     Test for ``PlanQueueOperations.set_processed_item_as_stopped()`` function.
     The function pushes running plan back to the queue and saves it in history as well.
+
+    Typically execution of single-run plans result in no UIDs, but in this test we still assign UIDS
+    to test functionality.
     """
     plans = [{"item_uid": 1, "name": "a"}, {"item_uid": 2, "name": "b"}, {"item_uid": 3, "name": "c"}]
+    plans_run_uids = [["abc1"], ["abc2", "abc3"], []]
 
-    def add_status_to_plans(plans, exit_status):
+    def add_status_to_plans(plans, run_uids, exit_status):
         plans = copy.deepcopy(plans)
         plans_modified = []
-        for plan in plans:
-            plan["exit_status"] = exit_status
+        for plan, run_uid in zip(plans, run_uids):
+            plan.setdefault("result", {})
+            plan["result"]["exit_status"] = exit_status
+            plan["result"]["run_uids"] = run_uid
             plans_modified.append(plan)
         return plans_modified
 
@@ -820,33 +831,37 @@ def test_set_processed_item_as_stopped(pq):
             await pq.add_item_to_queue(plan)
 
         # No plan is running
-        plan = await pq.set_processed_item_as_stopped(exit_status="stopped")
+        plan = await pq.set_processed_item_as_stopped(exit_status="stopped", run_uids=plans_run_uids[0])
         assert plan == {}
 
         # Execute the first plan
         await pq.set_next_item_as_running()
-        plan = await pq.set_processed_item_as_stopped(exit_status="stopped")
+        plan = await pq.set_processed_item_as_stopped(exit_status="stopped", run_uids=plans_run_uids[0])
 
         assert await pq.get_queue_size() == 3
         assert await pq.get_history_size() == 1
         assert plan["name"] == plans[0]["name"]
-        assert plan["exit_status"] == "stopped"
+        assert plan["result"]["exit_status"] == "stopped"
+        assert plan["result"]["run_uids"] == plans_run_uids[0]
 
         plan_history = await pq.get_history()
-        plan_history_expected = add_status_to_plans([plans[0]], "stopped")
+        plan_history_expected = add_status_to_plans([plans[0]], [plans_run_uids[0]], "stopped")
         assert plan_history == plan_history_expected
 
         # Execute the second plan
         await pq.set_next_item_as_running()
-        plan = await pq.set_processed_item_as_stopped(exit_status="stopped")
+        plan = await pq.set_processed_item_as_stopped(exit_status="stopped", run_uids=plans_run_uids[1])
 
         assert await pq.get_queue_size() == 3
         assert await pq.get_history_size() == 2
         assert plan["name"] == plans[0]["name"]
-        assert plan["exit_status"] == "stopped"
+        assert plan["result"]["exit_status"] == "stopped"
+        assert plan["result"]["run_uids"] == plans_run_uids[1]
 
         plan_history = await pq.get_history()
-        plan_history_expected = add_status_to_plans([plans[0], plans[0]], "stopped")
+        plan_history_expected = add_status_to_plans(
+            [plans[0].copy(), plans[0].copy()], [plans_run_uids[0], plans_run_uids[1]], "stopped"
+        )
         assert plan_history == plan_history_expected
 
     asyncio.run(testing())

@@ -278,7 +278,7 @@ class RunEngineManager(Process):
         self._manager_state = MState.IDLE
         self._environment_exists = False
         # If a plan is running, it needs to be pushed back into the queue
-        await self._plan_queue.set_processed_item_as_stopped(exit_status="environment_destroyed")
+        await self._plan_queue.set_processed_item_as_stopped(exit_status="environment_destroyed", run_uids=[])
 
         err_msg = "" if success else "Failed to properly destroy RE Worker environment."
         logger.info("RE Worker environment is destroyed")
@@ -360,7 +360,7 @@ class RunEngineManager(Process):
             # TODO: this would typically mean a bug (communciation error). Probably more
             #       complicated processing is needed
             logger.error(f"Failed to download plan report: {err_msg}. Stopping queue processing.")
-            await self._plan_queue.set_processed_item_as_stopped(exit_status="manager_error")
+            await self._plan_queue.set_processed_item_as_stopped(exit_status="manager_error", run_uids=[])
             self._manager_state = MState.IDLE
         else:
             plan_state = plan_report["plan_state"]
@@ -381,11 +381,11 @@ class RunEngineManager(Process):
                 # If a plan was not completed or not successful (exception was raised), then
                 # execution of the queue is stopped. It can be restarted later (failed or
                 # interrupted plan will still be in the queue.
-                await self._plan_queue.set_processed_item_as_completed(exit_status=plan_state)
+                await self._plan_queue.set_processed_item_as_completed(exit_status=plan_state, run_uids=result)
                 await self._start_plan_task()
             elif plan_state in ("stopped", "error"):
                 # Paused plan was stopped/aborted/halted
-                await self._plan_queue.set_processed_item_as_stopped(exit_status=plan_state)
+                await self._plan_queue.set_processed_item_as_stopped(exit_status=plan_state, run_uids=result)
                 self._manager_state = MState.IDLE
             elif plan_state == "paused":
                 # The plan was paused (nothing should be done).
@@ -1268,7 +1268,7 @@ class RunEngineManager(Process):
         if not self._manager_state == MState.EXECUTING_QUEUE:
             # TODO: there is no 'unknown' status. This is here temporarily. Different logic
             #   has to be applied here.
-            await self._plan_queue.set_processed_item_as_completed(exit_status="unknown")
+            await self._plan_queue.set_processed_item_as_completed(exit_status="unknown", run_uids=[])
 
         logger.info("Starting ZeroMQ server")
         self._zmq_socket = self._ctx.socket(zmq.REP)

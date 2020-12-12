@@ -567,5 +567,5 @@ Parameters    ---
 ------------  -----------------------------------------------------------------------------------------
 Returns       RE Manager will not respond to the request.
 ------------  -----------------------------------------------------------------------------------------
-EExecution     Immediate: no follow-up requests are required.
+Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================

@@ -487,3 +487,25 @@ Returns       **success**: *boolean*
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 
+
+============  =========================================================================================
+Method        **'re_pause'**
+------------  -----------------------------------------------------------------------------------------
+Description   Request Run Engine to pause currently running plan. The request will fail if RE Worker
+              environment does not exist or no plan is currently running. The request only initates
+              the sequence of pausing the plan.
+------------  -----------------------------------------------------------------------------------------
+Parameters    **option**: *'immediate'* or *'deferred'*
+                  pause the plan immediately (roll back to the previous checkpoint) or continue
+                  to the next checkpoint.
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+------------  -----------------------------------------------------------------------------------------
+Execution     The request only initiates the operation of pausing the plan. Wait until the plan is
+              paused by polling 'manager_state' status field (expected value is 'paused').
+============  =========================================================================================
+

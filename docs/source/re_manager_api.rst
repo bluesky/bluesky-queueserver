@@ -322,9 +322,43 @@ Returns       **success**: *boolean*
               **msg**: *str*
                   error message in case of failure, empty string ('') otherwise.
 
-              **item**: *dict* - the dictionary of item parameters, ({}) if operation failed.
+              **item**: *dict*
+                  the dictionary of item parameters, ({}) if operation failed.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 
+
+============  =========================================================================================
+Method        **'queue_item_remove'**
+------------  -----------------------------------------------------------------------------------------
+Description   Remove item from the queue. By default the last item in the queue is removed.
+              Alternatively the position or UID of the item can be specified.
+------------  -----------------------------------------------------------------------------------------
+Parameters    **pos**: *int*, *'front'* or *'back'* (optional)
+                  position of the item in the queue. RE Manager will attempt to insert the item
+                  at the specified position. The position may be positive or negative (counted
+                  from the back of the queue) integer. If 'pos' value is a string 'front' or 'back',
+                  then the item is inserted at the front or the back of the queue.
+
+              **uid**: *str* (optional)
+                  uid of the requested item.
+
+              *Parameters 'pos' and 'uid' are mutually exclusive.*
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **item**: *dict*
+                  the dictionary of parameters of the removed item, ({}) if operation failed.
+
+              **qsize**: *int* or *None*
+                  the number of items in the plan queue after the plan was added if
+                  the operation is successful, *None* otherwise
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
 

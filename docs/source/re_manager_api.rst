@@ -262,3 +262,38 @@ Execution     The request initiates the sequence of destroying the environment.
 ============  =========================================================================================
 
 
+============  =========================================================================================
+Method        **'queue_item_add'**
+------------  -----------------------------------------------------------------------------------------
+Description   Add item to the queue. The item may be a plan or an instruction. By default the
+              item is added to the back of the queue. Alternatively the item can be placed at
+              the desired position in the queue or before or after one of the existing items.
+------------  -----------------------------------------------------------------------------------------
+Parameters    **plan or instruction**: *dict*
+                  the dictionary of plan or instruction parameters. Plans are distinguished from
+                  instructions based on whether 'plan' or 'instruction' parameter is included.
+
+              **pos**: *int*, *'front'* or *'back'* (optional)
+                  position of the item in the queue. RE Manager will attempt to insert the item
+                  at the specified position. The position may be positive or negative (counted
+                  from the back of the queue) integer. If 'pos' value is a string 'front' or 'back',
+                  then the item is inserted at the front or the back of the queue.
+
+              **before_uid**, **after_uid**: *str* (optional)
+                  insert the item before or after the item with the given item UID.
+
+              *Parameters 'pos', 'before_uid' and 'after_uid' are mutually exclusive.*
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **qsize**: *int* or *None*
+                  the number of items in the plan queue after the plan was added if
+                  the operation is successful, *None* otherwise
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+

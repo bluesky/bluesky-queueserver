@@ -529,3 +529,27 @@ Execution     The request only initiates the operation. Wait until the plan is p
               resumed or 'idle' if execution was stopped).
 ============  =========================================================================================
 
+
+============  =========================================================================================
+Method        **'manager_stop'**
+------------  -----------------------------------------------------------------------------------------
+Description   Exit RE Manager application. Clients will probably not need to initiate exit remotely,
+              but ability to do so it is extremely useful for automated testing.
+------------  -----------------------------------------------------------------------------------------
+Parameters    **option**: *'safe_on'* or *'safe_off'* (optional)
+                  if the option of 'safe_on' is selected (default), then the request fails
+                  unless 'manager_state' status field is 'idle' (no plans are running).
+                  If the option is 'safe_off' then RE Worker environment is destroyed
+                  (worker process is terminated and all data that was not saved is discarded).
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+------------  -----------------------------------------------------------------------------------------
+Execution     The request only initiates the operation of exiting RE Manager. If the request succeeds
+              it may be expected that RE Manager application will eventually be exited and stops it
+              stops responding to requests.
+============  =========================================================================================
+

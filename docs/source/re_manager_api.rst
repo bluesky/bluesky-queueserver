@@ -213,3 +213,28 @@ Execution     The request only initiates the sequence of creating a new environm
               while operation is in process and change to 'idle' when the operation completes and
               'worker_environment_exists' is set True if environment was created successfully.
 ============  =========================================================================================
+
+
+============  =========================================================================================
+Method        **'environment_close'**
+------------  -----------------------------------------------------------------------------------------
+Description   Initiate the operation of closing the existing RE Worker environment. Fails if there
+              is no existing environment or if RE Manager is not in 'idle' state. Use
+              'environment_destroy' method to close a non-responsive RE Worker environment.
+------------  -----------------------------------------------------------------------------------------
+Parameters    ---
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+------------  -----------------------------------------------------------------------------------------
+Execution     The request only initiates the sequence of closing the environment.
+              Monitor 'manager_state' and 'worker_environment_exists' status fields
+              (see 'status' method) to detection when the operation coompletes:
+              'manager_state' is expected to have the value 'closing_environment'
+              while operation is in process and switch to 'idle' when the operation completes
+              and 'worker_environment_exists' is set False if environment was closed successfully.
+============  =========================================================================================
+

@@ -421,3 +421,28 @@ Returns       **success**: *boolean*
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 
+
+============  =========================================================================================
+Method        **'queue_start'**
+------------  -----------------------------------------------------------------------------------------
+Description   Start execution of the queue. The operation succeeds only if RE Manager is in
+              'idle' state and RE Worker environment exists. This operation only initiates
+              the process of starting the execution of the queue.
+------------  -----------------------------------------------------------------------------------------
+Parameters    ---
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+------------  -----------------------------------------------------------------------------------------
+Execution     The request initiates the operation of starting the queue. Verify that the queue
+              is running by checking the status fields: 'manager_state' is expected to have
+              the value 'executing_queue' and 'running_item_uid' should return UID of
+              the running plan. It is possible that the queue execution is successfully started,
+              but immediately stopped (queue is empty, queue contains a very short plan,
+              the first plan in the queue fails to start, the first item in the queue is 'queue_stop'
+              instruction etc.). RE Manager is expected to handle those cases in orderly way, but
+              the client should be capable of detecting and handling those events as well.
+============  =========================================================================================

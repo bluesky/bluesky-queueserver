@@ -553,3 +553,19 @@ Execution     The request only initiates the operation of exiting RE Manager. If
               stops responding to requests.
 ============  =========================================================================================
 
+
+============  =========================================================================================
+Method        **'manager_kill'**
+------------  -----------------------------------------------------------------------------------------
+Description   Freezes RE Manager process by stopping the asyncio event loop. By design, the manager
+              process is expected to restart after 5 seconds of inactivity. The restart of the manager
+              process should not affect the state of the queue or running plans. This function is
+              implemented for testing purposes only. There is no practical reason for a client
+              application to send this request.
+------------  -----------------------------------------------------------------------------------------
+Parameters    ---
+------------  -----------------------------------------------------------------------------------------
+Returns       RE Manager will not respond to the request.
+------------  -----------------------------------------------------------------------------------------
+EExecution     Immediate: no follow-up requests are required.
+============  =========================================================================================

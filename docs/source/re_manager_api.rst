@@ -446,3 +446,25 @@ Execution     The request initiates the operation of starting the queue. Verify 
               instruction etc.). RE Manager is expected to handle those cases in orderly way, but
               the client should be capable of detecting and handling those events as well.
 ============  =========================================================================================
+
+
+============  =========================================================================================
+Method        **'queue_stop'**
+------------  -----------------------------------------------------------------------------------------
+Description   Request RE Manager to stop execution of the queue after completion of the currently
+              running plan. The request succeeds only if the queue is currently running
+              ('manager_state' status field has value 'executing_queue'). The 'queue_stop_pending'
+              status field can be used at any time to verify if the request is pending.
+------------  -----------------------------------------------------------------------------------------
+Parameters    ---
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+

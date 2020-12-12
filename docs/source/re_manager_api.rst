@@ -230,11 +230,35 @@ Returns       **success**: *boolean*
               **msg**: *str*
                   error message in case of failure, empty string ('') otherwise.
 ------------  -----------------------------------------------------------------------------------------
-Execution     The request only initiates the sequence of closing the environment.
+Execution     The request initiates the sequence of closing the environment.
               Monitor 'manager_state' and 'worker_environment_exists' status fields
               (see 'status' method) to detection when the operation coompletes:
               'manager_state' is expected to have the value 'closing_environment'
               while operation is in process and switch to 'idle' when the operation completes
               and 'worker_environment_exists' is set False if environment was closed successfully.
 ============  =========================================================================================
+
+
+============  =========================================================================================
+Method        **'environment_destroy'**
+------------  -----------------------------------------------------------------------------------------
+Description   Initiate the operation of destroying of (unresponsive) the existing RE Worker
+              environment. The operation fails if there is no existing environment.
+------------  -----------------------------------------------------------------------------------------
+Parameters    ---
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+------------  -----------------------------------------------------------------------------------------
+Execution     The request initiates the sequence of destroying the environment.
+              Monitor 'manager_state' and 'worker_environment_exists' status fields
+              (see 'status' method): 'manager_state' is expected to have the value
+              'destroying_environment' while operation is in process and switch to 'idle' when
+              the operation completes and 'worker_environment_exists' is set False if environment
+              was destroyed successfully.
+============  =========================================================================================
+
 

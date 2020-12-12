@@ -58,12 +58,41 @@ Returns       **msg**: *str*
                   - **'destroying_environment'** - RE Worker environment is in the process of being
                     destroyed (emergency).
 
-              **queue_stop_pending**: *bool*
+              **queue_stop_pending**: *boolean*
                   indicates if the request to stop the queue after completion of the current plan is pending.
 
-              **worker_environment_exists**: *bool*
+              **worker_environment_exists**: *boolean*
                   indicates if RE Worker environment was created and plans could be executed.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
+
+
+============  =========================================================================================
+Method        'queue_get'
+------------  -----------------------------------------------------------------------------------------
+Description   Returns the items in the plan queue. The returned list of items may contain plans or
+              instructions. Each item is represented as a dictionary. Plans and instructions can be
+              distinguished by checking the value with the key 'item_type': 'plan' indicates that
+              the item is a plan, while 'instruction' indicates that it is an instruction.
+------------  -----------------------------------------------------------------------------------------
+Parameters    ---
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was successfully processed. Currently the request always
+                  succeeds.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ("") otherwise.
+
+              **queue**: *list*
+                  list of queue items
+
+              **running_item**: *dict*
+                  parameters of the item representing currently running plan, empty dict ({}) is
+                  returned if no plan is currently running.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
 

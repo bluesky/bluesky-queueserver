@@ -509,3 +509,23 @@ Execution     The request only initiates the operation of pausing the plan. Wait
               paused by polling 'manager_state' status field (expected value is 'paused').
 ============  =========================================================================================
 
+
+============  =========================================================================================
+Method        **'re_resume'**, **'re_stop'**, **'re_abort'**, **'re_halt'**
+------------  -----------------------------------------------------------------------------------------
+Description   Request Run Engine to resume, stop, abort or halt a paused plan. Fails if RE Worker
+              environment does not exist or 'manager_state' status field value is not 'paused'.
+------------  -----------------------------------------------------------------------------------------
+Parameters    ---
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+------------  -----------------------------------------------------------------------------------------
+Execution     The request only initiates the operation. Wait until the plan is paused by monitoring
+              'manager_state' status field (expected value is 'executing_queue' if execution is
+              resumed or 'idle' if execution was stopped).
+============  =========================================================================================
+

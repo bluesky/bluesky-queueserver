@@ -187,3 +187,29 @@ Returns       **success**: *boolean*
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
+
+
+============  =========================================================================================
+Method        **'environment_open'**
+------------  -----------------------------------------------------------------------------------------
+Description   Initiate the creation of a new RE Worker environment. The request will
+              succeed only if RE Manager is in 'idle' state and the environment does not exist.
+              RE Worker environment must be created before plans could be executed. To restart
+              the environment, close the existing environment first by sending 'environment_close'
+              request. To destroy 'frozen' environment, use 'environment_destroy' method.
+------------  -----------------------------------------------------------------------------------------
+Parameters    ---
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+------------  -----------------------------------------------------------------------------------------
+Execution     The request only initiates the sequence of creating a new environment. It may take
+              a long time to start the environment. Monitor 'manager_state'
+              and 'worker_environment_exists' status fields ('status' method) to detect when
+              the operation is completed: 'manager_state' should have the value 'opening_environment'
+              while operation is in process and change to 'idle' when the operation completes and
+              'worker_environment_exists' is set True if environment was created successfully.
+============  =========================================================================================

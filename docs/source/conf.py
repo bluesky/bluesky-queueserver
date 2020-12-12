@@ -200,3 +200,14 @@ intersphinx_mapping = {
     # 'pandas': ('https://pandas.pydata.org/pandas-docs/stable', None),
     'matplotlib': ('https://matplotlib.org', None),
 }
+
+
+
+# Fix for RTD theme issue: enables wrapping of text in table cells.
+#   see https://rackerlabs.github.io/docs-rackspace/tools/rtd-tables.html
+html_context = {
+    'css_files': [
+        '_static/theme_overrides.css',  # override wide tables in RTD theme
+        ],
+     }
+

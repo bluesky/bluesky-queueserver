@@ -124,3 +124,25 @@ Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 
 
+============  =========================================================================================
+Method        **'devices_allowed'**
+------------  -----------------------------------------------------------------------------------------
+Description   Returns a dictionary that contains information on the allowed devices for a given user
+              group.
+------------  -----------------------------------------------------------------------------------------
+Parameters    **user_group**: *str*
+                  the name of the user group (e.g. 'admin').
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **devices_allowed**: *dict*
+                  the dictionary that contains information on the allowed devices.
+                  Dictionary keys are device names.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+

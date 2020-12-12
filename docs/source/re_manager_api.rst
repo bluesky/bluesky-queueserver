@@ -146,3 +146,26 @@ Returns       **success**: *boolean*
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 
+
+============  =========================================================================================
+Method        **'history_get'**
+------------  -----------------------------------------------------------------------------------------
+Description   Returns the list of items in the plan history.
+
+              *The request always succeeds*.
+------------  -----------------------------------------------------------------------------------------
+Parameters    ---
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **history**: *list*
+                  list of items in the plan history, each item is represented by a dictionary of
+                  item parameters. Currently the plan history may contain only plans.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+

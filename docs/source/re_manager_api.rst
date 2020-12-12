@@ -403,3 +403,21 @@ Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 
 
+============  =========================================================================================
+Method        **'queue_clear'**
+------------  -----------------------------------------------------------------------------------------
+Description   Remove all items from the plan queue. The currently running plan does not belong to
+              the queue and is not affected by this operation. If the plan fails or its execution
+              is stopped, it will be pushed to the beginning of the queue.
+------------  -----------------------------------------------------------------------------------------
+Parameters    ---
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+

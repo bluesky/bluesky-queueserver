@@ -468,3 +468,22 @@ Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 
 
+============  =========================================================================================
+Method        **'queue_stop_cancel'**
+------------  -----------------------------------------------------------------------------------------
+Description   Cancel the pending request to stop execution of the queue after the currently
+              running plan.
+
+              *The request always succeeds*.
+------------  -----------------------------------------------------------------------------------------
+Parameters    ---
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+

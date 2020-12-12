@@ -362,3 +362,44 @@ Returns       **success**: *boolean*
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 
+
+============  =========================================================================================
+Method        **'queue_item_move'**
+------------  -----------------------------------------------------------------------------------------
+Description   Move item to a different position in the queue.
+------------  -----------------------------------------------------------------------------------------
+Parameters    **pos**: *int*, *'front'* or *'back'*
+                  current position of the item in the queue. Integer number can be negative.
+
+              **uid**: *str* (optional)
+                  uid of the item to move.
+
+              **pos_dest**: *int*, *'front'*, *'back'*
+                  new position of the item. Integer number can be negative.
+
+              **before_uid**, **after_uid**: *str*
+                  UID of an existing item in the queue. The selected item will be moved
+                  before or after this item.
+
+              *Parameters 'pos' and 'uid' are mutually exclusive, but at least one of them must
+              be specified.*
+
+              *Parameters 'pos_dest', 'before_uid' and 'after_uid' are mutually exclusive,
+              but at least one of them must be specified.*
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **item**: *dict*
+                  the dictionary of parameters of the moved item, ({}) if operation failed.
+
+              **qsize**: *int* or *None*
+                  the size of the queue.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+

@@ -2,6 +2,112 @@
 Run Engine Manager API
 ======================
 
+
+
+.. currentmodule:: bluesky_queueserver.manager.comms
+
+Asyncio-Based API for communicating with RE Manager
+===================================================
+
+Asyncio-based API is designed for use in applications that employ `asyncio` event loop.
+For example, HTTP server module is using asyncio-based API for communication with RE Manager.
+
+.. autosummary::
+   :nosignatures:
+   :toctree: generated
+
+    ZMQCommSendAsync
+    ZMQCommSendAsync.send_message
+    ZMQCommSendAsync.close
+
+
+Thread-Based API for communicating with RE Manager
+==================================================
+
+Thread-based API is designed for use in applications that are not based on `asyncio` event loop,
+such as PyQT applications or simple python scripts. Communication with RE Manager is performed
+by instantiating the object `ZMQCommSendThreads` and using `send_message()` method to send and
+receive messages. The `send_message()` method supports blocking and non-blocking calls. Blocking
+call to `send_message()` method returns the received message and intended mostly use in Python
+scripts. If blocking is not desirable, a user may implement a custom callback for processing
+the incoming messages and pass reference to the callback `send_message()` method.
+
+.. autosummary::
+   :nosignatures:
+   :toctree: generated
+
+    ZMQCommSendThreads
+    ZMQCommSendThreads.send_message
+    ZMQCommSendThreads.close
+
+
+Supported Methods For Communicating With RE Manager
+===================================================
+
+Brief Reference
+---------------
+
+The following reference describes the methods used for controlling RE Manager. For each
+method, the documentation contains the description of parameters and returned variables.
+Method name is passed as `method` parameter to `send_message()` API functions. Parameter
+names are keys of the dictionary that is passed as `params` parameter and returned
+variables are keys of the dictionary returned by `send_message()` API function or
+as a callback `msg` parameter.
+
+Get status information from RE Manager:
+
+- :ref:`method_ping`
+- :ref:`method_status`
+
+Allowed plans and devices:
+
+- :ref:`method_plans_allowed`
+- :ref:`method_devices_allowed`
+
+History of executed plans:
+
+- :ref:`method_history_get`
+- :ref:`method_history_clear`
+
+Open and close RE Worker environment:
+
+- :ref:`method_environment_open`
+- :ref:`method_environment_close`
+- :ref:`method_environment_destroy`
+
+
+Operations with the plan queue:
+
+- :ref:`method_queue_get`
+- :ref:`method_queue_item_add`
+- :ref:`method_queue_item_get`
+- :ref:`method_queue_item_remove`
+- :ref:`method_queue_item_move`
+- :ref:`method_queue_clear`
+
+Start and stop execution of the plan queue:
+
+- :ref:`method_queue_start`
+- :ref:`method_queue_stop`
+- :ref:`method_queue_stop_cancel`
+
+Send commands to Bluesky Run Engine:
+
+- :ref:`method_re_pause`
+- :ref:`method_re_resume_stop_abort_halt`
+
+Stopping RE Manager (mostly used in testing):
+- :ref:`method_manager_stop`
+- :ref:`method_manager_kill`
+
+
+Detailed Reference
+------------------
+
+.. _method_ping:
+
+**'ping'**
+^^^^^^^^^^
 ============  =========================================================================================
 Method        **''** (empty string)
 ------------  -----------------------------------------------------------------------------------------
@@ -18,6 +124,11 @@ Returns       See 'status' method for information on returned data.
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 
+
+.. _method_status:
+
+**'status'**
+^^^^^^^^^^^^
 
 ============  =========================================================================================
 Method        **'status'**
@@ -71,6 +182,10 @@ Returns       **msg**: *str*
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 
+.. _method_queue_get:
+
+**'queue_get'**
+^^^^^^^^^^^^^^^
 
 ============  =========================================================================================
 Method        **'queue_get'**
@@ -101,6 +216,12 @@ Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 
 
+.. _method_plans_allowed:
+
+**'plans_allowed'**
+^^^^^^^^^^^^^^^^^^^
+
+
 ============  =========================================================================================
 Method        **'plans_allowed'**
 ------------  -----------------------------------------------------------------------------------------
@@ -122,6 +243,12 @@ Returns       **success**: *boolean*
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
+
+
+.. _method_devices_allowed:
+
+**'devices_allowed'**
+^^^^^^^^^^^^^^^^^^^^^
 
 
 ============  =========================================================================================
@@ -147,6 +274,12 @@ Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 
 
+.. _method_history_get:
+
+**'history_get'**
+^^^^^^^^^^^^^^^^^
+
+
 ============  =========================================================================================
 Method        **'history_get'**
 ------------  -----------------------------------------------------------------------------------------
@@ -170,6 +303,12 @@ Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 
 
+.. _method_history_clear:
+
+**'history_clear'**
+^^^^^^^^^^^^^^^^^^^
+
+
 ============  =========================================================================================
 Method        **'history_clear'**
 ------------  -----------------------------------------------------------------------------------------
@@ -187,6 +326,12 @@ Returns       **success**: *boolean*
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
+
+
+.. _method_environment_open:
+
+**'environment_open'**
+^^^^^^^^^^^^^^^^^^^^^^
 
 
 ============  =========================================================================================
@@ -215,6 +360,12 @@ Execution     The request only initiates the sequence of creating a new environm
 ============  =========================================================================================
 
 
+.. _method_environment_close:
+
+**'environment_close'**
+^^^^^^^^^^^^^^^^^^^^^^^
+
+
 ============  =========================================================================================
 Method        **'environment_close'**
 ------------  -----------------------------------------------------------------------------------------
@@ -239,6 +390,12 @@ Execution     The request initiates the sequence of closing the environment.
 ============  =========================================================================================
 
 
+.. _method_environment_destroy:
+
+**'environment_destroy'**
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
 ============  =========================================================================================
 Method        **'environment_destroy'**
 ------------  -----------------------------------------------------------------------------------------
@@ -260,6 +417,12 @@ Execution     The request initiates the sequence of destroying the environment.
               the operation completes and 'worker_environment_exists' is set False if environment
               was destroyed successfully.
 ============  =========================================================================================
+
+
+.. _method_queue_item_add:
+
+**'queue_item_add'**
+^^^^^^^^^^^^^^^^^^^^
 
 
 ============  =========================================================================================
@@ -298,6 +461,12 @@ Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 
 
+.. _method_queue_item_get:
+
+**'queue_item_get'**
+^^^^^^^^^^^^^^^^^^^^
+
+
 ============  =========================================================================================
 Method        **'queue_item_get'**
 ------------  -----------------------------------------------------------------------------------------
@@ -327,6 +496,12 @@ Returns       **success**: *boolean*
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
+
+
+.. _method_queue_item_remove:
+
+**'queue_item_remove'**
+^^^^^^^^^^^^^^^^^^^^^^^
 
 
 ============  =========================================================================================
@@ -361,6 +536,12 @@ Returns       **success**: *boolean*
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
+
+
+.. _method_queue_item_move:
+
+**'queue_item_move'**
+^^^^^^^^^^^^^^^^^^^^^
 
 
 ============  =========================================================================================
@@ -403,6 +584,12 @@ Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 
 
+.. _method_queue_clear:
+
+**'queue_clear'**
+^^^^^^^^^^^^^^^^^
+
+
 ============  =========================================================================================
 Method        **'queue_clear'**
 ------------  -----------------------------------------------------------------------------------------
@@ -420,6 +607,12 @@ Returns       **success**: *boolean*
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
+
+
+.. _method_queue_start:
+
+**'queue_start'**
+^^^^^^^^^^^^^^^^^
 
 
 ============  =========================================================================================
@@ -448,6 +641,12 @@ Execution     The request initiates the operation of starting the queue. Verify 
 ============  =========================================================================================
 
 
+.. _method_queue_stop:
+
+**'queue_stop'**
+^^^^^^^^^^^^^^^^
+
+
 ============  =========================================================================================
 Method        **'queue_stop'**
 ------------  -----------------------------------------------------------------------------------------
@@ -468,6 +667,12 @@ Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 
 
+.. _method_queue_stop_cancel:
+
+**'queue_stop_cancel'**
+^^^^^^^^^^^^^^^^^^^^^^^
+
+
 ============  =========================================================================================
 Method        **'queue_stop_cancel'**
 ------------  -----------------------------------------------------------------------------------------
@@ -486,6 +691,12 @@ Returns       **success**: *boolean*
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
+
+
+.. _method_re_pause:
+
+**'re_pause'**
+^^^^^^^^^^^^^^
 
 
 ============  =========================================================================================
@@ -510,6 +721,11 @@ Execution     The request only initiates the operation of pausing the plan. Wait
 ============  =========================================================================================
 
 
+.. _method_re_resume_stop_abort_halt:
+
+**'re_resume', 're_stop', 're_abort', 're_halt'**
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 ============  =========================================================================================
 Method        **'re_resume'**, **'re_stop'**, **'re_abort'**, **'re_halt'**
 ------------  -----------------------------------------------------------------------------------------
@@ -528,6 +744,12 @@ Execution     The request only initiates the operation. Wait until the plan is p
               'manager_state' status field (expected value is 'executing_queue' if execution is
               resumed or 'idle' if execution was stopped).
 ============  =========================================================================================
+
+
+.. _method_manager_stop:
+
+**'manager_stop'**
+^^^^^^^^^^^^^^^^^^
 
 
 ============  =========================================================================================
@@ -552,6 +774,12 @@ Execution     The request only initiates the operation of exiting RE Manager. If
               it may be expected that RE Manager application will eventually be exited and stops it
               stops responding to requests.
 ============  =========================================================================================
+
+
+.. _method_manager_kill:
+
+**'manager_kill'**
+^^^^^^^^^^^^^^^^^^
 
 
 ============  =========================================================================================

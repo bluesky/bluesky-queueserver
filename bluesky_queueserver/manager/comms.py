@@ -422,14 +422,14 @@ class ZMQCommSendThreads:
 
     Parameters
     ----------
-    zmq_server_address: str or None
+    zmq_server_address : str or None
         Address of ZMQ server. If None, then the default address is ``tcp://localhost:5555``
         is used.
-    timeout_recv: int
+    timeout_recv : int
         Timeout (in ms) for ZMQ receive operations.
-    timeout_send: int
+    timeout_send : int
         Timeout (in ms) for ZMQ send operations.
-    raise_exceptions: bool
+    raise_exceptions : bool
         Tells if exceptions should be raised in case of communication errors (mostly timeouts)
         when ``send_message()`` is called in blocking mode. This setting can be overridden by
         specifying ``raise_exceptions`` parameter of ``send_message()`` function. The exception
@@ -439,7 +439,7 @@ class ZMQCommSendThreads:
     Examples
     --------
 
-    .. code-block: python
+    .. code-block:: python
 
         zmq_comm = ZMQCommSendThreads()
 
@@ -759,16 +759,16 @@ class ZMQCommSendAsync:
 
     Parameters
     ----------
-    loop: asyncio loop
+    loop : asyncio loop
         Current event loop
-    zmq_server_address: str or None
+    zmq_server_address : str or None
         Address of ZMQ server. If None, then the default address is ``tcp://localhost:5555``
         is used.
-    timeout_recv: int
+    timeout_recv : int
         Timeout (in ms) for ZMQ receive operations.
     timeout_send: int
         Timeout (in ms) for ZMQ send operations.
-    raise_exceptions: bool
+    raise_exceptions : bool
         Tells if exceptions should be raised in case of communication errors (mostly timeouts)
         when ``send_message()`` is awaited. This setting can be overridden by
         specifying ``raise_exceptions`` parameter of ``send_message()`` function. The exception
@@ -778,16 +778,17 @@ class ZMQCommSendAsync:
     Examples
     --------
 
-    .. code-block: python
+    .. code-block:: python
 
         async def communicate():
             zmq_comm = ZMQCommSendAsync()
             for n in range(10):
-                msg = await zmq_comm.send_message(method="some_method", params={"some_value": n}
+                msg = await zmq_comm.send_message(method="some_method", params={"some_value": n})
                 print(f"msg={msg}")
             zmq_comm.close()
 
         asyncio.run(communicate())
+
     """
 
     def __init__(

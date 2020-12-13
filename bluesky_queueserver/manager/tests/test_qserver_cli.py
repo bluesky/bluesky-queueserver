@@ -914,3 +914,14 @@ def test_qserver_queue_stop(re_manager, deactivate):  # noqa: F811
     assert n_history == (2 if deactivate else 1)
     status = get_queue_state()
     assert status["queue_stop_pending"] is False
+
+
+def test_qserver_ping(re_manager):  # noqa: F811
+    """
+    Methods ``ping``: basic test
+    """
+    # Wait until RE Manager is started
+    assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+    # Send 'ping' request
+    assert subprocess.call(["qserver", "ping"]) == 0

@@ -34,8 +34,11 @@ def _request_to_json(request_type, path, **kwargs):
     return resp
 
 
-def test_http_server_ping_handler(re_manager, fastapi_server):  # noqa F811
-    resp = _request_to_json("get", "/")
+# fmt: off
+@pytest.mark.parametrize("api_call", ["/", "/ping"])
+# fmt: on
+def test_http_server_ping_handler(re_manager, fastapi_server, api_call):  # noqa F811
+    resp = _request_to_json("get", api_call)
     assert resp["msg"] == "RE Manager"
     assert resp["manager_state"] == "idle"
     assert resp["items_in_queue"] == 0

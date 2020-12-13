@@ -121,6 +121,21 @@ def test_zmq_api_asyncio_based(re_manager):  # noqa F811
 
 
 # =======================================================================================
+#                   Methods 'ping' (currently returning status), "status"
+
+# fmt: off
+@pytest.mark.parametrize("api_name", ["ping", "status"])
+# fmt: on
+def test_zmq_api_ping_status(re_manager, api_name):
+    resp, _ = zmq_single_request(api_name)
+    assert resp["msg"] == "RE Manager"
+    assert resp["manager_state"] == "idle"
+    assert resp["items_in_queue"] == 0
+    assert resp["running_item_uid"] is None
+    assert resp["worker_environment_exists"] is False
+
+
+# =======================================================================================
 #                   Methods 'environment_open', 'environment_close'
 
 

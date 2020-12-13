@@ -3,14 +3,16 @@ Run Engine Manager API
 ======================
 
 
-
 .. currentmodule:: bluesky_queueserver.manager.comms
 
-Asyncio-Based API for communicating with RE Manager
-===================================================
+Asyncio-Based API for Controlling RE Manager
+============================================
 
 Asyncio-based API is designed for use in applications that employ `asyncio` event loop.
 For example, HTTP server module is using asyncio-based API for communication with RE Manager.
+Communication is performed by instantiating `ZMQCommSendAsync` class and awaiting
+`ZMQCommSendAsync.send_message()` function, which accepts the method name and parameters
+as arguments and returns the response message.
 
 .. autosummary::
    :nosignatures:
@@ -21,16 +23,18 @@ For example, HTTP server module is using asyncio-based API for communication wit
     ZMQCommSendAsync.close
 
 
-Thread-Based API for communicating with RE Manager
-==================================================
+Thread-Based API for Controlling RE Manager
+===========================================
 
 Thread-based API is designed for use in applications that are not based on `asyncio` event loop,
 such as PyQT applications or simple python scripts. Communication with RE Manager is performed
-by instantiating the object `ZMQCommSendThreads` and using `send_message()` method to send and
-receive messages. The `send_message()` method supports blocking and non-blocking calls. Blocking
-call to `send_message()` method returns the received message and intended mostly use in Python
-scripts. If blocking is not desirable, a user may implement a custom callback for processing
-the incoming messages and pass reference to the callback `send_message()` method.
+by instantiating `ZMQCommSendThreads` class and calling `ZMQCommSendThreads.send_message()`
+function, which accepts the method name and parameters. The `send_message()` function may be
+called in blocking and non-blocking mode. In blocking mode, the function returns the response
+message. In non-blocking mode the function exits once ZMQ request is send to RE Manager and
+passes the response message to user-defined callback function once the response is received.
+The reference to the callback function is passed to `send_message()` function as one of the
+arguments.
 
 .. autosummary::
    :nosignatures:
@@ -41,18 +45,23 @@ the incoming messages and pass reference to the callback `send_message()` method
     ZMQCommSendThreads.close
 
 
-Supported Methods For Communicating With RE Manager
-===================================================
+Supported Methods For ZMQ Communication API
+===========================================
 
 Brief Reference
 ---------------
 
 The following reference describes the methods used for controlling RE Manager. For each
-method, the documentation contains the description of parameters and returned variables.
-Method name is passed as `method` parameter to `send_message()` API functions. Parameter
-names are keys of the dictionary that is passed as `params` parameter and returned
-variables are keys of the dictionary returned by `send_message()` API function or
-as a callback `msg` parameter.
+method, the documentation contains the description of outgoing and returned parameters.
+Method name and the dictionary of method parameters are passed as arguments to
+`send_message()` API function.
+
+The result of the request processing is returned
+as a dictionary of the returned parameters by `send_message()` function or passed as
+an argument of the callback. In case of communication error, `send_message` function may
+raise the exception (default) or return the error message. If reference to a callback function
+is passed to `send_message` (in thread-based API), the communication error message will be
+passed as `msg_err` parameter of the callback function
 
 Get status information from RE Manager:
 
@@ -109,9 +118,9 @@ Detailed Reference
 **'ping'**
 ^^^^^^^^^^
 ============  =========================================================================================
-Method        **''** (empty string)
+Method        **'ping'**
 ------------  -----------------------------------------------------------------------------------------
-Description   'Ping' request: causes RE Manager to send some response. Currently 'ping' request is
+Description   Causes RE Manager to send some predefined response. Currently 'ping' request is
               equivalent to 'status' request. The functionality may be changed in the future.
               Use 'status' method to request status information from RE Manager.
 
@@ -178,39 +187,6 @@ Returns       **msg**: *str*
 
               **worker_environment_exists**: *boolean*
                   indicates if RE Worker environment was created and plans could be executed.
-------------  -----------------------------------------------------------------------------------------
-Execution     Immediate: no follow-up requests are required.
-============  =========================================================================================
-
-.. _method_queue_get:
-
-**'queue_get'**
-^^^^^^^^^^^^^^^
-
-============  =========================================================================================
-Method        **'queue_get'**
-------------  -----------------------------------------------------------------------------------------
-Description   Returns the items in the plan queue. The returned list of items may contain plans or
-              instructions. Each item is represented as a dictionary. Plans and instructions can be
-              distinguished by checking the value with the key 'item_type': 'plan' indicates that
-              the item is a plan, while 'instruction' indicates that it is an instruction.
-
-              *The request always succeeds*.
-------------  -----------------------------------------------------------------------------------------
-Parameters    ---
-------------  -----------------------------------------------------------------------------------------
-Returns       **success**: *boolean*
-                  indicates if the request was processed successfully.
-
-              **msg**: *str*
-                  error message in case of failure, empty string ('') otherwise.
-
-              **queue**: *list*
-                  list of queue items
-
-              **running_item**: *dict*
-                  parameters of the item representing currently running plan, empty dictionary ({}) is
-                  returned if no plan is currently running.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
@@ -416,6 +392,40 @@ Execution     The request initiates the sequence of destroying the environment.
               'destroying_environment' while operation is in process and switch to 'idle' when
               the operation completes and 'worker_environment_exists' is set False if environment
               was destroyed successfully.
+============  =========================================================================================
+
+
+.. _method_queue_get:
+
+**'queue_get'**
+^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'queue_get'**
+------------  -----------------------------------------------------------------------------------------
+Description   Returns the items in the plan queue. The returned list of items may contain plans or
+              instructions. Each item is represented as a dictionary. Plans and instructions can be
+              distinguished by checking the value with the key 'item_type': 'plan' indicates that
+              the item is a plan, while 'instruction' indicates that it is an instruction.
+
+              *The request always succeeds*.
+------------  -----------------------------------------------------------------------------------------
+Parameters    ---
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **queue**: *list*
+                  list of queue items
+
+              **running_item**: *dict*
+                  parameters of the item representing currently running plan, empty dictionary ({}) is
+                  returned if no plan is currently running.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 
 

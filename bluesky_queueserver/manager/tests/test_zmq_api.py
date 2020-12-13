@@ -126,7 +126,7 @@ def test_zmq_api_asyncio_based(re_manager):  # noqa F811
 # fmt: off
 @pytest.mark.parametrize("api_name", ["ping", "status"])
 # fmt: on
-def test_zmq_api_ping_status(re_manager, api_name):
+def test_zmq_api_ping_status(re_manager, api_name):  # noqa F811
     resp, _ = zmq_single_request(api_name)
     assert resp["msg"] == "RE Manager"
     assert resp["manager_state"] == "idle"

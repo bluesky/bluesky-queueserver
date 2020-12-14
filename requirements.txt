@@ -2,6 +2,7 @@ aioredis
 bluesky
 bluesky-kafka
 databroker
+event-model
 fastapi
 json-rpc
 jsonschema

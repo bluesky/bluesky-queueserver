@@ -79,6 +79,32 @@ existing_devices:
     classname: SPseudo3x3
     module: ophyd.sim
 existing_plans:
+  _sim_plan_inner:
+    description: null
+    name: _sim_plan_inner
+    parameters:
+    - annotation: <class 'int'>
+      annotation_pickled: 80 03 63 62 75 69 6c 74 69 6e 73 0a 69 6e 74 0a 71 00 2e
+      default: ''
+      default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
+        2e
+      kind:
+        name: POSITIONAL_OR_KEYWORD
+        value: 1
+      name: npts
+    - annotation: <class 'float'>
+      annotation_pickled: 80 03 63 62 75 69 6c 74 69 6e 73 0a 66 6c 6f 61 74 0a 71
+        00 2e
+      default: '1.0'
+      default_pickled: 80 03 47 3f f0 00 00 00 00 00 00 2e
+      kind:
+        name: POSITIONAL_OR_KEYWORD
+        value: 1
+      name: delay
+    returns:
+      annotation: ''
+      annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
+        00 2e
   adaptive_scan:
     description: Scan over one variable with adaptively tuned step size.
     name: adaptive_scan
@@ -1921,6 +1947,49 @@ existing_plans:
         name: KEYWORD_ONLY
         value: 3
       name: md
+    returns:
+      annotation: ''
+      annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71
+        00 2e
+  sim_multirun_plan_nested:
+    description: 'Simulated multi-run plan: two nested runs. The plan is included
+      for testing purposes only.'
+    name: sim_multirun_plan_nested
+    parameters:
+    - annotation: <class 'int'>
+      annotation_pickled: 80 03 63 62 75 69 6c 74 69 6e 73 0a 69 6e 74 0a 71 00 2e
+      custom:
+        description: The number of measurements in the outer run. Inner run will contain
+          'npts+1' measurments.
+      default: ''
+      default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
+        2e
+      description: 'The number of measurements in the outer run. Inner run will contain
+        ''npts+1''
+
+        measurments.
+
+        Kind: positional or keyword.'
+      kind:
+        name: POSITIONAL_OR_KEYWORD
+        value: 1
+      name: npts
+    - annotation: <class 'float'>
+      annotation_pickled: 80 03 63 62 75 69 6c 74 69 6e 73 0a 66 6c 6f 61 74 0a 71
+        00 2e
+      custom:
+        description: Delay between measurements.
+      default: '1.0'
+      default_pickled: 80 03 47 3f f0 00 00 00 00 00 00 2e
+      description: 'Delay between measurements.
+
+        Kind: positional or keyword.
+
+        Default: 1.0.'
+      kind:
+        name: POSITIONAL_OR_KEYWORD
+        value: 1
+      name: delay
     returns:
       annotation: ''
       annotation_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71

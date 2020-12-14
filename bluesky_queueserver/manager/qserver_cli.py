@@ -628,13 +628,23 @@ def create_msg(params):
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
 
+    # ----------- re ------------
     elif command == "re":
         if len(params) < 1:
             raise CommandParameterError(f"Request '{command}' must include at least one parameter")
-        supported_params = ("pause", "resume", "stop", "abort", "halt")
+        supported_params = ("pause", "resume", "stop", "abort", "halt", "runs")
         if params[0] in supported_params:
             if params[0] == "pause":
                 method, prms = msg_re_pause(params)
+            elif params[0] == "runs":
+                if len(params) == 1:
+                    method, prms = f"{command}_{params[0]}", {}
+                elif (len(params) == 2) and (params[1] in ("active", "open", "closed")):
+                    method, prms = f"{command}_{params[0]}", {"option": params[1]}
+                else:
+                    raise CommandParameterError(
+                        f"Unrecognized combination of parameters: {format_list_as_command(params)}"
+                    )
             else:
                 method, prms = f"{command}_{params[0]}", {}
         else:

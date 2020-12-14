@@ -5,6 +5,7 @@ from multiprocessing import Process
 import time as ttime
 import pprint
 import enum
+import uuid
 
 from .comms import PipeJsonRpcSendAsync, CommTimeoutError
 from .profile_ops import load_allowed_plans_and_devices, validate_plan
@@ -62,6 +63,9 @@ class RunEngineManager(Process):
         self._manager_state = MState.INITIALIZING
         self._queue_stop_pending = False  # Queue is in the process of being stopped
         self._worker_state_info = None  # Copy of the last downloaded state of RE Worker
+
+        self._re_run_list = []
+        self._re_run_list_uid = str(uuid.uuid4())
 
         self._loop = None
 
@@ -348,6 +352,9 @@ class RunEngineManager(Process):
                         if ws["re_report_available"]:
                             self._loop.create_task(self._process_plan_report())
 
+                        if ws["run_list_updated"]:
+                            self._loop.create_task(self._download_run_list())
+
     async def _process_plan_report(self):
         """
         Process plan report. Called when plan report is available.
@@ -396,6 +403,20 @@ class RunEngineManager(Process):
         if self._manager_state == MState.IDLE:
             # No plans are running: deactivate the stop sequence.
             self._queue_stop_deactivate()
+
+    async def _download_run_list(self):
+        """
+        Download the list of currently available runs when it is updated by the worker
+        """
+        # Read report first
+        run_list, err_msg = await self._worker_request_run_list()
+        if run_list is None:
+            # TODO: this would typically mean a bug (communciation error). Probably more
+            #       complicated processing is needed
+            logger.error(f"Failed to download plan report: {err_msg}.")
+        else:
+            self._re_run_list = run_list["run_list"]
+            self._re_run_list_uid = str(uuid.uuid4())
 
     async def _start_plan(self):
         """
@@ -571,6 +592,16 @@ class RunEngineManager(Process):
             plan_report, err_msg = None, "Timeout occurred"
         return plan_report, err_msg
 
+    async def _worker_request_run_list(self):
+        try:
+            run_list = await self._comm_to_worker.send_msg("request_run_list")
+            err_msg = ""
+            if run_list is None:
+                err_msg = "Failed to obtain the run list from the worker"
+        except CommTimeoutError:
+            run_list, err_msg = None, "Timeout occurred"
+        return run_list, err_msg
+
     async def _worker_command_close_env(self):
         try:
             response = await self._comm_to_worker.send_msg("command_close_env")
@@ -718,6 +749,8 @@ class RunEngineManager(Process):
         manager_state = self._manager_state.value
         queue_stop_pending = self._queue_stop_pending
         worker_environment_exists = self._environment_exists
+        re_state = self._worker_state_info["re_state"] if self._worker_state_info else None
+        run_list_uid = self._re_run_list_uid
         # worker_state_info = self._worker_state_info
 
         # TODO: consider different levels of verbosity for ping or other command to
@@ -730,6 +763,10 @@ class RunEngineManager(Process):
             "manager_state": manager_state,
             "queue_stop_pending": queue_stop_pending,
             "worker_environment_exists": worker_environment_exists,
+            "re_state": re_state,  # State of Run Engine
+            # If Run List UID change, download the list of runs for the current plan.
+            # Run List UID is updated when the list is cleared as well.
+            "run_list_uid": run_list_uid,
             # "worker_state_info": worker_state_info
         }
         return msg
@@ -1092,6 +1129,32 @@ class RunEngineManager(Process):
         logger.info("Halting paused plan ...")
         return await self._continue_run_engine(option="halt")
 
+    async def _re_runs_handler(self, request):
+        """
+        Return the list of runs for the currently running plan. The list includes open and already
+        closed runs.
+        """
+        logger.info("Returning the list of runs for the running plan.")
+
+        option = request["option"] if "option" in request else "active"
+        available_options = ("active", "open", "closed")
+
+        if option in available_options:
+            if option == "open":
+                run_list = [_ for _ in self._re_run_list if _["is_open"]]
+            elif option == "closed":
+                run_list = [_ for _ in self._re_run_list if not _["is_open"]]
+            else:
+                run_list = self._re_run_list
+            success, msg = True, ""
+        else:
+            run_list = []
+            success = False
+            msg = f"Option '{option}' is not supported. Available options: {available_options}"
+
+        run_list_uid = self._re_run_list_uid
+        return {"success": success, "msg": msg, "run_list": run_list, "run_list_uid": run_list_uid}
+
     async def _manager_stop_handler(self, request):
         """
         Stop RE Manager in orderly way. The method may be called with option
@@ -1168,6 +1231,7 @@ class RunEngineManager(Process):
             "re_stop": "_re_stop_handler",
             "re_abort": "_re_abort_handler",
             "re_halt": "_re_halt_handler",
+            "re_runs": "_re_runs_handler",
             "manager_stop": "_manager_stop_handler",
             "manager_kill": "_manager_kill_handler",
         }
@@ -1265,6 +1329,9 @@ class RunEngineManager(Process):
                             )
             else:
                 logger.error("Error while reading RE Worker status: %s", err_msg)
+        else:
+            self._worker_state_info = None
+
         if not self._manager_state == MState.EXECUTING_QUEUE:
             # TODO: there is no 'unknown' status. This is here temporarily. Different logic
             #   has to be applied here.

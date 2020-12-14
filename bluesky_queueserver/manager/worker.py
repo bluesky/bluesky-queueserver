@@ -6,8 +6,12 @@ import os
 import asyncio
 from functools import partial
 import logging
+import copy
 
 from .comms import PipeJsonRpcReceive
+
+from bluesky.callbacks.core import CallbackBase
+from event_model import RunRouter
 
 import msgpack
 import msgpack_numpy as mpn
@@ -21,6 +25,82 @@ from .profile_ops import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class RunList:
+    def __init__(self):
+        self._run_list = []
+        self._lock = threading.Lock()
+        self._list_changed = False
+
+    def is_changed(self):
+        return self._list_changed
+
+    def clear(self):
+        with self._lock:
+            self._run_list.clear()
+            self._list_changed = True
+
+    def add_run(self, *, uid):
+        with self._lock:
+            self._run_list.append({"uid": uid, "is_open": True, "exit_status": None})
+            self._list_changed = True
+
+    def set_run_closed(self, *, uid, exit_status):
+        with self._lock:
+            run = None
+            # 'reversed' - if a plan sequentially opens/closes many runs, the open run is much more
+            #   likely to be at the end of the list.
+            for r in reversed(self._run_list):
+                if r["uid"] == uid:
+                    run = r
+                    break
+
+            if run is None:
+                raise Exception("Run with UID '%s' was not found in the list", uid)
+
+            run["is_open"] = False
+            run["exit_status"] = exit_status
+            self._list_changed = True
+
+    def get_run_list(self, *, clear_state=False):
+        with self._lock:
+            run_list_copy = copy.deepcopy(self._run_list)
+            if clear_state:
+                self._list_changed = False
+            return run_list_copy
+
+
+class CallbackRegisterRun(CallbackBase):
+    def __init__(self, *, run_list):
+        super().__init__()
+        self._run_list = run_list
+
+    def start(self, doc):
+        """
+        Process START documents
+        """
+        try:
+            uid = doc["uid"]
+            self._run_list.add_run(uid=uid)
+
+            print(f"New run was open: '{uid}'")
+            print(f"Run list: {self._run_list.get_run_list()}")
+        except Exception as ex:
+            logger.exception(f"RE Manager: Could not register new run: {ex}")
+
+    def stop(self, doc):
+        """
+        Process STOP documents
+        """
+        try:
+            uid = doc["run_start"]
+            exit_status = doc["exit_status"]
+            self._run_list.set_run_closed(uid=uid, exit_status=exit_status)
+
+            print(f"Run was closed: '{uid}'")
+        except Exception as ex:
+            logger.exception(f"RE Manager: Failed to label run as closed: {ex}")
 
 
 class RunEngineWorker(Process):
@@ -75,6 +155,9 @@ class RunEngineWorker(Process):
         self._config = config or {}
         self._allowed_plans, self._allowed_devices = {}, {}
 
+        # The list of runs that were opened as part of execution of the currently running plan.
+        self._active_run_list = RunList()
+
         self._re_namespace, self._existing_plans, self._existing_devices = {}, {}, {}
 
     def _execute_plan(self, plan, is_resuming):
@@ -112,6 +195,9 @@ class RunEngineWorker(Process):
                 # Include RE state
                 self._re_report["re_state"] = str(self._RE._state)
 
+                # Clear the list of active runs
+                self._active_run_list.clear()
+
         except BaseException as ex:
             with self._re_report_lock:
 
@@ -133,6 +219,9 @@ class RunEngineWorker(Process):
                     self._re_report["plan_state"] = "error"
                     self._re_report["success"] = False
                     self._state["running_plan_completed"] = True
+
+                    # Clear the list of active runs (don't clean the list for the paused plan).
+                    self._active_run_list.clear()
 
                 # Include RE state
                 self._re_report["re_state"] = str(self._RE._state)
@@ -253,12 +342,14 @@ class RunEngineWorker(Process):
         re_state = str(self._RE._state) if self._RE else "null"
         env_state = self._state["environment_state"]
         re_report_available = self._re_report is not None
+        run_list_updated = self._active_run_list.is_changed()  # True - updates are available
         msg_out = {
             "running_item_uid": item_uid,
             "running_plan_completed": plan_completed,
             "re_report_available": re_report_available,
             "re_state": re_state,
             "environment_state": env_state,
+            "run_list_updated": run_list_updated
         }
         return msg_out
 
@@ -272,6 +363,16 @@ class RunEngineWorker(Process):
         # TODO: may be report should be cleared only after the reset? Check the logic.
         msg_out = self._re_report
         self._re_report = None
+        return msg_out
+
+    def _request_run_list_handler(self):
+        """
+        Returns the list of runs for the currently executed plan and clears the state
+        of the list. The list can be requested at any time, but it is recommended that
+        the state of the list is checked first (`re_report` field `run_list_updated`)
+        and update is loaded only if updates exist (`run_list_updated is True`).
+        """
+        msg_out = {"run_list": self._active_run_list.get_run_list(clear_state=True)}
         return msg_out
 
     def _command_close_env_handler(self):
@@ -462,6 +563,7 @@ class RunEngineWorker(Process):
 
         self._comm_to_manager.add_method(self._request_state_handler, "request_state")
         self._comm_to_manager.add_method(self._request_plan_report_handler, "request_plan_report")
+        self._comm_to_manager.add_method(self._request_run_list_handler, "request_run_list")
         self._comm_to_manager.add_method(self._command_close_env_handler, "command_close_env")
         self._comm_to_manager.add_method(self._command_confirm_exit_handler, "command_confirm_exit")
         self._comm_to_manager.add_method(self._command_run_plan_handler, "command_run_plan")
@@ -553,8 +655,15 @@ class RunEngineWorker(Process):
                     self._RE = RunEngine(md)
                     self._re_namespace["RE"] = self._RE
 
-                    bec = BestEffortCallback()
-                    self._RE.subscribe(bec)
+                    def factory(name, doc):
+                        # Documents from each run is routed to an independent
+                        #   instance of BestEffortCallback
+                        bec = BestEffortCallback()
+                        return [bec], []
+
+                    # Subscribe to Best Effort Callback in the way that works with multi-run plans.
+                    rr = RunRouter([factory])
+                    self._RE.subscribe(rr)
 
                     # Subscribe RE to databroker if config file name is provided
                     self._db = None
@@ -568,6 +677,11 @@ class RunEngineWorker(Process):
                             self._re_namespace["db"] = self._db
 
                             self._RE.subscribe(self._db.insert)
+
+                # Subscribe Run Engine to 'CallbackRegisterRun'. This callback is used internally
+                #   by the worker process to keep track of the runs that are open and closed.
+                run_reg_cb = CallbackRegisterRun(run_list=self._active_run_list)
+                self._RE.subscribe(run_reg_cb)
 
                 if "kafka" in self._config:
                     logger.info(

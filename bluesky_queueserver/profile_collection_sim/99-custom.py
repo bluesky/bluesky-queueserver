@@ -69,11 +69,11 @@ def _sim_plan_inner(npts: int, delay: float = 1.0):
 @parameter_annotation_decorator(
     {
         "description": "Simulated multi-run plan: two nested runs. "
-                       "The plan is included for testing purposes only.",
+        "The plan is included for testing purposes only.",
         "parameters": {
             "npts": {
                 "description": "The number of measurements in the outer run. "
-                               "Inner run will contain 'npts+1' measurments.",
+                "Inner run will contain 'npts+1' measurments.",
             },
             "delay": {
                 "description": "Delay between measurements.",
@@ -82,14 +82,14 @@ def _sim_plan_inner(npts: int, delay: float = 1.0):
     }
 )
 def sim_multirun_plan_nested(npts: int, delay: float = 1.0):
-    for j in range(int(npts/2)):
+    for j in range(int(npts / 2)):
         yield from bps.mov(motor, j * 0.2)
         yield from bps.trigger_and_read([motor, det])
         yield from bps.sleep(delay)
 
     yield from _sim_plan_inner(npts + 1, delay)
 
-    for j in range(int(npts/2), npts):
+    for j in range(int(npts / 2), npts):
         yield from bps.mov(motor, j * 0.2)
         yield from bps.trigger_and_read([motor, det])
         yield from bps.sleep(delay)

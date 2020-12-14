@@ -349,7 +349,7 @@ class RunEngineWorker(Process):
             "re_report_available": re_report_available,
             "re_state": re_state,
             "environment_state": env_state,
-            "run_list_updated": run_list_updated
+            "run_list_updated": run_list_updated,
         }
         return msg_out
 

@@ -6,7 +6,7 @@ from bluesky_queueserver.manager.plan_monitoring import RunList, CallbackRegiste
 
 def test_RunList_1():
     """
-    Basic tests from RunList class.
+    Full functionality test: ``RunList`` class.
     """
     uids = [uuid.uuid4() for _ in range(3)]
     is_open = [True] * 3
@@ -54,11 +54,15 @@ def test_RunList_1():
     assert run_list.is_changed() is False
 
 
-
 def test_CallbackRegisterRun_1():
     """
-    Basic tests from CallbackRegisterRun class.
+    Basic test: ``CallbackRegisterRun`` class.
     """
     run_list = RunList()
     cb = CallbackRegisterRun(run_list=run_list)
-    cb("start", {"uid": "abc"})
+    uid = uuid.uuid4()
+
+    cb("start", {"uid": uid})
+    assert run_list.get_run_list() == [{"uid": uid, "is_open": True, "exit_status": None}]
+    cb("stop", {"run_start": uid, "exit_status": "success"})
+    assert run_list.get_run_list() == [{"uid": uid, "is_open": False, "exit_status": "success"}]

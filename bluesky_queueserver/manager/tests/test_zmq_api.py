@@ -6,6 +6,7 @@ import asyncio
 from bluesky_queueserver.manager.profile_ops import (
     get_default_profile_collection_dir,
     load_allowed_plans_and_devices,
+    gen_list_of_plans_and_devices,
 )
 
 from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
@@ -19,8 +20,10 @@ from ._common import (
     get_queue_state,
     condition_environment_closed,
     condition_manager_idle,
+    copy_default_profile_collection,
+    append_code_to_last_startup_file,
 )
-from ._common import re_manager, re_manager_pc_copy  # noqa: F401
+from ._common import re_manager, re_manager_pc_copy   # noqa: F401
 
 # Plans used in most of the tests: '_plan1' and '_plan2' are quickly executed '_plan3' runs for 5 seconds.
 _plan1 = {"name": "count", "args": [["det1", "det2"]]}
@@ -846,6 +849,114 @@ def test_zmq_api_move_plan_1(re_manager, params, src, order, success, msg):  # n
         assert resp2["success"] is False
         assert msg in resp2["msg"]
 
+
+# =======================================================================================
+#                              Method `re_runs`
+
+
+_sample_multirun_plan1 = """
+import bluesky.preprocessors as bpp
+import bluesky.plan_stubs as bps
+
+
+@bpp.set_run_key_decorator("run_2")
+@bpp.run_decorator(md={})
+def _multirun_plan_inner():
+    npts, delay = 5, 1.0
+    for j in range(npts):
+        yield from bps.mov(motor1, j * 0.1 + 1, motor2, j * 0.2 - 2)
+        yield from bps.trigger_and_read([motor1, motor2, det2])
+        yield from bps.sleep(delay)
+
+
+@bpp.set_run_key_decorator("run_1")
+@bpp.run_decorator(md={})
+def multirun_plan_nested():
+    '''
+    Multirun plan that is expected to produce 3 runs: 2 sequential runs nested in 1 outer run.
+    '''
+    npts, delay = 6, 1.0
+    for j in range(int(npts / 2)):
+        yield from bps.mov(motor, j * 0.2)
+        yield from bps.trigger_and_read([motor, det])
+        yield from bps.sleep(delay)
+
+    yield from _multirun_plan_inner()
+
+    yield from _multirun_plan_inner()
+
+    for j in range(int(npts / 2), npts):
+        yield from bps.mov(motor, j * 0.2)
+        yield from bps.trigger_and_read([motor, det])
+        yield from bps.sleep(delay)
+"""
+
+
+def test_re_runs_1(re_manager_pc_copy, tmp_path):
+
+    pc_path = copy_default_profile_collection(tmp_path)
+    append_code_to_last_startup_file(pc_path, additional_code=_sample_multirun_plan1)
+
+    gen_list_of_plans_and_devices(pc_path, overwrite=True)
+    resp1, _ = zmq_single_request("permissions_reload")
+    assert resp1["success"] is True, f"resp={resp1}"
+
+    params = {"plan": {"name": "multirun_plan_nested"}, "user": _user, "user_group": _user_group}
+    resp2, _ = zmq_single_request("queue_item_add", params)
+    assert resp2["success"] is True, f"resp={resp2}"
+
+    # Open the environment
+    resp3, _ = zmq_single_request("environment_open")
+    assert resp3["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    resp, _ = zmq_single_request("status")
+    run_list_uid = resp["run_list_uid"]
+
+    resp4, _ = zmq_single_request("queue_start")
+    assert resp4["success"] is True
+
+    run_list_states = [
+        {"n": 1, "open": [True]},
+        {"n": 2, "open": [True, True]},
+        {"n": 2, "open": [True, False]},
+        {"n": 3, "open": [True, False, True]},
+        {"n": 3, "open": [True, False, False]},
+        {"n": 3, "open": [False, False, False]},
+        {"n": 0, "open": []},
+    ]
+
+    time_finish = ttime.time() + 60
+    while ttime.time() < time_finish:
+
+        # Exit if the plan execution is completed
+        resp, _ = zmq_single_request("status")
+        if resp["manager_state"] == "idle":
+            break
+
+        if run_list_uid != resp["run_list_uid"]:
+            run_list_uid = resp["run_list_uid"]
+
+        ttime.sleep(0.1)
+
+    #assert wait_for_condition(time=60, condition=condition_queue_processing_finished)
+
+    resp5a, _ = zmq_single_request("status")
+    assert resp5a["items_in_queue"] == 0
+    assert resp5a["items_in_history"] == 1
+
+    resp5b, _ = zmq_single_request("history_get")
+    assert resp5b["success"] is True
+    history = resp5b["history"]
+    assert len(history) == 1, str(resp5b)
+    # Check that correct number of UIDs are saved in the history
+    history_run_uids = history[0]["result"]["run_uids"]
+    assert len(history_run_uids) == 3, str(resp5b)
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 # =======================================================================================
 #                 Tests for different scenarios of queue execution

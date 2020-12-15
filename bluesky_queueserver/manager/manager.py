@@ -571,6 +571,20 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": err_msg}
 
+    def _load_allowed_plans_and_devices(self):
+        """
+        Load the list of allowed plans and devices
+        """
+        try:
+            path_pd = self._config["existing_plans_and_devices_path"]
+            path_ug = self._config["user_group_permissions_path"]
+            self._allowed_plans, self._allowed_devices = load_allowed_plans_and_devices(
+                path_existing_plans_and_devices=path_pd, path_user_group_permissions=path_ug
+            )
+        except Exception as ex:
+            raise Exception("Error occurred while loading lists of allowed plans and devices from "
+                            "'{path_pd}': {str(ex)}")
+
     # ===============================================================================
     #         Functions that send commands/request data from Worker process
 
@@ -824,6 +838,19 @@ class RunEngineManager(Process):
             "msg": msg,
             "devices_allowed": devices_allowed,
         }
+
+    async def _permissions_reload_handler(self, request):
+        """
+        Reloads the list of allowed plans and devices from the location provided in command line parameters.
+        """
+        logger.info("Reloading lists of allowed plans and devices ...")
+        try:
+            self._load_allowed_plans_and_devices()
+            success, msg = True, ""
+        except Exception as ex:
+            success = False
+            msg = f"Error: {str(ex)}"
+        return {"success": success, "msg": msg}
 
     async def _queue_get_handler(self, request):
         """
@@ -1213,6 +1240,7 @@ class RunEngineManager(Process):
             "queue_get": "_queue_get_handler",
             "plans_allowed": "_plans_allowed_handler",
             "devices_allowed": "_devices_allowed_handler",
+            "permissions_reload": "_permissions_reload_handler",
             "history_get": "_history_get_handler",
             "history_clear": "_history_clear_handler",
             "environment_open": "_environment_open_handler",
@@ -1284,18 +1312,10 @@ class RunEngineManager(Process):
 
         # Load lists of allowed plans and devices
         logger.info("Loading the lists of allowed plans and devices ...")
-        path_pd = self._config["existing_plans_and_devices_path"]
-        path_ug = self._config["user_group_permissions_path"]
         try:
-            self._allowed_plans, self._allowed_devices = load_allowed_plans_and_devices(
-                path_existing_plans_and_devices=path_pd, path_user_group_permissions=path_ug
-            )
+            self._load_allowed_plans_and_devices()
         except Exception as ex:
-            logger.exception(
-                "Error occurred while loading lists of allowed plans and devices from '%s': %s",
-                path_pd,
-                str(ex),
-            )
+            logger.exception("Exception: %s", ex)
 
         # Set the environment state based on whether the worker process is alive (request Watchdog)
         self._environment_exists = await self._is_worker_alive()

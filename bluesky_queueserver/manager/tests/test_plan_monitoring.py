@@ -1,7 +1,7 @@
 import pytest
 import uuid
 
-from bluesky_queueserver.manager.run_monitoring import RunList, CallbackRegisterRun
+from bluesky_queueserver.manager.plan_monitoring import RunList, CallbackRegisterRun
 
 
 def test_RunList_1():
@@ -11,8 +11,9 @@ def test_RunList_1():
     uids = [uuid.uuid4() for _ in range(3)]
     is_open = [True] * 3
     exit_code = [None] * 3
-    expected_run_list = [{"uid": _[0], "is_open": _[1], "exit_status": _[2]}
-                         for _ in zip(uids, is_open, exit_code)]
+    expected_run_list = [
+        {"uid": _[0], "is_open": _[1], "exit_status": _[2]} for _ in zip(uids, is_open, exit_code)
+    ]
 
     # Create run list
     run_list = RunList()
@@ -45,3 +46,12 @@ def test_RunList_1():
     with pytest.raises(Exception, match="Run with UID .* was not found in the list"):
         run_list.set_run_closed(uid="non-existing-uid", exit_status="success")
     assert run_list.is_changed() is False
+
+
+def test_CallbackRegisterRun_1():
+    """
+    Basic tests from CallbackRegisterRun class.
+    """
+    run_list = RunList()
+    cb = CallbackRegisterRun(run_list=run_list)
+    cb("start", {"uid": "abc"})

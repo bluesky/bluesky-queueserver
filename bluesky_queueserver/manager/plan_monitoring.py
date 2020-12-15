@@ -12,6 +12,7 @@ class RunList:
     The class for maintaining the list of active runs (used in RE Worker).
     The calls of the class methods are thread-safe.
     """
+
     def __init__(self):
         self._run_list = []
         self._lock = threading.Lock()
@@ -106,6 +107,7 @@ class CallbackRegisterRun(CallbackBase):
     run_list : RunList
         reference to ``RunList`` object used to store Run UIDs.
     """
+
     def __init__(self, *, run_list):
         super().__init__()
         self._run_list = run_list

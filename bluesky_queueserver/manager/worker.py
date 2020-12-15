@@ -22,7 +22,7 @@ from .profile_ops import (
     parse_plan,
 )
 
-from .run_monitoring import RunList, CallbackRegisterRun
+from .plan_monitoring import RunList, CallbackRegisterRun
 
 logger = logging.getLogger(__name__)
 

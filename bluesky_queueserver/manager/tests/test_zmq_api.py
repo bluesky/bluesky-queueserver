@@ -891,16 +891,24 @@ def multirun_plan_nested():
         yield from bps.sleep(delay)
 """
 
-
-def test_re_runs_1(re_manager_pc_copy, tmp_path):
-
+# fmt: off
+@pytest.mark.parametrize("test_with_manager_restart", [False, True])
+# fmt: on
+def test_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_restart):  # noqa: F811
+    """
+    Relatively complicated test for ``re_runs`` ZMQ API with multirun test. The same test
+    is run with and without manager restart (API ``manager_kill``). Additionally
+    the ``permissions_reload`` API was tested.
+    """
     pc_path = copy_default_profile_collection(tmp_path)
     append_code_to_last_startup_file(pc_path, additional_code=_sample_multirun_plan1)
 
+    # Generate the new list of allowed plans and devices and reload them
     gen_list_of_plans_and_devices(pc_path, overwrite=True)
     resp1, _ = zmq_single_request("permissions_reload")
     assert resp1["success"] is True, f"resp={resp1}"
 
+    # Add plan to the queue
     params = {"plan": {"name": "multirun_plan_nested"}, "user": _user, "user_group": _user_group}
     resp2, _ = zmq_single_request("queue_item_add", params)
     assert resp2["success"] is True, f"resp={resp2}"
@@ -910,41 +918,110 @@ def test_re_runs_1(re_manager_pc_copy, tmp_path):
     assert resp3["success"] is True
     assert wait_for_condition(time=10, condition=condition_environment_created)
 
+    # Get initial value of (empty) run list to capture changes in the run list
     resp, _ = zmq_single_request("status")
     run_list_uid = resp["run_list_uid"]
 
+    # Start the queue
     resp4, _ = zmq_single_request("queue_start")
     assert resp4["success"] is True
 
+    # The plan consists of 3 runs: runs #2 and #3 are sequential and enclosed in run #1.
+    #   As the plan is executed we are going to look at the states of the executed runs.
+    #   The sequence of possible states is known and we will capture all the states we can
+    #   (by monitoring 'run_list_uid' in RE Monitor status). The states may occur only in
+    #   the listed sequence, but some of the states are very unlikely to be hit, so they
+    #   are marked as not required.
     run_list_states = [
-        {"n": 1, "open": [True]},
-        {"n": 2, "open": [True, True]},
-        {"n": 2, "open": [True, False]},
-        {"n": 3, "open": [True, False, True]},
-        {"n": 3, "open": [True, False, False]},
-        {"n": 3, "open": [False, False, False]},
-        {"n": 0, "open": []},
+        {"is_open": [True], "required": True},
+        {"is_open": [True, True], "required": True},
+        {"is_open": [True, False], "required": False},
+        {"is_open": [True, False, True], "required": True},
+        {"is_open": [True, False, False], "required": True},
+        {"is_open": [False, False, False], "required": False},
+        {"is_open": [], "required": False},
     ]
+    # We will count the number of times the state was detected.
+    states_found = [0] * len(run_list_states)
 
+    # The index of the last state.
+    n_last_state = -1
+
+    # If test includes manager restart, then do the restart.
+    if test_with_manager_restart:
+        ttime.sleep(4)   # Let the plan work for a little bit.
+        zmq_single_request("manager_kill")
+
+    # Wait for the end of execution of the plan with timeout (60 seconds)
     time_finish = ttime.time() + 60
     while ttime.time() < time_finish:
 
-        # Exit if the plan execution is completed
+        # If the manager was restarted, then wait for the manager to restart.
+        #   All requests will time out until the manager is restarted.
         resp, _ = zmq_single_request("status")
+        if test_with_manager_restart and not resp:
+            # Wait until RE Manager is restarted
+            continue
+        else:
+            # This is an error, raise the exception
+            assert resp
+
+        # Exit if the plan execution is completed
         if resp["manager_state"] == "idle":
             break
 
+        # Check if 'run_list_uid' changed. If yes, then read and analyze the new 'run_uid'.
         if run_list_uid != resp["run_list_uid"]:
             run_list_uid = resp["run_list_uid"]
+            # Use all supported combinations of options to load the 'run_uid'.
+            resp_run_list1, _ = zmq_single_request("re_runs")
+            resp_run_list2, _ = zmq_single_request("re_runs", params={"option": "active"})
+            resp_run_list3, _ = zmq_single_request("re_runs", params={"option": "open"})
+            resp_run_list4, _ = zmq_single_request("re_runs", params={"option": "closed"})
+            full_list = resp_run_list1["run_list"]
+            assert resp_run_list2["run_list"] == full_list
+            assert resp_run_list3["run_list"] == [_ for _ in full_list if _["is_open"]]
+            assert resp_run_list4["run_list"] == [_ for _ in full_list if not _["is_open"]]
+
+            # Save full UID list (for all runs)
+            if len(full_list) == 3:
+                full_uid_list = [_["uid"] for _ in full_list]
+
+            is_open_list = [_["is_open"] for _ in full_list]
+            for n, state in enumerate(run_list_states):
+                if state["is_open"] == is_open_list:
+                    states_found[n] += 1
+                    assert n > n_last_state, f"The Run List state #{n} was visited after state #{n_last_state}"
+                    n_last_state = n
+                    break
 
         ttime.sleep(0.1)
 
-    #assert wait_for_condition(time=60, condition=condition_queue_processing_finished)
+    # Since some states could be missed if RE Manager is restarted, we don't do the following check.
+    if not test_with_manager_restart:
+        for n_hits, state in zip(states_found, run_list_states):
+            if state["required"]:
+                assert n_hits == 1
 
+    # Finally check the status (to ensure the plan was executed correctly).
     resp5a, _ = zmq_single_request("status")
     assert resp5a["items_in_queue"] == 0
     assert resp5a["items_in_history"] == 1
+    # Also check if 'run_list_uid' was updated when the run list was cleared.
+    if states_found[-1]:
+        # The last state in the list is an empty run list. So UID is expected to remain the same.
+        assert resp5a["run_list_uid"] == run_list_uid
+    else:
+        # UID is expected to change, because the run list is cleared at the end of plan execution.
+        assert resp5a["run_list_uid"] != run_list_uid
 
+    # Make sure that the run list is empty.
+    resp5b, _ = zmq_single_request("re_runs")
+    assert resp5b["success"] is True
+    assert resp5b["msg"] == ""
+    assert resp5b["run_list"] == []
+
+    # Make sure that history contains correct data.
     resp5b, _ = zmq_single_request("history_get")
     assert resp5b["success"] is True
     history = resp5b["history"]
@@ -952,11 +1029,14 @@ def test_re_runs_1(re_manager_pc_copy, tmp_path):
     # Check that correct number of UIDs are saved in the history
     history_run_uids = history[0]["result"]["run_uids"]
     assert len(history_run_uids) == 3, str(resp5b)
+    # Make sure that the list of UID in history matches the list of UIDs in the run list
+    assert history_run_uids == full_uid_list
 
     # Close the environment
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)
+
 
 # =======================================================================================
 #                 Tests for different scenarios of queue execution

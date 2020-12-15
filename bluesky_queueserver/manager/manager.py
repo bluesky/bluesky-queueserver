@@ -1323,8 +1323,8 @@ class RunEngineManager(Process):
         # Now check if the plan is still being executed (if it was executed)
         if self._environment_exists:
             # Attempt to load the list of active runs.
-            self._re_run_list, _ = await self._worker_request_run_list()
-            self._re_run_list = self._re_run_list or []
+            re_run_list, _ = await self._worker_request_run_list()
+            self._re_run_list = re_run_list["run_list"] if re_run_list else []
             self._re_run_list_uid = str(uuid.uuid4())
 
             self._worker_state_info, err_msg = await self._worker_request_state()

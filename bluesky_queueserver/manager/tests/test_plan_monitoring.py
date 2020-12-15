@@ -18,6 +18,7 @@ def test_RunList_1():
     # Create run list
     run_list = RunList()
     assert run_list.is_changed() is False
+    assert run_list.get_run_list() == []
 
     # Add one object
     run_list.add_run(uid=uids[0])
@@ -46,6 +47,12 @@ def test_RunList_1():
     with pytest.raises(Exception, match="Run with UID .* was not found in the list"):
         run_list.set_run_closed(uid="non-existing-uid", exit_status="success")
     assert run_list.is_changed() is False
+
+    run_list.clear()
+    assert run_list.is_changed() is True
+    assert run_list.get_run_list(clear_state=True) == []
+    assert run_list.is_changed() is False
+
 
 
 def test_CallbackRegisterRun_1():

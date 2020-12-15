@@ -23,7 +23,7 @@ from ._common import (
     copy_default_profile_collection,
     append_code_to_last_startup_file,
 )
-from ._common import re_manager, re_manager_pc_copy   # noqa: F401
+from ._common import re_manager, re_manager_pc_copy  # noqa: F401
 
 # Plans used in most of the tests: '_plan1' and '_plan2' are quickly executed '_plan3' runs for 5 seconds.
 _plan1 = {"name": "count", "args": [["det1", "det2"]]}
@@ -891,6 +891,7 @@ def multirun_plan_nested():
         yield from bps.sleep(delay)
 """
 
+
 # fmt: off
 @pytest.mark.parametrize("test_with_manager_restart", [False, True])
 # fmt: on
@@ -949,7 +950,7 @@ def test_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_restart):  # 
 
     # If test includes manager restart, then do the restart.
     if test_with_manager_restart:
-        ttime.sleep(4)   # Let the plan work for a little bit.
+        ttime.sleep(4)  # Let the plan work for a little bit.
         zmq_single_request("manager_kill")
 
     # Wait for the end of execution of the plan with timeout (60 seconds)

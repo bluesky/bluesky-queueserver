@@ -582,8 +582,9 @@ class RunEngineManager(Process):
                 path_existing_plans_and_devices=path_pd, path_user_group_permissions=path_ug
             )
         except Exception as ex:
-            raise Exception("Error occurred while loading lists of allowed plans and devices from "
-                            "'{path_pd}': {str(ex)}")
+            raise Exception(
+                f"Error occurred while loading lists of allowed plans and devices from '{path_pd}': {str(ex)}"
+            )
 
     # ===============================================================================
     #         Functions that send commands/request data from Worker process

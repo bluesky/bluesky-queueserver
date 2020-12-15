@@ -1304,8 +1304,8 @@ class RunEngineManager(Process):
         if self._environment_exists:
             # Attempt to load the list of active runs.
             self._re_run_list, _ = await self._worker_request_run_list()
-            self._re_run_list = self.re_run_list or []
-            self._re_run_list_uid = uuid.uid4()
+            self._re_run_list = self._re_run_list or []
+            self._re_run_list_uid = str(uuid.uuid4())
 
             self._worker_state_info, err_msg = await self._worker_request_state()
             if self._worker_state_info:

@@ -90,15 +90,6 @@ def validate_payload_keys(payload, *, required_keys=None, optional_keys=None):
 
 
 @app.get("/")
-async def root_handler():
-    """
-    May be called to get some response from the server. Currently returns status of RE Manager.
-    Calls `ping` request to RE Manager. Identical to `/ping`.
-    """
-    msg = await zmq_to_manager.send_message(method="ping")
-    return msg
-
-
 @app.get("/ping")
 async def ping_handler():
     """

@@ -329,7 +329,7 @@ async def re_runs_closed_handler():
     """
     Run Engine: download the subset of active runs that includes runs that were already closed.
     """
-    params = {"option": "open"}
+    params = {"option": "closed"}
     msg = await zmq_to_manager.send_message(method="re_runs", params=params)
     return msg
 

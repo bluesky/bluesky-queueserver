@@ -925,3 +925,24 @@ def test_qserver_ping(re_manager):  # noqa: F811
 
     # Send 'ping' request
     assert subprocess.call(["qserver", "ping"]) == 0
+
+
+# fmt: off
+@pytest.mark.parametrize("option, exit_code", [
+    (None, SUCCESS),
+    ("active", SUCCESS),
+    ("open", SUCCESS),
+    ("closed", SUCCESS),
+    ("some_unknown", PARAM_ERROR)
+])
+# fmt: on
+def test_qserver_re_runs(re_manager, option, exit_code):  # noqa: F811
+    """
+    Basic test for ``re_runs`` method. There is no easy way to verify if the response
+    was correct, so we just check if all supported combinations of parameters are accepted.
+    """
+    # Wait until RE Manager is started
+    assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+    params = [option] if option else []
+    assert subprocess.call(["qserver", "re", "runs", *params]) == exit_code

@@ -752,7 +752,9 @@ def test_http_server_queue_stop(re_manager, fastapi_server, deactivate):  # noqa
 ])
 # fmt: on
 def test_http_server_re_runs(re_manager, fastapi_server, suffix, expected_n_items):  # noqa F811
-
+    """
+    Basic test for ``/re/run/...`` API. The API is tested on a single run plan.
+    """
     resp1 = _request_to_json("post", "/queue/item/add", json={"plan": _plan3})
     assert resp1["success"] is True
     assert resp1["qsize"] == 1

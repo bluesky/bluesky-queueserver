@@ -1145,7 +1145,7 @@ class RunEngineManager(Process):
         method = msg["method"]
         params = msg["params"]
         handler_dict = {
-            "": "_ping_handler",
+            "ping": "_ping_handler",
             "status": "_status_handler",
             "queue_get": "_queue_get_handler",
             "plans_allowed": "_plans_allowed_handler",

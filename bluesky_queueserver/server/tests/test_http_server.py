@@ -753,7 +753,7 @@ def test_http_server_queue_stop(re_manager, fastapi_server, deactivate):  # noqa
 # fmt: on
 def test_http_server_re_runs(re_manager, fastapi_server, suffix, expected_n_items):  # noqa F811
 
-    resp1 = _request_to_json("post", "/queue/item/add", json = {"plan": _plan3})
+    resp1 = _request_to_json("post", "/queue/item/add", json={"plan": _plan3})
     assert resp1["success"] is True
     assert resp1["qsize"] == 1
 
@@ -775,4 +775,3 @@ def test_http_server_re_runs(re_manager, fastapi_server, suffix, expected_n_item
     assert resp2["run_list_uid"] == run_list_uid
 
     assert wait_for_manager_state_idle(30), "Timeout"
-

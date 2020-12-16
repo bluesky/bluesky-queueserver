@@ -842,7 +842,8 @@ class RunEngineManager(Process):
 
     async def _permissions_reload_handler(self, request):
         """
-        Reloads the list of allowed plans and devices from the location provided in command line parameters.
+        Reloads the list of allowed plans and devices and user group permission from the default location
+        or location set using command line parameters.
         """
         logger.info("Reloading lists of allowed plans and devices ...")
         try:

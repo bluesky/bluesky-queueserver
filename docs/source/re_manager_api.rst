@@ -72,6 +72,7 @@ Allowed plans and devices:
 
 - :ref:`method_plans_allowed`
 - :ref:`method_devices_allowed`
+- :ref:`method_permissions_reload`
 
 History of executed plans:
 
@@ -254,6 +255,30 @@ Returns       **success**: *boolean*
               **devices_allowed**: *dict*
                   the dictionary that contains information on the allowed devices.
                   Dictionary keys are device names.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+
+.. _method_permissions_reload:
+
+**'permissions_reload'**
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'permissions_reload'**
+------------  -----------------------------------------------------------------------------------------
+Description   Reloads the list of allowed plans and devices and user group permission from
+              the default location or the location set using command line parameters. Use this
+              method to reload permissions if the files were changed on disk.
+------------  -----------------------------------------------------------------------------------------
+Parameters    ---
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================

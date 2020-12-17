@@ -799,16 +799,19 @@ def trivial_plan_for_unit_test():
 
 
 def test_http_server_reload_permissions(re_manager_pc_copy, fastapi_server, tmp_path):  # noqa F811
-
+    """
+    Tests for ``/permissions/reload`` API.
+    """
     pc_path = copy_default_profile_collection(tmp_path)
     append_code_to_last_startup_file(pc_path, additional_code=_sample_trivial_plan1)
 
     # Generate the new list of allowed plans and devices and reload them
     gen_list_of_plans_and_devices(pc_path, overwrite=True)
 
+    plan = {"plan": {"name": "trivial_plan_for_unit_test"}}
+
     # Attempt to add the plan to the queue. The request is supposed to fail, because
     #   the initially loaded profile collection does not contain the plan.
-    plan = {"plan": {"name": "trivial_plan_for_unit_test"}}
     resp1 = _request_to_json("post", "/queue/item/add", json=plan)
     assert resp1["success"] is False, str(resp1)
 
@@ -817,7 +820,6 @@ def test_http_server_reload_permissions(re_manager_pc_copy, fastapi_server, tmp_
     assert resp2["success"] is True, str(resp2)
 
     # Attempt to add the plan to the queue. It should be successful now.
-    plan = {"plan": {"name": "trivial_plan_for_unit_test"}}
     resp3 = _request_to_json("post", "/queue/item/add", json=plan)
     assert resp3["success"] is True, str(resp3)
     assert resp3["qsize"] == 1, str(resp3)

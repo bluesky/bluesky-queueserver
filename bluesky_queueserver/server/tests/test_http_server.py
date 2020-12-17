@@ -788,7 +788,6 @@ def test_http_server_re_runs(re_manager, fastapi_server, suffix, expected_n_item
     assert wait_for_manager_state_idle(30), "Timeout"
 
 
-
 _sample_trivial_plan1 = """
 def trivial_plan_for_unit_test():
     '''

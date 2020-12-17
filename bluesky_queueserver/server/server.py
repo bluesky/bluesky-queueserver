@@ -384,5 +384,3 @@ async def test_manager_kill_handler():
     """
     msg = await zmq_to_manager.send_message(method="manager_kill")
     return msg
-
-

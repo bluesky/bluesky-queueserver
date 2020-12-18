@@ -489,17 +489,20 @@ class RunEngineManager(Process):
                 plan_name = new_plan["name"]
                 args = new_plan["args"] if "args" in new_plan else []
                 kwargs = new_plan["kwargs"] if "kwargs" in new_plan else {}
+                meta = new_plan["meta"] if "meta" in new_plan else {}
                 item_uid = new_plan["item_uid"]
 
                 plan_info = {
                     "name": plan_name,
                     "args": args,
                     "kwargs": kwargs,
+                    "meta": meta,
                     "item_uid": item_uid,
                 }
 
                 success, err_msg = await self._worker_command_run_plan(plan_info)
                 if not success:
+                    await self._plan_queue.set_processed_item_as_stopped(exit_status="error", run_uids=[])
                     self._manager_state = MState.IDLE
                     logger.error(
                         "Failed to start the plan %s.\nError: %s",

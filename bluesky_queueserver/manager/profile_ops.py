@@ -728,6 +728,16 @@ def validate_plan(plan, *, allowed_plans, allowed_devices):
 
             _validate_plan_parameters(param_list=param_list, call_args=call_args, call_kwargs=call_kwargs)
 
+        # Check if supplied plan metadata is a dictionary or a list of dictionaries.
+        if "meta" in plan:
+            meta_msg = "Plan parameter 'meta' must be a dictionary or a list of dictionaries"
+            if isinstance(plan["meta"], (tuple, list)):
+                for meta in plan["meta"]:
+                    if not isinstance(meta, dict):
+                        raise Exception(meta_msg)
+            elif not isinstance(plan["meta"], dict):
+                raise Exception(meta_msg)
+
     except Exception as ex:
         success = False
         msg = f"Plan validation failed: {str(ex)}\nPlan: {pprint.pformat(plan)}"

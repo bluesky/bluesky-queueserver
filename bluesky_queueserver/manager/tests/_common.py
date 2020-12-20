@@ -202,8 +202,14 @@ def clear_redis_pool():
     asyncio.run(run())
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope="session")
 def db_catalog():
+    """
+    Creates msgpack-based catalog, returns reference to the catalog and the catalog name.
+    The catalog name may be used as a configuration name for subscribing to databroker.
+    Yields the dictionary: ``db_catalog["catalog"]`` - reference to the catalog,
+    ``db_catalog["catalog_name"]`` - string that represents the catalog name.
+    """
     db_catalog_name = "qserver_tests"
 
     config_dir = catalog_search_path()[0]
@@ -226,7 +232,7 @@ sources:
     driver: bluesky-msgpack-catalog
     args:
       paths:
-        - "{files_path}"    
+        - "{files_path}"
 """
 
     with open(config_path, "w") as file_out:
@@ -323,60 +329,6 @@ class ReManager:
             self._p = None
 
 
-@pytest.fixture(scope='session')
-def db_catalog():
-    """
-    Creates msgpack-based catalog, returns reference to the catalog and the catalog name.
-    The catalog name may be used as a configuration name for subscribing to databroker.
-    Yields the dictionary: ``db_catalog["catalog"]`` - reference to the catalog,
-    ``db_catalog["catalog_name"]`` - string that represents the catalog name.
-    """
-    db_catalog_name = "qserver_tests"
-
-    config_dir = catalog_search_path()[0]
-    config_path = os.path.join(config_dir, f"{db_catalog_name}.yml")
-
-    files_dir = os.path.join(tempfile.gettempdir(), "qserver_tests", "db_catalog_files")
-    files_dir = os.path.abspath(files_dir)
-    files_path = os.path.join(files_dir, "*.msgpack")
-
-    # Delete the directory 'db_catalog_files' and its contents in case it exists.
-    if os.path.isdir(files_dir):
-        shutil.rmtree(files_dir)
-
-    os.makedirs(config_dir, exist_ok=True)
-    os.makedirs(files_dir, exist_ok=True)
-
-    config_file_contents = f"""
-sources:
-  {db_catalog_name}:
-    driver: bluesky-msgpack-catalog
-    args:
-      paths:
-        - "{files_path}"    
-"""
-
-    with open(config_path, "w") as file_out:
-        file_out.writelines(config_file_contents)
-
-    # The catalog can not be opened using intake right away:
-    #   cat = intake.open_catalog(config_path)
-    # But standard way of opening a catalog such as
-    #   from databroker import catalog
-    #   catalog[qserver_tests]
-    # and subscription of Run Engine to Data Broker will not work.
-    # So we need the delay.
-    ttime.sleep(2.0)
-
-    cat = intake.open_catalog(config_path)
-    cat = cat[db_catalog_name]
-
-    yield {"catalog": cat, "catalog_name": db_catalog_name}
-
-    os.remove(config_path)
-    shutil.rmtree(files_dir)
-
-
 @pytest.fixture
 def re_manager_cmd():
     """
@@ -398,7 +350,9 @@ def re_manager_cmd():
         re["re"] = ReManager(params)
 
         # Wait until RE Manager is started
-        assert wait_for_condition(time=10, condition=condition_manager_idle), "Timeout: RE Manager failed to start."
+        assert wait_for_condition(
+            time=10, condition=condition_manager_idle
+        ), "Timeout: RE Manager failed to start."
 
     def _close():
         """

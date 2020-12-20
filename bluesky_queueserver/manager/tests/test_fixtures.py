@@ -13,7 +13,7 @@ from ._common import (
 _user, _user_group = "Testing Script", "admin"
 
 
-def test_fixture_db_catalog(db_catalog):
+def test_fixture_db_catalog(db_catalog):  # noqa F811
     """
     Basic test for the fixture `db_catalog`.
     """
@@ -24,14 +24,16 @@ def test_fixture_db_catalog(db_catalog):
 
     # Try to access the catalog in 'standard' way
     from databroker import catalog
+
     assert list(catalog[db_catalog["catalog_name"]]) == list(db_catalog["catalog"])
 
     # Try to instantiated the Data Broker
     from databroker import Broker
+
     Broker.named(db_catalog["catalog_name"])
 
 
-def test_fixture_re_manager_cmd_1(re_manager_cmd):
+def test_fixture_re_manager_cmd_1(re_manager_cmd):  # noqa F811
     """
     Basic test for ``re_manager_cmd``.
     """
@@ -41,7 +43,7 @@ def test_fixture_re_manager_cmd_1(re_manager_cmd):
     re_manager_cmd([])
 
 
-def test_fixture_re_manager_cmd_2(re_manager_cmd, db_catalog):
+def test_fixture_re_manager_cmd_2(re_manager_cmd, db_catalog):  # noqa F811
     """
     Test for the fixture ``re_manager_cmd``: start RE Manager with command line parameters.
     Subscribe RE to databroker (created by ``db_catalog``, execute the plan and make sure

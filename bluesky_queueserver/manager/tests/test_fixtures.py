@@ -84,8 +84,9 @@ def test_fixture_re_manager_cmd_2(re_manager_cmd, db_catalog):  # noqa F811
     history = resp6["history"]
     assert len(history) == 1
 
-    start_doc = cat[-1].metadata["start"]
-    assert history[-1]["result"]["run_uids"] == [start_doc["uid"]]
+    uid = history[-1]["result"]["run_uids"][0]
+    start_doc = cat[uid].metadata["start"]
+    assert start_doc["uid"] == uid
 
     # Close the environment.
     resp7, _ = zmq_single_request("environment_close")

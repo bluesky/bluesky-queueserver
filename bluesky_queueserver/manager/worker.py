@@ -22,8 +22,6 @@ from .profile_ops import (
     parse_plan,
 )
 
-from .plan_monitoring import RunList, CallbackRegisterRun
-
 logger = logging.getLogger(__name__)
 
 
@@ -80,7 +78,8 @@ class RunEngineWorker(Process):
         self._allowed_plans, self._allowed_devices = {}, {}
 
         # The list of runs that were opened as part of execution of the currently running plan.
-        self._active_run_list = RunList()
+        # Initialized with 'RunList()' in 'run()' method.
+        self._active_run_list = None
 
         self._re_namespace, self._existing_plans, self._existing_devices = {}, {}, {}
 
@@ -484,6 +483,10 @@ class RunEngineWorker(Process):
         by the `start` method.
         """
         success = True
+
+        from .plan_monitoring import RunList, CallbackRegisterRun
+
+        self._active_run_list = RunList()  # Initialization should be done before communication is enabled.
 
         self._comm_to_manager.add_method(self._request_state_handler, "request_state")
         self._comm_to_manager.add_method(self._request_plan_report_handler, "request_plan_report")

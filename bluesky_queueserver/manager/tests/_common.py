@@ -202,7 +202,7 @@ def clear_redis_pool():
     asyncio.run(run())
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def db_catalog():
     """
     Creates msgpack-based catalog, returns reference to the catalog and the catalog name.

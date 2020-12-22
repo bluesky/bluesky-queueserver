@@ -657,7 +657,12 @@ def test_verify_default_profile_collection():
     assert set(plans.keys()) == set(existing_plans.keys())
     assert set(devices) == set(existing_devices)
 
-    assert plans == existing_plans
+    # The list of plans can be large, so it is better to compare the contents plan by plan.
+    #   If there is a mismatch, the printed difference is too large to be useful.
+    assert len(plans) == len(existing_plans)
+    for key in plans.keys():
+        assert plans[key] == existing_plans[key]
+
     assert devices == existing_devices
 
 

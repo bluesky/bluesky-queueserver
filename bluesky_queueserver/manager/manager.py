@@ -42,7 +42,7 @@ class RunEngineManager(Process):
         `args` and `kwargs` of the `multiprocessing.Process`
     """
 
-    def __init__(self, *args, conn_watchdog, conn_worker, config=None, **kwargs):
+    def __init__(self, *args, conn_watchdog, conn_worker, config=None, log_level="DEBUG", **kwargs):
 
         if not conn_watchdog:
             raise RuntimeError(
@@ -53,6 +53,8 @@ class RunEngineManager(Process):
             raise RuntimeError("Value of the parameter 'conn_worker' is invalid: %s.", str(conn_worker))
 
         super().__init__(*args, **kwargs)
+
+        self._log_level = log_level
 
         self._watchdog_conn = conn_watchdog
         self._worker_conn = conn_worker
@@ -1414,6 +1416,10 @@ class RunEngineManager(Process):
         Overrides the `run()` function of the `multiprocessing.Process` class. Called
         by the `start` method.
         """
+
+        logging.basicConfig(level=logging.WARNING)
+        logging.getLogger(__name__).setLevel(self._log_level)
+
         logger.info("Starting RE Manager process")
         try:
             asyncio.run(self.zmq_server_comm())

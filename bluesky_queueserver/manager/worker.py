@@ -37,12 +37,14 @@ class RunEngineWorker(Process):
         `args` and `kwargs` of the `multiprocessing.Process`
     """
 
-    def __init__(self, *args, conn, config=None, **kwargs):
+    def __init__(self, *args, conn, config=None, log_level="DEBUG", **kwargs):
 
         if not conn:
             raise RuntimeError("Invalid value of parameter 'conn': %S.", str(conn))
 
         super().__init__(*args, **kwargs)
+
+        self._log_level = log_level
 
         # The end of bidirectional Pipe assigned to the worker (for communication with Manager process)
         self._conn = conn
@@ -483,6 +485,9 @@ class RunEngineWorker(Process):
         by the `start` method.
         """
         success = True
+
+        logging.basicConfig(level=logging.WARNING)
+        logging.getLogger(__name__).setLevel(self._log_level)
 
         from .plan_monitoring import RunList, CallbackRegisterRun
 

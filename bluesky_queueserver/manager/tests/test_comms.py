@@ -223,7 +223,51 @@ def test_PipeJsonRpcReceive_3():
     pc.stop()
 
 
-def test_PipeJsonRpcReceive_4_failing():
+def test_PipeJsonRpcReceive_4():
+    """
+    Test if all outdated unprocessed messages are deleted once the processing thread is started.
+    """
+
+    def method_handler3(*, value=3):
+        return value + 15
+
+    conn1, conn2 = multiprocessing.Pipe()
+    pc = PipeJsonRpcReceive(conn=conn2)
+    pc.add_method(method_handler3, "method3")
+
+    # The thread is not started yet, but we still send a message through the pipe.
+    #   This message is expected to be deleted once the thread starts.
+    request1a = [
+        format_jsonrpc_msg("method3", {"value": 5}),
+    ]
+    request1b = [
+        format_jsonrpc_msg("method3", {"value": 6}),
+    ]
+    conn1.send(json.dumps(request1a))
+    conn1.send(json.dumps(request1b))
+
+    # Start the processing thread. The messages that were already sent are expected to be ignored.
+    pc.start()
+
+    # Send another message. This message is expected to be processed.
+    request2 = [
+        format_jsonrpc_msg("method3", {"value": 7}),
+    ]
+    conn1.send(json.dumps(request2))
+
+    if conn1.poll(timeout=0.5):  # Set timeout large enough
+        response = conn1.recv()
+        response = json.loads(response)
+        assert len(response) == 1, "Unexpected number of response messages"
+        assert response[0]["id"] == request2[0]["id"], "Response ID does not match message ID."
+        assert response[0]["result"] == 22, "Response ID does not match message ID."
+    else:
+        assert False, "Timeout occurred while waiting for response."
+
+    pc.stop()
+
+
+def test_PipeJsonRpcReceive_5_failing():
     """
     Those tests are a result of exploration of how `json-rpc` error processing works.
     """
@@ -288,7 +332,7 @@ def test_PipeJsonRpcReceive_4_failing():
     pc.stop()
 
 
-def test_PipeJsonRpcReceive_5_failing():
+def test_PipeJsonRpcReceive_6_failing():
     """
     Exception is raised inside the handler is causing 'Server Error' -32000.
     Returns error type (Exception type) and message. It is questionable whether
@@ -322,7 +366,7 @@ def test_PipeJsonRpcReceive_5_failing():
     pc.stop()
 
 
-def test_PipeJsonRpcReceive_6_failing():
+def test_PipeJsonRpcReceive_7_failing():
     """
     This is an example of handler to timeout. 'json-rpc' package can not handle timeouts.
     Care must be taken to write handles that execute quickly. Timeouts must be handled

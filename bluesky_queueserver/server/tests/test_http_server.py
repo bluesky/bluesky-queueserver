@@ -30,7 +30,7 @@ def wait_for_environment_to_be_created(timeout, polling_period=0.2):
 
 
 def wait_for_queue_execution_to_complete(timeout, polling_period=0.2):
-    """Wait for environment to be created with timeout."""
+    """Wait for for queue execution to complete."""
     time_start = ttime.time()
     while ttime.time() < time_start + timeout:
         ttime.sleep(polling_period)
@@ -42,7 +42,7 @@ def wait_for_queue_execution_to_complete(timeout, polling_period=0.2):
 
 
 def wait_for_manager_state_idle(timeout, polling_period=0.2):
-    """Wait for environment to be created with timeout."""
+    """Wait until manager is in 'idle' state."""
     time_start = ttime.time()
     while ttime.time() < time_start + timeout:
         ttime.sleep(polling_period)

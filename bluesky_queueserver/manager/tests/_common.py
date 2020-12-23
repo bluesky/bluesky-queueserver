@@ -99,7 +99,7 @@ def append_code_to_last_startup_file(pc_path, additional_code):
         Code (text) that should be added to the end of the startup file
     """
 
-    # Path to the first file (starts with 00)
+    # Path to the last file
     file_pattern = os.path.join(pc_path, "[0-9][0-9]*.py")
     file_list = glob.glob(file_pattern)
     file_list.sort()

@@ -588,7 +588,7 @@ class RunEngineWorker(Process):
                     self._re_namespace["RE"] = self._RE
 
                     def factory(name, doc):
-                        # Documents from each run is routed to an independent
+                        # Documents from each run are routed to an independent
                         #   instance of BestEffortCallback
                         bec = BestEffortCallback()
                         return [bec], []

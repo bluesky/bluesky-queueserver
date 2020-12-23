@@ -974,7 +974,7 @@ def test_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_restart):  # 
         # Check if 'run_list_uid' changed. If yes, then read and analyze the new 'run_list_uid'.
         if run_list_uid != resp["run_list_uid"]:
             run_list_uid = resp["run_list_uid"]
-            # Use all supported combinations of options to load the 'run_uid'.
+            # Use all supported combinations of options to load the 'run_list_uid'.
             resp_run_list1, _ = zmq_single_request("re_runs")
             resp_run_list2, _ = zmq_single_request("re_runs", params={"option": "active"})
             resp_run_list3, _ = zmq_single_request("re_runs", params={"option": "open"})

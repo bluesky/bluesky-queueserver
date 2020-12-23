@@ -1960,14 +1960,14 @@ existing_plans:
       annotation_pickled: 80 03 63 62 75 69 6c 74 69 6e 73 0a 69 6e 74 0a 71 00 2e
       custom:
         description: The number of measurements in the outer run. Inner run will contain
-          'npts+1' measurments.
+          'npts+1' measurements.
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
       description: 'The number of measurements in the outer run. Inner run will contain
         ''npts+1''
 
-        measurments.
+        measurements.
 
         Kind: positional or keyword.'
       kind:

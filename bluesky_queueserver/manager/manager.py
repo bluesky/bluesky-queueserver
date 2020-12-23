@@ -413,7 +413,7 @@ class RunEngineManager(Process):
         # Read report first
         run_list, err_msg = await self._worker_request_run_list()
         if run_list is None:
-            # TODO: this would typically mean a bug (communciation error). Probably more
+            # TODO: this would typically mean a bug (communication error). Probably more
             #       complicated processing is needed
             logger.error(f"Failed to download plan report: {err_msg}.")
         else:

@@ -94,7 +94,7 @@ def append_code_to_last_startup_file(pc_path, additional_code):
     Parameters
     ----------
     pc_path: str
-        Path to the directory with profile collection
+        Path to the directory with IPython ``startup`` directory
     additional_code: str
         Code (text)that should be added to the beginning of the startup file
     """

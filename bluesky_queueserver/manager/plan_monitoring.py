@@ -100,7 +100,7 @@ class CallbackRegisterRun(CallbackBase):
     Callback used to process 'start' and 'stop' documents emitted by Run Engine.
     Run UIDs is extracted from 'start' documents and inserted into run list.
     When 'stop' document is emitted, the respective run in the run list is set
-    as stopped, and exit status of the run is saved
+    as stopped, and exit status of the run is saved.
 
     Parameters
     ----------

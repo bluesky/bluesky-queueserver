@@ -73,7 +73,7 @@ def _sim_plan_inner(npts: int, delay: float = 1.0):
         "parameters": {
             "npts": {
                 "description": "The number of measurements in the outer run. "
-                "Inner run will contain 'npts+1' measurments.",
+                "Inner run will contain 'npts+1' measurements.",
             },
             "delay": {
                 "description": "Delay between measurements.",

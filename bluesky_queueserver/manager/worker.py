@@ -295,7 +295,7 @@ class RunEngineWorker(Process):
         Returns the list of runs for the currently executed plan and clears the state
         of the list. The list can be requested at any time, but it is recommended that
         the state of the list is checked first (`re_report` field `run_list_updated`)
-        and update is loaded only if updates exist (`run_list_updated is True`).
+        and update is loaded only if updates exist (`run_list_updated` is True).
         """
         msg_out = {"run_list": self._active_run_list.get_run_list(clear_state=True)}
         return msg_out

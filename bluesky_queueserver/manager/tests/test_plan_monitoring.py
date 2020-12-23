@@ -60,7 +60,7 @@ def test_CallbackRegisterRun_1():
     """
     run_list = RunList()
     cb = CallbackRegisterRun(run_list=run_list)
-    uid = uuid.uuid4()
+    uid = str(uuid.uuid4())
 
     cb("start", {"uid": uid})
     assert run_list.get_run_list() == [{"uid": uid, "is_open": True, "exit_status": None}]

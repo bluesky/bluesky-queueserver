@@ -8,7 +8,7 @@ def test_RunList_1():
     """
     Full functionality test: ``RunList`` class.
     """
-    uids = [uuid.uuid4() for _ in range(3)]
+    uids = [str(uuid.uuid4()) for _ in range(3)]
     is_open = [True] * 3
     exit_code = [None] * 3
     expected_run_list = [

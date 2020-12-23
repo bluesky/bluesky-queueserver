@@ -17,6 +17,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _generate_run_list_uid():
+    """
+    Generate a new Run List UID.
+
+    Returns
+    -------
+    str
+        Run List UID
+    """
+    return str(uuid.uuid4())
+
+
 # TODO: this is incomplete set of states. Expect it to be expanded.
 class MState(enum.Enum):
     INITIALIZING = "initializing"
@@ -67,7 +79,7 @@ class RunEngineManager(Process):
         self._worker_state_info = None  # Copy of the last downloaded state of RE Worker
 
         self._re_run_list = []
-        self._re_run_list_uid = str(uuid.uuid4())
+        self._re_run_list_uid = _generate_run_list_uid()
 
         self._loop = None
 
@@ -418,7 +430,7 @@ class RunEngineManager(Process):
             logger.error(f"Failed to download plan report: {err_msg}.")
         else:
             self._re_run_list = run_list["run_list"]
-            self._re_run_list_uid = str(uuid.uuid4())
+            self._re_run_list_uid = _generate_run_list_uid()
 
     async def _start_plan(self):
         """
@@ -1329,7 +1341,7 @@ class RunEngineManager(Process):
             # Attempt to load the list of active runs.
             re_run_list, _ = await self._worker_request_run_list()
             self._re_run_list = re_run_list["run_list"] if re_run_list else []
-            self._re_run_list_uid = str(uuid.uuid4())
+            self._re_run_list_uid = _generate_run_list_uid()
 
             self._worker_state_info, err_msg = await self._worker_request_state()
             if self._worker_state_info:

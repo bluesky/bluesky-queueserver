@@ -24,7 +24,10 @@ class WatchdogProcess:
         config_manager=None,
         cls_run_engine_worker=RunEngineWorker,
         cls_run_engine_manager=RunEngineManager,
+        log_level="DEBUG",
     ):
+
+        self._log_level = log_level
 
         self._cls_run_engine_worker = cls_run_engine_worker
         self._cls_run_engine_manager = cls_run_engine_manager
@@ -71,7 +74,10 @@ class WatchdogProcess:
         logger.info("Starting RE Worker ...")
         try:
             self._re_worker = self._cls_run_engine_worker(
-                conn=self._manager_conn, name="RE Worker Process", config=self._config_worker
+                conn=self._manager_conn,
+                name="RE Worker Process",
+                config=self._config_worker,
+                log_level=self._log_level,
             )
             self._re_worker.start()
             success, err_msg = True, ""
@@ -136,10 +142,14 @@ class WatchdogProcess:
             conn_worker=self._worker_conn,
             config=self._config_manager,
             name="RE Manager Process",
+            log_level=self._log_level,
         )
         self._re_manager.start()
 
     def run(self):
+
+        logging.basicConfig(level=logging.WARNING)
+        logging.getLogger(__name__).setLevel(self._log_level)
 
         # Requests
         self._comm_to_manager.add_method(self._start_re_worker_handler, "start_re_worker")

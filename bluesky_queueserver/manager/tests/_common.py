@@ -48,7 +48,7 @@ def patch_first_startup_file(pc_path, additional_code):
     ----------
     pc_path: str
         Path to the directory with profile collection
-    code_to_add: str
+    additional_code: str
         Code (text)that should be added to the beginning of the startup file
     """
 
@@ -85,6 +85,38 @@ def patch_first_startup_file_undo(pc_path):
     if os.path.isfile(fln_tmp):
         os.remove(fln)
         os.rename(fln_tmp, fln)
+
+
+def append_code_to_last_startup_file(pc_path, additional_code):
+    """
+    Append code to the end of the last startup file.
+
+    Parameters
+    ----------
+    pc_path: str
+        Path to the directory with IPython ``startup`` directory
+    additional_code: str
+        Code (text) that should be added to the end of the startup file
+    """
+
+    # Path to the last file
+    file_pattern = os.path.join(pc_path, "[0-9][0-9]*.py")
+    file_list = glob.glob(file_pattern)
+    file_list.sort()
+    fln = file_list[-1]
+
+    # Backup the file which is about to be changed if it was not backed up already.
+    fln_tmp = os.path.join(pc_path, "_backup")
+    if not os.path.exists(fln_tmp):
+        shutil.copy(fln, fln_tmp)
+
+    with open(fln, "r") as file_in:
+        code = file_in.readlines()
+
+    with open(fln, "w") as file_out:
+        file_out.writelines(code)
+        file_out.write("\n\n")
+        file_out.writelines(additional_code)
 
 
 def get_queue_state():

@@ -151,6 +151,11 @@ class PipeJsonRpcReceive:
 
     def _start_conn_thread(self):
         if not self._thread_running:
+
+            # Clear the pipe from outdated unprocessed messages.
+            while self._conn.poll():
+                self._conn.recv()
+
             self._thread_running = True
             self._thread_conn = threading.Thread(
                 target=self._receive_conn_thread, name=self._thread_name, daemon=True

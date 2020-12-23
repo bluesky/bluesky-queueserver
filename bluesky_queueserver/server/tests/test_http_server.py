@@ -29,6 +29,30 @@ def wait_for_environment_to_be_created(timeout, polling_period=0.2):
     return False
 
 
+def wait_for_queue_execution_to_complete(timeout, polling_period=0.2):
+    """Wait for for queue execution to complete."""
+    time_start = ttime.time()
+    while ttime.time() < time_start + timeout:
+        ttime.sleep(polling_period)
+        resp = _request_to_json("get", "/status")
+        if (resp["manager_state"] == "idle") and (resp["items_in_queue"] == 1):
+            return True
+
+    return False
+
+
+def wait_for_manager_state_idle(timeout, polling_period=0.2):
+    """Wait until manager is in 'idle' state."""
+    time_start = ttime.time()
+    while ttime.time() < time_start + timeout:
+        ttime.sleep(polling_period)
+        resp = _request_to_json("get", "/status")
+        if resp["manager_state"] == "idle":
+            return True
+
+    return False
+
+
 def _request_to_json(request_type, path, **kwargs):
     resp = getattr(requests, request_type)(f"http://{SERVER_ADDRESS}:{SERVER_PORT}{path}", **kwargs).json()
     return resp
@@ -718,3 +742,38 @@ def test_http_server_queue_stop(re_manager, fastapi_server, deactivate):  # noqa
     assert status["running_item_uid"] is None
     assert status["worker_environment_exists"] is True
     assert status["queue_stop_pending"] is False
+
+
+# fmt: off
+@pytest.mark.parametrize("suffix, expected_n_items", [
+    ("/active", 1),
+    ("/open", 1),
+    ("/closed", 0),
+])
+# fmt: on
+def test_http_server_re_runs(re_manager, fastapi_server, suffix, expected_n_items):  # noqa F811
+    """
+    Basic test for ``/re/run/...`` API. The API is tested on a single run plan.
+    """
+    resp1 = _request_to_json("post", "/queue/item/add", json={"plan": _plan3})
+    assert resp1["success"] is True
+    assert resp1["qsize"] == 1
+
+    _request_to_json("post", "/environment/open")
+    assert wait_for_environment_to_be_created(10), "Timeout"
+
+    _request_to_json("post", "/queue/start")
+    ttime.sleep(2)
+
+    status = _request_to_json("get", "/status")
+    assert status["manager_state"] == "executing_queue"
+    run_list_uid = status["run_list_uid"]
+    assert isinstance(run_list_uid, str)
+
+    req = "/re/runs" + suffix
+    resp2 = _request_to_json("get", req)
+    assert resp2["success"] is True
+    assert len(resp2["run_list"]) == expected_n_items
+    assert resp2["run_list_uid"] == run_list_uid
+
+    assert wait_for_manager_state_idle(30), "Timeout"

@@ -2,6 +2,8 @@
 import typing
 import ophyd
 import bluesky
+import bluesky.preprocessors as bpp
+import bluesky.plan_stubs as bps
 from bluesky_queueserver.manager.annotation_decorator import parameter_annotation_decorator
 
 
@@ -51,3 +53,43 @@ def move_then_count(
     mv_args = [val for tup in zip(motors, positions) for val in tup]
     yield from mv(*mv_args)
     yield from count(detectors)
+
+
+@bpp.set_run_key_decorator("run_2")
+@bpp.run_decorator(md={})
+def _sim_plan_inner(npts: int, delay: float = 1.0):
+    for j in range(npts):
+        yield from bps.mov(motor1, j * 0.1 + 1, motor2, j * 0.2 - 2)
+        yield from bps.trigger_and_read([motor1, motor2, det2])
+        yield from bps.sleep(delay)
+
+
+@bpp.set_run_key_decorator("run_1")
+@bpp.run_decorator(md={})
+@parameter_annotation_decorator(
+    {
+        "description": "Simulated multi-run plan: two nested runs. "
+        "The plan is included for testing purposes only.",
+        "parameters": {
+            "npts": {
+                "description": "The number of measurements in the outer run. "
+                "Inner run will contain 'npts+1' measurements.",
+            },
+            "delay": {
+                "description": "Delay between measurements.",
+            },
+        },
+    }
+)
+def sim_multirun_plan_nested(npts: int, delay: float = 1.0):
+    for j in range(int(npts / 2)):
+        yield from bps.mov(motor, j * 0.2)
+        yield from bps.trigger_and_read([motor, det])
+        yield from bps.sleep(delay)
+
+    yield from _sim_plan_inner(npts + 1, delay)
+
+    for j in range(int(npts / 2), npts):
+        yield from bps.mov(motor, j * 0.2)
+        yield from bps.trigger_and_read([motor, det])
+        yield from bps.sleep(delay)

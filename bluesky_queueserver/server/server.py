@@ -303,6 +303,37 @@ async def re_halt_handler():
     return msg
 
 
+@app.get("/re/runs/active")
+async def re_runs_active_handler():
+    """
+    Run Engine: download the list of active runs (runs that were opened during execution of
+    the currently running plan and combines the subsets of 'open' and 'closed' runs.)
+    """
+    params = {"option": "active"}
+    msg = await zmq_to_manager.send_message(method="re_runs", params=params)
+    return msg
+
+
+@app.get("/re/runs/open")
+async def re_runs_open_handler():
+    """
+    Run Engine: download the subset of active runs that includes runs that were open, but not yet closed.
+    """
+    params = {"option": "open"}
+    msg = await zmq_to_manager.send_message(method="re_runs", params=params)
+    return msg
+
+
+@app.get("/re/runs/closed")
+async def re_runs_closed_handler():
+    """
+    Run Engine: download the subset of active runs that includes runs that were already closed.
+    """
+    params = {"option": "closed"}
+    msg = await zmq_to_manager.send_message(method="re_runs", params=params)
+    return msg
+
+
 @app.get("/plans/allowed")
 async def plans_allowed_handler():
     """

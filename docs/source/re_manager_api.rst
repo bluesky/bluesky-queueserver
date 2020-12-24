@@ -111,6 +111,7 @@ Monitor the list of active runs:
 - :ref:`method_re_runs`
 
 Stopping RE Manager (mostly used in testing):
+
 - :ref:`method_manager_stop`
 - :ref:`method_manager_kill`
 
@@ -122,6 +123,7 @@ Detailed Reference
 
 **'ping'**
 ^^^^^^^^^^
+
 ============  =========================================================================================
 Method        **'ping'**
 ------------  -----------------------------------------------------------------------------------------
@@ -207,7 +209,6 @@ Execution     Immediate: no follow-up requests are required.
 **'plans_allowed'**
 ^^^^^^^^^^^^^^^^^^^
 
-
 ============  =========================================================================================
 Method        **'plans_allowed'**
 ------------  -----------------------------------------------------------------------------------------
@@ -235,7 +236,6 @@ Execution     Immediate: no follow-up requests are required.
 
 **'devices_allowed'**
 ^^^^^^^^^^^^^^^^^^^^^
-
 
 ============  =========================================================================================
 Method        **'devices_allowed'**
@@ -289,7 +289,6 @@ Execution     Immediate: no follow-up requests are required.
 **'history_get'**
 ^^^^^^^^^^^^^^^^^
 
-
 ============  =========================================================================================
 Method        **'history_get'**
 ------------  -----------------------------------------------------------------------------------------
@@ -318,7 +317,6 @@ Execution     Immediate: no follow-up requests are required.
 **'history_clear'**
 ^^^^^^^^^^^^^^^^^^^
 
-
 ============  =========================================================================================
 Method        **'history_clear'**
 ------------  -----------------------------------------------------------------------------------------
@@ -343,7 +341,6 @@ Execution     Immediate: no follow-up requests are required.
 **'environment_open'**
 ^^^^^^^^^^^^^^^^^^^^^^
 
-
 ============  =========================================================================================
 Method        **'environment_open'**
 ------------  -----------------------------------------------------------------------------------------
@@ -365,8 +362,8 @@ Execution     The request only initiates the sequence of creating a new environm
               a long time to start the environment. Monitor 'manager_state'
               and 'worker_environment_exists' status fields ('status' method) to detect when
               the operation is completed: 'manager_state' should have the value 'opening_environment'
-              while operation is in process and change to 'idle' when the operation completes and
-              'worker_environment_exists' is set True if environment was created successfully.
+              while operation is in progress and change to 'idle' when the operation completes and
+              'worker_environment_exists' is set to True if environment was created successfully.
 ============  =========================================================================================
 
 
@@ -374,7 +371,6 @@ Execution     The request only initiates the sequence of creating a new environm
 
 **'environment_close'**
 ^^^^^^^^^^^^^^^^^^^^^^^
-
 
 ============  =========================================================================================
 Method        **'environment_close'**
@@ -395,7 +391,7 @@ Execution     The request initiates the sequence of closing the environment.
               Monitor 'manager_state' and 'worker_environment_exists' status fields
               (see 'status' method) to detection when the operation coompletes:
               'manager_state' is expected to have the value 'closing_environment'
-              while operation is in process and switch to 'idle' when the operation completes
+              while operation is in progress and switch to 'idle' when the operation completes
               and 'worker_environment_exists' is set False if environment was closed successfully.
 ============  =========================================================================================
 
@@ -405,11 +401,10 @@ Execution     The request initiates the sequence of closing the environment.
 **'environment_destroy'**
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-
 ============  =========================================================================================
 Method        **'environment_destroy'**
 ------------  -----------------------------------------------------------------------------------------
-Description   Initiate the operation of destroying of (unresponsive) the existing RE Worker
+Description   Initiate the operation of destroying of the existing (unresponsive) RE Worker
               environment. The operation fails if there is no existing environment.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    ---
@@ -423,7 +418,7 @@ Returns       **success**: *boolean*
 Execution     The request initiates the sequence of destroying the environment.
               Monitor 'manager_state' and 'worker_environment_exists' status fields
               (see 'status' method): 'manager_state' is expected to have the value
-              'destroying_environment' while operation is in process and switch to 'idle' when
+              'destroying_environment' while operation is in progress and switch to 'idle' when
               the operation completes and 'worker_environment_exists' is set False if environment
               was destroyed successfully.
 ============  =========================================================================================
@@ -468,7 +463,6 @@ Execution     Immediate: no follow-up requests are required.
 **'queue_item_add'**
 ^^^^^^^^^^^^^^^^^^^^
 
-
 ============  =========================================================================================
 Method        **'queue_item_add'**
 ------------  -----------------------------------------------------------------------------------------
@@ -499,7 +493,7 @@ Returns       **success**: *boolean*
 
               **qsize**: *int* or *None*
                   the number of items in the plan queue after the plan was added if
-                  the operation is successful, *None* otherwise
+                  the operation was successful, *None* otherwise
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
@@ -510,7 +504,6 @@ Execution     Immediate: no follow-up requests are required.
 **'queue_item_get'**
 ^^^^^^^^^^^^^^^^^^^^
 
-
 ============  =========================================================================================
 Method        **'queue_item_get'**
 ------------  -----------------------------------------------------------------------------------------
@@ -519,10 +512,10 @@ Description   Read item from the queue. By default the item from the back of the
               may be requested.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **pos**: *int*, *'front'* or *'back'* (optional)
-                  position of the item in the queue. RE Manager will attempt to insert the item
+                  position of the item in the queue. RE Manager will attempt to return the item
                   at the specified position. The position may be positive or negative (counted
                   from the back of the queue) integer. If 'pos' value is a string 'front' or 'back',
-                  then the item is inserted at the front or the back of the queue.
+                  then the item at the front or the back of the queue is returned.
 
               **uid**: *str* (optional)
                   uid of the requested item.
@@ -547,7 +540,6 @@ Execution     Immediate: no follow-up requests are required.
 **'queue_item_remove'**
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-
 ============  =========================================================================================
 Method        **'queue_item_remove'**
 ------------  -----------------------------------------------------------------------------------------
@@ -555,10 +547,10 @@ Description   Remove item from the queue. By default the last item in the queue 
               Alternatively the position or UID of the item can be specified.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **pos**: *int*, *'front'* or *'back'* (optional)
-                  position of the item in the queue. RE Manager will attempt to insert the item
+                  position of the item in the queue. RE Manager will attempt to remove the item
                   at the specified position. The position may be positive or negative (counted
                   from the back of the queue) integer. If 'pos' value is a string 'front' or 'back',
-                  then the item is inserted at the front or the back of the queue.
+                  then the item is removed from the front or the back of the queue.
 
               **uid**: *str* (optional)
                   uid of the requested item.
@@ -576,7 +568,7 @@ Returns       **success**: *boolean*
 
               **qsize**: *int* or *None*
                   the number of items in the plan queue after the plan was added if
-                  the operation is successful, *None* otherwise
+                  the operation was successful, *None* otherwise
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
@@ -586,7 +578,6 @@ Execution     Immediate: no follow-up requests are required.
 
 **'queue_item_move'**
 ^^^^^^^^^^^^^^^^^^^^^
-
 
 ============  =========================================================================================
 Method        **'queue_item_move'**
@@ -633,7 +624,6 @@ Execution     Immediate: no follow-up requests are required.
 **'queue_clear'**
 ^^^^^^^^^^^^^^^^^
 
-
 ============  =========================================================================================
 Method        **'queue_clear'**
 ------------  -----------------------------------------------------------------------------------------
@@ -657,7 +647,6 @@ Execution     Immediate: no follow-up requests are required.
 
 **'queue_start'**
 ^^^^^^^^^^^^^^^^^
-
 
 ============  =========================================================================================
 Method        **'queue_start'**
@@ -690,7 +679,6 @@ Execution     The request initiates the operation of starting the queue. Verify 
 **'queue_stop'**
 ^^^^^^^^^^^^^^^^
 
-
 ============  =========================================================================================
 Method        **'queue_stop'**
 ------------  -----------------------------------------------------------------------------------------
@@ -716,7 +704,6 @@ Execution     Immediate: no follow-up requests are required.
 **'queue_stop_cancel'**
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-
 ============  =========================================================================================
 Method        **'queue_stop_cancel'**
 ------------  -----------------------------------------------------------------------------------------
@@ -741,7 +728,6 @@ Execution     Immediate: no follow-up requests are required.
 
 **'re_pause'**
 ^^^^^^^^^^^^^^
-
 
 ============  =========================================================================================
 Method        **'re_pause'**
@@ -796,7 +782,6 @@ Execution     The request only initiates the operation. Wait until the plan is p
 **'re_runs'**
 ^^^^^^^^^^^^^
 
-
 ============  =========================================================================================
 Method        **'re_runs'**
 ------------  -----------------------------------------------------------------------------------------
@@ -836,12 +821,11 @@ Execution     The request only initiates the operation of pausing the plan. Wait
 **'manager_stop'**
 ^^^^^^^^^^^^^^^^^^
 
-
 ============  =========================================================================================
 Method        **'manager_stop'**
 ------------  -----------------------------------------------------------------------------------------
 Description   Exit RE Manager application. Clients will probably not need to initiate exit remotely,
-              but ability to do so it is extremely useful for automated testing.
+              but ability to do so is extremely useful for automated testing.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **option**: *'safe_on'* or *'safe_off'* (optional)
                   if the option of 'safe_on' is selected (default), then the request fails
@@ -865,7 +849,6 @@ Execution     The request only initiates the operation of exiting RE Manager. If
 
 **'manager_kill'**
 ^^^^^^^^^^^^^^^^^^
-
 
 ============  =========================================================================================
 Method        **'manager_kill'**

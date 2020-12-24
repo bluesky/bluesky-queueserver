@@ -325,6 +325,7 @@ def parse_plan(plan, *, allowed_plans, allowed_devices):
     plan_name = plan["name"]
     plan_args = plan["args"] if "args" in plan else []
     plan_kwargs = plan["kwargs"] if "kwargs" in plan else {}
+    plan_meta = plan["meta"] if "meta" in plan else {}
 
     def ref_from_name(v, allowed_items):
         if isinstance(v, str):
@@ -357,13 +358,33 @@ def parse_plan(plan, *, allowed_plans, allowed_devices):
     plan_args_parsed = process_argument(plan_args, allowed_items)
     plan_kwargs_parsed = process_argument(plan_kwargs, allowed_items)
 
+    # If metadata is a list of dictionaries, then merge the dictionaries into one
+    #   with dictionaries with lower index having higher priority.
+    success_meta = True
+    if isinstance(plan_meta, (list, tuple)):
+        p = {}
+        for meta in reversed(plan_meta):
+            if isinstance(meta, dict):
+                p.update(meta)
+            else:
+                success_meta = False
+        if success_meta:
+            plan_meta = p
+    elif not isinstance(plan_meta, dict):
+        success_meta = False
+
+    if not success_meta:
+        success = False
+        err_msg = f"Plan metadata must be a dictionary or a list of dictionaries: '{pprint.pformat(plan_meta)}'"
+
     if not success:
-        raise RuntimeError("Error while parsing the plan: %s", err_msg)
+        raise RuntimeError(f"Error while parsing the plan: {err_msg}")
 
     plan_parsed = {
         "name": plan_func,
         "args": plan_args_parsed,
         "kwargs": plan_kwargs_parsed,
+        "meta": plan_meta,
     }
     return plan_parsed
 
@@ -706,6 +727,16 @@ def validate_plan(plan, *, allowed_plans, allowed_devices):
             call_kwargs = plan.get("kwargs", {})
 
             _validate_plan_parameters(param_list=param_list, call_args=call_args, call_kwargs=call_kwargs)
+
+        # Check if supplied plan metadata is a dictionary or a list of dictionaries.
+        if "meta" in plan:
+            meta_msg = "Plan parameter 'meta' must be a dictionary or a list of dictionaries"
+            if isinstance(plan["meta"], (tuple, list)):
+                for meta in plan["meta"]:
+                    if not isinstance(meta, dict):
+                        raise Exception(meta_msg)
+            elif not isinstance(plan["meta"], dict):
+                raise Exception(meta_msg)
 
     except Exception as ex:
         success = False

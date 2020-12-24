@@ -2,6 +2,7 @@ import pytest
 import os
 import time as ttime
 import asyncio
+from copy import deepcopy
 
 from bluesky_queueserver.manager.profile_ops import (
     get_default_profile_collection_dir,
@@ -23,7 +24,7 @@ from ._common import (
     copy_default_profile_collection,
     append_code_to_last_startup_file,
 )
-from ._common import re_manager, re_manager_pc_copy  # noqa: F401
+from ._common import re_manager, re_manager_pc_copy, re_manager_cmd, db_catalog  # noqa: F401
 
 # Plans used in most of the tests: '_plan1' and '_plan2' are quickly executed '_plan3' runs for 5 seconds.
 _plan1 = {"name": "count", "args": [["det1", "det2"]]}
@@ -451,7 +452,66 @@ def test_zmq_api_queue_item_add_6(re_manager):  # noqa: F811
     assert resp2["queue"][2]["item_type"] == "plan"
 
 
-def test_zmq_api_queue_item_add_7_fail(re_manager):  # noqa F811
+# fmt: off
+@pytest.mark.parametrize("meta_param, meta_saved", [
+    # 'meta' is dictionary, all keys are saved
+    ({"test_key": "test_value"}, {"test_key": "test_value"}),
+    # 'meta' - array with two elements. Merging dictionaries with distinct keys.
+    ([{"test_key1": 10}, {"test_key2": 20}], {"test_key1": 10, "test_key2": 20}),
+    # ' meta' - array. Merging dictionaries with identical keys.
+    ([{"test_key": 10}, {"test_key": 20}], {"test_key": 10}),
+])
+# fmt: on
+def test_zmq_api_queue_item_add_7(db_catalog, re_manager_cmd, meta_param, meta_saved):  # noqa: F811
+    """
+    Add plan with metadata.
+    """
+    re_manager_cmd(["--databroker_config", db_catalog["catalog_name"]])
+    cat = db_catalog["catalog"]
+
+    # Plan
+    plan = deepcopy(_plan2)
+    plan["meta"] = meta_param
+    params1 = {"plan": plan, "user": _user, "user_group": _user_group}
+    resp1, _ = zmq_single_request("queue_item_add", params1)
+    assert resp1["success"] is True, f"resp={resp1}"
+
+    resp2, _ = zmq_single_request("status")
+    assert resp2["items_in_queue"] == 1
+    assert resp2["items_in_history"] == 0
+
+    # Open the environment.
+    resp3, _ = zmq_single_request("environment_open")
+    assert resp3["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    resp4, _ = zmq_single_request("queue_start")
+    assert resp4["success"] is True
+
+    assert wait_for_condition(time=5, condition=condition_manager_idle)
+
+    resp5, _ = zmq_single_request("status")
+    assert resp5["items_in_queue"] == 0
+    assert resp5["items_in_history"] == 1
+
+    resp6, _ = zmq_single_request("history_get")
+    history = resp6["history"]
+    assert len(history) == 1
+
+    # Check if metadata was recorded in the start document.
+    uid = history[-1]["result"]["run_uids"][0]
+    start_doc = cat[uid].metadata["start"]
+    for key in meta_saved:
+        assert key in start_doc, str(start_doc)
+        assert meta_saved[key] == start_doc[key], str(start_doc)
+
+    # Close the environment.
+    resp7, _ = zmq_single_request("environment_close")
+    assert resp7["success"] is True, f"resp={resp7}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_queue_item_add_8_fail(re_manager):  # noqa F811
 
     # Unknown plan name
     plan1 = {"name": "count_test", "args": [["det1", "det2"]]}

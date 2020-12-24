@@ -182,8 +182,9 @@ class RunEngineWorker(Process):
             plan_func = plan_parsed["name"]
             plan_args_parsed = plan_parsed["args"]
             plan_kwargs_parsed = plan_parsed["kwargs"]
+            plan_meta_parsed = plan_parsed["meta"]
 
-            def get_plan(plan_func, plan_args, plan_kwargs):
+            def get_plan(plan_func, plan_args, plan_kwargs, plan_meta):
                 def plan():
                     if self._RE._state == "panicked":
                         raise RuntimeError(
@@ -195,12 +196,12 @@ class RunEngineWorker(Process):
                             f"Run Engine is in '{self._RE._state}' state. Stop or finish any running plan."
                         )
                     else:
-                        result = self._RE(plan_func(*plan_args, **plan_kwargs))
+                        result = self._RE(plan_func(*plan_args, **plan_kwargs), **plan_meta)
                     return result
 
                 return plan
 
-            plan = get_plan(plan_func, plan_args_parsed, plan_kwargs_parsed)
+            plan = get_plan(plan_func, plan_args_parsed, plan_kwargs_parsed, plan_meta_parsed)
             # 'is_resuming' is true (we start a new plan that is supposedly runs to completion
             #   as opposed to aborting/stopping/halting a plan)
         except Exception as ex:

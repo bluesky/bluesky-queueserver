@@ -162,6 +162,17 @@ Get the lists (JSON) of allowed plans and devices::
   http GET http://localhost:60610/plans/allowed
   http GET http://localhost:60610/devices/allowed
 
+The list of allowed plans and devices is generated based on the list of existing plans and devices
+('existing_plans_and_devices.yaml' by default) and user group permissions ('user_group_permissions.yaml'
+by default). The files with permission data are loaded at RE Manager startup. If any of the files
+are changed while RE Manager is running (e.g. a new plan was added to the profile collection and
+the new 'existing_plans_and_devices.yaml' file was generated) and restarting RE Manager is not
+desirable, the data can be reloaded by sending 'permissions_reload' request::
+
+  qserver permissions reload
+
+  http GET http://localhost:60610/permissions/reload
+
 Before plans could be executed they should be placed in the **plan queue**. The plan queue contains
 **items**. The items are **plans** that could be executed by Run Engine or **instructions** that
 can modify the state of the queue or RE Manager. Currently only one instruction ('queue_stop' - stops

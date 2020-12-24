@@ -2,6 +2,8 @@ import time as ttime
 import subprocess
 import pytest
 
+from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
+
 from ._common import (
     patch_first_startup_file,
     patch_first_startup_file_undo,
@@ -14,6 +16,8 @@ from ._common import (
     get_reduced_state_info,
     get_queue_state,
     get_queue,
+    copy_default_profile_collection,
+    append_code_to_last_startup_file,
 )
 
 from ._common import re_manager, re_manager_pc_copy  # noqa: F401
@@ -946,3 +950,35 @@ def test_qserver_re_runs(re_manager, option, exit_code):  # noqa: F811
 
     params = [option] if option else []
     assert subprocess.call(["qserver", "re", "runs", *params]) == exit_code
+
+
+_sample_trivial_plan1 = """
+def trivial_plan_for_unit_test():
+    '''
+    Trivial plan for unit test.
+    '''
+    yield from scan([det1, det2], motor, -1, 1, 10)
+"""
+
+
+def test_qserver_reload_permissions(re_manager_pc_copy, tmp_path):  # noqa F811
+    """
+    Tests for ``/permissions/reload`` API.
+    """
+    pc_path = copy_default_profile_collection(tmp_path)
+    append_code_to_last_startup_file(pc_path, additional_code=_sample_trivial_plan1)
+
+    # Generate the new list of allowed plans and devices and reload them
+    gen_list_of_plans_and_devices(pc_path, overwrite=True)
+
+    plan = "{'name': 'trivial_plan_for_unit_test'}"
+
+    # Attempt to add the plan to the queue. The request is supposed to fail, because
+    #   the initially loaded profile collection does not contain the plan.
+    assert subprocess.call(["qserver", "queue", "add", "plan", plan]) == REQ_FAILED
+
+    # Reload profile collection
+    assert subprocess.call(["qserver", "permissions", "reload"]) == SUCCESS
+
+    # Attempt to add the plan to the queue. It should be successful now.
+    assert subprocess.call(["qserver", "queue", "add", "plan", plan]) == SUCCESS

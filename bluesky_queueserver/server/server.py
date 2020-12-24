@@ -356,6 +356,17 @@ async def devices_allowed_handler():
     return msg
 
 
+@app.post("/permissions/reload")
+async def permissions_reload_handler():
+    """
+    Reloads the list of allowed plans and devices and user group permission from the default location
+    or location set using command line parameters of RE Manager. Use this request to reload the data
+    if the respective files were changed on disk.
+    """
+    msg = await zmq_to_manager.send_message(method="permissions_reload")
+    return msg
+
+
 @app.post("/manager/stop")
 async def manager_stop_handler(payload: dict):
     """

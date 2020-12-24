@@ -3,13 +3,22 @@ import time as ttime
 import requests
 import pytest
 
-from bluesky_queueserver.manager.tests._common import re_manager  # noqa F401
+from bluesky_queueserver.manager.tests._common import (  # noqa F401
+    re_manager,
+    re_manager_pc_copy,
+    copy_default_profile_collection,
+    append_code_to_last_startup_file,
+)
+
 from bluesky_queueserver.server.tests.conftest import (  # noqa F401
     SERVER_ADDRESS,
     SERVER_PORT,
     add_plans_to_queue,
     fastapi_server,
 )
+
+from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
+
 
 # Plans used in most of the tests: '_plan1' and '_plan2' are quickly executed '_plan3' runs for 5 seconds.
 _plan1 = {"name": "count", "args": [["det1", "det2"]]}
@@ -777,3 +786,39 @@ def test_http_server_re_runs(re_manager, fastapi_server, suffix, expected_n_item
     assert resp2["run_list_uid"] == run_list_uid
 
     assert wait_for_manager_state_idle(30), "Timeout"
+
+
+_sample_trivial_plan1 = """
+def trivial_plan_for_unit_test():
+    '''
+    Trivial plan for unit test.
+    '''
+    yield from scan([det1, det2], motor, -1, 1, 10)
+"""
+
+
+def test_http_server_reload_permissions(re_manager_pc_copy, fastapi_server, tmp_path):  # noqa F811
+    """
+    Tests for ``/permissions/reload`` API.
+    """
+    pc_path = copy_default_profile_collection(tmp_path)
+    append_code_to_last_startup_file(pc_path, additional_code=_sample_trivial_plan1)
+
+    # Generate the new list of allowed plans and devices and reload them
+    gen_list_of_plans_and_devices(pc_path, overwrite=True)
+
+    plan = {"plan": {"name": "trivial_plan_for_unit_test"}}
+
+    # Attempt to add the plan to the queue. The request is supposed to fail, because
+    #   the initially loaded profile collection does not contain the plan.
+    resp1 = _request_to_json("post", "/queue/item/add", json=plan)
+    assert resp1["success"] is False, str(resp1)
+
+    # Reload profile collection
+    resp2 = _request_to_json("post", "/permissions/reload")
+    assert resp2["success"] is True, str(resp2)
+
+    # Attempt to add the plan to the queue. It should be successful now.
+    resp3 = _request_to_json("post", "/queue/item/add", json=plan)
+    assert resp3["success"] is True, str(resp3)
+    assert resp3["qsize"] == 1, str(resp3)

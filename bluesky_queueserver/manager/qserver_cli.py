@@ -46,6 +46,7 @@ qserver environment destroy    # Destroy RE environment (kill RE worker process)
 
 qserver allowed plans          # Request the list of allowed plans
 qserver allowed devices        # Request the list of allowed devices
+qserver permissions reload     # Reload the list of allowed plans and devices and user permissions from disk
 
 qserver queue add plan '<plan-params>'                 # Add plan to the back of the queue
 qserver queue add instruction <instruction>            # Add instruction to the back of the queue
@@ -607,6 +608,15 @@ def create_msg(params):
         if params[0] in supported_params:
             method = f"{params[0]}_{command}"
             prms["user_group"] = default_user_group
+        else:
+            raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
+
+    # ----------- permissions ------------
+    elif command == "permissions":
+        if len(params) != 1:
+            raise CommandParameterError(f"Request '{command}' must include only one parameter")
+        if params[0] == "reload":
+            method = f"{command}_{params[0]}"
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
 

@@ -337,7 +337,7 @@ def re_manager_cmd():
 
     Examples of using the fixture:
     ``re_manager_cmd()`` or ``re_manager_cmd([]) - create RE Manager without command-line parameters
-    ``re_manager-cmd(["-h"])`` - equivalent to ``start-re-manager -h``.
+    ``re_manager_cmd(["-h"])`` - equivalent to ``start-re-manager -h``.
     """
     re = {"re": None}
 

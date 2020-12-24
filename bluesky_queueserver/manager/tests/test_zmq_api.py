@@ -502,7 +502,7 @@ def test_zmq_api_queue_item_add_7(db_catalog, re_manager_cmd, meta_param, meta_s
     uid = history[-1]["result"]["run_uids"][0]
     start_doc = cat[uid].metadata["start"]
     for key in meta_saved:
-        assert key in meta_saved, str(start_doc)
+        assert key in start_doc, str(start_doc)
         assert meta_saved[key] == start_doc[key], str(start_doc)
 
     # Close the environment.

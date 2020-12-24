@@ -33,7 +33,7 @@ def test_fixture_db_catalog(db_catalog):  # noqa F811
 
     assert list(catalog[db_catalog["catalog_name"]]) == list(db_catalog["catalog"])
 
-    # Try to instantiated the Data Broker
+    # Try to instantiate the Data Broker
     from databroker import Broker
 
     Broker.named(db_catalog["catalog_name"])

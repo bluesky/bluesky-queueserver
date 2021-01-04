@@ -13,7 +13,7 @@ from ._common import copy_default_profile_collection, patch_first_startup_file
 from bluesky_queueserver.manager.annotation_decorator import parameter_annotation_decorator
 
 from bluesky_queueserver.manager.profile_ops import (
-    get_default_profile_collection_dir,
+    get_default_startup_dir,
     load_profile_collection,
     plans_from_nspace,
     devices_from_nspace,
@@ -50,11 +50,11 @@ def test_hex2bytes_bytes2hex():
     assert dict_result == dict_initial
 
 
-def test_get_default_profile_collection_dir():
+def test_get_default_startup_dir():
     """
-    Function `get_default_profile_collection_dir`
+    Function `get_default_startup_dir`
     """
-    pc_path = get_default_profile_collection_dir()
+    pc_path = get_default_startup_dir()
     assert os.path.exists(pc_path), "Directory with default profile collection deos not exist."
 
 
@@ -62,7 +62,7 @@ def test_load_profile_collection_1():
     """
     Loading default profile collection
     """
-    pc_path = get_default_profile_collection_dir()
+    pc_path = get_default_startup_dir()
     nspace = load_profile_collection(pc_path)
     assert len(nspace) > 0, "Failed to load the profile collection"
 
@@ -464,7 +464,7 @@ def test_plans_from_nspace():
     """
     Function 'plans_from_nspace' is extracting a subset of callable items from the namespace
     """
-    pc_path = get_default_profile_collection_dir()
+    pc_path = get_default_startup_dir()
     nspace = load_profile_collection(pc_path)
     plans = plans_from_nspace(nspace)
     for name, plan in plans.items():
@@ -475,7 +475,7 @@ def test_devices_from_nspace():
     """
     Function 'plans_from_nspace' is extracting a subset of callable items from the namespace
     """
-    pc_path = get_default_profile_collection_dir()
+    pc_path = get_default_startup_dir()
     nspace = load_profile_collection(pc_path)
     devices = devices_from_nspace(nspace)
     for name, device in devices.items():
@@ -497,7 +497,7 @@ def test_devices_from_nspace():
 )
 def test_parse_plan(plan, success, err_msg):
 
-    pc_path = get_default_profile_collection_dir()
+    pc_path = get_default_startup_dir()
     nspace = load_profile_collection(pc_path)
     plans = plans_from_nspace(nspace)
     devices = devices_from_nspace(nspace)
@@ -574,7 +574,7 @@ def test_load_existing_plans_and_devices():
     """
     Loads the list of allowed plans and devices from simulated profile collection.
     """
-    pc_path = get_default_profile_collection_dir()
+    pc_path = get_default_startup_dir()
     file_path = os.path.join(pc_path, "existing_plans_and_devices.yaml")
 
     existing_plans, existing_devices = load_existing_plans_and_devices(file_path)
@@ -633,7 +633,7 @@ def test_verify_default_profile_collection():
     issue.
     """
     # Create dictionaries of existing plans and devices. Apply all preprocessing steps.
-    pc_path = get_default_profile_collection_dir()
+    pc_path = get_default_startup_dir()
     nspace = load_profile_collection(pc_path)
 
     plans = plans_from_nspace(nspace)
@@ -856,7 +856,7 @@ def test_select_allowed_items(item_dict, allow_patterns, disallow_patterns, resu
 # fmt: on
 def test_load_allowed_plans_and_devices_1(fln_existing_items, fln_user_groups, empty_dict, all_users):
     """"""
-    pc_path = get_default_profile_collection_dir()
+    pc_path = get_default_startup_dir()
 
     fln_existing_items = None if (fln_existing_items is None) else os.path.join(pc_path, fln_existing_items)
     fln_user_groups = None if (fln_user_groups is None) else os.path.join(pc_path, fln_user_groups)

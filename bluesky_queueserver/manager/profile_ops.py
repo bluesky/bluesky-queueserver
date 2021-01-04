@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 qserver_version = bluesky_queueserver.__version__
 
 
-def get_default_profile_collection_dir():
+def get_default_startup_dir():
     """
     Returns the path to the default profile collection that is distributed with the package.
     The function does not guarantee that the directory exists.

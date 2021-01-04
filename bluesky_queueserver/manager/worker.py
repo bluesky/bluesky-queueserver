@@ -528,11 +528,11 @@ class RunEngineWorker(Process):
             self._existing_plans = {}
             self._existing_devices = {}
 
-        if "profile_collection_path" not in self._config:
-            logger.warning("Path to profile collection was not specified. No profile collection will be loaded.")
+        if "startup_dir" not in self._config:
+            logger.warning("Startup directory name was not specified. Profile collection will not be loaded.")
             init_namespace()
         else:
-            path = self._config["profile_collection_path"]
+            path = self._config["startup_dir"]
             logger.info("Loading beamline profile collection from directory '%s' ...", path)
             try:
                 keep_re = self._config["keep_re"]

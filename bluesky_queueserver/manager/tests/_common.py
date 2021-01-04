@@ -10,7 +10,7 @@ import tempfile
 
 from databroker import catalog_search_path
 
-from bluesky_queueserver.manager.profile_ops import get_default_profile_collection_dir
+from bluesky_queueserver.manager.profile_ops import get_default_startup_dir
 from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
 from bluesky_queueserver.manager.comms import zmq_single_request
 
@@ -25,7 +25,7 @@ def copy_default_profile_collection(tmp_path, *, copy_yaml=True):
     Returns the new temporary directory.
     """
     # Default path
-    pc_path = get_default_profile_collection_dir()
+    pc_path = get_default_startup_dir()
     # New path
     new_pc_path = os.path.join(tmp_path, "startup")
 
@@ -393,7 +393,7 @@ def re_manager_pc_copy(tmp_path):
     Copy profile collection and return its temporary path.
     """
     pc_path = copy_default_profile_collection(tmp_path)
-    re = ReManager(["-p", pc_path])
+    re = ReManager(["--startup-dir", pc_path])
 
     # Wait until RE Manager is started
     assert wait_for_condition(time=10, condition=condition_manager_idle), "Timeout: RE Manager failed to start."

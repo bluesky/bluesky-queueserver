@@ -7,7 +7,7 @@ import os
 from .worker import RunEngineWorker
 from .manager import RunEngineManager
 from .comms import PipeJsonRpcReceive
-from .profile_ops import get_default_profile_collection_dir
+from .profile_ops import get_default_startup_dir
 
 from .. import __version__
 
@@ -198,9 +198,8 @@ def start_manager():
         help="The address of ZMQ server.",
     )
     parser.add_argument(
-        "--profile_collection",
-        "-p",
-        dest="profile_collection_path",
+        "--startup-dir",
+        dest="startup_dir",
         type=str,
         help="Path to directory that contains profile collection.",
     )
@@ -260,19 +259,19 @@ def start_manager():
         config_worker["kafka"]["topic"] = args.kafka_topic
         config_worker["kafka"]["bootstrap"] = args.kafka_server
 
-    if args.profile_collection_path:
-        pc_path = args.profile_collection_path
-        pc_path = os.path.abspath(os.path.expanduser(pc_path))
-        if not os.path.exists(pc_path):
-            logger.error("Profile collection directory '%s' does not exist", pc_path)
+    if args.startup_dir:
+        startup_dir = args.startup_dir
+        startup_dir = os.path.abspath(os.path.expanduser(startup_dir))
+        if not os.path.exists(startup_dir):
+            logger.error("Startup directory '%s' does not exist", startup_dir)
             return 1
-        if not os.path.isdir(pc_path):
-            logger.error("Path to profile collection '%s' is not a directory", pc_path)
+        if not os.path.isdir(startup_dir):
+            logger.error("Startup directory '%s' is not a directory", startup_dir)
             return 1
     else:
         # The default collection is the collection of simulated Ophyd devices
         #   and built-in Bluesky plans.
-        pc_path = get_default_profile_collection_dir()
+        startup_dir = get_default_startup_dir()
 
     config_worker["keep_re"] = args.keep_re
     config_worker["use_mpack"] = args.use_mpack
@@ -281,17 +280,17 @@ def start_manager():
     if args.databroker_config:
         config_worker["databroker"]["config"] = args.databroker_config
 
-    config_worker["profile_collection_path"] = pc_path
+    config_worker["startup_dir"] = startup_dir
 
     default_existing_pd_fln = "existing_plans_and_devices.yaml"
     if args.existing_plans_and_devices_path:
         existing_pd_path = os.path.expanduser(args.existing_plans_and_devices_path)
         if not os.path.isabs(existing_pd_path):
-            existing_pd_path = os.path.join(pc_path, existing_pd_path)
+            existing_pd_path = os.path.join(startup_dir, existing_pd_path)
         if not existing_pd_path.endswith(".yaml"):
             os.path.join(existing_pd_path, default_existing_pd_fln)
     else:
-        existing_pd_path = os.path.join(pc_path, default_existing_pd_fln)
+        existing_pd_path = os.path.join(startup_dir, default_existing_pd_fln)
     if not os.path.isfile(existing_pd_path):
         logger.error(
             "The list of allowed plans and devices was not found at "
@@ -304,11 +303,11 @@ def start_manager():
     if args.user_group_permissions_path:
         user_group_pd_path = os.path.expanduser(args.user_group_permissions_path)
         if not os.path.isabs(user_group_pd_path):
-            user_group_pd_path = os.path.join(pc_path, user_group_pd_path)
+            user_group_pd_path = os.path.join(startup_dir, user_group_pd_path)
         if not user_group_pd_path.endswith(".yaml"):
             os.path.join(user_group_pd_path, default_existing_pd_fln)
     else:
-        user_group_pd_path = os.path.join(pc_path, default_user_group_pd_fln)
+        user_group_pd_path = os.path.join(startup_dir, default_user_group_pd_fln)
     if not os.path.isfile(user_group_pd_path):
         logger.error(
             "The file with user permissions was not found at "

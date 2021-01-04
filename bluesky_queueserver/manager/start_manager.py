@@ -244,7 +244,8 @@ def start_manager():
         "is ignored.",
     )
     parser.add_argument(
-        "--use_mpack",
+        "--use-persistent-metadata",
+        dest="use_persistent_metadata",
         action="store_true",
         help="Use msgpack-based persistent storage for scan metadata. Currently this "
         "is the preferred method to keep continuously incremented sequence of "
@@ -297,7 +298,7 @@ def start_manager():
         return 1
 
     config_worker["keep_re"] = args.keep_re
-    config_worker["use_mpack"] = args.use_mpack
+    config_worker["use_persistent_metadata"] = args.use_persistent_metadata
 
     config_worker["databroker"] = {}
     if args.databroker_config:

@@ -578,7 +578,7 @@ class RunEngineWorker(Process):
                 else:
                     # Instantiate a new Run Engine and Data Broker (if needed)
                     md = {}
-                    if self._config["use_mpack"]:
+                    if self._config["use_persistent_metadata"]:
                         # This code is temporarily copied from 'nslsii' before better solution for keeping
                         #   continuous sequence Run ID is found. TODO: continuous sequence of Run IDs.
                         directory = os.path.expanduser("~/.config/bluesky/md")

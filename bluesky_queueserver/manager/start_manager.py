@@ -245,7 +245,7 @@ def start_manager():
         help="Keep RE created in profile collection. If the flag is set, RE must be "
         "created in the profile collection for the plans to run. RE will also "
         "keep all its subscriptions. Also must be subscribed to the Data Broker "
-        "inside the profile collection, since '--databroker_config' argument "
+        "inside the profile collection, since '--databroker-config' argument "
         "is ignored.",
     )
     parser.add_argument(

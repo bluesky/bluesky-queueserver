@@ -466,7 +466,7 @@ def test_zmq_api_queue_item_add_7(db_catalog, re_manager_cmd, meta_param, meta_s
     """
     Add plan with metadata.
     """
-    re_manager_cmd(["--databroker_config", db_catalog["catalog_name"]])
+    re_manager_cmd(["--databroker-config", db_catalog["catalog_name"]])
     cat = db_catalog["catalog"]
 
     # Plan

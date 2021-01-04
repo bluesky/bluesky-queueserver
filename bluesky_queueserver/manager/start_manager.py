@@ -197,12 +197,21 @@ def start_manager():
         default="tcp://*:5555",
         help="The address of ZMQ server.",
     )
-    parser.add_argument(
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
         "--startup-dir",
         dest="startup_dir",
         type=str,
-        help="Path to directory that contains profile collection.",
+        help="Path to directory that contains startup files (profile collection).",
     )
+    group.add_argument(
+        "--startup-profile",
+        dest="profile_name",
+        type=str,
+        help="The name of IPython profile used to find the location of startup files (profile collection).",
+    )
+
     parser.add_argument(
         "--existing_plans_and_devices",
         dest="existing_plans_and_devices_path",
@@ -259,19 +268,33 @@ def start_manager():
         config_worker["kafka"]["topic"] = args.kafka_topic
         config_worker["kafka"]["bootstrap"] = args.kafka_server
 
-    if args.startup_dir:
+    # Find startup directory
+    if args.profile_name:
+        profile_name = args.profile_name
+        try:
+            import IPython
+            path_to_ipython = IPython.paths.get_ipython_dir()
+        except Exception:
+            logger.error("IPython is not installed. Specify directory to startup file by using "
+                         "'--startup-dir' option.")
+            return 1
+        startup_dir = os.path.abspath(path_to_ipython)
+        profile_name_full = f"profile_{profile_name}"
+        startup_dir = os.path.join(startup_dir, profile_name_full, "startup")
+    elif args.startup_dir:
         startup_dir = args.startup_dir
         startup_dir = os.path.abspath(os.path.expanduser(startup_dir))
-        if not os.path.exists(startup_dir):
-            logger.error("Startup directory '%s' does not exist", startup_dir)
-            return 1
-        if not os.path.isdir(startup_dir):
-            logger.error("Startup directory '%s' is not a directory", startup_dir)
-            return 1
     else:
         # The default collection is the collection of simulated Ophyd devices
         #   and built-in Bluesky plans.
         startup_dir = get_default_startup_dir()
+
+    if not os.path.exists(startup_dir):
+        logger.error("Startup directory '%s' does not exist", startup_dir)
+        return 1
+    if not os.path.isdir(startup_dir):
+        logger.error("Startup directory '%s' is not a directory", startup_dir)
+        return 1
 
     config_worker["keep_re"] = args.keep_re
     config_worker["use_mpack"] = args.use_mpack

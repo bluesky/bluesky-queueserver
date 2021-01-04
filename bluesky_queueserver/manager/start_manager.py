@@ -191,7 +191,7 @@ def start_manager():
         description="Start a RE Manager", epilog=f"blueksy-queueserver version {__version__}"
     )
     parser.add_argument(
-        "--zmq_addr",
+        "--zmq-addr",
         dest="zmq_addr",
         type=str,
         default="tcp://*:5555",
@@ -213,7 +213,7 @@ def start_manager():
     )
 
     parser.add_argument(
-        "--existing_plans_and_devices",
+        "--existing-plans-and-devices",
         dest="existing_plans_and_devices_path",
         type=str,
         help="Path to file that contains the list of existing plans and devices. "
@@ -222,7 +222,7 @@ def start_manager():
         "'existing_plans_and_devices.yaml' is used.",
     )
     parser.add_argument(
-        "--user_group_permissions",
+        "--user-group-permissions",
         dest="user_group_permissions_path",
         type=str,
         help="Path to file that contains lists of plans and devices available to users. "
@@ -230,12 +230,17 @@ def start_manager():
         "If the path is a directory, then the default file name "
         "'user_group_permissions.yaml' is used.",
     )
-    parser.add_argument("--kafka_topic", type=str, help="The kafka topic to publish to.")
+    parser.add_argument("--kafka-topic", dest="kafka_topic", type=str, help="The kafka topic to publish to.")
     parser.add_argument(
-        "--kafka_server", type=str, help="Bootstrap server to connect to.", default="127.0.0.1:9092"
+        "--kafka-server",
+        dest="kafka_server",
+        type=str,
+        help="Bootstrap server to connect to.",
+        default="127.0.0.1:9092",
     )
     parser.add_argument(
-        "--keep_re",
+        "--keep-re",
+        dest="keep_re",
         action="store_true",
         help="Keep RE created in profile collection. If the flag is set, RE must be "
         "created in the profile collection for the plans to run. RE will also "
@@ -252,7 +257,7 @@ def start_manager():
         "Run IDs between restarts of RE.",
     )
     parser.add_argument(
-        "--databroker_config",
+        "--databroker-config",
         dest="databroker_config",
         type=str,
         help="Name of the Data Broker configuration file.",

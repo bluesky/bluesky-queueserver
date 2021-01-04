@@ -57,7 +57,7 @@ def test_fixture_re_manager_cmd_2(re_manager_cmd, db_catalog):  # noqa F811
     start document.
     """
     db_name = db_catalog["catalog_name"]
-    re_manager_cmd(["--databroker_config", db_name])
+    re_manager_cmd(["--databroker-config", db_name])
 
     cat = db_catalog["catalog"]
 

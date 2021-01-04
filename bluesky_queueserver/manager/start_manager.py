@@ -188,7 +188,7 @@ class WatchdogProcess:
 
 def start_manager():
     parser = argparse.ArgumentParser(
-        description="Start a RE Manager", epilog=f"blueksy-queueserver version {__version__}"
+        description="Start Run Engine (RE) Manager", epilog=f"blueksy-queueserver version {__version__}"
     )
     parser.add_argument(
         "--zmq-addr",

@@ -313,11 +313,14 @@ class ReManager:
         """
         if self._p:
             try:
-                # Try to stop the manager in a nice way first by sending the command
-                resp, _ = zmq_single_request(method="manager_stop", params=None)
-                assert resp["success"] is True, f"Request to stop the manager failed: {resp['msg']}."
+                # If the process is already terminated, then don't attempt to communicate with it.
+                if self._p.poll() is None:
+                    # Try to stop the manager in a nice way first by sending the command
+                    resp, _ = zmq_single_request(method="manager_stop", params=None)
+                    assert resp["success"] is True, f"Request to stop the manager failed: {resp['msg']}."
 
-                self._p.wait(timeout)
+                    self._p.wait(timeout)
+
                 clear_redis_pool()
 
             except Exception as ex:
@@ -349,10 +352,9 @@ def re_manager_cmd():
         nonlocal re
         re["re"] = ReManager(params)
 
-        # Wait until RE Manager is started
-        assert wait_for_condition(
-            time=10, condition=condition_manager_idle
-        ), "Timeout: RE Manager failed to start."
+        # Wait until RE Manager is started. Raise exception if the server failed to start.
+        if not wait_for_condition(time=10, condition=condition_manager_idle):
+            raise TimeoutError("Timeout: RE Manager failed to start.")
 
     def _close():
         """
@@ -379,8 +381,9 @@ def re_manager():
     """
     re = ReManager()
 
-    # Wait until RE Manager is started
-    assert wait_for_condition(time=10, condition=condition_manager_idle), "Timeout: RE Manager failed to start."
+    # Wait until RE Manager is started. Raise exception if the server failed to start.
+    if not wait_for_condition(time=10, condition=condition_manager_idle):
+        raise TimeoutError("Timeout: RE Manager failed to start.")
 
     yield re  # Nothing to return
     re.stop_manager()
@@ -395,8 +398,9 @@ def re_manager_pc_copy(tmp_path):
     pc_path = copy_default_profile_collection(tmp_path)
     re = ReManager(["--startup-dir", pc_path])
 
-    # Wait until RE Manager is started
-    assert wait_for_condition(time=10, condition=condition_manager_idle), "Timeout: RE Manager failed to start."
+    # Wait until RE Manager is started. Raise exception if the server failed to start.
+    if not wait_for_condition(time=10, condition=condition_manager_idle):
+        raise TimeoutError("Timeout: RE Manager failed to start.")
 
     yield re, pc_path  # Location of the copy of the default profile collection.
     re.stop_manager()

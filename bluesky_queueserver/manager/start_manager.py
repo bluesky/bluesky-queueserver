@@ -274,10 +274,12 @@ def start_manager():
         profile_name = args.profile_name
         try:
             import IPython
+
             path_to_ipython = IPython.paths.get_ipython_dir()
         except Exception:
-            logger.error("IPython is not installed. Specify directory to startup file by using "
-                         "'--startup-dir' option.")
+            logger.error(
+                "IPython is not installed. Specify directory to startup file by using " "'--startup-dir' option."
+            )
             return 1
         startup_dir = os.path.abspath(path_to_ipython)
         profile_name_full = f"profile_{profile_name}"

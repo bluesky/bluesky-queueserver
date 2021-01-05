@@ -32,7 +32,7 @@ def copy_default_profile_collection(tmp_path, *, copy_yaml=True):
     os.makedirs(new_pc_path, exist_ok=True)
 
     # Copy simulated profile collection (only .py files)
-    patterns = ["*.py"]
+    patterns = ["*.py", "*.ipy"]
     if copy_yaml:
         patterns.append("*.yaml")
     for pattern in patterns:
@@ -57,8 +57,9 @@ def patch_first_startup_file(pc_path, additional_code):
     """
 
     # Path to the first file (starts with 00)
-    file_pattern = os.path.join(pc_path, "*.py")
-    file_list = glob.glob(file_pattern)
+    file_pattern_py = os.path.join(pc_path, "*.py")
+    file_pattern_ipy = os.path.join(pc_path, "*.ipy")
+    file_list = glob.glob(file_pattern_py) + glob.glob(file_pattern_ipy)
     file_list.sort()
     fln = file_list[0]
 
@@ -80,8 +81,9 @@ def patch_first_startup_file_undo(pc_path):
     Remove patches applied to the first file of profile collection.
     """
     # Path to the first file (starts with 00)
-    file_pattern = os.path.join(pc_path, "*.py")
-    file_list = glob.glob(file_pattern)
+    file_pattern_py = os.path.join(pc_path, "*.py")
+    file_pattern_ipy = os.path.join(pc_path, "*.ipy")
+    file_list = glob.glob(file_pattern_py) + glob.glob(file_pattern_ipy)
     file_list.sort()
     fln = file_list[0]
 
@@ -104,8 +106,9 @@ def append_code_to_last_startup_file(pc_path, additional_code):
     """
 
     # Path to the last file
-    file_pattern = os.path.join(pc_path, "*.py")
-    file_list = glob.glob(file_pattern)
+    file_pattern_py = os.path.join(pc_path, "*.py")
+    file_pattern_ipy = os.path.join(pc_path, "*.ipy")
+    file_list = glob.glob(file_pattern_py) + glob.glob(file_pattern_ipy)
     file_list.sort()
     fln = file_list[-1]
 

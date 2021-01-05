@@ -204,13 +204,19 @@ def start_manager():
         "--startup-dir",
         dest="startup_dir",
         type=str,
-        help="Path to directory that contains startup files (profile collection).",
+        help="Path to directory that contains a set of startup files (*.py and *.ipy). All the scripts "
+             "in the directory will be sorted in alphabetical order of their names and loaded in "
+             "the Run Engine Worker environment. The set of startup files may be located in any accessible "
+             "directory.",
     )
     group.add_argument(
         "--startup-profile",
         dest="profile_name",
         type=str,
-        help="The name of IPython profile used to find the location of startup files (profile collection).",
+        help="The name of IPython profile used to find the location of startup files. Example: if IPython is "
+             "configured to look for profiles in '~/.ipython' directory (default behavior) and the profile "
+             "name is 'testing', then RE Manager will look for startup files in "
+             "'~/.ipython/profile_testing/startup' directory.",
     )
 
     parser.add_argument(
@@ -287,9 +293,9 @@ def start_manager():
                 "IPython is not installed. Specify directory to startup file by using '--startup-dir' option."
             )
             return 1
-        startup_dir = os.path.abspath(path_to_ipython)
+        ipython_dir = os.path.abspath(path_to_ipython)
         profile_name_full = f"profile_{profile_name}"
-        startup_dir = os.path.join(startup_dir, profile_name_full, "startup")
+        startup_dir = os.path.join(ipython_dir, profile_name_full, "startup")
     elif args.startup_dir:
         startup_dir = args.startup_dir
         startup_dir = os.path.abspath(os.path.expanduser(startup_dir))

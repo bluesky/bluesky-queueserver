@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 qserver_version = bluesky_queueserver.__version__
 
 
-def get_default_profile_collection_dir():
+def get_default_startup_dir():
     """
     Returns the path to the default profile collection that is distributed with the package.
     The function does not guarantee that the directory exists.
@@ -205,8 +205,9 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
     if not os.path.isdir(path):
         raise IOError(f"Failed to load the profile collection. Path '{path}' is not a directory.")
 
-    file_pattern = os.path.join(path, "[0-9][0-9]*.py")
-    file_list = glob.glob(file_pattern)
+    file_pattern_py = os.path.join(path, "*.py")
+    file_pattern_ipy = os.path.join(path, "*.ipy")
+    file_list = glob.glob(file_pattern_py) + glob.glob(file_pattern_ipy)
     file_list.sort()  # Sort in alphabetical order
 
     # If the profile collection contains no startup files, it is very likely
@@ -1350,7 +1351,7 @@ def load_profile_collection_from_ipython(path=None):
         load_profile_collection_from_ipython()
     """
     ip = get_ipython()  # noqa F821
-    for f in sorted(glob.glob("[0-9][0-9]*.py")):
+    for f in sorted(glob.glob("*.py") + glob.glob("*.ipy")):
         print(f"Executing '{f}' in TravisCI")
         ip.parent._exec_file(f)
     print("Profile collection was loaded successfully.")

@@ -3,11 +3,12 @@ from multiprocessing import Pipe
 import threading
 import time as ttime
 import os
+from importlib.util import find_spec
 
 from .worker import RunEngineWorker
 from .manager import RunEngineManager
 from .comms import PipeJsonRpcReceive
-from .profile_ops import get_default_profile_collection_dir
+from .profile_ops import get_default_startup_dir
 
 from .. import __version__
 
@@ -188,24 +189,38 @@ class WatchdogProcess:
 
 def start_manager():
     parser = argparse.ArgumentParser(
-        description="Start a RE Manager", epilog=f"blueksy-queueserver version {__version__}"
+        description="Start Run Engine (RE) Manager", epilog=f"blueksy-queueserver version {__version__}"
     )
     parser.add_argument(
-        "--zmq_addr",
+        "--zmq-addr",
         dest="zmq_addr",
         type=str,
         default="tcp://*:5555",
         help="The address of ZMQ server.",
     )
-    parser.add_argument(
-        "--profile_collection",
-        "-p",
-        dest="profile_collection_path",
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--startup-dir",
+        dest="startup_dir",
         type=str,
-        help="Path to directory that contains profile collection.",
+        help="Path to directory that contains a set of startup files (*.py and *.ipy). All the scripts "
+        "in the directory will be sorted in alphabetical order of their names and loaded in "
+        "the Run Engine Worker environment. The set of startup files may be located in any accessible "
+        "directory.",
     )
+    group.add_argument(
+        "--startup-profile",
+        dest="profile_name",
+        type=str,
+        help="The name of IPython profile used to find the location of startup files. Example: if IPython is "
+        "configured to look for profiles in '~/.ipython' directory (default behavior) and the profile "
+        "name is 'testing', then RE Manager will look for startup files in "
+        "'~/.ipython/profile_testing/startup' directory.",
+    )
+
     parser.add_argument(
-        "--existing_plans_and_devices",
+        "--existing-plans-and-devices",
         dest="existing_plans_and_devices_path",
         type=str,
         help="Path to file that contains the list of existing plans and devices. "
@@ -214,7 +229,7 @@ def start_manager():
         "'existing_plans_and_devices.yaml' is used.",
     )
     parser.add_argument(
-        "--user_group_permissions",
+        "--user-group-permissions",
         dest="user_group_permissions_path",
         type=str,
         help="Path to file that contains lists of plans and devices available to users. "
@@ -222,28 +237,34 @@ def start_manager():
         "If the path is a directory, then the default file name "
         "'user_group_permissions.yaml' is used.",
     )
-    parser.add_argument("--kafka_topic", type=str, help="The kafka topic to publish to.")
+    parser.add_argument("--kafka-topic", dest="kafka_topic", type=str, help="The kafka topic to publish to.")
     parser.add_argument(
-        "--kafka_server", type=str, help="Bootstrap server to connect to.", default="127.0.0.1:9092"
+        "--kafka-server",
+        dest="kafka_server",
+        type=str,
+        help="Bootstrap server to connect to.",
+        default="127.0.0.1:9092",
     )
     parser.add_argument(
-        "--keep_re",
+        "--keep-re",
+        dest="keep_re",
         action="store_true",
         help="Keep RE created in profile collection. If the flag is set, RE must be "
         "created in the profile collection for the plans to run. RE will also "
         "keep all its subscriptions. Also must be subscribed to the Data Broker "
-        "inside the profile collection, since '--databroker_config' argument "
+        "inside the profile collection, since '--databroker-config' argument "
         "is ignored.",
     )
     parser.add_argument(
-        "--use_mpack",
+        "--use-persistent-metadata",
+        dest="use_persistent_metadata",
         action="store_true",
         help="Use msgpack-based persistent storage for scan metadata. Currently this "
         "is the preferred method to keep continuously incremented sequence of "
         "Run IDs between restarts of RE.",
     )
     parser.add_argument(
-        "--databroker_config",
+        "--databroker-config",
         dest="databroker_config",
         type=str,
         help="Name of the Data Broker configuration file.",
@@ -260,38 +281,54 @@ def start_manager():
         config_worker["kafka"]["topic"] = args.kafka_topic
         config_worker["kafka"]["bootstrap"] = args.kafka_server
 
-    if args.profile_collection_path:
-        pc_path = args.profile_collection_path
-        pc_path = os.path.abspath(os.path.expanduser(pc_path))
-        if not os.path.exists(pc_path):
-            logger.error("Profile collection directory '%s' does not exist", pc_path)
+    # Find startup directory
+    if args.profile_name:
+        profile_name = args.profile_name
+        if find_spec("IPython"):
+            import IPython
+
+            path_to_ipython = IPython.paths.get_ipython_dir()
+        else:
+            logger.error(
+                "IPython is not installed. Specify directory to startup file by using '--startup-dir' option."
+            )
             return 1
-        if not os.path.isdir(pc_path):
-            logger.error("Path to profile collection '%s' is not a directory", pc_path)
-            return 1
+        ipython_dir = os.path.abspath(path_to_ipython)
+        profile_name_full = f"profile_{profile_name}"
+        startup_dir = os.path.join(ipython_dir, profile_name_full, "startup")
+    elif args.startup_dir:
+        startup_dir = args.startup_dir
+        startup_dir = os.path.abspath(os.path.expanduser(startup_dir))
     else:
         # The default collection is the collection of simulated Ophyd devices
         #   and built-in Bluesky plans.
-        pc_path = get_default_profile_collection_dir()
+        startup_dir = get_default_startup_dir()
+
+    if not os.path.exists(startup_dir):
+        logger.error("Startup directory '%s' does not exist", startup_dir)
+        return 1
+    if not os.path.isdir(startup_dir):
+        logger.error("Startup directory '%s' is not a directory", startup_dir)
+        return 1
 
     config_worker["keep_re"] = args.keep_re
-    config_worker["use_mpack"] = args.use_mpack
+    config_worker["use_persistent_metadata"] = args.use_persistent_metadata
 
     config_worker["databroker"] = {}
     if args.databroker_config:
         config_worker["databroker"]["config"] = args.databroker_config
 
-    config_worker["profile_collection_path"] = pc_path
+    config_worker["startup_dir"] = startup_dir
 
     default_existing_pd_fln = "existing_plans_and_devices.yaml"
     if args.existing_plans_and_devices_path:
         existing_pd_path = os.path.expanduser(args.existing_plans_and_devices_path)
         if not os.path.isabs(existing_pd_path):
-            existing_pd_path = os.path.join(pc_path, existing_pd_path)
+            existing_pd_path = os.path.join(startup_dir, existing_pd_path)
         if not existing_pd_path.endswith(".yaml"):
             os.path.join(existing_pd_path, default_existing_pd_fln)
     else:
-        existing_pd_path = os.path.join(pc_path, default_existing_pd_fln)
+        existing_pd_path = os.path.join(startup_dir, default_existing_pd_fln)
     if not os.path.isfile(existing_pd_path):
         logger.error(
             "The list of allowed plans and devices was not found at "
@@ -304,11 +341,11 @@ def start_manager():
     if args.user_group_permissions_path:
         user_group_pd_path = os.path.expanduser(args.user_group_permissions_path)
         if not os.path.isabs(user_group_pd_path):
-            user_group_pd_path = os.path.join(pc_path, user_group_pd_path)
+            user_group_pd_path = os.path.join(startup_dir, user_group_pd_path)
         if not user_group_pd_path.endswith(".yaml"):
             os.path.join(user_group_pd_path, default_existing_pd_fln)
     else:
-        user_group_pd_path = os.path.join(pc_path, default_user_group_pd_fln)
+        user_group_pd_path = os.path.join(startup_dir, default_user_group_pd_fln)
     if not os.path.isfile(user_group_pd_path):
         logger.error(
             "The file with user permissions was not found at "

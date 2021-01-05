@@ -5,7 +5,7 @@ import asyncio
 from copy import deepcopy
 
 from bluesky_queueserver.manager.profile_ops import (
-    get_default_profile_collection_dir,
+    get_default_startup_dir,
     load_allowed_plans_and_devices,
     gen_list_of_plans_and_devices,
 )
@@ -466,7 +466,7 @@ def test_zmq_api_queue_item_add_7(db_catalog, re_manager_cmd, meta_param, meta_s
     """
     Add plan with metadata.
     """
-    re_manager_cmd(["--databroker_config", db_catalog["catalog_name"]])
+    re_manager_cmd(["--databroker-config", db_catalog["catalog_name"]])
     cat = db_catalog["catalog"]
 
     # Plan
@@ -603,7 +603,7 @@ def test_zmq_api_plans_allowed_and_devices_allowed_2(re_manager):  # noqa F811
     separately somewhere else.
     """
 
-    pc_path = get_default_profile_collection_dir()
+    pc_path = get_default_startup_dir()
     path_epd = os.path.join(pc_path, _existing_plans_and_devices_fln)
     path_up = os.path.join(pc_path, _user_group_permissions_fln)
 

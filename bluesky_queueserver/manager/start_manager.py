@@ -3,6 +3,7 @@ from multiprocessing import Pipe
 import threading
 import time as ttime
 import os
+from importlib.util import find_spec
 
 from .worker import RunEngineWorker
 from .manager import RunEngineManager
@@ -277,13 +278,13 @@ def start_manager():
     # Find startup directory
     if args.profile_name:
         profile_name = args.profile_name
-        try:
+        if find_spec("IPython"):
             import IPython
 
             path_to_ipython = IPython.paths.get_ipython_dir()
-        except Exception:
+        else:
             logger.error(
-                "IPython is not installed. Specify directory to startup file by using " "'--startup-dir' option."
+                "IPython is not installed. Specify directory to startup file by using '--startup-dir' option."
             )
             return 1
         startup_dir = os.path.abspath(path_to_ipython)

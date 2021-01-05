@@ -205,18 +205,18 @@ def start_manager():
         dest="startup_dir",
         type=str,
         help="Path to directory that contains a set of startup files (*.py and *.ipy). All the scripts "
-             "in the directory will be sorted in alphabetical order of their names and loaded in "
-             "the Run Engine Worker environment. The set of startup files may be located in any accessible "
-             "directory.",
+        "in the directory will be sorted in alphabetical order of their names and loaded in "
+        "the Run Engine Worker environment. The set of startup files may be located in any accessible "
+        "directory.",
     )
     group.add_argument(
         "--startup-profile",
         dest="profile_name",
         type=str,
         help="The name of IPython profile used to find the location of startup files. Example: if IPython is "
-             "configured to look for profiles in '~/.ipython' directory (default behavior) and the profile "
-             "name is 'testing', then RE Manager will look for startup files in "
-             "'~/.ipython/profile_testing/startup' directory.",
+        "configured to look for profiles in '~/.ipython' directory (default behavior) and the profile "
+        "name is 'testing', then RE Manager will look for startup files in "
+        "'~/.ipython/profile_testing/startup' directory.",
     )
 
     parser.add_argument(

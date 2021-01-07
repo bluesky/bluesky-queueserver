@@ -218,6 +218,25 @@ def start_manager():
         "name is 'testing', then RE Manager will look for startup files in "
         "'~/.ipython/profile_testing/startup' directory.",
     )
+    group.add_argument(
+        "--startup-module",
+        dest="startup_module_name",
+        type=str,
+        help="The name of the module with startup code. The module is imported each time the RE Worker "
+        "environment is opened. Example: 'some.startup.module'. Paths to the list of existing "
+        "plans and devices (--existing-plans-and-devices) and user group permissions "
+        "(--user-group-permissions) must be explicitly specified if this option is used.",
+    )
+
+    group.add_argument(
+        "--startup-script",
+        dest="startup_script_path",
+        type=str,
+        help="The path to the script with startup code. The script is loaded each time the RE Worker "
+        "environment is opened. Example: 'some.startup.module'. Paths to the list of existing "
+        "plans and devices (--existing-plans-and-devices) and user group permissions "
+        "(--user-group-permissions) must be explicitly specified if this option is used.",
+    )
 
     parser.add_argument(
         "--existing-plans-and-devices",
@@ -281,6 +300,8 @@ def start_manager():
         config_worker["kafka"]["topic"] = args.kafka_topic
         config_worker["kafka"]["bootstrap"] = args.kafka_server
 
+    startup_dir, startup_module_name, startup_script_path = None, None, None
+
     # Find startup directory
     if args.profile_name:
         profile_name = args.profile_name
@@ -299,17 +320,37 @@ def start_manager():
     elif args.startup_dir:
         startup_dir = args.startup_dir
         startup_dir = os.path.abspath(os.path.expanduser(startup_dir))
+    elif args.startup_module_name:
+        startup_module_name = args.startup_module_name
+    elif args.startup_script_path:
+        startup_script_path = args.startup_script_path
     else:
         # The default collection is the collection of simulated Ophyd devices
         #   and built-in Bluesky plans.
         startup_dir = get_default_startup_dir()
 
-    if not os.path.exists(startup_dir):
-        logger.error("Startup directory '%s' does not exist", startup_dir)
-        return 1
-    if not os.path.isdir(startup_dir):
-        logger.error("Startup directory '%s' is not a directory", startup_dir)
-        return 1
+    # Primitive error processing: make sure that all essential data exists.
+    if startup_dir is not None:
+        if not os.path.exists(startup_dir):
+            logger.error("Startup directory '%s' does not exist", startup_dir)
+            return 1
+        if not os.path.isdir(startup_dir):
+            logger.error("Startup directory '%s' is not a directory", startup_dir)
+            return 1
+    elif (startup_module_name is not None) or (startup_script_path is not None):
+        # startup_module_name or startup_script_path is set. This option requires
+        #   the paths to existing plans and devices and user group permissions to be set.
+        #   (The default directory can not be used in this case).
+        if not args.existing_plans_and_devices:
+            logger.error(
+                "The path to the list of existing plans and devices (--existing-plans-and-devices) "
+                "is not specified."
+            )
+        if not args.user_group_permissions_path:
+            logger.error(
+                "The path to the file containing user group permissions (--user-group-permissions) "
+                "is not specified."
+            )
 
     config_worker["keep_re"] = args.keep_re
     config_worker["use_persistent_metadata"] = args.use_persistent_metadata
@@ -319,6 +360,8 @@ def start_manager():
         config_worker["databroker"]["config"] = args.databroker_config
 
     config_worker["startup_dir"] = startup_dir
+    config_worker["startup_module_name"] = startup_module_name
+    config_worker["startup_script_path"] = startup_script_path
 
     default_existing_pd_fln = "existing_plans_and_devices.yaml"
     if args.existing_plans_and_devices_path:

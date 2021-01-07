@@ -293,17 +293,20 @@ class StartupLoadingError(Exception):
     ...
 
 
-def load_startup_script(script_path, *, keep_re=False):
+def load_startup_script(script_path, *, keep_re=False, enable_local_imports=False):
     """
     Populate namespace by import a module.
 
     Parameters
     ----------
-    script_path: str
+    script_path : str
         full path to the startup script
-    keep_re: boolean
+    keep_re : boolean
         Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
         or removed (``False``).
+    enable_local_imports : boolean
+        If ``False``, local imports from the script will not work. Setting to ``True``
+        enables local imports.
 
     Returns
     -------
@@ -317,14 +320,11 @@ def load_startup_script(script_path, *, keep_re=False):
 
     nspace = {}
 
-    # NOTE: commented code in this function enables local imports from the script.
-    #   It was decided not to allow local imports, so this code was commented. Uncomment this
-    #   code to enable local imports.
-
-    # p = os.path.split(script_path)[0]
-    # sys.path.insert(0, p)  # Needed to make local imports work.
-    # # Save the list of available modules
-    # sm_keys = list(sys.modules.keys())
+    if enable_local_imports:
+        p = os.path.split(script_path)[0]
+        sys.path.insert(0, p)  # Needed to make local imports work.
+        # Save the list of available modules
+        sm_keys = list(sys.modules.keys())
 
     try:
         exec(open(script_path).read(), None, nspace)
@@ -332,16 +332,17 @@ def load_startup_script(script_path, *, keep_re=False):
     except BaseException as ex:
         raise StartupLoadingError(f"Error encountered executing startup script at '{script_path}'") from ex
 
-    # finally:
-    #     # Delete data on all modules that were loaded by the script.
-    #     # We don't need them anymore. Modules will be reloaded from disk if
-    #     #   the script is executed again.
-    #     for key in list(sys.modules.keys()):
-    #         if key not in sm_keys:
-    #             print(f"Deleting the key '{key}'")
-    #             del sys.modules[key]
-    #
-    #     sys.path.remove(p)
+    finally:
+        if enable_local_imports:
+            # Delete data on all modules that were loaded by the script.
+            # We don't need them anymore. Modules will be reloaded from disk if
+            #   the script is executed again.
+            for key in list(sys.modules.keys()):
+                if key not in sm_keys:
+                    print(f"Deleting the key '{key}'")
+                    del sys.modules[key]
+
+            sys.path.remove(p)
 
     _discard_re_from_nspace(nspace, keep_re=keep_re)
 

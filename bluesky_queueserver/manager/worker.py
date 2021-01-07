@@ -15,7 +15,7 @@ import msgpack
 import msgpack_numpy as mpn
 
 from .profile_ops import (
-    load_profile_collection,
+    load_worker_startup_code,
     plans_from_nspace,
     devices_from_nspace,
     load_allowed_plans_and_devices,
@@ -523,33 +523,33 @@ class RunEngineWorker(Process):
         loop = get_bluesky_event_loop()
         asyncio.set_event_loop(loop)
 
-        def init_namespace():
-            self._re_namespace = {}
-            self._existing_plans = {}
-            self._existing_devices = {}
+        try:
+            keep_re = self._config["keep_re"]
+            startup_dir = self._config.get("startup_dir", None)
+            startup_module_name = self._config.get("startup_module_name", None)
+            startup_script_path = self._config.get("startup_script_path", None)
 
-        if "startup_dir" not in self._config:
-            logger.warning("Startup directory name was not specified. Profile collection will not be loaded.")
-            init_namespace()
-        else:
-            path = self._config["startup_dir"]
-            logger.info("Loading beamline profile collection from directory '%s' ...", path)
-            try:
-                keep_re = self._config["keep_re"]
-                self._re_namespace = load_profile_collection(path, keep_re=keep_re)
-                if keep_re and ("RE" not in self._re_namespace):
-                    raise RuntimeError(
-                        "Run Engine is not created in the profile collection " "and 'keep_re' option is activated."
-                    )
-                self._existing_plans = plans_from_nspace(self._re_namespace)
-                self._existing_devices = devices_from_nspace(self._re_namespace)
-                logger.info("Beamline profile collection was loaded completed.")
-            except Exception as ex:
-                logger.exception(
-                    "Failed to start RE Worker environment. Error while " "loading profile collection: %s.",
-                    str(ex),
+            self._re_namespace = load_worker_startup_code(
+                startup_dir=startup_dir,
+                startup_module_name=startup_module_name,
+                startup_script_path=startup_script_path,
+                keep_re=keep_re,
+            )
+
+            if keep_re and ("RE" not in self._re_namespace):
+                raise RuntimeError(
+                    "Run Engine is not created in the startup code and 'keep_re' option is activated."
                 )
-                success = False
+            self._existing_plans = plans_from_nspace(self._re_namespace)
+            self._existing_devices = devices_from_nspace(self._re_namespace)
+            logger.info("Startup code was loaded completed.")
+
+        except Exception as ex:
+            logger.exception(
+                "Failed to start RE Worker environment. Error while loading startup code: %s.",
+                str(ex),
+            )
+            success = False
 
         # Load lists of allowed plans and devices
         logger.info("Loading the lists of allowed plans and devices ...")

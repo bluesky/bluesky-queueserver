@@ -17,6 +17,7 @@ import pydantic
 import enum
 import random
 import argparse
+import importlib
 from numpydoc.docscrape import NumpyDocString
 
 import logging
@@ -171,6 +172,16 @@ def _patch_profile(file_name):
     return tmp_fln
 
 
+# Discard RE and db from the profile namespace (if they exist).
+def _discard_re_from_nspace(nspace, *, keep_re=False):
+    """
+    Discard RE and db from the profile namespace (if they exist).
+    """
+    if not keep_re:
+        nspace.pop("RE", None)
+        nspace.pop("db", None)
+
+
 def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
     """
     Load profile collection located at the specified path. The collection consists of
@@ -184,6 +195,9 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
     patch_profiles: boolean
         enable/disable patching profiles. At this point there is no reason not to
         patch profiles.
+    keep_re: boolean
+        Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
+        or removed (``False``).
 
     Returns
     -------
@@ -236,16 +250,145 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
                 exc_info = nspace["__plan_exc_info"]
                 raise exc_info[1].with_traceback(exc_info[2])
 
-        # Discard RE and db from the profile namespace (if they exist).
-        if not keep_re:
-            nspace.pop("RE", None)
-            nspace.pop("db", None)
+        _discard_re_from_nspace(nspace, keep_re=keep_re)
+
     finally:
         try:
             if path_is_set:
                 sys.path.remove(path)
         except Exception:
             pass
+
+    return nspace
+
+
+def load_startup_module(module_name, *, keep_re=False):
+    """
+    Populate namespace by import a module.
+
+    Parameters
+    ----------
+    module_name: str
+        name of the module to import
+    keep_re: boolean
+        Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
+        or removed (``False``).
+
+    Returns
+    -------
+    nspace: dict
+        namespace that contains objects loaded from the module.
+    """
+    importlib.invalidate_caches()
+
+    _module = importlib.import_module(module_name)
+    nspace = _module.__dict__
+
+    _discard_re_from_nspace(nspace, keep_re=keep_re)
+
+    return nspace
+
+
+class StartupLoadingError(Exception):
+    ...
+
+
+def load_startup_script(script_path, *, keep_re=False):
+    """
+    Populate namespace by import a module.
+
+    Parameters
+    ----------
+    script_path: str
+        full path to the startup script
+    keep_re: boolean
+        Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
+        or removed (``False``).
+
+    Returns
+    -------
+    nspace: dict
+        namespace that contains objects loaded from the module.
+    """
+    importlib.invalidate_caches()
+
+    if not os.path.isfile(script_path):
+        raise ImportError(f"Failed to load the script '{script_path}': script was not found")
+
+    nspace = {}
+
+    # NOTE: commented code in this function enables local imports from the script.
+    #   It was decided not to allow local imports, so this code was commented. Uncomment this
+    #   code to enable local imports.
+
+    # p = os.path.split(script_path)[0]
+    # sys.path.insert(0, p)  # Needed to make local imports work.
+    # # Save the list of available modules
+    # sm_keys = list(sys.modules.keys())
+
+    try:
+        exec(open(script_path).read(), None, nspace)
+
+    except BaseException as ex:
+        raise StartupLoadingError(f"Error encountered executing startup script at '{script_path}'") from ex
+
+    # finally:
+    #     # Delete data on all modules that were loaded by the script.
+    #     # We don't need them anymore. Modules will be reloaded from disk if
+    #     #   the script is executed again.
+    #     for key in list(sys.modules.keys()):
+    #         if key not in sm_keys:
+    #             print(f"Deleting the key '{key}'")
+    #             del sys.modules[key]
+    #
+    #     sys.path.remove(p)
+
+    _discard_re_from_nspace(nspace, keep_re=keep_re)
+
+    return nspace
+
+
+def load_worker_startup_code(
+    *, startup_dir=None, startup_module_name=None, startup_script_path=None, keep_re=False
+):
+    """
+    Load worker startup code. Possible sources: startup directory (IPython-style profile collection),
+    startup script or startup module.
+
+    Parameters
+    ----------
+    startup_dir : str
+        Name of the directory that contains startup files.
+    startup_module_name : str
+        Name of the startup module.
+    startup_script_path : str
+        Path to startup script.
+    keep_re: boolean
+        Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
+        or removed (``False``).
+
+    Returns
+    -------
+    nspace : dict
+       Dictionary with loaded namespace data
+    """
+    if startup_dir is not None:
+        logger.info("Loading RE Worker startup code from directory '%s' ...", startup_dir)
+        nspace = load_profile_collection(startup_dir, keep_re=keep_re)
+
+    elif startup_module_name is not None:
+        logger.info("Loading RE Worker startup code from module '%s' ...", startup_module_name)
+        nspace = load_startup_module(startup_module_name, keep_re=keep_re)
+
+    elif startup_script_path is not None:
+        logger.info("Loading RE Worker startup code from script '%s' ...", startup_script_path)
+        nspace = load_startup_script(startup_script_path, keep_re=keep_re)
+
+    else:
+        logger.warning(
+            "Source of startup information is not specified. RE Worker will be started with empty environment."
+        )
+        nspace = {}
 
     return nspace
 

@@ -878,46 +878,82 @@ def test_gen_list_of_plans_and_devices_1(tmp_path):
 
 # fmt: off
 @pytest.mark.parametrize("test, exit_code", [
-    ("default_path", 0),
-    ("specify_path", 0),
-    ("incorrect_path_startup", 1),
-    ("incorrect_path_file", 1),
+    ("startup_collection_at_current_dir", 0),
+    ("startup_collection_dir", 0),
+    ("startup_collection_incorrect_path_A", 1),
+    ("startup_collection_incorrect_path_B", 1),
+    ("startup_script_path", 0),
+    ("startup_script_path_incorrect", 1),
+    ("startup_module_name", 0),
+    ("startup_module_name_incorrect", 1),
+    ("file_incorrect_path", 1),
 ])
 # fmt: on
-def test_gen_list_of_plans_and_devices_cli(tmp_path, test, exit_code):
+def test_gen_list_of_plans_and_devices_cli(tmp_path, monkeypatch, test, exit_code):
     """
     Copy simulated profile collection and generate the list of allowed (in this case available)
     plans and devices based on the profile collection
     """
-    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
+    pc_path = os.path.join(tmp_path, "script_dir1")
+    script_path = os.path.join(pc_path, "startup_script.py")
+
+    os.makedirs(pc_path, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(_startup_script_1)
 
     fln_yaml = "existing_plans_and_devices.yaml"
+
+    # Make sure that .yaml file does not exist
     assert not os.path.isfile(os.path.join(pc_path, fln_yaml))
 
     os.chdir(tmp_path)
 
-    if test == "default_path":
+    if test == "startup_collection_at_current_dir":
         os.chdir(pc_path)
         params = ["qserver_list_of_plans_and_devices", "--startup-dir", "."]
-        assert subprocess.call(params) == exit_code
-    elif test == "specify_path":
+
+    elif test == "startup_collection_dir":
         params = ["qserver_list_of_plans_and_devices", "--startup-dir", pc_path, "--file-dir", pc_path]
-        assert subprocess.call(params) == exit_code
-    elif test == "incorrect_path_startup":
+
+    elif test == "startup_collection_incorrect_path_A":
         # Path exists (default path is used), but there are no startup files (fails)
         params = ["qserver_list_of_plans_and_devices", "--startup-dir", "."]
-        assert subprocess.call(params) == exit_code
+
+    elif test == "startup_collection_incorrect_path_B":
         # Path does not exist
         path_nonexisting = os.path.join(tmp_path, "abcde")
         params = ["qserver_list_of_plans_and_devices", "--startup-dir", path_nonexisting, "--file-dir", pc_path]
-        assert subprocess.call(params) == exit_code
-    elif test == "incorrect_path_file":
+
+    elif test == "startup_script_path":
+        params = ["qserver_list_of_plans_and_devices", "--startup-script", script_path, "--file-dir", pc_path]
+
+    elif test == "startup_script_path_incorrect":
+        params = [
+            "qserver_list_of_plans_and_devices",
+            "--startup-script",
+            "non_existing_path",
+            "--file-dir",
+            pc_path,
+        ]
+
+    elif test == "startup_module_name":
+        monkeypatch.setenv("PYTHONPATH", os.path.split(pc_path)[0])
+        s_name = "script_dir1.startup_script"
+        params = ["qserver_list_of_plans_and_devices", "--startup-module", s_name, "--file-dir", pc_path]
+
+    elif test == "startup_module_name_incorrect":
+        monkeypatch.setenv("PYTHONPATH", os.path.split(pc_path)[0])
+        s_name = "incorrect.module.name"
+        params = ["qserver_list_of_plans_and_devices", "--startup-module", s_name, "--file-dir", pc_path]
+
+    elif test == "file_incorrect_path":
         # Path does not exist
         path_nonexisting = os.path.join(tmp_path, "abcde")
         params = ["qserver_list_of_plans_and_devices", "--startup-dir", pc_path, "--file-dir", path_nonexisting]
-        assert subprocess.call(params) == exit_code
     else:
         assert False, f"Unknown test '{test}'"
+
+    assert subprocess.call(params) == exit_code
 
     if exit_code == 0:
         assert os.path.isfile(os.path.join(pc_path, fln_yaml))

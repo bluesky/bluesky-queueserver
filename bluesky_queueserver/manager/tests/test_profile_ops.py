@@ -520,22 +520,23 @@ def test_gen_list_of_plans_and_devices_1(tmp_path):
     pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
 
     fln_yaml = "list.yaml"
-    gen_list_of_plans_and_devices(pc_path, file_name=fln_yaml)
+    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml)
     assert os.path.isfile(os.path.join(pc_path, fln_yaml)), "List of plans and devices was not created"
 
     # Attempt to overwrite the file
     with pytest.raises(RuntimeError, match="already exists. File overwriting is disabled."):
-        gen_list_of_plans_and_devices(pc_path, file_name=fln_yaml)
+        gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml)
 
     # Allow file overwrite
-    gen_list_of_plans_and_devices(pc_path, file_name=fln_yaml, overwrite=True)
+    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml, overwrite=True)
 
 
 # fmt: off
 @pytest.mark.parametrize("test, exit_code", [
     ("default_path", 0),
     ("specify_path", 0),
-    ("incorrect_path", 1),
+    ("incorrect_path_startup", 1),
+    ("incorrect_path_file", 1),
 ])
 # fmt: on
 def test_gen_list_of_plans_and_devices_cli(tmp_path, test, exit_code):
@@ -552,15 +553,24 @@ def test_gen_list_of_plans_and_devices_cli(tmp_path, test, exit_code):
 
     if test == "default_path":
         os.chdir(pc_path)
-        assert subprocess.call(["qserver_list_of_plans_and_devices"]) == exit_code
+        assert subprocess.call(["qserver_list_of_plans_and_devices", "--startup-dir", "."]) == exit_code
     elif test == "specify_path":
-        assert subprocess.call(["qserver_list_of_plans_and_devices", "-p", pc_path]) == exit_code
-    elif test == "incorrect_path":
+        assert subprocess.call(["qserver_list_of_plans_and_devices",
+                                "--startup-dir", pc_path, "--file-dir", pc_path]) == exit_code
+    elif test == "incorrect_path_startup":
         # Path exists (default path is used), but there are no startup files (fails)
         assert subprocess.call(["qserver_list_of_plans_and_devices"]) == exit_code
         # Path does not exist
         path_nonexisting = os.path.join(tmp_path, "abcde")
-        assert subprocess.call(["qserver_list_of_plans_and_devices", "-p", path_nonexisting]) == exit_code
+        assert subprocess.call(["qserver_list_of_plans_and_devices",
+                                "--startup-dir", path_nonexisting, "--file-dir", pc_path]) == exit_code
+    elif test == "incorrect_path_file":
+        # Path exists (default path is used), but there are no startup files (fails)
+        assert subprocess.call(["qserver_list_of_plans_and_devices"]) == exit_code
+        # Path does not exist
+        path_nonexisting = os.path.join(tmp_path, "abcde")
+        assert subprocess.call(["qserver_list_of_plans_and_devices",
+                                "--startup-dir", pc_path, "--file-dir", path_nonexisting]) == exit_code
     else:
         assert False, f"Unknown test '{test}'"
 
@@ -987,7 +997,7 @@ def test_load_allowed_plans_and_devices_2(tmp_path, permissions_str, items_are_r
     patch_first_startup_file(pc_path, _patch_junk_plan_and_device)
 
     # Generate list of plans and devices for the patched profile collection
-    gen_list_of_plans_and_devices(path=pc_path, overwrite=True)
+    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, overwrite=True)
 
     permissions_fln = os.path.join(pc_path, "user_group_permissions.yaml")
     with open(permissions_fln, "w") as f:

@@ -379,6 +379,8 @@ def load_worker_startup_code(
 
     if startup_dir is not None:
         logger.info("Loading RE Worker startup code from directory '%s' ...", startup_dir)
+        startup_dir = os.path.abspath(os.path.expanduser(startup_dir))
+        print(f"startup_dir={startup_dir}") ##
         nspace = load_profile_collection(startup_dir, keep_re=keep_re)
 
     elif startup_module_name is not None:
@@ -387,6 +389,7 @@ def load_worker_startup_code(
 
     elif startup_script_path is not None:
         logger.info("Loading RE Worker startup code from script '%s' ...", startup_script_path)
+        startup_script_path = os.path.abspath(os.path.expanduser(startup_script_path))
         nspace = load_startup_script(startup_script_path, keep_re=keep_re)
 
     else:
@@ -1151,7 +1154,7 @@ def gen_list_of_plans_and_devices(
     startup_module_name=None,
     startup_script_path=None,
     file_dir=None,
-    file_name="existing_plans_and_devices.yaml",
+    file_name=None,
     overwrite=False,
 ):
     """
@@ -1174,7 +1177,7 @@ def gen_list_of_plans_and_devices(
     file_dir: str or None
         path to the directory where the file is to be created. None - create file in current directory.
     file_name: str
-        name of the output YAML file
+        name of the output YAML file, None - default file name is used
     overwrite: boolean
         overwrite the file if it already exists
 
@@ -1187,6 +1190,7 @@ def gen_list_of_plans_and_devices(
     RuntimeError
         Error occurred while creating or saving the lists.
     """
+    file_name = file_name or "existing_plans_and_devices.yaml"
     try:
         if file_dir is None:
             file_dir = os.getcwd()
@@ -1237,7 +1241,7 @@ def gen_list_of_plans_and_devices_cli():
         epilog=f"Bluesky-QServer version {qserver_version}.",
     )
     parser.add_argument(
-        "--file_dir",
+        "--file-dir",
         dest="file_dir",
         action="store",
         required=False,
@@ -1245,7 +1249,7 @@ def gen_list_of_plans_and_devices_cli():
         help="Directory where the list of plans and devices is saved. Default: current directory.",
     )
     parser.add_argument(
-        "--file_name",
+        "--file-name",
         dest="file_name",
         action="store",
         required=False,

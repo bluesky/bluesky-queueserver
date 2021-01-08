@@ -553,24 +553,24 @@ def test_gen_list_of_plans_and_devices_cli(tmp_path, test, exit_code):
 
     if test == "default_path":
         os.chdir(pc_path)
-        assert subprocess.call(["qserver_list_of_plans_and_devices", "--startup-dir", "."]) == exit_code
+        params = ["qserver_list_of_plans_and_devices", "--startup-dir", "."]
+        assert subprocess.call(params) == exit_code
     elif test == "specify_path":
-        assert subprocess.call(["qserver_list_of_plans_and_devices",
-                                "--startup-dir", pc_path, "--file-dir", pc_path]) == exit_code
+        params = ["qserver_list_of_plans_and_devices", "--startup-dir", pc_path, "--file-dir", pc_path]
+        assert subprocess.call(params) == exit_code
     elif test == "incorrect_path_startup":
         # Path exists (default path is used), but there are no startup files (fails)
-        assert subprocess.call(["qserver_list_of_plans_and_devices"]) == exit_code
+        params = ["qserver_list_of_plans_and_devices", "--startup-dir", "."]
+        assert subprocess.call(params) == exit_code
         # Path does not exist
         path_nonexisting = os.path.join(tmp_path, "abcde")
-        assert subprocess.call(["qserver_list_of_plans_and_devices",
-                                "--startup-dir", path_nonexisting, "--file-dir", pc_path]) == exit_code
+        params = ["qserver_list_of_plans_and_devices", "--startup-dir", path_nonexisting, "--file-dir", pc_path]
+        assert subprocess.call(params) == exit_code
     elif test == "incorrect_path_file":
-        # Path exists (default path is used), but there are no startup files (fails)
-        assert subprocess.call(["qserver_list_of_plans_and_devices"]) == exit_code
         # Path does not exist
         path_nonexisting = os.path.join(tmp_path, "abcde")
-        assert subprocess.call(["qserver_list_of_plans_and_devices",
-                                "--startup-dir", pc_path, "--file-dir", path_nonexisting]) == exit_code
+        params = ["qserver_list_of_plans_and_devices", "--startup-dir", pc_path, "--file-dir", path_nonexisting]
+        assert subprocess.call(params) == exit_code
     else:
         assert False, f"Unknown test '{test}'"
 

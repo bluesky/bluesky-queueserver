@@ -380,7 +380,7 @@ def load_worker_startup_code(
     if startup_dir is not None:
         logger.info("Loading RE Worker startup code from directory '%s' ...", startup_dir)
         startup_dir = os.path.abspath(os.path.expanduser(startup_dir))
-        print(f"startup_dir={startup_dir}") ##
+        print(f"startup_dir={startup_dir}")
         nspace = load_profile_collection(startup_dir, keep_re=keep_re)
 
     elif startup_module_name is not None:

@@ -373,6 +373,10 @@ def load_worker_startup_code(
     nspace : dict
        Dictionary with loaded namespace data
     """
+
+    if sum([_ is None for _ in [startup_dir, startup_module_name, startup_script_path]]) != 2:
+        raise ValueError("Source of the startup code was not specified or multiple sources were specified.")
+
     if startup_dir is not None:
         logger.info("Loading RE Worker startup code from directory '%s' ...", startup_dir)
         nspace = load_profile_collection(startup_dir, keep_re=keep_re)
@@ -1141,14 +1145,33 @@ def _unpickle_types(existing_dict):
             _unpickle_types(item)
 
 
-def gen_list_of_plans_and_devices(path=None, file_name="existing_plans_and_devices.yaml", overwrite=False):
+def gen_list_of_plans_and_devices(
+    *,
+    startup_dir=None,
+    startup_module_name=None,
+    startup_script_path=None,
+    file_dir=None,
+    file_name="existing_plans_and_devices.yaml",
+    overwrite=False,
+):
     """
-    Generate the list of plans and devices from profile collection.
-    The list is saved to file ``existing_plans_and_devices.yaml``.
+    Generate the list of plans and devices from a collection of startup files, python module or
+    a script. Only one source of startup code should be specified, otherwise an exception will be
+    raised.
+
+    If ``file_name`` is specified, it is used as a name for the output file, otherwise
+    the default file name ``existing_plans_and_devices.yaml`` is used. The file will be saved
+    to ``file_dir`` or current directory if ``file_dir`` is not specified or ``None``.
 
     Parameters
     ----------
-    path: str or None
+    startup_dir: str or None
+        path to the directory that contains a collection of startup files (IPython-style)
+    startup_module_name: str or None
+        name of the startup module to load
+    startup_script_path: str or None
+        name of the startup script
+    file_dir: str or None
         path to the directory where the file is to be created. None - create file in current directory.
     file_name: str
         name of the output YAML file
@@ -1165,10 +1188,17 @@ def gen_list_of_plans_and_devices(path=None, file_name="existing_plans_and_devic
         Error occurred while creating or saving the lists.
     """
     try:
-        if path is None:
-            path = os.getcwd()
+        if file_dir is None:
+            file_dir = os.getcwd()
 
-        nspace = load_profile_collection(path)
+        if sum([_ is None for _ in [startup_dir, startup_module_name, startup_script_path]]) != 2:
+            raise ValueError("Source of the startup code was not specified or multiple sources were specified.")
+
+        nspace = load_worker_startup_code(
+            startup_dir=startup_dir,
+            startup_module_name=startup_module_name,
+            startup_script_path=startup_script_path,
+        )
         plans = plans_from_nspace(nspace)
         devices = devices_from_nspace(nspace)
 
@@ -1177,7 +1207,7 @@ def gen_list_of_plans_and_devices(path=None, file_name="existing_plans_and_devic
             "existing_devices": _prepare_devices(devices),
         }
 
-        file_path = os.path.join(path, file_name)
+        file_path = os.path.join(file_dir, file_name)
         if os.path.exists(file_path) and not overwrite:
             raise IOError(f"File '{file_path}' already exists. File overwriting is disabled.")
 
@@ -1207,24 +1237,71 @@ def gen_list_of_plans_and_devices_cli():
         epilog=f"Bluesky-QServer version {qserver_version}.",
     )
     parser.add_argument(
-        "--path",
-        "-p",
-        dest="path",
+        "--file_dir",
+        dest="file_dir",
         action="store",
         required=False,
         default=None,
-        help="Path to profile collection. Current working directory is used if the path is not specified",
+        help="Directory where the list of plans and devices is saved. Default: current directory.",
+    )
+    parser.add_argument(
+        "--file_name",
+        dest="file_name",
+        action="store",
+        required=False,
+        default=None,
+        help="Name of the file where the list of plans and devices is saved. Default file name is used"
+        "if the parameter is not specified.",
+    )
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--startup-dir",
+        dest="startup_dir",
+        type=str,
+        default=None,
+        help="Path to directory that contains a set of startup files (*.py and *.ipy). All the scripts "
+        "in the directory will be sorted in alphabetical order of their names and loaded in "
+        "the Run Engine Worker environment. The set of startup files may be located in any accessible "
+        "directory.",
+    )
+    group.add_argument(
+        "--startup-module",
+        dest="startup_module_name",
+        type=str,
+        default=None,
+        help="The name of the module with startup code. The module is imported each time the RE Worker "
+        "environment is opened. Example: 'some.startup.module'.",
+    )
+    group.add_argument(
+        "--startup-script",
+        dest="startup_script_path",
+        type=str,
+        default=None,
+        help="The path to the script with startup code. The script is loaded each time the RE Worker "
+        "environment is opened. Example: 'some.startup.module'.",
     )
 
     args = parser.parse_args()
-    path = args.path
+    file_dir = args.file_dir
+    file_name = args.file_name
+    startup_dir = args.startup_dir
+    startup_module_name = args.startup_module_name
+    startup_script_path = args.startup_script_path
 
-    if path is not None:
-        path = os.path.expanduser(path)
-        path = os.path.abspath(path)
+    if file_dir is not None:
+        file_dir = os.path.expanduser(file_dir)
+        file_dir = os.path.abspath(file_dir)
 
     try:
-        gen_list_of_plans_and_devices(path=path, overwrite=True)
+        gen_list_of_plans_and_devices(
+            startup_dir=startup_dir,
+            startup_module_name=startup_module_name,
+            startup_script_path=startup_script_path,
+            file_dir=file_dir,
+            file_name=file_name,
+            overwrite=True,
+        )
         print("The list of existing plans and devices was created successfully.")
         exit_code = 0
     except BaseException as ex:

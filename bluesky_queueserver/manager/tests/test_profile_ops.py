@@ -19,6 +19,7 @@ from bluesky_queueserver.manager.profile_ops import (
     load_profile_collection,
     load_startup_script,
     load_startup_module,
+    load_worker_startup_code,
     plans_from_nspace,
     devices_from_nspace,
     parse_plan,
@@ -531,6 +532,59 @@ def test_load_startup_module_1(tmp_path, monkeypatch, keep_re):
     # Expect the functions from 'old' code to be in the namespace!!!
     assert "plan_in_module_1" in nspace, pprint.pformat(nspace)
     assert "plan_in_module_1_modified" not in nspace, pprint.pformat(nspace)
+
+
+# fmt: off
+@pytest.mark.parametrize("option", ["startup_dir", "script", "module"])
+@pytest.mark.parametrize("keep_re", [True, False])
+# fmt: on
+def test_load_worker_startup_code_1(tmp_path, monkeypatch, keep_re, option):
+    """
+    Test for `load_worker_startup_code` function.
+    """
+    script_dir = os.path.join(tmp_path, "script_dir1")
+    script_path = os.path.join(script_dir, "startup_script.py")
+
+    os.makedirs(script_dir, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(_startup_script_1)
+
+    if option == "startup_dir":
+        nspace = load_worker_startup_code(startup_dir=script_dir, keep_re=keep_re)
+
+    elif option == "script":
+        nspace = load_worker_startup_code(startup_script_path=script_path, keep_re=keep_re)
+
+    elif option == "module":
+        # Temporarily add module to the search path
+        sys_path = sys.path
+        monkeypatch.setattr(sys, "path", [str(tmp_path)] + sys_path)
+
+        nspace = load_worker_startup_code(startup_module_name="script_dir1.startup_script", keep_re=keep_re)
+
+    else:
+        assert False, f"Unknown option '{option}'"
+
+    assert isinstance(nspace, dict), str(type(nspace))
+    assert len(nspace) > 0
+
+    if keep_re:
+        assert "RE" in nspace, pprint.pformat(nspace)
+        assert "db" in nspace, pprint.pformat(nspace)
+    else:
+        assert "RE" not in nspace, pprint.pformat(nspace)
+        assert "db" not in nspace, pprint.pformat(nspace)
+
+
+@pytest.mark.parametrize("option", ["no_sources", "multiple_sources"])
+def test_load_worker_startup_code_2_failing(option):
+    with pytest.raises(ValueError, match="multiple sources were specified"):
+        if option == "no_sources":
+            load_worker_startup_code(startup_dir="abc", startup_module_name="script_dir1.startup_script")
+        elif option == "multiple_sources":
+            load_worker_startup_code()
+        else:
+            assert False, f"Unknown option '{option}'"
 
 
 # ---------------------------------------------------------------------------------

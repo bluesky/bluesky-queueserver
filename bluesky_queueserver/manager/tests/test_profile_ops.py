@@ -12,6 +12,8 @@ import ophyd
 
 from ._common import copy_default_profile_collection, patch_first_startup_file
 
+from ._common import reset_sys_modules  # noqa: F401
+
 from bluesky_queueserver.manager.annotation_decorator import parameter_annotation_decorator
 
 from bluesky_queueserver.manager.profile_ops import (
@@ -296,7 +298,7 @@ def simple_sample_plan_4():
 
 @pytest.mark.parametrize("keep_re", [True, False])
 @pytest.mark.parametrize("enable_local_imports", [True, False])
-def test_load_startup_script_1(tmp_path, keep_re, enable_local_imports):
+def test_load_startup_script_1(tmp_path, keep_re, enable_local_imports, reset_sys_modules):  # noqa: F811
     """
     Basic test for `load_startup_script` function. Load two scripts in sequence from two
     different locations and make sure that all the plans are loaded.
@@ -376,7 +378,7 @@ def plan_in_module_2():
 
 @pytest.mark.parametrize("keep_re", [True, False])
 @pytest.mark.parametrize("enable_local_imports", [True, False])
-def test_load_startup_script_2(tmp_path, keep_re, enable_local_imports):
+def test_load_startup_script_2(tmp_path, keep_re, enable_local_imports, reset_sys_modules):  # noqa: F811
     """
     Tests for `load_startup_script` function. Loading scripts WITH LOCAL IMPORTS.
     Loading is expected to fail if local imports are disabled.
@@ -469,7 +471,7 @@ def test_load_startup_script_2(tmp_path, keep_re, enable_local_imports):
 
 
 @pytest.mark.parametrize("keep_re", [True, False])
-def test_load_startup_module_1(tmp_path, monkeypatch, keep_re):
+def test_load_startup_module_1(tmp_path, monkeypatch, keep_re, reset_sys_modules):  # noqa: F811
     """
     Test for `load_startup_module` function: import module that is in the module search path.
     The test also demonstrates that if the code of the module or any module imported by the module
@@ -538,7 +540,7 @@ def test_load_startup_module_1(tmp_path, monkeypatch, keep_re):
 @pytest.mark.parametrize("option", ["startup_dir", "script", "module"])
 @pytest.mark.parametrize("keep_re", [True, False])
 # fmt: on
-def test_load_worker_startup_code_1(tmp_path, monkeypatch, keep_re, option):
+def test_load_worker_startup_code_1(tmp_path, monkeypatch, keep_re, option, reset_sys_modules):  # noqa: F811
     """
     Test for `load_worker_startup_code` function.
     """
@@ -577,7 +579,7 @@ def test_load_worker_startup_code_1(tmp_path, monkeypatch, keep_re, option):
 
 
 @pytest.mark.parametrize("option", ["no_sources", "multiple_sources"])
-def test_load_worker_startup_code_2_failing(option):
+def test_load_worker_startup_code_2_failing(option, reset_sys_modules):  # noqa: F811
     with pytest.raises(ValueError, match="multiple sources were specified"):
         if option == "no_sources":
             load_worker_startup_code(startup_dir="abc", startup_module_name="script_dir1.startup_script")

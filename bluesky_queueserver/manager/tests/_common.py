@@ -7,6 +7,7 @@ import asyncio
 import time as ttime
 import intake
 import tempfile
+import sys
 
 from databroker import catalog_search_path
 
@@ -407,3 +408,21 @@ def re_manager_pc_copy(tmp_path):
 
     yield re, pc_path  # Location of the copy of the default profile collection.
     re.stop_manager()
+
+
+@pytest.fixture
+def reset_sys_modules():
+    """
+    Resets `sys.modules` after each test. Allows importing the same module in multiple tests independently.
+    Intended for use in the tests for the functions that import modules or execute scripts that import modules.
+    """
+    # Save the set of keys before the test is called
+    sys_modules = list(sys.modules.keys())
+
+    yield
+
+    # Remove entries for all the modules loaded during the test
+    for key in list(sys.modules.keys()):
+        if key not in sys_modules:
+            print(f"Deleting the key '{key}'")
+            del sys.modules[key]

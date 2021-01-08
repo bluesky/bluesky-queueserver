@@ -6,6 +6,7 @@ import pickle
 import typing
 import subprocess
 import pprint
+import sys
 
 import ophyd
 
@@ -17,6 +18,7 @@ from bluesky_queueserver.manager.profile_ops import (
     get_default_startup_dir,
     load_profile_collection,
     load_startup_script,
+    load_startup_module,
     plans_from_nspace,
     devices_from_nspace,
     parse_plan,
@@ -463,6 +465,72 @@ def test_load_startup_script_2(tmp_path, keep_re, enable_local_imports):
         # Expected to fail if local imports are not enaabled
         with pytest.raises(StartupLoadingError):
             load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+
+
+@pytest.mark.parametrize("keep_re", [True, False])
+def test_load_startup_module_1(tmp_path, monkeypatch, keep_re):
+    """
+    Test for `load_startup_module` function: import module that is in the module search path.
+    The test also demonstrates that if the code of the module or any module imported by the module
+    is changed, loading of the module again does not load the new code, i.e. application needs to
+    be restarted if the code is edited.
+    """
+    # Load first script
+    script_dir = os.path.join(tmp_path, "script_dir1")
+    script_path = os.path.join(script_dir, "startup_script.py")
+    module_dir = os.path.join(script_dir, "mod")
+    module_path = os.path.join(module_dir, "imported_module.py")
+
+    script_patch = "from .mod.imported_module import *\n"
+
+    os.makedirs(script_dir, exist_ok=True)
+    os.makedirs(module_dir, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(script_patch + _startup_script_1)
+
+    with open(module_path, "w") as f:
+        f.write(_imported_module_1)
+
+    # Temporarily add module to the search path
+    sys_path = sys.path
+    monkeypatch.setattr(sys, "path", [str(tmp_path)] + sys_path)
+
+    nspace = load_startup_module("script_dir1.startup_script", keep_re=keep_re)
+
+    assert nspace
+    assert "simple_sample_plan_1" in nspace, pprint.pformat(nspace)
+    assert "simple_sample_plan_2" in nspace, pprint.pformat(nspace)
+    assert "plan_in_module_1" in nspace, pprint.pformat(nspace)
+    if keep_re:
+        assert "RE" in nspace, pprint.pformat(nspace)
+        assert "db" in nspace, pprint.pformat(nspace)
+    else:
+        assert "RE" not in nspace, pprint.pformat(nspace)
+        assert "db" not in nspace, pprint.pformat(nspace)
+
+    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    # The rest of the test demonstrates faulty behavior of the Python import system.
+    # Reload the same script, but replace the code in the module (emulate the process of code editing).
+    #   NOTE: current implementation will not load the new code!!! Application has to be restarted if
+    #         to import a module after code is modified.
+
+    # Replace the 'main' module code
+    with open(script_path, "w") as f:
+        f.write(script_patch + _startup_script_2)
+
+    nspace = load_startup_module("script_dir1.startup_script", keep_re=keep_re)
+    # Expect the functions from 'old' code to be in the namespace!!!
+    assert "simple_sample_plan_1" in nspace, pprint.pformat(nspace)
+    assert "simple_sample_plan_2" in nspace, pprint.pformat(nspace)
+
+    # Replace the code of the module which is imported from the 'main' module.
+    with open(module_path, "w") as f:
+        f.write(_imported_module_1_modified)
+
+    nspace = load_startup_module("script_dir1.startup_script", keep_re=keep_re)
+    # Expect the functions from 'old' code to be in the namespace!!!
+    assert "plan_in_module_1" in nspace, pprint.pformat(nspace)
+    assert "plan_in_module_1_modified" not in nspace, pprint.pformat(nspace)
 
 
 # ---------------------------------------------------------------------------------

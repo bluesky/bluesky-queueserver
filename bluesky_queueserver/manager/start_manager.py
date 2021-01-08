@@ -233,7 +233,7 @@ def start_manager():
         dest="startup_script_path",
         type=str,
         help="The path to the script with startup code. The script is loaded each time the RE Worker "
-        "environment is opened. Example: 'some.startup.module'. Paths to the list of existing "
+        "environment is opened. Example: '~/startup/scripts/scripts.py'. Paths to the list of existing "
         "plans and devices (--existing-plans-and-devices) and user group permissions "
         "(--user-group-permissions) must be explicitly specified if this option is used.",
     )

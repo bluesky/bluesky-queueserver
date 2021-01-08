@@ -1246,7 +1246,8 @@ def gen_list_of_plans_and_devices_cli():
         action="store",
         required=False,
         default=None,
-        help="Directory where the list of plans and devices is saved. Default: current directory.",
+        help="Directory where the list of plans and devices is saved. By default, the list is saved "
+        "to the file 'existing_plans_and_devices.yaml' in the current directory.",
     )
     parser.add_argument(
         "--file-name",
@@ -1254,8 +1255,8 @@ def gen_list_of_plans_and_devices_cli():
         action="store",
         required=False,
         default=None,
-        help="Name of the file where the list of plans and devices is saved. Default file name is used"
-        "if the parameter is not specified.",
+        help="Name of the file where the list of plans and devices is saved. Default file name "
+        "'existing_plans_and_devices.yaml' is used unless the parameter is not specified.",
     )
 
     group = parser.add_mutually_exclusive_group()
@@ -1267,23 +1268,26 @@ def gen_list_of_plans_and_devices_cli():
         help="Path to directory that contains a set of startup files (*.py and *.ipy). All the scripts "
         "in the directory will be sorted in alphabetical order of their names and loaded in "
         "the Run Engine Worker environment. The set of startup files may be located in any accessible "
-        "directory.",
+        "directory. Example: 'qserver_list_of_plans_and_devices --startup-dir .' load startup "
+        "files from the current directory and saves the lists to the file in current directory.",
     )
     group.add_argument(
         "--startup-module",
         dest="startup_module_name",
         type=str,
         default=None,
-        help="The name of the module with startup code. The module is imported each time the RE Worker "
-        "environment is opened. Example: 'some.startup.module'.",
+        help="The name of the module with startup code. Example: "
+        "'qserver_list_of_plans_and_devices --startup-module some.startup.module' loads startup "
+        "code from the module 'some.startup.module' and saves results to the file in the current directory.",
     )
     group.add_argument(
         "--startup-script",
         dest="startup_script_path",
         type=str,
         default=None,
-        help="The path to the script with startup code. The script is loaded each time the RE Worker "
-        "environment is opened. Example: 'some.startup.module'.",
+        help="The path to the script with startup code. Example: "
+        "'qserver_list_of_plans_and_devices --startup-script ~/startup/scripts/script.py' loads"
+        "startup code from the script and saves the results to the file in the current directory.",
     )
 
     args = parser.parse_args()

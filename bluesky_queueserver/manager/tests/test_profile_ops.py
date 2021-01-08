@@ -950,6 +950,7 @@ def test_gen_list_of_plans_and_devices_cli(tmp_path, monkeypatch, test, exit_cod
         # Path does not exist
         path_nonexisting = os.path.join(tmp_path, "abcde")
         params = ["qserver_list_of_plans_and_devices", "--startup-dir", pc_path, "--file-dir", path_nonexisting]
+
     else:
         assert False, f"Unknown test '{test}'"
 

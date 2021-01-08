@@ -5,6 +5,7 @@ import yaml
 import pickle
 import typing
 import subprocess
+import pprint
 
 import ophyd
 
@@ -15,6 +16,7 @@ from bluesky_queueserver.manager.annotation_decorator import parameter_annotatio
 from bluesky_queueserver.manager.profile_ops import (
     get_default_startup_dir,
     load_profile_collection,
+    load_startup_script,
     plans_from_nspace,
     devices_from_nspace,
     parse_plan,
@@ -30,6 +32,7 @@ from bluesky_queueserver.manager.profile_ops import (
     _prepare_plans,
     _prepare_devices,
     _unpickle_types,
+    StartupLoadingError,
 )
 
 
@@ -240,6 +243,226 @@ RE.subscribe(db.insert)
     else:
         assert "RE" not in nspace
         assert "db" not in nspace
+
+
+_startup_script_1 = """
+from ophyd.sim import det1, det2
+from bluesky.plans import count
+
+def simple_sample_plan_1():
+    '''
+    Simple plan for tests.
+    '''
+    yield from count([det1, det2])
+
+
+def simple_sample_plan_2():
+    '''
+    Simple plan for tests.
+    '''
+    yield from count([det1, det2])
+
+from bluesky import RunEngine
+RE = RunEngine({})
+
+from databroker import Broker
+db = Broker.named('temp')
+"""
+
+
+_startup_script_2 = """
+from ophyd.sim import det1, det2
+from bluesky.plans import count
+
+
+def simple_sample_plan_3():
+    '''
+    Simple plan for tests.
+    '''
+    yield from count([det1, det2])
+
+
+def simple_sample_plan_4():
+    '''
+    Simple plan for tests.
+    '''
+    yield from count([det1, det2])
+
+"""
+
+
+@pytest.mark.parametrize("keep_re", [True, False])
+@pytest.mark.parametrize("enable_local_imports", [True, False])
+def test_load_startup_script_1(tmp_path, keep_re, enable_local_imports):
+    """
+    Basic test for `load_startup_script` function. Load two scripts in sequence from two
+    different locations and make sure that all the plans are loaded.
+    There are NO LOCAL IMPORTS in the scripts, so the script should work with/without local
+    imports.
+    """
+    # Load first script
+    script_dir = os.path.join(tmp_path, "script_dir1")
+    script_path = os.path.join(script_dir, "startup_script.py")
+
+    os.makedirs(script_dir, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(_startup_script_1)
+
+    nspace = load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+
+    assert nspace
+    assert "simple_sample_plan_1" in nspace, pprint.pformat(nspace)
+    assert "simple_sample_plan_2" in nspace, pprint.pformat(nspace)
+    if keep_re:
+        assert "RE" in nspace, pprint.pformat(nspace)
+        assert "db" in nspace, pprint.pformat(nspace)
+    else:
+        assert "RE" not in nspace, pprint.pformat(nspace)
+        assert "db" not in nspace, pprint.pformat(nspace)
+
+    # Load different script (same name, but different path)
+    script_dir = os.path.join(tmp_path, "script_dir2")
+    script_path = os.path.join(script_dir, "startup_script.py")
+
+    os.makedirs(script_dir, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(_startup_script_2)
+
+    nspace = load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+
+    assert nspace
+    assert "simple_sample_plan_3" in nspace, pprint.pformat(nspace)
+    assert "simple_sample_plan_4" in nspace, pprint.pformat(nspace)
+    assert "RE" not in nspace, pprint.pformat(nspace)
+    assert "db" not in nspace, pprint.pformat(nspace)
+
+
+_imported_module_1 = """
+from ophyd.sim import det1, det2
+from bluesky.plans import count
+
+def plan_in_module_1():
+    '''
+    Simple plan for tests.
+    '''
+    yield from count([det1, det2])
+"""
+
+_imported_module_1_modified = """
+from ophyd.sim import det1, det2
+from bluesky.plans import count
+
+def plan_in_module_1_modified():
+    '''
+    Simple plan for tests.
+    '''
+    yield from count([det1, det2])
+"""
+
+_imported_module_2 = """
+from ophyd.sim import det1, det2
+from bluesky.plans import count
+
+def plan_in_module_2():
+    '''
+    Simple plan for tests.
+    '''
+    yield from count([det1, det2])
+"""
+
+
+@pytest.mark.parametrize("keep_re", [True, False])
+@pytest.mark.parametrize("enable_local_imports", [True, False])
+def test_load_startup_script_2(tmp_path, keep_re, enable_local_imports):
+    """
+    Tests for `load_startup_script` function. Loading scripts WITH LOCAL IMPORTS.
+    Loading is expected to fail if local imports are disabled.
+
+    The test contains the following steps:
+    - Load the script that contains local import statement, make sure that the imported contents
+      is in the namespace.
+    - Change the code in the imported module and reload the script. Make sure that the changed
+      code was imported.
+    - Load a script located in a different directory that is importing module with the same name
+      (same relative path to the script), but containing different code. Make sure that correct
+      module is imported.
+    """
+    # Load first script
+    script_dir = os.path.join(tmp_path, "script_dir1")
+    script_path = os.path.join(script_dir, "startup_script.py")
+    module_dir = os.path.join(script_dir, "mod")
+    module_path = os.path.join(module_dir, "imported_module.py")
+
+    script_patch = "from mod.imported_module import *\n"
+
+    os.makedirs(script_dir, exist_ok=True)
+    os.makedirs(module_dir, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(script_patch + _startup_script_1)
+    with open(module_path, "w") as f:
+        f.write(_imported_module_1)
+
+    if enable_local_imports:
+        nspace = load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+
+        assert nspace
+        assert "simple_sample_plan_1" in nspace, pprint.pformat(nspace)
+        assert "simple_sample_plan_2" in nspace, pprint.pformat(nspace)
+        assert "plan_in_module_1" in nspace, pprint.pformat(nspace)
+        if keep_re:
+            assert "RE" in nspace, pprint.pformat(nspace)
+            assert "db" in nspace, pprint.pformat(nspace)
+        else:
+            assert "RE" not in nspace, pprint.pformat(nspace)
+            assert "db" not in nspace, pprint.pformat(nspace)
+    else:
+        # Expected to fail if local imports are not enaabled
+        with pytest.raises(StartupLoadingError):
+            load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+
+    # Reload the same script, but replace the code in the module (emulate the process of code editing).
+    #   Check that the new code is loaded when the module is imported.
+    with open(module_path, "w") as f:
+        f.write(_imported_module_1_modified)
+
+    if enable_local_imports:
+        nspace = load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+        assert "plan_in_module_1" not in nspace, pprint.pformat(nspace)
+        assert "plan_in_module_1_modified" in nspace, pprint.pformat(nspace)
+
+    else:
+        # Expected to fail if local imports are not enaabled
+        with pytest.raises(StartupLoadingError):
+            load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+
+    # Load different script (same name, but different path). The script imports module with the same name
+    #   (with the same relative path). Check that the correct version of the module is loaded.
+    script_dir = os.path.join(tmp_path, "script_dir2")
+    script_path = os.path.join(script_dir, "startup_script.py")
+    module_dir = os.path.join(script_dir, "mod")
+    module_path = os.path.join(module_dir, "imported_module.py")
+
+    script_patch = "from mod.imported_module import *\n"
+
+    os.makedirs(script_dir, exist_ok=True)
+    os.makedirs(module_dir, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(script_patch + _startup_script_2)
+    with open(module_path, "w") as f:
+        f.write(_imported_module_2)
+
+    if enable_local_imports:
+        nspace = load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+
+        assert nspace
+        assert "simple_sample_plan_3" in nspace, pprint.pformat(nspace)
+        assert "simple_sample_plan_4" in nspace, pprint.pformat(nspace)
+        assert "RE" not in nspace, pprint.pformat(nspace)
+        assert "db" not in nspace, pprint.pformat(nspace)
+    else:
+        # Expected to fail if local imports are not enaabled
+        with pytest.raises(StartupLoadingError):
+            load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
 
 
 # ---------------------------------------------------------------------------------

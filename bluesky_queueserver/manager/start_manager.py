@@ -329,6 +329,10 @@ def start_manager():
         #   and built-in Bluesky plans.
         startup_dir = get_default_startup_dir()
 
+    if sum([_ is not None for _ in [startup_dir, startup_module_name, startup_script_path]]) != 1:
+        logger.error("Multiple or no startup code sources were specified.")
+        return 1
+
     # Primitive error processing: make sure that all essential data exists.
     if startup_dir is not None:
         if not os.path.exists(startup_dir):
@@ -346,11 +350,18 @@ def start_manager():
                 "The path to the list of existing plans and devices (--existing-plans-and-devices) "
                 "is not specified."
             )
+            return 1
         if not args.user_group_permissions_path:
             logger.error(
                 "The path to the file containing user group permissions (--user-group-permissions) "
                 "is not specified."
             )
+            return 1
+        # Check if startup script exists (if it is specified)
+        if startup_script_path is not None:
+            if not os.path.isfile(startup_script_path):
+                logger.error("The script '{startup_script_path}' is not found.")
+            return 1
 
     config_worker["keep_re"] = args.keep_re
     config_worker["use_persistent_metadata"] = args.use_persistent_metadata

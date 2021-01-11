@@ -327,7 +327,10 @@ def load_startup_script(script_path, *, keep_re=False, enable_local_imports=Fals
         sm_keys = list(sys.modules.keys())
 
     try:
-        exec(open(script_path).read(), None, nspace)
+        nspace_global, nspace_local = {}, {}
+        exec(open(script_path).read(), nspace_global, nspace_local)
+        nspace = nspace_global
+        nspace.update(nspace_local)
 
     except BaseException as ex:
         raise StartupLoadingError(f"Error encountered executing startup script at '{script_path}'") from ex

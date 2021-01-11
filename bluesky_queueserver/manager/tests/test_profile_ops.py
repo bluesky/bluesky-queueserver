@@ -470,6 +470,34 @@ def test_load_startup_script_2(tmp_path, keep_re, enable_local_imports, reset_sy
             load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
 
 
+_startup_script_3 = """
+a = 10
+locals()['b'] = 20
+globals()['c'] = 50
+"""
+
+
+def test_load_startup_script_3(tmp_path, reset_sys_modules):  # noqa: F811
+    """
+    Test for ``load_startup_script`` function.
+    Verifies if variables defined in global and local scope in the script are handled correctly.
+    """
+    # Load first script
+    script_dir = os.path.join(tmp_path, "script_dir1")
+    script_path = os.path.join(script_dir, "startup_script.py")
+
+    os.makedirs(script_dir, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(_startup_script_3)
+
+    nspace = load_startup_script(script_path)
+
+    expected_results = {"a": 10, "b": 20, "c": 50}
+    for k, v in expected_results.items():
+        assert k in nspace
+        assert nspace[k] == v
+
+
 @pytest.mark.parametrize("keep_re", [True, False])
 def test_load_startup_module_1(tmp_path, monkeypatch, keep_re, reset_sys_modules):  # noqa: F811
     """

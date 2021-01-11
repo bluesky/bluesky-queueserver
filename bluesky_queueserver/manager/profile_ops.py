@@ -1220,7 +1220,7 @@ def gen_list_of_plans_and_devices(
             yaml.dump(existing_plans_and_devices, stream)
 
     except Exception as ex:
-        raise RuntimeError(f"Failed to create the list of devices and plans: {str(ex)}")
+        raise RuntimeError(f"Failed to create the list of plans and devices: {str(ex)}")
 
 
 def gen_list_of_plans_and_devices_cli():

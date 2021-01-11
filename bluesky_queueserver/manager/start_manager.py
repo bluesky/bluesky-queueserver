@@ -239,7 +239,7 @@ def start_manager():
     )
 
     parser.add_argument(
-        "--existing-plans-and-devices",
+        "--existing-plans-devices",
         dest="existing_plans_and_devices_path",
         type=str,
         help="Path to file that contains the list of existing plans and devices. "
@@ -323,7 +323,7 @@ def start_manager():
     elif args.startup_module_name:
         startup_module_name = args.startup_module_name
     elif args.startup_script_path:
-        startup_script_path = args.startup_script_path
+        startup_script_path = os.path.abspath(os.path.expanduser(args.startup_script_path))
     else:
         # The default collection is the collection of simulated Ophyd devices
         #   and built-in Bluesky plans.
@@ -345,7 +345,7 @@ def start_manager():
         # startup_module_name or startup_script_path is set. This option requires
         #   the paths to existing plans and devices and user group permissions to be set.
         #   (The default directory can not be used in this case).
-        if not args.existing_plans_and_devices:
+        if not args.existing_plans_and_devices_path:
             logger.error(
                 "The path to the list of existing plans and devices (--existing-plans-and-devices) "
                 "is not specified."
@@ -361,7 +361,7 @@ def start_manager():
         if startup_script_path is not None:
             if not os.path.isfile(startup_script_path):
                 logger.error("The script '{startup_script_path}' is not found.")
-            return 1
+                return 1
 
     config_worker["keep_re"] = args.keep_re
     config_worker["use_persistent_metadata"] = args.use_persistent_metadata
@@ -380,13 +380,13 @@ def start_manager():
         if not os.path.isabs(existing_pd_path):
             existing_pd_path = os.path.join(startup_dir, existing_pd_path)
         if not existing_pd_path.endswith(".yaml"):
-            os.path.join(existing_pd_path, default_existing_pd_fln)
+            existing_pd_path = os.path.join(existing_pd_path, default_existing_pd_fln)
     else:
         existing_pd_path = os.path.join(startup_dir, default_existing_pd_fln)
     if not os.path.isfile(existing_pd_path):
         logger.error(
             "The list of allowed plans and devices was not found at "
-            "'%s'. Proceed without the list: all plans and devices are allowed.",
+            "'%s'. Proceed without the list: all plans and devices will be accepted by RE Manager.",
             existing_pd_path,
         )
         existing_pd_path = None
@@ -397,13 +397,13 @@ def start_manager():
         if not os.path.isabs(user_group_pd_path):
             user_group_pd_path = os.path.join(startup_dir, user_group_pd_path)
         if not user_group_pd_path.endswith(".yaml"):
-            os.path.join(user_group_pd_path, default_existing_pd_fln)
+            user_group_pd_path = os.path.join(user_group_pd_path, default_user_group_pd_fln)
     else:
         user_group_pd_path = os.path.join(startup_dir, default_user_group_pd_fln)
     if not os.path.isfile(user_group_pd_path):
         logger.error(
             "The file with user permissions was not found at "
-            "'%s'. All existing plans and devices will be allowed to all users.",
+            "'%s'. User groups are not defined. USERS WILL NOT BE ABLE TO SUBMIT PLANS.",
             user_group_pd_path,
         )
         user_group_pd_path = None

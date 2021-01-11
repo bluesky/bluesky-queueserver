@@ -1225,9 +1225,9 @@ def gen_list_of_plans_and_devices(
 
 def gen_list_of_plans_and_devices_cli():
     """
-    'qserver_list_of_plans_and_devices'
+    'qserver-list-plans-devices'
     CLI tool for generating the list of existing plans and devices based on profile collection.
-    The tool is supposed to be called as 'qserver_list_of_plans_and_devices' from command line.
+    The tool is supposed to be called as 'qserver-list-plans-devices' from command line.
     The function will ALWAYS overwrite the existing list of plans and devices (the list
     is automatically generated, so overwriting (updating) should be a safe operation that doesn't
     lead to loss configuration data.
@@ -1268,7 +1268,7 @@ def gen_list_of_plans_and_devices_cli():
         help="Path to directory that contains a set of startup files (*.py and *.ipy). All the scripts "
         "in the directory will be sorted in alphabetical order of their names and loaded in "
         "the Run Engine Worker environment. The set of startup files may be located in any accessible "
-        "directory. Example: 'qserver_list_of_plans_and_devices --startup-dir .' load startup "
+        "directory. Example: 'qserver-list-plans-devices --startup-dir .' load startup "
         "files from the current directory and saves the lists to the file in current directory.",
     )
     group.add_argument(
@@ -1277,7 +1277,7 @@ def gen_list_of_plans_and_devices_cli():
         type=str,
         default=None,
         help="The name of the module with startup code. Example: "
-        "'qserver_list_of_plans_and_devices --startup-module some.startup.module' loads startup "
+        "'qserver-list-plans-devices --startup-module some.startup.module' loads startup "
         "code from the module 'some.startup.module' and saves results to the file in the current directory.",
     )
     group.add_argument(
@@ -1286,7 +1286,7 @@ def gen_list_of_plans_and_devices_cli():
         type=str,
         default=None,
         help="The path to the script with startup code. Example: "
-        "'qserver_list_of_plans_and_devices --startup-script ~/startup/scripts/script.py' loads"
+        "'qserver-list-plans-devices --startup-script ~/startup/scripts/script.py' loads"
         "startup code from the script and saves the results to the file in the current directory.",
     )
 

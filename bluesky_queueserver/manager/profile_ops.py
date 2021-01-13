@@ -17,6 +17,7 @@ import pydantic
 import enum
 import random
 import argparse
+import importlib
 from numpydoc.docscrape import NumpyDocString
 
 import logging
@@ -171,6 +172,16 @@ def _patch_profile(file_name):
     return tmp_fln
 
 
+# Discard RE and db from the profile namespace (if they exist).
+def _discard_re_from_nspace(nspace, *, keep_re=False):
+    """
+    Discard RE and db from the profile namespace (if they exist).
+    """
+    if not keep_re:
+        nspace.pop("RE", None)
+        nspace.pop("db", None)
+
+
 def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
     """
     Load profile collection located at the specified path. The collection consists of
@@ -184,6 +195,9 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
     patch_profiles: boolean
         enable/disable patching profiles. At this point there is no reason not to
         patch profiles.
+    keep_re: boolean
+        Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
+        or removed (``False``).
 
     Returns
     -------
@@ -236,16 +250,156 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
                 exc_info = nspace["__plan_exc_info"]
                 raise exc_info[1].with_traceback(exc_info[2])
 
-        # Discard RE and db from the profile namespace (if they exist).
-        if not keep_re:
-            nspace.pop("RE", None)
-            nspace.pop("db", None)
+        _discard_re_from_nspace(nspace, keep_re=keep_re)
+
     finally:
         try:
             if path_is_set:
                 sys.path.remove(path)
         except Exception:
             pass
+
+    return nspace
+
+
+def load_startup_module(module_name, *, keep_re=False):
+    """
+    Populate namespace by import a module.
+
+    Parameters
+    ----------
+    module_name: str
+        name of the module to import
+    keep_re: boolean
+        Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
+        or removed (``False``).
+
+    Returns
+    -------
+    nspace: dict
+        namespace that contains objects loaded from the module.
+    """
+    importlib.invalidate_caches()
+
+    _module = importlib.import_module(module_name)
+    nspace = _module.__dict__
+
+    _discard_re_from_nspace(nspace, keep_re=keep_re)
+
+    return nspace
+
+
+class StartupLoadingError(Exception):
+    ...
+
+
+def load_startup_script(script_path, *, keep_re=False, enable_local_imports=False):
+    """
+    Populate namespace by import a module.
+
+    Parameters
+    ----------
+    script_path : str
+        full path to the startup script
+    keep_re : boolean
+        Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
+        or removed (``False``).
+    enable_local_imports : boolean
+        If ``False``, local imports from the script will not work. Setting to ``True``
+        enables local imports.
+
+    Returns
+    -------
+    nspace: dict
+        namespace that contains objects loaded from the module.
+    """
+    importlib.invalidate_caches()
+
+    if not os.path.isfile(script_path):
+        raise ImportError(f"Failed to load the script '{script_path}': script was not found")
+
+    nspace = {}
+
+    if enable_local_imports:
+        p = os.path.split(script_path)[0]
+        sys.path.insert(0, p)  # Needed to make local imports work.
+        # Save the list of available modules
+        sm_keys = list(sys.modules.keys())
+
+    try:
+        nspace_global, nspace_local = {}, {}
+        exec(open(script_path).read(), nspace_global, nspace_local)
+        nspace = nspace_global
+        nspace.update(nspace_local)
+
+    except BaseException as ex:
+        raise StartupLoadingError(f"Error encountered executing startup script at '{script_path}'") from ex
+
+    finally:
+        if enable_local_imports:
+            # Delete data on all modules that were loaded by the script.
+            # We don't need them anymore. Modules will be reloaded from disk if
+            #   the script is executed again.
+            for key in list(sys.modules.keys()):
+                if key not in sm_keys:
+                    print(f"Deleting the key '{key}'")
+                    del sys.modules[key]
+
+            sys.path.remove(p)
+
+    _discard_re_from_nspace(nspace, keep_re=keep_re)
+
+    return nspace
+
+
+def load_worker_startup_code(
+    *, startup_dir=None, startup_module_name=None, startup_script_path=None, keep_re=False
+):
+    """
+    Load worker startup code. Possible sources: startup directory (IPython-style profile collection),
+    startup script or startup module.
+
+    Parameters
+    ----------
+    startup_dir : str
+        Name of the directory that contains startup files.
+    startup_module_name : str
+        Name of the startup module.
+    startup_script_path : str
+        Path to startup script.
+    keep_re: boolean
+        Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
+        or removed (``False``).
+
+    Returns
+    -------
+    nspace : dict
+       Dictionary with loaded namespace data
+    """
+
+    if sum([_ is None for _ in [startup_dir, startup_module_name, startup_script_path]]) != 2:
+        raise ValueError("Source of the startup code was not specified or multiple sources were specified.")
+
+    if startup_dir is not None:
+        logger.info("Loading RE Worker startup code from directory '%s' ...", startup_dir)
+        startup_dir = os.path.abspath(os.path.expanduser(startup_dir))
+        print(f"startup_dir={startup_dir}")
+        nspace = load_profile_collection(startup_dir, keep_re=keep_re)
+
+    elif startup_module_name is not None:
+        logger.info("Loading RE Worker startup code from module '%s' ...", startup_module_name)
+        nspace = load_startup_module(startup_module_name, keep_re=keep_re)
+
+    elif startup_script_path is not None:
+        logger.info("Loading RE Worker startup code from script '%s' ...", startup_script_path)
+        startup_script_path = os.path.abspath(os.path.expanduser(startup_script_path))
+        nspace = load_startup_script(startup_script_path, keep_re=keep_re)
+
+    else:
+        logger.warning(
+            "Source of startup information is not specified. RE Worker will be started with empty environment."
+        )
+        nspace = {}
 
     return nspace
 
@@ -997,17 +1151,36 @@ def _unpickle_types(existing_dict):
             _unpickle_types(item)
 
 
-def gen_list_of_plans_and_devices(path=None, file_name="existing_plans_and_devices.yaml", overwrite=False):
+def gen_list_of_plans_and_devices(
+    *,
+    startup_dir=None,
+    startup_module_name=None,
+    startup_script_path=None,
+    file_dir=None,
+    file_name=None,
+    overwrite=False,
+):
     """
-    Generate the list of plans and devices from profile collection.
-    The list is saved to file ``existing_plans_and_devices.yaml``.
+    Generate the list of plans and devices from a collection of startup files, python module or
+    a script. Only one source of startup code should be specified, otherwise an exception will be
+    raised.
+
+    If ``file_name`` is specified, it is used as a name for the output file, otherwise
+    the default file name ``existing_plans_and_devices.yaml`` is used. The file will be saved
+    to ``file_dir`` or current directory if ``file_dir`` is not specified or ``None``.
 
     Parameters
     ----------
-    path: str or None
+    startup_dir: str or None
+        path to the directory that contains a collection of startup files (IPython-style)
+    startup_module_name: str or None
+        name of the startup module to load
+    startup_script_path: str or None
+        name of the startup script
+    file_dir: str or None
         path to the directory where the file is to be created. None - create file in current directory.
     file_name: str
-        name of the output YAML file
+        name of the output YAML file, None - default file name is used
     overwrite: boolean
         overwrite the file if it already exists
 
@@ -1020,11 +1193,19 @@ def gen_list_of_plans_and_devices(path=None, file_name="existing_plans_and_devic
     RuntimeError
         Error occurred while creating or saving the lists.
     """
+    file_name = file_name or "existing_plans_and_devices.yaml"
     try:
-        if path is None:
-            path = os.getcwd()
+        if file_dir is None:
+            file_dir = os.getcwd()
 
-        nspace = load_profile_collection(path)
+        if sum([_ is None for _ in [startup_dir, startup_module_name, startup_script_path]]) != 2:
+            raise ValueError("Source of the startup code was not specified or multiple sources were specified.")
+
+        nspace = load_worker_startup_code(
+            startup_dir=startup_dir,
+            startup_module_name=startup_module_name,
+            startup_script_path=startup_script_path,
+        )
         plans = plans_from_nspace(nspace)
         devices = devices_from_nspace(nspace)
 
@@ -1033,7 +1214,7 @@ def gen_list_of_plans_and_devices(path=None, file_name="existing_plans_and_devic
             "existing_devices": _prepare_devices(devices),
         }
 
-        file_path = os.path.join(path, file_name)
+        file_path = os.path.join(file_dir, file_name)
         if os.path.exists(file_path) and not overwrite:
             raise IOError(f"File '{file_path}' already exists. File overwriting is disabled.")
 
@@ -1042,14 +1223,14 @@ def gen_list_of_plans_and_devices(path=None, file_name="existing_plans_and_devic
             yaml.dump(existing_plans_and_devices, stream)
 
     except Exception as ex:
-        raise RuntimeError(f"Failed to create the list of devices and plans: {str(ex)}")
+        raise RuntimeError(f"Failed to create the list of plans and devices: {str(ex)}")
 
 
 def gen_list_of_plans_and_devices_cli():
     """
-    'qserver_list_of_plans_and_devices'
+    'qserver-list-plans-devices'
     CLI tool for generating the list of existing plans and devices based on profile collection.
-    The tool is supposed to be called as 'qserver_list_of_plans_and_devices' from command line.
+    The tool is supposed to be called as 'qserver-list-plans-devices' from command line.
     The function will ALWAYS overwrite the existing list of plans and devices (the list
     is automatically generated, so overwriting (updating) should be a safe operation that doesn't
     lead to loss configuration data.
@@ -1063,24 +1244,75 @@ def gen_list_of_plans_and_devices_cli():
         epilog=f"Bluesky-QServer version {qserver_version}.",
     )
     parser.add_argument(
-        "--path",
-        "-p",
-        dest="path",
+        "--file-dir",
+        dest="file_dir",
         action="store",
         required=False,
         default=None,
-        help="Path to profile collection. Current working directory is used if the path is not specified",
+        help="Directory where the list of plans and devices is saved. By default, the list is saved "
+        "to the file 'existing_plans_and_devices.yaml' in the current directory.",
+    )
+    parser.add_argument(
+        "--file-name",
+        dest="file_name",
+        action="store",
+        required=False,
+        default=None,
+        help="Name of the file where the list of plans and devices is saved. Default file name "
+        "'existing_plans_and_devices.yaml' is used unless the parameter is not specified.",
+    )
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--startup-dir",
+        dest="startup_dir",
+        type=str,
+        default=None,
+        help="Path to directory that contains a set of startup files (*.py and *.ipy). All the scripts "
+        "in the directory will be sorted in alphabetical order of their names and loaded in "
+        "the Run Engine Worker environment. The set of startup files may be located in any accessible "
+        "directory. Example: 'qserver-list-plans-devices --startup-dir .' load startup "
+        "files from the current directory and saves the lists to the file in current directory.",
+    )
+    group.add_argument(
+        "--startup-module",
+        dest="startup_module_name",
+        type=str,
+        default=None,
+        help="The name of the module with startup code. Example: "
+        "'qserver-list-plans-devices --startup-module some.startup.module' loads startup "
+        "code from the module 'some.startup.module' and saves results to the file in the current directory.",
+    )
+    group.add_argument(
+        "--startup-script",
+        dest="startup_script_path",
+        type=str,
+        default=None,
+        help="The path to the script with startup code. Example: "
+        "'qserver-list-plans-devices --startup-script ~/startup/scripts/script.py' loads"
+        "startup code from the script and saves the results to the file in the current directory.",
     )
 
     args = parser.parse_args()
-    path = args.path
+    file_dir = args.file_dir
+    file_name = args.file_name
+    startup_dir = args.startup_dir
+    startup_module_name = args.startup_module_name
+    startup_script_path = args.startup_script_path
 
-    if path is not None:
-        path = os.path.expanduser(path)
-        path = os.path.abspath(path)
+    if file_dir is not None:
+        file_dir = os.path.expanduser(file_dir)
+        file_dir = os.path.abspath(file_dir)
 
     try:
-        gen_list_of_plans_and_devices(path=path, overwrite=True)
+        gen_list_of_plans_and_devices(
+            startup_dir=startup_dir,
+            startup_module_name=startup_module_name,
+            startup_script_path=startup_script_path,
+            file_dir=file_dir,
+            file_name=file_name,
+            overwrite=True,
+        )
         print("The list of existing plans and devices was created successfully.")
         exit_code = 0
     except BaseException as ex:

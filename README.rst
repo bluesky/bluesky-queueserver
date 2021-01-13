@@ -68,7 +68,7 @@ On Mac OS::
 
   pip install -e .
 
-This also sets up an entry points for the 'qserver' and 'qserver_list_of_plans_and_devices' CLI tools.
+This also sets up an entry points for the 'qserver' and 'qserver-list-plans-devices' CLI tools.
 
 **Install httpie (optional)**::
 

@@ -40,7 +40,7 @@ def test_manager_options_startup_profile(re_manager_cmd, tmp_path, monkeypatch, 
     append_code_to_last_startup_file(pc_path, additional_code=_sample_plan1)
 
     # Generate the new list of allowed plans and devices and reload them
-    gen_list_of_plans_and_devices(pc_path, overwrite=True)
+    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, overwrite=True)
 
     # Start manager
     if option == "startup_dir":

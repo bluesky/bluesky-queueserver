@@ -965,7 +965,7 @@ def test_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_restart):  # 
     append_code_to_last_startup_file(pc_path, additional_code=_sample_multirun_plan1)
 
     # Generate the new list of allowed plans and devices and reload them
-    gen_list_of_plans_and_devices(pc_path, overwrite=True)
+    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, overwrite=True)
     resp1, _ = zmq_single_request("permissions_reload")
     assert resp1["success"] is True, f"resp={resp1}"
 

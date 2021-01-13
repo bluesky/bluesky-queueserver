@@ -48,7 +48,7 @@ setup(
         "console_scripts": [
             "qserver = bluesky_queueserver.manager.qserver_cli:qserver",
             "start-re-manager = bluesky_queueserver.manager.start_manager:start_manager",
-            "qserver_list_of_plans_and_devices = bluesky_queueserver.manager."
+            "qserver-list-plans-devices = bluesky_queueserver.manager."
             "profile_ops:gen_list_of_plans_and_devices_cli",
         ],
     },

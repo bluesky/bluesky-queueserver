@@ -5,16 +5,23 @@ import yaml
 import pickle
 import typing
 import subprocess
+import pprint
+import sys
 
 import ophyd
 
 from ._common import copy_default_profile_collection, patch_first_startup_file
+
+from ._common import reset_sys_modules  # noqa: F401
 
 from bluesky_queueserver.manager.annotation_decorator import parameter_annotation_decorator
 
 from bluesky_queueserver.manager.profile_ops import (
     get_default_startup_dir,
     load_profile_collection,
+    load_startup_script,
+    load_startup_module,
+    load_worker_startup_code,
     plans_from_nspace,
     devices_from_nspace,
     parse_plan,
@@ -30,6 +37,7 @@ from bluesky_queueserver.manager.profile_ops import (
     _prepare_plans,
     _prepare_devices,
     _unpickle_types,
+    StartupLoadingError,
 )
 
 
@@ -240,6 +248,373 @@ RE.subscribe(db.insert)
     else:
         assert "RE" not in nspace
         assert "db" not in nspace
+
+
+_startup_script_1 = """
+from ophyd.sim import det1, det2
+from bluesky.plans import count
+
+def simple_sample_plan_1():
+    '''
+    Simple plan for tests.
+    '''
+    yield from count([det1, det2])
+
+
+def simple_sample_plan_2():
+    '''
+    Simple plan for tests.
+    '''
+    yield from count([det1, det2])
+
+from bluesky import RunEngine
+RE = RunEngine({})
+
+from databroker import Broker
+db = Broker.named('temp')
+"""
+
+
+_startup_script_2 = """
+from ophyd.sim import det1, det2
+from bluesky.plans import count
+
+
+def simple_sample_plan_3():
+    '''
+    Simple plan for tests.
+    '''
+    yield from count([det1, det2])
+
+
+def simple_sample_plan_4():
+    '''
+    Simple plan for tests.
+    '''
+    yield from count([det1, det2])
+
+"""
+
+
+@pytest.mark.parametrize("keep_re", [True, False])
+@pytest.mark.parametrize("enable_local_imports", [True, False])
+def test_load_startup_script_1(tmp_path, keep_re, enable_local_imports, reset_sys_modules):  # noqa: F811
+    """
+    Basic test for `load_startup_script` function. Load two scripts in sequence from two
+    different locations and make sure that all the plans are loaded.
+    There are NO LOCAL IMPORTS in the scripts, so the script should work with/without local
+    imports.
+    """
+    # Load first script
+    script_dir = os.path.join(tmp_path, "script_dir1")
+    script_path = os.path.join(script_dir, "startup_script.py")
+
+    os.makedirs(script_dir, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(_startup_script_1)
+
+    nspace = load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+
+    assert nspace
+    assert "simple_sample_plan_1" in nspace, pprint.pformat(nspace)
+    assert "simple_sample_plan_2" in nspace, pprint.pformat(nspace)
+    if keep_re:
+        assert "RE" in nspace, pprint.pformat(nspace)
+        assert "db" in nspace, pprint.pformat(nspace)
+    else:
+        assert "RE" not in nspace, pprint.pformat(nspace)
+        assert "db" not in nspace, pprint.pformat(nspace)
+
+    # Load different script (same name, but different path)
+    script_dir = os.path.join(tmp_path, "script_dir2")
+    script_path = os.path.join(script_dir, "startup_script.py")
+
+    os.makedirs(script_dir, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(_startup_script_2)
+
+    nspace = load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+
+    assert nspace
+    assert "simple_sample_plan_3" in nspace, pprint.pformat(nspace)
+    assert "simple_sample_plan_4" in nspace, pprint.pformat(nspace)
+    assert "RE" not in nspace, pprint.pformat(nspace)
+    assert "db" not in nspace, pprint.pformat(nspace)
+
+
+_imported_module_1 = """
+from ophyd.sim import det1, det2
+from bluesky.plans import count
+
+def plan_in_module_1():
+    '''
+    Simple plan for tests.
+    '''
+    yield from count([det1, det2])
+"""
+
+_imported_module_1_modified = """
+from ophyd.sim import det1, det2
+from bluesky.plans import count
+
+def plan_in_module_1_modified():
+    '''
+    Simple plan for tests.
+    '''
+    yield from count([det1, det2])
+"""
+
+_imported_module_2 = """
+from ophyd.sim import det1, det2
+from bluesky.plans import count
+
+def plan_in_module_2():
+    '''
+    Simple plan for tests.
+    '''
+    yield from count([det1, det2])
+"""
+
+
+@pytest.mark.parametrize("keep_re", [True, False])
+@pytest.mark.parametrize("enable_local_imports", [True, False])
+def test_load_startup_script_2(tmp_path, keep_re, enable_local_imports, reset_sys_modules):  # noqa: F811
+    """
+    Tests for `load_startup_script` function. Loading scripts WITH LOCAL IMPORTS.
+    Loading is expected to fail if local imports are disabled.
+
+    The test contains the following steps:
+    - Load the script that contains local import statement, make sure that the imported contents
+      is in the namespace.
+    - Change the code in the imported module and reload the script. Make sure that the changed
+      code was imported.
+    - Load a script located in a different directory that is importing module with the same name
+      (same relative path to the script), but containing different code. Make sure that correct
+      module is imported.
+    """
+    # Load first script
+    script_dir = os.path.join(tmp_path, "script_dir1")
+    script_path = os.path.join(script_dir, "startup_script.py")
+    module_dir = os.path.join(script_dir, "mod")
+    module_path = os.path.join(module_dir, "imported_module.py")
+
+    script_patch = "from mod.imported_module import *\n"
+
+    os.makedirs(script_dir, exist_ok=True)
+    os.makedirs(module_dir, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(script_patch + _startup_script_1)
+    with open(module_path, "w") as f:
+        f.write(_imported_module_1)
+
+    if enable_local_imports:
+        nspace = load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+
+        assert nspace
+        assert "simple_sample_plan_1" in nspace, pprint.pformat(nspace)
+        assert "simple_sample_plan_2" in nspace, pprint.pformat(nspace)
+        assert "plan_in_module_1" in nspace, pprint.pformat(nspace)
+        if keep_re:
+            assert "RE" in nspace, pprint.pformat(nspace)
+            assert "db" in nspace, pprint.pformat(nspace)
+        else:
+            assert "RE" not in nspace, pprint.pformat(nspace)
+            assert "db" not in nspace, pprint.pformat(nspace)
+    else:
+        # Expected to fail if local imports are not enaabled
+        with pytest.raises(StartupLoadingError):
+            load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+
+    # Reload the same script, but replace the code in the module (emulate the process of code editing).
+    #   Check that the new code is loaded when the module is imported.
+    with open(module_path, "w") as f:
+        f.write(_imported_module_1_modified)
+
+    if enable_local_imports:
+        nspace = load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+        assert "plan_in_module_1" not in nspace, pprint.pformat(nspace)
+        assert "plan_in_module_1_modified" in nspace, pprint.pformat(nspace)
+
+    else:
+        # Expected to fail if local imports are not enaabled
+        with pytest.raises(StartupLoadingError):
+            load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+
+    # Load different script (same name, but different path). The script imports module with the same name
+    #   (with the same relative path). Check that the correct version of the module is loaded.
+    script_dir = os.path.join(tmp_path, "script_dir2")
+    script_path = os.path.join(script_dir, "startup_script.py")
+    module_dir = os.path.join(script_dir, "mod")
+    module_path = os.path.join(module_dir, "imported_module.py")
+
+    script_patch = "from mod.imported_module import *\n"
+
+    os.makedirs(script_dir, exist_ok=True)
+    os.makedirs(module_dir, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(script_patch + _startup_script_2)
+    with open(module_path, "w") as f:
+        f.write(_imported_module_2)
+
+    if enable_local_imports:
+        nspace = load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+
+        assert nspace
+        assert "simple_sample_plan_3" in nspace, pprint.pformat(nspace)
+        assert "simple_sample_plan_4" in nspace, pprint.pformat(nspace)
+        assert "RE" not in nspace, pprint.pformat(nspace)
+        assert "db" not in nspace, pprint.pformat(nspace)
+    else:
+        # Expected to fail if local imports are not enaabled
+        with pytest.raises(StartupLoadingError):
+            load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+
+
+_startup_script_3 = """
+a = 10
+locals()['b'] = 20
+globals()['c'] = 50
+"""
+
+
+def test_load_startup_script_3(tmp_path, reset_sys_modules):  # noqa: F811
+    """
+    Test for ``load_startup_script`` function.
+    Verifies if variables defined in global and local scope in the script are handled correctly.
+    """
+    # Load first script
+    script_dir = os.path.join(tmp_path, "script_dir1")
+    script_path = os.path.join(script_dir, "startup_script.py")
+
+    os.makedirs(script_dir, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(_startup_script_3)
+
+    nspace = load_startup_script(script_path)
+
+    expected_results = {"a": 10, "b": 20, "c": 50}
+    for k, v in expected_results.items():
+        assert k in nspace
+        assert nspace[k] == v
+
+
+@pytest.mark.parametrize("keep_re", [True, False])
+def test_load_startup_module_1(tmp_path, monkeypatch, keep_re, reset_sys_modules):  # noqa: F811
+    """
+    Test for `load_startup_module` function: import module that is in the module search path.
+    The test also demonstrates that if the code of the module or any module imported by the module
+    is changed, loading of the module again does not load the new code, i.e. application needs to
+    be restarted if the code is edited.
+    """
+    # Load first script
+    script_dir = os.path.join(tmp_path, "script_dir1")
+    script_path = os.path.join(script_dir, "startup_script.py")
+    module_dir = os.path.join(script_dir, "mod")
+    module_path = os.path.join(module_dir, "imported_module.py")
+
+    script_patch = "from .mod.imported_module import *\n"
+
+    os.makedirs(script_dir, exist_ok=True)
+    os.makedirs(module_dir, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(script_patch + _startup_script_1)
+
+    with open(module_path, "w") as f:
+        f.write(_imported_module_1)
+
+    # Temporarily add module to the search path
+    sys_path = sys.path
+    monkeypatch.setattr(sys, "path", [str(tmp_path)] + sys_path)
+
+    nspace = load_startup_module("script_dir1.startup_script", keep_re=keep_re)
+
+    assert nspace
+    assert "simple_sample_plan_1" in nspace, pprint.pformat(nspace)
+    assert "simple_sample_plan_2" in nspace, pprint.pformat(nspace)
+    assert "plan_in_module_1" in nspace, pprint.pformat(nspace)
+    if keep_re:
+        assert "RE" in nspace, pprint.pformat(nspace)
+        assert "db" in nspace, pprint.pformat(nspace)
+    else:
+        assert "RE" not in nspace, pprint.pformat(nspace)
+        assert "db" not in nspace, pprint.pformat(nspace)
+
+    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    # The rest of the test demonstrates faulty behavior of the Python import system.
+    # Reload the same script, but replace the code in the module (emulate the process of code editing).
+    #   NOTE: current implementation will not load the new code!!! Application has to be restarted if
+    #         to import a module after code is modified.
+
+    # Replace the 'main' module code
+    with open(script_path, "w") as f:
+        f.write(script_patch + _startup_script_2)
+
+    nspace = load_startup_module("script_dir1.startup_script", keep_re=keep_re)
+    # Expect the functions from 'old' code to be in the namespace!!!
+    assert "simple_sample_plan_1" in nspace, pprint.pformat(nspace)
+    assert "simple_sample_plan_2" in nspace, pprint.pformat(nspace)
+
+    # Replace the code of the module which is imported from the 'main' module.
+    with open(module_path, "w") as f:
+        f.write(_imported_module_1_modified)
+
+    nspace = load_startup_module("script_dir1.startup_script", keep_re=keep_re)
+    # Expect the functions from 'old' code to be in the namespace!!!
+    assert "plan_in_module_1" in nspace, pprint.pformat(nspace)
+    assert "plan_in_module_1_modified" not in nspace, pprint.pformat(nspace)
+
+
+# fmt: off
+@pytest.mark.parametrize("option", ["startup_dir", "script", "module"])
+@pytest.mark.parametrize("keep_re", [True, False])
+# fmt: on
+def test_load_worker_startup_code_1(tmp_path, monkeypatch, keep_re, option, reset_sys_modules):  # noqa: F811
+    """
+    Test for `load_worker_startup_code` function.
+    """
+    script_dir = os.path.join(tmp_path, "script_dir1")
+    script_path = os.path.join(script_dir, "startup_script.py")
+
+    os.makedirs(script_dir, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(_startup_script_1)
+
+    if option == "startup_dir":
+        nspace = load_worker_startup_code(startup_dir=script_dir, keep_re=keep_re)
+
+    elif option == "script":
+        nspace = load_worker_startup_code(startup_script_path=script_path, keep_re=keep_re)
+
+    elif option == "module":
+        # Temporarily add module to the search path
+        sys_path = sys.path
+        monkeypatch.setattr(sys, "path", [str(tmp_path)] + sys_path)
+
+        nspace = load_worker_startup_code(startup_module_name="script_dir1.startup_script", keep_re=keep_re)
+
+    else:
+        assert False, f"Unknown option '{option}'"
+
+    assert isinstance(nspace, dict), str(type(nspace))
+    assert len(nspace) > 0
+
+    if keep_re:
+        assert "RE" in nspace, pprint.pformat(nspace)
+        assert "db" in nspace, pprint.pformat(nspace)
+    else:
+        assert "RE" not in nspace, pprint.pformat(nspace)
+        assert "db" not in nspace, pprint.pformat(nspace)
+
+
+@pytest.mark.parametrize("option", ["no_sources", "multiple_sources"])
+def test_load_worker_startup_code_2_failing(option, reset_sys_modules):  # noqa: F811
+    with pytest.raises(ValueError, match="multiple sources were specified"):
+        if option == "no_sources":
+            load_worker_startup_code(startup_dir="abc", startup_module_name="script_dir1.startup_script")
+        elif option == "multiple_sources":
+            load_worker_startup_code()
+        else:
+            assert False, f"Unknown option '{option}'"
 
 
 # ---------------------------------------------------------------------------------
@@ -520,49 +895,97 @@ def test_gen_list_of_plans_and_devices_1(tmp_path):
     pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
 
     fln_yaml = "list.yaml"
-    gen_list_of_plans_and_devices(pc_path, file_name=fln_yaml)
+    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml)
     assert os.path.isfile(os.path.join(pc_path, fln_yaml)), "List of plans and devices was not created"
 
     # Attempt to overwrite the file
     with pytest.raises(RuntimeError, match="already exists. File overwriting is disabled."):
-        gen_list_of_plans_and_devices(pc_path, file_name=fln_yaml)
+        gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml)
 
     # Allow file overwrite
-    gen_list_of_plans_and_devices(pc_path, file_name=fln_yaml, overwrite=True)
+    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml, overwrite=True)
 
 
 # fmt: off
 @pytest.mark.parametrize("test, exit_code", [
-    ("default_path", 0),
-    ("specify_path", 0),
-    ("incorrect_path", 1),
+    ("startup_collection_at_current_dir", 0),
+    ("startup_collection_dir", 0),
+    ("startup_collection_incorrect_path_A", 1),
+    ("startup_collection_incorrect_path_B", 1),
+    ("startup_script_path", 0),
+    ("startup_script_path_incorrect", 1),
+    ("startup_module_name", 0),
+    ("startup_module_name_incorrect", 1),
+    ("file_incorrect_path", 1),
 ])
 # fmt: on
-def test_gen_list_of_plans_and_devices_cli(tmp_path, test, exit_code):
+def test_gen_list_of_plans_and_devices_cli(tmp_path, monkeypatch, test, exit_code):
     """
+    Test for ``qserver-list-plans_devices`` CLI tool for generating list of plans and devices.
     Copy simulated profile collection and generate the list of allowed (in this case available)
-    plans and devices based on the profile collection
+    plans and devices based on the profile collection.
     """
-    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
+    pc_path = os.path.join(tmp_path, "script_dir1")
+    script_path = os.path.join(pc_path, "startup_script.py")
+
+    os.makedirs(pc_path, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(_startup_script_1)
 
     fln_yaml = "existing_plans_and_devices.yaml"
+
+    # Make sure that .yaml file does not exist
     assert not os.path.isfile(os.path.join(pc_path, fln_yaml))
 
     os.chdir(tmp_path)
 
-    if test == "default_path":
+    if test == "startup_collection_at_current_dir":
         os.chdir(pc_path)
-        assert subprocess.call(["qserver_list_of_plans_and_devices"]) == exit_code
-    elif test == "specify_path":
-        assert subprocess.call(["qserver_list_of_plans_and_devices", "-p", pc_path]) == exit_code
-    elif test == "incorrect_path":
+        params = ["qserver-list-plans-devices", "--startup-dir", "."]
+
+    elif test == "startup_collection_dir":
+        params = ["qserver-list-plans-devices", "--startup-dir", pc_path, "--file-dir", pc_path]
+
+    elif test == "startup_collection_incorrect_path_A":
         # Path exists (default path is used), but there are no startup files (fails)
-        assert subprocess.call(["qserver_list_of_plans_and_devices"]) == exit_code
+        params = ["qserver-list-plans-devices", "--startup-dir", "."]
+
+    elif test == "startup_collection_incorrect_path_B":
         # Path does not exist
         path_nonexisting = os.path.join(tmp_path, "abcde")
-        assert subprocess.call(["qserver_list_of_plans_and_devices", "-p", path_nonexisting]) == exit_code
+        params = ["qserver-list-plans-devices", "--startup-dir", path_nonexisting, "--file-dir", pc_path]
+
+    elif test == "startup_script_path":
+        params = ["qserver-list-plans-devices", "--startup-script", script_path, "--file-dir", pc_path]
+
+    elif test == "startup_script_path_incorrect":
+        params = [
+            "qserver-list-plans-devices",
+            "--startup-script",
+            "non_existing_path",
+            "--file-dir",
+            pc_path,
+        ]
+
+    elif test == "startup_module_name":
+        monkeypatch.setenv("PYTHONPATH", os.path.split(pc_path)[0])
+        s_name = "script_dir1.startup_script"
+        params = ["qserver-list-plans-devices", "--startup-module", s_name, "--file-dir", pc_path]
+
+    elif test == "startup_module_name_incorrect":
+        monkeypatch.setenv("PYTHONPATH", os.path.split(pc_path)[0])
+        s_name = "incorrect.module.name"
+        params = ["qserver-list-plans-devices", "--startup-module", s_name, "--file-dir", pc_path]
+
+    elif test == "file_incorrect_path":
+        # Path does not exist
+        path_nonexisting = os.path.join(tmp_path, "abcde")
+        params = ["qserver-list-plans-devices", "--startup-dir", pc_path, "--file-dir", path_nonexisting]
+
     else:
         assert False, f"Unknown test '{test}'"
+
+    assert subprocess.call(params) == exit_code
 
     if exit_code == 0:
         assert os.path.isfile(os.path.join(pc_path, fln_yaml))
@@ -987,7 +1410,7 @@ def test_load_allowed_plans_and_devices_2(tmp_path, permissions_str, items_are_r
     patch_first_startup_file(pc_path, _patch_junk_plan_and_device)
 
     # Generate list of plans and devices for the patched profile collection
-    gen_list_of_plans_and_devices(path=pc_path, overwrite=True)
+    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, overwrite=True)
 
     permissions_fln = os.path.join(pc_path, "user_group_permissions.yaml")
     with open(permissions_fln, "w") as f:

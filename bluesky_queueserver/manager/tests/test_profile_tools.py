@@ -1,7 +1,9 @@
 import os
 import inspect
+import pytest
+
 from ._common import copy_default_profile_collection, patch_first_startup_file
-from bluesky_queueserver.manager.profile_tools import global_user_namespace
+from bluesky_queueserver.manager.profile_tools import global_user_namespace, load_devices_from_happi
 from bluesky_queueserver.manager.profile_ops import load_profile_collection
 
 
@@ -157,3 +159,167 @@ def test_global_user_namespace():
     global_user_namespace.set_user_namespace(user_ns=ns, use_ipython=False)
     assert global_user_namespace.user_ns == ns
     assert global_user_namespace.use_ipython is False
+
+
+_happi_json_db_1 = """
+{
+  "detA": {
+    "_id": "det",
+    "active": true,
+    "args": [],
+    "device_class": "ophyd.sim.DetWithCountTime",
+    "documentation": null,
+    "instrument": "TEST.1",
+    "kwargs": {
+      "name": "{{name}}"
+    },
+    "name": "det",
+    "type": "OphydItem"
+  },
+  "detB": {
+    "_id": "det",
+    "active": true,
+    "args": [],
+    "device_class": "ophyd.sim.DetWithCountTime",
+    "documentation": null,
+    "instrument": "TEST.2",
+    "kwargs": {
+      "name": "{{name}}"
+    },
+    "name": "det",
+    "type": "OphydItem"
+  },
+  "motorA": {
+    "_id": "motor",
+    "active": true,
+    "args": [],
+    "device_class": "ophyd.sim.SynAxisNoPosition",
+    "documentation": null,
+    "instrument": "TEST.1",
+    "kwargs": {
+      "name": "{{name}}"
+    },
+    "name": "motor",
+    "type": "OphydItem"
+  },
+  "motorB": {
+    "_id": "motor",
+    "active": true,
+    "args": [],
+    "device_class": "ophyd.sim.SynAxisNoPosition",
+    "documentation": null,
+    "instrument": "TEST.2",
+    "kwargs": {
+      "name": "{{name}}"
+    },
+    "name": "motor",
+    "type": "OphydItem"
+  },
+  "motor1": {
+    "_id": "motor1",
+    "active": true,
+    "args": [],
+    "device_class": "ophyd.sim.SynAxisNoHints",
+    "documentation": null,
+    "instrument": "TEST.1",
+    "kwargs": {
+      "name": "{{name}}"
+    },
+    "name": "motor1",
+    "type": "OphydItem"
+  },
+  "motor2": {
+    "_id": "motor2",
+    "active": true,
+    "args": [],
+    "device_class": "ophyd.sim.SynAxisNoHints",
+    "documentation": null,
+    "instrument": "TEST.1",
+    "kwargs": {
+      "name": "{{name}}"
+    },
+    "name": "motor2",
+    "type": "OphydItem"
+  },
+  "motor3": {
+    "_id": "motor3",
+    "active": false,
+    "args": [],
+    "device_class": "ophyd.sim.SynAxis",
+    "documentation": null,
+    "instrument": "TEST.1",
+    "kwargs": {
+      "name": "{{name}}"
+    },
+    "name": "motor3",
+    "type": "OphydItem"
+  }
+}
+"""
+
+
+def _configure_happi(tmp_path, monkeypatch, json_devices):
+    path_json = os.path.join(tmp_path, "sim_devices.json")
+    path_ini = os.path.join(tmp_path, "happi.ini")
+
+    happi_ini_text = f"[DEFAULT]\nbackend=json\npath={path_json}"
+
+    with open(path_ini, "w") as f:
+        f.write(happi_ini_text)
+
+    with open(path_json, "w") as f:
+        f.write(json_devices)
+
+    monkeypatch.setenv("HAPPI_CFG", path_ini)
+
+
+# fmt: off
+@pytest.mark.parametrize("devices, instrument, kw_args, success, errmsg", [
+    (("det", "motor"), "TEST.1", {}, True, ""),
+    (("det", "motor"), "TEST.2", {}, True, ""),
+    (("motor1",), "TEST.1", {}, True, ""),
+    (("motor1",), None, {}, True, ""),
+    (("det", "motor"), "TEST.3", {}, False, "No devices with name"),
+    (("det", "motor"), None, {}, False, "Multiple devices with name"),
+    # Use additional search parameters
+    (("motor3",), "TEST.1", {"active": False}, True, ""),
+    (("motor3",), "TEST.1", {"active": True}, False, "No devices with nam"),
+])
+# fmt: on
+def test_load_devices_from_happi_1(tmp_path, monkeypatch, devices, instrument, kw_args, success, errmsg):
+    """
+    Tests for ``load_devices_from_happi``.
+    """
+    _configure_happi(tmp_path, monkeypatch, json_devices=_happi_json_db_1)
+
+    # Load as a dictionary
+    if success:
+        ns = load_devices_from_happi(devices, instrument=instrument, **kw_args)
+        assert len(ns) == len(devices)
+        for d in devices:
+            assert d in ns
+    else:
+        with pytest.raises(Exception, match=errmsg):
+            load_devices_from_happi(devices, instrument=instrument, **kw_args)
+
+    # Load in local namespace
+    def _test_loading(devices, instrument):
+        if success:
+            load_devices_from_happi(devices, instrument=instrument, namespace=locals(), **kw_args)
+            for d in devices:
+                assert d in locals()
+        else:
+            with pytest.raises(Exception, match=errmsg):
+                load_devices_from_happi(devices, instrument=instrument, namespace=locals(), **kw_args)
+
+    _test_loading(devices=devices, instrument=instrument)
+
+
+def test_load_devices_from_happi_2_fail(tmp_path, monkeypatch):
+    """
+    Test for ``load_devices_from_happi``: ``instrument`` parameter is missing
+    """
+    _configure_happi(tmp_path, monkeypatch, json_devices=_happi_json_db_1)
+
+    with pytest.raises(Exception, match="missing 1 required keyword-only argument: 'instrument'"):
+        load_devices_from_happi(("det1",))

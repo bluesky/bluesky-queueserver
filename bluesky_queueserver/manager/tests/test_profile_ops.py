@@ -322,7 +322,7 @@ _happi_json_db = """
 
 
 def _configure_happi(tmp_path, monkeypatch):
-    path_json = os.path.join(tmp_path, "sim_devices.py")
+    path_json = os.path.join(tmp_path, "sim_devices.json")
     path_ini = os.path.join(tmp_path, "happi.ini")
 
     happi_ini_text = f"[DEFAULT]\nbackend=json\npath={path_json}"

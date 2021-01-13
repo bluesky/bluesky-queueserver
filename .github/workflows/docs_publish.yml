@@ -31,13 +31,6 @@ jobs:
 
         pip install .
         pip install -r requirements-dev.txt
-
-        # Install Happi (master). Happi is not available from PyPI.
-        git clone https://github.com/pcdshub/happi.git
-        pushd happi
-        pip install .
-        popd
-
         pip list
     - name: Build Docs
       run: |

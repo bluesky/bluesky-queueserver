@@ -250,6 +250,143 @@ RE.subscribe(db.insert)
         assert "db" not in nspace
 
 
+_happi_json_db = """
+{
+  "det": {
+    "_id": "det",
+    "active": true,
+    "args": [],
+    "device_class": "ophyd.sim.DetWithCountTime",
+    "documentation": null,
+    "instrument": "TEST",
+    "kwargs": {
+      "name": "{{name}}"
+    },
+    "name": "det",
+    "type": "OphydItem"
+  },
+  "motor": {
+    "_id": "motor",
+    "active": true,
+    "args": [],
+    "device_class": "ophyd.sim.SynAxisNoPosition",
+    "documentation": null,
+    "instrument": "TEST",
+    "kwargs": {
+      "name": "{{name}}"
+    },
+    "name": "motor",
+    "type": "OphydItem"
+  },
+  "motor1": {
+    "_id": "motor1",
+    "active": true,
+    "args": [],
+    "device_class": "ophyd.sim.SynAxisNoHints",
+    "documentation": null,
+    "instrument": "TEST",
+    "kwargs": {
+      "name": "{{name}}"
+    },
+    "name": "motor1",
+    "type": "OphydItem"
+  },
+  "motor2": {
+    "_id": "motor2",
+    "active": true,
+    "args": [],
+    "device_class": "ophyd.sim.SynAxisNoHints",
+    "documentation": null,
+    "instrument": "TEST",
+    "kwargs": {
+      "name": "{{name}}"
+    },
+    "name": "motor2",
+    "type": "OphydItem"
+  },
+  "motor3": {
+    "_id": "motor3",
+    "active": true,
+    "args": [],
+    "device_class": "ophyd.sim.SynAxis",
+    "documentation": null,
+    "instrument": "TEST",
+    "kwargs": {
+      "name": "{{name}}"
+    },
+    "name": "motor3",
+    "type": "OphydItem"
+  }
+}
+"""
+
+
+def _configure_happi(tmp_path, monkeypatch):
+    path_json = os.path.join(tmp_path, "sim_devices.py")
+    path_ini = os.path.join(tmp_path, "happi.ini")
+
+    happi_ini_text = f"[DEFAULT]\nbackend=json\npath={path_json}"
+
+    with open(path_ini, "w") as f:
+        f.write(happi_ini_text)
+
+    with open(path_json, "w") as f:
+        f.write(_happi_json_db)
+
+    monkeypatch.setenv("HAPPI_CFG", path_ini)
+
+
+_startup_script_happi_1 = """
+from bluesky.plans import count
+from bluesky_queueserver.manager.profile_tools import load_devices_from_happi
+
+# Specify the list of devices to load
+device_list = ["det", "motor", "motor2"]
+
+# Load the devices in the script namespace. It is assumed that Happi is configured
+#   properly and there is no need to specify the backend and the path.
+load_devices_from_happi(device_list, instrument="TEST", namespace=locals())
+
+def simple_sample_plan_1():
+    '''
+    Simple plan for tests. Calling standard 'count' plan.
+    '''
+    yield from count([det], num=5, delay=1)
+"""
+
+
+def _verify_happi_namespace(nspace):
+    """
+    Check contents of the namespace created by loading `_startup_script_happi_1`.
+    """
+    assert "det" in nspace, pprint.pformat(nspace)
+    assert isinstance(nspace["det"], ophyd.sim.DetWithCountTime)
+    assert "motor" in nspace
+    assert isinstance(nspace["motor"], ophyd.sim.SynAxisNoPosition)
+    assert "motor2" in nspace
+    assert isinstance(nspace["motor2"], ophyd.sim.SynAxisNoHints)
+    assert "count" in nspace
+    assert "simple_sample_plan_1" in nspace
+
+
+def test_load_profile_collection_6(tmp_path, monkeypatch):
+    """
+    Load profile collection: instantiation of devices using Happi.
+    """
+    _configure_happi(tmp_path, monkeypatch)
+
+    pc_path = os.path.join(tmp_path, "script_dir1")
+    script_path = os.path.join(pc_path, "startup_script.py")
+
+    os.makedirs(pc_path, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(_startup_script_happi_1)
+
+    nspace = load_profile_collection(pc_path)
+
+    _verify_happi_namespace(nspace)
+
+
 _startup_script_1 = """
 from ophyd.sim import det1, det2
 from bluesky.plans import count
@@ -498,6 +635,24 @@ def test_load_startup_script_3(tmp_path, reset_sys_modules):  # noqa: F811
         assert nspace[k] == v
 
 
+def test_load_startup_script_4(tmp_path, monkeypatch):
+    """
+    Load startup script: instantiation of devices using Happi.
+    """
+    _configure_happi(tmp_path, monkeypatch)
+
+    pc_path = os.path.join(tmp_path, "script_dir1")
+    script_path = os.path.join(pc_path, "startup_script.py")
+
+    os.makedirs(pc_path, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(_startup_script_happi_1)
+
+    nspace = load_startup_script(script_path)
+
+    _verify_happi_namespace(nspace)
+
+
 @pytest.mark.parametrize("keep_re", [True, False])
 def test_load_startup_module_1(tmp_path, monkeypatch, keep_re, reset_sys_modules):  # noqa: F811
     """
@@ -562,6 +717,28 @@ def test_load_startup_module_1(tmp_path, monkeypatch, keep_re, reset_sys_modules
     # Expect the functions from 'old' code to be in the namespace!!!
     assert "plan_in_module_1" in nspace, pprint.pformat(nspace)
     assert "plan_in_module_1_modified" not in nspace, pprint.pformat(nspace)
+
+
+def test_load_startup_module_2(tmp_path, monkeypatch, reset_sys_modules):  # noqa: F811
+    """
+    Load startup module: instantiation of devices using Happi.
+    """
+    _configure_happi(tmp_path, monkeypatch)
+
+    pc_path = os.path.join(tmp_path, "script_dir1")
+    script_path = os.path.join(pc_path, "startup_script.py")
+
+    os.makedirs(pc_path, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(_startup_script_happi_1)
+
+    # Temporarily add module to the search path
+    sys_path = sys.path
+    monkeypatch.setattr(sys, "path", [str(tmp_path)] + sys_path)
+
+    nspace = load_startup_module("script_dir1.startup_script")
+
+    _verify_happi_namespace(nspace)
 
 
 # fmt: off

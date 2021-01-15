@@ -127,44 +127,48 @@ def set_user_ns(func):
     return wrapper
 
 
-def load_devices_from_happi(device_names, *, instrument, namespace=None, **kwargs):
+def load_devices_from_happi(device_names, *, namespace=None, **kwargs):
     """
-    Load the devices from Happi. The devices are specified as a list of device names.
-    Since the database may contain devices from multiple instruments (beamlines or endstations),
-    the function requires to specify the instrument name, that is included in each search request.
-    The instrument name could be arbitrary string, but it must be unique for the instrument
-    and consistently used throughout the database (``instrument`` metadata key). If instrument
-    name should not be included in the search parameters, then the function should be called with
-    ``beamline=None`` set explicitly. The ``instrument`` parameter is set as required to avoid
-    potential errors due to accidental loading devices configured for different instruments.
+    Load the devices from Happi based on the list of ``device_names``. The elements of the list
+    may be strings (device name) or tuples of two strings (device name used for database search and
+    the name with which the device is loaded in the script namespace). Two names may be needed
+    in case the devices are stored in the database using compound names that contain beamline
+    acronyms (e.g. ``abc_det`` and ``def_det`` for beamlines ABC and DEF) but they are expected
+    to have the name ``det`` when loaded during ABC and DEF beamline startup respectively (see examples).
 
-    The function may be called multiple times in a row if needed. For example, if the instrument
-    is split into two subsystems ``TEST.1`` and ``TEST.2``, then the devices from both subsystems
-    may be loaded into a script as
+    The devices are loaded into a namespace referenced by ``namespaced`` parameter.
+    The function may be called multiple times in a row for the same namespace to populate
+    it with results of multiple searches. The function also returns the dictionary of loaded devices,
+    which could be used to pupulate a namespace using custom code.
+
+    Following are the examples of some function calls.
 
     .. code-block:: python
 
-        load_devices_from_happi(["det1", "motor1"], instrument="TEST.1", namespace=locals())
-        load_devices_from_happi(["det2"], instrument="TEST.2", namespace=locals())
+        # Load devices 'det1' and 'motor1'.
+        load_devices_from_happi(["det1", "motor1"], namespace=locals())
+        # Works exactly the same as the previous example. If the second tuple element is
+        #   evaluated as boolean value of False, then it is ignored and the device is not renamed.
+        load_devices_from_happi([("det1", None), ("motor1", "")], namespace=locals())
 
-        # Load device associated with any instrument (works as long as the database contains
-        #   only one device with this name)
-        load_devices_from_happi(["unique_device"], instrument=None, namespace=locals())
+        # Load 'abc_det1' as 'det1' and 'abc_motor1' as 'motor1'.
+        load_devices_from_happi([("abc_det1", "det1"), ("abc_motor1", "motor1")], namespace=locals())
 
     Parameters
     ----------
-    device_names : list(str)
-        List of device names. It is expected that search will result in one found device per
-        device name.
-    instrument : str or None
-        Instrument (beamline or enstation) name used in database search. This a required parameter.
-        Explicitly set ``instrument=None`` to run search without instrument name (e.g. if the
-        database contains devices for a single instrument).
+    device_names : list(str) or list(tuple(str))
+        List of device names. Elements of the list could be strings or tuples (lists) of string with
+        two elements. If an element is a tuple of two names, then the first name is used in database
+        search and the second name is the name of the device after it is loaded into the namespace.
+        Each element of the list is processed separately and may contain mix of strings and tuples.
+        If the second name in the tuple has boolean value of ``False``, then it is ignored and
+        the device is imported with the same name as used in database. It is expected that search
+        will result in one found device per device name, otherwise ``RuntimeError`` is raised.
     namespace : dict
         Reference to the namespace where the devices should be loaded. It can be the reference
         to ``global()`` or ``locals()`` of the startup script.
     kwargs : dict
-        Additional search parameters
+        Additional search parameters.
 
     Returns
     -------
@@ -181,30 +185,55 @@ def load_devices_from_happi(device_names, *, instrument, namespace=None, **kwarg
 
     kwargs = kwargs or {}
 
+    # Verify that 'device_names' has correct type
+    if not isinstance(device_names, (tuple, list)):
+        raise TypeError(
+            "Parameter 'device_names' value must be a tuple or a list: "
+            f"type(device_names) = {type(device_names)}"
+        )
+    for n, name in enumerate(device_names):
+        if isinstance(name, (str, tuple, list)):
+            raise TypeError(
+                f"Parameter 'device_names': element #{n} must be str, tuple or list: " f"device_names[n] = {name}"
+            )
+        if isinstance(name, (tuple, list)):
+            if len(name) != 2 or not isinstance(name[0], str) or not isinstance(name[1], str):
+                raise TypeError(
+                    f"Parameter 'device_names': element #{n} be in the form "
+                    f"('name_in_db', 'name_in_namespace'): device_names[n] = {name}"
+                )
+
     from happi import Client, load_devices
 
     client = Client.from_config()
 
     results = []
     for d_name in device_names:
+        if isinstance(d_name, str):
+            name_db, name_ns = d_name, None
+        else:
+            name_db, name_ns = d_name
+
         # Assemble search parameters
         search_params = dict(kwargs)
-        search_params.update({"name": d_name})
-        if instrument:
-            search_params.update({"instrument": instrument})
+        search_params.update({"name": name_db})
 
         res = client.search(**search_params)
         if not res:
             raise RuntimeError(
-                f"No devices with name '{d_name}' were found in Happi database. "
+                f"No devices with name '{name_db}' were found in Happi database. "
                 f"Search parameters {search_params}"
             )
         elif len(res) > 1:
             raise RuntimeError(
-                f"Multiple devices with name '{d_name}' were found in Happi database. "
+                f"Multiple devices with name '{name_db}' were found in Happi database. "
                 f"Search parameters {search_params}"
             )
         else:
+            r = res[0]
+            # Modify the object name (if needed)
+            if name_ns:
+                r["name"] = name_ns
             # Instantiate the object
             results.append(res[0])
 

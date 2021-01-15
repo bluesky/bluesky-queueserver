@@ -149,7 +149,7 @@ def load_devices_from_happi(device_names, *, namespace=None, **kwargs):
         load_devices_from_happi(["det1", "motor1"], namespace=locals())
         # Works exactly the same as the previous example. If the second tuple element is
         #   evaluated as boolean value of False, then it is ignored and the device is not renamed.
-        load_devices_from_happi([("det1", None), ("motor1", "")], namespace=locals())
+        load_devices_from_happi([("det1", ""), ("motor1", "")], namespace=locals())
 
         # Load 'abc_det1' as 'det1' and 'abc_motor1' as 'motor1'.
         load_devices_from_happi([("abc_det1", "det1"), ("abc_motor1", "motor1")], namespace=locals())
@@ -161,7 +161,7 @@ def load_devices_from_happi(device_names, *, namespace=None, **kwargs):
         two elements. If an element is a tuple of two names, then the first name is used in database
         search and the second name is the name of the device after it is loaded into the namespace.
         Each element of the list is processed separately and may contain mix of strings and tuples.
-        If the second name in the tuple has boolean value of ``False``, then it is ignored and
+        If the second name in the tuple is an empty string, then it is ignored and
         the device is imported with the same name as used in database. It is expected that search
         will result in one found device per device name, otherwise ``RuntimeError`` is raised.
     namespace : dict

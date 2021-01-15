@@ -258,7 +258,6 @@ _happi_json_db = """
     "args": [],
     "device_class": "ophyd.sim.DetWithCountTime",
     "documentation": null,
-    "instrument": "TEST",
     "kwargs": {
       "name": "{{name}}"
     },
@@ -271,50 +270,46 @@ _happi_json_db = """
     "args": [],
     "device_class": "ophyd.sim.SynAxisNoPosition",
     "documentation": null,
-    "instrument": "TEST",
     "kwargs": {
       "name": "{{name}}"
     },
     "name": "motor",
     "type": "OphydItem"
   },
-  "motor1": {
-    "_id": "motor1",
+  "tst_motor1": {
+    "_id": "tst_motor1",
     "active": true,
     "args": [],
     "device_class": "ophyd.sim.SynAxisNoHints",
     "documentation": null,
-    "instrument": "TEST",
     "kwargs": {
       "name": "{{name}}"
     },
-    "name": "motor1",
+    "name": "tst_motor1",
     "type": "OphydItem"
   },
-  "motor2": {
-    "_id": "motor2",
+  "tst_motor2": {
+    "_id": "tst_motor2",
     "active": true,
     "args": [],
     "device_class": "ophyd.sim.SynAxisNoHints",
     "documentation": null,
-    "instrument": "TEST",
     "kwargs": {
       "name": "{{name}}"
     },
-    "name": "motor2",
+    "name": "tst_motor2",
     "type": "OphydItem"
   },
-  "motor3": {
-    "_id": "motor3",
+  "tst_motor3": {
+    "_id": "tst_motor3",
     "active": true,
     "args": [],
     "device_class": "ophyd.sim.SynAxis",
     "documentation": null,
-    "instrument": "TEST",
     "kwargs": {
       "name": "{{name}}"
     },
-    "name": "motor3",
+    "name": "tst_motor3",
     "type": "OphydItem"
   }
 }
@@ -341,11 +336,15 @@ from bluesky.plans import count
 from bluesky_queueserver.manager.profile_tools import load_devices_from_happi
 
 # Specify the list of devices to load
-device_list = ["det", "motor", "motor2"]
+device_list = [
+    "det",  # Search for the device 'det' and load it as 'det.
+    ("motor", ""),  #  Search for the device 'motor' and loaded it as 'motor'
+    ("tst_motor2", "motor2"),  # Search for 'tst_motor2' and rename it to 'motor2'
+]
 
 # Load the devices in the script namespace. It is assumed that Happi is configured
 #   properly and there is no need to specify the backend and the path.
-load_devices_from_happi(device_list, instrument="TEST", namespace=locals())
+load_devices_from_happi(device_list, namespace=locals())
 
 def simple_sample_plan_1():
     '''

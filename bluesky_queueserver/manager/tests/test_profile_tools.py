@@ -269,11 +269,12 @@ def _configure_happi(tmp_path, monkeypatch, json_devices):
     ("string", ("det", "motor"), {}, False, "Parameter 'device_names' value must be a tuple or a list"),
     # Incorrecty type or form of a device list element
     (("det", 10), ("det", "motor"), {}, False, "Parameter 'device_names': element .* must be str, tuple or list"),
-    ((10, "motor"), ("det", "motor"), {}, False, "Parameter 'device_names': element .* must be str, tuple or list"),
+    ((10, "motor"), ("det", "motor"), {}, False,
+     "Parameter 'device_names': element .* must be str, tuple or list"),
     (("det", (10, "motor2")), ("det", "motor"), {}, False, "element .* is expected to be in the form"),
     (("det", ("tst_motor2", 10)), ("det", "motor"), {}, False, "element .* is expected to be in the form"),
-    (("det", ("tst_motor2", "motor2", 10)), ("det", "motor"), {}, False, "element .* is expected to be in the form"),
-
+    (("det", ("tst_motor2", "motor2", 10)), ("det", "motor"), {}, False,
+     "element .* is expected to be in the form"),
     # No device found
     (("det", "motor10"), ("det", "motor10"), {}, False, "No devices with name"),
     # Multiple devices found (search for "motor3" yields multile devices, this is database issue)
@@ -313,13 +314,3 @@ def test_load_devices_from_happi_1(tmp_path, monkeypatch, device_names, loaded_n
                 load_devices_from_happi(device_names, namespace=locals(), **kw_args)
 
     _test_loading(device_names=device_names, loaded_names=loaded_names)
-
-
-def test_load_devices_from_happi_2_fail(tmp_path, monkeypatch):
-    """
-    Test for ``load_devices_from_happi``: ``instrument`` parameter is missing
-    """
-    _configure_happi(tmp_path, monkeypatch, json_devices=_happi_json_db_1)
-
-    with pytest.raises(Exception, match="missing 1 required keyword-only argument: 'instrument'"):
-        load_devices_from_happi(("det1",))

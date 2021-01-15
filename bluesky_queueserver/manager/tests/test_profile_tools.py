@@ -163,52 +163,24 @@ def test_global_user_namespace():
 
 _happi_json_db_1 = """
 {
-  "detA": {
+  "det": {
     "_id": "det",
     "active": true,
     "args": [],
     "device_class": "ophyd.sim.DetWithCountTime",
     "documentation": null,
-    "instrument": "TEST.1",
     "kwargs": {
       "name": "{{name}}"
     },
     "name": "det",
     "type": "OphydItem"
   },
-  "detB": {
-    "_id": "det",
-    "active": true,
-    "args": [],
-    "device_class": "ophyd.sim.DetWithCountTime",
-    "documentation": null,
-    "instrument": "TEST.2",
-    "kwargs": {
-      "name": "{{name}}"
-    },
-    "name": "det",
-    "type": "OphydItem"
-  },
-  "motorA": {
+  "motor": {
     "_id": "motor",
     "active": true,
     "args": [],
     "device_class": "ophyd.sim.SynAxisNoPosition",
     "documentation": null,
-    "instrument": "TEST.1",
-    "kwargs": {
-      "name": "{{name}}"
-    },
-    "name": "motor",
-    "type": "OphydItem"
-  },
-  "motorB": {
-    "_id": "motor",
-    "active": true,
-    "args": [],
-    "device_class": "ophyd.sim.SynAxisNoPosition",
-    "documentation": null,
-    "instrument": "TEST.2",
     "kwargs": {
       "name": "{{name}}"
     },
@@ -221,33 +193,42 @@ _happi_json_db_1 = """
     "args": [],
     "device_class": "ophyd.sim.SynAxisNoHints",
     "documentation": null,
-    "instrument": "TEST.1",
     "kwargs": {
       "name": "{{name}}"
     },
     "name": "motor1",
     "type": "OphydItem"
   },
-  "motor2": {
-    "_id": "motor2",
+  "tst_motor2": {
+    "_id": "tst_motor2",
     "active": true,
     "args": [],
     "device_class": "ophyd.sim.SynAxisNoHints",
     "documentation": null,
-    "instrument": "TEST.1",
     "kwargs": {
       "name": "{{name}}"
     },
-    "name": "motor2",
+    "name": "tst_motor2",
     "type": "OphydItem"
   },
   "motor3": {
+    "_id": "motor3",
+    "active": true,
+    "args": [],
+    "device_class": "ophyd.sim.SynAxis",
+    "documentation": null,
+    "kwargs": {
+      "name": "{{name}}"
+    },
+    "name": "motor3",
+    "type": "OphydItem"
+  },
+  "motor3_duplicate_error": {
     "_id": "motor3",
     "active": false,
     "args": [],
     "device_class": "ophyd.sim.SynAxis",
     "documentation": null,
-    "instrument": "TEST.1",
     "kwargs": {
       "name": "{{name}}"
     },
@@ -274,19 +255,38 @@ def _configure_happi(tmp_path, monkeypatch, json_devices):
 
 
 # fmt: off
-@pytest.mark.parametrize("devices, instrument, kw_args, success, errmsg", [
-    (("det", "motor"), "TEST.1", {}, True, ""),
-    (("det", "motor"), "TEST.2", {}, True, ""),
-    (("motor1",), "TEST.1", {}, True, ""),
-    (("motor1",), None, {}, True, ""),
-    (("det", "motor"), "TEST.3", {}, False, "No devices with name"),
-    (("det", "motor"), None, {}, False, "Multiple devices with name"),
-    # Use additional search parameters
-    (("motor3",), "TEST.1", {"active": False}, True, ""),
-    (("motor3",), "TEST.1", {"active": True}, False, "No devices with nam"),
+@pytest.mark.parametrize("device_names, loaded_names, kw_args, success, errmsg", [
+    (("det", "motor"), ("det", "motor"), {}, True, ""),
+    (["det", "motor"], ("det", "motor"), {}, True, ""),
+    ((("det", ""), ["motor", ""]), ("det", "motor"), {}, True, ""),
+    (("det", ["motor", ""]), ("det", "motor"), {}, True, ""),
+    (("det", ("motor", ""), ("tst_motor2", "motor2")), ("det", "motor", "motor2"), {}, True, ""),
+    # This is not typical use case, but the same device may be loaded multiple times
+    #   with different names if needed.
+    ((("motor1", "motor1_copy1"), ("motor1", "motor1_copy2")), ("motor1_copy1", "motor1_copy2"), {}, True, ""),
+    # Incorrect type of the device list
+    (10, ("det", "motor"), {}, False, "Parameter 'device_names' value must be a tuple or a list"),
+    ("string", ("det", "motor"), {}, False, "Parameter 'device_names' value must be a tuple or a list"),
+    # Incorrecty type or form of a device list element
+    (("det", 10), ("det", "motor"), {}, False, "Parameter 'device_names': element .* must be str, tuple or list"),
+    ((10, "motor"), ("det", "motor"), {}, False, "Parameter 'device_names': element .* must be str, tuple or list"),
+    (("det", (10, "motor2")), ("det", "motor"), {}, False, "element .* is expected to be in the form"),
+    (("det", ("tst_motor2", 10)), ("det", "motor"), {}, False, "element .* is expected to be in the form"),
+    (("det", ("tst_motor2", "motor2", 10)), ("det", "motor"), {}, False, "element .* is expected to be in the form"),
+
+    # No device found
+    (("det", "motor10"), ("det", "motor10"), {}, False, "No devices with name"),
+    # Multiple devices found (search for "motor3" yields multile devices, this is database issue)
+    (("det", "motor3"), ("det", "motor3"), {}, False, "Multiple devices with name"),
+    # Use additional search parameters. (Two entries for "motor3" differ in the value of `active` field.
+    #   A single entry for `det` has `active==True`.)
+    (("det", "motor3"), ("det", "motor3"), {"active": True}, True, ""),
+    (("det", "motor3"), ("det", "motor3"), {"active": False}, False,
+     "No devices with name 'det' were found in Happi database."),
+    (("motor3",), ("motor3",), {"active": False}, True, ""),
 ])
 # fmt: on
-def test_load_devices_from_happi_1(tmp_path, monkeypatch, devices, instrument, kw_args, success, errmsg):
+def test_load_devices_from_happi_1(tmp_path, monkeypatch, device_names, loaded_names, kw_args, success, errmsg):
     """
     Tests for ``load_devices_from_happi``.
     """
@@ -294,25 +294,25 @@ def test_load_devices_from_happi_1(tmp_path, monkeypatch, devices, instrument, k
 
     # Load as a dictionary
     if success:
-        ns = load_devices_from_happi(devices, instrument=instrument, **kw_args)
-        assert len(ns) == len(devices)
-        for d in devices:
+        ns = load_devices_from_happi(device_names, **kw_args)
+        assert len(ns) == len(loaded_names)
+        for d in loaded_names:
             assert d in ns
     else:
         with pytest.raises(Exception, match=errmsg):
-            load_devices_from_happi(devices, instrument=instrument, **kw_args)
+            load_devices_from_happi(device_names, **kw_args)
 
     # Load in local namespace
-    def _test_loading(devices, instrument):
+    def _test_loading(device_names, loaded_names):
         if success:
-            load_devices_from_happi(devices, instrument=instrument, namespace=locals(), **kw_args)
-            for d in devices:
+            load_devices_from_happi(device_names, namespace=locals(), **kw_args)
+            for d in loaded_names:
                 assert d in locals()
         else:
             with pytest.raises(Exception, match=errmsg):
-                load_devices_from_happi(devices, instrument=instrument, namespace=locals(), **kw_args)
+                load_devices_from_happi(device_names, namespace=locals(), **kw_args)
 
-    _test_loading(devices=devices, instrument=instrument)
+    _test_loading(device_names=device_names, loaded_names=loaded_names)
 
 
 def test_load_devices_from_happi_2_fail(tmp_path, monkeypatch):

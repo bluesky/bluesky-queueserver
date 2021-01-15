@@ -192,14 +192,14 @@ def load_devices_from_happi(device_names, *, namespace=None, **kwargs):
             f"type(device_names) = {type(device_names)}"
         )
     for n, name in enumerate(device_names):
-        if isinstance(name, (str, tuple, list)):
+        if not isinstance(name, (str, tuple, list)):
             raise TypeError(
                 f"Parameter 'device_names': element #{n} must be str, tuple or list: " f"device_names[n] = {name}"
             )
         if isinstance(name, (tuple, list)):
             if len(name) != 2 or not isinstance(name[0], str) or not isinstance(name[1], str):
                 raise TypeError(
-                    f"Parameter 'device_names': element #{n} be in the form "
+                    f"Parameter 'device_names': element #{n} is expected to be in the form "
                     f"('name_in_db', 'name_in_namespace'): device_names[n] = {name}"
                 )
 
@@ -233,9 +233,20 @@ def load_devices_from_happi(device_names, *, namespace=None, **kwargs):
             r = res[0]
             # Modify the object name (if needed)
             if name_ns:
-                r["name"] = name_ns
+                # In order for the following conversion to work properly, the name of
+                #   the device should be specified only once (as `name` attribute),
+                #   and aliases `{{name}}` should be used if the name is used as any other
+                #   parameter. This is standard and recommended practice for instantiating
+                #   Happi items (devices).
+                #
+                # In search results, the reference to the device is `r._device`.
+                # `r.metadata` contains expanded metadata (it is probably not used, but it
+                #   is a good idea to change it as well for consistency. We don't touch `_id`.
+                # The modified data is not expected to be saved to the database.
+                setattr(r._device, "name", name_ns)
+                r.metadata["name"] = name_ns
             # Instantiate the object
-            results.append(res[0])
+            results.append(r)
 
     ns = load_devices(*[_.item for _ in results])
     ns_dict = ns.__dict__

@@ -1,5 +1,6 @@
 import functools
 import inspect
+import re
 
 
 class UserNamespace:
@@ -201,6 +202,11 @@ def load_devices_from_happi(device_names, *, namespace=None, **kwargs):
                 raise TypeError(
                     f"Parameter 'device_names': element #{n} is expected to be in the form "
                     f"('name_in_db', 'name_in_namespace'): device_names[n] = {name}"
+                )
+            elif name[1] and not re.search(r"^[a-z][_a-z0-9]*$", name[1]):
+                raise TypeError(
+                    f"The device '{name[0]}' can not be renamed: The new device name '{name[1]}' "
+                    "may consist of lowercase letters, numbers and '_' and must start from lowercase letter"
                 )
 
     from happi import Client, load_devices

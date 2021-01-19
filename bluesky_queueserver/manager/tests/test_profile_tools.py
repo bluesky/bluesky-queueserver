@@ -285,6 +285,17 @@ def _configure_happi(tmp_path, monkeypatch, json_devices):
     (("det", "motor3"), ("det", "motor3"), {"active": False}, False,
      "No devices with name 'det' were found in Happi database."),
     (("motor3",), ("motor3",), {"active": False}, True, ""),
+    # Verify that valid device names are accepted
+    (("det", ["motor", "motor3_new"]), ("det", "motor3_new"), {}, True, ""),
+    # Invalid new device name
+    (("det", ["motor", "Motor"]), ("det", "motor"), {}, False, "may consist of lowercase letters, numbers"),
+    (("det", ["motor", "moTor"]), ("det", "motor"), {}, False, "may consist of lowercase letters, numbers"),
+    (("det", ["motor", "_motor"]), ("det", "motor"), {}, False, "may consist of lowercase letters, numbers"),
+    (("det", ["motor", " motor"]), ("det", "motor"), {}, False, "may consist of lowercase letters, numbers"),
+    (("det", ["motor", "motor "]), ("det", "motor"), {}, False, "may consist of lowercase letters, numbers"),
+    (("det", ["motor", "motor new"]), ("det", "motor"), {}, False, "may consist of lowercase letters, numbers"),
+    (("det", ["motor", "motor_$new"]), ("det", "motor"), {}, False, "may consist of lowercase letters, numbers"),
+    (("det", ["motor", "2motor_$new"]), ("det", "motor"), {}, False, "may consist of lowercase letters, numbers"),
 ])
 # fmt: on
 def test_load_devices_from_happi_1(tmp_path, monkeypatch, device_names, loaded_names, kw_args, success, errmsg):

@@ -140,9 +140,27 @@ def load_devices_from_happi(device_names, *, namespace=None, **kwargs):
     The devices are loaded into a namespace referenced by ``namespaced`` parameter.
     The function may be called multiple times in a row for the same namespace to populate
     it with results of multiple searches. The function also returns the dictionary of loaded devices,
-    which could be used to pupulate a namespace using custom code.
+    which could be used to populate a namespace using custom code.
 
-    Following are the examples of some function calls.
+    Happi should be configure by creating configuration file and setting the environment variable
+    ``HAPPI_CFG`` equal to the path to the configuration file. For example, if JSON Happi database
+    is contained in the file ``path=/home/user/happi/database.json`` and the path to configuration
+    file is ``path=/home/user/happi.ini``, then the environment variable should be set to
+
+    .. code-block::
+
+        HAPPI_CFG=/home/user/happi.ini
+
+    and configuration file ``happi.ini`` should contain
+
+    .. code-block::
+
+        [DEFAULT]
+        backend=json
+        path=/home/user/happi/database.json
+
+    Examples
+    --------
 
     .. code-block:: python
 

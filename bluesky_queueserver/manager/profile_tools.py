@@ -128,7 +128,7 @@ def set_user_ns(func):
     return wrapper
 
 
-def load_devices_from_happi(device_names, *, namespace=None, **kwargs):
+def load_devices_from_happi(device_names, *, namespace, **kwargs):
     """
     Load the devices from Happi based on the list of ``device_names``. The elements of the list
     may be strings (device name) or tuples of two strings (device name used for database search and
@@ -139,13 +139,13 @@ def load_devices_from_happi(device_names, *, namespace=None, **kwargs):
 
     The devices are loaded into a namespace referenced by ``namespace`` parameter.
     The function may be called multiple times in a row for the same namespace to populate
-    it with results of multiple searches. The function also returns the dictionary of loaded devices,
-    which could be used to populate a namespace using custom code.
+    it with results of multiple searches. The function also returns the list of names of loaded devices.
 
-    Happi should be configure by creating configuration file and setting the environment variable
-    ``HAPPI_CFG`` equal to the path to the configuration file. For example, if JSON Happi database
-    is contained in the file ``path=/home/user/happi/database.json`` and the path to configuration
-    file is ``path=/home/user/happi.ini``, then the environment variable should be set to
+    Happi should be configured before the function could be used: Happi configuration file should be
+    created and environment variable ``HAPPI_CFG`` with the path to the configuration file should be set.
+    For example, if JSON Happi database is contained in the file ``path=/home/user/happi/database.json``
+    and the path to configuration file is ``path=/home/user/happi.ini``, then the environment variable
+    should be set as
 
     .. code-block::
 
@@ -173,6 +173,15 @@ def load_devices_from_happi(device_names, *, namespace=None, **kwargs):
         # Load 'abc_det1' as 'det1' and 'abc_motor1' as 'motor1'.
         load_devices_from_happi([("abc_det1", "det1"), ("abc_motor1", "motor1")], namespace=locals())
 
+        # Get the dictionary of devices
+        device_dict = {}
+        load_devices_from_happi(["det1", "motor1"], namespace=device_dict)
+        # 'device_dict': {"dev1": device1, "motor1": motor1}
+
+        # Obtain the list of updated items (devices)
+        item_list = load_devices_from_happi([("abc_det1", "det1"), ("abc_motor1", "motor1")], namespace=locals())
+        # 'item_list': ["det1", "motor1"]
+
     Parameters
     ----------
     device_names : list(str) or list(tuple(str))
@@ -185,16 +194,15 @@ def load_devices_from_happi(device_names, *, namespace=None, **kwargs):
         will result in one found device per device name, otherwise ``RuntimeError`` is raised.
     namespace : dict
         Reference to the namespace where the devices should be loaded. It can be the reference
-        to ``global()`` or ``locals()`` of the startup script.
+        to ``global()`` or ``locals()`` of the startup script or reference to a dictionary.
+        It is a required keyword argument.
     kwargs : dict
         Additional search parameters.
 
     Returns
     -------
-    dict
-        the dictionary (namespace) that contains loaded the devices. It is not equal to
-        ``nspace_ref``. Typically there is no need to use the returned namespace if ``nspace_ref``
-        is specified.
+    list(str)
+        the list of names of items in the ``namespace`` that were updated by the function.
 
     Raises
     ------
@@ -203,6 +211,11 @@ def load_devices_from_happi(device_names, *, namespace=None, **kwargs):
     """
 
     kwargs = kwargs or {}
+
+    if not isinstance(namespace, dict):
+        raise TypeError(
+            f"Parameter 'namespace' must be a dictionary: the value of type {type(namespace)} was passed instead"
+        )
 
     # Verify that 'device_names' has correct type
     if not isinstance(device_names, (tuple, list)):
@@ -274,6 +287,5 @@ def load_devices_from_happi(device_names, *, namespace=None, **kwargs):
 
     ns = load_devices(*[_.item for _ in results])
     ns_dict = ns.__dict__
-    if namespace:
-        namespace.update(ns_dict)
-    return ns_dict
+    namespace.update(ns_dict)
+    return list(ns_dict.keys())

@@ -256,6 +256,7 @@ def _configure_happi(tmp_path, monkeypatch, json_devices):
 
 # fmt: off
 @pytest.mark.parametrize("device_names, loaded_names, kw_args, success, errmsg", [
+    ([], [], {}, True, ""),  # No devices are loaded if the list of devices is empty
     (("det", "motor"), ("det", "motor"), {}, True, ""),
     (["det", "motor"], ("det", "motor"), {}, True, ""),
     ((("det", ""), ["motor", ""]), ("det", "motor"), {}, True, ""),
@@ -306,13 +307,16 @@ def test_load_devices_from_happi_1(tmp_path, monkeypatch, device_names, loaded_n
 
     # Load as a dictionary
     if success:
-        ns = load_devices_from_happi(device_names, **kw_args)
-        assert len(ns) == len(loaded_names)
+        ns = {}
+        dlist = load_devices_from_happi(device_names, namespace=ns, **kw_args)
+        assert len(ns) == len(loaded_names), str(ns)
         for d in loaded_names:
             assert d in ns
+        assert set(dlist) == set(loaded_names)
     else:
         with pytest.raises(Exception, match=errmsg):
-            load_devices_from_happi(device_names, **kw_args)
+            ns = {}
+            load_devices_from_happi(device_names, namespace=ns, **kw_args)
 
     # Load in local namespace
     def _test_loading(device_names, loaded_names):
@@ -325,3 +329,18 @@ def test_load_devices_from_happi_1(tmp_path, monkeypatch, device_names, loaded_n
                 load_devices_from_happi(device_names, namespace=locals(), **kw_args)
 
     _test_loading(device_names=device_names, loaded_names=loaded_names)
+
+
+def test_load_devices_from_happi_2_fail(tmp_path, monkeypatch):
+    """
+    Function ``load_devices_from_happi``: parameter ``namespace`` is required and must be of type ``dict``.
+    """
+    _configure_happi(tmp_path, monkeypatch, json_devices=_happi_json_db_1)
+
+    # Missing 'namespace' parameter
+    with pytest.raises(TypeError, match="missing 1 required keyword-only argument: 'namespace'"):
+        load_devices_from_happi(["det", "motor"])
+
+    # Incorrect type of 'namespace' parameter
+    with pytest.raises(TypeError, match="Parameter 'namespace' must be a dictionary"):
+        load_devices_from_happi(["det", "motor"], namespace=[1, 2, 3])

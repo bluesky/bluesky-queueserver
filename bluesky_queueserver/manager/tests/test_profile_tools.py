@@ -1,7 +1,9 @@
 import os
 import inspect
+import pytest
+
 from ._common import copy_default_profile_collection, patch_first_startup_file
-from bluesky_queueserver.manager.profile_tools import global_user_namespace
+from bluesky_queueserver.manager.profile_tools import global_user_namespace, load_devices_from_happi
 from bluesky_queueserver.manager.profile_ops import load_profile_collection
 
 
@@ -157,3 +159,188 @@ def test_global_user_namespace():
     global_user_namespace.set_user_namespace(user_ns=ns, use_ipython=False)
     assert global_user_namespace.user_ns == ns
     assert global_user_namespace.use_ipython is False
+
+
+_happi_json_db_1 = """
+{
+  "det": {
+    "_id": "det",
+    "active": true,
+    "args": [],
+    "device_class": "ophyd.sim.DetWithCountTime",
+    "documentation": null,
+    "kwargs": {
+      "name": "{{name}}"
+    },
+    "name": "det",
+    "type": "OphydItem"
+  },
+  "motor": {
+    "_id": "motor",
+    "active": true,
+    "args": [],
+    "device_class": "ophyd.sim.SynAxisNoPosition",
+    "documentation": null,
+    "kwargs": {
+      "name": "{{name}}"
+    },
+    "name": "motor",
+    "type": "OphydItem"
+  },
+  "motor1": {
+    "_id": "motor1",
+    "active": true,
+    "args": [],
+    "device_class": "ophyd.sim.SynAxisNoHints",
+    "documentation": null,
+    "kwargs": {
+      "name": "{{name}}"
+    },
+    "name": "motor1",
+    "type": "OphydItem"
+  },
+  "tst_motor2": {
+    "_id": "tst_motor2",
+    "active": true,
+    "args": [],
+    "device_class": "ophyd.sim.SynAxisNoHints",
+    "documentation": null,
+    "kwargs": {
+      "name": "{{name}}"
+    },
+    "name": "tst_motor2",
+    "type": "OphydItem"
+  },
+  "motor3": {
+    "_id": "motor3",
+    "active": true,
+    "args": [],
+    "device_class": "ophyd.sim.SynAxis",
+    "documentation": null,
+    "kwargs": {
+      "name": "{{name}}"
+    },
+    "name": "motor3",
+    "type": "OphydItem"
+  },
+  "motor3_duplicate_error": {
+    "_id": "motor3",
+    "active": false,
+    "args": [],
+    "device_class": "ophyd.sim.SynAxis",
+    "documentation": null,
+    "kwargs": {
+      "name": "{{name}}"
+    },
+    "name": "motor3",
+    "type": "OphydItem"
+  }
+}
+"""
+
+
+def _configure_happi(tmp_path, monkeypatch, json_devices):
+    path_json = os.path.join(tmp_path, "sim_devices.json")
+    path_ini = os.path.join(tmp_path, "happi.ini")
+
+    happi_ini_text = f"[DEFAULT]\nbackend=json\npath={path_json}"
+
+    with open(path_ini, "w") as f:
+        f.write(happi_ini_text)
+
+    with open(path_json, "w") as f:
+        f.write(json_devices)
+
+    monkeypatch.setenv("HAPPI_CFG", path_ini)
+
+
+# fmt: off
+@pytest.mark.parametrize("device_names, loaded_names, kw_args, success, errmsg", [
+    ([], [], {}, True, ""),  # No devices are loaded if the list of devices is empty
+    (("det", "motor"), ("det", "motor"), {}, True, ""),
+    (["det", "motor"], ("det", "motor"), {}, True, ""),
+    ((("det", ""), ["motor", ""]), ("det", "motor"), {}, True, ""),
+    (("det", ["motor", ""]), ("det", "motor"), {}, True, ""),
+    (("det", ("motor", ""), ("tst_motor2", "motor2")), ("det", "motor", "motor2"), {}, True, ""),
+    # This is not typical use case, but the same device may be loaded multiple times
+    #   with different names if needed.
+    ((("motor1", "motor1_copy1"), ("motor1", "motor1_copy2")), ("motor1_copy1", "motor1_copy2"), {}, True, ""),
+    # Incorrect type of the device list
+    (10, ("det", "motor"), {}, False, "Parameter 'device_names' value must be a tuple or a list"),
+    ("string", ("det", "motor"), {}, False, "Parameter 'device_names' value must be a tuple or a list"),
+    # Incorrecty type or form of a device list element
+    (("det", 10), ("det", "motor"), {}, False, "Parameter 'device_names': element .* must be str, tuple or list"),
+    ((10, "motor"), ("det", "motor"), {}, False,
+     "Parameter 'device_names': element .* must be str, tuple or list"),
+    (("det", (10, "motor2")), ("det", "motor"), {}, False, "element .* is expected to be in the form"),
+    (("det", ("tst_motor2", 10)), ("det", "motor"), {}, False, "element .* is expected to be in the form"),
+    (("det", ("tst_motor2", "motor2", 10)), ("det", "motor"), {}, False,
+     "element .* is expected to be in the form"),
+    # No device found
+    (("det", "motor10"), ("det", "motor10"), {}, False, "No devices with name"),
+    # Multiple devices found (search for "motor3" yields multile devices, this is database issue)
+    (("det", "motor3"), ("det", "motor3"), {}, False, "Multiple devices with name"),
+    # Use additional search parameters. (Two entries for "motor3" differ in the value of `active` field.
+    #   A single entry for `det` has `active==True`.)
+    (("det", "motor3"), ("det", "motor3"), {"active": True}, True, ""),
+    (("det", "motor3"), ("det", "motor3"), {"active": False}, False,
+     "No devices with name 'det' were found in Happi database."),
+    (("motor3",), ("motor3",), {"active": False}, True, ""),
+    # Verify that valid device names are accepted
+    (("det", ["motor", "motor3_new"]), ("det", "motor3_new"), {}, True, ""),
+    # Invalid new device name
+    (("det", ["motor", "Motor"]), ("det", "motor"), {}, False, "may consist of lowercase letters, numbers"),
+    (("det", ["motor", "moTor"]), ("det", "motor"), {}, False, "may consist of lowercase letters, numbers"),
+    (("det", ["motor", "_motor"]), ("det", "motor"), {}, False, "may consist of lowercase letters, numbers"),
+    (("det", ["motor", " motor"]), ("det", "motor"), {}, False, "may consist of lowercase letters, numbers"),
+    (("det", ["motor", "motor "]), ("det", "motor"), {}, False, "may consist of lowercase letters, numbers"),
+    (("det", ["motor", "motor new"]), ("det", "motor"), {}, False, "may consist of lowercase letters, numbers"),
+    (("det", ["motor", "motor_$new"]), ("det", "motor"), {}, False, "may consist of lowercase letters, numbers"),
+    (("det", ["motor", "2motor_$new"]), ("det", "motor"), {}, False, "may consist of lowercase letters, numbers"),
+])
+# fmt: on
+def test_load_devices_from_happi_1(tmp_path, monkeypatch, device_names, loaded_names, kw_args, success, errmsg):
+    """
+    Tests for ``load_devices_from_happi``.
+    """
+    _configure_happi(tmp_path, monkeypatch, json_devices=_happi_json_db_1)
+
+    # Load as a dictionary
+    if success:
+        ns = {}
+        dlist = load_devices_from_happi(device_names, namespace=ns, **kw_args)
+        assert len(ns) == len(loaded_names), str(ns)
+        for d in loaded_names:
+            assert d in ns
+        assert set(dlist) == set(loaded_names)
+    else:
+        with pytest.raises(Exception, match=errmsg):
+            ns = {}
+            load_devices_from_happi(device_names, namespace=ns, **kw_args)
+
+    # Load in local namespace
+    def _test_loading(device_names, loaded_names):
+        if success:
+            load_devices_from_happi(device_names, namespace=locals(), **kw_args)
+            for d in loaded_names:
+                assert d in locals()
+        else:
+            with pytest.raises(Exception, match=errmsg):
+                load_devices_from_happi(device_names, namespace=locals(), **kw_args)
+
+    _test_loading(device_names=device_names, loaded_names=loaded_names)
+
+
+def test_load_devices_from_happi_2_fail(tmp_path, monkeypatch):
+    """
+    Function ``load_devices_from_happi``: parameter ``namespace`` is required and must be of type ``dict``.
+    """
+    _configure_happi(tmp_path, monkeypatch, json_devices=_happi_json_db_1)
+
+    # Missing 'namespace' parameter
+    with pytest.raises(TypeError, match="missing 1 required keyword-only argument: 'namespace'"):
+        load_devices_from_happi(["det", "motor"])
+
+    # Incorrect type of 'namespace' parameter
+    with pytest.raises(TypeError, match="Parameter 'namespace' must be a dictionary"):
+        load_devices_from_happi(["det", "motor"], namespace=[1, 2, 3])

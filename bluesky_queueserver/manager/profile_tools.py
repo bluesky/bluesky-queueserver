@@ -288,4 +288,4 @@ def load_devices_from_happi(device_names, *, namespace, **kwargs):
     ns = load_devices(*[_.item for _ in results])
     ns_dict = ns.__dict__
     namespace.update(ns_dict)
-    return list(ns_dict.keys())
+    return list(ns_dict)

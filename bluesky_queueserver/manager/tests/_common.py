@@ -373,7 +373,7 @@ def re_manager_cmd():
         _close()
         _create(params)
 
-    yield create_re_manager  # Nothing to return
+    yield create_re_manager
 
     _close()
 

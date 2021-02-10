@@ -86,7 +86,7 @@ class RunEngineManager(Process):
         # Communication with the server using ZMQ
         self._ctx = None
         self._zmq_socket = None
-        self._ip_zmq_server = "tcp://*:5555"
+        self._ip_zmq_server = "tcp://*:60615"
         if config and ("zmq_addr" in config):
             self._ip_zmq_server = config["zmq_addr"]
         logger.info("Starting ZMQ server at '%s'", self._ip_zmq_server)

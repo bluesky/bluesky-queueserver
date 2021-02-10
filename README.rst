@@ -43,7 +43,7 @@ QueueServer is supporting the following functions:
 
 
 In some cases the program may crash and leave some sockets open. This may prevent the Manager from
-restarting. To close the sockets (we are interested in sockets on ports 5555 and 60610), find
+restarting. To close the sockets (we are interested in sockets on ports 60615 and 60610), find
 PIDs of the processes::
 
   $ netstat -ltnp
@@ -113,10 +113,10 @@ The most basic request is 'ping' intended to fetch some response from RE Manager
   qserver ping
   http GET http://localhost:60610
 
-Current default address of RE Manager is set to tcp://localhost:5555, but different
+Current default address of RE Manager is set to tcp://localhost:60615, but different
 address may be passed as a parameter to CLI tool::
 
-  qserver ping -a "tcp://localhost:5555"
+  qserver ping -a "tcp://localhost:60615"
 
 The 'qserver' CLI tool may run in the monitoring mode (send 'ping' request to RE Manager every second)::
 

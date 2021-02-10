@@ -730,7 +730,7 @@ def qserver():
         dest="address",
         action="store",
         default=None,
-        help="Address of the server (e.g. 'tcp://localhost:5555', quoted string)",
+        help="Address of the server (e.g. 'tcp://localhost:60615', quoted string)",
     )
 
     args = parser.parse_args()

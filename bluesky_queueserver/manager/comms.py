@@ -428,7 +428,7 @@ class ZMQCommSendThreads:
     Parameters
     ----------
     zmq_server_address : str or None
-        Address of ZMQ server. If None, then the default address is ``tcp://localhost:5555``
+        Address of ZMQ server. If None, then the default address is ``tcp://localhost:60615``
         is used.
     timeout_recv : int
         Timeout (in ms) for ZMQ receive operations.
@@ -486,7 +486,7 @@ class ZMQCommSendThreads:
         timeout_send=500,
         raise_exceptions=True,
     ):
-        zmq_server_address = zmq_server_address or "tcp://localhost:5555"
+        zmq_server_address = zmq_server_address or "tcp://localhost:60615"
 
         self._timeout_receive = timeout_recv  # Timeout for 'recv' operation (ms)
         self._timeout_send = timeout_send  # # Timeout for 'send' operation (ms)
@@ -767,7 +767,7 @@ class ZMQCommSendAsync:
     loop : asyncio loop
         Current event loop
     zmq_server_address : str or None
-        Address of ZMQ server. If None, then the default address is ``tcp://localhost:5555``
+        Address of ZMQ server. If None, then the default address is ``tcp://localhost:60615``
         is used.
     timeout_recv : int
         Timeout (in ms) for ZMQ receive operations.
@@ -807,7 +807,7 @@ class ZMQCommSendAsync:
     ):
         self._loop = loop if loop else asyncio.get_event_loop()
 
-        zmq_server_address = zmq_server_address or "tcp://localhost:5555"
+        zmq_server_address = zmq_server_address or "tcp://localhost:60615"
 
         self._timeout_receive = timeout_recv  # Timeout for 'recv' operation (ms)
         self._timeout_send = timeout_send  # # Timeout for 'send' operation (ms)

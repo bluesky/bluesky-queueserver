@@ -675,7 +675,7 @@ def _zmq_server_1msg():
     # ZMQ server that provides single response
     ctx = zmq.Context()
     zmq_socket = ctx.socket(zmq.REP)
-    zmq_socket.bind("tcp://*:5555")
+    zmq_socket.bind("tcp://*:60615")
     msg_in = zmq_socket.recv_json()
     msg_out = {"success": True, "some_data": 10, "msg_in": msg_in}
     zmq_socket.send_json(msg_out)
@@ -727,7 +727,7 @@ def _zmq_server_2msg():
     # ZMQ server: provides ability to communicate twice
     ctx = zmq.Context()
     zmq_socket = ctx.socket(zmq.REP)
-    zmq_socket.bind("tcp://*:5555")
+    zmq_socket.bind("tcp://*:60615")
     msg_in = zmq_socket.recv_json()
     msg_out = {"success": True, "some_data": 10, "msg_in": msg_in}
     zmq_socket.send_json(msg_out)
@@ -783,7 +783,7 @@ def _zmq_server_2msg_delay1():
     # ZMQ server: provides ability to communicate twice
     ctx = zmq.Context()
     zmq_socket = ctx.socket(zmq.REP)
-    zmq_socket.bind("tcp://*:5555")
+    zmq_socket.bind("tcp://*:60615")
     msg_in = zmq_socket.recv_json()
     ttime.sleep(0.1)  # Delay before the 1st response
     msg_out = {"success": True, "some_data": 10, "msg_in": msg_in}
@@ -861,7 +861,7 @@ def _zmq_server_delay2():
     # ZMQ server: provides ability to communicate twice
     ctx = zmq.Context()
     zmq_socket = ctx.socket(zmq.REP)
-    zmq_socket.bind("tcp://*:5555")
+    zmq_socket.bind("tcp://*:60615")
     msg_in = zmq_socket.recv_json()
     ttime.sleep(3)  # Generate timeout at the client
     msg_out = {"success": True, "some_data": 10, "msg_in": msg_in}

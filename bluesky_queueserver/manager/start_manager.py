@@ -273,9 +273,9 @@ def start_manager():
         help="The address of ZMQ proxy used to publish data. If the parameter is specified, RE is "
         "be subscribed to 'bluesky.callbacks.zmq.Publisher' and documents are published via 0MQ proxy. "
         "0MQ Proxy (see Bluesky 0MQ documentation) should be started before plans could be executed. "
-        "The address should be in the form '127.0.0.1:5577' or 'localhost:5577'. The address is passed "
-        "to 'bluesky.callbacks.zmq.Publisher'. It is recommended to avoid using 0MQ proxy in production "
-        "data acquisition systems and use Kafka instead.",
+        "The address should be in the form '127.0.0.1:5567' or 'localhost:5567'. The address is passed "
+        "to 'bluesky.callbacks.zmq.Publisher'. It is recommended to use Kafka instead of 0MQ proxy in "
+        "production data acquisition systems and use Kafka instead.",
     )
 
     parser.add_argument(

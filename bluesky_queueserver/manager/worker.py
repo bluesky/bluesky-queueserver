@@ -634,6 +634,7 @@ class RunEngineWorker(Process):
 
                 if "zmq_data_proxy_addr" in self._config:
                     from bluesky.callbacks.zmq import Publisher
+
                     publisher = Publisher(self._config["zmq_data_proxy_addr"])
                     self._RE.subscribe(publisher)
 

@@ -256,6 +256,7 @@ def start_manager():
         "If the path is a directory, then the default file name "
         "'user_group_permissions.yaml' is used.",
     )
+
     parser.add_argument("--kafka-topic", dest="kafka_topic", type=str, help="The kafka topic to publish to.")
     parser.add_argument(
         "--kafka-server",
@@ -264,6 +265,19 @@ def start_manager():
         help="Bootstrap server to connect to.",
         default="127.0.0.1:9092",
     )
+
+    parser.add_argument(
+        "--zmq-data-proxy-addr",
+        dest="zmq_data_proxy_addr",
+        type=str,
+        help="The address of ZMQ proxy used to publish data. If the parameter is specified, RE is "
+             "be subscribed to 'bluesky.callbacks.zmq.Publisher' and documents are published via 0MQ proxy. "
+             "0MQ Proxy (see Bluesky 0MQ documentation) should be started before plans could be executed. "
+             "The address should be in the form '127.0.0.1:5567' or 'localhost:5567'. The address is passed "
+             "to 'bluesky.callbacks.zmq.Publisher'. It is recommended to avoid using 0MQ proxy in production "
+             "data acquisition systems and use Kafka instead."
+    )
+
     parser.add_argument(
         "--keep-re",
         dest="keep_re",
@@ -299,6 +313,9 @@ def start_manager():
         config_worker["kafka"] = {}
         config_worker["kafka"]["topic"] = args.kafka_topic
         config_worker["kafka"]["bootstrap"] = args.kafka_server
+
+    if args.zmq_data_proxy_addr is not None:
+        config_worker["zmq_data_proxy_addr"] = args.zmq_data_proxy_addr
 
     startup_dir, startup_module_name, startup_script_path = None, None, None
 

@@ -478,8 +478,8 @@ Parameters    **plan or instruction**: *dict*
                   the name of the user group (e.g. 'admin').
 
               **user**: *str*
-                  the name of the user (e.g. 'John Doe'). The name is included in the plan metadata
-                  and may be used to identify the user who added the plan to the queue. It is not
+                  the name of the user (e.g. 'John Doe'). The name is included in the item metadata
+                  and may be used to identify the user who added the item to the queue. It is not
                   passed to the Run Engine or included in run metadata.
 
               **pos**: *int*, *'front'* or *'back'* (optional)

@@ -474,6 +474,14 @@ Parameters    **plan or instruction**: *dict*
                   the dictionary of plan or instruction parameters. Plans are distinguished from
                   instructions based on whether 'plan' or 'instruction' parameter is included.
 
+              **user_group**: *str*
+                  the name of the user group (e.g. 'admin').
+
+              **user**: *str*
+                  the name of the user (e.g. 'John Doe'). The name is included in the plan metadata
+                  and may be used to identify the user who added the plan to the queue. It is not
+                  not passed to the Run Engine or included in run metadata.
+
               **pos**: *int*, *'front'* or *'back'* (optional)
                   position of the item in the queue. RE Manager will attempt to insert the item
                   at the specified position. The position may be positive or negative (counted

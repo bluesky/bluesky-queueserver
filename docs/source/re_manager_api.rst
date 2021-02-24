@@ -480,7 +480,7 @@ Parameters    **plan or instruction**: *dict*
               **user**: *str*
                   the name of the user (e.g. 'John Doe'). The name is included in the plan metadata
                   and may be used to identify the user who added the plan to the queue. It is not
-                  not passed to the Run Engine or included in run metadata.
+                  passed to the Run Engine or included in run metadata.
 
               **pos**: *int*, *'front'* or *'back'* (optional)
                   position of the item in the queue. RE Manager will attempt to insert the item

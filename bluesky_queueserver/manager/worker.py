@@ -19,7 +19,7 @@ from .profile_ops import (
     plans_from_nspace,
     devices_from_nspace,
     load_allowed_plans_and_devices,
-    parse_plan,
+    prepare_plan,
 )
 
 logger = logging.getLogger(__name__)
@@ -175,7 +175,7 @@ class RunEngineWorker(Process):
         logger.info("Starting a plan '%s'.", plan_info["name"])
 
         try:
-            plan_parsed = parse_plan(
+            plan_parsed = prepare_plan(
                 plan_info, allowed_plans=self._existing_plans, allowed_devices=self._existing_devices
             )
 
@@ -452,7 +452,7 @@ class RunEngineWorker(Process):
             status = "accepted"
         else:
             status = "rejected"
-            err_msg = "Run Engine must be in 'idle' state to continue. " f"The state is '{self._RE._state}'"
+            err_msg = f"Run Engine must be in 'idle' state to continue. The state is '{self._RE._state}'"
 
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out

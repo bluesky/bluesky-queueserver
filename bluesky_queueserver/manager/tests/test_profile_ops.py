@@ -24,7 +24,7 @@ from bluesky_queueserver.manager.profile_ops import (
     load_worker_startup_code,
     plans_from_nspace,
     devices_from_nspace,
-    parse_plan,
+    prepare_plan,
     gen_list_of_plans_and_devices,
     load_existing_plans_and_devices,
     load_user_group_permissions,
@@ -1054,13 +1054,13 @@ def test_parse_plan(plan, success, err_msg):
     devices = devices_from_nspace(nspace)
 
     if success:
-        plan_parsed = parse_plan(plan, allowed_plans=plans, allowed_devices=devices)
+        plan_parsed = prepare_plan(plan, allowed_plans=plans, allowed_devices=devices)
         expected_keys = ("name", "args", "kwargs")
         for k in expected_keys:
             assert k in plan_parsed, f"Key '{k}' does not exist: {plan_parsed.keys()}"
     else:
         with pytest.raises(RuntimeError, match=err_msg):
-            parse_plan(plan, allowed_plans=plans, allowed_devices=devices)
+            prepare_plan(plan, allowed_plans=plans, allowed_devices=devices)
 
 
 def test_gen_list_of_plans_and_devices_1(tmp_path):

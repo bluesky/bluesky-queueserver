@@ -448,9 +448,9 @@ def devices_from_nspace(nspace):
     return devices
 
 
-def parse_plan(plan, *, allowed_plans, allowed_devices):
+def prepare_plan(plan, *, allowed_plans, allowed_devices):
     """
-    Parse the plan: replace the device names (str) in the plan specification by
+    Prepare the plan: replace the device names (str) in the plan specification by
     references to ophyd objects; replace plan name by the reference to the plan.
 
     Parameters
@@ -535,13 +535,13 @@ def parse_plan(plan, *, allowed_plans, allowed_devices):
     if not success:
         raise RuntimeError(f"Error while parsing the plan: {err_msg}")
 
-    plan_parsed = {
+    plan_prepared = {
         "name": plan_func,
         "args": plan_args_parsed,
         "kwargs": plan_kwargs_parsed,
         "meta": plan_meta,
     }
-    return plan_parsed
+    return plan_prepared
 
 
 # ===============================================================================
@@ -1125,7 +1125,16 @@ def _prepare_devices(devices):
     """
     Prepare dictionary of existing devices for saving to YAML file.
     """
-    return {k: {"classname": type(v).__name__, "module": type(v).__module__} for k, v in devices.items()}
+    from bluesky.utils import is_movable
+
+    return {
+        k: {
+            "is_movable": is_movable(v),  # True - motor, False - detector
+            "classname": type(v).__name__,
+            "module": type(v).__module__,
+        }
+        for k, v in devices.items()
+    }
 
 
 def _unpickle_types(existing_dict):

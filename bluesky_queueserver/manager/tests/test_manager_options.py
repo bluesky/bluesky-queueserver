@@ -180,13 +180,14 @@ def test_manager_acq_with_0MQ_proxy(re_manager_cmd, zmq_proxy, zmq_dispatcher): 
 @pytest.mark.parametrize("redis_addr, success", [
     ("localhost", True),
     ("localhost:6379", True),
-    ("localhost:6378", False)])
+    ("localhost:6378", False)])  # Incorrect port.
 # fmt: on
 def test_manager_redis_addr_parameter(re_manager_cmd, redis_addr, success):  # noqa: F811
     if success:
         re_manager_cmd(["--redis-addr", redis_addr])
 
         # Try to communicate with the server to make sure Redis is configure correctly.
+        #   RE Manager has to access Redis in order to prepare 'status'.
         resp1, _ = zmq_single_request("status")
         assert resp1["items_in_queue"] == 0
         assert resp1["items_in_history"] == 0

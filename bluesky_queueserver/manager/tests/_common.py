@@ -335,6 +335,15 @@ class ReManager:
 
             self._p = None
 
+    def kill_manager(self):
+        """
+        Kill the subprocess running RE Manager. Use only to stop RE Manager that failed to start correctly.
+        The operation will always succeed.
+        """
+        if self._p:
+            self._p.kill()
+            clear_redis_pool()
+
 
 @pytest.fixture
 def re_manager_cmd():
@@ -347,26 +356,31 @@ def re_manager_cmd():
     ``re_manager_cmd(["-h"])`` - equivalent to ``start-re-manager -h``.
     """
     re = {"re": None}
+    failed_to_start = False
 
     def _create(params):
         """
         Create RE Manager. ``start-re-manager`` is called with command line parameters from
           the list ``params``.
         """
-        nonlocal re
+        nonlocal re, failed_to_start
         re["re"] = ReManager(params)
 
         # Wait until RE Manager is started. Raise exception if the server failed to start.
         if not wait_for_condition(time=10, condition=condition_manager_idle):
+            failed_to_start = True
             raise TimeoutError("Timeout: RE Manager failed to start.")
 
     def _close():
         """
         Close RE Manager if it exists.
         """
-        nonlocal re
+        nonlocal re, failed_to_start
         if re["re"] is not None:
-            re["re"].stop_manager()
+            if not failed_to_start:
+                re["re"].stop_manager()
+            else:
+                re["re"].kill_manager()
 
     def create_re_manager(params=None):
         params = params or []
@@ -384,13 +398,18 @@ def re_manager():
     Start RE Manager as a subprocess. Tests will communicate with RE Manager via ZeroMQ.
     """
     re = ReManager()
+    failed_to_start = False
 
     # Wait until RE Manager is started. Raise exception if the server failed to start.
     if not wait_for_condition(time=10, condition=condition_manager_idle):
+        failed_to_start = True
         raise TimeoutError("Timeout: RE Manager failed to start.")
 
     yield re  # Nothing to return
-    re.stop_manager()
+    if not failed_to_start:
+        re.stop_manager()
+    else:
+        re.kill_manager()
 
 
 @pytest.fixture
@@ -401,13 +420,18 @@ def re_manager_pc_copy(tmp_path):
     """
     pc_path = copy_default_profile_collection(tmp_path)
     re = ReManager(["--startup-dir", pc_path])
+    failed_to_start = False
 
     # Wait until RE Manager is started. Raise exception if the server failed to start.
     if not wait_for_condition(time=10, condition=condition_manager_idle):
+        failed_to_start = True
         raise TimeoutError("Timeout: RE Manager failed to start.")
 
     yield re, pc_path  # Location of the copy of the default profile collection.
-    re.stop_manager()
+    if not failed_to_start:
+        re.stop_manager()
+    else:
+        re.kill_manager()
 
 
 @pytest.fixture

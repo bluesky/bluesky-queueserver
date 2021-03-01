@@ -174,3 +174,22 @@ def test_manager_acq_with_0MQ_proxy(re_manager_cmd, zmq_proxy, zmq_dispatcher): 
     assert len(remote_accumulator) >= 2
     assert remote_accumulator[0][0] == "start"  # Start document
     assert remote_accumulator[-1][0] == "stop"  # Stop document
+
+
+# fmt: off
+@pytest.mark.parametrize("redis_addr, success", [
+    ("localhost", True),
+    ("localhost:6379", True),
+    ("localhost:6378", False)])
+# fmt: on
+def test_manager_redis_addr_parameter(re_manager_cmd, redis_addr, success):  # noqa: F811
+    if success:
+        re_manager_cmd(["--redis-addr", redis_addr])
+
+        # Try to communicate with the server to make sure Redis is configure correctly.
+        resp1, _ = zmq_single_request("status")
+        assert resp1["items_in_queue"] == 0
+        assert resp1["items_in_history"] == 0
+    else:
+        with pytest.raises(TimeoutError, match="RE Manager failed to start"):
+            re_manager_cmd(["--redis-addr", redis_addr])

@@ -199,15 +199,6 @@ def start_manager():
         help="The address of ZMQ server (control connection).",
     )
 
-    parser.add_argument(
-        "--redis-addr",
-        dest="redis_addr",
-        type=str,
-        default="localhost",
-        help="The address of Redis server (e.g. 'localhost', '127.0.0.1', 'localhost:6379'). "
-        "RE Manager will connect to Redis at 'localhost' by default.",
-    )
-
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--startup-dir",
@@ -264,6 +255,15 @@ def start_manager():
         "The path may be a relative path to the profile collection directory. "
         "If the path is a directory, then the default file name "
         "'user_group_permissions.yaml' is used.",
+    )
+
+    parser.add_argument(
+        "--redis-addr",
+        dest="redis_addr",
+        type=str,
+        default="localhost",
+        help="The address of Redis server (e.g. 'localhost', '127.0.0.1', 'localhost:6379'). "
+        "RE Manager will connect to Redis at 'localhost' by default.",
     )
 
     parser.add_argument("--kafka-topic", dest="kafka_topic", type=str, help="The kafka topic to publish to.")

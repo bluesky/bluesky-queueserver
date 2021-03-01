@@ -11,7 +11,6 @@ from .comms import PipeJsonRpcSendAsync, CommTimeoutError
 from .profile_ops import load_allowed_plans_and_devices, validate_plan
 from .plan_queue_ops import PlanQueueOperations
 
-
 import logging
 
 logger = logging.getLogger(__name__)

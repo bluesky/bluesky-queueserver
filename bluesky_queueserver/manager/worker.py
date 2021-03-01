@@ -22,6 +22,11 @@ from .profile_ops import (
     prepare_plan,
 )
 
+# TODO: Data Broker import fails in the worker process unless xarray is imported in the global namespace
+#       somewhere in the program (e.g. here) (with xarray==0.17.0). Everything worked fine with
+#       xarray==0.16.2. Why?
+import xarray  # noqa: F401
+
 logger = logging.getLogger(__name__)
 
 

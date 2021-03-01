@@ -199,6 +199,15 @@ def start_manager():
         help="The address of ZMQ server (control connection).",
     )
 
+    parser.add_argument(
+        "--redis-addr",
+        dest="redis_addr",
+        type=str,
+        default="localhost",
+        help="The address of Redis server (e.g. 'localhost', '127.0.0.1', 'localhost:6379'). "
+        "RE Manager will connect to Redis at 'localhost' by default.",
+    )
+
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--startup-dir",
@@ -431,6 +440,12 @@ def start_manager():
     config_manager["user_group_permissions_path"] = user_group_pd_path
 
     config_manager["zmq_addr"] = args.zmq_addr
+
+    redis_addr = args.redis_addr
+    if redis_addr.count(":") > 1:
+        logger.error(f"Redis address is incorrectly formatted: '{redis_addr}'")
+        return 1
+    config_manager["redis_addr"] = redis_addr
 
     wp = WatchdogProcess(config_worker=config_worker, config_manager=config_manager)
     try:

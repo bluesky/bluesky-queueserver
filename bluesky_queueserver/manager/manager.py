@@ -1266,6 +1266,7 @@ class RunEngineManager(Process):
             "environment_close": "_environment_close_handler",
             "environment_destroy": "_environment_destroy_handler",
             "queue_item_add": "_queue_item_add_handler",
+            # "queue_item_replace": "_queue_item_replace_handler",
             "queue_item_get": "_queue_item_get_handler",
             "queue_item_remove": "_queue_item_remove_handler",
             "queue_item_move": "_queue_item_move_handler",

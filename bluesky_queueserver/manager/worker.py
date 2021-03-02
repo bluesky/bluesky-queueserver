@@ -19,7 +19,7 @@ from .profile_ops import (
     plans_from_nspace,
     devices_from_nspace,
     load_allowed_plans_and_devices,
-    parse_plan,
+    prepare_plan,
 )
 
 logger = logging.getLogger(__name__)
@@ -76,7 +76,10 @@ class RunEngineWorker(Process):
         self._comm_to_manager = PipeJsonRpcReceive(conn=self._conn, name="RE Worker-Manager Comm")
 
         self._db = None
-        self._config = config or {}
+
+        # Note: 'self._config' is a private attribute of 'multiprocessing.Process'. Overriding
+        #   this variable may lead to unpredictable and hard to debug issues.
+        self._config_dict = config or {}
         self._allowed_plans, self._allowed_devices = {}, {}
 
         # The list of runs that were opened as part of execution of the currently running plan.
@@ -175,7 +178,7 @@ class RunEngineWorker(Process):
         logger.info("Starting a plan '%s'.", plan_info["name"])
 
         try:
-            plan_parsed = parse_plan(
+            plan_parsed = prepare_plan(
                 plan_info, allowed_plans=self._existing_plans, allowed_devices=self._existing_devices
             )
 
@@ -452,7 +455,7 @@ class RunEngineWorker(Process):
             status = "accepted"
         else:
             status = "rejected"
-            err_msg = "Run Engine must be in 'idle' state to continue. " f"The state is '{self._RE._state}'"
+            err_msg = f"Run Engine must be in 'idle' state to continue. The state is '{self._RE._state}'"
 
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
@@ -486,7 +489,6 @@ class RunEngineWorker(Process):
         by the `start` method.
         """
         success = True
-
         logging.basicConfig(level=logging.WARNING)
         logging.getLogger(__name__).setLevel(self._log_level)
 
@@ -524,10 +526,10 @@ class RunEngineWorker(Process):
         asyncio.set_event_loop(loop)
 
         try:
-            keep_re = self._config["keep_re"]
-            startup_dir = self._config.get("startup_dir", None)
-            startup_module_name = self._config.get("startup_module_name", None)
-            startup_script_path = self._config.get("startup_script_path", None)
+            keep_re = self._config_dict["keep_re"]
+            startup_dir = self._config_dict.get("startup_dir", None)
+            startup_module_name = self._config_dict.get("startup_module_name", None)
+            startup_script_path = self._config_dict.get("startup_script_path", None)
 
             self._re_namespace = load_worker_startup_code(
                 startup_dir=startup_dir,
@@ -553,8 +555,8 @@ class RunEngineWorker(Process):
 
         # Load lists of allowed plans and devices
         logger.info("Loading the lists of allowed plans and devices ...")
-        path_pd = self._config["existing_plans_and_devices_path"]
-        path_ug = self._config["user_group_permissions_path"]
+        path_pd = self._config_dict["existing_plans_and_devices_path"]
+        path_ug = self._config_dict["user_group_permissions_path"]
         try:
             self._allowed_plans, self._allowed_devices = load_allowed_plans_and_devices(
                 path_existing_plans_and_devices=path_pd, path_user_group_permissions=path_ug
@@ -571,14 +573,14 @@ class RunEngineWorker(Process):
                 # Make RE namespace available to the plan code.
                 global_user_namespace.set_user_namespace(user_ns=self._re_namespace, use_ipython=False)
 
-                if self._config["keep_re"]:
+                if self._config_dict["keep_re"]:
                     # Copy references from the namespace
                     self._RE = self._re_namespace["RE"]
                     self._db = self._re_namespace.get("RE", None)
                 else:
                     # Instantiate a new Run Engine and Data Broker (if needed)
                     md = {}
-                    if self._config["use_persistent_metadata"]:
+                    if self._config_dict["use_persistent_metadata"]:
                         # This code is temporarily copied from 'nslsii' before better solution for keeping
                         #   continuous sequence Run ID is found. TODO: continuous sequence of Run IDs.
                         directory = os.path.expanduser("~/.config/bluesky/md")
@@ -600,8 +602,8 @@ class RunEngineWorker(Process):
 
                     # Subscribe RE to databroker if config file name is provided
                     self._db = None
-                    if "databroker" in self._config:
-                        config_name = self._config["databroker"].get("config", None)
+                    if "databroker" in self._config_dict:
+                        config_name = self._config_dict["databroker"].get("config", None)
                         if config_name:
                             logger.info("Subscribing RE to Data Broker using configuration '%s'.", config_name)
                             from databroker import Broker
@@ -616,15 +618,15 @@ class RunEngineWorker(Process):
                 run_reg_cb = CallbackRegisterRun(run_list=self._active_run_list)
                 self._RE.subscribe(run_reg_cb)
 
-                if "kafka" in self._config:
+                if "kafka" in self._config_dict:
                     logger.info(
                         "Subscribing to Kafka: topic '%s', servers '%s'",
-                        self._config["kafka"]["topic"],
-                        self._config["kafka"]["bootstrap"],
+                        self._config_dict["kafka"]["topic"],
+                        self._config_dict["kafka"]["bootstrap"],
                     )
                     kafka_publisher = kafkaPublisher(
-                        topic=self._config["kafka"]["topic"],
-                        bootstrap_servers=self._config["kafka"]["bootstrap"],
+                        topic=self._config_dict["kafka"]["topic"],
+                        bootstrap_servers=self._config_dict["kafka"]["bootstrap"],
                         key="kafka-unit-test-key",
                         # work with a single broker
                         producer_config={"acks": 1, "enable.idempotence": False, "request.timeout.ms": 5000},
@@ -632,10 +634,10 @@ class RunEngineWorker(Process):
                     )
                     self._RE.subscribe(kafka_publisher)
 
-                if "zmq_data_proxy_addr" in self._config:
+                if "zmq_data_proxy_addr" in self._config_dict:
                     from bluesky.callbacks.zmq import Publisher
 
-                    publisher = Publisher(self._config["zmq_data_proxy_addr"])
+                    publisher = Publisher(self._config_dict["zmq_data_proxy_addr"])
                     self._RE.subscribe(publisher)
 
                 self._execution_queue = queue.Queue()

@@ -257,6 +257,15 @@ def start_manager():
         "'user_group_permissions.yaml' is used.",
     )
 
+    parser.add_argument(
+        "--redis-addr",
+        dest="redis_addr",
+        type=str,
+        default="localhost",
+        help="The address of Redis server (e.g. 'localhost', '127.0.0.1', 'localhost:6379'). "
+        "RE Manager will connect to Redis at 'localhost' by default.",
+    )
+
     parser.add_argument("--kafka-topic", dest="kafka_topic", type=str, help="The kafka topic to publish to.")
     parser.add_argument(
         "--kafka-server",
@@ -431,6 +440,12 @@ def start_manager():
     config_manager["user_group_permissions_path"] = user_group_pd_path
 
     config_manager["zmq_addr"] = args.zmq_addr
+
+    redis_addr = args.redis_addr
+    if redis_addr.count(":") > 1:
+        logger.error(f"Redis address is incorrectly formatted: '{redis_addr}'")
+        return 1
+    config_manager["redis_addr"] = redis_addr
 
     wp = WatchdogProcess(config_worker=config_worker, config_manager=config_manager)
     try:

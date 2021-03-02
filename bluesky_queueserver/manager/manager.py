@@ -11,7 +11,6 @@ from .comms import PipeJsonRpcSendAsync, CommTimeoutError
 from .profile_ops import load_allowed_plans_and_devices, validate_plan
 from .plan_queue_ops import PlanQueueOperations
 
-
 import logging
 
 logger = logging.getLogger(__name__)
@@ -91,6 +90,10 @@ class RunEngineManager(Process):
             self._ip_zmq_server = config["zmq_addr"]
         logger.info("Starting ZMQ server at '%s'", self._ip_zmq_server)
 
+        self._ip_redis_server = "localhost"
+        if config and ("redis_addr" in config):
+            self._ip_redis_server = config["redis_addr"]
+
         self._plan_queue = None  # Object of class plan_queue_ops.PlanQueueOperations
 
         self._heartbeat_generator_task = None  # Task for heartbeat generator
@@ -107,7 +110,9 @@ class RunEngineManager(Process):
         self._background_task = None  # asyncio.Task
         self._background_task_status = {"status": "success", "err_msg": ""}
 
-        self._config = config or {}
+        # Note: 'self._config' is a private attribute of 'multiprocessing.Process'. Overriding
+        #   this variable may lead to unpredictable and hard to debug issues.
+        self._config_dict = config or {}
         self._allowed_plans, self._allowed_devices = {}, {}
 
     async def _heartbeat_generator(self):
@@ -593,8 +598,8 @@ class RunEngineManager(Process):
         Load the list of allowed plans and devices
         """
         try:
-            path_pd = self._config["existing_plans_and_devices_path"]
-            path_ug = self._config["user_group_permissions_path"]
+            path_pd = self._config_dict["existing_plans_and_devices_path"]
+            path_ug = self._config_dict["user_group_permissions_path"]
             self._allowed_plans, self._allowed_devices = load_allowed_plans_and_devices(
                 path_existing_plans_and_devices=path_pd, path_user_group_permissions=path_ug
             )
@@ -1266,6 +1271,7 @@ class RunEngineManager(Process):
             "environment_close": "_environment_close_handler",
             "environment_destroy": "_environment_destroy_handler",
             "queue_item_add": "_queue_item_add_handler",
+            # "queue_item_replace": "_queue_item_replace_handler",
             "queue_item_get": "_queue_item_get_handler",
             "queue_item_remove": "_queue_item_remove_handler",
             "queue_item_move": "_queue_item_move_handler",
@@ -1323,7 +1329,7 @@ class RunEngineManager(Process):
         self._heartbeat_generator_task = asyncio.ensure_future(self._heartbeat_generator(), loop=self._loop)
         self._worker_status_task = asyncio.ensure_future(self._periodic_worker_state_request(), loop=self._loop)
 
-        self._plan_queue = PlanQueueOperations()
+        self._plan_queue = PlanQueueOperations(redis_host=self._ip_redis_server)
         await self._plan_queue.start()
 
         # Delete Redis entries (for testing and debugging)

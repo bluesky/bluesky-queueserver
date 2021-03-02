@@ -110,7 +110,9 @@ class RunEngineManager(Process):
         self._background_task = None  # asyncio.Task
         self._background_task_status = {"status": "success", "err_msg": ""}
 
-        self._config = config or {}
+        # Note: 'self._config' is a private attribute of 'multiprocessing.Process'. Overriding
+        #   this variable may lead to unpredictable and hard to debug issues.
+        self._config_dict = config or {}
         self._allowed_plans, self._allowed_devices = {}, {}
 
     async def _heartbeat_generator(self):
@@ -596,8 +598,8 @@ class RunEngineManager(Process):
         Load the list of allowed plans and devices
         """
         try:
-            path_pd = self._config["existing_plans_and_devices_path"]
-            path_ug = self._config["user_group_permissions_path"]
+            path_pd = self._config_dict["existing_plans_and_devices_path"]
+            path_ug = self._config_dict["user_group_permissions_path"]
             self._allowed_plans, self._allowed_devices = load_allowed_plans_and_devices(
                 path_existing_plans_and_devices=path_pd, path_user_group_permissions=path_ug
             )

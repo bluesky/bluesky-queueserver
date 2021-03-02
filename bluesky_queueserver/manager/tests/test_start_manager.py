@@ -22,7 +22,7 @@ class ReManagerEmulation(threading.Thread):
         self._restart = False
         self._send_heartbeat = True
         self._lock = threading.Lock()
-        self._config = config or {}
+        self._config_dict = config or {}
         self._log_level = log_level
 
     def _heartbeat(self):
@@ -98,7 +98,7 @@ class ReManagerEmulation(threading.Thread):
 class ReWorkerEmulation(threading.Thread):
     def __init__(self, *args, conn, config=None, log_level="DEBUG", **kwargs):
         super().__init__(*args, **kwargs)
-        self._config = config or {}
+        self._config_dict = config or {}
         self._exit = False
         self.n_loops = 0
         self._log_level = log_level
@@ -273,8 +273,8 @@ def test_WatchdogProcess_6():
     assert response["success"] is True, "Unexpected response from RE Manager"
 
     # Check if configuration was set correctly in RE Worker and RE manager
-    assert wp._re_worker._config == config_worker, "Worker configuration was not passed correctly"
-    assert wp._re_manager._config == config_manager, "Manager configuration was not passed correctly"
+    assert wp._re_worker._config_dict == config_worker, "Worker configuration was not passed correctly"
+    assert wp._re_manager._config_dict == config_manager, "Manager configuration was not passed correctly"
 
     # Exit the process (thread).
     wp._re_worker.exit()

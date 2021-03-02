@@ -493,6 +493,7 @@ class RunEngineWorker(Process):
         logging.getLogger(__name__).setLevel(self._log_level)
 
         from .profile_tools import set_re_worker_active, clear_re_worker_active
+
         # Set the environment variable indicating that RE Worker is active. Status may be
         #   checked using 'is_re_worker_active()' in startup scripts or modules.
         set_re_worker_active()

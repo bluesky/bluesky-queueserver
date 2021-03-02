@@ -1202,6 +1202,8 @@ def gen_list_of_plans_and_devices(
     RuntimeError
         Error occurred while creating or saving the lists.
     """
+    from .profile_tools import set_re_worker_active, clear_re_worker_active
+
     file_name = file_name or "existing_plans_and_devices.yaml"
     try:
         if file_dir is None:
@@ -1209,6 +1211,8 @@ def gen_list_of_plans_and_devices(
 
         if sum([_ is None for _ in [startup_dir, startup_module_name, startup_script_path]]) != 2:
             raise ValueError("Source of the startup code was not specified or multiple sources were specified.")
+
+        set_re_worker_active()
 
         nspace = load_worker_startup_code(
             startup_dir=startup_dir,
@@ -1233,6 +1237,9 @@ def gen_list_of_plans_and_devices(
 
     except Exception as ex:
         raise RuntimeError(f"Failed to create the list of plans and devices: {str(ex)}")
+
+    finally:
+        clear_re_worker_active()
 
 
 def gen_list_of_plans_and_devices_cli():

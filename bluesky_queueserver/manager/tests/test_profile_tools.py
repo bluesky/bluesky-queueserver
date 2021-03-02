@@ -2,9 +2,29 @@ import os
 import inspect
 import pytest
 
-from ._common import copy_default_profile_collection, patch_first_startup_file
-from bluesky_queueserver.manager.profile_tools import global_user_namespace, load_devices_from_happi
-from bluesky_queueserver.manager.profile_ops import load_profile_collection
+from bluesky_queueserver.manager.profile_tools import (
+    global_user_namespace,
+    load_devices_from_happi,
+    set_re_worker_active,
+    clear_re_worker_active,
+    is_re_worker_active,
+)
+from bluesky_queueserver.manager.profile_ops import load_profile_collection, gen_list_of_plans_and_devices
+
+from ..comms import zmq_single_request
+
+from ._common import (
+    wait_for_condition,
+    condition_environment_created,
+    condition_environment_closed,
+    condition_manager_idle,
+    copy_default_profile_collection,
+    patch_first_startup_file,
+)
+from ._common import re_manager_pc_copy  # noqa: F401
+
+# User name and user group name used throughout most of the tests.
+_user, _user_group = "Testing Script", "admin"
 
 
 def create_local_imports_files(tmp_path):
@@ -344,3 +364,131 @@ def test_load_devices_from_happi_2_fail(tmp_path, monkeypatch):
     # Incorrect type of 'namespace' parameter
     with pytest.raises(TypeError, match="Parameter 'namespace' must be a dictionary"):
         load_devices_from_happi(["det", "motor"], namespace=[1, 2, 3])
+
+
+def test_is_re_worker_active_1(monkeypatch):  # noqa: F811
+    """
+    Basic tests for ``set_re_worker_active``, ``clear_re_worker_active`` and ``is_re_worker_active`` functions.
+    """
+    monkeypatch.setattr(os, "environ", os.environ.copy())
+    assert is_re_worker_active() is False
+    set_re_worker_active()
+    assert is_re_worker_active() is True
+    clear_re_worker_active()
+    assert is_re_worker_active() is False
+
+
+def create_local_imports_dir(pc_path):
+    path1 = os.path.join(pc_path, "dir1")
+    fln1 = os.path.join(path1, "file1.py")
+
+    os.makedirs(path1, exist_ok=True)
+
+    # Create file1
+    code1 = """
+from bluesky_queueserver.manager.profile_tools import is_re_worker_active
+
+# Executed during import
+if not is_re_worker_active():
+    raise Exception("Importing module 'file1': RE Worker is not detected as active")
+
+def f1():
+    if not is_re_worker_active():
+        raise Exception("Function f1: RE Worker is not detected as active")
+    return True
+"""
+    with open(fln1, "w") as f:
+        f.writelines(code1)
+
+
+_code_patch1 = """
+from ophyd.sim import det1, det2
+from bluesky.plans import count
+
+from bluesky_queueserver.manager.profile_tools import is_re_worker_active
+from dir1.file1 import f1
+
+# Executed during import
+if not is_re_worker_active():
+    raise Exception("Importing startup script: RE Worker is not detected as active")
+
+def sim_plan_1():
+    '''
+    Simple plan for tests.
+    '''
+    if f1() is not True:
+        raise Exception("sim_plan_1: Function 'f1' did not return correct result.")
+
+    if not is_re_worker_active():
+        raise Exception("sim_plan_1: RE Worker is not detected as active")
+
+    yield from count([det1, det2])
+"""
+
+
+def test_is_re_worker_active_2(re_manager_pc_copy, tmp_path, monkeypatch):  # noqa: F811
+    """
+    Test that ``is_re_worker_active()`` API is working as expected in startup scripts.
+    The sample startup scripts are modified to call ``is_re_worker_active()`` during import
+    and during execution of a plan. The script is also importing the local module, which
+    is calling the API during import and in the body of a function that is called during
+    the plan execution. Two modes of operation are tested: (1) loading the profile collection
+    in the current process (``gen_list_of_plans_and_devices`` function); (2) loading
+    of startup profile collection and execution of the plan in RE Worker environment.
+    """
+    monkeypatch.setattr(os, "environ", os.environ.copy())
+
+    pc_path = copy_default_profile_collection(tmp_path)
+    create_local_imports_dir(pc_path)
+
+    patch_first_startup_file(pc_path, _code_patch1)
+
+    # Make sure that 'is_re_worker_active()' works as expected when the list of plans and devices is
+    #   created (profile collection is loaded in the current process).
+    assert is_re_worker_active() is False
+    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, overwrite=True)
+    assert is_re_worker_active() is False  # Make sure that that 'active' state is cleared
+
+    # Open environment and execute plan 'sim_plan_1'
+    resp1, _ = zmq_single_request("permissions_reload")
+    assert resp1["success"] is True, f"resp={resp1}"
+
+    # Add plan to the queue
+    params = {"plan": {"name": "sim_plan_1"}, "user": _user, "user_group": _user_group}
+    resp2, _ = zmq_single_request("queue_item_add", params)
+    assert resp2["success"] is True, f"resp={resp2}"
+
+    # Open the environment
+    resp3, _ = zmq_single_request("environment_open")
+    assert resp3["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    # Make sure that the status is not set in the current process
+    assert is_re_worker_active() is False
+
+    # Make sure that the run is in the queue and the history is empty
+    status, _ = zmq_single_request("status")
+    assert status["items_in_queue"] == 1
+    assert status["items_in_history"] == 0
+
+    # Start the queue
+    resp4, _ = zmq_single_request("queue_start")
+    assert resp4["success"] is True
+
+    assert wait_for_condition(time=5, condition=condition_manager_idle)
+
+    # Make sure that the run was executed successfully
+    status, _ = zmq_single_request("status")
+    assert status["items_in_queue"] == 0
+    assert status["items_in_history"] == 1
+
+    # Make sure that plan was completed successfully
+    resp5, _ = zmq_single_request("history_get")
+    assert resp5["success"] is True
+    history = resp5["history"]
+    assert history[-1]["result"]["exit_status"] == "completed"
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)

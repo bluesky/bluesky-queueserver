@@ -301,7 +301,7 @@ def set_re_worker_active():
     Subsequent calls to ``is_re_worker_active`` in the current process will return ``True``.
     This function should not be used in the startup scripts.
     """
-    os.environ[_env_re_worker_active] = True
+    os.environ[_env_re_worker_active] = ""
 
 
 def clear_re_worker_active():
@@ -338,4 +338,4 @@ def is_re_worker_active():
     boolean
         ``True`` - the code is executed in RE Worker environment, otherwise ``False``.
     """
-    return bool(os.environ.get(_env_re_worker_active, False))
+    return _env_re_worker_active in os.environ

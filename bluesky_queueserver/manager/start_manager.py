@@ -386,7 +386,7 @@ def start_manager():
         # Check if startup script exists (if it is specified)
         if startup_script_path is not None:
             if not os.path.isfile(startup_script_path):
-                logger.error("The script '{startup_script_path}' is not found.")
+                logger.error(f"The script '{startup_script_path}' is not found.")
                 return 1
 
     config_worker["keep_re"] = args.keep_re

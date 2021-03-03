@@ -1,6 +1,7 @@
 import os
 import inspect
 import pytest
+import sys
 
 from bluesky_queueserver.manager.profile_tools import (
     global_user_namespace,
@@ -21,7 +22,7 @@ from ._common import (
     copy_default_profile_collection,
     patch_first_startup_file,
 )
-from ._common import re_manager_pc_copy  # noqa: F401
+from ._common import re_manager_cmd  # noqa: F401
 
 # User name and user group name used throughout most of the tests.
 _user, _user_group = "Testing Script", "admin"
@@ -378,30 +379,30 @@ def test_is_re_worker_active_1(monkeypatch):  # noqa: F811
     assert is_re_worker_active() is False
 
 
-def create_local_imports_dir(pc_path):
-    path1 = os.path.join(pc_path, "dir1")
-    fln1 = os.path.join(path1, "file1.py")
-
-    os.makedirs(path1, exist_ok=True)
-
-    # Create file1
-    code1 = """
-from bluesky_queueserver.manager.profile_tools import is_re_worker_active
-
-# Executed during import
-if not is_re_worker_active():
-    raise Exception("Importing module 'file1': RE Worker is not detected as active")
-
-def f1():
-    if not is_re_worker_active():
-        raise Exception("Function f1: RE Worker is not detected as active")
-    return True
+# Minimalistic user permissions sufficient to start RE Manager
+_user_groups_text = r"""user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - null  # Allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - null  # Allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - null  # Allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - null  # Allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
 """
-    with open(fln1, "w") as f:
-        f.writelines(code1)
 
 
-_code_patch1 = """
+_startup_script_1 = """
 from ophyd.sim import det1, det2
 from bluesky.plans import count
 
@@ -426,7 +427,33 @@ def sim_plan_1():
 """
 
 
-def test_is_re_worker_active_2(re_manager_pc_copy, tmp_path, monkeypatch):  # noqa: F811
+def create_local_imports_dir(pc_path):
+    path1 = os.path.join(pc_path, "dir1")
+    fln1 = os.path.join(path1, "file1.py")
+
+    os.makedirs(path1, exist_ok=True)
+
+    # Create file1
+    code1 = """
+from bluesky_queueserver.manager.profile_tools import is_re_worker_active
+
+# Executed during import
+if not is_re_worker_active():
+    raise Exception("Importing module 'file1': RE Worker is not detected as active")
+
+def f1():
+    if not is_re_worker_active():
+        raise Exception("Function f1: RE Worker is not detected as active")
+    return True
+"""
+    with open(fln1, "w") as f:
+        f.writelines(code1)
+
+
+# fmt: off
+@pytest.mark.parametrize("option", ["startup_dir", "script", "module"])
+# fmt: on
+def test_is_re_worker_active_2(re_manager_cmd, tmp_path, monkeypatch, option):  # noqa: F811
     """
     Test that ``is_re_worker_active()`` API is working as expected in startup scripts.
     The sample startup scripts are modified to call ``is_re_worker_active()`` during import
@@ -438,16 +465,61 @@ def test_is_re_worker_active_2(re_manager_pc_copy, tmp_path, monkeypatch):  # no
     """
     monkeypatch.setattr(os, "environ", os.environ.copy())
 
-    pc_path = copy_default_profile_collection(tmp_path)
-    create_local_imports_dir(pc_path)
+    # Load first script
+    script_dir = os.path.join(tmp_path, "script_dir1")
+    script_path = os.path.join(script_dir, "startup_script.py")
 
-    patch_first_startup_file(pc_path, _code_patch1)
+    os.makedirs(script_dir, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(_startup_script_1)
+
+    create_local_imports_dir(script_dir)
+
+    path_user_permissions = os.path.join(script_dir, "user_group_permissions.yaml")
+    with open(path_user_permissions, "w") as f:
+        f.writelines(_user_groups_text)
+
+    path_existing_plans_and_devices = os.path.join(script_dir, "existing_plans_and_devices.yaml")
 
     # Make sure that 'is_re_worker_active()' works as expected when the list of plans and devices is
     #   created (profile collection is loaded in the current process).
     assert is_re_worker_active() is False
-    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, overwrite=True)
+    if option == "startup_dir":
+        gen_list_of_plans_and_devices(startup_dir=script_dir, file_dir=script_dir, overwrite=True)
+    elif option == "script":
+        gen_list_of_plans_and_devices(startup_script_path=script_path, file_dir=script_dir, overwrite=True)
+    elif option == "module":
+        # Temporarily add module to the search path
+        sys_path = sys.path
+        monkeypatch.setattr(sys, "path", [str(tmp_path)] + sys_path)
+        gen_list_of_plans_and_devices(
+            startup_module_name="script_dir1.startup_script", file_dir=script_dir, overwrite=True
+        )
+    else:
+        assert False, f"Unknown option '{option}'"
     assert is_re_worker_active() is False  # Make sure that that 'active' state is cleared
+
+    if option == "startup_dir":
+        re_manager_cmd(["--startup-dir", script_dir])
+    elif option == "script":
+        re_manager_cmd(
+            [
+                "--startup-script",
+                script_path,
+                "--user-group-permissions",
+                path_user_permissions,
+                "--existing-plans-devices",
+                path_existing_plans_and_devices,
+            ]
+        )
+    elif option == "module":
+        # Unfortunately, there seems to be no way to continue with the rest of the test,
+        #   because RE Manager can load only the installed modules. In this test we successfully
+        #   loaded the module in `gen_list_of_plans_and_devices()`, so let's consider it
+        #   a success and interrupt the test.
+        return
+    else:
+        assert False, f"Unknown option '{option}'"
 
     # Open environment and execute plan 'sim_plan_1'
     resp1, _ = zmq_single_request("permissions_reload")

@@ -293,7 +293,7 @@ class StartupLoadingError(Exception):
     ...
 
 
-def load_startup_script(script_path, *, keep_re=False, enable_local_imports=False):
+def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True):
     """
     Populate namespace by import a module.
 

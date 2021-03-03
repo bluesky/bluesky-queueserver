@@ -513,10 +513,21 @@ def test_is_re_worker_active_2(re_manager_cmd, tmp_path, monkeypatch, option):  
             ]
         )
     elif option == "module":
-        # Unfortunately, there seems to be no way to continue with the rest of the test,
-        #   because RE Manager can load only the installed modules. In this test we successfully
-        #   loaded the module in `gen_list_of_plans_and_devices()`, so let's consider it
-        #   a success and interrupt the test.
+        # The manager will still start, but the environment can not load, because
+        #   the module 'script_dir1.startup_script' is not installed.
+        re_manager_cmd(
+            [
+                "--startup-module",
+                "script_dir1.startup_script",
+                "--user-group-permissions",
+                path_user_permissions,
+                "--existing-plans-devices",
+                path_existing_plans_and_devices,
+            ]
+        )
+        # Since the environment can not be loaded, the rest of the test will not work.
+        #   We successfully loaded the module in `gen_list_of_plans_and_devices()`, so
+        #   let's consider it success and interrupt the test.
         return
     else:
         assert False, f"Unknown option '{option}'"

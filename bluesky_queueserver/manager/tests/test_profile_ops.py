@@ -1046,7 +1046,7 @@ def test_devices_from_nspace():
         ),
     ],
 )
-def test_parse_plan(plan, success, err_msg):
+def test_prepare_plan(plan, success, err_msg):
 
     pc_path = get_default_startup_dir()
     nspace = load_profile_collection(pc_path)

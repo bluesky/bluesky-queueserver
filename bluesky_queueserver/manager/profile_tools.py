@@ -1,6 +1,7 @@
 import functools
 import inspect
 import re
+import os
 
 
 class UserNamespace:
@@ -289,3 +290,52 @@ def load_devices_from_happi(device_names, *, namespace, **kwargs):
     ns_dict = ns.__dict__
     namespace.update(ns_dict)
     return list(ns_dict)
+
+
+_env_re_worker_active = "QSERVER_RE_WORKER_ACTIVE"
+
+
+def set_re_worker_active():
+    """
+    Set the environment variable used to determine if the current process is RE Worker process.
+    Subsequent calls to ``is_re_worker_active`` in the current process will return ``True``.
+    This function should not be used in the startup scripts.
+    """
+    os.environ[_env_re_worker_active] = "1"
+
+
+def clear_re_worker_active():
+    """
+    Clear the environment variable used to determine if the current process is RE Worker process.
+    Subsequent calls to ``is_re_worker_active`` in the current process will return ``False``.
+    This function should not be used in the startup scripts.
+    """
+    if _env_re_worker_active in os.environ:
+        del os.environ[_env_re_worker_active]
+
+
+def is_re_worker_active():
+    """
+    The function can be used in startup scripts or modules to check if the script is imported or
+    executed in RE Worker environment. For example, an experimental plan may contain interactive
+    features that should be disabled if the plan is executed remotely:
+
+    .. code-block:: python
+
+        from bluesky_queueserver.manager.profile_tools import is_re_worker_active
+
+        ...
+
+        if is_re_worker_active():
+            (code without interactive features, e.g. reading data from a file)
+        else:
+            (code with interactive features, e.g. manual data input)
+
+        ...
+
+    Returns
+    -------
+    boolean
+        ``True`` - the code is executed in RE Worker environment, otherwise ``False``.
+    """
+    return os.environ.get(_env_re_worker_active, "false").lower() not in ("false", "0", "")

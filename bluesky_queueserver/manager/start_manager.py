@@ -386,7 +386,7 @@ def start_manager():
         # Check if startup script exists (if it is specified)
         if startup_script_path is not None:
             if not os.path.isfile(startup_script_path):
-                logger.error("The script '{startup_script_path}' is not found.")
+                logger.error(f"The script '{startup_script_path}' is not found.")
                 return 1
 
     config_worker["keep_re"] = args.keep_re
@@ -403,7 +403,7 @@ def start_manager():
     default_existing_pd_fln = "existing_plans_and_devices.yaml"
     if args.existing_plans_and_devices_path:
         existing_pd_path = os.path.expanduser(args.existing_plans_and_devices_path)
-        if not os.path.isabs(existing_pd_path):
+        if not os.path.isabs(existing_pd_path) and startup_dir:
             existing_pd_path = os.path.join(startup_dir, existing_pd_path)
         if not existing_pd_path.endswith(".yaml"):
             existing_pd_path = os.path.join(existing_pd_path, default_existing_pd_fln)
@@ -420,7 +420,7 @@ def start_manager():
     default_user_group_pd_fln = "user_group_permissions.yaml"
     if args.user_group_permissions_path:
         user_group_pd_path = os.path.expanduser(args.user_group_permissions_path)
-        if not os.path.isabs(user_group_pd_path):
+        if not os.path.isabs(user_group_pd_path) and startup_dir:
             user_group_pd_path = os.path.join(startup_dir, user_group_pd_path)
         if not user_group_pd_path.endswith(".yaml"):
             user_group_pd_path = os.path.join(user_group_pd_path, default_user_group_pd_fln)

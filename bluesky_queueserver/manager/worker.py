@@ -492,6 +492,12 @@ class RunEngineWorker(Process):
         logging.basicConfig(level=logging.WARNING)
         logging.getLogger(__name__).setLevel(self._log_level)
 
+        from .profile_tools import set_re_worker_active, clear_re_worker_active
+
+        # Set the environment variable indicating that RE Worker is active. Status may be
+        #   checked using 'is_re_worker_active()' in startup scripts or modules.
+        set_re_worker_active()
+
         from .plan_monitoring import RunList, CallbackRegisterRun
 
         self._active_run_list = RunList()  # Initialization should be done before communication is enabled.
@@ -660,6 +666,10 @@ class RunEngineWorker(Process):
         # Wait until confirmation is received from RE Manager
         while not self._exit_confirmed_event.is_set():
             ttime.sleep(0.02)
+
+        # Clear the environment variable indicating that RE Worker is active. It is an optional step
+        #   since the process is about to close, but we still do it for consistency.
+        clear_re_worker_active()
 
         self._RE = None
 

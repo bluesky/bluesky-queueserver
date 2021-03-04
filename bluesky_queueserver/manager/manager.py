@@ -1010,10 +1010,11 @@ class RunEngineManager(Process):
             generate_new_uid = bool(request.get("replace", False))
             item, item_type, item_uid_original = self._prepare_item(request=request, generate_new_uid=generate_new_uid)
 
-            # item["item_uid"] will change if uid is replaced, but we still need 'original' uid
-            #   to update the correct item
-
+            # item["item_uid"] will change if uid is replaced, but we still need
+            #   'original' UID to update the correct item
+            item, qsize = await self._plan_queue.replace_item(item, item_uid=item_uid_original)
             success = True
+
         except Exception as ex:
             success = False
             msg = f"Failed to add an item: {str(ex)}"

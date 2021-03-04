@@ -292,6 +292,8 @@ def load_devices_from_happi(device_names, *, namespace, **kwargs):
     return list(ns_dict)
 
 
+# Name of the environment variable may change in the future. Use API to set/clear the variable.
+#   The variable name should not be included in the documentation.
 _env_re_worker_active = "QSERVER_RE_WORKER_ACTIVE"
 
 
@@ -338,4 +340,4 @@ def is_re_worker_active():
     boolean
         ``True`` - the code is executed in RE Worker environment, otherwise ``False``.
     """
-    return os.environ.get(_env_re_worker_active, "false").lower() not in ("n", "no", "f", "false", "off", "0", "")
+    return os.environ.get(_env_re_worker_active, "false").lower() not in ("", "n", "no", "f", "false", "off", "0")

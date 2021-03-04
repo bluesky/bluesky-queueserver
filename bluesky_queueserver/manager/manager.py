@@ -886,6 +886,75 @@ class RunEngineManager(Process):
 
         return {"success": True, "msg": "", "queue": plan_queue, "running_item": running_item}
 
+    def _get_item_from_request(self, *, request):
+        item_type = None
+        item_types = ("plan", "instruction")
+        for itype in item_types:
+            if itype in request:
+                item_type = itype
+                item = request[itype]
+                break
+        if item_type is None:
+            raise Exception(
+                "Incorrect request format: request contains no item info. "
+                f"Supported item types: {item_types}"
+            )
+        return item, item_type
+
+    def _get_user_info_from_request(self, *, request):
+        if "user_group" not in request:
+            raise Exception("Incorrect request format: user group is not specified")
+
+        if "user" not in request:
+            raise Exception("Incorrect request format: user name is not specified")
+
+        user = request["user"]
+        user_group = request["user_group"]
+
+        if user_group not in self._allowed_plans:
+            raise Exception(f"Unknown user group: '{user_group}'")
+
+        return user, user_group
+
+    def _prepare_item(self, *, request, generate_new_uid):
+        item, item_type = self._get_item_from_request(request=request)
+        user, user_group = self._get_user_info_from_request(request=request)
+
+        if item_type == "plan":
+            allowed_plans = self._allowed_plans[user_group] if self._allowed_plans else self._allowed_plans
+            allowed_devices = (
+                self._allowed_devices[user_group] if self._allowed_devices else self._allowed_devices
+            )
+            success, msg = validate_plan(item, allowed_plans=allowed_plans, allowed_devices=allowed_devices)
+        elif item_type == "instruction":
+            # At this point we support only one instruction ('queue_stop'), so validation is trivial.
+            if ("action" in item) and (item["action"] == "queue_stop"):
+                success, msg = True, ""
+            else:
+                success, msg = False, f"Unrecognized instruction: {item}"
+        else:
+            success, msg = False, f"Invalid item: {item}"
+
+        if not success:
+            raise Exception(msg)
+
+        item["item_type"] = item_type
+
+        # Add user name and user_id to the plan (for later reference)
+        item["user"] = user
+        item["user_group"] = user_group
+
+        # Preserve original item UID
+        item_uid_original = item.get("item_uid", None)
+
+        if generate_new_uid:
+            item["item_uid"] = PlanQueueOperations.new_item_uid()
+        else:
+            if "item_uid" not in item:
+                raise Exception("Item description contains no UID and UID generation is skipped")
+
+        return item, item_type, item_uid_original
+
     async def _queue_item_add_handler(self, request):
         """
         Adds new item to the the queue. Item may be a plan or an instruction. Request must
@@ -910,61 +979,12 @@ class RunEngineManager(Process):
         item_type, item, qsize, msg = None, None, None, ""
 
         try:
-            item_types = ("plan", "instruction")
-            for itype in item_types:
-                if itype in request:
-                    item_type = itype
-                    item = request[itype]
-                    break
-
-            if item_type is None:
-                raise Exception(
-                    "Incorrect request format: request contains no item info. "
-                    f"Supported item types: {item_types}"
-                )
-
-            if "user_group" not in request:
-                raise Exception("Incorrect request format: user group is not specified")
-
-            if "user" not in request:
-                raise Exception("Incorrect request format: user name is not specified")
-
-            user = request["user"]
-            user_group = request["user_group"]
-
-            if user_group not in self._allowed_plans:
-                raise Exception(f"Unknown user group: '{user_group}'")
+            # Always generate a new UID for the added plan!!!
+            item, item_type, _ = self._prepare_item(request=request, generate_new_uid=True)
 
             pos = request.get("pos", None)  # Position is optional
             before_uid = request.get("before_uid", None)
             after_uid = request.get("after_uid", None)
-
-            if item_type == "plan":
-                allowed_plans = self._allowed_plans[user_group] if self._allowed_plans else self._allowed_plans
-                allowed_devices = (
-                    self._allowed_devices[user_group] if self._allowed_devices else self._allowed_devices
-                )
-                success, msg = validate_plan(item, allowed_plans=allowed_plans, allowed_devices=allowed_devices)
-            elif item_type == "instruction":
-                # At this point we support only one instruction ('queue_stop'), so validation is trivial.
-                if ("action" in item) and (item["action"] == "queue_stop"):
-                    success, msg = True, ""
-                else:
-                    success, msg = False, f"Unrecognized instruction: {item}"
-            else:
-                success, msg = False, f"Invalid item: {item}"
-
-            if not success:
-                raise Exception(msg)
-
-            item["item_type"] = item_type
-
-            # Add user name and user_id to the plan (for later reference)
-            item["user"] = user
-            item["user_group"] = user_group
-
-            # Always generate a new UID for the added plan!!!
-            item["item_uid"] = PlanQueueOperations.new_item_uid()
 
             # Adding plan to queue may raise an exception
             item, qsize = await self._plan_queue.add_item_to_queue(
@@ -983,8 +1003,25 @@ class RunEngineManager(Process):
         return rdict
 
     async def _queue_item_update_handler(self, request):
-        success, msg, qsize, uid = True, "", 0, "some-uid"
-        rdict = {"success": success, "msg": msg, "qsize": qsize, "uid": uid}
+        success, msg, qsize = True, "", 0
+
+        try:
+            # Generate new UID if 'replace' flag is True, otherwise update the plan
+            generate_new_uid = bool(request.get("replace", False))
+            item, item_type, item_uid_original = self._prepare_item(request=request, generate_new_uid=generate_new_uid)
+
+            # item["item_uid"] will change if uid is replaced, but we still need 'original' uid
+            #   to update the correct item
+
+            success = True
+        except Exception as ex:
+            success = False
+            msg = f"Failed to add an item: {str(ex)}"
+
+        rdict = {"success": success, "msg": msg, "qsize": qsize}
+        if item_type:
+            rdict[item_type] = item
+
         return rdict
 
     async def _queue_item_get_handler(self, request):

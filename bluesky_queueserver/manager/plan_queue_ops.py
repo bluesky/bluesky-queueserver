@@ -608,6 +608,14 @@ class PlanQueueOperations:
         async with self._lock:
             return await self._add_item_to_queue(item, pos=pos, before_uid=before_uid, after_uid=after_uid)
 
+    async def _replace_item(self, item, *, item_uid):
+        qsize = 0
+        return item, qsize
+
+    async def replace_item(self, item, *, item_uid):
+        async with self._lock:
+            return await self._replace_item(item, item_uid=item_uid)
+
     async def _move_item(self, *, pos=None, uid=None, pos_dest=None, before_uid=None, after_uid=None):
         """
         See ``self.move_plan()`` method.

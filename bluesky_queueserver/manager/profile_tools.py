@@ -338,4 +338,4 @@ def is_re_worker_active():
     boolean
         ``True`` - the code is executed in RE Worker environment, otherwise ``False``.
     """
-    return os.environ.get(_env_re_worker_active, "false").lower() not in ("false", "0", "")
+    return os.environ.get(_env_re_worker_active, "false").lower() not in ("n", "no", "f", "false", "off", "0", "")

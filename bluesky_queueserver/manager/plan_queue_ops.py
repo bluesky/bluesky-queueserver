@@ -128,7 +128,8 @@ class PlanQueueOperations:
         """
         Verify that item (plan) structure is valid enough to be put in the queue.
         Current checks: item is a dictionary, ``item_uid`` key is present, Plan with the UID is not in
-        the queue or currently running. Ignore UIDs in the list ``ignore_uids``.
+        the queue or currently running. Ignore UIDs in the list ``ignore_uids``: those UIDs are expected
+        to be in the dictionary.
         """
         ignore_uids = ignore_uids or []
         self._verify_item_type(item)

@@ -98,14 +98,19 @@ def test_verify_item_type(pq, plan, result):
 
 # fmt: off
 @pytest.mark.parametrize(
-    "plan, result, errmsg",
-    [({"a": 10}, False, "Item does not have UID"),
-     ([10, 20], False, errmsg_wrong_plan_type),
-     ({"item_uid": "one"}, True, ""),
-     ({"item_uid": "two"}, False, "Item with UID .+ is already in the queue"),
-     ({"item_uid": "three"}, False, "Item with UID .+ is already in the queue")])
+    "plan, f_kwargs, result, errmsg",
+    [({"a": 10}, {}, False, "Item does not have UID"),
+     ([10, 20], {}, False, errmsg_wrong_plan_type),
+     ({"item_uid": "one"}, {}, True, ""),
+     ({"item_uid": "two"}, {}, False, "Item with UID .+ is already in the queue"),
+     ({"item_uid": "three"}, {}, False, "Item with UID .+ is already in the queue"),
+     ({"item_uid": "two"}, {"ignore_uids": None}, False, "Item with UID .+ is already in the queue"),
+     ({"item_uid": "two"}, {"ignore_uids": ["two"]}, True, ""),
+     ({"item_uid": "two"}, {"ignore_uids": ["two", "three"]}, True, ""),
+     ({"item_uid": "two"}, {"ignore_uids": ["one", "three"]}, False, "Item with UID .+ is already in the queue"),
+     ])
 # fmt: on
-def test_verify_item(pq, plan, result, errmsg):
+def test_verify_item(pq, plan, f_kwargs, result, errmsg):
     """
     Tests for method ``_verify_item()``.
     """
@@ -126,10 +131,10 @@ def test_verify_item(pq, plan, result, errmsg):
     asyncio.run(set_plans())
 
     if result:
-        pq._verify_item(plan)
+        pq._verify_item(plan, **f_kwargs)
     else:
         with pytest.raises(Exception, match=errmsg):
-            pq._verify_item(plan)
+            pq._verify_item(plan, **f_kwargs)
 
 
 def test_new_item_uid(pq):

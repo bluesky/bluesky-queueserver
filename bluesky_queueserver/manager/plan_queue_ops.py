@@ -578,7 +578,6 @@ class PlanQueueOperations:
         ----------
         item: dict
             Item (plan or instruction) represented as a dictionary of parameters
-
         pos: int, str or None
             Integer that specifies the position index, "front" or "back".
             If ``pos`` is in the range ``1..qsize-1`` the item is inserted
@@ -588,11 +587,9 @@ class PlanQueueOperations:
             (-1 - the last element of the queue). If ``pos>=qsize``,
             the plan is added to the back of the queue. If ``pos==0`` or
             ``pos<=-qsize``, the plan is pushed to the front of the queue.
-
         before_uid: str or None
             If UID is specified, then the item is inserted before the plan with UID.
             ``before_uid`` has precedence over ``after_uid``.
-
         after_uid: str or None
             If UID is specified, then the item is inserted before the plan with UID.
 
@@ -612,7 +609,9 @@ class PlanQueueOperations:
             return await self._add_item_to_queue(item, pos=pos, before_uid=before_uid, after_uid=after_uid)
 
     async def _replace_item(self, item, *, item_uid):
-
+        """
+        See ``self._replace_item()`` method
+        """
         # We can not replace currently running item, since it is technically not in the queue
         running_item = await self._get_running_item_info()
         running_item_uid = running_item["item_uid"] if running_item else None
@@ -648,6 +647,23 @@ class PlanQueueOperations:
         return item, qsize
 
     async def replace_item(self, item, *, item_uid):
+        """
+        Replace item in the queue. Item with UID ``item_uid`` is replaced by item ``item``. The new
+        item may have UID which is the same or different from UID of the item being replaced.
+
+        Parameters
+        ----------
+        item: dict
+            Item (plan or instruction) represented as a dictionary of parameters.
+
+        item_uid: str
+            UID of existing item in the queue that will be replaced.
+
+        Returns
+        -------
+        dict, int
+            The dictionary that contains the item that was added and the new size of the queue.
+        """
         async with self._lock:
             return await self._replace_item(item, item_uid=item_uid)
 

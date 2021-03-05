@@ -896,8 +896,7 @@ class RunEngineManager(Process):
                 break
         if item_type is None:
             raise Exception(
-                "Incorrect request format: request contains no item info. "
-                f"Supported item types: {item_types}"
+                "Incorrect request format: request contains no item info. " f"Supported item types: {item_types}"
             )
         return item, item_type
 
@@ -922,9 +921,7 @@ class RunEngineManager(Process):
 
         if item_type == "plan":
             allowed_plans = self._allowed_plans[user_group] if self._allowed_plans else self._allowed_plans
-            allowed_devices = (
-                self._allowed_devices[user_group] if self._allowed_devices else self._allowed_devices
-            )
+            allowed_devices = self._allowed_devices[user_group] if self._allowed_devices else self._allowed_devices
             success, msg = validate_plan(item, allowed_plans=allowed_plans, allowed_devices=allowed_devices)
         elif item_type == "instruction":
             # At this point we support only one instruction ('queue_stop'), so validation is trivial.
@@ -1008,7 +1005,9 @@ class RunEngineManager(Process):
         try:
             # Generate new UID if 'replace' flag is True, otherwise update the plan
             generate_new_uid = bool(request.get("replace", False))
-            item, item_type, item_uid_original = self._prepare_item(request=request, generate_new_uid=generate_new_uid)
+            item, item_type, item_uid_original = self._prepare_item(
+                request=request, generate_new_uid=generate_new_uid
+            )
 
             # item["item_uid"] will change if uid is replaced, but we still need
             #   'original' UID to update the correct item

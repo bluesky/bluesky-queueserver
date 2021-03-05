@@ -124,18 +124,20 @@ class PlanQueueOperations:
         if not isinstance(item, dict):
             raise TypeError(f"Parameter 'item' should be a dictionary: '{item}', (type '{type(item)}')")
 
-    def _verify_item(self, item):
+    def _verify_item(self, item, *, ignore_uids=None):
         """
         Verify that item (plan) structure is valid enough to be put in the queue.
         Current checks: item is a dictionary, ``item_uid`` key is present, Plan with the UID is not in
-        the queue or currently running.
+        the queue or currently running. Ignore UIDs in the list ``ignore_uids``.
         """
+        ignore_uids = ignore_uids or []
         self._verify_item_type(item)
         # Verify plan UID
         if "item_uid" not in item:
             raise ValueError("Item does not have UID.")
-        if self._is_uid_in_dict(item["item_uid"]):
-            raise RuntimeError(f"Item with UID {item['item_uid']} is already in the queue")
+        uid = item["item_uid"]
+        if (uid not in ignore_uids) and self._is_uid_in_dict(uid):
+            raise RuntimeError(f"Item with UID {uid} is already in the queue")
 
     @staticmethod
     def new_item_uid():
@@ -609,7 +611,39 @@ class PlanQueueOperations:
             return await self._add_item_to_queue(item, pos=pos, before_uid=before_uid, after_uid=after_uid)
 
     async def _replace_item(self, item, *, item_uid):
-        qsize = 0
+
+        # We can not replace currently running item, since it is technically not in the queue
+        running_item = await self._get_running_item_info()
+        running_item_uid = running_item["item_uid"] if running_item else None
+        if not self._is_uid_in_dict(item_uid) or (running_item_uid is not None and running_item_uid == item_uid):
+            raise RuntimeError(f"Failed to replace item: Item with UID {item_uid} is not in the queue")
+
+        if "item_uid" not in item:
+            item = self.set_new_item_uuid(item)
+
+        item_to_replace = self._uid_dict_get_item(item_uid)
+        if item == item_to_replace:
+            # There is nothing to do. Consider operation as successful.
+            qsize = await self._get_queue_size()
+            return item, qsize
+
+        # Item with 'item_uid' is expected to be in the queue, so ignore 'item_uid'.
+        #   The concern is that the queue may contain a plan with `item["item_uid"]`, which could be
+        #   different from 'item_uid'. Then inserting the item may violate integrity of the queue.
+        self._verify_item(item, ignore_uids=[item_uid])
+
+        # Insert the new item after the old one and remove the old one. At this point it is guaranteed
+        #   that they are not equal.
+        await self._r_pool.linsert(self._name_plan_queue, json.dumps(item_to_replace), json.dumps(item))
+        await self._r_pool.lrem(self._name_plan_queue, json.dumps(item_to_replace))
+
+        # Update self._uid_dict
+        self._uid_dict_remove(item_uid)
+        self._uid_dict_add(item)
+
+        # Read the actual size of the queue.
+        qsize = await self._get_queue_size()
+
         return item, qsize
 
     async def replace_item(self, item, *, item_uid):

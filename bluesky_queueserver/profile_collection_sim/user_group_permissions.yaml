@@ -3,11 +3,11 @@ user_groups:
     allowed_plans:
       - null  # Allow all
     forbidden_plans:
-      - "$_"  # All plans with names starting with '_'
+      - "^_"  # All plans with names starting with '_'
     allowed_devices:
       - null  # Allow all
     forbidden_devices:
-      - "$_"  # All devices with names starting with '_'
+      - "^_"  # All devices with names starting with '_'
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
       - ".*"  # A different way to allow all

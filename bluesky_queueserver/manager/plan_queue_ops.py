@@ -615,8 +615,10 @@ class PlanQueueOperations:
         # We can not replace currently running item, since it is technically not in the queue
         running_item = await self._get_running_item_info()
         running_item_uid = running_item["item_uid"] if running_item else None
-        if not self._is_uid_in_dict(item_uid) or (running_item_uid is not None and running_item_uid == item_uid):
+        if not self._is_uid_in_dict(item_uid):
             raise RuntimeError(f"Failed to replace item: Item with UID {item_uid} is not in the queue")
+        if (running_item_uid is not None) and (running_item_uid == item_uid):
+            raise RuntimeError(f"Failed to replace item: Item with UID {item_uid} is currently running")
 
         if "item_uid" not in item:
             item = self.set_new_item_uuid(item)
@@ -635,7 +637,7 @@ class PlanQueueOperations:
         # Insert the new item after the old one and remove the old one. At this point it is guaranteed
         #   that they are not equal.
         await self._r_pool.linsert(self._name_plan_queue, json.dumps(item_to_replace), json.dumps(item))
-        await self._r_pool.lrem(self._name_plan_queue, json.dumps(item_to_replace))
+        await self._remove_item(item_to_replace)
 
         # Update self._uid_dict
         self._uid_dict_remove(item_uid)

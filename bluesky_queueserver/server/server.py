@@ -174,6 +174,20 @@ async def queue_item_add_handler(payload: dict):
     return msg
 
 
+@app.post("/queue/item/update")
+async def queue_item_add_handler(payload: dict):
+    """
+    Update existing plan in the queue
+    """
+    # TODO: validate inputs! Also: payload["replace"] parameter may be use to change what metadata
+    #   is added to the plan (or whether metadata is changed at all)
+    params = payload
+    params["user"] = _login_data["user"]
+    params["user_group"] = _login_data["user_group"]
+    msg = await zmq_to_manager.send_message(method="queue_item_update", params=params)
+    return msg
+
+
 @app.post("/queue/item/remove")
 async def qqueue_item_remove_handler(payload: dict):
     """

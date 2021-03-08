@@ -616,9 +616,9 @@ class PlanQueueOperations:
         running_item = await self._get_running_item_info()
         running_item_uid = running_item["item_uid"] if running_item else None
         if not self._is_uid_in_dict(item_uid):
-            raise RuntimeError(f"Failed to replace item: Item with UID {item_uid} is not in the queue")
+            raise RuntimeError(f"Failed to replace item: Item with UID '{item_uid}' is not in the queue")
         if (running_item_uid is not None) and (running_item_uid == item_uid):
-            raise RuntimeError(f"Failed to replace item: Item with UID {item_uid} is currently running")
+            raise RuntimeError(f"Failed to replace item: Item with UID '{item_uid}' is currently running")
 
         if "item_uid" not in item:
             item = self.set_new_item_uuid(item)

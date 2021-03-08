@@ -916,6 +916,35 @@ class RunEngineManager(Process):
         return user, user_group
 
     def _prepare_item(self, *, request, generate_new_uid):
+        """
+        Prepare item before it could be added to the queue or used to update/replace existing item
+        in the queue. Preparation includes identification of item type and validation of the item.
+        The ``user`` and ``user_group`` are set to the values passed in the request. The new
+        ``item_uid`` is generated if requested.
+
+        Parameters
+        ----------
+        request : dict
+            request data received from the server
+        generate_new_uid : boolean
+            generate new ``item_uid`` if True, otherwise keep existing ``item_uid``.
+            Raise ``RuntimeError`` if ``generate_new_uid==False`` and the item has no assigned ``item_uid``.
+
+        Returns
+        -------
+        item : dict
+            prepared item
+        item_type : str
+            item type: ``plan`` or ``instruction``
+        item_uid_original : str or None
+            copy of the original ``item_uid`` saved before it is replaced with new UID, ``None`` if the
+            original item (passed as part of ``request``) has no UID.
+
+        Raises
+        ------
+        RuntimeError
+            raised if (1) item validation failed or (2) item has no UID and new UID is not generated
+        """
         item, item_type = self._get_item_from_request(request=request)
         user, user_group = self._get_user_info_from_request(request=request)
 
@@ -933,7 +962,7 @@ class RunEngineManager(Process):
             success, msg = False, f"Invalid item: {item}"
 
         if not success:
-            raise Exception(msg)
+            raise RuntimeError(msg)
 
         item["item_type"] = item_type
 
@@ -948,13 +977,13 @@ class RunEngineManager(Process):
             item["item_uid"] = PlanQueueOperations.new_item_uid()
         else:
             if "item_uid" not in item:
-                raise Exception("Item description contains no UID and UID generation is skipped")
+                raise RuntimeError("Item description contains no UID and UID generation is skipped")
 
         return item, item_type, item_uid_original
 
     async def _queue_item_add_handler(self, request):
         """
-        Adds new item to the the queue. Item may be a plan or an instruction. Request must
+        Adds new item to the queue. Item may be a plan or an instruction. Request must
         include the element with the key ``plan`` if the added item is a plan or ``instruction``
         if it is an instruction. The element with the key is a dictionary of plan or instruction
         parameters. The parameters may not include UID, because the function always overwrites
@@ -1000,6 +1029,19 @@ class RunEngineManager(Process):
         return rdict
 
     async def _queue_item_update_handler(self, request):
+        """
+        Updates the existing item in the queue. Item may be a plan or an instruction. The request
+        must contain item description (``plan`` or ``instruction``) in the same format as for
+        ``queue_item_add`` request, except that the description must contain UID (``item_uid`` key).
+        The queue must contain an item with the identical UID. This item will be replaced with
+        the item passed as part of the request. The request may contain an optional parameter ``replace``.
+        If ``replace`` is missing or evaluated as ``False``, then the item UID in the queue does is
+        not changed. If ``replace`` is ``True``, then the new UID is generated before the item is
+        replaced. The original UID is still used to locate the item in the queue before replacing it.
+        The ``replace`` parameter allows to distinguish between small changes to item parameters
+        (``replace=False`` - UID is not changed) or complete replacement of the item (``replace=True`` -
+        new UID is generated).
+        """
         success, msg, qsize = True, "", 0
 
         try:

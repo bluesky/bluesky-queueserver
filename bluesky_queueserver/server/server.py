@@ -175,7 +175,7 @@ async def queue_item_add_handler(payload: dict):
 
 
 @app.post("/queue/item/update")
-async def queue_item_add_handler(payload: dict):
+async def queue_item_update_handler(payload: dict):
     """
     Update existing plan in the queue
     """

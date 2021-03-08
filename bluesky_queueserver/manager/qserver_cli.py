@@ -307,7 +307,7 @@ def check_number_of_parameters(params, n_min, n_max, params_report=None):
         raise CommandParameterError(err_msg)
 
 
-def msg_queue_add(params):
+def msg_queue_add_update(params, *, cmd_opt):
     """
     Generate outgoing message for `queue add` command. See ``cli_examples`` for supported formats
     for the command.
@@ -316,6 +316,8 @@ def msg_queue_add(params):
     ----------
     params : list
         List of parameters of the command. The first element of the list is expected to be ``add`` keyword.
+    cmd_opt : str
+        Command option, must match ``param[0]``.
 
     Returns
     -------
@@ -330,7 +332,7 @@ def msg_queue_add(params):
     """
     # Check if the function was called for the appropriate command
     command = "queue"
-    expected_p0 = "add"
+    expected_p0 = cmd_opt
     if params[0] != expected_p0:
         raise ValueError(f"Incorrect parameter value '{params[0]}'. Expected value: '{expected_p0}'")
 
@@ -344,7 +346,14 @@ def msg_queue_add(params):
     try:
         # Destination address is optional. If no destination index or UID found, then
         #   'addr_param' is {}.
-        addr_param, p_item = extract_destination_address(params[2:])
+        if params[0] == "add":
+            addr_param, p_item = extract_destination_address(params[2:])
+        elif params[0] == "update":
+            # No address is expected
+            addr_param, p_item = {}, params[2:]
+        else:
+            raise CommandParameterError(f"Option '{params[0]}' is not supported: '{command} {params[0]}'")
+
         # There should be exactly 1 parameter left. This parameter should contain a plan
         #   or an instruction.
         check_number_of_parameters(p_item, 1, 1, params)
@@ -627,7 +636,10 @@ def create_msg(params):
         supported_params = ("add", "get", "clear", "item", "start", "stop")
         if params[0] in supported_params:
             if params[0] == "add":
-                method, prms = msg_queue_add(params)
+                method, prms = msg_queue_add_update(params, cmd_opt="add")
+
+            elif params[0] == "update":
+                method, prms = msg_queue_add_update(params, cmd_opt="update")
 
             elif params[0] in ("get", "clear", "start"):
                 if len(params) != 1:

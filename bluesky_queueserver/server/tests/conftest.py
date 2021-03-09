@@ -8,7 +8,7 @@ SERVER_ADDRESS = "localhost"
 SERVER_PORT = "60610"
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def fastapi_server(xprocess):
     class Starter(ProcessStarter):
         pattern = "Connected to ZeroMQ server"

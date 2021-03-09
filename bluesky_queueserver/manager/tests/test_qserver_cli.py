@@ -743,6 +743,46 @@ def test_queue_item_add_7_fail(re_manager, params, exit_code):  # noqa F811
     assert subprocess.call(["qserver", "queue", "add", "plan", *params]) == exit_code
 
 
+# fmt: on
+@pytest.mark.parametrize("replace", [False, True])
+@pytest.mark.parametrize("item_type", ["plan", "instruction"])
+# fmt: off
+def test_queue_item_update_1(re_manager, replace, item_type):  # noqa F811
+    """
+    Basic test for `queue_item_update` method.
+    """
+    plan1 = "{'name':'count', 'args':[['det1', 'det2']]}"
+    plan2 = "{'name':'count', 'args':[['det1', 'det2']]}"
+    instruction = "queue-stop"
+
+    assert subprocess.call(["qserver", "queue", "add", "plan", plan1]) == SUCCESS
+
+    queue_1 = get_queue()["queue"]
+    assert len(queue_1) == 1
+    item_1 = queue_1[0]
+    uid_1 = item_1["item_uid"]
+
+    if item_type == "plan":
+        item = plan2
+    elif item_type == "instruction":
+        item = instruction
+    else:
+        assert False, f"Unsupported item type '{item_type}'"
+    option = "replace" if replace else "update"
+
+    assert subprocess.call(["qserver", "queue", option, item_type, uid_1, item]) == SUCCESS
+
+    queue_2 = get_queue()["queue"]
+    assert len(queue_2) == 1
+    item_2 = queue_2[0]
+
+    if replace:
+        assert item_2["item_uid"] != item_1["item_uid"]
+    else:
+        assert item_2["item_uid"] == item_1["item_uid"]
+    item_2["item_type"] == item_type
+
+
 # fmt: off
 @pytest.mark.parametrize("pos, uid_ind, pos_result, success", [
     (None, None, 2, True),

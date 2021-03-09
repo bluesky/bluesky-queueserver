@@ -345,7 +345,7 @@ def msg_queue_add_update(params, *, cmd_opt):
     if len(params) < 3:
         raise CommandParameterError(f"Item type and value are not specified: '{command} {params[0]}'")
 
-    if len(params) != 4:
+    if (params[0] in ("update", "replace")) and (len(params) != 4):
         raise CommandParameterError(f"Incorrect number of parameters: '{command} {params[0]}'")
 
     p_item_type = params[1]
@@ -381,6 +381,8 @@ def msg_queue_add_update(params, *, cmd_opt):
                 instruction = {"action": "queue_stop"}
             else:
                 raise CommandParameterError(f"Unsupported instruction type: {p_item[0]}")
+            if update_uid:
+                instruction["item_uid"] = update_uid
             addr_param.update({"instruction": instruction})
         else:
             # This indicates a bug in the program.
@@ -394,6 +396,8 @@ def msg_queue_add_update(params, *, cmd_opt):
     prms = addr_param
     prms["user"] = default_user
     prms["user_group"] = default_user_group
+    if params[0] in ("update", "replace"):
+        prms["replace"] = params[0] == "replace"
 
     return method, prms
 
@@ -647,13 +651,16 @@ def create_msg(params):
     elif command == "queue":
         if len(params) < 1:
             raise CommandParameterError(f"Request '{command}' must include at least one parameter")
-        supported_params = ("add", "get", "clear", "item", "start", "stop")
+        supported_params = ("add", "update", "replace", "get", "clear", "item", "start", "stop")
         if params[0] in supported_params:
             if params[0] == "add":
                 method, prms = msg_queue_add_update(params, cmd_opt="add")
 
             elif params[0] == "update":
                 method, prms = msg_queue_add_update(params, cmd_opt="update")
+
+            elif params[0] == "replace":
+                method, prms = msg_queue_add_update(params, cmd_opt="replace")
 
             elif params[0] in ("get", "clear", "start"):
                 if len(params) != 1:

@@ -1042,7 +1042,7 @@ class RunEngineManager(Process):
         (``replace=False`` - UID is not changed) or complete replacement of the item (``replace=True`` -
         new UID is generated).
         """
-        success, msg, qsize = True, "", 0
+        success, msg, qsize, item_type = True, "", 0, None
 
         try:
             # Generate new UID if 'replace' flag is True, otherwise update the plan

@@ -307,6 +307,29 @@ The following instruction moves item with <uid_source> to the front of the queue
   qserver queue item move <uid_source> "front"
   http POST http://localhost:60610/queue/item/move uid:='<uid_source>' pos_dest:='"front"'
 
+The parameters of queue items may be updated or replaced. When the item is replaced, it is assigned a new
+item UID, while if the item is updated, item UID remains the same. The commands implementing those
+operations do not distinguish plans and instructions, i.e. an instruction may be updated/replaced
+by a plan or a plan by an instruction. The operations may be performed using CLI tool by calling
+*'queue update'* and *'queue replace'* with parameter *<existing-uid>* being item UID of the item in the
+queue which is being replaced followed by the JSON representation of the dictionary of parameters
+of the new item::
+
+  qserver queue update plan <existing-uid> {"name":"count", "args":[["det1", "det2"]]}'
+  qserver queue update instruction <existing-uid> {"action":"queue_stop"}
+  qserver queue replace plan <existing-uid> {"name":"count", "args":[["det1", "det2"]]}'
+  qserver queue replace instruction <existing-uid> {"action":"queue_stop"}
+
+REST API */queue/item/update* is used to implement both operations. Item parameter *'item_uid'* must
+be set to the UID of the item to be updated. Additional API parameter 'replace' determines if the item
+is updated or replaced. If the parameter is skipped or set *false*, the item is updated. If the
+parameter is set *true*, the item is replaced (i.e. new item UID is generated)::
+
+  http POST http://localhost:60610/queue/item/update plan:='{"item_uid": "<existing-uid>", "name":"count", "args":[["det1", "det2"]]}'
+  http POST http://localhost:60610/queue/item/update instruction:='{"item_uid": "<existing-uid>", "action":"queue_stop"}'
+  http POST http://localhost:60610/queue/item/update replace:=true plan:='{"item_uid": "<existing-uid>", "name":"count", "args":[["det1", "det2"]]}'
+  http POST http://localhost:60610/queue/item/update replace:=true instruction:='{"item_uid": "<existing-uid>", "action":"queue_stop"}'
+
 Remove all entries from the plan queue::
 
   qserver queue clear

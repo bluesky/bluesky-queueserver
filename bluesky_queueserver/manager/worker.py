@@ -37,7 +37,7 @@ class RunEngineWorker(Process):
         `args` and `kwargs` of the `multiprocessing.Process`
     """
 
-    def __init__(self, *args, conn, config=None, log_level="DEBUG", **kwargs):
+    def __init__(self, *args, conn, config=None, log_level=logging.DEBUG, **kwargs):
 
         if not conn:
             raise RuntimeError("Invalid value of parameter 'conn': %S.", str(conn))
@@ -488,9 +488,10 @@ class RunEngineWorker(Process):
         Overrides the `run()` function of the `multiprocessing.Process` class. Called
         by the `start` method.
         """
-        success = True
-        logging.basicConfig(level=logging.WARNING)
+        logging.basicConfig(level=max(logging.WARNING, self._log_level))
         logging.getLogger(__name__).setLevel(self._log_level)
+
+        success = True
 
         from .profile_tools import set_re_worker_active, clear_re_worker_active
 

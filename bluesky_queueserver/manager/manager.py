@@ -53,7 +53,7 @@ class RunEngineManager(Process):
         `args` and `kwargs` of the `multiprocessing.Process`
     """
 
-    def __init__(self, *args, conn_watchdog, conn_worker, config=None, log_level="DEBUG", **kwargs):
+    def __init__(self, *args, conn_watchdog, conn_worker, config=None, log_level=logging.DEBUG, **kwargs):
 
         if not conn_watchdog:
             raise RuntimeError(
@@ -1522,8 +1522,7 @@ class RunEngineManager(Process):
         Overrides the `run()` function of the `multiprocessing.Process` class. Called
         by the `start` method.
         """
-
-        logging.basicConfig(level=logging.WARNING)
+        logging.basicConfig(level=max(logging.WARNING, self._log_level))
         logging.getLogger(__name__).setLevel(self._log_level)
 
         logger.info("Starting RE Manager process")

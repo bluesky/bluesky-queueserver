@@ -196,17 +196,17 @@ class RunEngineManager(Process):
             success = await self._watchdog_start_re_worker()
             if not success:
                 raise RuntimeError("Failed to create Worker process")
-            logger.debug("Waiting for RE worker to start ...")
+            logger.info("Waiting for RE worker to start ...")
             success = await self._fut_manager_task_completed  # TODO: timeout may be needed here
             if success:
                 self._environment_exists = True
-                logger.debug("Worker started successfully.")
+                logger.info("Worker started successfully.")
                 success, err_msg = True, ""
             else:
                 self._environment_exists = True
                 await self._confirm_re_worker_exit()
                 self._environment_exists = False
-                logger.debug("Error occurred while opening RE Worker environment.")
+                logger.error("Error occurred while opening RE Worker environment.")
                 success, err_msg = False, "Error occurred while opening RE Worker environment."
 
         except Exception as ex:
@@ -316,13 +316,13 @@ class RunEngineManager(Process):
         """
         success = True
         if self._environment_exists:
-            logger.debug("Waiting for exit confirmation from RE worker ...")
+            logger.info("Waiting for exit confirmation from RE worker ...")
             success, err_msg = await self._worker_command_confirm_exit()
 
             # Environment is not in valid state anyway. So assume it does not exist.
             self._environment_exists = False
             if success:
-                logger.debug("Wait for RE Worker process to close (join)")
+                logger.info("Wait for RE Worker process to close (join)")
 
                 if not await self._watchdog_join_re_worker(timeout_join=0.5):
                     success, err_msg = False, "Failed to join RE Worker thread."
@@ -385,7 +385,7 @@ class RunEngineManager(Process):
         if plan_report is None:
             # TODO: this would typically mean a bug (communciation error). Probably more
             #       complicated processing is needed
-            logger.error(f"Failed to download plan report: {err_msg}. Stopping queue processing.")
+            logger.error("Failed to download plan report: %s. Stopping queue processing.", err_msg)
             await self._plan_queue.set_processed_item_as_stopped(exit_status="manager_error", run_uids=[])
             self._manager_state = MState.IDLE
         else:
@@ -395,7 +395,7 @@ class RunEngineManager(Process):
             err_msg = plan_report["err_msg"]
 
             msg_display = result if result else err_msg
-            logger.info(
+            logger.debug(
                 "Report received from RE Worker:\nplan_state=%s\nsuccess=%s\n%s\n)",
                 plan_state,
                 str(success),
@@ -772,7 +772,7 @@ class RunEngineManager(Process):
         """
         Returns status of the manager.
         """
-        logger.info("Processing 'status' request.")
+        logger.info("Processing 'status' request ...")
 
         # Computed/retrieved data
         n_pending_items = await self._plan_queue.get_queue_size()
@@ -812,7 +812,7 @@ class RunEngineManager(Process):
         """
         Returns the list of allowed plans.
         """
-        logger.info("Returning the list of allowed plans.")
+        logger.info("Returning the list of allowed plans ...")
 
         try:
             if "user_group" not in request:
@@ -839,7 +839,7 @@ class RunEngineManager(Process):
         """
         Returns the list of allowed devices.
         """
-        logger.info("Returning the list of allowed devices.")
+        logger.info("Returning the list of allowed devices ...")
 
         try:
             if "user_group" not in request:
@@ -880,7 +880,7 @@ class RunEngineManager(Process):
         """
         Returns the contents of the current queue.
         """
-        logger.info("Returning current queue and running plan.")
+        logger.info("Returning current queue and running plan ...")
         plan_queue = await self._plan_queue.get_queue()
         running_item = await self._plan_queue.get_running_item_info()
 
@@ -1000,7 +1000,8 @@ class RunEngineManager(Process):
         It is recommended to use negative indices (counted from the back of the queue)
         when modifying a running queue.
         """
-        logger.info("Adding new plan to the queue: %s", pprint.pformat(request))
+        logger.info("Adding new plan to the queue ...")
+        logger.debug("Request: %s", pprint.pformat(request))
 
         item_type, item, qsize, msg = None, None, None, ""
 
@@ -1072,7 +1073,7 @@ class RunEngineManager(Process):
         may be specified as an index (positive or negative) or a string
         from the set {``front``, ``back``}. The default option is ``back``
         """
-        logger.info("Getting an item from the queue.")
+        logger.info("Getting an item from the queue ...")
         try:
             item, msg = {}, ""
             pos = request.get("pos", None)
@@ -1093,7 +1094,7 @@ class RunEngineManager(Process):
         If ``uid`` is specified, then the position is ignored. A plan with
         the UID must exist in the queue, otherwise operation fails.
         """
-        logger.info("Removing item from the queue.")
+        logger.info("Removing item from the queue ...")
         try:
             item, qsize, msg = {}, None, ""
             pos = request.get("pos", None)
@@ -1114,7 +1115,7 @@ class RunEngineManager(Process):
         UID. The 'source' plan is moved to the new position or placed before
         or after the 'destination' plan. Both source and destination must be specified.
         """
-        logger.info("Removing item from the queue.")
+        logger.info("Removing item from the queue ...")
         try:
             item, qsize, msg = {}, None, ""
             pos = request.get("pos", None)
@@ -1136,7 +1137,7 @@ class RunEngineManager(Process):
         """
         Remove all entries from the plan queue (does not affect currently executed run)
         """
-        logger.info("Clearing the queue")
+        logger.info("Clearing the queue ...")
         await self._plan_queue.clear_queue()
         return {"success": True, "msg": ""}
 
@@ -1144,7 +1145,7 @@ class RunEngineManager(Process):
         """
         Returns the contents of the plan history.
         """
-        logger.info("Returning plan history.")
+        logger.info("Returning plan history ...")
         plan_history = await self._plan_queue.get_history()
 
         return {"success": True, "msg": "", "history": plan_history}
@@ -1153,7 +1154,7 @@ class RunEngineManager(Process):
         """
         Remove all entries from the plan history
         """
-        logger.info("Clearing the plan execution history")
+        logger.info("Clearing the plan execution history ...")
         await self._plan_queue.clear_history()
         return {"success": True, "msg": ""}
 
@@ -1188,7 +1189,7 @@ class RunEngineManager(Process):
         Start execution of the loaded queue. Additional runs can be added to the queue while
         it is executed. If the queue is empty, then nothing will happen.
         """
-        logger.info("Starting queue processing.")
+        logger.info("Starting queue processing ...")
         success, msg = await self._start_plan()
         return {"success": success, "msg": msg}
 
@@ -1218,7 +1219,7 @@ class RunEngineManager(Process):
         """
         Pause Run Engine
         """
-        logger.info("Pausing the queue (currently running plan).")
+        logger.info("Pausing the queue (currently running plan) ...")
         option = request["option"] if "option" in request else None
         available_options = ("deferred", "immediate")
         if option in available_options:
@@ -1269,7 +1270,7 @@ class RunEngineManager(Process):
         Return the list of runs for the currently running plan. The list includes open and already
         closed runs.
         """
-        logger.info("Returning the list of runs for the running plan.")
+        logger.info("Returning the list of runs for the running plan ...")
 
         option = request["option"] if "option" in request else "active"
         available_options = ("active", "open", "closed")
@@ -1471,7 +1472,7 @@ class RunEngineManager(Process):
             #   has to be applied here.
             await self._plan_queue.set_processed_item_as_completed(exit_status="unknown", run_uids=[])
 
-        logger.info("Starting ZeroMQ server")
+        logger.info("Starting ZeroMQ server ...")
         self._zmq_socket = self._ctx.socket(zmq.REP)
         self._zmq_socket.bind(self._ip_zmq_server)
         logger.info("ZeroMQ server is waiting on %s", str(self._ip_zmq_server))
@@ -1482,12 +1483,12 @@ class RunEngineManager(Process):
         while True:
             #  Wait for next request from client
             msg_in = await self._zmq_receive()
-            logger.info("ZeroMQ server received request: %s", pprint.pformat(msg_in))
+            logger.debug("ZeroMQ server received request: %s", pprint.pformat(msg_in))
 
             msg_out = await self._zmq_execute(msg_in)
 
             #  Send reply back to client
-            logger.info("ZeroMQ server sending response: %s", pprint.pformat(msg_out))
+            logger.debug("ZeroMQ server sending response: %s", pprint.pformat(msg_out))
             await self._zmq_send(msg_out)
 
             if self._manager_stopping:

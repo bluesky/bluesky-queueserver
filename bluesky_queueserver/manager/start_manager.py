@@ -179,12 +179,12 @@ class WatchdogProcess:
             #   a clock to be completely independent from system clock.
             t_min, t_max = self._heartbeat_timeout, self._heartbeat_timeout + 10.0
             if (time_passed >= t_min) and (time_passed <= t_max) and not self._manager_is_stopping:
-                logger.error("Timeout detected by Watchdog. RE Manager malfunctioned and must be restarted.")
+                logger.error("Timeout detected by Watchdog. RE Manager malfunctioned and must be restarted")
                 self._re_manager.kill()
                 self._start_re_manager()
 
         self._comm_to_manager.stop()
-        logger.info("RE Watchdog is stopped.")
+        logger.info("RE Watchdog is stopped")
 
 
 def start_manager():
@@ -451,4 +451,4 @@ def start_manager():
     try:
         wp.run()
     except KeyboardInterrupt:
-        logger.info("The program was manually stopped.")
+        logger.info("The program was manually stopped")

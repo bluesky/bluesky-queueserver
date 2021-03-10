@@ -154,7 +154,7 @@ class RunEngineWorker(Process):
                 # Include RE state
                 self._re_report["re_state"] = str(self._RE._state)
 
-        logger.debug("Finished execution of a task")
+        logger.debug("Finished execution of the task")
 
     def _load_new_plan(self, plan_info):
         """
@@ -309,7 +309,7 @@ class RunEngineWorker(Process):
         Close RE Worker environment in orderly way.
         """
         # Stop the loop in main thread
-        logger.info("Closing RE Worker environment")
+        logger.info("Closing RE Worker environment ...")
         # TODO: probably the criteria on when the environment could be more precise.
         #       For now simply assume that we can not close the environment in which
         #       Run Engine is running using this method. Different method that kills
@@ -354,7 +354,7 @@ class RunEngineWorker(Process):
         """
         Initiate execution of a new plan.
         """
-        logger.info("Starting execution of a plan")
+        logger.info("Starting execution of a plan ...")
         # TODO: refine the criteria of acceptance of the new plan.
         invalid_state = 0
         if not self._execution_queue.empty():
@@ -398,7 +398,7 @@ class RunEngineWorker(Process):
         Pause running plan. Options: `deferred` and `immediate`.
         """
         # Stop the loop in main thread
-        logger.info("Pausing Run Engine")
+        logger.info("Pausing Run Engine ...")
         pausing_options = ("deferred", "immediate")
         # TODO: the question is whether it is possible or should be allowed to pause a plan in
         #       any other state than 'running'???
@@ -550,7 +550,7 @@ class RunEngineWorker(Process):
                 )
             self._existing_plans = plans_from_nspace(self._re_namespace)
             self._existing_devices = devices_from_nspace(self._re_namespace)
-            logger.info("Startup code was loaded completed.")
+            logger.info("Startup code loading was completed")
 
         except Exception as ex:
             logger.exception(
@@ -655,7 +655,7 @@ class RunEngineWorker(Process):
                 logger.exception("Error occurred while initializing the environment: %s.", str(ex))
 
         if success:
-            logger.info("RE Environment is ready.")
+            logger.info("RE Environment is ready")
             self._execute_in_main_thread()
         else:
             self._exit_event.set()
@@ -675,4 +675,4 @@ class RunEngineWorker(Process):
 
         self._comm_to_manager.stop()
 
-        logger.info("Run Engine environment was closed successfully.")
+        logger.info("Run Engine environment was closed successfully")

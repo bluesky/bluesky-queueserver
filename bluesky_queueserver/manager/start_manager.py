@@ -25,7 +25,7 @@ class WatchdogProcess:
         config_manager=None,
         cls_run_engine_worker=RunEngineWorker,
         cls_run_engine_manager=RunEngineManager,
-        log_level="DEBUG",
+        log_level=logging.DEBUG,
     ):
 
         self._log_level = log_level
@@ -149,7 +149,7 @@ class WatchdogProcess:
 
     def run(self):
 
-        logging.basicConfig(level=logging.WARNING)
+        logging.basicConfig(level=max(logging.WARNING, self._log_level))
         logging.getLogger(__name__).setLevel(self._log_level)
 
         # Requests
@@ -483,7 +483,7 @@ def start_manager():
         return 1
     config_manager["redis_addr"] = redis_addr
 
-    wp = WatchdogProcess(config_worker=config_worker, config_manager=config_manager)
+    wp = WatchdogProcess(config_worker=config_worker, config_manager=config_manager, log_level=log_level)
     try:
         wp.run()
     except KeyboardInterrupt:

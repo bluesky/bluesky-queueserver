@@ -312,10 +312,46 @@ def start_manager():
         help="Name of the Data Broker configuration file.",
     )
 
-    logging.basicConfig(level=logging.WARNING)
-    logging.getLogger("bluesky_queueserver").setLevel("DEBUG")
+    group_verbosity = parser.add_argument_group(
+        "Logging verbosity settings",
+        "The default logging settings (loglevel=INFO) provide optimal amount of data to monitor "
+        "the operation of RE Manager. Select '--verbose' option to see detailed data on received and "
+        "sent messages, addeded and executed plans etc. Use options '--quiet' and '--silent' to "
+        "see only warnings and error messages or disable logging output.",
+    )
+    group_v = group_verbosity.add_mutually_exclusive_group()
+    group_v.add_argument(
+        "--verbose",
+        dest="logger_verbose",
+        action="store_true",
+        help="Set logger level to DEBUG.",
+    )
+    group_v.add_argument(
+        "--quiet",
+        dest="logger_quiet",
+        action="store_true",
+        help="Set logger level to WARNING.",
+    )
+    group_v.add_argument(
+        "--silent",
+        dest="logger_silent",
+        action="store_true",
+        help="Disables logging output.",
+    )
 
     args = parser.parse_args()
+
+    log_level = logging.INFO
+    if args.logger_verbose:
+        log_level = logging.DEBUG
+    elif args.logger_quiet:
+        log_level = logging.WARNING
+    elif args.logger_silent:
+        log_level = logging.CRITICAL + 1
+
+    logging.basicConfig(level=max(logging.WARNING, log_level))
+    logging.getLogger("bluesky_queueserver").setLevel(log_level)
+
     config_worker = {}
     config_manager = {}
     if args.kafka_topic is not None:

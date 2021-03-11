@@ -137,6 +137,10 @@ def test_zmq_api_ping_status(re_manager, api_name):  # noqa F811
     assert resp["items_in_queue"] == 0
     assert resp["running_item_uid"] is None
     assert resp["worker_environment_exists"] is False
+    assert bool(resp["plan_queue_uid"])
+    assert isinstance(resp["plan_queue_uid"], str), type(resp["plan_queue_uid"])
+    assert bool(resp["plan_history_uid"])
+    assert isinstance(resp["plan_history_uid"], str), type(resp["plan_history_uid"])
 
 
 # =======================================================================================
@@ -235,6 +239,8 @@ def test_zmq_api_queue_item_add_1(re_manager):  # noqa F811
     """
     Basic test for `queue_item_add` method.
     """
+    status0 = get_queue_state()
+
     resp1, _ = zmq_single_request("queue_item_add", {"plan": _plan1, "user": _user, "user_group": _user_group})
     assert resp1["success"] is True
     assert resp1["qsize"] == 1
@@ -244,11 +250,16 @@ def test_zmq_api_queue_item_add_1(re_manager):  # noqa F811
     assert resp1["plan"]["user_group"] == _user_group
     assert "item_uid" in resp1["plan"]
 
+    status1 = get_queue_state()
+    assert status1["plan_queue_uid"] != status0["plan_queue_uid"]
+    assert status1["plan_history_uid"] == status0["plan_history_uid"]
+
     resp2, _ = zmq_single_request("queue_get")
     assert resp2["queue"] != []
     assert len(resp2["queue"]) == 1
     assert resp2["queue"][0] == resp1["plan"]
     assert resp2["running_item"] == {}
+    assert resp2["plan_queue_uid"] == status1["plan_queue_uid"]
 
 
 # fmt: off
@@ -606,6 +617,8 @@ def test_zmq_api_queue_item_update_1(re_manager, replace):  # noqa F811
     if replace is not None:
         params["replace"] = replace
 
+    status1 = get_queue_state()
+
     resp2, _ = zmq_single_request("queue_item_update", params)
     assert resp2["success"] is True
     assert resp2["qsize"] == 1
@@ -619,11 +632,16 @@ def test_zmq_api_queue_item_update_1(re_manager, replace):  # noqa F811
     else:
         assert resp2["plan"]["item_uid"] == uid
 
+    status2 = get_queue_state()
+    assert status2["plan_queue_uid"] != status1["plan_queue_uid"]
+    assert status2["plan_history_uid"] == status1["plan_history_uid"]
+
     resp3, _ = zmq_single_request("queue_get")
     assert resp3["queue"] != []
     assert len(resp3["queue"]) == 1
     assert resp3["queue"][0] == resp2["plan"]
     assert resp3["running_item"] == {}
+    assert resp3["plan_queue_uid"] == status2["plan_queue_uid"]
 
 
 # fmt: on
@@ -784,10 +802,13 @@ def test_zmq_api_queue_item_get_remove_1(re_manager):  # noqa F811
         resp0, _ = zmq_single_request("queue_item_add", {"plan": plan, "user": _user, "user_group": _user_group})
         assert resp0["success"] is True
 
+    status0 = get_queue_state()
+
     resp1, _ = zmq_single_request("queue_get")
     assert resp1["queue"] != []
     assert len(resp1["queue"]) == 3
     assert resp1["running_item"] == {}
+    assert resp1["plan_queue_uid"] == status0["plan_queue_uid"]
 
     # Get the last plan from the queue
     resp2, _ = zmq_single_request("queue_item_get")
@@ -805,6 +826,9 @@ def test_zmq_api_queue_item_get_remove_1(re_manager):  # noqa F811
     assert resp3["item"]["args"] == [["det1", "det2"]]
     assert resp2["item"]["kwargs"] == _plan3["kwargs"]
     assert "item_uid" in resp3["item"]
+
+    status1 = get_queue_state()
+    assert status1["plan_queue_uid"] != status0["plan_queue_uid"]
 
 
 # fmt: off
@@ -998,6 +1022,7 @@ def test_zmq_api_move_plan_1(re_manager, params, src, order, success, msg):  # n
 
     resp1, _ = zmq_single_request("queue_get")
     queue = resp1["queue"]
+    pq_uid = resp1["plan_queue_uid"]
     assert len(queue) == 3
 
     item_uids = [_["item_uid"] for _ in queue]
@@ -1026,9 +1051,21 @@ def test_zmq_api_move_plan_1(re_manager, params, src, order, success, msg):  # n
 
         assert item_uids_from_queue == item_uids_reordered
 
+        status = get_queue_state()
+        if order != [0, 1, 2]:
+            # The queue actually changed, so UID is expected to change
+            assert status["plan_queue_uid"] != pq_uid
+        else:
+            # The queue did not change, so UID is expected to remain the same
+            assert status["plan_queue_uid"] == pq_uid
+
     else:
         assert resp2["success"] is False
         assert msg in resp2["msg"]
+
+        status = get_queue_state()
+        # Queue did not change, so UID should remain the same
+        assert status["plan_queue_uid"] == pq_uid
 
 
 # =======================================================================================

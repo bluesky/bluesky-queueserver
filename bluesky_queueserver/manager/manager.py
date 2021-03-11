@@ -885,9 +885,9 @@ class RunEngineManager(Process):
         Returns the contents of the current queue.
         """
         logger.info("Returning current queue and running plan ...")
+        plan_queue_uid = self._plan_queue.plan_queue_uid
         plan_queue = await self._plan_queue.get_queue()
         running_item = await self._plan_queue.get_running_item_info()
-        plan_queue_uid = self._plan_queue.plan_queue_uid
 
         return {
             "success": True,
@@ -1157,8 +1157,8 @@ class RunEngineManager(Process):
         Returns the contents of the plan history.
         """
         logger.info("Returning plan history ...")
-        plan_history = await self._plan_queue.get_history()
         plan_history_uid = self._plan_queue.plan_history_uid
+        plan_history = await self._plan_queue.get_history()
 
         return {"success": True, "msg": "", "history": plan_history, "plan_history_uid": plan_history_uid}
 

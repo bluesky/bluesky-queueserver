@@ -550,7 +550,7 @@ class PlanQueueOperations:
 
         if (before_uid is not None) and (after_uid is not None):
             raise ValueError(
-                "Ambiguous parameters: request to insert " "the plan before and after the reference plan"
+                "Ambiguous parameters: request to insert the plan before and after the reference plan"
             )
 
         pos = pos if pos is not None else "back"
@@ -920,6 +920,7 @@ class PlanQueueOperations:
         if not await self._is_item_running():
             plan_json = await self._r_pool.lpop(self._name_plan_queue)
             if plan_json:
+                self._plan_queue_uid = self.new_item_uid()
                 plan = json.loads(plan_json)
                 await self._set_running_item_info(plan)
             else:

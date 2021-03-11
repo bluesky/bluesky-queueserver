@@ -214,7 +214,36 @@ def test_uid_dict_1(pq):
     assert pq._is_uid_in_dict(plan_b["item_uid"]) is False
 
 
-def test_uid_dict_2_initialize(pq):
+def test_uid_dict_2(pq):
+    """
+    Test if functions changing `pq._uid_dict` are also updating `pq.plan_queue_uid`.
+    """
+    plan_a = {"item_uid": "a", "name": "name_a"}
+    plan_a_updated = {"item_uid": "a", "name": "name_a_updated"}
+
+    pq_uid = pq.plan_queue_uid
+
+    pq._uid_dict_add(plan_a)
+
+    assert pq.plan_queue_uid != pq_uid
+    pq_uid = pq.plan_queue_uid
+
+    pq._uid_dict_update(plan_a_updated)
+
+    assert pq.plan_queue_uid != pq_uid
+    pq_uid = pq.plan_queue_uid
+
+    pq._uid_dict_remove(plan_a_updated["item_uid"])
+
+    assert pq.plan_queue_uid != pq_uid
+    pq_uid = pq.plan_queue_uid
+
+    pq._uid_dict_clear()
+
+    assert pq.plan_queue_uid != pq_uid
+
+
+def test_uid_dict_3_initialize(pq):
     """
     Basic test for functions associated with ``_uid_dict_initialize()``
     """
@@ -226,13 +255,17 @@ def test_uid_dict_2_initialize(pq):
         plans = await pq.get_queue()
         uid_dict = {_["item_uid"]: _ for _ in plans}
 
+        pq_uid = pq.plan_queue_uid
+
         await pq._uid_dict_initialize()
+
         assert pq._uid_dict == uid_dict
+        assert pq.plan_queue_uid != pq_uid
 
     asyncio.run(testing())
 
 
-def test_uid_dict_3_failing(pq):
+def test_uid_dict_4_failing(pq):
     """
     Failing cases for functions associated with `_uid_dict`
     """
@@ -244,20 +277,24 @@ def test_uid_dict_3_failing(pq):
     pq._uid_dict_add(plan_b)
 
     # Add plan with UID that already exists
+    pq_uid = pq.plan_queue_uid
     with pytest.raises(RuntimeError, match=f"'{plan_a['item_uid']}', which is already in the queue"):
         pq._uid_dict_add(plan_a)
+    assert pq.plan_queue_uid == pq_uid
 
     assert len(pq._uid_dict) == 2
 
     # Remove plan with UID does not exist exists
     with pytest.raises(RuntimeError, match=f"'{plan_c['item_uid']}', which is not in the queue"):
         pq._uid_dict_remove(plan_c["item_uid"])
+    assert pq.plan_queue_uid == pq_uid
 
     assert len(pq._uid_dict) == 2
 
     # Update plan with UID does not exist exists
     with pytest.raises(RuntimeError, match=f"'{plan_c['item_uid']}', which is not in the queue"):
         pq._uid_dict_update(plan_c)
+    assert pq.plan_queue_uid == pq_uid
 
     assert len(pq._uid_dict) == 2
 
@@ -332,10 +369,12 @@ def test_get_item_1(pq, params, name):
 
     async def testing():
 
+        pq_uid = pq.plan_queue_uid
         await pq.add_item_to_queue({"item_uid": "one", "name": "a"})
         await pq.add_item_to_queue({"item_uid": "two", "name": "b"})
         await pq.add_item_to_queue({"item_uid": "three", "name": "c"})
         assert await pq.get_queue_size() == 3
+        assert pq.plan_queue_uid != pq_uid
 
         if name is not None:
             plan = await pq.get_item(**params)
@@ -361,8 +400,10 @@ def test_get_item_2_fail(pq):
         await pq.add_item_to_queue({"item_uid": "three", "name": "c"})
         assert await pq.get_queue_size() == 3
 
+        pq_uid = pq.plan_queue_uid
         await pq.set_next_item_as_running()
         assert await pq.get_queue_size() == 2
+        assert pq.plan_queue_uid != pq_uid
 
         with pytest.raises(IndexError, match="is currently running"):
             await pq.get_item(uid="one")
@@ -459,26 +500,32 @@ def test_add_item_to_queue_3_fail(pq):
     """
 
     async def testing():
-
+        pq_uid = pq.plan_queue_uid
         with pytest.raises(ValueError, match="Parameter 'pos' has incorrect value"):
             await pq.add_item_to_queue({"name": "a"}, pos="something")
+        assert pq.plan_queue_uid == pq_uid
 
         with pytest.raises(TypeError, match=errmsg_wrong_plan_type):
             await pq.add_item_to_queue("plan_is_not_string")
+        assert pq.plan_queue_uid == pq_uid
 
         # Duplicate plan UID
         plan = {"item_uid": "abc", "name": "a"}
         await pq.add_item_to_queue(plan)
+        pq_uid = pq.plan_queue_uid
         with pytest.raises(RuntimeError, match="Item with UID .+ is already in the queue"):
             await pq.add_item_to_queue(plan)
+        assert pq.plan_queue_uid == pq_uid
 
         # Ambiguous parameters (position and UID is passed)
         with pytest.raises(ValueError, match="Ambiguous parameters"):
             await pq.add_item_to_queue({"name": "abc"}, pos=5, before_uid="abc")
+        assert pq.plan_queue_uid == pq_uid
 
         # Ambiguous parameters ('before_uid' and 'after_uid' is specified)
         with pytest.raises(ValueError, match="Ambiguous parameters"):
             await pq.add_item_to_queue({"name": "abc"}, before_uid="abc", after_uid="abc")
+        assert pq.plan_queue_uid == pq_uid
 
     asyncio.run(testing())
 
@@ -512,9 +559,11 @@ def test_replace_item_1(pq, replace_uid):
             if replace_uid:
                 plan["item_uid"] = pq.new_item_uid()  # Generate new UID
 
+            pq_uid = pq.plan_queue_uid
             plan_new, qsize = await pq.replace_item(plan, item_uid=uid_to_replace)
             assert plan_new["name"] == plan["name"]
             assert plan_new["item_uid"] == plan["item_uid"]
+            assert pq.plan_queue_uid != pq_uid
 
             assert await pq.get_queue_size() == 3
             plans_added[n] = plan_new
@@ -549,7 +598,9 @@ def test_replace_item_2(pq):
 
         new_name = "h"
         plan_new = {"name": new_name}  # No UID in the plan. It should still be inserted
+        pq_uid = pq.plan_queue_uid
         plan_replaced, qsize = await pq.replace_item(plan_new, item_uid=plans_added[1]["item_uid"])
+        assert pq.plan_queue_uid != pq_uid
 
         new_uid = plan_replaced["item_uid"]
         assert new_uid != plans_added[1]["item_uid"]
@@ -591,23 +642,29 @@ def test_replace_item_3_failing(pq):
         queue = await pq.get_queue()
         running_item_info = await pq.get_running_item_info()
 
+        pq_uid = pq.plan_queue_uid
+
         plan_new = {"name": "h"}  # No UID in the plan. It should still be inserted
         # Case: attempt to replace a plan that is currently running
         with pytest.raises(RuntimeError, match="Failed to replace item: Item with UID .* is currently running"):
             await pq.replace_item(plan_new, item_uid=running_plan["item_uid"])
+        assert pq.plan_queue_uid == pq_uid
 
         # Case: attempt to replace a plan that is not in queue
         with pytest.raises(RuntimeError, match="Failed to replace item: Item with UID .* is not in the queue"):
             await pq.replace_item(plan_new, item_uid="uid-that-does-not-exist")
+        assert pq.plan_queue_uid == pq_uid
 
         # Case: attempt to replace a plan with another plan that already exists in the queue
         plan = plans_added[1]
         with pytest.raises(RuntimeError, match="Item with UID .* is already in the queue"):
             await pq.replace_item(plan, item_uid=plans_added[2]["item_uid"])
+        assert pq.plan_queue_uid == pq_uid
 
         # Case: attempt to replace a plan with currently running plan
         with pytest.raises(RuntimeError, match="Item with UID .* is already in the queue"):
             await pq.replace_item(running_plan, item_uid=plans_added[2]["item_uid"])
+        assert pq.plan_queue_uid == pq_uid
 
         # Make sure that the queue did not change during the test
         assert await pq.get_queue() == queue
@@ -617,47 +674,47 @@ def test_replace_item_3_failing(pq):
 
 
 # fmt: off
-@pytest.mark.parametrize("params, src, order, success, msg", [
-    ({"pos": 1, "pos_dest": 1}, 1, "abcde", True, ""),
-    ({"pos": "front", "pos_dest": "front"}, 0, "abcde", True, ""),
-    ({"pos": "back", "pos_dest": "back"}, 4, "abcde", True, ""),
-    ({"pos": "front", "pos_dest": "back"}, 0, "bcdea", True, ""),
-    ({"pos": "back", "pos_dest": "front"}, 4, "eabcd", True, ""),
-    ({"pos": 1, "pos_dest": 2}, 1, "acbde", True, ""),
-    ({"pos": 2, "pos_dest": 1}, 2, "acbde", True, ""),
-    ({"pos": 0, "pos_dest": 4}, 0, "bcdea", True, ""),
-    ({"pos": 4, "pos_dest": 0}, 4, "eabcd", True, ""),
-    ({"pos": 3, "pos_dest": "front"}, 3, "dabce", True, ""),
-    ({"pos": 2, "pos_dest": "back"}, 2, "abdec", True, ""),
-    ({"uid": "p3", "after_uid": "p3"}, 2, "abcde", True, ""),
-    ({"uid": "p1", "before_uid": "p2"}, 0, "abcde", True, ""),
-    ({"uid": "p1", "after_uid": "p2"}, 0, "bacde", True, ""),
-    ({"uid": "p2", "pos_dest": "front"}, 1, "bacde", True, ""),
-    ({"uid": "p2", "pos_dest": "back"}, 1, "acdeb", True, ""),
-    ({"uid": "p1", "pos_dest": "front"}, 0, "abcde", True, ""),
-    ({"uid": "p5", "pos_dest": "back"}, 4, "abcde", True, ""),
-    ({"pos": 1, "after_uid": "p4"}, 1, "acdbe", True, ""),
-    ({"pos": "front", "after_uid": "p4"}, 0, "bcdae", True, ""),
-    ({"pos": 3, "after_uid": "p1"}, 3, "adbce", True, ""),
-    ({"pos": "back", "after_uid": "p1"}, 4, "aebcd", True, ""),
-    ({"pos": 1, "before_uid": "p4"}, 1, "acbde", True, ""),
-    ({"pos": "front", "before_uid": "p4"}, 0, "bcade", True, ""),
-    ({"pos": 3, "before_uid": "p1"}, 3, "dabce", True, ""),
-    ({"pos": "back", "before_uid": "p1"}, 4, "eabcd", True, ""),
-    ({"pos": "back", "after_uid": "p5"}, 4, "abcde", True, ""),
-    ({"pos": "front", "before_uid": "p1"}, 0, "abcde", True, ""),
-    ({"pos": 50, "before_uid": "p1"}, 0, "", False, r"Source plan \(position 50\) was not found"),
-    ({"uid": "abc", "before_uid": "p1"}, 0, "", False, r"Source plan \(UID 'abc'\) was not found"),
-    ({"pos": 3, "pos_dest": 50}, 0, "", False, r"Destination plan \(position 50\) was not found"),
-    ({"uid": "p1", "before_uid": "abc"}, 0, "", False, r"Destination plan \(UID 'abc'\) was not found"),
-    ({"before_uid": "p1"}, 0, "", False, r"Source position or UID is not specified"),
-    ({"pos": 3}, 0, "", False, r"Destination position or UID is not specified"),
-    ({"pos": 1, "uid": "p1", "before_uid": "p4"}, 1, "", False, "Ambiguous parameters"),
-    ({"pos": 1, "pos_dest": 4, "before_uid": "p4"}, 1, "", False, "Ambiguous parameters"),
-    ({"pos": 1, "after_uid": "p4", "before_uid": "p4"}, 1, "", False, "Ambiguous parameters"),
+@pytest.mark.parametrize("params, src, order, success, pquid_changed, msg", [
+    ({"pos": 1, "pos_dest": 1}, 1, "abcde", True, False, ""),
+    ({"pos": "front", "pos_dest": "front"}, 0, "abcde", True, False, ""),
+    ({"pos": "back", "pos_dest": "back"}, 4, "abcde", True, False, ""),
+    ({"pos": "front", "pos_dest": "back"}, 0, "bcdea", True, True, ""),
+    ({"pos": "back", "pos_dest": "front"}, 4, "eabcd", True, True, ""),
+    ({"pos": 1, "pos_dest": 2}, 1, "acbde", True, True, ""),
+    ({"pos": 2, "pos_dest": 1}, 2, "acbde", True, True, ""),
+    ({"pos": 0, "pos_dest": 4}, 0, "bcdea", True, True, ""),
+    ({"pos": 4, "pos_dest": 0}, 4, "eabcd", True, True, ""),
+    ({"pos": 3, "pos_dest": "front"}, 3, "dabce", True, True, ""),
+    ({"pos": 2, "pos_dest": "back"}, 2, "abdec", True, True, ""),
+    ({"uid": "p3", "after_uid": "p3"}, 2, "abcde", True, False, ""),
+    ({"uid": "p1", "before_uid": "p2"}, 0, "abcde", True, True, ""),
+    ({"uid": "p1", "after_uid": "p2"}, 0, "bacde", True, True, ""),
+    ({"uid": "p2", "pos_dest": "front"}, 1, "bacde", True, True, ""),
+    ({"uid": "p2", "pos_dest": "back"}, 1, "acdeb", True, True, ""),
+    ({"uid": "p1", "pos_dest": "front"}, 0, "abcde", True, False, ""),
+    ({"uid": "p5", "pos_dest": "back"}, 4, "abcde", True, False, ""),
+    ({"pos": 1, "after_uid": "p4"}, 1, "acdbe", True, True, ""),
+    ({"pos": "front", "after_uid": "p4"}, 0, "bcdae", True, True, ""),
+    ({"pos": 3, "after_uid": "p1"}, 3, "adbce", True, True, ""),
+    ({"pos": "back", "after_uid": "p1"}, 4, "aebcd", True, True, ""),
+    ({"pos": 1, "before_uid": "p4"}, 1, "acbde", True, True, ""),
+    ({"pos": "front", "before_uid": "p4"}, 0, "bcade", True, True, ""),
+    ({"pos": 3, "before_uid": "p1"}, 3, "dabce", True, True, ""),
+    ({"pos": "back", "before_uid": "p1"}, 4, "eabcd", True, True, ""),
+    ({"pos": "back", "after_uid": "p5"}, 4, "abcde", True, False, ""),
+    ({"pos": "front", "before_uid": "p1"}, 0, "abcde", True, False, ""),
+    ({"pos": 50, "before_uid": "p1"}, 0, "", False, False, r"Source plan \(position 50\) was not found"),
+    ({"uid": "abc", "before_uid": "p1"}, 0, "", False, False, r"Source plan \(UID 'abc'\) was not found"),
+    ({"pos": 3, "pos_dest": 50}, 0, "", False, False, r"Destination plan \(position 50\) was not found"),
+    ({"uid": "p1", "before_uid": "abc"}, 0, "", False, False, r"Destination plan \(UID 'abc'\) was not found"),
+    ({"before_uid": "p1"}, 0, "", False, None, r"Source position or UID is not specified"),
+    ({"pos": 3}, 0, "", False, False, r"Destination position or UID is not specified"),
+    ({"pos": 1, "uid": "p1", "before_uid": "p4"}, 1, "", False, False, "Ambiguous parameters"),
+    ({"pos": 1, "pos_dest": 4, "before_uid": "p4"}, 1, "", False, False, "Ambiguous parameters"),
+    ({"pos": 1, "after_uid": "p4", "before_uid": "p4"}, 1, "", False, False, "Ambiguous parameters"),
 ])
 # fmt: on
-def test_move_item_1(pq, params, src, order, success, msg):
+def test_move_item_1(pq, params, src, order, success, pquid_changed, msg):
     """
     Basic tests for ``move_item()``.
     """
@@ -675,6 +732,7 @@ def test_move_item_1(pq, params, src, order, success, msg):
             await pq.add_item_to_queue(plan)
 
         assert await pq.get_queue_size() == len(plans)
+        pq_uid = pq.plan_queue_uid
 
         if success:
             plan, qsize = await pq.move_item(**params)
@@ -686,9 +744,15 @@ def test_move_item_1(pq, params, src, order, success, msg):
             names = "".join(names)
             assert names == order
 
+            if pquid_changed:
+                assert pq.plan_queue_uid != pq_uid
+            else:
+                assert pq.plan_queue_uid == pq_uid
+
         else:
             with pytest.raises(Exception, match=msg):
                 await pq.move_item(**params)
+            assert pq.plan_queue_uid == pq_uid
 
     asyncio.run(testing())
 
@@ -719,6 +783,8 @@ def test_pop_item_from_queue_1(pq, pos, name):
         await pq.add_item_to_queue({"name": "c"})
         assert await pq.get_queue_size() == 3
 
+        pq_uid = pq.plan_queue_uid
+
         if name is not None:
             plan, qsize = await pq.pop_item_from_queue(pos=pos)
             assert plan["name"] == name
@@ -727,9 +793,11 @@ def test_pop_item_from_queue_1(pq, pos, name):
             # Push the plan back to the queue (proves that UID is removed from '_uid_dict')
             await pq.add_item_to_queue(plan)
             assert await pq.get_queue_size() == 3
+            assert pq.plan_queue_uid != pq_uid
         else:
             with pytest.raises(IndexError, match="Index .* is out of range"):
                 await pq.pop_item_from_queue(pos=pos)
+            assert pq.plan_queue_uid == pq_uid
 
     asyncio.run(testing())
 
@@ -743,8 +811,10 @@ def test_pop_item_from_queue_2(pq, pos):
 
     async def testing():
         assert await pq.get_queue_size() == 0
+        pq_uid = pq.plan_queue_uid
         with pytest.raises(IndexError, match="Index .* is out of range|Queue is empty"):
             await pq.pop_item_from_queue(pos=pos)
+        assert pq.plan_queue_uid == pq_uid
 
     asyncio.run(testing())
 
@@ -765,22 +835,28 @@ def test_pop_item_from_queue_3(pq):
         plan_to_remove = [_ for _ in plans if _["name"] == "b"][0]
 
         # Remove one plan
+        pq_uid = pq.plan_queue_uid
         await pq.pop_item_from_queue(uid=plan_to_remove["item_uid"])
         assert await pq.get_queue_size() == 2
+        assert pq.plan_queue_uid != pq_uid
 
         # Attempt to remove the plan again. This should raise an exception.
+        pq_uid = pq.plan_queue_uid
         with pytest.raises(
             IndexError, match=f"Plan with UID '{plan_to_remove['item_uid']}' " f"is not in the queue"
         ):
             await pq.pop_item_from_queue(uid=plan_to_remove["item_uid"])
         assert await pq.get_queue_size() == 2
+        assert pq.plan_queue_uid == pq_uid
 
         # Attempt to remove the plan that is running. This should raise an exception.
         await pq.set_next_item_as_running()
         assert await pq.get_queue_size() == 1
+        pq_uid = pq.plan_queue_uid
         with pytest.raises(IndexError, match="Can not remove an item which is currently running"):
             await pq.pop_item_from_queue(uid=plans[0]["item_uid"])
         assert await pq.get_queue_size() == 1
+        assert pq.plan_queue_uid == pq_uid
 
     asyncio.run(testing())
 
@@ -791,12 +867,15 @@ def test_pop_item_from_queue_4_fail(pq):
     """
 
     async def testing():
+        pq_uid = pq.plan_queue_uid
         with pytest.raises(ValueError, match="Parameter 'pos' has incorrect value"):
             await pq.pop_item_from_queue(pos="something")
+        assert pq.plan_queue_uid == pq_uid
 
         # Ambiguous parameters (position and UID is passed)
         with pytest.raises(ValueError, match="Ambiguous parameters"):
             await pq.pop_item_from_queue(pos=5, uid="abc")
+        assert pq.plan_queue_uid == pq_uid
 
     asyncio.run(testing())
 
@@ -816,11 +895,14 @@ def test_clear_queue(pq):
         assert await pq.get_queue_size() == 2
         assert len(pq._uid_dict) == 3
 
+        pq_uid = pq.plan_queue_uid
+
         # Clears the queue only (doesn't touch the running plan)
         await pq.clear_queue()
 
         assert await pq.get_queue_size() == 0
         assert len(pq._uid_dict) == 1
+        assert pq.plan_queue_uid != pq_uid
 
         with pytest.raises(ValueError, match="Parameter 'pos' has incorrect value"):
             await pq.pop_item_from_queue(pos="something")
@@ -837,16 +919,22 @@ def test_add_to_history_functions(pq):
         assert await pq.get_history_size() == 0
 
         plans = [{"name": "a"}, {"name": "b"}, {"name": "c"}]
+        ph_uid = pq.plan_history_uid
         for plan in plans:
             await pq._add_to_history(plan)
         assert await pq.get_history_size() == 3
+        assert pq.plan_history_uid != ph_uid
 
+        ph_uid = pq.plan_history_uid
         plan_history = await pq.get_history()
+        assert pq.plan_history_uid == ph_uid
 
         assert len(plan_history) == 3
         assert plan_history == plans
 
+        ph_uid = pq.plan_history_uid
         await pq.clear_history()
+        assert pq.plan_history_uid != ph_uid
 
         plan_history = await pq.get_history()
         assert plan_history == []
@@ -871,14 +959,19 @@ def test_set_next_item_as_running(pq):
         await pq.add_item_to_queue({"name": "a"})
         await pq.add_item_to_queue({"name": "b"})
         await pq.add_item_to_queue({"name": "c"})
+
         # Set one of 3 plans as running (removes it from the queue)
+        pq_uid = pq.plan_queue_uid
         assert await pq.set_next_item_as_running() != {}
 
+        assert pq.plan_queue_uid != pq_uid
         assert await pq.get_queue_size() == 2
         assert len(pq._uid_dict) == 3
 
         # Apply if a plan is already running
+        pq_uid = pq.plan_queue_uid
         assert await pq.set_next_item_as_running() == {}
+        assert pq.plan_queue_uid == pq_uid
         assert await pq.get_queue_size() == 2
         assert len(pq._uid_dict) == 3
 
@@ -909,12 +1002,19 @@ def test_set_processed_item_as_completed(pq):
             await pq.add_item_to_queue(plan)
 
         # No plan is running
+        pq_uid = pq.plan_queue_uid
+        ph_uid = pq.plan_history_uid
         plan = await pq.set_processed_item_as_completed(exit_status="completed", run_uids=plans_run_uids[0])
         assert plan == {}
+        assert pq.plan_queue_uid == pq_uid
+        assert pq.plan_history_uid == ph_uid
 
         # Execute the first plan
         await pq.set_next_item_as_running()
+        pq_uid = pq.plan_queue_uid
         plan = await pq.set_processed_item_as_completed(exit_status="completed", run_uids=plans_run_uids[0])
+        assert pq.plan_queue_uid != pq_uid
+        assert pq.plan_history_uid != ph_uid
 
         assert await pq.get_queue_size() == 2
         assert await pq.get_history_size() == 1
@@ -969,12 +1069,19 @@ def test_set_processed_item_as_stopped(pq):
             await pq.add_item_to_queue(plan)
 
         # No plan is running
+        pq_uid = pq.plan_queue_uid
+        ph_uid = pq.plan_history_uid
         plan = await pq.set_processed_item_as_stopped(exit_status="stopped", run_uids=plans_run_uids[0])
         assert plan == {}
+        assert pq.plan_queue_uid == pq_uid
+        assert pq.plan_history_uid == ph_uid
 
         # Execute the first plan
         await pq.set_next_item_as_running()
+        pq_uid = pq.plan_queue_uid
         plan = await pq.set_processed_item_as_stopped(exit_status="stopped", run_uids=plans_run_uids[0])
+        assert pq.plan_queue_uid != pq_uid
+        assert pq.plan_history_uid != ph_uid
 
         assert await pq.get_queue_size() == 3
         assert await pq.get_history_size() == 1

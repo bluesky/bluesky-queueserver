@@ -64,7 +64,24 @@ class PlanQueueOperations:
         self._name_plan_queue = "plan_queue"
         self._name_plan_history = "plan_history"
 
+        self._plan_queue_uid = self.new_item_uid()
+        self._plan_history_uid = self.new_item_uid()
+
         self._lock = None
+
+    @property
+    def plan_queue_uid(self):
+        """
+        Get current plan queue UID (str).
+        """
+        return self._plan_queue_uid
+
+    @property
+    def plan_history_uid(self):
+        """
+        Get current plan history UID.
+        """
+        return self._plan_history_uid
 
     async def start(self):
         """

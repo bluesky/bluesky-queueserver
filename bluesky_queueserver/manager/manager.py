@@ -788,6 +788,8 @@ class RunEngineManager(Process):
         worker_environment_exists = self._environment_exists
         re_state = self._worker_state_info["re_state"] if self._worker_state_info else None
         run_list_uid = self._re_run_list_uid
+        plan_queue_uid = self._plan_queue.plan_queue_uid()
+        plan_history_uid = self._plan_queue.plan_history_uid()
         # worker_state_info = self._worker_state_info
 
         # TODO: consider different levels of verbosity for ping or other command to
@@ -804,6 +806,8 @@ class RunEngineManager(Process):
             # If Run List UID change, download the list of runs for the current plan.
             # Run List UID is updated when the list is cleared as well.
             "run_list_uid": run_list_uid,
+            "plan_queue_uid": plan_queue_uid,
+            "plan_history_uid": plan_history_uid,
             # "worker_state_info": worker_state_info
         }
         return msg
@@ -883,8 +887,15 @@ class RunEngineManager(Process):
         logger.info("Returning current queue and running plan ...")
         plan_queue = await self._plan_queue.get_queue()
         running_item = await self._plan_queue.get_running_item_info()
+        plan_queue_uid = self._plan_queue.plan_queue_uid()
 
-        return {"success": True, "msg": "", "queue": plan_queue, "running_item": running_item}
+        return {
+            "success": True,
+            "msg": "",
+            "queue": plan_queue,
+            "running_item": running_item,
+            "plan_queue_uid": plan_queue_uid,
+        }
 
     def _get_item_from_request(self, *, request):
         item_type = None
@@ -1147,8 +1158,9 @@ class RunEngineManager(Process):
         """
         logger.info("Returning plan history ...")
         plan_history = await self._plan_queue.get_history()
+        plan_history_uid = self._plan_queue.plan_history_uid()
 
-        return {"success": True, "msg": "", "history": plan_history}
+        return {"success": True, "msg": "", "history": plan_history, "plan_history_uid": plan_history_uid}
 
     async def _history_clear_handler(self, request):
         """

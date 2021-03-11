@@ -64,7 +64,11 @@ class PlanQueueOperations:
         self._name_plan_queue = "plan_queue"
         self._name_plan_history = "plan_history"
 
+        # Plan queue UID is expected to change each time the contents of the queue is changed.
+        #   Since `self._uid_dict` is modified each time the queue is updated, it is sufficient
+        #   to update Plan queue UID in the functions that update `self._uid_dict`.
         self._plan_queue_uid = self.new_item_uid()
+        # Plan history UID is expected to change each time the history is changed.
         self._plan_history_uid = self.new_item_uid()
 
         self._lock = None
@@ -93,6 +97,9 @@ class PlanQueueOperations:
                 self._r_pool = await aioredis.create_redis_pool(f"redis://{self._redis_host}", encoding="utf8")
                 await self._queue_clean()
                 await self._uid_dict_initialize()
+
+                self._plan_queue_uid = self.new_item_uid()
+                self._plan_history_uid = self.new_item_uid()
 
     async def _queue_clean(self):
         """
@@ -125,6 +132,9 @@ class PlanQueueOperations:
         await self._r_pool.delete(self._name_plan_queue)
         await self._r_pool.delete(self._name_plan_history)
         self._uid_dict_clear()
+
+        self._plan_queue_uid = self.new_item_uid()
+        self._plan_history_uid = self.new_item_uid()
 
     async def delete_pool_entries(self):
         """
@@ -214,6 +224,7 @@ class PlanQueueOperations:
         """
         Clear ``self._uid_dict``.
         """
+        self._plan_queue_uid = self.new_item_uid()
         self._uid_dict.clear()
 
     def _is_uid_in_dict(self, uid):
@@ -229,6 +240,7 @@ class PlanQueueOperations:
         uid = plan["item_uid"]
         if self._is_uid_in_dict(uid):
             raise RuntimeError(f"Trying to add plan with UID '{uid}', which is already in the queue")
+        self._plan_queue_uid = self.new_item_uid()
         self._uid_dict.update({uid: plan})
 
     def _uid_dict_remove(self, uid):
@@ -237,6 +249,7 @@ class PlanQueueOperations:
         """
         if not self._is_uid_in_dict(uid):
             raise RuntimeError(f"Trying to remove plan with UID '{uid}', which is not in the queue")
+        self._plan_queue_uid = self.new_item_uid()
         self._uid_dict.pop(uid)
 
     def _uid_dict_update(self, plan):
@@ -246,6 +259,7 @@ class PlanQueueOperations:
         uid = plan["item_uid"]
         if not self._is_uid_in_dict(uid):
             raise RuntimeError(f"Trying to update plan with UID '{uid}', which is not in the queue")
+        self._plan_queue_uid = self.new_item_uid()
         self._uid_dict.update({uid: plan})
 
     def _uid_dict_get_item(self, uid):
@@ -836,6 +850,7 @@ class PlanQueueOperations:
         int
             The new size of the history.
         """
+        self._plan_history_uid = self.new_item_uid()
         history_size = await self._r_pool.rpush(self._name_plan_history, json.dumps(item))
         return history_size
 
@@ -882,6 +897,7 @@ class PlanQueueOperations:
         """
         See ``self.clear_history()`` method.
         """
+        self._plan_history_uid = self.new_item_uid()
         while await self._get_history_size():
             await self._r_pool.rpop(self._name_plan_history)
 

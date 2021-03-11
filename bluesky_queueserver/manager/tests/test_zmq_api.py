@@ -18,6 +18,7 @@ from ._common import (
     wait_for_condition,
     condition_environment_created,
     condition_queue_processing_finished,
+    condition_manager_paused,
     get_queue_state,
     condition_environment_closed,
     condition_manager_idle,
@@ -1330,6 +1331,119 @@ def test_zmq_api_queue_execution_1(re_manager):  # noqa: F811
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+class UidChecker:
+    """
+    The class may be used to verify if ``plan_queue_uid`` and ``plan_history_uid``
+    changed by calling ``verify_uid_changes`` between operations.
+    """
+
+    def __init__(self):
+        self.pq_uid, self.ph_uid = self.get_queue_uids()
+
+    def get_queue_uids(self):
+        status = get_queue_state()
+        return status["plan_queue_uid"], status["plan_history_uid"]
+
+    def verify_uid_changes(self, *, pq_changed, ph_changed):
+        """
+        Verify if ``plan_queue_uid`` and ``plan_history_uid`` changed
+        since the last call to this function or instantiation of the class.
+
+        Parameters
+        ----------
+        pq_changed : boolean
+            indicates if ``plan_queue_uid`` is expected to change since last
+            call to this function
+        ph_changed : boolean
+            indicates if ``plan_history_uid`` is expected to change since last
+            call to this function
+        """
+        pq_uid_new, ph_uid_new = self.get_queue_uids()
+        if pq_changed:
+            assert pq_uid_new != self.pq_uid
+        else:
+            assert pq_uid_new == self.pq_uid
+
+        if ph_changed:
+            assert ph_uid_new != self.ph_uid
+        else:
+            assert ph_uid_new == self.ph_uid
+
+        self.pq_uid, self.ph_uid = pq_uid_new, ph_uid_new
+
+
+def test_zmq_api_queue_execution_2(re_manager):  # noqa: F811
+    """
+    Execution of a queue that contains an instruction ('queue_stop').
+    """
+
+    uid_checker = UidChecker()
+
+    # Plan
+    params1b = {"plan": _plan3, "user": _user, "user_group": _user_group}
+    resp1b, _ = zmq_single_request("queue_item_add", params1b)
+    assert resp1b["success"] is True, f"resp={resp1b}"
+    uid_checker.verify_uid_changes(pq_changed=True, ph_changed=False)
+
+    # Plan
+    params1d = {"plan": _plan3, "user": _user, "user_group": _user_group}
+    resp1d, _ = zmq_single_request("queue_item_add", params1d)
+    assert resp1d["success"] is True, f"resp={resp1d}"
+    uid_checker.verify_uid_changes(pq_changed=True, ph_changed=False)
+
+    # The queue contains only a single instruction (stop the queue).
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    resp2a, _ = zmq_single_request("status")
+    assert resp2a["items_in_queue"] == 2
+    assert resp2a["items_in_history"] == 0
+
+    uid_checker.verify_uid_changes(pq_changed=False, ph_changed=False)
+
+    resp3, _ = zmq_single_request("queue_start")
+    assert resp3["success"] is True
+    ttime.sleep(1)
+    uid_checker.verify_uid_changes(pq_changed=True, ph_changed=False)
+
+    resp3a, _ = zmq_single_request("queue_stop")
+    assert resp3a["success"] is True
+
+    assert wait_for_condition(time=20, condition=condition_manager_idle)
+    uid_checker.verify_uid_changes(pq_changed=True, ph_changed=True)
+
+    resp3b, _ = zmq_single_request("status")
+    assert resp3b["items_in_queue"] == 1
+    assert resp3b["items_in_history"] == 1
+
+    resp5, _ = zmq_single_request("queue_start")
+    assert resp5["success"] is True
+    ttime.sleep(1)
+    uid_checker.verify_uid_changes(pq_changed=True, ph_changed=False)
+
+    resp5a, _ = zmq_single_request("re_pause", params={"option": "immediate"})
+    assert resp5a["success"] is True, str(resp5a)
+
+    assert wait_for_condition(time=20, condition=condition_manager_paused)
+    uid_checker.verify_uid_changes(pq_changed=False, ph_changed=False)
+
+    resp5b, _ = zmq_single_request("re_stop")
+    assert resp5b["success"] is True, str(resp5b)
+
+    assert wait_for_condition(time=20, condition=condition_manager_idle)
+    uid_checker.verify_uid_changes(pq_changed=True, ph_changed=True)
+
+    resp5a, _ = zmq_single_request("status")
+    assert resp5a["items_in_queue"] == 1
+    assert resp5a["items_in_history"] == 2
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=30, condition=condition_environment_closed)
 
 
 """

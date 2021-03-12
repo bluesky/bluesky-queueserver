@@ -1376,9 +1376,9 @@ class UidChecker:
 
 def test_zmq_api_queue_execution_2(re_manager):  # noqa: F811
     """
-    Execution of a queue that contains an instruction ('queue_stop').
+    Test if status fields ``plan_queue_uid`` and ``plan_history_uid`` are properly changed
+    during execution of common queue operations.
     """
-
     uid_checker = UidChecker()
 
     # Plan

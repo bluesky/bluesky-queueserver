@@ -877,7 +877,7 @@ class PlanQueueOperations:
         See ``self.get_history()`` method.
         """
         all_plans_json = await self._r_pool.lrange(self._name_plan_history, 0, -1)
-        return [json.loads(_) for _ in all_plans_json]
+        return [json.loads(_) for _ in all_plans_json], self._plan_history_uid
 
     async def get_history(self):
         """
@@ -889,6 +889,8 @@ class PlanQueueOperations:
         list(dict)
             The list of items in the plan history. Each plan is represented as a dictionary.
             Empty list is returned if the queue is empty.
+        str
+            Plan history UID
         """
         async with self._lock:
             return await self._get_history()

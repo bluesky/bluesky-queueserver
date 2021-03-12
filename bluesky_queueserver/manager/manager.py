@@ -1157,8 +1157,7 @@ class RunEngineManager(Process):
         Returns the contents of the plan history.
         """
         logger.info("Returning plan history ...")
-        plan_history_uid = self._plan_queue.plan_history_uid
-        plan_history = await self._plan_queue.get_history()
+        plan_history, plan_history_uid = await self._plan_queue.get_history()
 
         return {"success": True, "msg": "", "history": plan_history, "plan_history_uid": plan_history_uid}
 

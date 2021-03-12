@@ -926,7 +926,8 @@ def test_add_to_history_functions(pq):
         assert pq.plan_history_uid != ph_uid
 
         ph_uid = pq.plan_history_uid
-        plan_history = await pq.get_history()
+        plan_history, plan_history_uid_1 = await pq.get_history()
+        assert pq.plan_history_uid == plan_history_uid_1
         assert pq.plan_history_uid == ph_uid
 
         assert len(plan_history) == 3
@@ -936,7 +937,7 @@ def test_add_to_history_functions(pq):
         await pq.clear_history()
         assert pq.plan_history_uid != ph_uid
 
-        plan_history = await pq.get_history()
+        plan_history, _ = await pq.get_history()
         assert plan_history == []
 
     asyncio.run(testing())
@@ -1022,7 +1023,7 @@ def test_set_processed_item_as_completed(pq):
         assert plan["result"]["exit_status"] == "completed"
         assert plan["result"]["run_uids"] == plans_run_uids[0]
 
-        plan_history = await pq.get_history()
+        plan_history, _ = await pq.get_history()
         plan_history_expected = add_status_to_plans(plans[0:1], plans_run_uids[0:1], "completed")
         assert plan_history == plan_history_expected
 
@@ -1036,7 +1037,7 @@ def test_set_processed_item_as_completed(pq):
         assert plan["result"]["exit_status"] == "completed"
         assert plan["result"]["run_uids"] == plans_run_uids[1]
 
-        plan_history = await pq.get_history()
+        plan_history, _ = await pq.get_history()
         plan_history_expected = add_status_to_plans(plans[0:2], plans_run_uids[0:2], "completed")
         assert plan_history == plan_history_expected
 
@@ -1089,7 +1090,7 @@ def test_set_processed_item_as_stopped(pq):
         assert plan["result"]["exit_status"] == "stopped"
         assert plan["result"]["run_uids"] == plans_run_uids[0]
 
-        plan_history = await pq.get_history()
+        plan_history, _ = await pq.get_history()
         plan_history_expected = add_status_to_plans([plans[0]], [plans_run_uids[0]], "stopped")
         assert plan_history == plan_history_expected
 
@@ -1103,7 +1104,7 @@ def test_set_processed_item_as_stopped(pq):
         assert plan["result"]["exit_status"] == "stopped"
         assert plan["result"]["run_uids"] == plans_run_uids[1]
 
-        plan_history = await pq.get_history()
+        plan_history, _ = await pq.get_history()
         plan_history_expected = add_status_to_plans(
             [plans[0].copy(), plans[0].copy()], [plans_run_uids[0], plans_run_uids[1]], "stopped"
         )

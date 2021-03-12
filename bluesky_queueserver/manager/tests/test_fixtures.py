@@ -1,5 +1,3 @@
-import pytest
-
 from bluesky_queueserver.manager.comms import zmq_single_request
 
 from ._common import re_manager_cmd, db_catalog  # noqa: F401
@@ -15,7 +13,6 @@ from ._common import (
 _user, _user_group = "Testing Script", "admin"
 
 
-@pytest.mark.xfail(reason="For some reason the test fails when run on CI, but expected to pass locally")
 def test_fixture_db_catalog(db_catalog):  # noqa F811
     """
     Basic test for the fixture `db_catalog`.
@@ -25,18 +22,16 @@ def test_fixture_db_catalog(db_catalog):  # noqa F811
     #   all the tests in the current session.
     list(db_catalog["catalog"])
 
-    # NOTE: For some reason, the following operations fail when run with GitHub Actions CI
-    #    with "KeyError: 'qserver_tests'"
-
-    # Try to access the catalog in 'standard' way
-    from databroker import catalog
-
-    assert list(catalog[db_catalog["catalog_name"]]) == list(db_catalog["catalog"])
-
     # Try to instantiate the Data Broker
     from databroker import Broker
 
     Broker.named(db_catalog["catalog_name"])
+
+    # Try to access the catalog in 'standard' way
+    from databroker import catalog
+
+    catalog.force_reload()
+    assert list(catalog[db_catalog["catalog_name"]]) == list(db_catalog["catalog"])
 
 
 def test_fixture_re_manager_cmd_1(re_manager_cmd):  # noqa F811

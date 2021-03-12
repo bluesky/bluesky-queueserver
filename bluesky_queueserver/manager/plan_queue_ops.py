@@ -32,7 +32,7 @@ class PlanQueueOperations:
         qsize = await pq.get_queue_size()
 
         # Read the queue (as a list)
-        queue = await pq.get_queue()
+        queue, _ = await pq.get_queue()
 
         # Start the first plan (This doesn't actually execute the plan. It is just for bookkeeping.)
         plan = await pq.set_next_item_as_running()
@@ -76,14 +76,18 @@ class PlanQueueOperations:
     @property
     def plan_queue_uid(self):
         """
-        Get current plan queue UID (str).
+        Get current plan queue UID (str). Note, that the UID may be updated multiple times during
+        complex queue operations, so the returned UID may not represent a valid queue state.
+        The intended use: the changes of UID could be monitored to detect changes in the queue
+        without accessing the queue. If the UID is different from UID returned by
+        ``PlanQueueOperations.get_queue()``, then the contents of the queue changed.
         """
         return self._plan_queue_uid
 
     @property
     def plan_history_uid(self):
         """
-        Get current plan history UID.
+        Get current plan history UID. See notes for ``PlanQueueOperations.plan_queue_uid``.
         """
         return self._plan_history_uid
 
@@ -105,7 +109,7 @@ class PlanQueueOperations:
         """
         Delete all the invalid queue entries (there could be some entries from failed unit tests).
         """
-        pq = await self._get_queue()
+        pq, _ = await self._get_queue()
 
         def verify_item(item):
             # The criteria may be changed.
@@ -212,7 +216,7 @@ class PlanQueueOperations:
         IndexError
             No plan is found.
         """
-        queue = await self._get_queue()
+        queue, _ = await self._get_queue()
         for n, plan in enumerate(queue):
             if plan["item_uid"] == uid:
                 return n
@@ -272,7 +276,7 @@ class PlanQueueOperations:
         """
         Initialize ``self._uid_dict`` with UIDs extracted from the plans in the queue.
         """
-        pq = await self._get_queue()
+        pq, _ = await self._get_queue()
         self._uid_dict_clear()
         # Go over all plans in the queue
         for item in pq:
@@ -366,7 +370,7 @@ class PlanQueueOperations:
         See ``self.get_queue()`` method.
         """
         all_plans_json = await self._r_pool.lrange(self._name_plan_queue, 0, -1)
-        return [json.loads(_) for _ in all_plans_json]
+        return [json.loads(_) for _ in all_plans_json], self._plan_queue_uid
 
     async def get_queue(self):
         """
@@ -378,9 +382,37 @@ class PlanQueueOperations:
         list(dict)
             The list of items in the queue. Each item is represented as a dictionary.
             Empty list is returned if the queue is empty.
+        str
+            Plan queue UID.
         """
         async with self._lock:
             return await self._get_queue()
+
+    async def _get_queue_full(self):
+        plan_queue, plan_queue_uid = await self._get_queue()
+        running_item = await self._get_running_item_info()
+        return plan_queue, running_item, plan_queue_uid
+
+    async def get_queue_full(self):
+        """
+        Get the list of all items in the queue and information on currently running item.
+        The first element of the list is the first item in the queue. This is 'atomic' operation,
+        i.e. it guarantees that all returned data represent a valid queue state and
+        the queue was not changed while the data was collected.
+
+        Returns
+        -------
+        list(dict)
+            The list of items in the queue. Each item is represented as a dictionary.
+            Empty list is returned if the queue is empty.
+        dict
+            Dictionary representing currently running plan. Empty dictionary if
+            no plan is currently running (key value is ``{}`` or the key does not exist).
+        str
+            Plan queue UID.
+        """
+        async with self._lock:
+            return await self._get_queue_full()
 
     async def _get_item(self, *, pos=None, uid=None):
         """

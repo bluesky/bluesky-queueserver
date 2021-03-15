@@ -98,14 +98,19 @@ def test_verify_item_type(pq, plan, result):
 
 # fmt: off
 @pytest.mark.parametrize(
-    "plan, result, errmsg",
-    [({"a": 10}, False, "Item does not have UID"),
-     ([10, 20], False, errmsg_wrong_plan_type),
-     ({"item_uid": "one"}, True, ""),
-     ({"item_uid": "two"}, False, "Item with UID .+ is already in the queue"),
-     ({"item_uid": "three"}, False, "Item with UID .+ is already in the queue")])
+    "plan, f_kwargs, result, errmsg",
+    [({"a": 10}, {}, False, "Item does not have UID"),
+     ([10, 20], {}, False, errmsg_wrong_plan_type),
+     ({"item_uid": "one"}, {}, True, ""),
+     ({"item_uid": "two"}, {}, False, "Item with UID .+ is already in the queue"),
+     ({"item_uid": "three"}, {}, False, "Item with UID .+ is already in the queue"),
+     ({"item_uid": "two"}, {"ignore_uids": None}, False, "Item with UID .+ is already in the queue"),
+     ({"item_uid": "two"}, {"ignore_uids": ["two"]}, True, ""),
+     ({"item_uid": "two"}, {"ignore_uids": ["two", "three"]}, True, ""),
+     ({"item_uid": "two"}, {"ignore_uids": ["one", "three"]}, False, "Item with UID .+ is already in the queue"),
+     ])
 # fmt: on
-def test_verify_item(pq, plan, result, errmsg):
+def test_verify_item(pq, plan, f_kwargs, result, errmsg):
     """
     Tests for method ``_verify_item()``.
     """
@@ -126,10 +131,10 @@ def test_verify_item(pq, plan, result, errmsg):
     asyncio.run(set_plans())
 
     if result:
-        pq._verify_item(plan)
+        pq._verify_item(plan, **f_kwargs)
     else:
         with pytest.raises(Exception, match=errmsg):
-            pq._verify_item(plan)
+            pq._verify_item(plan, **f_kwargs)
 
 
 def test_new_item_uid(pq):
@@ -474,6 +479,139 @@ def test_add_item_to_queue_3_fail(pq):
         # Ambiguous parameters ('before_uid' and 'after_uid' is specified)
         with pytest.raises(ValueError, match="Ambiguous parameters"):
             await pq.add_item_to_queue({"name": "abc"}, before_uid="abc", after_uid="abc")
+
+    asyncio.run(testing())
+
+
+# fmt: off
+@pytest.mark.parametrize("replace_uid", [False, True])
+# fmt: on
+def test_replace_item_1(pq, replace_uid):
+    """
+    Basic functionality of ``PlanQueueOperations.replace_item()`` function.
+    """
+
+    async def testing():
+        plans = [{"name": "a"}, {"name": "b"}, {"name": "c"}]
+        plans_added = [None] * len(plans)
+        qsizes = [None] * len(plans)
+
+        for n, plan in enumerate(plans):
+            plans_added[n], qsizes[n] = await pq.add_item_to_queue(plan)
+
+        assert qsizes == [1, 2, 3]
+        assert await pq.get_queue_size() == 3
+
+        # Change name, but keep UID
+        plan_names_new = ["d", "e", "f"]
+        for n in range(len(plans_added)):
+            plan = plans_added[n].copy()
+            plan["name"] = plan_names_new[n]
+
+            uid_to_replace = plan["item_uid"]
+            if replace_uid:
+                plan["item_uid"] = pq.new_item_uid()  # Generate new UID
+
+            plan_new, qsize = await pq.replace_item(plan, item_uid=uid_to_replace)
+            assert plan_new["name"] == plan["name"]
+            assert plan_new["item_uid"] == plan["item_uid"]
+
+            assert await pq.get_queue_size() == 3
+            plans_added[n] = plan_new
+
+            # Make sure that the plan can be correctly extracted by uid
+            assert await pq.get_item(uid=plan["item_uid"]) == plan
+            assert await pq.get_queue_size() == 3
+
+            # Initialize '_uid_dict' and see if the plan can still be extracted using correct UID.
+            await pq._uid_dict_initialize()
+            assert await pq.get_item(uid=plan["item_uid"]) == plan
+            assert await pq.get_queue_size() == 3
+
+    asyncio.run(testing())
+
+
+def test_replace_item_2(pq):
+    """
+    ``PlanQueueOperations.replace_item()`` function: not UID in the plan - random UID is assigned.
+    """
+
+    async def testing():
+        plans = [{"name": "a"}, {"name": "b"}, {"name": "c"}]
+        plans_added = [None] * len(plans)
+        qsizes = [None] * len(plans)
+
+        for n, plan in enumerate(plans):
+            plans_added[n], qsizes[n] = await pq.add_item_to_queue(plan)
+
+        assert qsizes == [1, 2, 3]
+        assert await pq.get_queue_size() == 3
+
+        new_name = "h"
+        plan_new = {"name": new_name}  # No UID in the plan. It should still be inserted
+        plan_replaced, qsize = await pq.replace_item(plan_new, item_uid=plans_added[1]["item_uid"])
+
+        new_uid = plan_replaced["item_uid"]
+        assert new_uid != plans_added[1]["item_uid"]
+        assert plan_replaced["name"] == plan_new["name"]
+
+        plan = await pq.get_item(uid=new_uid)
+        assert plan["item_uid"] == new_uid
+        assert plan["name"] == new_name
+
+        # Initialize '_uid_dict' and see if the plan can still be extracted using correct UID.
+        await pq._uid_dict_initialize()
+        plan = await pq.get_item(uid=new_uid)
+        assert plan["item_uid"] == new_uid
+        assert plan["name"] == new_name
+
+    asyncio.run(testing())
+
+
+def test_replace_item_3_failing(pq):
+    """
+    ``PlanQueueOperations.replace_item()`` - failing cases
+    """
+
+    async def testing():
+        plans = [{"name": "a"}, {"name": "b"}, {"name": "c"}]
+        plans_added = [None] * len(plans)
+        qsizes = [None] * len(plans)
+
+        for n, plan in enumerate(plans):
+            plans_added[n], qsizes[n] = await pq.add_item_to_queue(plan)
+
+        assert qsizes == [1, 2, 3]
+        assert await pq.get_queue_size() == 3
+
+        # Set the first item as 'running'
+        running_plan = await pq.set_next_item_as_running()
+        assert running_plan == plans[0]
+
+        queue = await pq.get_queue()
+        running_item_info = await pq.get_running_item_info()
+
+        plan_new = {"name": "h"}  # No UID in the plan. It should still be inserted
+        # Case: attempt to replace a plan that is currently running
+        with pytest.raises(RuntimeError, match="Failed to replace item: Item with UID .* is currently running"):
+            await pq.replace_item(plan_new, item_uid=running_plan["item_uid"])
+
+        # Case: attempt to replace a plan that is not in queue
+        with pytest.raises(RuntimeError, match="Failed to replace item: Item with UID .* is not in the queue"):
+            await pq.replace_item(plan_new, item_uid="uid-that-does-not-exist")
+
+        # Case: attempt to replace a plan with another plan that already exists in the queue
+        plan = plans_added[1]
+        with pytest.raises(RuntimeError, match="Item with UID .* is already in the queue"):
+            await pq.replace_item(plan, item_uid=plans_added[2]["item_uid"])
+
+        # Case: attempt to replace a plan with currently running plan
+        with pytest.raises(RuntimeError, match="Item with UID .* is already in the queue"):
+            await pq.replace_item(running_plan, item_uid=plans_added[2]["item_uid"])
+
+        # Make sure that the queue did not change during the test
+        assert await pq.get_queue() == queue
+        assert await pq.get_running_item_info() == running_item_info
 
     asyncio.run(testing())
 

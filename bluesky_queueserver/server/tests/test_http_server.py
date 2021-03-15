@@ -235,6 +235,85 @@ def test_http_server_queue_item_add_handler_6_fail(re_manager, fastapi_server): 
     assert "Incorrect request format: request contains no item info." in resp1["msg"]
 
 
+# fmt: on
+@pytest.mark.parametrize("replace", [None, False, True])
+# fmt: off
+def test_http_server_queue_item_update_1(re_manager, fastapi_server, replace):  # noqa F811
+    """
+    Basic test for `/queue/item/update` API.
+    """
+    resp1 = _request_to_json("post", "/queue/item/add", json={"plan": _plan1})
+    assert resp1["success"] is True, f"resp={resp1}"
+    assert resp1["qsize"] == 1
+    assert resp1["plan"]["name"] == _plan1["name"]
+    assert resp1["plan"]["args"] == _plan1["args"]
+    assert "item_uid" in resp1["plan"]
+
+    plan = resp1["plan"]
+    uid = plan["item_uid"]
+
+    plan_changed = plan.copy()
+    plan_new_args = [["det1"]]
+    plan_changed["args"] = plan_new_args
+
+    params = {"plan": plan_changed}
+    if replace is not None:
+        params["replace"] = replace
+
+    resp2 = _request_to_json("post", "/queue/item/update", json=params)
+    assert resp2["success"] is True
+    assert resp2["qsize"] == 1
+    assert resp2["plan"]["name"] == _plan1["name"]
+    assert resp2["plan"]["args"] == plan_new_args
+    assert "item_uid" in resp2["plan"]
+    if replace:
+        assert resp2["plan"]["item_uid"] != uid
+    else:
+        assert resp2["plan"]["item_uid"] == uid
+
+    resp3 = _request_to_json("get", "/queue/get")
+    assert resp3["queue"] != []
+    assert len(resp3["queue"]) == 1
+    assert resp3["queue"][0] == resp2["plan"]
+    assert resp3["running_item"] == {}
+
+
+# fmt: on
+@pytest.mark.parametrize("replace", [None, False, True])
+# fmt: off
+def test_http_server_queue_item_update_2_fail(re_manager, fastapi_server, replace):  # noqa F811
+    """
+    Failing cases for `queue_item_update`: submitted item UID does not match any UID in the queue.
+    """
+    resp1 = _request_to_json("post", "/queue/item/add", json={"plan": _plan1})
+    assert resp1["success"] is True
+    assert resp1["qsize"] == 1
+    assert resp1["plan"]["name"] == _plan1["name"]
+    assert resp1["plan"]["args"] == _plan1["args"]
+    assert "item_uid" in resp1["plan"]
+
+    plan = resp1["plan"]
+
+    plan_changed = plan.copy()
+    plan_changed["args"] = [["det1"]]
+    plan_changed["item_uid"] = "incorrect_uid"
+
+    params = {"plan": plan_changed}
+    if replace is not None:
+        params["replace"] = replace
+
+    resp2 = _request_to_json("post", "/queue/item/update", json=params)
+    assert resp2["success"] is False
+    assert resp2["msg"] == "Failed to add an item: Failed to replace item: " \
+                           "Item with UID 'incorrect_uid' is not in the queue"
+
+    resp3 = _request_to_json("get", "/queue/get")
+    assert resp3["queue"] != []
+    assert len(resp3["queue"]) == 1
+    assert resp3["queue"][0] == plan
+    assert resp3["running_item"] == {}
+
+
 def test_http_server_queue_item_get_remove_handler_1(re_manager, fastapi_server):  # noqa F811
 
     add_plans_to_queue()

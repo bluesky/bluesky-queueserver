@@ -90,6 +90,7 @@ Operations with the plan queue:
 
 - :ref:`method_queue_get`
 - :ref:`method_queue_item_add`
+- :ref:`method_queue_item_update`
 - :ref:`method_queue_item_get`
 - :ref:`method_queue_item_remove`
 - :ref:`method_queue_item_move`
@@ -502,6 +503,62 @@ Returns       **success**: *boolean*
               **qsize**: *int* or *None*
                   the number of items in the plan queue after the plan was added if
                   the operation was successful, *None* otherwise
+
+              **plan** or **instruction**: *dict*
+                  the inserted item. The item contains the assigned item UID.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+
+.. _method_queue_item_update:
+
+**'queue_item_update'**
+^^^^^^^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'queue_item_update'**
+------------  -----------------------------------------------------------------------------------------
+Description   Update the existing item in the queue. The method is intended for editing queue items,
+              but may be used for replacing the existing items with completely different ones.
+              The updated item may be a plan or an instruction. The item parameter 'item_uid' must
+              be set to a UID of an existing queue item that is expected to be replaced. The method
+              fails if the item is not found. By default, the UID of the updated item is not changed
+              and 'user' and 'user_group' parameters are set to the values provided in the request.
+              The 'user_group' is also used for validation of submitted item. If it is preferable
+              to replace the item UID with a new random UID (e.g. if the item is replaced with
+              completely different item), the method should be called with the optional parameter
+              'replace=True'.
+------------  -----------------------------------------------------------------------------------------
+Parameters    **plan or instruction**: *dict*
+                  the dictionary of plan or instruction parameters. Plans are distinguished from
+                  instructions based on whether 'plan' or 'instruction' parameter is included.
+
+              **user_group**: *str*
+                  the name of the user group (e.g. 'admin').
+
+              **user**: *str*
+                  the name of the user (e.g. 'John Doe'). The name is included in the item metadata
+                  and may be used to identify the user who added the item to the queue. It is not
+                  passed to the Run Engine or included in run metadata.
+
+              **replace**: *boolean* (optional)
+                  replace the updated item UID with the new random UID (True) or keep the original
+                  UID (False). Default value is (False).
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **qsize**: *int* or *None*
+                  the number of items in the plan queue after the plan was added if
+                  the operation was successful, *None* otherwise
+
+              **plan** or **instruction**: *dict*
+                  the updated item. The item contains the new item UID if the method was called with
+                  'replace=True'.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================

@@ -61,6 +61,11 @@ NOTE: Position indices are 0-based. Inserting a plan to position 0 pushes it to 
       Negative position indices are counted from the back of the queue. Request for a plan with index -1
       returns the last plan of the queue. Inserting a plan at position -1 makes it previous to last.
 
+qserver queue update plan <uid> '<plan-params>'         #  Update item with <uid> with a plan
+qserver queue replace plan <uid> '<plan-params>'        #  Replace item with <uid> with a plan
+qserver queue update instruction <uid> '<instruction>'  #  Update item with <uid> with an instruction
+qserver queue replace instruction <uid> '<instruction>' #  Replace item with <uid> with an instruction
+
 Example of JSON specification of a plan:
     '{"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}'
 
@@ -307,7 +312,7 @@ def check_number_of_parameters(params, n_min, n_max, params_report=None):
         raise CommandParameterError(err_msg)
 
 
-def msg_queue_add(params):
+def msg_queue_add_update(params, *, cmd_opt):
     """
     Generate outgoing message for `queue add` command. See ``cli_examples`` for supported formats
     for the command.
@@ -316,6 +321,8 @@ def msg_queue_add(params):
     ----------
     params : list
         List of parameters of the command. The first element of the list is expected to be ``add`` keyword.
+    cmd_opt : str
+        Command option, must match ``param[0]``.
 
     Returns
     -------
@@ -330,21 +337,33 @@ def msg_queue_add(params):
     """
     # Check if the function was called for the appropriate command
     command = "queue"
-    expected_p0 = "add"
+    expected_p0 = cmd_opt
     if params[0] != expected_p0:
         raise ValueError(f"Incorrect parameter value '{params[0]}'. Expected value: '{expected_p0}'")
 
-    # Make sure that there are sufficient number of parameters to start processing
+    # Make sure that there is sufficient number of parameters to start processing
     if len(params) < 3:
-        raise CommandParameterError(f"Item type and value are not specified '{command} {params[0]}'")
+        raise CommandParameterError(f"Item type and value are not specified: '{command} {params[0]}'")
+
+    if (params[0] in ("update", "replace")) and (len(params) != 4):
+        raise CommandParameterError(f"Incorrect number of parameters: '{command} {params[0]}'")
 
     p_item_type = params[1]
     if p_item_type not in ("plan", "instruction"):
         raise_request_not_supported([command, params[0], params[1]])
+
     try:
         # Destination address is optional. If no destination index or UID found, then
         #   'addr_param' is {}.
-        addr_param, p_item = extract_destination_address(params[2:])
+        if params[0] == "add":
+            update_uid = None
+            addr_param, p_item = extract_destination_address(params[2:])
+        elif params[0] in ("update", "replace"):
+            update_uid = params[2]  # Next parameter is UID
+            addr_param, p_item = {}, params[3:]
+        else:
+            raise CommandParameterError(f"Option '{params[0]}' is not supported: '{command} {params[0]}'")
+
         # There should be exactly 1 parameter left. This parameter should contain a plan
         #   or an instruction.
         check_number_of_parameters(p_item, 1, 1, params)
@@ -354,23 +373,31 @@ def msg_queue_add(params):
                 plan = ast.literal_eval(p_item[0])
             except Exception:
                 raise CommandParameterError(f"Error occurred while parsing the plan '{p_item[0]}'")
+            if update_uid:
+                plan["item_uid"] = update_uid
             addr_param.update({"plan": plan})
         elif p_item_type == "instruction":
             if p_item[0] == "queue-stop":
                 instruction = {"action": "queue_stop"}
             else:
                 raise CommandParameterError(f"Unsupported instruction type: {p_item[0]}")
+            if update_uid:
+                instruction["item_uid"] = update_uid
             addr_param.update({"instruction": instruction})
         else:
             # This indicates a bug in the program.
             raise ValueError(f"Unknown item type: {p_item_type}")
+
     except IndexError:
         raise CommandParameterError(f"The command '{params}' contains insufficient number of parameters")
 
-    method = f"{command}_item_{params[0]}"
+    option = params[0] if (params[0] != "replace") else "update"
+    method = f"{command}_item_{option}"
     prms = addr_param
     prms["user"] = default_user
     prms["user_group"] = default_user_group
+    if params[0] in ("update", "replace"):
+        prms["replace"] = params[0] == "replace"
 
     return method, prms
 
@@ -624,10 +651,16 @@ def create_msg(params):
     elif command == "queue":
         if len(params) < 1:
             raise CommandParameterError(f"Request '{command}' must include at least one parameter")
-        supported_params = ("add", "get", "clear", "item", "start", "stop")
+        supported_params = ("add", "update", "replace", "get", "clear", "item", "start", "stop")
         if params[0] in supported_params:
             if params[0] == "add":
-                method, prms = msg_queue_add(params)
+                method, prms = msg_queue_add_update(params, cmd_opt="add")
+
+            elif params[0] == "update":
+                method, prms = msg_queue_add_update(params, cmd_opt="update")
+
+            elif params[0] == "replace":
+                method, prms = msg_queue_add_update(params, cmd_opt="replace")
 
             elif params[0] in ("get", "clear", "start"):
                 if len(params) != 1:

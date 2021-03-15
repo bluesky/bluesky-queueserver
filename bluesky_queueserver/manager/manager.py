@@ -886,9 +886,104 @@ class RunEngineManager(Process):
 
         return {"success": True, "msg": "", "queue": plan_queue, "running_item": running_item}
 
+    def _get_item_from_request(self, *, request):
+        item_type = None
+        item_types = ("plan", "instruction")
+        for itype in item_types:
+            if itype in request:
+                item_type = itype
+                item = request[itype]
+                break
+        if item_type is None:
+            raise Exception(
+                "Incorrect request format: request contains no item info. " f"Supported item types: {item_types}"
+            )
+        return item, item_type
+
+    def _get_user_info_from_request(self, *, request):
+        if "user_group" not in request:
+            raise Exception("Incorrect request format: user group is not specified")
+
+        if "user" not in request:
+            raise Exception("Incorrect request format: user name is not specified")
+
+        user = request["user"]
+        user_group = request["user_group"]
+
+        if user_group not in self._allowed_plans:
+            raise Exception(f"Unknown user group: '{user_group}'")
+
+        return user, user_group
+
+    def _prepare_item(self, *, request, generate_new_uid):
+        """
+        Prepare item before it could be added to the queue or used to update/replace existing item
+        in the queue. Preparation includes identification of item type and validation of the item.
+        The ``user`` and ``user_group`` are set to the values passed in the request. The new
+        ``item_uid`` is generated if requested.
+
+        Parameters
+        ----------
+        request : dict
+            request data received from the server
+        generate_new_uid : boolean
+            generate new ``item_uid`` if True, otherwise keep existing ``item_uid``.
+            Raise ``RuntimeError`` if ``generate_new_uid==False`` and the item has no assigned ``item_uid``.
+
+        Returns
+        -------
+        item : dict
+            prepared item
+        item_type : str
+            item type: ``plan`` or ``instruction``
+        item_uid_original : str or None
+            copy of the original ``item_uid`` saved before it is replaced with new UID, ``None`` if the
+            original item (passed as part of ``request``) has no UID.
+
+        Raises
+        ------
+        RuntimeError
+            raised if (1) item validation failed or (2) item has no UID and new UID is not generated
+        """
+        item, item_type = self._get_item_from_request(request=request)
+        user, user_group = self._get_user_info_from_request(request=request)
+
+        if item_type == "plan":
+            allowed_plans = self._allowed_plans[user_group] if self._allowed_plans else self._allowed_plans
+            allowed_devices = self._allowed_devices[user_group] if self._allowed_devices else self._allowed_devices
+            success, msg = validate_plan(item, allowed_plans=allowed_plans, allowed_devices=allowed_devices)
+        elif item_type == "instruction":
+            # At this point we support only one instruction ('queue_stop'), so validation is trivial.
+            if ("action" in item) and (item["action"] == "queue_stop"):
+                success, msg = True, ""
+            else:
+                success, msg = False, f"Unrecognized instruction: {item}"
+        else:
+            success, msg = False, f"Invalid item: {item}"
+
+        if not success:
+            raise RuntimeError(msg)
+
+        item["item_type"] = item_type
+
+        # Add user name and user_id to the plan (for later reference)
+        item["user"] = user
+        item["user_group"] = user_group
+
+        # Preserve original item UID
+        item_uid_original = item.get("item_uid", None)
+
+        if generate_new_uid:
+            item["item_uid"] = PlanQueueOperations.new_item_uid()
+        else:
+            if "item_uid" not in item:
+                raise RuntimeError("Item description contains no UID and UID generation is skipped")
+
+        return item, item_type, item_uid_original
+
     async def _queue_item_add_handler(self, request):
         """
-        Adds new item to the the queue. Item may be a plan or an instruction. Request must
+        Adds new item to the queue. Item may be a plan or an instruction. Request must
         include the element with the key ``plan`` if the added item is a plan or ``instruction``
         if it is an instruction. The element with the key is a dictionary of plan or instruction
         parameters. The parameters may not include UID, because the function always overwrites
@@ -910,66 +1005,55 @@ class RunEngineManager(Process):
         item_type, item, qsize, msg = None, None, None, ""
 
         try:
-            item_types = ("plan", "instruction")
-            for itype in item_types:
-                if itype in request:
-                    item_type = itype
-                    item = request[itype]
-                    break
-
-            if item_type is None:
-                raise Exception(
-                    "Incorrect request format: request contains no item info. "
-                    f"Supported item types: {item_types}"
-                )
-
-            if "user_group" not in request:
-                raise Exception("Incorrect request format: user group is not specified")
-
-            if "user" not in request:
-                raise Exception("Incorrect request format: user name is not specified")
-
-            user = request["user"]
-            user_group = request["user_group"]
-
-            if user_group not in self._allowed_plans:
-                raise Exception(f"Unknown user group: '{user_group}'")
+            # Always generate a new UID for the added plan!!!
+            item, item_type, _ = self._prepare_item(request=request, generate_new_uid=True)
 
             pos = request.get("pos", None)  # Position is optional
             before_uid = request.get("before_uid", None)
             after_uid = request.get("after_uid", None)
 
-            if item_type == "plan":
-                allowed_plans = self._allowed_plans[user_group] if self._allowed_plans else self._allowed_plans
-                allowed_devices = (
-                    self._allowed_devices[user_group] if self._allowed_devices else self._allowed_devices
-                )
-                success, msg = validate_plan(item, allowed_plans=allowed_plans, allowed_devices=allowed_devices)
-            elif item_type == "instruction":
-                # At this point we support only one instruction ('queue_stop'), so validation is trivial.
-                if ("action" in item) and (item["action"] == "queue_stop"):
-                    success, msg = True, ""
-                else:
-                    success, msg = False, f"Unrecognized instruction: {item}"
-            else:
-                success, msg = False, f"Invalid item: {item}"
-
-            if not success:
-                raise Exception(msg)
-
-            item["item_type"] = item_type
-
-            # Add user name and user_id to the plan (for later reference)
-            item["user"] = user
-            item["user_group"] = user_group
-
-            # Always generate a new UID for the added plan!!!
-            item["item_uid"] = PlanQueueOperations.new_item_uid()
-
             # Adding plan to queue may raise an exception
             item, qsize = await self._plan_queue.add_item_to_queue(
                 item, pos=pos, before_uid=before_uid, after_uid=after_uid
             )
+            success = True
+
+        except Exception as ex:
+            success = False
+            msg = f"Failed to add an item: {str(ex)}"
+
+        rdict = {"success": success, "msg": msg, "qsize": qsize}
+        if item_type:
+            rdict[item_type] = item
+
+        return rdict
+
+    async def _queue_item_update_handler(self, request):
+        """
+        Updates the existing item in the queue. Item may be a plan or an instruction. The request
+        must contain item description (``plan`` or ``instruction``) in the same format as for
+        ``queue_item_add`` request, except that the description must contain UID (``item_uid`` key).
+        The queue must contain an item with the identical UID. This item will be replaced with
+        the item passed as part of the request. The request may contain an optional parameter ``replace``.
+        If ``replace`` is missing or evaluated as ``False``, then the item UID in the queue does is
+        not changed. If ``replace`` is ``True``, then the new UID is generated before the item is
+        replaced. The original UID is still used to locate the item in the queue before replacing it.
+        The ``replace`` parameter allows to distinguish between small changes to item parameters
+        (``replace=False`` - UID is not changed) or complete replacement of the item (``replace=True`` -
+        new UID is generated).
+        """
+        success, msg, qsize, item_type = True, "", 0, None
+
+        try:
+            # Generate new UID if 'replace' flag is True, otherwise update the plan
+            generate_new_uid = bool(request.get("replace", False))
+            item, item_type, item_uid_original = self._prepare_item(
+                request=request, generate_new_uid=generate_new_uid
+            )
+
+            # item["item_uid"] will change if uid is replaced, but we still need
+            #   'original' UID to update the correct item
+            item, qsize = await self._plan_queue.replace_item(item, item_uid=item_uid_original)
             success = True
 
         except Exception as ex:
@@ -1271,7 +1355,7 @@ class RunEngineManager(Process):
             "environment_close": "_environment_close_handler",
             "environment_destroy": "_environment_destroy_handler",
             "queue_item_add": "_queue_item_add_handler",
-            # "queue_item_replace": "_queue_item_replace_handler",
+            "queue_item_update": "_queue_item_update_handler",
             "queue_item_get": "_queue_item_get_handler",
             "queue_item_remove": "_queue_item_remove_handler",
             "queue_item_move": "_queue_item_move_handler",

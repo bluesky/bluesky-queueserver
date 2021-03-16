@@ -896,7 +896,7 @@ class RunEngineManager(Process):
                 break
         if item_type is None:
             raise Exception(
-                "Incorrect request format: request contains no item info. " f"Supported item types: {item_types}"
+                "Incorrect request format: request contains no item info. Supported item types: {item_types}"
             )
         return item, item_type
 
@@ -1036,7 +1036,7 @@ class RunEngineManager(Process):
         ``queue_item_add`` request, except that the description must contain UID (``item_uid`` key).
         The queue must contain an item with the identical UID. This item will be replaced with
         the item passed as part of the request. The request may contain an optional parameter ``replace``.
-        If ``replace`` is missing or evaluated as ``False``, then the item UID in the queue does is
+        If ``replace`` is missing or evaluated as ``False``, then the item UID in the queue is
         not changed. If ``replace`` is ``True``, then the new UID is generated before the item is
         replaced. The original UID is still used to locate the item in the queue before replacing it.
         The ``replace`` parameter allows to distinguish between small changes to item parameters

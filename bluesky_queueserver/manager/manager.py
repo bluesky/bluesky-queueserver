@@ -896,7 +896,7 @@ class RunEngineManager(Process):
                 break
         if item_type is None:
             raise Exception(
-                "Incorrect request format: request contains no item info. Supported item types: {item_types}"
+                f"Incorrect request format: request contains no item info. Supported item types: {item_types}"
             )
         return item, item_type
 

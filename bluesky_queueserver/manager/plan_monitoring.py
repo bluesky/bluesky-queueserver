@@ -120,8 +120,8 @@ class CallbackRegisterRun(CallbackBase):
             uid = doc["uid"]
             self._run_list.add_run(uid=uid)
 
-            logger.info(f"New run was open: '{uid}'")
-            logger.debug(f"Run list: {self._run_list.get_run_list()}")
+            logger.info("New run was open: '%s'", uid)
+            logger.debug("Run list: %s", str(self._run_list.get_run_list()))
         except Exception as ex:
             logger.exception(f"RE Manager: Could not register new run: {ex}")
 

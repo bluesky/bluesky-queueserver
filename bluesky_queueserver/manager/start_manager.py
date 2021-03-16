@@ -316,7 +316,7 @@ def start_manager():
         "Logging verbosity settings",
         "The default logging settings (loglevel=INFO) provide optimal amount of data to monitor "
         "the operation of RE Manager. Select '--verbose' option to see detailed data on received and "
-        "sent messages, addeded and executed plans etc. Use options '--quiet' and '--silent' to "
+        "sent messages, added and executed plans, etc. Use options '--quiet' and '--silent' to "
         "see only warnings and error messages or disable logging output.",
     )
     group_v = group_verbosity.add_mutually_exclusive_group()

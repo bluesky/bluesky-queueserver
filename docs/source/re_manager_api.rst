@@ -168,6 +168,14 @@ Returns       **msg**: *str*
               **running_item_uid**: *str* or *None*
                  item UID of the currently running plan or *None* if no plan is currently running.
 
+              **plan_queue_uid**: *str*
+                 plan queue UID, which is updated each time the contents of the queue is changed.
+                 Monitor this parameter to determine when the queue data should be downloaded.
+
+              **plan_history_uid**: *str*
+                 plan history UID, which is updated each time the contents of the history is changed.
+                 Monitor this parameter to determine when the history data should be downloaded.
+
               **manager_state**: *str*
                   state of RE Manager. Supported states:
 
@@ -308,6 +316,9 @@ Returns       **success**: *boolean*
               **history**: *list*
                   list of items in the plan history, each item is represented by a dictionary of
                   item parameters. Currently the plan history may contain only plans.
+
+              **plan_history_uid**: *str*
+                  current plan history UID.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
@@ -454,6 +465,9 @@ Returns       **success**: *boolean*
               **running_item**: *dict*
                   parameters of the item representing currently running plan, empty dictionary ({}) is
                   returned if no plan is currently running.
+
+              **plan_queue_uid**: *str*
+                  current plan queue UID.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================

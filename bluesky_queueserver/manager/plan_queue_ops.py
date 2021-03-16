@@ -32,7 +32,7 @@ class PlanQueueOperations:
         qsize = await pq.get_queue_size()
 
         # Read the queue (as a list)
-        queue = await pq.get_queue()
+        queue, _ = await pq.get_queue()
 
         # Start the first plan (This doesn't actually execute the plan. It is just for bookkeeping.)
         plan = await pq.set_next_item_as_running()
@@ -64,7 +64,32 @@ class PlanQueueOperations:
         self._name_plan_queue = "plan_queue"
         self._name_plan_history = "plan_history"
 
+        # Plan queue UID is expected to change each time the contents of the queue is changed.
+        #   Since `self._uid_dict` is modified each time the queue is updated, it is sufficient
+        #   to update Plan queue UID in the functions that update `self._uid_dict`.
+        self._plan_queue_uid = self.new_item_uid()
+        # Plan history UID is expected to change each time the history is changed.
+        self._plan_history_uid = self.new_item_uid()
+
         self._lock = None
+
+    @property
+    def plan_queue_uid(self):
+        """
+        Get current plan queue UID (str). Note, that the UID may be updated multiple times during
+        complex queue operations, so the returned UID may not represent a valid queue state.
+        The intended use: the changes of UID could be monitored to detect changes in the queue
+        without accessing the queue. If the UID is different from UID returned by
+        ``PlanQueueOperations.get_queue()``, then the contents of the queue changed.
+        """
+        return self._plan_queue_uid
+
+    @property
+    def plan_history_uid(self):
+        """
+        Get current plan history UID. See notes for ``PlanQueueOperations.plan_queue_uid``.
+        """
+        return self._plan_history_uid
 
     async def start(self):
         """
@@ -77,11 +102,14 @@ class PlanQueueOperations:
                 await self._queue_clean()
                 await self._uid_dict_initialize()
 
+                self._plan_queue_uid = self.new_item_uid()
+                self._plan_history_uid = self.new_item_uid()
+
     async def _queue_clean(self):
         """
         Delete all the invalid queue entries (there could be some entries from failed unit tests).
         """
-        pq = await self._get_queue()
+        pq, _ = await self._get_queue()
 
         def verify_item(item):
             # The criteria may be changed.
@@ -108,6 +136,9 @@ class PlanQueueOperations:
         await self._r_pool.delete(self._name_plan_queue)
         await self._r_pool.delete(self._name_plan_history)
         self._uid_dict_clear()
+
+        self._plan_queue_uid = self.new_item_uid()
+        self._plan_history_uid = self.new_item_uid()
 
     async def delete_pool_entries(self):
         """
@@ -185,7 +216,7 @@ class PlanQueueOperations:
         IndexError
             No plan is found.
         """
-        queue = await self._get_queue()
+        queue, _ = await self._get_queue()
         for n, plan in enumerate(queue):
             if plan["item_uid"] == uid:
                 return n
@@ -197,6 +228,7 @@ class PlanQueueOperations:
         """
         Clear ``self._uid_dict``.
         """
+        self._plan_queue_uid = self.new_item_uid()
         self._uid_dict.clear()
 
     def _is_uid_in_dict(self, uid):
@@ -212,6 +244,7 @@ class PlanQueueOperations:
         uid = plan["item_uid"]
         if self._is_uid_in_dict(uid):
             raise RuntimeError(f"Trying to add plan with UID '{uid}', which is already in the queue")
+        self._plan_queue_uid = self.new_item_uid()
         self._uid_dict.update({uid: plan})
 
     def _uid_dict_remove(self, uid):
@@ -220,6 +253,7 @@ class PlanQueueOperations:
         """
         if not self._is_uid_in_dict(uid):
             raise RuntimeError(f"Trying to remove plan with UID '{uid}', which is not in the queue")
+        self._plan_queue_uid = self.new_item_uid()
         self._uid_dict.pop(uid)
 
     def _uid_dict_update(self, plan):
@@ -229,6 +263,7 @@ class PlanQueueOperations:
         uid = plan["item_uid"]
         if not self._is_uid_in_dict(uid):
             raise RuntimeError(f"Trying to update plan with UID '{uid}', which is not in the queue")
+        self._plan_queue_uid = self.new_item_uid()
         self._uid_dict.update({uid: plan})
 
     def _uid_dict_get_item(self, uid):
@@ -241,7 +276,7 @@ class PlanQueueOperations:
         """
         Initialize ``self._uid_dict`` with UIDs extracted from the plans in the queue.
         """
-        pq = await self._get_queue()
+        pq, _ = await self._get_queue()
         self._uid_dict_clear()
         # Go over all plans in the queue
         for item in pq:
@@ -335,7 +370,7 @@ class PlanQueueOperations:
         See ``self.get_queue()`` method.
         """
         all_plans_json = await self._r_pool.lrange(self._name_plan_queue, 0, -1)
-        return [json.loads(_) for _ in all_plans_json]
+        return [json.loads(_) for _ in all_plans_json], self._plan_queue_uid
 
     async def get_queue(self):
         """
@@ -347,9 +382,37 @@ class PlanQueueOperations:
         list(dict)
             The list of items in the queue. Each item is represented as a dictionary.
             Empty list is returned if the queue is empty.
+        str
+            Plan queue UID.
         """
         async with self._lock:
             return await self._get_queue()
+
+    async def _get_queue_full(self):
+        plan_queue, plan_queue_uid = await self._get_queue()
+        running_item = await self._get_running_item_info()
+        return plan_queue, running_item, plan_queue_uid
+
+    async def get_queue_full(self):
+        """
+        Get the list of all items in the queue and information on currently running item.
+        The first element of the list is the first item in the queue. This is 'atomic' operation,
+        i.e. it guarantees that all returned data represent a valid queue state and
+        the queue was not changed while the data was collected.
+
+        Returns
+        -------
+        list(dict)
+            The list of items in the queue. Each item is represented as a dictionary.
+            Empty list is returned if the queue is empty.
+        dict
+            Dictionary representing currently running plan. Empty dictionary if
+            no plan is currently running (key value is ``{}`` or the key does not exist).
+        str
+            Plan queue UID.
+        """
+        async with self._lock:
+            return await self._get_queue_full()
 
     async def _get_item(self, *, pos=None, uid=None):
         """
@@ -519,7 +582,7 @@ class PlanQueueOperations:
 
         if (before_uid is not None) and (after_uid is not None):
             raise ValueError(
-                "Ambiguous parameters: request to insert " "the plan before and after the reference plan"
+                "Ambiguous parameters: request to insert the plan before and after the reference plan"
             )
 
         pos = pos if pos is not None else "back"
@@ -819,6 +882,7 @@ class PlanQueueOperations:
         int
             The new size of the history.
         """
+        self._plan_history_uid = self.new_item_uid()
         history_size = await self._r_pool.rpush(self._name_plan_history, json.dumps(item))
         return history_size
 
@@ -845,7 +909,7 @@ class PlanQueueOperations:
         See ``self.get_history()`` method.
         """
         all_plans_json = await self._r_pool.lrange(self._name_plan_history, 0, -1)
-        return [json.loads(_) for _ in all_plans_json]
+        return [json.loads(_) for _ in all_plans_json], self._plan_history_uid
 
     async def get_history(self):
         """
@@ -857,6 +921,8 @@ class PlanQueueOperations:
         list(dict)
             The list of items in the plan history. Each plan is represented as a dictionary.
             Empty list is returned if the queue is empty.
+        str
+            Plan history UID
         """
         async with self._lock:
             return await self._get_history()
@@ -865,6 +931,7 @@ class PlanQueueOperations:
         """
         See ``self.clear_history()`` method.
         """
+        self._plan_history_uid = self.new_item_uid()
         while await self._get_history_size():
             await self._r_pool.rpop(self._name_plan_history)
 
@@ -887,6 +954,7 @@ class PlanQueueOperations:
         if not await self._is_item_running():
             plan_json = await self._r_pool.lpop(self._name_plan_queue)
             if plan_json:
+                self._plan_queue_uid = self.new_item_uid()
                 plan = json.loads(plan_json)
                 await self._set_running_item_info(plan)
             else:

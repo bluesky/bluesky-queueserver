@@ -653,14 +653,8 @@ def create_msg(params):
             raise CommandParameterError(f"Request '{command}' must include at least one parameter")
         supported_params = ("add", "update", "replace", "get", "clear", "item", "start", "stop")
         if params[0] in supported_params:
-            if params[0] == "add":
-                method, prms = msg_queue_add_update(params, cmd_opt="add")
-
-            elif params[0] == "update":
-                method, prms = msg_queue_add_update(params, cmd_opt="update")
-
-            elif params[0] == "replace":
-                method, prms = msg_queue_add_update(params, cmd_opt="replace")
+            if params[0] in ("add", "update", "replace"):
+                method, prms = msg_queue_add_update(params, cmd_opt=params[0])
 
             elif params[0] in ("get", "clear", "start"):
                 if len(params) != 1:

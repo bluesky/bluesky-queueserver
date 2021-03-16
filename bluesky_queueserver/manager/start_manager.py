@@ -25,7 +25,7 @@ class WatchdogProcess:
         config_manager=None,
         cls_run_engine_worker=RunEngineWorker,
         cls_run_engine_manager=RunEngineManager,
-        log_level="DEBUG",
+        log_level=logging.DEBUG,
     ):
 
         self._log_level = log_level
@@ -149,7 +149,7 @@ class WatchdogProcess:
 
     def run(self):
 
-        logging.basicConfig(level=logging.WARNING)
+        logging.basicConfig(level=max(logging.WARNING, self._log_level))
         logging.getLogger(__name__).setLevel(self._log_level)
 
         # Requests
@@ -179,12 +179,12 @@ class WatchdogProcess:
             #   a clock to be completely independent from system clock.
             t_min, t_max = self._heartbeat_timeout, self._heartbeat_timeout + 10.0
             if (time_passed >= t_min) and (time_passed <= t_max) and not self._manager_is_stopping:
-                logger.error("Timeout detected by Watchdog. RE Manager malfunctioned and must be restarted.")
+                logger.error("Timeout detected by Watchdog. RE Manager malfunctioned and must be restarted")
                 self._re_manager.kill()
                 self._start_re_manager()
 
         self._comm_to_manager.stop()
-        logger.info("RE Watchdog is stopped.")
+        logger.info("RE Watchdog is stopped")
 
 
 def start_manager():
@@ -312,10 +312,46 @@ def start_manager():
         help="Name of the Data Broker configuration file.",
     )
 
-    logging.basicConfig(level=logging.WARNING)
-    logging.getLogger("bluesky_queueserver").setLevel("DEBUG")
+    group_verbosity = parser.add_argument_group(
+        "Logging verbosity settings",
+        "The default logging settings (loglevel=INFO) provide optimal amount of data to monitor "
+        "the operation of RE Manager. Select '--verbose' option to see detailed data on received and "
+        "sent messages, added and executed plans, etc. Use options '--quiet' and '--silent' to "
+        "see only warnings and error messages or disable logging output.",
+    )
+    group_v = group_verbosity.add_mutually_exclusive_group()
+    group_v.add_argument(
+        "--verbose",
+        dest="logger_verbose",
+        action="store_true",
+        help="Set logger level to DEBUG.",
+    )
+    group_v.add_argument(
+        "--quiet",
+        dest="logger_quiet",
+        action="store_true",
+        help="Set logger level to WARNING.",
+    )
+    group_v.add_argument(
+        "--silent",
+        dest="logger_silent",
+        action="store_true",
+        help="Disables logging output.",
+    )
 
     args = parser.parse_args()
+
+    log_level = logging.INFO
+    if args.logger_verbose:
+        log_level = logging.DEBUG
+    elif args.logger_quiet:
+        log_level = logging.WARNING
+    elif args.logger_silent:
+        log_level = logging.CRITICAL + 1
+
+    logging.basicConfig(level=max(logging.WARNING, log_level))
+    logging.getLogger("bluesky_queueserver").setLevel(log_level)
+
     config_worker = {}
     config_manager = {}
     if args.kafka_topic is not None:
@@ -447,8 +483,8 @@ def start_manager():
         return 1
     config_manager["redis_addr"] = redis_addr
 
-    wp = WatchdogProcess(config_worker=config_worker, config_manager=config_manager)
+    wp = WatchdogProcess(config_worker=config_worker, config_manager=config_manager, log_level=log_level)
     try:
         wp.run()
     except KeyboardInterrupt:
-        logger.info("The program was manually stopped.")
+        logger.info("The program was manually stopped")

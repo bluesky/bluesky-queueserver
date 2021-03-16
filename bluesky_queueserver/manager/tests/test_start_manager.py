@@ -5,6 +5,8 @@ import json
 from bluesky_queueserver.manager.start_manager import WatchdogProcess
 from bluesky_queueserver.tests.common import format_jsonrpc_msg
 
+import logging
+
 
 class ReManagerEmulation(threading.Thread):
     """
@@ -14,7 +16,7 @@ class ReManagerEmulation(threading.Thread):
     'heartbeat' messages to inform RE Manager that it is running.
     """
 
-    def __init__(self, *args, conn_watchdog, conn_worker, config=None, log_level="DEBUG", **kwargs):
+    def __init__(self, *args, conn_watchdog, conn_worker, config=None, log_level=logging.DEBUG, **kwargs):
         super().__init__(*args, **kwargs)
         self._conn_watchdog = conn_watchdog
         self.n_loops = 0
@@ -96,7 +98,7 @@ class ReManagerEmulation(threading.Thread):
 
 
 class ReWorkerEmulation(threading.Thread):
-    def __init__(self, *args, conn, config=None, log_level="DEBUG", **kwargs):
+    def __init__(self, *args, conn, config=None, log_level=logging.DEBUG, **kwargs):
         super().__init__(*args, **kwargs)
         self._config_dict = config or {}
         self._exit = False
@@ -275,6 +277,44 @@ def test_WatchdogProcess_6():
     # Check if configuration was set correctly in RE Worker and RE manager
     assert wp._re_worker._config_dict == config_worker, "Worker configuration was not passed correctly"
     assert wp._re_manager._config_dict == config_manager, "Manager configuration was not passed correctly"
+
+    # Exit the process (thread).
+    wp._re_worker.exit()
+    ttime.sleep(0.01)
+
+    response = wp._re_manager.send_msg_to_watchdog("join_re_worker", {"timeout": 0.5})
+    assert response["success"] is True, "Unexpected response from RE Manager"
+
+    wp._re_manager.exit(restart=False)
+    wp_th.join(0.1)
+
+
+def test_WatchdogProcess_7():
+    """
+    Test if the Watchdog and Manager processes are initialized with correct logger
+    """
+    config_worker = {"some_parameter1": "some_value1"}
+    config_manager = {"some_parameter2": "some_value2"}
+
+    log_level = logging.INFO
+
+    wp = WatchdogProcess(
+        config_worker=config_worker,
+        config_manager=config_manager,
+        cls_run_engine_manager=ReManagerEmulation,
+        cls_run_engine_worker=ReWorkerEmulation,
+        log_level=log_level,
+    )
+    wp_th = threading.Thread(target=wp.run)
+    wp_th.start()
+    ttime.sleep(0.01)
+
+    response = wp._re_manager.send_msg_to_watchdog("start_re_worker")
+    assert response["success"] is True, "Unexpected response from RE Manager"
+
+    # Check if configuration was set correctly in RE Worker and RE manager
+    assert wp._re_worker._log_level == log_level
+    assert wp._re_manager._log_level == log_level
 
     # Exit the process (thread).
     wp._re_worker.exit()

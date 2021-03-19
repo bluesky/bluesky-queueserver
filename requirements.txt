@@ -13,6 +13,7 @@ msgpack_numpy
 numpydoc
 ophyd
 pydantic
+python-multipart
 pyyaml
 pyzmq
 requests

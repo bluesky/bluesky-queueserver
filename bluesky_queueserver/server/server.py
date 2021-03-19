@@ -1,10 +1,13 @@
 import logging
 from enum import Enum
+import io
+import pprint
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, File, UploadFile
 
 from ..manager.comms import ZMQCommSendAsync
 from .conversions import filter_plan_descriptions
+from .server_beamline_specific_code import convert_spreadsheet_to_plan_queue
 
 logger = logging.getLogger(__name__)
 
@@ -398,3 +401,51 @@ async def test_manager_kill_handler():
     """
     msg = await zmq_to_manager.send_message(method="manager_kill")
     return msg
+
+
+@app.post("/queue/upload/spreadsheet")
+async def image(spreadsheet: UploadFile = File(...)):
+    """
+    The endpoint receives uploaded spreadsheet, converts it to the list of plans and adds
+    the plans to the queue.
+
+    Parameters
+    ----------
+    spreadsheet : File
+        uploaded excel file
+
+    Returns
+    -------
+    success : boolean
+        Indicates if the spreadsheet was successfully converted to a sequence of plans.
+        ``True`` value does not indicate that the plans were accepted by the RE Manager and
+        successfully added to the queue.
+    msg : str
+        Error message in case of failure to process the spreadsheet
+    result : list(dict)
+        The list of parameter dictionaries returned by RE Manager in response to requests
+        to add each plan in the list. Check ``success`` parameter in each dictionary to
+        see if the plan was accepted and ``msg`` parameter for an error message in case
+        the plan was rejected.
+    """
+    success, msg, result = True, "", []
+    try:
+        f = io.BytesIO(spreadsheet.file.read())
+        plan_list = convert_spreadsheet_to_plan_queue(
+            instrument_id="BMM", data_type="excel", spreadsheet_file=f, user_name=_login_data["user"]
+        )
+
+        logger.debug("The following plans were created: %s", pprint.pformat(plan_list))
+
+        for plan in plan_list:
+            params = dict()
+            params["plan"] = plan
+            params["user"] = _login_data["user"]
+            params["user_group"] = _login_data["user_group"]
+            msg = await zmq_to_manager.send_message(method="queue_item_add", params=params)
+            result.append(msg)
+
+    except Exception as ex:
+        success, msg = False, str(ex)
+
+    return {"success": success, "msg": msg, "result": result}

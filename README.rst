@@ -237,6 +237,15 @@ The names of the plans and devices are strings. The strings are converted to ref
 Ophyd devices in the worker process. The simulated beamline profile collection includes all simulated
 Ophyd devices and built-in Bluesky plans.
 
+Alternatively the queue may be populated by uploading the list of plans with parameters in the form of
+a spreadsheet to HTTP server. Note that this is an experimental feature, which could be modified at any
+time until API is settled. The format of the spreadsheet will be specific to each beamline
+using the server. Beamline-specific code will be distributed in a separate package from the core HTTP
+server code. Currently, to upload spreadsheet located at `../sample_excel.xlsx` run the following
+command::
+
+  http --form POST http://localhost:60610/queue/upload/spreadsheet spreadsheet@../sample_excel.xlsx
+
 Queue can be edited at any time. Changes to the running queue become effective the moment they are
 performed. As the currently running plan is finished, the new plan is popped from the top of the queue.
 

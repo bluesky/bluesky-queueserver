@@ -11,6 +11,7 @@ scikit-image # Needed for BEC/other stuff to run, factor out
 msgpack>=1.0.0
 msgpack_numpy
 numpydoc
+openpyxl
 ophyd
 pydantic
 python-multipart

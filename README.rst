@@ -241,8 +241,8 @@ Alternatively the queue may be populated by uploading the list of plans with par
 a spreadsheet to HTTP server. Note that this is an experimental feature, which could be modified at any
 time until API is settled. The format of the spreadsheet will be specific to each beamline
 using the server. Beamline-specific code will be distributed in a separate package from the core HTTP
-server code. Currently, to upload spreadsheet located at `../sample_excel.xlsx` run the following
-command::
+server code. Currently, to upload spreadsheet located at `../sample_excel.xlsx` (could be arbitrary path)
+run the following command::
 
   http --form POST http://localhost:60610/queue/upload/spreadsheet spreadsheet@../sample_excel.xlsx
 

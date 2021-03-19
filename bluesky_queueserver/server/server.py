@@ -2,6 +2,7 @@ import logging
 from enum import Enum
 import io
 import pprint
+import os
 
 from fastapi import FastAPI, HTTPException, File, UploadFile
 
@@ -23,12 +24,17 @@ logging.getLogger("bluesky_queueserver").setLevel("DEBUG")
 app = FastAPI()
 zmq_to_manager = None
 
+instrument_id = None
+
 
 @app.on_event("startup")
 async def startup_event():
     global zmq_to_manager
+    global instrument_id
     # ZMQCommSendAsync should be created from the event loop of FastAPI server.
     zmq_to_manager = ZMQCommSendAsync(raise_exceptions=False)
+    # env variable QSERVER_INSTRUMENT_ID must be "BMM" etc.
+    instrument_id = os.getenv("QSERVER_INSTRUMENT_ID", None)
 
 
 @app.on_event("shutdown")
@@ -404,7 +410,7 @@ async def test_manager_kill_handler():
 
 
 @app.post("/queue/upload/spreadsheet")
-async def image(spreadsheet: UploadFile = File(...)):
+async def queue_upload_spreadsheet(spreadsheet: UploadFile = File(...)):
     """
     The endpoint receives uploaded spreadsheet, converts it to the list of plans and adds
     the plans to the queue.
@@ -432,7 +438,7 @@ async def image(spreadsheet: UploadFile = File(...)):
     try:
         f = io.BytesIO(spreadsheet.file.read())
         plan_list = convert_spreadsheet_to_plan_queue(
-            instrument_id="BMM", data_type="excel", spreadsheet_file=f, user_name=_login_data["user"]
+            instrument_id=instrument_id, data_type="excel", spreadsheet_file=f, user_name=_login_data["user"]
         )
 
         logger.debug("The following plans were created: %s", pprint.pformat(plan_list))

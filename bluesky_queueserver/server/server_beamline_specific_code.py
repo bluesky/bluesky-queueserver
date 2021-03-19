@@ -3,6 +3,7 @@
 # -------------------------------------------------------------------------------------
 import re
 from openpyxl import load_workbook
+import pandas as pd
 
 
 def isfloat(value):
@@ -622,7 +623,61 @@ class WheelMacroBuilder(BMMMacroBuilder):
         return this
 
 
-def convert_spreadsheet_to_plan_queue(*, instrument_id, data_type, spreadsheet_file, user_name):
+def _unit_test_process_spreadsheet(*, spreadsheet_file):
+    """
+    Process trivial spreadsheet with plan parameters (for use in unit tests).
+    The spreadsheet is expected to contain parameters of 'count' plan in the form:
+        name   num   delay
+    0   count  5     1
+    1   count  6     0.5
+
+    Parameters
+    ----------
+    spreadsheet_file : file
+        readable file object
+
+    Returns
+    -------
+    plan_list : list(dict)
+        Dictionary representing a list of plans extracted from the spreadsheet.
+    """
+    df = pd.read_excel(spreadsheet_file, index_col=0, engine="openpyxl")
+    plan_list = []
+    n_rows, _ = df.shape
+    for nr in range(n_rows):
+        plan = {
+            "name": df["name"][nr],
+            "args": [["det1", "det2"]],
+            "kwargs": {"num": int(df["num"][nr]), "delay": float(df["delay"][nr])},
+        }
+        plan_list.append(plan)
+    return plan_list
+
+
+def convert_spreadsheet_to_plan_queue(*, spreadsheet_file, instrument_id, data_type, user_name):
+    """
+    Convert spreadsheet into a list of plans that could be added to the queue.
+
+    Parameters
+    ----------
+    spreadsheet_file : file
+        Readable file object.
+    instrument_id : str
+        Instrument (beamline) ID, such as ``BMM``. Instrument ID ``__TEST__`` is reserved for
+        unit tests.
+    data_type : str
+        Data type, such as ``excel``. May be used to select proper processing function.
+    user_name : str
+        User name: may be used as part of plan parameters.
+
+    Returns
+    -------
+    plan_list : list(dict)
+        Dictionary representing a list of plans extracted from the spreadsheet.
+    """
+
+    msg_unsupported_data_type = f"Data type '{data_type}' is not supported for the instrument '{instrument_id}'"
+
     if instrument_id == "BMM":
         if data_type == "excel":
             # pd = pandas.read_excel(
@@ -632,6 +687,16 @@ def convert_spreadsheet_to_plan_queue(*, instrument_id, data_type, spreadsheet_f
             mb = WheelMacroBuilder(user_name=user_name)
             return mb.process_spreadsheet(spreadsheet_file=spreadsheet_file, energy=True)
         else:
-            raise ValueError(f"Data type '{data_type}' is not supported for the instrument '{instrument_id}'")
+            raise ValueError(msg_unsupported_data_type)
+    elif instrument_id == "__TEST__":
+        # Special reserved case for use in unit tests.
+        if data_type == "excel":
+            return _unit_test_process_spreadsheet(spreadsheet_file=spreadsheet_file)
+        else:
+            raise ValueError(msg_unsupported_data_type)
+    elif instrument_id is None:
+        raise ValueError(
+            "Instrument ID is not set. Set environment variable QSERVER_INSTRUMENT_ID and restart the server"
+        )
     else:
         raise ValueError(f"Unsupported instrument: '{instrument_id}'")

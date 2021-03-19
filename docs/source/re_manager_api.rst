@@ -518,8 +518,9 @@ Returns       **success**: *boolean*
                   the number of items in the plan queue after the plan was added if
                   the operation was successful, *None* otherwise
 
-              **plan** or **instruction**: *dict*
-                  the inserted item. The item contains the assigned item UID.
+              **plan** or **instruction**: *dict*, optional
+                  the inserted item. The item contains the assigned item UID. The parameter
+                  may not be returned in case of error in processing the request.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
@@ -570,9 +571,10 @@ Returns       **success**: *boolean*
                   the number of items in the plan queue after the plan was added if
                   the operation was successful, *None* otherwise
 
-              **plan** or **instruction**: *dict*
+              **plan** or **instruction**: *dict*, optional
                   the updated item. The item contains the new item UID if the method was called with
-                  'replace=True'.
+                  'replace=True'. The parameter may not be returned in case of error in processing
+                  the request.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================

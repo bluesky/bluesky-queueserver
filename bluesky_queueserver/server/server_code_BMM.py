@@ -3,7 +3,6 @@
 # -------------------------------------------------------------------------------------
 import re
 from openpyxl import load_workbook
-import pandas as pd
 
 
 def isfloat(value):
@@ -623,38 +622,7 @@ class WheelMacroBuilder(BMMMacroBuilder):
         return this
 
 
-def _unit_test_process_spreadsheet(*, spreadsheet_file):
-    """
-    Process trivial spreadsheet with plan parameters (for use in unit tests).
-    The spreadsheet is expected to contain parameters of 'count' plan in the form:
-        name   num   delay
-    0   count  5     1
-    1   count  6     0.5
-
-    Parameters
-    ----------
-    spreadsheet_file : file
-        readable file object
-
-    Returns
-    -------
-    plan_list : list(dict)
-        Dictionary representing a list of plans extracted from the spreadsheet.
-    """
-    df = pd.read_excel(spreadsheet_file, index_col=0, engine="openpyxl")
-    plan_list = []
-    n_rows, _ = df.shape
-    for nr in range(n_rows):
-        plan = {
-            "name": df["name"][nr],
-            "args": [["det1", "det2"]],
-            "kwargs": {"num": int(df["num"][nr]), "delay": float(df["delay"][nr])},
-        }
-        plan_list.append(plan)
-    return plan_list
-
-
-def convert_spreadsheet_to_plan_queue(*, spreadsheet_file, instrument_id, data_type, user_name):
+def spreadsheet_to_plan_list(*, spreadsheet_file, file_name, data_type, user, **kwargs):
     """
     Convert spreadsheet into a list of plans that could be added to the queue.
 
@@ -662,12 +630,11 @@ def convert_spreadsheet_to_plan_queue(*, spreadsheet_file, instrument_id, data_t
     ----------
     spreadsheet_file : file
         Readable file object.
-    instrument_id : str
-        Instrument (beamline) ID, such as ``BMM``. Instrument ID ``__TEST__`` is reserved for
-        unit tests.
-    data_type : str
+    file_name : str
+        The name of uploaded spreadsheet file.
+    data_type : str, None
         Data type, such as ``excel``. May be used to select proper processing function.
-    user_name : str
+    user : str
         User name: may be used as part of plan parameters.
 
     Returns
@@ -675,28 +642,17 @@ def convert_spreadsheet_to_plan_queue(*, spreadsheet_file, instrument_id, data_t
     plan_list : list(dict)
         Dictionary representing a list of plans extracted from the spreadsheet.
     """
+    import os
 
-    msg_unsupported_data_type = f"Data type '{data_type}' is not supported for the instrument '{instrument_id}'"
-
-    if instrument_id == "BMM":
-        if data_type == "excel":
-            # pd = pandas.read_excel(
-            #     spreadsheet_file, engine="openpyxl", header=None, index_col=None, sheet_name=None
-            # )
-            # print(f"pd={pd}")
-            mb = WheelMacroBuilder(user_name=user_name)
-            return mb.process_spreadsheet(spreadsheet_file=spreadsheet_file, energy=True)
-        else:
-            raise ValueError(msg_unsupported_data_type)
-    elif instrument_id == "__TEST__":
-        # Special reserved case for use in unit tests.
-        if data_type == "excel":
-            return _unit_test_process_spreadsheet(spreadsheet_file=spreadsheet_file)
-        else:
-            raise ValueError(msg_unsupported_data_type)
-    elif instrument_id is None:
+    supported_extensions = ("xlsx", "xlsm", "xltx", "xltm")
+    ext = os.path.splitext(file_name)[1]
+    if ext not in supported_extensions:
         raise ValueError(
-            "Instrument ID is not set. Set environment variable QSERVER_INSTRUMENT_ID and restart the server"
+            f"Unsupported spreadsheet file '{file_name}'. Only extensions {supported_extensions} are supported"
         )
+
+    if data_type and (data_type.lower() == "wheel_xafs"):
+        mb = WheelMacroBuilder(user_name=user)
+        return mb.process_spreadsheet(spreadsheet_file=spreadsheet_file, energy=True)
     else:
-        raise ValueError(f"Unsupported instrument: '{instrument_id}'")
+        raise ValueError(f"Data type '{data_type}' is not supported.")

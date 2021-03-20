@@ -5,11 +5,11 @@ import pprint
 import os
 import importlib
 
-from fastapi import FastAPI, HTTPException, File, UploadFile
+from fastapi import FastAPI, HTTPException, File, UploadFile, Form
+from typing import Optional
 
 from ..manager.comms import ZMQCommSendAsync
 from .conversions import filter_plan_descriptions
-from .server_beamline_specific_code import convert_spreadsheet_to_plan_queue
 
 logger = logging.getLogger(__name__)
 
@@ -420,8 +420,13 @@ async def test_manager_kill_handler():
     return msg
 
 
+def spreadsheet_to_plan_list(*, spreadsheet_file, file_name, data_type, **kwargs):  # noqa: F821
+    raise NotImplementedError("Built-in function for converting spreadsheet to plan list is not implemented yet")
+
+
 @app.post("/queue/upload/spreadsheet")
-async def queue_upload_spreadsheet(spreadsheet: UploadFile = File(...)):
+async def queue_upload_spreadsheet(spreadsheet: UploadFile = File(...), data_type: Optional[str] = Form(None)):
+
     """
     The endpoint receives uploaded spreadsheet, converts it to the list of plans and adds
     the plans to the queue.
@@ -430,6 +435,9 @@ async def queue_upload_spreadsheet(spreadsheet: UploadFile = File(...)):
     ----------
     spreadsheet : File
         uploaded excel file
+    data_type : str
+        user defined spreadsheet type, which determines which processing function is used to
+        process the spreadsheet.
 
     Returns
     -------
@@ -447,10 +455,32 @@ async def queue_upload_spreadsheet(spreadsheet: UploadFile = File(...)):
     """
     success, msg, result = True, "", []
     try:
+        # Create fully functional file object. The file object returned by FastAPI is not fully functional.
         f = io.BytesIO(spreadsheet.file.read())
-        plan_list = convert_spreadsheet_to_plan_queue(
-            instrument_id=instrument_id, data_type="excel", spreadsheet_file=f, user_name=_login_data["user"]
-        )
+        # File name is also passed to the processing function (may be useful in user created
+        #   processing code, since processing may differ based on extension or file name)
+        f_name = spreadsheet.filename
+
+        # Determine which processing function should be used
+        plan_list = []
+        processed = False
+        if custom_code_module and ("spreadsheet_to_plan_list" in custom_code_module.__dict__):
+            # Try applying  the custom processing function. Some additional useful data is passed to
+            #   the function. Unnecessary parameters can be ignored.
+            plan_list = custom_code_module.spreadsheet_to_plan_list(
+                spreadsheet_file=f, file_name=f_name, data_type=data_type, user=_login_data["user"]
+            )
+            # The function is expected to return None if it rejects the file (based on 'data_type').
+            #   Then the file should be sent to built-in processing function.
+            processed = plan_list is not None
+
+        if not processed:
+            plan_list = spreadsheet_to_plan_list(
+                spreadsheet_file=f, file_name=f_name, data_type=data_type, user=_login_data["user"]
+            )
+
+        if plan_list is None:
+            raise RuntimeError("Failed to process the spreadsheet: unsupported data type or format")
 
         logger.debug("The following plans were created: %s", pprint.pformat(plan_list))
 

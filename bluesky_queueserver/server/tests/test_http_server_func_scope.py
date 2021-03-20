@@ -26,7 +26,11 @@ def test_http_server_queue_upload_spreasheet_1(re_manager, fastapi_server_fs, tm
     the contents of the queue, run the queue and verify that the required number of plans were successfully
     completed.
     """
-    monkeypatch.setenv("QSERVER_INSTRUMENT_ID", "__TEST__", prepend=False)
+    monkeypatch.setenv(
+        "BS_HTTPSERVER_CUSTOM_CODE_MODULE",
+        "bluesky_queueserver.server.tests.http_custom_proc_functions",
+        prepend=False,
+    )
     fastapi_server_fs()
 
     # Create sample Excel file

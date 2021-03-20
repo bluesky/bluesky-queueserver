@@ -644,11 +644,11 @@ def spreadsheet_to_plan_list(*, spreadsheet_file, file_name, data_type, user, **
     """
     import os
 
-    supported_extensions = ("xlsx", "xlsm", "xltx", "xltm")
+    supported_extensions = (".xlsx", ".xlsm", ".xltx", ".xltm")
     ext = os.path.splitext(file_name)[1]
     if ext not in supported_extensions:
         raise ValueError(
-            f"Unsupported spreadsheet file '{file_name}'. Only extensions {supported_extensions} are supported"
+            f"Unsupported spreadsheet file '{file_name}' (extension '{ext}'). Only extensions {supported_extensions} are supported"
         )
 
     if data_type and (data_type.lower() == "wheel_xafs"):

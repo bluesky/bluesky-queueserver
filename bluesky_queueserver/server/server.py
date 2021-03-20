@@ -3,6 +3,7 @@ from enum import Enum
 import io
 import pprint
 import os
+import importlib
 
 from fastapi import FastAPI, HTTPException, File, UploadFile
 
@@ -24,17 +25,27 @@ logging.getLogger("bluesky_queueserver").setLevel("DEBUG")
 app = FastAPI()
 zmq_to_manager = None
 
-instrument_id = None
+custom_code_module = None
 
 
 @app.on_event("startup")
 async def startup_event():
     global zmq_to_manager
-    global instrument_id
+    global custom_code_module
     # ZMQCommSendAsync should be created from the event loop of FastAPI server.
     zmq_to_manager = ZMQCommSendAsync(raise_exceptions=False)
-    # env variable QSERVER_INSTRUMENT_ID must be "BMM" etc.
-    instrument_id = os.getenv("QSERVER_INSTRUMENT_ID", None)
+
+    # Import module with custom code
+    module_name = os.getenv("BS_HTTPSERVER_CUSTOM_CODE_MODULE", None)
+
+    if module_name:
+        try:
+            logger.info("Importing custom module '%s' ...", module_name)
+            custom_code_module = importlib.import_module(module_name)
+            logger.info("Module '%s' was imported successfully.", module_name)
+        except Exception as ex:
+            custom_code_module = None
+            logger.error("Failed to import custom instrument module '%s': %s", module_name, ex)
 
 
 @app.on_event("shutdown")

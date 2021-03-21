@@ -471,10 +471,11 @@ async def queue_upload_spreadsheet(spreadsheet: UploadFile = File(...), data_typ
                 spreadsheet_file=f, file_name=f_name, data_type=data_type, user=_login_data["user"]
             )
             # The function is expected to return None if it rejects the file (based on 'data_type').
-            #   Then the file should be sent to built-in processing function.
+            #   Then try to apply the default processing function.
             processed = plan_list is not None
 
         if not processed:
+            # Apply default spreadsheet processing function.
             plan_list = spreadsheet_to_plan_list(
                 spreadsheet_file=f, file_name=f_name, data_type=data_type, user=_login_data["user"]
             )

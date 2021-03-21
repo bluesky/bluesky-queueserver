@@ -88,15 +88,19 @@ In the first shell start RE Manager::
 RE Manager supports a number of command line options. Use 'start-re-manager -h' to view
 the available options.
 
-If instrument-specific functionality is expected to be used, set the environment variable
-QSERVER_INSTRUMENT_ID should be set to one of supported ID values before the Web Server is started::
-
-  export QSERVER_INSTRUMENT_ID <id>
-
 The Web Server should be started from the second shell as follows::
 
   uvicorn bluesky_queueserver.server.server:app --host localhost --port 60610
 
+The Web Server supports using external modules for processing some requests. Those modules
+are optional and may contain custom instrument-specific processing code. The name of the external
+module may be passed to HTTP server by setting **BLUESKY_HTTPSERVER_CUSTOM_MODULE** environment
+variable::
+
+  BLUESKY_HTTPSERVER_CUSTOM_MODULE=<name-of-external-module> uvicorn bluesky_queueserver.server.server:app --host localhost --port 60610
+
+If the server fails to load custom external module, the server will support only default
+functionality and may reject the requests that require custom processing.
 
 The third shell will be used to send HTTP requests. RE Manager can also be controlled using 'qserver' CLI
 tool. If only CLI tool will be used, then there is no need to start the Web Server. The following manual

@@ -36,7 +36,7 @@ async def startup_event():
     zmq_to_manager = ZMQCommSendAsync(raise_exceptions=False)
 
     # Import module with custom code
-    module_name = os.getenv("BS_HTTPSERVER_CUSTOM_CODE_MODULE", None)
+    module_name = os.getenv("BLUESKY_HTTPSERVER_CUSTOM_MODULE", None)
 
     if module_name:
         try:

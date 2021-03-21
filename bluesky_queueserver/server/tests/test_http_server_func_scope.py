@@ -27,7 +27,7 @@ def test_http_server_queue_upload_spreasheet_1(re_manager, fastapi_server_fs, tm
     completed.
     """
     monkeypatch.setenv(
-        "BS_HTTPSERVER_CUSTOM_CODE_MODULE",
+        "BLUESKY_HTTPSERVER_CUSTOM_MODULE",
         "bluesky_queueserver.server.tests.http_custom_proc_functions",
         prepend=False,
     )

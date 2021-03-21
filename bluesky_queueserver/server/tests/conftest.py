@@ -13,7 +13,7 @@ SERVER_PORT = "60610"
 @pytest.fixture(scope="module")
 def fastapi_server(xprocess):
     class Starter(ProcessStarter):
-        pattern = "Connected to ZeroMQ server"
+        pattern = "Bluesky HTTP Server started successfully"
         args = f"uvicorn --host={SERVER_ADDRESS} --port {SERVER_PORT} {bqss.__name__}:app".split()
 
     xprocess.ensure("fastapi_server", Starter)
@@ -33,7 +33,7 @@ def fastapi_server_fs(xprocess):
 
     def start():
         class Starter(ProcessStarter):
-            pattern = "Connected to ZeroMQ server"
+            pattern = "Bluesky HTTP Server started successfully"
             args = f"uvicorn --host={SERVER_ADDRESS} --port {SERVER_PORT} {bqss.__name__}:app".split()
 
         xprocess.ensure("fastapi_server", Starter)

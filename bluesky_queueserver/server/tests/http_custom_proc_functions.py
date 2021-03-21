@@ -1,7 +1,8 @@
 import pandas as pd
+import os
 
 
-def spreadsheet_to_plan_list(*, spreadsheet_file, **kwargs):
+def spreadsheet_to_plan_list(*, spreadsheet_file, data_type, file_name, **kwargs):
     """
     Process trivial spreadsheet with plan parameters (for use in unit tests).
     The spreadsheet is expected to contain parameters of 'count' plan in the form:
@@ -19,6 +20,17 @@ def spreadsheet_to_plan_list(*, spreadsheet_file, **kwargs):
     plan_list : list(dict)
         Dictionary representing a list of plans extracted from the spreadsheet.
     """
+
+    # Test that data type is successfully passed. In real processing functions we would
+    #   check if it matches one of the supported functions.
+    if data_type == "unsupported":
+        raise ValueError(f"Unsupported data type: '{data_type}'")
+
+    # Check that file name has extension 'xlsx'. Raise the exception otherwise.
+    ext = os.path.splitext(file_name)[1]
+    if ext != ".xlsx":
+        raise ValueError(f"Unsupported file (extension '{ext}')")
+
     df = pd.read_excel(spreadsheet_file, index_col=0, engine="openpyxl")
     plan_list = []
     n_rows, _ = df.shape

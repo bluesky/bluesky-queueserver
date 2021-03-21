@@ -47,6 +47,10 @@ async def startup_event():
             custom_code_module = None
             logger.error("Failed to import custom instrument module '%s': %s", module_name, ex)
 
+    # The following message is used in unit tests to detect when HTTP server is started.
+    #   Unit tests need to be modified if this message is modified.
+    logger.info("Bluesky HTTP Server started successfully")
+
 
 @app.on_event("shutdown")
 def shutdown_event():

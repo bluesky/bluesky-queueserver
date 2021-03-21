@@ -99,8 +99,9 @@ variable::
 
   BLUESKY_HTTPSERVER_CUSTOM_MODULE=<name-of-external-module> uvicorn bluesky_queueserver.server.server:app --host localhost --port 60610
 
-If the server fails to load custom external module, the server will support only default
-functionality and may reject the requests that require custom processing.
+If the module name contains '-' (dash) characters, they will be automatically converted to '_'
+(underscore) characters. If the server fails to load custom external module, the server
+will support only default functionality and may reject the requests that require custom processing.
 
 The third shell will be used to send HTTP requests. RE Manager can also be controlled using 'qserver' CLI
 tool. If only CLI tool will be used, then there is no need to start the Web Server. The following manual

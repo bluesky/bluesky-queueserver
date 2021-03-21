@@ -12,7 +12,7 @@ from ..manager.comms import ZMQCommSendAsync
 from .conversions import filter_plan_descriptions
 
 logger = logging.getLogger(__name__)
-
+logger.setLevel(logging.INFO)
 
 # Login and authentication are not implemented, but some API methods require
 #   login data. So for now we set up fixed user name and group
@@ -41,7 +41,7 @@ async def startup_event():
     if module_name:
         try:
             logger.info("Importing custom module '%s' ...", module_name)
-            custom_code_module = importlib.import_module(module_name)
+            custom_code_module = importlib.import_module(module_name.replace("-", "_"))
             logger.info("Module '%s' was imported successfully.", module_name)
         except Exception as ex:
             custom_code_module = None
@@ -465,6 +465,7 @@ async def queue_upload_spreadsheet(spreadsheet: UploadFile = File(...), data_typ
         plan_list = []
         processed = False
         if custom_code_module and ("spreadsheet_to_plan_list" in custom_code_module.__dict__):
+            logger.info("Processing spreadsheet using function from external module ...")
             # Try applying  the custom processing function. Some additional useful data is passed to
             #   the function. Unnecessary parameters can be ignored.
             plan_list = custom_code_module.spreadsheet_to_plan_list(
@@ -476,6 +477,7 @@ async def queue_upload_spreadsheet(spreadsheet: UploadFile = File(...), data_typ
 
         if not processed:
             # Apply default spreadsheet processing function.
+            logger.info("Processing spreadsheet using default function ...")
             plan_list = spreadsheet_to_plan_list(
                 spreadsheet_file=f, file_name=f_name, data_type=data_type, user=_login_data["user"]
             )

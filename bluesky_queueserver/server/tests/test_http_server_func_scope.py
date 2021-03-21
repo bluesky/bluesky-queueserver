@@ -1,5 +1,6 @@
-import pandas as pd
 import os
+import pandas as pd
+import pytest
 
 from bluesky_queueserver.manager.tests._common import (  # noqa F401
     re_manager,
@@ -120,7 +121,7 @@ def test_http_server_queue_upload_spreasheet_2(re_manager, fastapi_server_fs, tm
     data = {"data_type": "unsupported"}
     resp1 = request_to_json("post", "/queue/upload/spreadsheet", files=files, data=data)
     assert resp1["success"] is False, str(resp1)
-    assert resp1["msg"] == "Unsupported data type: 'unsupported'", str(resp1)
+    assert resp1["msg"] == "Unsupported data type: 'unsupported'"
 
 
 def test_http_server_queue_upload_spreasheet_3(re_manager, fastapi_server_fs, tmp_path, monkeypatch):  # noqa F811
@@ -146,4 +147,36 @@ def test_http_server_queue_upload_spreasheet_3(re_manager, fastapi_server_fs, tm
     files = {"spreadsheet": open(new_path, "rb")}
     resp1 = request_to_json("post", "/queue/upload/spreadsheet", files=files)
     assert resp1["success"] is False, str(resp1)
-    assert resp1["msg"] == f"Unsupported file (extension '{new_ext}')", str(resp1)
+    assert resp1["msg"] == f"Unsupported file (extension '{new_ext}')"
+
+
+@pytest.mark.parametrize("use_custom", [False, True])
+def test_http_server_queue_upload_spreasheet_4(
+    re_manager, fastapi_server_fs, tmp_path, monkeypatch, use_custom  # noqa F811
+):
+    """
+    Test for ``/queue/upload/spreadsheet`` API. Pass the spreadsheet to the default processing function
+    either directly (use_custom=False) or first pass it to the custom processing function which
+    rejects the spreadsheet by returning ``None``. If custom processing function returns ``None``, then
+    the spreadsheet is passed to the default function.
+
+    NOTE: currently the default processing function is not implemented and the request returns error message.
+    The test will have to be modified, when the function is implemented.
+    """
+    if use_custom:
+        monkeypatch.setenv(
+            "BLUESKY_HTTPSERVER_CUSTOM_MODULE",
+            "bluesky_queueserver.server.tests.http_custom_proc_functions",
+            prepend=False,
+        )
+    fastapi_server_fs()
+
+    ss_path, plans_expected = _create_test_excel_file1(tmp_path)
+
+    # Send the Excel file to the server
+    params = {"files": {"spreadsheet": open(ss_path, "rb")}}
+    if use_custom:
+        params["data"] = {"data_type": "process_with_default_function"}
+    resp1 = request_to_json("post", "/queue/upload/spreadsheet", **params)
+    assert resp1["success"] is False, str(resp1)
+    assert resp1["msg"] == "Default function for converting spreadsheet to plan list is not implemented yet"

@@ -425,7 +425,8 @@ async def test_manager_kill_handler():
 
 
 def spreadsheet_to_plan_list(*, spreadsheet_file, file_name, data_type, **kwargs):  # noqa: F821
-    raise NotImplementedError("Built-in function for converting spreadsheet to plan list is not implemented yet")
+    # TODO: write implementation of default function for processing of 'universal' spreadsheets
+    raise NotImplementedError("Default function for converting spreadsheet to plan list is not implemented yet")
 
 
 @app.post("/queue/upload/spreadsheet")

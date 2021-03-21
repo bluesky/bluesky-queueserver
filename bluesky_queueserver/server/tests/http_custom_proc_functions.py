@@ -14,6 +14,12 @@ def spreadsheet_to_plan_list(*, spreadsheet_file, data_type, file_name, **kwargs
     ----------
     spreadsheet_file : file
         readable file object
+    data_type : str
+        string that represents type of data in the spreadsheets. May be used to
+        distinguish between different types of spreadsheets used at the same beamline.
+    file_name : str
+        name of the uploaded spreadsheet file, may be used to determine file type by
+        looking at the extension.
 
     Returns
     -------
@@ -25,6 +31,11 @@ def spreadsheet_to_plan_list(*, spreadsheet_file, data_type, file_name, **kwargs
     #   check if it matches one of the supported functions.
     if data_type == "unsupported":
         raise ValueError(f"Unsupported data type: '{data_type}'")
+
+    # If custom processing function (such as this one) returns None, then the spreadsheet
+    #   is passed to the default processing function.
+    if data_type == "process_with_default_function":
+        return None
 
     # Check that file name has extension 'xlsx'. Raise the exception otherwise.
     ext = os.path.splitext(file_name)[1]

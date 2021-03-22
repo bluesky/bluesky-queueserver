@@ -924,7 +924,7 @@ class RunEngineManager(Process):
 
         return user, user_group
 
-    def _prepare_item(self, *, request, generate_new_uid):
+    def _prepare_item(self, *, item, item_type, user, user_group, generate_new_uid):
         """
         Prepare item before it could be added to the queue or used to update/replace existing item
         in the queue. Preparation includes identification of item type and validation of the item.
@@ -933,8 +933,14 @@ class RunEngineManager(Process):
 
         Parameters
         ----------
-        request : dict
-            request data received from the server
+        item : dict
+            original item passed to RE Manager
+        item_type : str
+            item type (``plan`` or ``instruction``)
+        user : str
+            name of the user who submitted or modified the plan
+        user_group : str
+            name of the user group to which the user belongs
         generate_new_uid : boolean
             generate new ``item_uid`` if True, otherwise keep existing ``item_uid``.
             Raise ``RuntimeError`` if ``generate_new_uid==False`` and the item has no assigned ``item_uid``.
@@ -954,8 +960,7 @@ class RunEngineManager(Process):
         RuntimeError
             raised if (1) item validation failed or (2) item has no UID and new UID is not generated
         """
-        item, item_type = self._get_item_from_request(request=request)
-        user, user_group = self._get_user_info_from_request(request=request)
+        item = item.copy()  # Create a copy to avoid modifying the original item
 
         if item_type == "plan":
             allowed_plans = self._allowed_plans[user_group] if self._allowed_plans else self._allowed_plans
@@ -988,7 +993,7 @@ class RunEngineManager(Process):
             if "item_uid" not in item:
                 raise RuntimeError("Item description contains no UID and UID generation is skipped")
 
-        return item, item_type, item_uid_original
+        return item, item_uid_original
 
     async def _queue_item_add_handler(self, request):
         """
@@ -1015,8 +1020,13 @@ class RunEngineManager(Process):
         item_type, item, qsize, msg = None, None, None, ""
 
         try:
+            item, item_type = self._get_item_from_request(request=request)
+            user, user_group = self._get_user_info_from_request(request=request)
+
             # Always generate a new UID for the added plan!!!
-            item, item_type, _ = self._prepare_item(request=request, generate_new_uid=True)
+            item, _ = self._prepare_item(
+                item=item, item_type=item_type, user=user, user_group=user_group, generate_new_uid=True
+            )
 
             pos = request.get("pos", None)  # Position is optional
             before_uid = request.get("before_uid", None)
@@ -1055,10 +1065,14 @@ class RunEngineManager(Process):
         success, msg, qsize, item_type = True, "", 0, None
 
         try:
+
+            item, item_type = self._get_item_from_request(request=request)
+            user, user_group = self._get_user_info_from_request(request=request)
+
             # Generate new UID if 'replace' flag is True, otherwise update the plan
             generate_new_uid = bool(request.get("replace", False))
-            item, item_type, item_uid_original = self._prepare_item(
-                request=request, generate_new_uid=generate_new_uid
+            item, item_uid_original = self._prepare_item(
+                item=item, item_type=item_type, user=user, user_group=user_group, generate_new_uid=generate_new_uid
             )
 
             # item["item_uid"] will change if uid is replaced, but we still need

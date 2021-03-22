@@ -1048,6 +1048,101 @@ class RunEngineManager(Process):
 
         return rdict
 
+    async def _queue_item_add_batch_handler(self, request):
+        """
+        Adds a batch of items to the end of the queue. The request is expected to contain the following
+        elements: ``user`` and ``user_group`` have the same meaning as for ``queue_item_add`` request;
+        ``items`` contains a list of items, each item is a dictionary that contains a key corresponding
+        to one of currently supported types (``plan`` or ``instruction``) with the value representing
+        properly formatted item parameters (dictionary with ``name`` (required), ``args``, ``kwargs``
+        and ``meta`` keys).
+
+        The function is validating all items in the batch and adds the batch to the queue only if
+        all items were validated successfully. Otherwise, the function returns ``success=False``
+        and ``msg`` contains error message. The function also returns the list of items. For each
+        item, ``success`` indicates if the item was validated successfully and ``msg`` contains
+        error message showing the reason of validation failure for the item. The elements ``plan``
+        or ``instruction`` contain item parameters that were extracted from the submitted item (if any).
+        If items are inserted in the queue, the item parameters will also contain ``item_uid`` of
+        the items.
+
+        If 'global' value ``success`` is ``True`` for the message, then ``success`` values for all items
+        are ``True`` and the items are inserted in the queue. There is no need to verify ``success``
+        status of each item if 'global' ``success`` is ``True``.
+        """
+        logger.info("Adding a batch of items to the queue ...")
+        logger.debug("Request: %s", pprint.pformat(request))
+
+        success, msg, result, qsize = True, "", [], None
+
+        try:
+            # Prepare items
+            if "items" not in request:
+                raise Exception("Invalid request format: the list of items is not found")
+            items = request["items"]
+            items_prepared, items_added, report, success = [], [], [], True
+
+            user, user_group = self._get_user_info_from_request(request=request)
+
+            for item_info in items:
+                item, item_type = {}, None
+                try:
+                    item, item_type = self._get_item_from_request(request=item_info)
+
+                    # Always generate a new UID for the added plan!!!
+                    item_prepared, _ = self._prepare_item(
+                        item=item, item_type=item_type, user=user, user_group=user_group, generate_new_uid=True
+                    )
+
+                    items_prepared.append(item_prepared)
+                    report.append({"success": True, "msg": ""})
+
+                except Exception as ex:
+                    success = False
+                    # If 'item_info' does not contain valid item, then do not return any item.
+                    if item and item_type:
+                        item["item_type"] = item_type
+                    items_prepared.append(item)
+                    report.append({"success": False, "msg": f"Failed to add a plan: {ex}"})
+
+            if len(report) != len(items) != len(items_prepared):
+                raise Exception("Error in data processing algorithm occurred")
+
+            if success:
+                # Adding plan to queue may still raise an exception
+                for item in items_prepared:
+                    item_added, _ = await self._plan_queue.add_item_to_queue(item)
+                    items_added.append(item_added)
+            else:
+                items_added = items_prepared
+
+            # Prepare the list of added items with error messages
+            for item, rep in zip(items_added, report):
+                d = rep.copy()
+                if "item_type" in item:
+                    d[item["item_type"]] = item
+                result.append(d)
+
+            if not success:
+                n_items = len(report)
+                n_failed = sum([not _["success"] for _ in report])
+                msg = f"Failed to add all items: validation of {n_failed} out of {n_items} submitted items failed"
+
+        except Exception as ex:
+            success = False
+            msg = f"Failed to add an item: {str(ex)}"
+
+        try:
+            qsize = await self._plan_queue.get_queue_size()
+        except Exception as ex:
+            qsize = None
+
+        rdict = {"success": success, "msg": msg, "qsize": qsize}
+        if result:
+            rdict["result"] = result
+
+        return rdict
+
     async def _queue_item_update_handler(self, request):
         """
         Updates the existing item in the queue. Item may be a plan or an instruction. The request
@@ -1379,6 +1474,7 @@ class RunEngineManager(Process):
             "environment_close": "_environment_close_handler",
             "environment_destroy": "_environment_destroy_handler",
             "queue_item_add": "_queue_item_add_handler",
+            "queue_item_add_batch": "_queue_item_add_batch_handler",
             "queue_item_update": "_queue_item_update_handler",
             "queue_item_get": "_queue_item_get_handler",
             "queue_item_remove": "_queue_item_remove_handler",

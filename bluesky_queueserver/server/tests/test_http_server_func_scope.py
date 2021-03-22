@@ -211,7 +211,7 @@ def test_http_server_queue_upload_spreasheet_5(re_manager, fastapi_server_fs, tm
     files = {"spreadsheet": open(ss_path, "rb")}
     resp1 = request_to_json("post", "/queue/upload/spreadsheet", files=files)
     assert resp1["success"] is False, str(resp1)
-    assert resp1["msg"] == "The batch of plans is rejected by RE Manager"
+    assert resp1["msg"] == "Failed to add all items: validation of 1 out of 3 submitted items failed"
 
     result = resp1["result"]
     assert len(result) == len(plans_expected), str(result)
@@ -224,3 +224,8 @@ def test_http_server_queue_upload_spreasheet_5(re_manager, fastapi_server_fs, tm
                 assert p["success"] is True
                 assert k in p["plan"]
                 assert v == p["plan"][k]
+
+    # No plans are expected to be added to the queue
+    resp2 = request_to_json("get", "/status")
+    assert resp2["items_in_queue"] == 0
+    assert resp2["items_in_history"] == 0

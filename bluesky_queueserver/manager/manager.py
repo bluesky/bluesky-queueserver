@@ -1084,6 +1084,7 @@ class RunEngineManager(Process):
 
             user, user_group = self._get_user_info_from_request(request=request)
 
+            # First validate all the items
             for item_info in items:
                 item, item_type = {}, None
                 try:
@@ -1102,10 +1103,11 @@ class RunEngineManager(Process):
                     # If 'item_info' does not contain valid item, then do not return any item.
                     if item and item_type:
                         item["item_type"] = item_type
-                    items_prepared.append(item)
+                    items_prepared.append(item)  # Always add item even if it is '{}'
                     report.append({"success": False, "msg": f"Failed to add a plan: {ex}"})
 
             if len(report) != len(items) != len(items_prepared):
+                # This error should never happen, but it may be useful for debugging.
                 raise Exception("Error in data processing algorithm occurred")
 
             if success:
@@ -1134,12 +1136,11 @@ class RunEngineManager(Process):
 
         try:
             qsize = await self._plan_queue.get_queue_size()
-        except Exception as ex:
+        except Exception:
             qsize = None
 
-        rdict = {"success": success, "msg": msg, "qsize": qsize}
-        if result:
-            rdict["result"] = result
+        # Note, that 'result' may be an empty list []
+        rdict = {"success": success, "msg": msg, "qsize": qsize, "result": result}
 
         return rdict
 

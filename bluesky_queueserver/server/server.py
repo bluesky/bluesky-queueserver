@@ -458,7 +458,6 @@ async def queue_upload_spreadsheet(spreadsheet: UploadFile = File(...), data_typ
         see if the plan was accepted and ``msg`` parameter for an error message in case
         the plan was rejected.
     """
-    success, msg, result = True, "", []
     try:
         # Create fully functional file object. The file object returned by FastAPI is not fully functional.
         f = io.BytesIO(spreadsheet.file.read())
@@ -492,22 +491,13 @@ async def queue_upload_spreadsheet(spreadsheet: UploadFile = File(...), data_typ
 
         logger.debug("The following plans were created: %s", pprint.pformat(plan_list))
 
-        for plan in plan_list:
-            params = dict()
-            params["plan"] = plan
-            params["user"] = _login_data["user"]
-            params["user_group"] = _login_data["user_group"]
-            res = await zmq_to_manager.send_message(method="queue_item_add", params=params)
-            result.append(res)
-
-        # Set 'success=False' if at least one of the plans is rejected by RE Manager.
-        for res in result:
-            if res["success"] is False:
-                success = False
-                msg = "The batch of plans is rejected by RE Manager"
-                break
+        params = dict()
+        params["user"] = _login_data["user"]
+        params["user_group"] = _login_data["user_group"]
+        params["items"] = [{"plan": _} for _ in plan_list]
+        msg = await zmq_to_manager.send_message(method="queue_item_add_batch", params=params)
 
     except Exception as ex:
-        success, msg = False, str(ex)
+        msg = {"success": False, "msg": str(ex), "result": []}
 
-    return {"success": success, "msg": msg, "result": result}
+    return msg

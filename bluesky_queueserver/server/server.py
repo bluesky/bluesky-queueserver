@@ -497,8 +497,15 @@ async def queue_upload_spreadsheet(spreadsheet: UploadFile = File(...), data_typ
             params["plan"] = plan
             params["user"] = _login_data["user"]
             params["user_group"] = _login_data["user_group"]
-            msg = await zmq_to_manager.send_message(method="queue_item_add", params=params)
-            result.append(msg)
+            res = await zmq_to_manager.send_message(method="queue_item_add", params=params)
+            result.append(res)
+
+        # Set 'success=False' if at least one of the plans is rejected by RE Manager.
+        for res in result:
+            if res["success"] is False:
+                success = False
+                msg = "The batch of plans is rejected by RE Manager"
+                break
 
     except Exception as ex:
         success, msg = False, str(ex)

@@ -21,7 +21,7 @@ from bluesky_queueserver.server.tests.conftest import (  # noqa F401
 )
 
 
-def _create_test_excel_file1(tmp_path):
+def _create_test_excel_file1(tmp_path, *, plan_params, col_names):
     """
     Create test spreadsheet file in temporary directory. Return full path to the spreadsheet
     and the expected list of plans with parameters.
@@ -30,16 +30,16 @@ def _create_test_excel_file1(tmp_path):
     ss_fln = "spreadsheet.xlsx"
     ss_path = os.path.join(tmp_path, ss_fln)
 
-    plan_params = [["count", 5, 1], ["count", 6, 0.5]]
-
     # Expected plans
     plans_expected = []
     for p in plan_params:
-        plans_expected.append({"name": p[0], "args": [["det1", "det2"]], "kwargs": {"num": p[1], "delay": p[2]}})
+        plans_expected.append(
+            {"name": p[0], "args": [["det1", "det2"]], "kwargs": {k: v for k, v in zip(col_names[1:], p[1:])}}
+        )
 
     def create_excel(ss_path):
         df = pd.DataFrame(plan_params)
-        df = df.set_axis(["name", "num", "delay"], axis=1)
+        df = df.set_axis(col_names, axis=1)
         df.to_excel(ss_path, engine="openpyxl")
         return df
 
@@ -66,7 +66,9 @@ def test_http_server_queue_upload_spreasheet_1(re_manager, fastapi_server_fs, tm
     )
     fastapi_server_fs()
 
-    ss_path, plans_expected = _create_test_excel_file1(tmp_path)
+    plan_params = [["count", 5, 1], ["count", 6, 0.5]]
+    col_names = ["name", "num", "delay"]
+    ss_path, plans_expected = _create_test_excel_file1(tmp_path, plan_params=plan_params, col_names=col_names)
 
     # Send the Excel file to the server
     files = {"spreadsheet": open(ss_path, "rb")}
@@ -114,7 +116,9 @@ def test_http_server_queue_upload_spreasheet_2(re_manager, fastapi_server_fs, tm
     )
     fastapi_server_fs()
 
-    ss_path, plans_expected = _create_test_excel_file1(tmp_path)
+    plan_params = [["count", 5, 1], ["count", 6, 0.5]]
+    col_names = ["name", "num", "delay"]
+    ss_path, plans_expected = _create_test_excel_file1(tmp_path, plan_params=plan_params, col_names=col_names)
 
     # Send the Excel file to the server
     files = {"spreadsheet": open(ss_path, "rb")}
@@ -136,7 +140,9 @@ def test_http_server_queue_upload_spreasheet_3(re_manager, fastapi_server_fs, tm
     )
     fastapi_server_fs()
 
-    ss_path, plans_expected = _create_test_excel_file1(tmp_path)
+    plan_params = [["count", 5, 1], ["count", 6, 0.5]]
+    col_names = ["name", "num", "delay"]
+    ss_path, plans_expected = _create_test_excel_file1(tmp_path, plan_params=plan_params, col_names=col_names)
 
     # Rename .xlsx file to .txt file. This should cause processing error, since only .xlsx files are supported.
     new_ext = ".txt"
@@ -171,7 +177,9 @@ def test_http_server_queue_upload_spreasheet_4(
         )
     fastapi_server_fs()
 
-    ss_path, plans_expected = _create_test_excel_file1(tmp_path)
+    plan_params = [["count", 5, 1], ["count", 6, 0.5]]
+    col_names = ["name", "num", "delay"]
+    ss_path, plans_expected = _create_test_excel_file1(tmp_path, plan_params=plan_params, col_names=col_names)
 
     # Send the Excel file to the server
     params = {"files": {"spreadsheet": open(ss_path, "rb")}}
@@ -180,3 +188,39 @@ def test_http_server_queue_upload_spreasheet_4(
     resp1 = request_to_json("post", "/queue/upload/spreadsheet", **params)
     assert resp1["success"] is False, str(resp1)
     assert resp1["msg"] == "Default function for converting spreadsheet to plan list is not implemented yet"
+
+
+def test_http_server_queue_upload_spreasheet_5(re_manager, fastapi_server_fs, tmp_path, monkeypatch):  # noqa F811
+    """
+    Test for ``/queue/upload/spreadsheet``. Test the case when one of the plans is not accepted by
+    RE Manager. The API is expected to return ``success==False``, error message. Items in ``result``
+    will contain ``success`` status and error message for each plan.
+    """
+    monkeypatch.setenv(
+        "BLUESKY_HTTPSERVER_CUSTOM_MODULE",
+        "bluesky_queueserver.server.tests.http_custom_proc_functions",
+        prepend=False,
+    )
+    fastapi_server_fs()
+
+    plan_params = [["count", 5, 1], ["nonexisting_plan", 4, 0.7], ["count", 6, 0.5]]
+    col_names = ["name", "num", "delay"]
+    ss_path, plans_expected = _create_test_excel_file1(tmp_path, plan_params=plan_params, col_names=col_names)
+
+    # Send the Excel file to the server
+    files = {"spreadsheet": open(ss_path, "rb")}
+    resp1 = request_to_json("post", "/queue/upload/spreadsheet", files=files)
+    assert resp1["success"] is False, str(resp1)
+    assert resp1["msg"] == "The batch of plans is rejected by RE Manager"
+
+    result = resp1["result"]
+    assert len(result) == len(plans_expected), str(result)
+    for p, p_exp in zip(result, plans_expected):
+        for k, v in p_exp.items():
+            if p_exp["name"] == "nonexisting_plan":
+                assert p["success"] is False
+                assert "not in the list of allowed plans" in p["msg"], p["msg"]
+            else:
+                assert p["success"] is True
+                assert k in p["plan"]
+                assert v == p["plan"][k]

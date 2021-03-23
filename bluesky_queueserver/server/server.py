@@ -221,11 +221,12 @@ async def queue_upload_spreadsheet(spreadsheet: UploadFile = File(...), data_typ
         successfully added to the queue.
     msg : str
         Error message in case of failure to process the spreadsheet
-    result : list(dict)
+    item_list : list(dict)
         The list of parameter dictionaries returned by RE Manager in response to requests
         to add each plan in the list. Check ``success`` parameter in each dictionary to
         see if the plan was accepted and ``msg`` parameter for an error message in case
-        the plan was rejected.
+        the plan was rejected. The list may be empty if the spreadsheet contains no items
+        or processing of the spreadsheet failed.
     """
     try:
         # Create fully functional file object. The file object returned by FastAPI is not fully functional.
@@ -267,7 +268,7 @@ async def queue_upload_spreadsheet(spreadsheet: UploadFile = File(...), data_typ
         msg = await zmq_to_manager.send_message(method="queue_item_add_batch", params=params)
 
     except Exception as ex:
-        msg = {"success": False, "msg": str(ex), "result": []}
+        msg = {"success": False, "msg": str(ex), "item_list": []}
 
     return msg
 

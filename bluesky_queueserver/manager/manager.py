@@ -1073,7 +1073,7 @@ class RunEngineManager(Process):
         logger.info("Adding a batch of items to the queue ...")
         logger.debug("Request: %s", pprint.pformat(request))
 
-        success, msg, result, qsize = True, "", [], None
+        success, msg, item_list, qsize = True, "", [], None
 
         try:
             # Prepare items
@@ -1123,7 +1123,7 @@ class RunEngineManager(Process):
                 d = rep.copy()
                 if "item_type" in item:
                     d[item["item_type"]] = item
-                result.append(d)
+                item_list.append(d)
 
             if not success:
                 n_items = len(report)
@@ -1139,8 +1139,8 @@ class RunEngineManager(Process):
         except Exception:
             qsize = None
 
-        # Note, that 'result' may be an empty list []
-        rdict = {"success": success, "msg": msg, "qsize": qsize, "result": result}
+        # Note, that 'item_list' may be an empty list []
+        rdict = {"success": success, "msg": msg, "qsize": qsize, "item_list": item_list}
 
         return rdict
 

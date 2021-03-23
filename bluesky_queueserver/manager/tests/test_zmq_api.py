@@ -475,10 +475,10 @@ def test_zmq_api_queue_item_add_batch_1(re_manager):  # noqa: F811
     assert resp1a["success"] is True, f"resp={resp1a}"
     assert resp1a["msg"] == ""
     assert resp1a["qsize"] == 4
-    result = resp1a["result"]
-    assert len(result) == len(items)
+    item_list = resp1a["item_list"]
+    assert len(item_list) == len(items)
 
-    for item, item_res in zip(items, result):
+    for item, item_res in zip(items, item_list):
         assert item_res["success"] is True, str(item)
         assert item_res["msg"] == "", str(item)
 
@@ -536,7 +536,9 @@ def test_zmq_api_queue_item_add_batch_1(re_manager):  # noqa: F811
 
 def test_zmq_api_queue_item_add_batch_2(re_manager):  # noqa: F811
     """
-    Basic test for ``queue_item_add_batch`` API.
+    Test for ``queue_item_add_batch`` API. Attempt to add a batch that contains invalid plans.
+    Make sure that the invalid plans are detected, correct error messages are returned and the
+    plans from the batch are not added to the queue.
     """
     _plan2_corrupt = _plan2.copy()
     _plan2_corrupt["name"] = "nonexisting_name"
@@ -548,11 +550,11 @@ def test_zmq_api_queue_item_add_batch_2(re_manager):  # noqa: F811
     resp1a, _ = zmq_single_request("queue_item_add_batch", params)
     assert resp1a["success"] is False, f"resp={resp1a}"
     assert resp1a["msg"] == "Failed to add all items: validation of 2 out of 5 submitted items failed"
-    result = resp1a["result"]
-    assert len(result) == len(items)
+    item_list = resp1a["item_list"]
+    assert len(item_list) == len(items)
 
     for n, item in enumerate(items):
-        item_res = result[n]
+        item_res = item_list[n]
         scs = success_expected[n]
         msg = msg_expected[n]
         assert item_res["success"] == scs, str(item)
@@ -586,6 +588,24 @@ def test_zmq_api_queue_item_add_batch_2(re_manager):  # noqa: F811
                     assert item_res[key]["kwargs"] == item[key]["kwargs"]
             else:
                 assert item_res[key]["action"] == item[key]["action"]
+
+    state = get_queue_state()
+    assert state["items_in_queue"] == 0
+    assert state["items_in_history"] == 0
+
+
+def test_zmq_api_queue_item_add_batch_3(re_manager):  # noqa: F811
+    """
+    Test for ``queue_item_add_batch`` API. Add an empty batch. The operation should return success.
+    """
+    items = []
+
+    params = {"items": items, "user": _user, "user_group": _user_group}
+    resp1a, _ = zmq_single_request("queue_item_add_batch", params)
+    assert resp1a["success"] is True, f"resp={resp1a}"
+    assert resp1a["msg"] == ""
+    item_list = resp1a["item_list"]
+    assert item_list == []
 
     state = get_queue_state()
     assert state["items_in_queue"] == 0

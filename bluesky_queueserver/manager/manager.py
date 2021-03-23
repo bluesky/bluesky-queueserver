@@ -1051,20 +1051,22 @@ class RunEngineManager(Process):
     async def _queue_item_add_batch_handler(self, request):
         """
         Adds a batch of items to the end of the queue. The request is expected to contain the following
-        elements: ``user`` and ``user_group`` have the same meaning as for ``queue_item_add`` request;
-        ``items`` contains a list of items, each item is a dictionary that contains a key corresponding
-        to one of currently supported types (``plan`` or ``instruction``) with the value representing
-        properly formatted item parameters (dictionary with ``name`` (required), ``args``, ``kwargs``
-        and ``meta`` keys).
+        elements: ``user`` and ``user_group`` (have the same meaning as for ``queue_item_add`` request);
+        ``items`` contains a list of items, each item is a dictionary that contains an element with
+        the key corresponding to one of currently supported types (``plan`` or ``instruction``) and
+        the value representing properly formatted item parameters (dictionary with ``name`` (required),
+        ``args``, ``kwargs`` and ``meta`` keys).
 
         The function is validating all items in the batch and adds the batch to the queue only if
         all items were validated successfully. Otherwise, the function returns ``success=False``
-        and ``msg`` contains error message. The function also returns the list of items. For each
-        item, ``success`` indicates if the item was validated successfully and ``msg`` contains
+        and ``msg`` contains error message. The function also returns the list of items (``item_list``).
+        For each item, ``success`` indicates if the item was validated successfully and ``msg`` contains
         error message showing the reason of validation failure for the item. The elements ``plan``
         or ``instruction`` contain item parameters that were extracted from the submitted item (if any).
         If items are inserted in the queue, the item parameters will also contain ``item_uid`` of
-        the items.
+        the items. The returned item list may be empty if no items were submitted (still considered
+        successful operation) or input parameters are invalid and the request could not be processed
+        (operation failed).
 
         If 'global' value ``success`` is ``True`` for the message, then ``success`` values for all items
         are ``True`` and the items are inserted in the queue. There is no need to verify ``success``

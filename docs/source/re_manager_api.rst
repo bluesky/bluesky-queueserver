@@ -90,6 +90,7 @@ Operations with the plan queue:
 
 - :ref:`method_queue_get`
 - :ref:`method_queue_item_add`
+- :ref:`method_queue_item_add_batch`
 - :ref:`method_queue_item_update`
 - :ref:`method_queue_item_get`
 - :ref:`method_queue_item_remove`
@@ -518,9 +519,70 @@ Returns       **success**: *boolean*
                   the number of items in the plan queue after the plan was added if
                   the operation was successful, *None* otherwise
 
-              **plan** or **instruction**: *dict*, optional
+              **plan** or **instruction**: *dict* (optional)
                   the inserted item. The item contains the assigned item UID. The parameter
                   may not be returned in case of error in processing the request.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+
+.. _method_queue_item_add_batch:
+
+**'queue_item_add_batch'**
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'queue_item_add_batch'**
+------------  -----------------------------------------------------------------------------------------
+Description   Add a batch of items to the back of the queue. The batch may consist of any number
+              of supported items (see **queue_item_add** method). The batch is treated as a single
+              unit. Each item in the queue must successfully pass validation before any items are added
+              to the queue. If any item fails validation, the whole batch is rejected. In case the
+              batch is rejected, the function returns the detailed report for each item, including
+              *success* status indicating if the item passed validation and error message in case
+              validation failed.
+------------  -----------------------------------------------------------------------------------------
+Parameters    **items**: *list*
+                  the list containing a batch of items. Each element is a dictionary representing
+                  a valid item. The dictionary must contain a key-value pair with the key representing
+                  one of the supported item types (*'plan'* or *'instruction'*) and the value being
+                  a dictionary of item parameters. An empty item list will also be accepted.
+
+              **user_group**: *str*
+                  the name of the user group (e.g. 'admin').
+
+              **user**: *str*
+                  the name of the user (e.g. 'John Doe'). The name is included in the item metadata
+                  and may be used to identify the user who added the item to the queue. It is not
+                  passed to the Run Engine or included in run metadata.
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully. The request fails if any item
+                  fails validation. The queue is not expected to be modified if the request fails.
+                  If the parameter is *True*, then validation of all items succeeded: there is no
+                  need to verify *success* status for each item returned in *item_list* parameter.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **qsize**: *int* or *None*
+                  the number of items in the plan queue after processing of the request. The correct
+                  queue size may be returned even if the operation fails. In rare failing cases
+                  the parameter may return *None*.
+
+              **item_list** : *list*
+                  the list of processed items inserted item. Each item represents the dictionary
+                  with the following keys:
+
+                - **success** - boolean value indicating if the validation of the item was successful.
+
+                - **msg** - error message in case validation of the item failed.
+
+                - **plan** or **instruction** (optional) - item parameters in the same form as
+                  in **queue_item_add** method. If the batch was added to the queue, the parameters for
+                  each item will contain the assigned *'item_uid'*. The item parameters may be missing
+                  if there is an error in processing of the item.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
@@ -571,7 +633,7 @@ Returns       **success**: *boolean*
                   the number of items in the plan queue after the plan was added if
                   the operation was successful, *None* otherwise
 
-              **plan** or **instruction**: *dict*, optional
+              **plan** or **instruction**: *dict* (optional)
                   the updated item. The item contains the new item UID if the method was called with
                   'replace=True'. The parameter may not be returned in case of error in processing
                   the request.

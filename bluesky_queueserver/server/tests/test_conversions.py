@@ -1,6 +1,7 @@
+import numpy as np
 import pytest
 
-from bluesky_queueserver.server.conversions import filter_plan_descriptions
+from bluesky_queueserver.server.conversions import filter_plan_descriptions, _read_cell_parameter
 
 
 # fmt: off
@@ -118,3 +119,39 @@ def test_filter_plan_descriptions_1(plans_in, plans_out_expected):
     """
     plans_out = filter_plan_descriptions((plans_in))
     assert plans_out == plans_out_expected
+
+
+# fmt: off
+@pytest.mark.parametrize("val_in, val_out, val_type, success, errmsg", [
+    (10, 10, int, True, ""),
+    (np.int64(10), 10, int, True, ""),
+    (10.0, 10, int, True, ""),  # The number is expected to be rounded to int and represented as int
+    (np.float64(10.0), 10, int, True, ""),
+    (10.5, 10.5, float, True, ""),
+    (np.float64(10.5), 10.5, float, True, ""),
+    ("10", 10, int, True, ""),  # Number representation is more straightforward if they are strings
+    ("10.0", 10, float, True, ""),
+    ("10.5", 10.5, float, True, ""),
+    ("10, 20", (10, 20), None, True, ""),
+    ("10.3, 20", (10.3, 20), None, True, ""),
+    ("'det1'", 'det1', str, True, ""),
+    ("'det1', 'det2'", ('det1', 'det2'), None, True, ""),
+    ("det1", 'det1', None, False, "name 'det1' is not defined"),  # detector names must be quoted
+    ("det1, det2", ('det1', 'det2'), None, False, "name 'det1' is not defined"),  # detector names must be quoted
+    ([10, 20], None, None, False, "Cell value .* has unsupported type"),
+    ("[10, 20, 'det']", [10, 20, "det"], list, True, ""),  # List represented as a string
+    # Test for a complicated expression
+    ("{'a':'10','b':'20.5','c':'det','d':{'e':[50, 60]}}",
+     {'a': '10', 'b': '20.5', 'c': 'det', 'd': {'e': [50, 60]}}, dict, True, ""),
+
+])
+# fmt: on
+def test_read_cell_parameter(val_in, val_out, val_type, success, errmsg):
+    if success:
+        val_result = _read_cell_parameter(val_in)
+        assert val_result == val_out
+        if val_type:
+            assert type(val_result) == val_type
+    else:
+        with pytest.raises(Exception, match=errmsg):
+            _read_cell_parameter(val_in)

@@ -1,4 +1,8 @@
+import math
+import numpy as np
+import pandas as pd
 import re
+import os
 
 
 def filter_plan_descriptions(plans_source):
@@ -144,6 +148,93 @@ def filter_plan_descriptions(plans_source):
     return plans_filtered
 
 
+def _read_cell_parameter(cell_value):
+    """"""
+    if isinstance(cell_value, str):
+        return eval(cell_value, {}, {})
+
+    elif isinstance(cell_value, (np.floating, float)):
+        # The following is necessary because ints in excel spreadsheet will likely be represented as np.float64.
+        #   So check if they round well and return 'int' if they do.
+        if float(int(cell_value)) == float(cell_value):
+            return int(cell_value)
+        else:
+            return float(cell_value)
+
+    elif isinstance(cell_value, (np.integer, int)):
+        return int(cell_value)
+
+    else:
+        raise ValueError(
+            f"Cell value '{cell_value}' has unsupported type '{type(cell_value)}': "
+            "supported types: (int, float, str)"
+        )
+
+
 def spreadsheet_to_plan_list(*, spreadsheet_file, file_name, data_type, **kwargs):  # noqa: F821
-    # TODO: write implementation of default function for processing of 'universal' spreadsheets
-    raise NotImplementedError("Default function for converting spreadsheet to plan list is not implemented yet")
+
+    # Check if the spreadseet type has supported extension
+    _, ss_ext = os.path.splitext(file_name)
+    supported_ext = (".xlsx", ".xls", ".csv")
+    if ss_ext not in supported_ext:
+        raise ValueError(
+            f"File '{file_name}' (extension '{ss_ext}') is not supported: supported extensions '{supported_ext}'"
+        )
+
+    if ss_ext == ".xlsx":
+        df = pd.read_excel(spreadsheet_file, engine="openpyxl")
+    elif ss_ext == ".xls":
+        df = pd.read_excel(spreadsheet_file)
+    elif ss_ext == ".csv":
+        df = pd.read_csv(spreadsheet_file)
+
+    column_keys = df.keys()
+    if len(column_keys) < 1:
+        raise ValueError(
+            f"Spreadsheet is expected to have at least 1 column (plan name): {len(column_keys)} columns"
+        )
+    key_plan_name = column_keys[0]
+    key_plan_args = column_keys[1] if (len(column_keys) > 1) else None
+    keys_kwargs = column_keys[2:]  # This could be empty
+
+    # Check that the columns for kwargs contain no duplicate names
+    if len(set([_.lower() for _ in keys_kwargs])) != len(keys_kwargs):
+        raise ValueError(f"Some plan kwarg names are identical: {keys_kwargs}")
+
+    # The number of rows (rows are potentially plans, there could be empty rows though)
+    n_rows = len(df["key_plan_name"])
+
+    plan_list = []
+
+    for nr in n_rows:
+        plan_name = df[key_plan_name][nr]
+
+        # If plan name is missing or has False bool value, then just skip the line (probably it is empty)
+        if not plan_name or math.isnan(plan_name):
+            continue
+
+        # Check if the plan name is string and it is formatted to represent a valid plan name
+        if not isinstance(plan_name, str):
+            raise ValueError(
+                f"Plan name '{plan_name}' (row {nr}) is of incorrect type ('{type(plan_name)}'): "
+                "supported type 'str')"
+            )
+        if not plan_name.isidentifier():
+            raise ValueError(f"Plan name '{plan_name}' (row {nr}) is not a valid plan name")
+
+        try:
+            plan_args = []
+            if key_plan_args:
+                plan_args = list(_read_cell_parameter(df[key_plan_args][nr]))
+
+            plan_kwargs = {}
+            for key in keys_kwargs:
+                kwarg = _read_cell_parameter(df[key][nr])
+                plan_kwargs[key] = kwarg
+
+            plan_list.append({"plan": {"name": plan_name, "args": plan_args, "kwargs": plan_kwargs}})
+
+        except Exception as ex:
+            raise ValueError(f"Error occurred while interpreting plan parameters in row {nr}: {ex}")
+
+    return plan_list

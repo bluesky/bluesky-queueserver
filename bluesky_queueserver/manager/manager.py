@@ -1003,6 +1003,22 @@ class RunEngineManager(Process):
 
         return item, item_uid_original
 
+    def _generate_item_log_msg(self, prefix_msg, success, item_type, item, qsize):
+        """
+        Generate short log message for reporting results of ``queue_item_add``, ``queue_item_add_batch``
+        and ``queue_item_update`` operations.
+        """
+        log_msg = f"{prefix_msg}: success={success} item_type='{item_type}'"
+        if item:
+            if "name" in item:
+                log_msg += f" name='{item['name']}'"
+            elif "action" in item:
+                log_msg += f" action='{item['action']}'"
+            if "item_uid" in item:
+                log_msg += f" item_uid='{item['item_uid']}'"
+        log_msg += f" qsize={qsize}."
+        return log_msg
+
     async def _queue_item_add_handler(self, request):
         """
         Adds new item to the queue. Item may be a plan or an instruction. Request must
@@ -1022,7 +1038,7 @@ class RunEngineManager(Process):
         It is recommended to use negative indices (counted from the back of the queue)
         when modifying a running queue.
         """
-        logger.info("Adding new plan to the queue ...")
+        logger.info("Adding new item to the queue ...")
         logger.debug("Request: %s", pprint.pformat(request))
 
         item_type, item, qsize, msg = None, None, None, ""
@@ -1049,6 +1065,8 @@ class RunEngineManager(Process):
         except Exception as ex:
             success = False
             msg = f"Failed to add an item: {str(ex)}"
+
+        logger.info(self._generate_item_log_msg("Item added", success, item_type, item, qsize))
 
         rdict = {"success": success, "msg": msg, "qsize": qsize}
         if item_type:
@@ -1149,6 +1167,8 @@ class RunEngineManager(Process):
         except Exception:
             qsize = None
 
+        logger.info(self._generate_item_log_msg("Batch of items added", success, None, None, qsize))
+
         # Note, that 'item_list' may be an empty list []
         rdict = {"success": success, "msg": msg, "qsize": qsize, "item_list": item_list}
 
@@ -1189,6 +1209,8 @@ class RunEngineManager(Process):
         except Exception as ex:
             success = False
             msg = f"Failed to add an item: {str(ex)}"
+
+        logger.info(self._generate_item_log_msg("Item updated", success, item_type, item, qsize))
 
         rdict = {"success": success, "msg": msg, "qsize": qsize}
         if item_type:

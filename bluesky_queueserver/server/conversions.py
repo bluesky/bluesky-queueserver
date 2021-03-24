@@ -4,6 +4,10 @@ import pandas as pd
 import re
 import os
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def filter_plan_descriptions(plans_source):
     """
@@ -148,10 +152,21 @@ def filter_plan_descriptions(plans_source):
     return plans_filtered
 
 
+def _is_nan(val):
+    return isinstance(val, (np.floating, float)) and math.isnan(val)
+
+
 def _read_cell_parameter(cell_value):
-    """"""
+    """
+    Returns
+    -------
+    Element read from the cell and converted to appropriate format or ``math.nan`` if element is missing
+    """
     if isinstance(cell_value, str):
         return eval(cell_value, {}, {})
+
+    elif _is_nan(cell_value):
+        return math.nan
 
     elif isinstance(cell_value, (np.floating, float)):
         # The following is necessary because ints in excel spreadsheet will likely be represented as np.float64.
@@ -171,7 +186,7 @@ def _read_cell_parameter(cell_value):
         )
 
 
-def spreadsheet_to_plan_list(*, spreadsheet_file, file_name, data_type, **kwargs):  # noqa: F821
+def spreadsheet_to_plan_list(*, spreadsheet_file, file_name, **kwargs):  # noqa: F821
 
     # Check if the spreadseet type has supported extension
     _, ss_ext = os.path.splitext(file_name)
@@ -202,39 +217,52 @@ def spreadsheet_to_plan_list(*, spreadsheet_file, file_name, data_type, **kwargs
         raise ValueError(f"Some plan kwarg names are identical: {keys_kwargs}")
 
     # The number of rows (rows are potentially plans, there could be empty rows though)
-    n_rows = len(df["key_plan_name"])
+    n_rows = len(df[key_plan_name])
 
     plan_list = []
 
-    for nr in n_rows:
+    for nr in range(n_rows):
         plan_name = df[key_plan_name][nr]
 
         # If plan name is missing or has False bool value, then just skip the line (probably it is empty)
-        if not plan_name or math.isnan(plan_name):
+        if not plan_name or _is_nan(plan_name):
             continue
 
         # Check if the plan name is string and it is formatted to represent a valid plan name
         if not isinstance(plan_name, str):
             raise ValueError(
-                f"Plan name '{plan_name}' (row {nr}) is of incorrect type ('{type(plan_name)}'): "
+                f"Plan name '{plan_name}' (row {nr + 1}) is of incorrect type ('{type(plan_name)}'): "
                 "supported type 'str')"
             )
         if not plan_name.isidentifier():
-            raise ValueError(f"Plan name '{plan_name}' (row {nr}) is not a valid plan name")
+            raise ValueError(f"Plan name '{plan_name}' (row {nr + 1}) is not a valid plan name")
 
         try:
             plan_args = []
             if key_plan_args:
-                plan_args = list(_read_cell_parameter(df[key_plan_args][nr]))
+                args = _read_cell_parameter(df[key_plan_args][nr])
+                if isinstance(args, (tuple, list)):
+                    plan_args = args
+                else:
+                    plan_args = (args,)
+                plan_args = list(plan_args)
+                plan_args = [_ for _ in plan_args if not _is_nan(_)]
 
             plan_kwargs = {}
             for key in keys_kwargs:
                 kwarg = _read_cell_parameter(df[key][nr])
-                plan_kwargs[key] = kwarg
+                if not _is_nan(kwarg):
+                    plan_kwargs[key] = kwarg
 
-            plan_list.append({"plan": {"name": plan_name, "args": plan_args, "kwargs": plan_kwargs}})
+            plan = {"name": plan_name}
+            if plan_args:
+                plan["args"] = plan_args
+            if plan_kwargs:
+                plan["kwargs"] = plan_kwargs
+            plan_list.append({"plan": plan})
 
         except Exception as ex:
-            raise ValueError(f"Error occurred while interpreting plan parameters in row {nr}: {ex}")
+            logger.exception(f"{ex}")
+            raise ValueError(f"Error occurred while interpreting plan parameters in row {nr + 1}: {ex}")
 
     return plan_list

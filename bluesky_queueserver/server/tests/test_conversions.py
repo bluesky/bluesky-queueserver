@@ -1,7 +1,14 @@
+import math
 import numpy as np
+import os
+import pandas as pd
 import pytest
 
-from bluesky_queueserver.server.conversions import filter_plan_descriptions, _read_cell_parameter
+from bluesky_queueserver.server.conversions import (
+    filter_plan_descriptions,
+    _read_cell_parameter,
+    spreadsheet_to_plan_list,
+)
 
 
 # fmt: off
@@ -155,3 +162,117 @@ def test_read_cell_parameter(val_in, val_out, val_type, success, errmsg):
     else:
         with pytest.raises(Exception, match=errmsg):
             _read_cell_parameter(val_in)
+
+
+def create_excel_file_from_plan_list(tmp_path, *, plan_list, ss_filename="spreadsheet", ss_ext=".xlsx"):
+    """
+    Create test spreadsheet file in temporary directory. Return full path to the spreadsheet
+    and the expected list of plans with parameters. Supporting '.xlsx' and '.csv' extensions.
+    The idea was to also write tests for '.xls' file support, but Pandas writer does not seem to
+    support writing ".xls" files.
+
+    Parameters
+    ----------
+    tmp_path : str
+        temporary path
+    plan_list : list(dict)
+        list of plan parameters
+    ss_filename : str
+        spreadsheet file name without extension
+    ss_ext : str
+        spreadsheet extension ('.xlsx' and '.csv' extensions are supported)
+
+    Returns
+    -------
+    str
+        full path to spreadsheet file
+    """
+    # Create sample Excel file
+    ss_filename = ss_filename + ss_ext
+    ss_path = os.path.join(tmp_path, ss_filename)
+
+    def format_cell(val):
+        if isinstance(val, (np.integer, int)):
+            return int(val)
+        elif isinstance(val, (np.floating, float)):
+            return float(val)
+        else:
+            return str(val)
+
+    plan_params = []
+    kwarg_names = []
+    for plan in plan_list:
+        pp = [plan["name"]]
+        if "args" in plan:
+            pp.append(format_cell(plan["args"]))
+        else:
+            pp.append(math.nan)
+        if "kwargs" in plan:
+            plan_kwargs = plan["kwargs"].copy()
+            for kw in kwarg_names:
+                if kw in plan_kwargs:
+                    pp.append(format_cell(plan_kwargs[kw]))
+                    del plan_kwargs[kw]
+                else:
+                    pp.append(math.nan)
+            for kw in plan_kwargs.keys():
+                kwarg_names.append(kw)
+                pp.append(format_cell(plan_kwargs[kw]))
+        plan_params.append(pp)
+
+    # Make all parameter lists equal length
+    max_params = max([len(_) for _ in plan_params])
+    for pp in plan_params:
+        for _ in range(len(pp), max_params):
+            pp.append(math.nan)
+
+    col_names = ["plan_name", "args"] + kwarg_names
+
+    def create_excel(ss_path, plan_params, col_names):
+        df = pd.DataFrame(plan_params)
+        df = df.set_axis(col_names, axis=1)
+
+        _, ext = os.path.splitext(ss_path)
+        if ext == ".xlsx":
+            df.to_excel(ss_path, index=False, engine="openpyxl")
+        elif ext == ".csv":
+            df.to_csv(ss_path, index=False)
+        return df
+
+    def verify_excel(ss_path, df):
+        _, ext = os.path.splitext(ss_path)
+        if ext == ".xlsx":
+            df_read = pd.read_excel(ss_path, engine="openpyxl")
+        elif ext == ".csv":
+            df_read = pd.read_csv(ss_path)
+
+        assert df_read.equals(df), str(df_read)
+
+    df = create_excel(ss_path, plan_params, col_names)
+    verify_excel(ss_path, df)
+
+    return ss_path
+
+
+# fmt: on
+@pytest.mark.parametrize("ext", [".xlsx", ".csv"])
+# fmt: off
+def test_spreadsheet_to_plan_list_1(tmp_path, ext):
+
+    plan_list = [
+        {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10}},
+        {"name": "count", "args": [["det1"]], "kwargs": {"delay": 0.5}},
+        {"name": "count", "kwargs": {"detectors": ["det1"], "delay": 0.5}},
+        {"name": math.nan},
+        {"name": "scan", "args": [["det1", "det2"], "motor", -1, 1, 10], "kwargs": {"num": 3}},
+        {"name": "scan", "args": [["det1", "det2"], "motor", -1, 1, 10]},
+        {"name": "count", "args": [["det2"]], "kwargs": {"num": 2, "delay": 0.7}},
+        {"name": "count", "args": [["det2"]], "kwargs": {"num": 2}},
+    ]
+
+    ss_path = create_excel_file_from_plan_list(tmp_path, plan_list=plan_list, ss_ext=ext)
+    with open(ss_path, "rb") as f:
+        plans = spreadsheet_to_plan_list(spreadsheet_file=f, file_name=os.path.split(ss_path)[-1])
+
+    # Remove the case when name == None before comparing dictionaries
+    assert plans == [{"plan": _} for _ in plan_list if isinstance(_["name"], str)]

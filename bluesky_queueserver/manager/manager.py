@@ -461,7 +461,10 @@ class RunEngineManager(Process):
         Names of plans and devices are strings.
         """
         n_pending_plans = await self._plan_queue.get_queue_size()
-        logger.info("Starting a new plan: %d plans are left in the queue", n_pending_plans)
+        if n_pending_plans:
+            logger.info("Processing the next queue item: %d plans are left in the queue.", n_pending_plans)
+        else:
+            logger.info("No items are left in the queue.")
 
         if not n_pending_plans:
             self._manager_state = MState.IDLE
@@ -505,6 +508,9 @@ class RunEngineManager(Process):
                     "item_uid": item_uid,
                 }
 
+                # TODO: Decide if we really want to have metadata in the log
+                logger.info("Starting the plan:\n%s.", pprint.pformat(plan_info))
+
                 success, err_msg = await self._worker_command_run_plan(plan_info)
                 if not success:
                     await self._plan_queue.set_processed_item_as_stopped(exit_status="error", run_uids=[])
@@ -518,6 +524,8 @@ class RunEngineManager(Process):
 
             # The next items is INSTRUCTION
             elif next_item["item_type"] == "instruction":
+                logger.info("Executing instruction:\n%s.", pprint.pformat(next_item))
+
                 if next_item["action"] == "queue_stop":
                     # Pop the instruction from the queue
                     await self._plan_queue.pop_item_from_queue(pos="front")

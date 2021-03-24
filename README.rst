@@ -92,6 +92,17 @@ The Web Server should be started from the second shell as follows::
 
   uvicorn bluesky_queueserver.server.server:app --host localhost --port 60610
 
+The Web Server supports using external modules for processing some requests. Those modules
+are optional and may contain custom instrument-specific processing code. The name of the external
+module may be passed to HTTP server by setting **BLUESKY_HTTPSERVER_CUSTOM_MODULE** environment
+variable::
+
+  BLUESKY_HTTPSERVER_CUSTOM_MODULE=<name-of-external-module> uvicorn bluesky_queueserver.server.server:app --host localhost --port 60610
+
+If the module name contains '-' (dash) characters, they will be automatically converted to '_'
+(underscore) characters. If the server fails to load custom external module, the server
+will support only default functionality and may reject the requests that require custom processing.
+
 The third shell will be used to send HTTP requests. RE Manager can also be controlled using 'qserver' CLI
 tool. If only CLI tool will be used, then there is no need to start the Web Server. The following manual
 demostrates how to control RE Manager using CLI commands and HTTP requests. The CLI tool commands will be
@@ -236,6 +247,15 @@ to access elements using negative indices (counted from the back of the queue).
 The names of the plans and devices are strings. The strings are converted to references to Bluesky plans and
 Ophyd devices in the worker process. The simulated beamline profile collection includes all simulated
 Ophyd devices and built-in Bluesky plans.
+
+Alternatively the queue may be populated by uploading the list of plans with parameters in the form of
+a spreadsheet to HTTP server. Note that this is an experimental feature, which could be modified at any
+time until API is settled. The format of the spreadsheet will be specific to each beamline
+using the server. Beamline-specific code will be distributed in a separate package from the core HTTP
+server code. Currently, to upload spreadsheet located at `../sample_excel.xlsx` (could be arbitrary path)
+run the following command::
+
+  http --form POST http://localhost:60610/queue/upload/spreadsheet spreadsheet@../sample_excel.xlsx
 
 Queue can be edited at any time. Changes to the running queue become effective the moment they are
 performed. As the currently running plan is finished, the new plan is popped from the top of the queue.

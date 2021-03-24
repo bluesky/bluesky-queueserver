@@ -1,13 +1,18 @@
 import logging
 from enum import Enum
+import io
+import pprint
+import os
+import importlib
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, File, UploadFile, Form
+from typing import Optional
 
 from ..manager.comms import ZMQCommSendAsync
 from .conversions import filter_plan_descriptions
 
 logger = logging.getLogger(__name__)
-
+logger.setLevel(logging.INFO)
 
 # Login and authentication are not implemented, but some API methods require
 #   login data. So for now we set up fixed user name and group
@@ -20,12 +25,31 @@ logging.getLogger("bluesky_queueserver").setLevel("DEBUG")
 app = FastAPI()
 zmq_to_manager = None
 
+custom_code_module = None
+
 
 @app.on_event("startup")
 async def startup_event():
     global zmq_to_manager
+    global custom_code_module
     # ZMQCommSendAsync should be created from the event loop of FastAPI server.
     zmq_to_manager = ZMQCommSendAsync(raise_exceptions=False)
+
+    # Import module with custom code
+    module_name = os.getenv("BLUESKY_HTTPSERVER_CUSTOM_MODULE", None)
+
+    if module_name:
+        try:
+            logger.info("Importing custom module '%s' ...", module_name)
+            custom_code_module = importlib.import_module(module_name.replace("-", "_"))
+            logger.info("Module '%s' was imported successfully.", module_name)
+        except Exception as ex:
+            custom_code_module = None
+            logger.error("Failed to import custom instrument module '%s': %s", module_name, ex)
+
+    # The following message is used in unit tests to detect when HTTP server is started.
+    #   Unit tests need to be modified if this message is modified.
+    logger.info("Bluesky HTTP Server started successfully")
 
 
 @app.on_event("shutdown")
@@ -398,3 +422,92 @@ async def test_manager_kill_handler():
     """
     msg = await zmq_to_manager.send_message(method="manager_kill")
     return msg
+
+
+def spreadsheet_to_plan_list(*, spreadsheet_file, file_name, data_type, **kwargs):  # noqa: F821
+    # TODO: write implementation of default function for processing of 'universal' spreadsheets
+    raise NotImplementedError("Default function for converting spreadsheet to plan list is not implemented yet")
+
+
+@app.post("/queue/upload/spreadsheet")
+async def queue_upload_spreadsheet(spreadsheet: UploadFile = File(...), data_type: Optional[str] = Form(None)):
+
+    """
+    The endpoint receives uploaded spreadsheet, converts it to the list of plans and adds
+    the plans to the queue.
+
+    Parameters
+    ----------
+    spreadsheet : File
+        uploaded excel file
+    data_type : str
+        user defined spreadsheet type, which determines which processing function is used to
+        process the spreadsheet.
+
+    Returns
+    -------
+    success : boolean
+        Indicates if the spreadsheet was successfully converted to a sequence of plans.
+        ``True`` value does not indicate that the plans were accepted by the RE Manager and
+        successfully added to the queue.
+    msg : str
+        Error message in case of failure to process the spreadsheet
+    result : list(dict)
+        The list of parameter dictionaries returned by RE Manager in response to requests
+        to add each plan in the list. Check ``success`` parameter in each dictionary to
+        see if the plan was accepted and ``msg`` parameter for an error message in case
+        the plan was rejected.
+    """
+    success, msg, result = True, "", []
+    try:
+        # Create fully functional file object. The file object returned by FastAPI is not fully functional.
+        f = io.BytesIO(spreadsheet.file.read())
+        # File name is also passed to the processing function (may be useful in user created
+        #   processing code, since processing may differ based on extension or file name)
+        f_name = spreadsheet.filename
+
+        # Determine which processing function should be used
+        plan_list = []
+        processed = False
+        if custom_code_module and ("spreadsheet_to_plan_list" in custom_code_module.__dict__):
+            logger.info("Processing spreadsheet using function from external module ...")
+            # Try applying  the custom processing function. Some additional useful data is passed to
+            #   the function. Unnecessary parameters can be ignored.
+            plan_list = custom_code_module.spreadsheet_to_plan_list(
+                spreadsheet_file=f, file_name=f_name, data_type=data_type, user=_login_data["user"]
+            )
+            # The function is expected to return None if it rejects the file (based on 'data_type').
+            #   Then try to apply the default processing function.
+            processed = plan_list is not None
+
+        if not processed:
+            # Apply default spreadsheet processing function.
+            logger.info("Processing spreadsheet using default function ...")
+            plan_list = spreadsheet_to_plan_list(
+                spreadsheet_file=f, file_name=f_name, data_type=data_type, user=_login_data["user"]
+            )
+
+        if plan_list is None:
+            raise RuntimeError("Failed to process the spreadsheet: unsupported data type or format")
+
+        logger.debug("The following plans were created: %s", pprint.pformat(plan_list))
+
+        for plan in plan_list:
+            params = dict()
+            params["plan"] = plan
+            params["user"] = _login_data["user"]
+            params["user_group"] = _login_data["user_group"]
+            res = await zmq_to_manager.send_message(method="queue_item_add", params=params)
+            result.append(res)
+
+        # Set 'success=False' if at least one of the plans is rejected by RE Manager.
+        for res in result:
+            if res["success"] is False:
+                success = False
+                msg = "The batch of plans is rejected by RE Manager"
+                break
+
+    except Exception as ex:
+        success, msg = False, str(ex)
+
+    return {"success": success, "msg": msg, "result": result}

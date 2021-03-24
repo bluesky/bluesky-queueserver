@@ -142,3 +142,8 @@ def filter_plan_descriptions(plans_source):
         plans_filtered.update({p_name: plan})
 
     return plans_filtered
+
+
+def spreadsheet_to_plan_list(*, spreadsheet_file, file_name, data_type, **kwargs):  # noqa: F821
+    # TODO: write implementation of default function for processing of 'universal' spreadsheets
+    raise NotImplementedError("Default function for converting spreadsheet to plan list is not implemented yet")

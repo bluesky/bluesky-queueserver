@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException, File, UploadFile, Form
 from typing import Optional
 
 from ..manager.comms import ZMQCommSendAsync
-from .conversions import filter_plan_descriptions
+from .conversions import filter_plan_descriptions, spreadsheet_to_plan_list
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -497,8 +497,3 @@ async def test_manager_kill_handler():
     """
     msg = await zmq_to_manager.send_message(method="manager_kill")
     return msg
-
-
-def spreadsheet_to_plan_list(*, spreadsheet_file, file_name, data_type, **kwargs):  # noqa: F821
-    # TODO: write implementation of default function for processing of 'universal' spreadsheets
-    raise NotImplementedError("Default function for converting spreadsheet to plan list is not implemented yet")

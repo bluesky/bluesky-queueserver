@@ -655,7 +655,7 @@ def test_zmq_api_queue_item_add_7(db_catalog, re_manager_cmd, meta_param, meta_s
     assert resp5["items_in_history"] == 1
 
     resp6, _ = zmq_single_request("history_get")
-    history = resp6["history"]
+    history = resp6["items"]
     assert len(history) == 1
 
     # Check if metadata was recorded in the start document.
@@ -1392,7 +1392,7 @@ def test_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_restart):  # 
     # Make sure that history contains correct data.
     resp5b, _ = zmq_single_request("history_get")
     assert resp5b["success"] is True
-    history = resp5b["history"]
+    history = resp5b["items"]
     assert len(history) == 1, str(resp5b)
     # Check that correct number of UIDs are saved in the history
     history_run_uids = history[0]["result"]["run_uids"]

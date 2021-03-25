@@ -661,14 +661,14 @@ def test_http_server_plan_history(re_manager, fastapi_server):  # noqa F811
     ttime.sleep(5)
 
     resp1 = request_to_json("get", "/history/get")
-    assert len(resp1["history"]) == 3
-    assert resp1["history"][0]["name"] == "count"
+    assert len(resp1["items"]) == 3
+    assert resp1["items"][0]["name"] == "count"
 
     resp2 = request_to_json("post", "/history/clear")
     assert resp2["success"] is True
 
     resp3 = request_to_json("get", "/history/get")
-    assert resp3["history"] == []
+    assert resp3["items"] == []
 
 
 def test_http_server_manager_kill(re_manager, fastapi_server):  # noqa F811

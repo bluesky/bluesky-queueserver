@@ -1299,7 +1299,7 @@ class RunEngineManager(Process):
         logger.info("Returning plan history ...")
         plan_history, plan_history_uid = await self._plan_queue.get_history()
 
-        return {"success": True, "msg": "", "history": plan_history, "plan_history_uid": plan_history_uid}
+        return {"success": True, "msg": "", "items": plan_history, "plan_history_uid": plan_history_uid}
 
     async def _history_clear_handler(self, request):
         """

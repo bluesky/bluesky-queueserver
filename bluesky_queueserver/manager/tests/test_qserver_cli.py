@@ -605,11 +605,11 @@ def test_queue_item_add_1(re_manager, pos, pos_result, success):  # noqa F811
         assert res == PARAM_ERROR
 
     resp = get_queue()
-    assert len(resp["queue"]) == (3 if success else 2)
+    assert len(resp["items"]) == (3 if success else 2)
 
     if success:
-        assert resp["queue"][pos_result]["args"] == [["det1", "det2"]]
-        assert "item_uid" in resp["queue"][pos_result]
+        assert resp["items"][pos_result]["args"] == [["det1", "det2"]]
+        assert "item_uid" in resp["items"][pos_result]
 
 
 def test_queue_item_add_2(re_manager):  # noqa F811
@@ -652,7 +652,7 @@ def test_queue_item_add_3(re_manager, before, target_pos, result_order):  # noqa
     assert subprocess.call(["qserver", "queue", "add", "plan", plan2]) == SUCCESS
 
     # Read queue.
-    queue_1 = get_queue()["queue"]
+    queue_1 = get_queue()["items"]
     assert len(queue_1) == 2
     uids_1 = [_["item_uid"] for _ in queue_1]
 
@@ -660,7 +660,7 @@ def test_queue_item_add_3(re_manager, before, target_pos, result_order):  # noqa
     assert subprocess.call(["qserver", "queue", "add", "plan", *params]) == SUCCESS
 
     # Check if the element was inserted in the right plance
-    queue_2 = get_queue()["queue"]
+    queue_2 = get_queue()["items"]
     assert len(queue_2) == 3
     uids_2 = [_["item_uid"] for _ in queue_2]
     for n, uid in enumerate(uids_2):
@@ -681,7 +681,7 @@ def test_queue_item_add_4(re_manager):  # noqa F811
     assert subprocess.call(["qserver", "queue", "add", "instruction", instruction]) == SUCCESS
     assert subprocess.call(["qserver", "queue", "add", "plan", plan2]) == SUCCESS
 
-    queue_1 = get_queue()["queue"]
+    queue_1 = get_queue()["items"]
     assert len(queue_1) == 3
     assert queue_1[0]["item_type"] == "plan", str(queue_1[0])
     assert queue_1[1]["item_type"] == "instruction", str(queue_1[1])
@@ -757,7 +757,7 @@ def test_queue_item_update_1(re_manager, replace, item_type):  # noqa F811
 
     assert subprocess.call(["qserver", "queue", "add", "plan", plan1]) == SUCCESS
 
-    queue_1 = get_queue()["queue"]
+    queue_1 = get_queue()["items"]
     assert len(queue_1) == 1
     item_1 = queue_1[0]
     uid_to_replace = item_1["item_uid"]
@@ -772,7 +772,7 @@ def test_queue_item_update_1(re_manager, replace, item_type):  # noqa F811
 
     assert subprocess.call(["qserver", "queue", option, item_type, uid_to_replace, item]) == SUCCESS
 
-    queue_2 = get_queue()["queue"]
+    queue_2 = get_queue()["items"]
     assert len(queue_2) == 1
     item_2 = queue_2[0]
 
@@ -797,7 +797,7 @@ def test_queue_item_update_2_fail(re_manager, replace, item_type):  # noqa F811
 
     assert subprocess.call(["qserver", "queue", "add", "plan", plan1]) == SUCCESS
 
-    queue_1 = get_queue()["queue"]
+    queue_1 = get_queue()["items"]
     assert len(queue_1) == 1
     uid_to_replace = "non-existent-UID"
 
@@ -811,7 +811,7 @@ def test_queue_item_update_2_fail(re_manager, replace, item_type):  # noqa F811
 
     assert subprocess.call(["qserver", "queue", option, item_type, uid_to_replace, item]) == REQ_FAILED
 
-    queue_2 = get_queue()["queue"]
+    queue_2 = get_queue()["items"]
     assert queue_1 == queue_2
 
 
@@ -851,7 +851,7 @@ def test_queue_item_get_remove(re_manager, pos, uid_ind, pos_result, success):  
     for plan in plans:
         assert subprocess.call(["qserver", "queue", "add", "plan", plan]) == SUCCESS
 
-    queue_1 = get_queue()["queue"]
+    queue_1 = get_queue()["items"]
     assert len(queue_1) == 3
     uids_1 = [_["item_uid"] for _ in queue_1]
     uids_1.append("unknown_uid")  # Extra element (for one of the tests)
@@ -877,7 +877,7 @@ def test_queue_item_get_remove(re_manager, pos, uid_ind, pos_result, success):  
     else:
         assert res == REQ_FAILED
 
-    queue_2 = get_queue()["queue"]
+    queue_2 = get_queue()["items"]
     assert len(queue_2) == (2 if success else 3)
     if success:
         ind = [0, 1, 2]
@@ -922,7 +922,7 @@ def test_queue_item_get_move(re_manager, params, result_order, exit_code):  # no
     for plan in plans:
         assert subprocess.call(["qserver", "queue", "add", "plan", plan]) == SUCCESS
 
-    queue_1 = get_queue()["queue"]
+    queue_1 = get_queue()["items"]
     assert len(queue_1) == 3
     uids_1 = [_["item_uid"] for _ in queue_1]
     uids_1.append("unknown_uid")  # Extra element (for one of the tests)
@@ -936,7 +936,7 @@ def test_queue_item_get_move(re_manager, params, result_order, exit_code):  # no
     # Testing 'queue_item_move'.
     assert subprocess.call(["qserver", "queue", "item", "move", *params]) == exit_code
 
-    queue_2 = get_queue()["queue"]
+    queue_2 = get_queue()["items"]
     assert len(queue_2) == 3
     uids_2 = [_["item_uid"] for _ in queue_2]
 

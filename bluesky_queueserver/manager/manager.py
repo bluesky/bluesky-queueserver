@@ -898,7 +898,7 @@ class RunEngineManager(Process):
         return {
             "success": True,
             "msg": "",
-            "queue": plan_queue,
+            "items": plan_queue,
             "running_item": running_item,
             "plan_queue_uid": plan_queue_uid,
         }

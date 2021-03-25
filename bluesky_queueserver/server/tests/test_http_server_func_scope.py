@@ -81,7 +81,7 @@ def test_http_server_queue_upload_spreasheet_1(re_manager, fastapi_server_fs, tm
     resp2 = request_to_json("get", "/queue/get")
     assert resp2["success"] is True
     assert resp2["running_item"] == {}
-    queue = resp2["queue"]
+    queue = resp2["items"]
     assert len(queue) == len(plans_expected), str(queue)
     for p, p_exp in zip(queue, plans_expected):
         for k, v in p_exp.items():
@@ -196,7 +196,7 @@ def test_http_server_queue_upload_spreasheet_4(
     resp2 = request_to_json("get", "/queue/get")
     assert resp2["success"] is True
     assert resp2["running_item"] == {}
-    queue = resp2["queue"]
+    queue = resp2["items"]
     assert len(queue) == len(plans_expected), str(queue)
     for p, p_exp in zip(queue, plans_expected):
         for k, v in p_exp.items():

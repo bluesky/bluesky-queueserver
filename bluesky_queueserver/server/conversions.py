@@ -273,7 +273,7 @@ def spreadsheet_to_plan_list(*, spreadsheet_file, file_name, **kwargs):  # noqa:
                 plan["args"] = plan_args
             if plan_kwargs:
                 plan["kwargs"] = plan_kwargs
-            plan_list.append({"plan": plan})
+            plan_list.append(plan)
 
         except Exception as ex:
             logger.exception(f"{ex}")

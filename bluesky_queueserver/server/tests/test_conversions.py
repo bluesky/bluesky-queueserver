@@ -196,13 +196,15 @@ def create_excel_file_from_plan_list(tmp_path, *, plan_list, ss_filename="spread
             return int(val)
         elif isinstance(val, (np.floating, float)):
             return float(val)
+        elif isinstance(val, str):
+            return f"'{val}'"
         else:
             return str(val)
 
     plan_params = []
     kwarg_names = []
     for plan in plan_list:
-        pp = [plan["name"]]
+        pp = [format_cell(plan["name"])]
         if "args" in plan:
             pp.append(format_cell(plan["args"]))
         else:
@@ -254,25 +256,51 @@ def create_excel_file_from_plan_list(tmp_path, *, plan_list, ss_filename="spread
     return ss_path
 
 
+_plan_list = [
+    {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10}},
+    {"name": "count", "args": [["det1"]], "kwargs": {"delay": 0.5}},
+    {"name": "count", "kwargs": {"detectors": ["det1"], "delay": 0.5}},
+    {"name": math.nan},
+    {"name": "scan", "args": [["det1", "det2"], "motor", -1, 1, 10], "kwargs": {"num": 3}},
+    {"name": "scan", "args": [["det1", "det2"], "motor", -1, 1, 10]},
+    {"name": "count", "args": [["det2"]], "kwargs": {"num": 2, "delay": 0.7}},
+    {"name": "count", "args": [["det2"]], "kwargs": {"num": 2}},
+]
+
+
 # fmt: on
 @pytest.mark.parametrize("ext", [".xlsx", ".csv"])
 # fmt: off
 def test_spreadsheet_to_plan_list_1(tmp_path, ext):
 
-    plan_list = [
-        {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10}},
-        {"name": "count", "args": [["det1"]], "kwargs": {"delay": 0.5}},
-        {"name": "count", "kwargs": {"detectors": ["det1"], "delay": 0.5}},
-        {"name": math.nan},
-        {"name": "scan", "args": [["det1", "det2"], "motor", -1, 1, 10], "kwargs": {"num": 3}},
-        {"name": "scan", "args": [["det1", "det2"], "motor", -1, 1, 10]},
-        {"name": "count", "args": [["det2"]], "kwargs": {"num": 2, "delay": 0.7}},
-        {"name": "count", "args": [["det2"]], "kwargs": {"num": 2}},
-    ]
-
-    ss_path = create_excel_file_from_plan_list(tmp_path, plan_list=plan_list, ss_ext=ext)
+    ss_path = create_excel_file_from_plan_list(tmp_path, plan_list=_plan_list, ss_ext=ext)
     with open(ss_path, "rb") as f:
         plans = spreadsheet_to_plan_list(spreadsheet_file=f, file_name=os.path.split(ss_path)[-1])
 
     # Remove the case when name == None before comparing dictionaries
-    assert plans == [{"plan": _} for _ in plan_list if isinstance(_["name"], str)]
+    assert plans == [{"plan": _} for _ in _plan_list if isinstance(_["name"], str)]
+
+
+# fmt: on
+@pytest.mark.parametrize("ext", [".xlsx", ".csv"])
+@pytest.mark.parametrize("extra_plan, errmsg", [
+    # Invalid plan name (wrong type - not str)
+    # ({"name": 10, "args": [["det1", "det2"]], "kwargs": {"num": 10}},
+    #  "Plan name .*row 9.* has incorrect type"),
+    ({"name": [10, 20], "args": [["det1", "det2"]], "kwargs": {"num": 10}},
+     "Plan name .*row 9.* has incorrect type"),
+    # Invalid plan name (can not be a Python identifier)
+    ({"name": "10", "args": [["det1", "det2"]], "kwargs": {"num": 10}},
+     "Plan name .*10.*row 9.* is not a valid plan name"),
+    ({"name": "co unt", "args": [["det1", "det2"]], "kwargs": {"num": 10}},
+     "Plan name .*co unt.*row 9.* is not a valid plan name"),
+])
+# fmt: off
+def test_spreadsheet_to_plan_list_2_fail(tmp_path, ext, extra_plan, errmsg):
+
+    _plan_list_modified = _plan_list.copy()
+    _plan_list_modified.append(extra_plan)
+    ss_path = create_excel_file_from_plan_list(tmp_path, plan_list=_plan_list_modified, ss_ext=ext)
+    with open(ss_path, "rb") as f:
+        with pytest.raises(Exception, match=errmsg):
+            spreadsheet_to_plan_list(spreadsheet_file=f, file_name=os.path.split(ss_path)[-1])

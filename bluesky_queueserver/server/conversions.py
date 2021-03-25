@@ -219,6 +219,10 @@ def spreadsheet_to_plan_list(*, spreadsheet_file, file_name, **kwargs):  # noqa:
     # The number of rows (rows are potentially plans, there could be empty rows though)
     n_rows = len(df[key_plan_name])
 
+    def _format_row(df, nr):
+        # Print the row as a tuple
+        return str(tuple([df[_][nr] for _ in df.keys()]))
+
     plan_list = []
 
     for nr in range(n_rows):
@@ -228,14 +232,24 @@ def spreadsheet_to_plan_list(*, spreadsheet_file, file_name, **kwargs):  # noqa:
         if not plan_name or _is_nan(plan_name):
             continue
 
+        # The following step allows the plan names to be quoted or unquoted as well as to detect cases
+        #   when name is of wrong type (list or dict) because spreadsheet formatting is incorrect.
+        try:
+            plan_name = _read_cell_parameter(plan_name)
+        except Exception:
+            # Exception is raised if the plan name is unquoted. If plan name is just a corrupt
+            #   expression, then it will remain a string and the plan will be rejected by RE Manager.
+            pass
         # Check if the plan name is string and it is formatted to represent a valid plan name
         if not isinstance(plan_name, str):
             raise ValueError(
-                f"Plan name '{plan_name}' (row {nr + 1}) is of incorrect type ('{type(plan_name)}'): "
-                "supported type 'str')"
+                f"Plan name '{plan_name}' (row {nr + 1}: {_format_row(df, nr)}) has "
+                f"incorrect type ('{type(plan_name)}'): only 'str' type is supported)"
             )
         if not plan_name.isidentifier():
-            raise ValueError(f"Plan name '{plan_name}' (row {nr + 1}) is not a valid plan name")
+            raise ValueError(
+                f"Plan name '{plan_name}' (row {nr + 1}: {_format_row(df, nr)}) is not a valid plan name"
+            )
 
         try:
             plan_args = []
@@ -263,6 +277,8 @@ def spreadsheet_to_plan_list(*, spreadsheet_file, file_name, **kwargs):  # noqa:
 
         except Exception as ex:
             logger.exception(f"{ex}")
-            raise ValueError(f"Error occurred while interpreting plan parameters in row {nr + 1}: {ex}")
+            raise ValueError(
+                f"Error occurred while interpreting plan parameters in row {nr + 1} ({_format_row(df, nr)}): {ex}"
+            )
 
     return plan_list

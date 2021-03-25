@@ -153,6 +153,10 @@ def filter_plan_descriptions(plans_source):
 
 
 def _is_nan(val):
+    """
+    Determine if the value is ``math.nan``. The function ``math.isnan()`` may be applied
+    only to floating point numbers (definitely not to strings).
+    """
     return isinstance(val, (np.floating, float)) and math.isnan(val)
 
 
@@ -187,7 +191,72 @@ def _read_cell_parameter(cell_value):
 
 
 def spreadsheet_to_plan_list(*, spreadsheet_file, file_name, **kwargs):  # noqa: F821
+    """
+    The default function for converting spreadsheet to a list of plans. The function
+    accepts files in .xlsx and .csv formats. For Excel files, only the first sheet of
+    the workbook will be loaded. The spreadsheet is expected to be prepared using
+    the following format (printed Pandas dataframe, NaN is an empty cell):
 
+      plan_name                                   args   num  delay detectors
+         'count'                      ['det1', 'det2']  10.0    NaN       NaN
+         'count'                              ['det1']   NaN    0.5       NaN
+         'count'                                   NaN   NaN    0.5  ['det1']
+            NaN                                    NaN   NaN    NaN       NaN
+          'scan'      ['det1', 'det2'], 'motor', -1, 1  10.0    NaN       NaN
+          'scan'  ['det1', 'det2'], 'motor', -1, 1, 10   NaN    NaN       NaN
+         'count'                              ['det2']   2.0    0.7       NaN
+         'count'                              ['det2']   2.0    NaN       NaN
+
+    Guidelines:
+
+    - The first row contains column names. The names of columns 1 and 2 can be
+      arbitrary, but should be kept informative. It is recommended to name column 2 as
+      'args'. The remaining column names should strictly match names of plan kwargs.
+
+    - Each of the remaining rows contains parameters of a single plan. Empty rows
+      are permitted. The row is considered empty if the cell containing plan name
+      is empty. In this case the remaining row cells are ignored.
+
+    - Column 1 contains plan names. Plan names should be enclosed in quotation marks.
+      (Plan name will be accepted without quotation marks but it is recommended to use
+      quatation marks for consistency.) Plan names must satisfy requirements for Python
+      identifiers, otherwise the exception will be raised. (The plan with the respective
+      name should also exist in the RE Worker environment, but this function doesn't
+      verify it.)
+
+    - Column 2 contains plan args. The args should be comma-separated. The list of args
+      should not be enclosed in ``[]`` (e.g. ['det1', 'det2'] is considered as one arg
+      containing a list of detectors. The names of the devices (motors or detectors)
+      should be enclosed in quotation marks. The cell may be left empty if the plan
+      is not using args. NOTE: column 2 is reserved for args and it should be present
+      even if no plans in the list accepts args.
+
+    - Columns 3,4... contain values of kwargs. Each column is reserved for kwarg with
+      the name listed in row 1. If a kwarg is not used for a given plan, the cell should
+      be empty.
+
+    The contents of the cells are evaluated using Python expression ``eval(<cell_value>, {}, {}``,
+    therefore the expressions may not contain variable names or function calls. But they may
+    represent arbitrary expressions containing numbers and strings (numbers and strings
+    can be organized in lists, dictionaries, lists of dictionaries etc. If a cell contains
+    unquoted device name (e.g. ``motor``), the name will be interpreted by ``eval()`` as
+    a variable and an exception will be raised.
+
+    Parameters
+    ----------
+    spreadsheet_file : file
+        readable file object for '.xlsx' or '.csv' spreadsheet file.
+    file_name : str
+        name of the spreadsheet file. Extension of the file name is used to determine the file type.
+    kwargs : dict
+        absorbs kwargs that are not used by this function
+
+    Returns
+    -------
+    list(dict)
+        List of dictionaries containing plan parameters. Each dictionary contains elements ``name`` (str),
+        ``args`` (list) and ``kwargs`` (dict).
+    """
     # Check if the spreadseet type has supported extension
     _, ss_ext = os.path.splitext(file_name)
     supported_ext = (".xlsx", ".xls", ".csv")
@@ -254,13 +323,10 @@ def spreadsheet_to_plan_list(*, spreadsheet_file, file_name, **kwargs):  # noqa:
         try:
             plan_args = []
             if key_plan_args:
-                args = _read_cell_parameter(df[key_plan_args][nr])
-                if isinstance(args, (tuple, list)):
-                    plan_args = args
-                else:
-                    plan_args = (args,)
-                plan_args = list(plan_args)
-                plan_args = [_ for _ in plan_args if not _is_nan(_)]
+                args_ss = df[key_plan_args][nr]
+                if not _is_nan(args_ss):
+                    args_ss = f"[{args_ss}]"  # args_ss will typically be a string anyway
+                    plan_args = _read_cell_parameter(args_ss)
 
             plan_kwargs = {}
             for key in keys_kwargs:

@@ -180,9 +180,6 @@ def test_http_server_queue_upload_spreasheet_4(
         )
     fastapi_server_fs()
 
-    # plan_params = [["count", 5, 1], ["count", 6, 0.5]]
-    # col_names = ["name", "num", "delay"]
-
     ss_path = create_excel_file_from_plan_list(tmp_path, plan_list=plan_list_sample)
     plans_expected = [_ for _ in plan_list_sample if isinstance(_["name"], str)]
 

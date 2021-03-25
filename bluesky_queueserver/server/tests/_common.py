@@ -45,9 +45,21 @@ def create_excel_file_from_plan_list(tmp_path, *, plan_list, ss_filename="spread
     kwarg_names = []
     for plan in plan_list:
         pp = [format_cell(plan["name"])]
+        args_appended = False
         if "args" in plan:
-            pp.append(format_cell(plan["args"]))
-        else:
+            # Args are typically going to be represented as a printed list not enclosed in []
+            plan_args = plan["args"]
+            if not isinstance(plan_args, (tuple, list)):
+                raise ValueError(
+                    f"Plan args must be a tuple or a list: type(plan_args)={type(plan_args)} plan={plan}"
+                )
+            plan_args = list(plan_args)  # In case 'plan_args' is a tuple
+            if plan_args:  # Do not
+                plan_args_format = format_cell(plan_args)
+                plan_args_format = plan_args_format[1:-1]  # Remove [ and ]
+                pp.append(plan_args_format)
+                args_appended = True
+        if not args_appended:
             pp.append(math.nan)
         if "kwargs" in plan:
             plan_kwargs = plan["kwargs"].copy()

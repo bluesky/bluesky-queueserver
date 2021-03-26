@@ -571,8 +571,8 @@ Returns       **success**: *boolean*
                   queue size may be returned even if the operation fails. In rare failing cases
                   the parameter may return *None*.
 
-              **item_list** : *list*
-                  the list of processed items inserted item. Each item represents the dictionary
+              **item_list**: *list*
+                  the list of processed items. Each item represents the dictionary
                   with the following keys:
 
                 - **success** - boolean value indicating if the validation of the item was successful.

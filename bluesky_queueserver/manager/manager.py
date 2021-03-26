@@ -903,21 +903,32 @@ class RunEngineManager(Process):
             "plan_queue_uid": plan_queue_uid,
         }
 
-    def _get_item_from_request(self, *, request):
+    def _get_item_from_request(self, *, request=None, item=None):
         """
         Extract ``item`` and ``item_type`` from the request, validate the values and report errors
         """
         msg_prefix = "Incorrect request format: "
         supported_item_types = ("plan", "instruction")
 
-        if "item" not in request:
-            raise Exception(f"{msg_prefix}request contains no item info")
+        # The following two error reports represent serious bug, which needs to be fixed
+        if (request is None) and (item is None):
+            raise Exception(f"Runtime error: neither 'request' nor 'item' is specfied in function call")
+        if (request is not None) and (item is not None):
+            raise Exception(f"Runtime error: both 'request' and 'item' are specfied in function call")
 
         # Generate error message instead of raising exception: we still want to return
         #   'item' if it exists so that we could send it to the client with error message.
-        msg = ""
+        msg, item_type = "", None
 
-        item, item_type = request["item"], None
+        if request is not None:
+            if not isinstance(request, dict):
+                raise ValueError(
+                    f"Incorrect type of 'request' parameter: "
+                    f"type(request)='{type(request)}', expected type is 'dict'"
+                )
+            if "item" not in request:
+                raise Exception(f"{msg_prefix}request contains no item info")
+            item = request["item"]
 
         if isinstance(item, dict):
             item_type = item.get("item_type", None)
@@ -1122,7 +1133,7 @@ class RunEngineManager(Process):
             if "items" not in request:
                 raise Exception("Invalid request format: the list of items is not found")
             items = request["items"]
-            items_prepared, report, success = [], [], [], True
+            items_prepared, report, success = [], [], True
 
             user, user_group = self._get_user_info_from_request(request=request)
 
@@ -1130,7 +1141,7 @@ class RunEngineManager(Process):
             for item_info in items:
                 item, item_type = None, None
                 try:
-                    item, item_type, _success, _msg = self._get_item_from_request(request=item_info)
+                    item, item_type, _success, _msg = self._get_item_from_request(item=item_info)
                     if not _success:
                         raise Exception(_msg)
 

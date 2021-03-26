@@ -611,42 +611,36 @@ def test_zmq_api_queue_item_add_batch_1(re_manager):  # noqa: F811
     """
     Basic test for ``queue_item_add_batch`` API.
     """
-    items = [{"plan": _plan1}, {"plan": _plan2}, {"instruction": _instruction_stop}, {"plan": _plan3}]
+    items = [_plan1, _plan2, _instruction_stop, _plan3]
 
     params = {"items": items, "user": _user, "user_group": _user_group}
     resp1a, _ = zmq_single_request("queue_item_add_batch", params)
     assert resp1a["success"] is True, f"resp={resp1a}"
     assert resp1a["msg"] == ""
     assert resp1a["qsize"] == 4
-    item_list = resp1a["item_list"]
+    item_list = resp1a["items"]
+    item_results = resp1a["results"]
     assert len(item_list) == len(items)
+    assert len(item_results) == len(items)
 
-    for item, item_res in zip(items, item_list):
-        assert item_res["success"] is True, str(item)
-        assert item_res["msg"] == "", str(item)
+    for n, item in enumerate(items):
+        item_res, res = item_list[n], item_results[n]
+        assert res["success"] is True, str(item)
+        assert res["msg"] == "", str(item)
 
-        if "instruction" in item:
-            key, name = "instruction", "action"
-        elif "plan" in item:
-            key, name = "plan", "name"
+        assert "name" in item_res, str(item_res)
+        assert item_res["name"] == item["name"]
+        assert isinstance(item_res["item_uid"], str)
+        assert item_res["item_uid"]
+
+        if "args" in item:
+            assert item_res["args"] == item["args"]
         else:
-            assert False, f"Unsupported item {item}"
-
-        assert key in item_res, str(item_res)
-        assert name in item_res[key], str(item_res)
-        assert item_res[key][name] == item[key][name]
-        assert isinstance(item_res[key]["item_uid"], str)
-        assert item_res[key]["item_uid"]
-
-        if key == "plan":
-            if "args" in item[key]:
-                assert item_res[key]["args"] == item[key]["args"]
-            else:
-                assert item_res[key]["args"] == []
-            if "kwargs" in item[key]:
-                assert item_res[key]["kwargs"] == item[key]["kwargs"]
+            assert "args" not in item_res
+        if "kwargs" in item:
+            assert item_res["kwargs"] == item["kwargs"]
         else:
-            assert item_res[key]["action"] == item[key]["action"]
+            assert "kwargs" not in item_res
 
     state = get_queue_state()
     assert state["items_in_queue"] == 4
@@ -685,52 +679,47 @@ def test_zmq_api_queue_item_add_batch_2(re_manager):  # noqa: F811
     """
     _plan2_corrupt = _plan2.copy()
     _plan2_corrupt["name"] = "nonexisting_name"
-    items = [{"plan": _plan1}, {"plan": _plan2_corrupt}, {"instruction": _instruction_stop}, {}, {"plan": _plan3}]
+    items = [_plan1, _plan2_corrupt, _instruction_stop, {}, _plan3]
     success_expected = [True, False, True, False, True]
-    msg_expected = ["", "is not in the list of allowed plans", "", "request contains no item info", ""]
+    msg_expected = ["", "is not in the list of allowed plans", "", "'item_type' key is not found", ""]
 
     params = {"items": items, "user": _user, "user_group": _user_group}
     resp1a, _ = zmq_single_request("queue_item_add_batch", params)
     assert resp1a["success"] is False, f"resp={resp1a}"
     assert resp1a["msg"] == "Failed to add all items: validation of 2 out of 5 submitted items failed"
-    item_list = resp1a["item_list"]
+    item_list = resp1a["items"]
+    item_results = resp1a["results"]
     assert len(item_list) == len(items)
+    assert len(item_results) == len(items)
 
     for n, item in enumerate(items):
-        item_res = item_list[n]
-        scs = success_expected[n]
-        msg = msg_expected[n]
-        assert item_res["success"] == scs, str(item)
+        item_res, res = item_list[n], item_results[n]
+        scs, msg = success_expected[n], msg_expected[n]
+        assert res["success"] == scs, str(item)
         if not msg:
-            assert item_res["msg"] == "", str(item)
+            assert res["msg"] == "", str(item)
         else:
-            assert msg in item_res["msg"], str(item)
+            assert msg in res["msg"], str(item)
 
-        key = ""
-        if "instruction" in item:
-            key, name = "instruction", "action"
-        elif "plan" in item:
-            key, name = "plan", "name"
-
-        if key:
-            assert key in item_res, str(item_res)
-            assert name in item_res[key], str(item_res)
-            assert item_res[key][name] == item[key][name]
+        if item:  # We should attempt to access elements of an item, which is {}
+            assert "name" in item_res, str(item_res)
+            assert item_res["name"] == item["name"]
             if scs:
-                assert isinstance(item_res[key]["item_uid"], str)
-                assert item_res[key]["item_uid"]
+                assert isinstance(item_res["item_uid"], str)
+                assert item_res["item_uid"]
             else:
-                assert "item_uid" not in item_res[key]
+                assert "item_uid" not in item_res
 
-            if key == "plan":
-                if "args" in item[key]:
-                    assert item_res[key]["args"] == item[key]["args"]
-                else:
-                    assert item_res[key]["args"] == []
-                if "kwargs" in item[key]:
-                    assert item_res[key]["kwargs"] == item[key]["kwargs"]
+            if "args" in item:
+                assert item_res["args"] == item["args"]
             else:
-                assert item_res[key]["action"] == item[key]["action"]
+                assert "args" not in item_res
+            if "kwargs" in item:
+                assert item_res["kwargs"] == item["kwargs"]
+            else:
+                assert "kwargs" not in item_res
+        else:
+            assert item_res == {}
 
     state = get_queue_state()
     assert state["items_in_queue"] == 0
@@ -747,8 +736,8 @@ def test_zmq_api_queue_item_add_batch_3(re_manager):  # noqa: F811
     resp1a, _ = zmq_single_request("queue_item_add_batch", params)
     assert resp1a["success"] is True, f"resp={resp1a}"
     assert resp1a["msg"] == ""
-    item_list = resp1a["item_list"]
-    assert item_list == []
+    assert resp1a["items"] == []
+    assert resp1a["results"] == []
 
     state = get_queue_state()
     assert state["items_in_queue"] == 0

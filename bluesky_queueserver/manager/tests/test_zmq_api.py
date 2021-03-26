@@ -1055,7 +1055,7 @@ def test_zmq_api_queue_item_get_remove_1(re_manager):  # noqa F811
     """
     plans = [_plan1, _plan2, _plan3]
     for plan in plans:
-        resp0, _ = zmq_single_request("queue_item_add", {"plan": plan, "user": _user, "user_group": _user_group})
+        resp0, _ = zmq_single_request("queue_item_add", {"item": plan, "user": _user, "user_group": _user_group})
         assert resp0["success"] is True
 
     status0 = get_queue_state()
@@ -1111,12 +1111,12 @@ def test_zmq_api_queue_item_get_remove_2(re_manager, pos, pos_result, success): 
     """
 
     plans = [
-        {"item_uid": "one", "name": "count", "args": [["det1"]]},
-        {"item_uid": "two", "name": "count", "args": [["det2"]]},
-        {"item_uid": "three", "name": "count", "args": [["det1", "det2"]]},
+        {"item_uid": "one", "name": "count", "args": [["det1"]], "item_type": "plan"},
+        {"item_uid": "two", "name": "count", "args": [["det2"]], "item_type": "plan"},
+        {"item_uid": "three", "name": "count", "args": [["det1", "det2"]], "item_type": "plan"},
     ]
     for plan in plans:
-        resp0, _ = zmq_single_request("queue_item_add", {"plan": plan, "user": _user, "user_group": _user_group})
+        resp0, _ = zmq_single_request("queue_item_add", {"item": plan, "user": _user, "user_group": _user_group})
         assert resp0["success"] is True
 
     # Remove entry at the specified position
@@ -1156,7 +1156,7 @@ def test_zmq_api_queue_item_get_remove_3(re_manager):  # noqa F811
     """
     plans = [_plan3, _plan2, _plan1]
     for plan in plans:
-        resp0, _ = zmq_single_request("queue_item_add", {"plan": plan, "user": _user, "user_group": _user_group})
+        resp0, _ = zmq_single_request("queue_item_add", {"item": plan, "user": _user, "user_group": _user_group})
         assert resp0["success"] is True
 
     resp1, _ = zmq_single_request("queue_get")
@@ -1233,6 +1233,9 @@ def test_zmq_api_queue_item_get_remove_4_failing(re_manager):  # noqa F811
     assert "Ambiguous parameters" in resp1["msg"]
 
 
+# =======================================================================================
+#                              Method `queue_item_move`
+
 # fmt: off
 @pytest.mark.parametrize("params, src, order, success, msg", [
     ({"pos": 1, "pos_dest": 1}, 1, [0, 1, 2], True, ""),
@@ -1273,7 +1276,7 @@ def test_zmq_api_queue_item_get_remove_4_failing(re_manager):  # noqa F811
 def test_zmq_api_move_plan_1(re_manager, params, src, order, success, msg):  # noqa: F811
     plans = [_plan1, _plan2, _plan3]
     for plan in plans:
-        resp0, _ = zmq_single_request("queue_item_add", {"plan": plan, "user": _user, "user_group": _user_group})
+        resp0, _ = zmq_single_request("queue_item_add", {"item": plan, "user": _user, "user_group": _user_group})
         assert resp0["success"] is True
 
     resp1, _ = zmq_single_request("queue_get")
@@ -1384,7 +1387,11 @@ def test_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_restart):  # 
     assert resp1["success"] is True, f"resp={resp1}"
 
     # Add plan to the queue
-    params = {"plan": {"name": "multirun_plan_nested"}, "user": _user, "user_group": _user_group}
+    params = {
+        "item": {"name": "multirun_plan_nested", "item_type": "plan"},
+        "user": _user,
+        "user_group": _user_group,
+    }
     resp2, _ = zmq_single_request("queue_item_add", params)
     assert resp2["success"] is True, f"resp={resp2}"
 
@@ -1523,26 +1530,26 @@ def test_zmq_api_queue_execution_1(re_manager):  # noqa: F811
     """
 
     # Instruction STOP
-    params1a = {"instruction": _instruction_stop, "user": _user, "user_group": _user_group}
+    params1a = {"item": _instruction_stop, "user": _user, "user_group": _user_group}
     resp1a, _ = zmq_single_request("queue_item_add", params1a)
     assert resp1a["success"] is True, f"resp={resp1a}"
     assert resp1a["msg"] == ""
-    assert resp1a["instruction"]["action"] == "queue_stop"
+    assert resp1a["item"]["name"] == "queue_stop"
 
     # Plan
-    params1b = {"plan": _plan1, "user": _user, "user_group": _user_group}
+    params1b = {"item": _plan1, "user": _user, "user_group": _user_group}
     resp1b, _ = zmq_single_request("queue_item_add", params1b)
     assert resp1b["success"] is True, f"resp={resp1b}"
 
     # Instruction STOP
-    params1c = {"instruction": _instruction_stop, "user": _user, "user_group": _user_group}
+    params1c = {"item": _instruction_stop, "user": _user, "user_group": _user_group}
     resp1c, _ = zmq_single_request("queue_item_add", params1c)
     assert resp1c["success"] is True, f"resp={resp1c}"
     assert resp1c["msg"] == ""
-    assert resp1c["instruction"]["action"] == "queue_stop"
+    assert resp1c["item"]["name"] == "queue_stop"
 
     # Plan
-    params1d = {"plan": _plan2, "user": _user, "user_group": _user_group}
+    params1d = {"item": _plan2, "user": _user, "user_group": _user_group}
     resp1d, _ = zmq_single_request("queue_item_add", params1d)
     assert resp1d["success"] is True, f"resp={resp1d}"
 
@@ -1637,13 +1644,13 @@ def test_zmq_api_queue_execution_2(re_manager):  # noqa: F811
     uid_checker = UidChecker()
 
     # Plan
-    params1b = {"plan": _plan3, "user": _user, "user_group": _user_group}
+    params1b = {"item": _plan3, "user": _user, "user_group": _user_group}
     resp1b, _ = zmq_single_request("queue_item_add", params1b)
     assert resp1b["success"] is True, f"resp={resp1b}"
     uid_checker.verify_uid_changes(pq_changed=True, ph_changed=False)
 
     # Plan
-    params1d = {"plan": _plan3, "user": _user, "user_group": _user_group}
+    params1d = {"item": _plan3, "user": _user, "user_group": _user_group}
     resp1d, _ = zmq_single_request("queue_item_add", params1d)
     assert resp1d["success"] is True, f"resp={resp1d}"
     uid_checker.verify_uid_changes(pq_changed=True, ph_changed=False)

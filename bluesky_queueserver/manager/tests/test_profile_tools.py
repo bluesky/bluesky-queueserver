@@ -568,7 +568,7 @@ def test_is_re_worker_active_2(re_manager_cmd, tmp_path, monkeypatch, option):  
     # Make sure that plan was completed successfully
     resp5, _ = zmq_single_request("history_get")
     assert resp5["success"] is True
-    history = resp5["history"]
+    history = resp5["items"]
     assert history[-1]["result"]["exit_status"] == "completed"
 
     # Close the environment

@@ -526,7 +526,7 @@ class RunEngineManager(Process):
             elif next_item["item_type"] == "instruction":
                 logger.info("Executing instruction:\n%s.", pprint.pformat(next_item))
 
-                if next_item["action"] == "queue_stop":
+                if next_item["name"] == "queue_stop":
                     # Pop the instruction from the queue
                     await self._plan_queue.pop_item_from_queue(pos="front")
                     self._manager_state = MState.EXECUTING_QUEUE
@@ -535,7 +535,7 @@ class RunEngineManager(Process):
                     success, err_msg = True, ""
                 else:
                     success = False
-                    err_msg = f"Unsupported action: '{next_item['action']}' (item {next_item})"
+                    err_msg = f"Unsupported action: '{next_item['name']}' (item {next_item})"
 
             else:
                 success = False
@@ -917,7 +917,8 @@ class RunEngineManager(Process):
         #   'item' if it exists so that we could send it to the client with error message.
         msg = ""
 
-        item = request["item"]
+        item, item_type = request["item"], None
+
         if isinstance(item, dict):
             item_type = item.get("item_type", None)
             if item_type is None:
@@ -927,8 +928,13 @@ class RunEngineManager(Process):
                     f"{msg_prefix}unsupported 'item_type' value '{item_type}', "
                     f"supported item types {supported_item_types}"
                 )
+        else:
+            msg = (
+                f"{msg_prefix}incorrect type ('{type(item)}') of item parameter: "
+                "item parameter must have type 'dict'"
+            )
 
-        success = bool(msg)
+        success = not bool(msg)
         return item, item_type, success, msg
 
     def _get_user_info_from_request(self, *, request):

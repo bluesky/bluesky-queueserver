@@ -85,7 +85,7 @@ def test_fixture_re_manager_cmd_2(re_manager_cmd, db_catalog):  # noqa F811
     assert resp5["items_in_history"] == 1
 
     resp6, _ = zmq_single_request("history_get")
-    history = resp6["history"]
+    history = resp6["items"]
     assert len(history) == 1
 
     uid = history[-1]["result"]["run_uids"][0]

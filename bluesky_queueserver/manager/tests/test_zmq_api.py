@@ -872,6 +872,103 @@ def test_zmq_api_queue_item_update_3_fail(re_manager, replace):  # noqa F811
     assert resp3["running_item"] == {}
 
 
+def test_zmq_api_queue_item_update_4_fail(re_manager):  # noqa F811
+    """
+    Failing cases for ``queue_item_update`` API: verify that it works identically to 'queue_item_add' for
+    all failing cases.
+    """
+
+    resp1, _ = zmq_single_request("queue_item_add", {"item": _plan1, "user": _user, "user_group": _user_group})
+    assert resp1["success"] is True
+    assert resp1["qsize"] == 1
+    assert resp1["item"]["name"] == _plan1["name"]
+    assert resp1["item"]["args"] == _plan1["args"]
+    assert resp1["item"]["user"] == _user
+    assert resp1["item"]["user_group"] == _user_group
+    assert "item_uid" in resp1["item"]
+
+    plan_to_update = resp1["item"].copy()
+
+    # Unknown plan name
+    plan2 = plan_to_update.copy()
+    plan2["name"] = "count_test"
+    params2 = {"item": plan2, "user": _user, "user_group": _user_group}
+    resp2, _ = zmq_single_request("queue_item_update", params2)
+    assert resp2["success"] is False
+    assert "Plan 'count_test' is not in the list of allowed plans" in resp2["msg"]
+
+    # Unknown kwarg
+    plan3 = plan_to_update.copy()
+    plan3["kwargs"] = {"abc": 10}
+    params3 = {"item": plan3, "user": _user, "user_group": _user_group}
+    resp3, _ = zmq_single_request("queue_item_update", params3)
+    assert resp3["success"] is False
+    assert (
+        "Failed to add an item: Plan validation failed: got an unexpected keyword argument 'abc'" in resp3["msg"]
+    )
+
+    # User name is not specified
+    params4 = {"item": plan_to_update, "user_group": _user_group}
+    resp4, _ = zmq_single_request("queue_item_update", params4)
+    assert resp4["success"] is False
+    assert "user name is not specified" in resp4["msg"]
+
+    # User group is not specified
+    params5 = {"item": plan_to_update, "user": _user}
+    resp5, _ = zmq_single_request("queue_item_update", params5)
+    assert resp5["success"] is False
+    assert "user group is not specified" in resp5["msg"]
+
+    # Unknown user group
+    params6 = {"item": plan_to_update, "user": _user, "user_group": "no_such_group"}
+    resp6, _ = zmq_single_request("queue_item_update", params6)
+    assert resp6["success"] is False
+    assert "Unknown user group: 'no_such_group'" in resp6["msg"]
+
+    # Missing item parameters
+    params7 = {"user": _user, "user_group": _user_group}
+    resp7, _ = zmq_single_request("queue_item_update", params7)
+    assert resp7["success"] is False
+    assert resp7["item"] is None
+    assert "Incorrect request format: request contains no item info" in resp7["msg"]
+
+    # Incorrect type of the item parameter (must be dict)
+    params8 = {"item": [], "user": _user, "user_group": _user_group}
+    resp8, _ = zmq_single_request("queue_item_update", params8)
+    assert resp8["success"] is False
+    assert resp8["item"] == []
+    assert "item parameter must have type 'dict'" in resp8["msg"]
+
+    # Unsupported item type
+    plan9 = plan_to_update.copy()
+    plan9["item_type"] = "unsupported"
+    params9 = {"item": plan9, "user": _user, "user_group": _user_group}
+    resp9, _ = zmq_single_request("queue_item_update", params9)
+    assert resp9["success"] is False
+    assert resp9["item"] == plan9
+    assert "Incorrect request format: unsupported 'item_type' value 'unsupported'" in resp9["msg"]
+
+    # Valid plan
+    plan10 = plan_to_update.copy()
+    plan10["args"] = [["det1"]]
+    params10 = {"item": plan10, "user": _user, "user_group": _user_group}
+    resp10, _ = zmq_single_request("queue_item_update", params10)
+    assert resp10["success"] is True
+    assert resp10["qsize"] == 1
+    assert resp10["item"]["name"] == "count"
+    assert resp10["item"]["args"] == [["det1"]]
+    assert resp10["item"]["user"] == _user
+    assert resp10["item"]["user_group"] == _user_group
+    assert "item_uid" in resp10["item"]
+    assert resp10["item"]["item_uid"] == plan_to_update["item_uid"]
+
+    resp11, _ = zmq_single_request("queue_get")
+    assert resp11["items"] != []
+    assert len(resp11["items"]) == 1
+    assert resp11["items"][0] == resp10["item"]
+    assert resp11["running_item"] == {}
+
+
 # =======================================================================================
 #                      Method 'plans_allowed', 'devices_allowed'
 

@@ -36,7 +36,12 @@ def _create_test_excel_file1(tmp_path, *, plan_params, col_names):
     plans_expected = []
     for p in plan_params:
         plans_expected.append(
-            {"name": p[0], "args": [["det1", "det2"]], "kwargs": {k: v for k, v in zip(col_names[1:], p[1:])}}
+            {
+                "name": p[0],
+                "args": [["det1", "det2"]],
+                "kwargs": {k: v for k, v in zip(col_names[1:], p[1:])},
+                "item_type": "plan",
+            }
         )
 
     def create_excel(ss_path):
@@ -76,6 +81,17 @@ def test_http_server_queue_upload_spreasheet_1(re_manager, fastapi_server_fs, tm
     files = {"spreadsheet": open(ss_path, "rb")}
     resp1 = request_to_json("post", "/queue/upload/spreadsheet", files=files)
     assert resp1["success"] is True, str(resp1)
+    items1 = resp1["items"]
+    results1 = resp1["results"]
+    assert len(items1) == len(plans_expected), str(items1)
+    for p, p_exp in zip(items1, plans_expected):
+        for k, v in p_exp.items():
+            assert k in p
+            assert v == p[k]
+
+    assert len(results1) == len(plans_expected), str(results1)
+    assert all([_["success"] is True for _ in results1]), str(results1)
+    assert all([_["msg"] == "" for _ in results1]), str(results1)
 
     # Verify that the queue contains correct plans
     resp2 = request_to_json("get", "/queue/get")
@@ -128,7 +144,8 @@ def test_http_server_queue_upload_spreasheet_2(re_manager, fastapi_server_fs, tm
     resp1 = request_to_json("post", "/queue/upload/spreadsheet", files=files, data=data)
     assert resp1["success"] is False, str(resp1)
     assert resp1["msg"] == "Unsupported data type: 'unsupported'"
-    assert resp1["item_list"] == []
+    assert resp1["items"] == []
+    assert resp1["results"] == []
 
 
 def test_http_server_queue_upload_spreasheet_3(re_manager, fastapi_server_fs, tmp_path, monkeypatch):  # noqa F811
@@ -189,8 +206,9 @@ def test_http_server_queue_upload_spreasheet_4(
         params["data"] = {"data_type": "process_with_default_function"}
     resp1 = request_to_json("post", "/queue/upload/spreadsheet", **params)
     assert resp1["success"] is True, str(resp1)
-    assert "item_list" in resp1, str(resp1)
-    assert len(resp1["item_list"]) == len(plans_expected), str(resp1)
+    assert "items" in resp1, str(resp1)
+    assert "results" in resp1, str(resp1)
+    assert len(resp1["results"]) == len(plans_expected), str(resp1)
 
     # Verify that the queue contains correct plans
     resp2 = request_to_json("get", "/queue/get")
@@ -243,17 +261,20 @@ def test_http_server_queue_upload_spreasheet_5(re_manager, fastapi_server_fs, tm
     assert resp1["success"] is False, str(resp1)
     assert resp1["msg"] == "Failed to add all items: validation of 1 out of 3 submitted items failed"
 
-    result = resp1["item_list"]
-    assert len(result) == len(plans_expected), str(result)
-    for p, p_exp in zip(result, plans_expected):
+    items, results = resp1["items"], resp1["results"]
+    assert len(items) == len(plans_expected), str(items)
+    assert len(results) == len(plans_expected), str(items)
+    for n, p_exp in enumerate(plans_expected):
+        p, r = items[n], results[n]
+        if p_exp["name"] == "nonexisting_plan":
+            assert r["success"] is False
+            assert "not in the list of allowed plans" in r["msg"], r["msg"]
+        else:
+            assert r["success"] is True
+            assert r["msg"] == ""
         for k, v in p_exp.items():
-            if p_exp["name"] == "nonexisting_plan":
-                assert p["success"] is False
-                assert "not in the list of allowed plans" in p["msg"], p["msg"]
-            else:
-                assert p["success"] is True
-                assert k in p["plan"]
-                assert v == p["plan"][k]
+            assert k in p
+            assert v == p[k]
 
     # No plans are expected to be added to the queue
     resp2 = request_to_json("get", "/status")

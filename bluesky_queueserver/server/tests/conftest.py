@@ -53,10 +53,10 @@ def add_plans_to_queue():
 
     user_group = "admin"
     user = "HTTP unit test setup"
-    plan1 = {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}
-    plan2 = {"name": "count", "args": [["det1", "det2"]]}
+    plan1 = {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}, "item_type": "plan"}
+    plan2 = {"name": "count", "args": [["det1", "det2"]], "item_type": "plan"}
     for plan in (plan1, plan2, plan2):
-        resp2, _ = zmq_single_request("queue_item_add", {"plan": plan, "user": user, "user_group": user_group})
+        resp2, _ = zmq_single_request("queue_item_add", {"item": plan, "user": user, "user_group": user_group})
         assert resp2["success"] is True, str(resp2)
 
 

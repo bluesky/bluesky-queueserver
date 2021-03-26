@@ -334,7 +334,7 @@ def spreadsheet_to_plan_list(*, spreadsheet_file, file_name, **kwargs):  # noqa:
                 if not _is_nan(kwarg):
                     plan_kwargs[key] = kwarg
 
-            plan = {"name": plan_name}
+            plan = {"name": plan_name, "item_type": "plan"}
             if plan_args:
                 plan["args"] = plan_args
             if plan_kwargs:

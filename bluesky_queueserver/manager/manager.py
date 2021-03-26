@@ -911,10 +911,12 @@ class RunEngineManager(Process):
         supported_item_types = ("plan", "instruction")
 
         # The following two error reports represent serious bug, which needs to be fixed
-        if (request is None) and (item is None):
-            raise Exception(f"Runtime error: neither 'request' nor 'item' is specfied in function call")
-        if (request is not None) and (item is not None):
-            raise Exception(f"Runtime error: both 'request' and 'item' are specfied in function call")
+        n_request_or_item = sum([(request is None), (item is None)])
+        if n_request_or_item != 1:
+            raise RuntimeError(
+                "Runtime error: Only one of 'request' or 'item' parameters "
+                f"may be not None: request={request}, item={item}"
+            )
 
         # Generate error message instead of raising exception: we still want to return
         #   'item' if it exists so that we could send it to the client with error message.
@@ -927,7 +929,7 @@ class RunEngineManager(Process):
                     f"type(request)='{type(request)}', expected type is 'dict'"
                 )
             if "item" not in request:
-                raise Exception(f"{msg_prefix}request contains no item info")
+                raise ValueError(f"{msg_prefix}request contains no item info")
             item = request["item"]
 
         if isinstance(item, dict):
@@ -950,16 +952,16 @@ class RunEngineManager(Process):
 
     def _get_user_info_from_request(self, *, request):
         if "user_group" not in request:
-            raise Exception("Incorrect request format: user group is not specified")
+            raise ValueError("Incorrect request format: user group is not specified")
 
         if "user" not in request:
-            raise Exception("Incorrect request format: user name is not specified")
+            raise ValueError("Incorrect request format: user name is not specified")
 
         user = request["user"]
         user_group = request["user_group"]
 
         if user_group not in self._allowed_plans:
-            raise Exception(f"Unknown user group: '{user_group}'")
+            raise ValueError(f"Unknown user group: '{user_group}'")
 
         return user, user_group
 

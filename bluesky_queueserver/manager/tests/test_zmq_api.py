@@ -755,16 +755,16 @@ def test_zmq_api_queue_item_update_1(re_manager, replace):  # noqa F811
     Basic test for `queue_item_update` method.
     """
 
-    resp1, _ = zmq_single_request("queue_item_add", {"plan": _plan1, "user": _user, "user_group": _user_group})
+    resp1, _ = zmq_single_request("queue_item_add", {"item": _plan1, "user": _user, "user_group": _user_group})
     assert resp1["success"] is True
     assert resp1["qsize"] == 1
-    assert resp1["plan"]["name"] == _plan1["name"]
-    assert resp1["plan"]["args"] == _plan1["args"]
-    assert resp1["plan"]["user"] == _user
-    assert resp1["plan"]["user_group"] == _user_group
-    assert "item_uid" in resp1["plan"]
+    assert resp1["item"]["name"] == _plan1["name"]
+    assert resp1["item"]["args"] == _plan1["args"]
+    assert resp1["item"]["user"] == _user
+    assert resp1["item"]["user_group"] == _user_group
+    assert "item_uid" in resp1["item"]
 
-    plan = resp1["plan"]
+    plan = resp1["item"]
     uid = plan["item_uid"]
 
     plan_changed = plan.copy()
@@ -772,7 +772,7 @@ def test_zmq_api_queue_item_update_1(re_manager, replace):  # noqa F811
     plan_changed["args"] = plan_new_args
 
     user_replaced = "Different User"
-    params = {"plan": plan_changed, "user": user_replaced, "user_group": _user_group}
+    params = {"item": plan_changed, "user": user_replaced, "user_group": _user_group}
     if replace is not None:
         params["replace"] = replace
 
@@ -781,15 +781,15 @@ def test_zmq_api_queue_item_update_1(re_manager, replace):  # noqa F811
     resp2, _ = zmq_single_request("queue_item_update", params)
     assert resp2["success"] is True
     assert resp2["qsize"] == 1
-    assert resp2["plan"]["name"] == _plan1["name"]
-    assert resp2["plan"]["args"] == plan_new_args
-    assert resp2["plan"]["user"] == user_replaced
-    assert resp2["plan"]["user_group"] == _user_group
-    assert "item_uid" in resp2["plan"]
+    assert resp2["item"]["name"] == _plan1["name"]
+    assert resp2["item"]["args"] == plan_new_args
+    assert resp2["item"]["user"] == user_replaced
+    assert resp2["item"]["user_group"] == _user_group
+    assert "item_uid" in resp2["item"]
     if replace:
-        assert resp2["plan"]["item_uid"] != uid
+        assert resp2["item"]["item_uid"] != uid
     else:
-        assert resp2["plan"]["item_uid"] == uid
+        assert resp2["item"]["item_uid"] == uid
 
     status2 = get_queue_state()
     assert status2["plan_queue_uid"] != status1["plan_queue_uid"]
@@ -798,7 +798,7 @@ def test_zmq_api_queue_item_update_1(re_manager, replace):  # noqa F811
     resp3, _ = zmq_single_request("queue_get")
     assert resp3["items"] != []
     assert len(resp3["items"]) == 1
-    assert resp3["items"][0] == resp2["plan"]
+    assert resp3["items"][0] == resp2["item"]
     assert resp3["running_item"] == {}
     assert resp3["plan_queue_uid"] == status2["plan_queue_uid"]
 
@@ -810,23 +810,23 @@ def test_zmq_api_queue_item_update_2_fail(re_manager, replace):  # noqa F811
     """
     Failing cases for `queue_item_update`: submitted item UID does not match any UID in the queue.
     """
-    resp1, _ = zmq_single_request("queue_item_add", {"plan": _plan1, "user": _user, "user_group": _user_group})
+    resp1, _ = zmq_single_request("queue_item_add", {"item": _plan1, "user": _user, "user_group": _user_group})
     assert resp1["success"] is True
     assert resp1["qsize"] == 1
-    assert resp1["plan"]["name"] == _plan1["name"]
-    assert resp1["plan"]["args"] == _plan1["args"]
-    assert resp1["plan"]["user"] == _user
-    assert resp1["plan"]["user_group"] == _user_group
-    assert "item_uid" in resp1["plan"]
+    assert resp1["item"]["name"] == _plan1["name"]
+    assert resp1["item"]["args"] == _plan1["args"]
+    assert resp1["item"]["user"] == _user
+    assert resp1["item"]["user_group"] == _user_group
+    assert "item_uid" in resp1["item"]
 
-    plan = resp1["plan"]
+    plan = resp1["item"]
 
     plan_changed = plan.copy()
     plan_changed["args"] = [["det1"]]
     plan_changed["item_uid"] = "incorrect_uid"
 
     user_replaced = "Different User"
-    params = {"plan": plan_changed, "user": user_replaced, "user_group": _user_group}
+    params = {"item": plan_changed, "user": user_replaced, "user_group": _user_group}
     if replace is not None:
         params["replace"] = replace
 
@@ -858,7 +858,7 @@ def test_zmq_api_queue_item_update_3_fail(re_manager, replace):  # noqa F811
     plan_changed["item_uid"] = "incorrect_uid"
 
     user_replaced = "Different User"
-    params = {"plan": plan_changed, "user": user_replaced, "user_group": _user_group}
+    params = {"item": plan_changed, "user": user_replaced, "user_group": _user_group}
     if replace is not None:
         params["replace"] = replace
 

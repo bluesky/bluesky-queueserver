@@ -537,7 +537,7 @@ def test_is_re_worker_active_2(re_manager_cmd, tmp_path, monkeypatch, option):  
     assert resp1["success"] is True, f"resp={resp1}"
 
     # Add plan to the queue
-    params = {"plan": {"name": "sim_plan_1"}, "user": _user, "user_group": _user_group}
+    params = {"item": {"name": "sim_plan_1", "item_type": "plan"}, "user": _user, "user_group": _user_group}
     resp2, _ = zmq_single_request("queue_item_add", params)
     assert resp2["success"] is True, f"resp={resp2}"
 

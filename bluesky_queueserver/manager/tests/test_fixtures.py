@@ -59,10 +59,10 @@ def test_fixture_re_manager_cmd_2(re_manager_cmd, db_catalog):  # noqa F811
 
     cat = db_catalog["catalog"]
 
-    plan = {"name": "scan", "args": [["det1", "det2"], "motor", -1, 1, 10]}
+    plan = {"name": "scan", "args": [["det1", "det2"], "motor", -1, 1, 10], "item_type": "plan"}
 
     # Plan
-    params1 = {"plan": plan, "user": _user, "user_group": _user_group}
+    params1 = {"item": plan, "user": _user, "user_group": _user_group}
     resp1, _ = zmq_single_request("queue_item_add", params1)
     assert resp1["success"] is True, f"resp={resp1}"
 

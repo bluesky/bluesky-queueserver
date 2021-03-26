@@ -375,15 +375,17 @@ def msg_queue_add_update(params, *, cmd_opt):
                 raise CommandParameterError(f"Error occurred while parsing the plan '{p_item[0]}'")
             if update_uid:
                 plan["item_uid"] = update_uid
-            addr_param.update({"plan": plan})
+            plan["item_type"] = "plan"
+            addr_param.update({"item": plan})
         elif p_item_type == "instruction":
             if p_item[0] == "queue-stop":
-                instruction = {"action": "queue_stop"}
+                instruction = {"name": "queue_stop"}
             else:
                 raise CommandParameterError(f"Unsupported instruction type: {p_item[0]}")
             if update_uid:
                 instruction["item_uid"] = update_uid
-            addr_param.update({"instruction": instruction})
+            instruction["item_type"] = "instruction"
+            addr_param.update({"item": instruction})
         else:
             # This indicates a bug in the program.
             raise ValueError(f"Unknown item type: {p_item_type}")

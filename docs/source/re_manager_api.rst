@@ -521,10 +521,9 @@ Returns       **success**: *boolean*
                   the operation was successful, *None* otherwise
 
               **item**: *dict* or *None* (optional)
-                  the inserted item. The item contains the assigned item UID. If there is an error
-                  in processing of the parameters, the item passed with the request may be returned
-                  without modification. The value *None* may be returned if item is not contained
-                  in the request.
+                  the inserted item. The item contains the assigned item UID. In case of error
+                  the item may be returned without modification (with assigned UID). *None* will be
+                  returned if request does not contain item parameters.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
@@ -569,7 +568,7 @@ Returns       **success**: *boolean*
                   error message in case of failure, empty string ('') otherwise.
 
               **qsize**: *int* or *None*
-                  the number of items in the plan queue after processing of the request. The correct
+                  the number of items in the plan queue after processing the request. The correct
                   queue size may be returned even if the operation fails. In rare failing cases
                   the parameter may return *None*.
 
@@ -639,10 +638,9 @@ Returns       **success**: *boolean*
                   the operation was successful, *None* otherwise
 
               **item**: *dict* or *None* (optional)
-                  the inserted item. The item contains the assigned item UID. If there is an error
-                  in processing of the parameters, the item passed with the request may be returned
-                  without modification. The value *None* may be returned if item is not contained
-                  in the request.
+                  the inserted item. The item contains the assigned item UID. In case of error
+                  the item may be returned without modification (with assigned UID). *None* will be
+                  returned if request does not contain item parameters.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================

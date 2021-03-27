@@ -195,9 +195,9 @@ Push a new plan to the back of the queue::
   qserver queue add plan '{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
   qserver queue add plan '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
 
-  http POST http://localhost:60610/queue/item/add plan:='{"name":"count", "args":[["det1", "det2"]]}'
-  http POST http://localhost:60610/queue/item/add plan:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10]}'
-  http POST http://localhost:60610/queue/item/add plan:='{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
+  http POST http://localhost:60610/queue/item/add item:='{"name":"count", "args":[["det1", "det2"]], "item_type": "plan"}'
+  http POST http://localhost:60610/queue/item/add item:='{"name":"scan", "args":[["det1", "det2"], "motor", -1, 1, 10], "item_type": "plan"}'
+  http POST http://localhost:60610/queue/item/add item:='{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}, "item_type": "plan"}'
 
 It takes 10 second to execute the third plan in the group above, so it is may be the most convenient for testing
 pausing/resuming/stopping of experimental plans.
@@ -206,7 +206,7 @@ API for queue operations is designed to work identically with items of all types
 instruction can be added to the queue `queue_item_add` API::
 
   qserver queue add instruction queue-stop
-  http POST http://localhost:60610/queue/item/add instruction:='{"action":"queue_stop"}'
+  http POST http://localhost:60610/queue/item/add item:='{"name":"queue_stop", "item_type": "instruction"}'
 
 An item can be added at any position of the queue. Push a plan to the front or the back of the queue::
 
@@ -214,31 +214,31 @@ An item can be added at any position of the queue. Push a plan to the front or t
   qserver queue add plan back '{"name":"count", "args":[["det1", "det2"]]}'
   qserver queue add plan 2 '{"name":"count", "args":[["det1", "det2"]]}'  # Inserted at pos #2 (0-based)
 
-  http POST http://localhost:60610/queue/item/add pos:='"front"' plan:='{"name":"count", "args":[["det1", "det2"]]}'
-  http POST http://localhost:60610/queue/item/add pos:='"back"' plan:='{"name":"count", "args":[["det1", "det2"]]}'
-  http POST http://localhost:60610/queue/item/add pos:=2 plan:='{"name":"count", "args":[["det1", "det2"]]}'
+  http POST http://localhost:60610/queue/item/add pos:='"front"' item:='{"name":"count", "args":[["det1", "det2"]], "item_type": "plan"}'
+  http POST http://localhost:60610/queue/item/add pos:='"back"' item:='{"name":"count", "args":[["det1", "det2"]], "item_type": "plan"}'
+  http POST http://localhost:60610/queue/item/add pos:=2 item:='{"name":"count", "args":[["det1", "det2"]], "item_type": "plan"}'
 
 The following command will insert an item in place of the last item in the queue; the last item remains
 the last item in the queue::
 
   qserver queue add plan -1 '{"name":"count", "args":[["det1", "det2"]]}'
-  http POST http://localhost:60610/queue/item/add pos:=-1 plan:='{"name":"count", "args":[["det1", "det2"]]}'
+  http POST http://localhost:60610/queue/item/add pos:=-1 item:='{"name":"count", "args":[["det1", "det2"]], "item_type": "plan"}'
 
 An item can be inserted before or after an existing item with given Item UID.
 Insert the plan before an existing item with <uid>::
 
   qserver queue add plan before_uid '<uid>' '{"name":"count", "args":[["det1", "det2"]]}'
-  http POST http://localhost:60610/queue/item/add before_uid:='<uid>' plan:='{"name":"count", "args":[["det1", "det2"]]}'
+  http POST http://localhost:60610/queue/item/add before_uid:='<uid>' item:='{"name":"count", "args":[["det1", "det2"]], "item_type": "plan"}'
 
 Insert the plan after an existing item with <uid>::
 
   qserver queue add plan after_uid '<uid>' '{"name":"count", "args":[["det1", "det2"]]}'
-  http POST http://localhost:60610/queue/item/add after_uid:='<uid>' plan:='{"name":"count", "args":[["det1", "det2"]]}'
+  http POST http://localhost:60610/queue/item/add after_uid:='<uid>' item:='{"name":"count", "args":[["det1", "det2"]], "item_type": "plan"}'
 
 If the queue has 5 items (0..4), then the following command pushes the new plan to the back of the queue::
 
   qserver queue add plan 5 '{"name":"count", "args":[["det1", "det2"]]}'
-  http POST http://localhost:60610/queue/item/add pos:=5 plan:='{"name":"count", "args":[["det1", "det2"]]}'
+  http POST http://localhost:60610/queue/item/add pos:=5 item:='{"name":"count", "args":[["det1", "det2"]], "item_type": "plan"}'
 
 The 'queue_item_add' request will accept any index value. If the index is out of range, then the item will
 be pushed to the front or the back of the queue. If the queue is currently running, then it is recommended
@@ -345,10 +345,10 @@ be set to the UID of the item to be updated. Additional API parameter 'replace' 
 is updated or replaced. If the parameter is skipped or set *false*, the item is updated. If the
 parameter is set *true*, the item is replaced (i.e. new item UID is generated)::
 
-  http POST http://localhost:60610/queue/item/update plan:='{"item_uid": "<existing-uid>", "name":"count", "args":[["det1", "det2"]]}'
-  http POST http://localhost:60610/queue/item/update instruction:='{"item_uid": "<existing-uid>", "action":"queue_stop"}'
-  http POST http://localhost:60610/queue/item/update replace:=true plan:='{"item_uid": "<existing-uid>", "name":"count", "args":[["det1", "det2"]]}'
-  http POST http://localhost:60610/queue/item/update replace:=true instruction:='{"item_uid": "<existing-uid>", "action":"queue_stop"}'
+  http POST http://localhost:60610/queue/item/update item:='{"item_uid": "<existing-uid>", "name":"count", "args":[["det1", "det2"]], "item_type": "plan"}'
+  http POST http://localhost:60610/queue/item/update item:='{"item_uid": "<existing-uid>", "name":"queue_stop", , "item_type": "instruction"}'
+  http POST http://localhost:60610/queue/item/update replace:=true item:='{"item_uid": "<existing-uid>", "name":"count", "args":[["det1", "det2"]], "item_type": "plan"}'
+  http POST http://localhost:60610/queue/item/update replace:=true item:='{"item_uid": "<existing-uid>", "name":"queue_stop", "item_type": "instruction"}'
 
 Remove all entries from the plan queue::
 

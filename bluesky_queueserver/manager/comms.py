@@ -658,10 +658,10 @@ class ZMQCommSendThreads:
         """
         self._zmq_socket = self._ctx.socket(zmq.REQ)
         # Set server public key
-        self._zmq_socket.set(zmq.CURVE_SERVERKEY, "AmNRencT%-oprGXs?BLp!Q2*xxWQ{sHRShO.JU#/".encode('utf-8'))
+        self._zmq_socket.set(zmq.CURVE_SERVERKEY, "AmNRencT%-oprGXs?BLp!Q2*xxWQ{sHRShO.JU#/".encode("utf-8"))
         # Set public and private keys for the client
-        self._zmq_socket.set(zmq.CURVE_PUBLICKEY, "wt8[6a8eoXFRVL<l2JBbOzs(hcI%kRBIr0Do/eLC".encode('utf-8'))
-        self._zmq_socket.set(zmq.CURVE_SECRETKEY, "=@e7WwVuz{*eGcnv{AL@x2hmX!z^)wP3vKsQ{S7s".encode('utf-8'))
+        self._zmq_socket.set(zmq.CURVE_PUBLICKEY, "wt8[6a8eoXFRVL<l2JBbOzs(hcI%kRBIr0Do/eLC".encode("utf-8"))
+        self._zmq_socket.set(zmq.CURVE_SECRETKEY, "=@e7WwVuz{*eGcnv{AL@x2hmX!z^)wP3vKsQ{S7s".encode("utf-8"))
 
         # Increment `self._timeout_receive` so that timeout supplied to `self._zmq_socket.poll`
         #   expires first so that correct message is produced.
@@ -860,10 +860,10 @@ class ZMQCommSendAsync:
     def _zmq_socket_open(self):
         self._zmq_socket = self._ctx.socket(zmq.REQ)
         # Set server public key
-        self._zmq_socket.set(zmq.CURVE_SERVERKEY, "AmNRencT%-oprGXs?BLp!Q2*xxWQ{sHRShO.JU#/".encode('utf-8'))
+        self._zmq_socket.set(zmq.CURVE_SERVERKEY, "AmNRencT%-oprGXs?BLp!Q2*xxWQ{sHRShO.JU#/".encode("utf-8"))
         # Set public and private keys for the client
-        self._zmq_socket.set(zmq.CURVE_PUBLICKEY, "wt8[6a8eoXFRVL<l2JBbOzs(hcI%kRBIr0Do/eLC".encode('utf-8'))
-        self._zmq_socket.set(zmq.CURVE_SECRETKEY, "=@e7WwVuz{*eGcnv{AL@x2hmX!z^)wP3vKsQ{S7s".encode('utf-8'))
+        self._zmq_socket.set(zmq.CURVE_PUBLICKEY, "wt8[6a8eoXFRVL<l2JBbOzs(hcI%kRBIr0Do/eLC".encode("utf-8"))
+        self._zmq_socket.set(zmq.CURVE_SECRETKEY, "=@e7WwVuz{*eGcnv{AL@x2hmX!z^)wP3vKsQ{S7s".encode("utf-8"))
         # Increment `self._timeout_receive` so that timeout supplied to `self._zmq_socket.poll`
         #   expires first so that correct message is produced.
         self._zmq_socket.RCVTIMEO = self._timeout_receive + 1

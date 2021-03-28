@@ -1645,7 +1645,7 @@ class RunEngineManager(Process):
         logger.info("Starting ZeroMQ server ...")
         self._zmq_socket = self._ctx.socket(zmq.REP)
         self._zmq_socket.set(zmq.CURVE_SERVER, 1)
-        self._zmq_socket.set(zmq.CURVE_SECRETKEY, ">YXLq7tT:)VGXS>&2f0r*x[S24fFjl*V6b(lISyI".encode('utf-8'))
+        self._zmq_socket.set(zmq.CURVE_SECRETKEY, ">YXLq7tT:)VGXS>&2f0r*x[S24fFjl*V6b(lISyI".encode("utf-8"))
         self._zmq_socket.bind(self._ip_zmq_server)
         logger.info("ZeroMQ server is waiting on %s", str(self._ip_zmq_server))
 

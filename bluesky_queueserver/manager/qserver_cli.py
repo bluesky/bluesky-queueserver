@@ -868,3 +868,6 @@ def qserver_zmq_keys():
 
     except Exception as ex:
         print(f"Failed to generate keys: {ex}")
+        return QServerExitCodes.EXCEPTION_OCCURRED.value
+
+    return QServerExitCodes.SUCCESS.value

@@ -3,6 +3,7 @@ import subprocess
 import pytest
 
 from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
+from bluesky_queueserver.manager.comms import generate_new_zmq_key_pair
 
 from ._common import (
     patch_first_startup_file,
@@ -1054,3 +1055,22 @@ def test_qserver_reload_permissions(re_manager_pc_copy, tmp_path):  # noqa F811
 
     # Attempt to add the plan to the queue. It should be successful now.
     assert subprocess.call(["qserver", "queue", "add", "plan", plan]) == SUCCESS
+
+
+# ================================================================================
+#                            qserver-zmq-keys
+
+
+def test_qserver_zmq_keys():
+    """
+    Test for ``qserver-zmq-keys`` CLI
+    """
+    # Generate key pair
+    assert subprocess.call(["qserver-zmq-keys"]) == SUCCESS
+
+    # Generated public key based on private key - invalid key (exception)
+    assert subprocess.call(["qserver-zmq-keys", "--zmq-private-key", "abc"]) == EXCEPTION_OCCURRED
+
+    # Generated public key based on private key - success
+    _, private_key = generate_new_zmq_key_pair()
+    assert subprocess.call(["qserver-zmq-keys", "--zmq-private-key", private_key]) == SUCCESS

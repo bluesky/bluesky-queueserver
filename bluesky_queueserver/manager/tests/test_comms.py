@@ -692,7 +692,13 @@ def test_generate_zmq_keys():
 
 
 # fmt: off
-@pytest.mark.parametrize("key", [None, 10, "", "abc"])
+@pytest.mark.parametrize("key", [
+    None,
+    10,
+    "",
+    "abc",
+    "wt8[6a8eoXFRVL<l2JBbOzs(hcI%kRBIr0Do/eL'",  # 40 characters, but contains invalid character "'"
+])
 # fmt: on
 def test_validate_zmq_key(key):
     """

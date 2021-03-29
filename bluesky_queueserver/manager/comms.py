@@ -455,6 +455,21 @@ def generate_zmq_public_key(key_private):
 
 
 def validate_zmq_key(key):
+    """
+    Validates format of a public or private key by feeding it to the function that generates
+    public key from a private key. The function will raise an exception if the key is improperly
+    formatted. The key is expected to be encoded using z85 and represented as a 40 character string.
+
+    Parameters
+    ----------
+    key: str
+        public or private key.
+
+    Raises
+    ------
+    ValueError
+        raised in case the key is not valid.
+    """
     try:
         generate_zmq_public_key(key)
     except Exception:
@@ -531,6 +546,10 @@ class ZMQCommSendThreads:
         raise_exceptions=True,
         server_public_key=None,
     ):
+
+        if server_public_key is not None:
+            validate_zmq_key(server_public_key)
+
         zmq_server_address = zmq_server_address or "tcp://localhost:60615"
         self._server_public_key = server_public_key
 
@@ -862,6 +881,9 @@ class ZMQCommSendAsync:
     ):
         self._loop = loop if loop else asyncio.get_event_loop()
 
+        if server_public_key is not None:
+            validate_zmq_key(server_public_key)
+
         zmq_server_address = zmq_server_address or "tcp://localhost:60615"
         self._server_public_key = server_public_key
 
@@ -996,7 +1018,7 @@ class ZMQCommSendAsync:
         self._zmq_socket.close()
 
 
-def zmq_single_request(method, params=None, *, zmq_server_address=None):
+def zmq_single_request(method, params=None, *, zmq_server_address=None, server_public_key=None):
     """
     Send a single request to ZMQ server. The function opens the socket, sends
     a single ZMQ request and closes the socket. The function is not expected
@@ -1011,6 +1033,8 @@ def zmq_single_request(method, params=None, *, zmq_server_address=None):
     params: dict or None
         Dictionary of parameters (payload of the message). If ``None`` then
         the message is sent with empty payload: ``params = {}``.
+    server_public_key: str
+        Public key from the key pair for ZMQ server (40 bytes, z85 encoded).
 
     Returns
     -------
@@ -1024,8 +1048,11 @@ def zmq_single_request(method, params=None, *, zmq_server_address=None):
     msg_received = None
 
     async def send_request(method, params):
+
         nonlocal msg_received
-        zmq_to_manager = ZMQCommSendAsync(zmq_server_address=zmq_server_address)
+        zmq_to_manager = ZMQCommSendAsync(
+            zmq_server_address=zmq_server_address, server_public_key=server_public_key
+        )
         msg_received = await zmq_to_manager.send_message(method=method, params=params, raise_exceptions=True)
         zmq_to_manager.close()
 

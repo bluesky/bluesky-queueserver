@@ -673,6 +673,7 @@ def test_PipeJsonRpcSendAsync_7_fail():
 # =======================================================================
 #                               ZMQ keys
 
+
 def test_generate_zmq_keys():
     """
     Functions ``generate_new_zmq_key_pair()``, ``generate_zmq_public_key()`` and ``validate_zmq_key()``.

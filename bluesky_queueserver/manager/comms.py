@@ -438,7 +438,7 @@ def generate_new_zmq_key_pair():
         Public (first) and private (second) keys.
     """
     key_public, key_private = zmq.curve_keypair()
-    return key_public.decode('utf-8'), key_private.decode('utf-8')
+    return key_public.decode("utf-8"), key_private.decode("utf-8")
 
 
 def generate_zmq_public_key(key_private):
@@ -451,7 +451,7 @@ def generate_zmq_public_key(key_private):
         Public key.
     """
     key_public = zmq.curve_public(key_private.encode("utf-8"))
-    return key_public.decode('utf-8')
+    return key_public.decode("utf-8")
 
 
 def validate_zmq_key(key):
@@ -529,8 +529,10 @@ class ZMQCommSendThreads:
         timeout_recv=2000,
         timeout_send=500,
         raise_exceptions=True,
+        server_public_key=None,
     ):
         zmq_server_address = zmq_server_address or "tcp://localhost:60615"
+        self._server_public_key = server_public_key
 
         self._timeout_receive = timeout_recv  # Timeout for 'recv' operation (ms)
         self._timeout_send = timeout_send  # # Timeout for 'send' operation (ms)
@@ -701,12 +703,13 @@ class ZMQCommSendThreads:
         Open ZMQ socket.
         """
         self._zmq_socket = self._ctx.socket(zmq.REQ)
-        # Set server public key
-        self._zmq_socket.set(zmq.CURVE_SERVERKEY, "AmNRencT%-oprGXs?BLp!Q2*xxWQ{sHRShO.JU#/".encode("utf-8"))
 
-        # Set public and private keys for the client
-        self._zmq_socket.set(zmq.CURVE_PUBLICKEY, _fixed_public_key.encode("utf-8"))
-        self._zmq_socket.set(zmq.CURVE_SECRETKEY, _fixed_private_key.encode("utf-8"))
+        if self._server_public_key:
+            # Set server public key
+            self._zmq_socket.set(zmq.CURVE_SERVERKEY, self._server_public_key.encode("utf-8"))
+            # Set public and private keys for the client
+            self._zmq_socket.set(zmq.CURVE_PUBLICKEY, _fixed_public_key.encode("utf-8"))
+            self._zmq_socket.set(zmq.CURVE_SECRETKEY, _fixed_private_key.encode("utf-8"))
 
         # Increment `self._timeout_receive` so that timeout supplied to `self._zmq_socket.poll`
         #   expires first so that correct message is produced.
@@ -855,10 +858,12 @@ class ZMQCommSendAsync:
         timeout_recv=2000,
         timeout_send=500,
         raise_exceptions=True,
+        server_public_key=None,
     ):
         self._loop = loop if loop else asyncio.get_event_loop()
 
         zmq_server_address = zmq_server_address or "tcp://localhost:60615"
+        self._server_public_key = server_public_key
 
         self._timeout_receive = timeout_recv  # Timeout for 'recv' operation (ms)
         self._timeout_send = timeout_send  # # Timeout for 'send' operation (ms)
@@ -904,11 +909,14 @@ class ZMQCommSendAsync:
 
     def _zmq_socket_open(self):
         self._zmq_socket = self._ctx.socket(zmq.REQ)
-        # Set server public key
-        self._zmq_socket.set(zmq.CURVE_SERVERKEY, "AmNRencT%-oprGXs?BLp!Q2*xxWQ{sHRShO.JU#/".encode("utf-8"))
-        # Set public and private keys for the client
-        self._zmq_socket.set(zmq.CURVE_PUBLICKEY, _fixed_public_key.encode("utf-8"))
-        self._zmq_socket.set(zmq.CURVE_SECRETKEY, _fixed_private_key.encode("utf-8"))
+
+        if self._server_public_key:
+            # Set server public key
+            self._zmq_socket.set(zmq.CURVE_SERVERKEY, "AmNRencT%-oprGXs?BLp!Q2*xxWQ{sHRShO.JU#/".encode("utf-8"))
+            # Set public and private keys for the client
+            self._zmq_socket.set(zmq.CURVE_PUBLICKEY, _fixed_public_key.encode("utf-8"))
+            self._zmq_socket.set(zmq.CURVE_SECRETKEY, _fixed_private_key.encode("utf-8"))
+
         # Increment `self._timeout_receive` so that timeout supplied to `self._zmq_socket.poll`
         #   expires first so that correct message is produced.
         self._zmq_socket.RCVTIMEO = self._timeout_receive + 1

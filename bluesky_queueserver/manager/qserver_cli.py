@@ -7,7 +7,7 @@ import enum
 import os
 
 import bluesky_queueserver
-from .comms import zmq_single_request, validate_zmq_key
+from .comms import zmq_single_request, validate_zmq_key, generate_zmq_public_key, generate_new_zmq_key_pair
 
 import logging
 
@@ -826,3 +826,45 @@ def qserver():
         exit_code = QServerExitCodes.SUCCESS
 
     return exit_code.value
+
+
+def qserver_zmq_keys():
+    logging.basicConfig(level=logging.WARNING)
+    logging.getLogger("bluesky_queueserver").setLevel("INFO")
+
+    parser = argparse.ArgumentParser(
+        description="Bluesky-QServer: ZMQ security - generate public-private key pair for "
+                    "ZMQ control communication channel.\n",
+        epilog=f"Bluesky-QServer version {qserver_version}.",
+    )
+    parser.add_argument(
+        "--zmq-private-key",
+        dest="zmq_private_key",
+        type=str,
+        default=None,
+        help="ZMQ server private key (for secured control connection). Setting the private key enables "
+        "the encryption. The parameter value should be 40 character string containing z85 encrypted "
+        "key. The private key passed as CLI parameter overrides the private key contained in the "
+        "environment variable QSERVER_ZMQ_PRIVATE_KEY.",
+    )
+
+    args = parser.parse_args()
+    try:
+        if args.zmq_private_key is not None:
+            private_key = args.zmq_private_key
+            validate_zmq_key(private_key)  # Will generate nice error message in case the key is invalid
+            public_key = generate_zmq_public_key(private_key)
+            msg = "Private key generated based on provided private key."
+        else:
+            public_key, private_key = generate_new_zmq_key_pair()
+            msg = "New public-private key pair."
+
+        print(f"====================================================================================")
+        print(f"     ZMQ SECURITY: {msg}")
+        print(f"====================================================================================")
+        print(f" Private key (RE Manager):                 {private_key}")
+        print(f" Public key (CLI client or HTTP server):   {public_key}")
+        print(f"====================================================================================\n")
+
+    except Exception as ex:
+        print(f"Failed to generate keys: {ex}")

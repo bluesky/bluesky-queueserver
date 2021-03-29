@@ -50,6 +50,7 @@ setup(
             "start-re-manager = bluesky_queueserver.manager.start_manager:start_manager",
             "qserver-list-plans-devices = bluesky_queueserver.manager."
             "profile_ops:gen_list_of_plans_and_devices_cli",
+            "qserver-zmq-keys = bluesky_queueserver.manager.qserver_cli:qserver_zmq_keys",
         ],
     },
     include_package_data=True,

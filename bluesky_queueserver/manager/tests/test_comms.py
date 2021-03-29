@@ -13,6 +13,9 @@ from bluesky_queueserver.manager.comms import (
     CommJsonRpcError,
     ZMQCommSendThreads,
     ZMQCommSendAsync,
+    generate_new_zmq_key_pair,
+    generate_zmq_public_key,
+    validate_zmq_key,
 )
 from bluesky_queueserver.tests.common import format_jsonrpc_msg
 
@@ -665,6 +668,37 @@ def test_PipeJsonRpcSendAsync_7_fail():
 
     asyncio.run(send_messages())
     pc.stop()
+
+
+# =======================================================================
+#                               ZMQ keys
+
+def test_generate_zmq_keys():
+    """
+    Functions ``generate_new_zmq_key_pair()``, ``generate_zmq_public_key()`` and ``validate_zmq_key()``.
+    """
+    key_public, key_private = generate_new_zmq_key_pair()
+    assert isinstance(key_public, str)
+    assert len(key_public) == 40
+    assert isinstance(key_private, str)
+    assert len(key_private) == 40
+
+    validate_zmq_key(key_public)
+    validate_zmq_key(key_private)
+
+    key_public_gen = generate_zmq_public_key(key_private)
+    assert key_public_gen == key_public
+
+
+# fmt: off
+@pytest.mark.parametrize("key", [None, 10, "", "abc"])
+# fmt: on
+def test_validate_zmq_key(key):
+    """
+    Function ``validate_zmq_key()``: cases of failing validation.
+    """
+    with pytest.raises(ValueError, match="secret must be a 40 byte z85 encoded string"):
+        validate_zmq_key(key)
 
 
 # =======================================================================

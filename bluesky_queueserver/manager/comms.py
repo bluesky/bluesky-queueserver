@@ -424,6 +424,47 @@ class PipeJsonRpcSendAsync:
                 break
 
 
+# =========================================================================================
+#                      Generation and validation of ZMQ key pairs
+
+
+def generate_new_zmq_key_pair():
+    """
+    Generates new public-private key pair for ZMQ encryption.
+
+    Returns
+    -------
+    str, str
+        Public (first) and private (second) keys.
+    """
+    key_public, key_private = zmq.curve_keypair()
+    return key_public.decode('utf-8'), key_private.decode('utf-8')
+
+
+def generate_zmq_public_key(key_private):
+    """
+    Generates public key based on private key for ZMQ encryption.
+
+    Returns
+    -------
+    str
+        Public key.
+    """
+    key_public = zmq.curve_public(key_private.encode("utf-8"))
+    return key_public.decode('utf-8')
+
+
+def validate_zmq_key(key):
+    try:
+        generate_zmq_public_key(key)
+    except Exception:
+        raise ValueError(f"Invalid key '{key}': secret must be a 40 byte z85 encoded string")
+
+
+# =========================================================================================
+#                                    ZMQ communication
+
+
 class ZMQCommSendThreads:
     """
     Thread-based API for communication with RE Manager via ZMQ.

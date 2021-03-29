@@ -934,7 +934,7 @@ class ZMQCommSendAsync:
 
         if self._server_public_key:
             # Set server public key
-            self._zmq_socket.set(zmq.CURVE_SERVERKEY, "AmNRencT%-oprGXs?BLp!Q2*xxWQ{sHRShO.JU#/".encode("utf-8"))
+            self._zmq_socket.set(zmq.CURVE_SERVERKEY, self._server_public_key.encode("utf-8"))
             # Set public and private keys for the client
             self._zmq_socket.set(zmq.CURVE_PUBLICKEY, _fixed_public_key.encode("utf-8"))
             self._zmq_socket.set(zmq.CURVE_SECRETKEY, _fixed_private_key.encode("utf-8"))

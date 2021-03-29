@@ -704,7 +704,7 @@ def test_validate_zmq_key(key):
     """
     Function ``validate_zmq_key()``: cases of failing validation.
     """
-    with pytest.raises(ValueError, match="secret must be a 40 byte z85 encoded string"):
+    with pytest.raises(ValueError, match="the key must be a 40 byte z85 encoded string"):
         validate_zmq_key(key)
 
 

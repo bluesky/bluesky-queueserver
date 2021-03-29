@@ -8,7 +8,7 @@ import importlib
 from fastapi import FastAPI, HTTPException, File, UploadFile, Form
 from typing import Optional
 
-from ..manager.comms import ZMQCommSendAsync
+from ..manager.comms import ZMQCommSendAsync, validate_zmq_key
 from .conversions import filter_plan_descriptions, spreadsheet_to_plan_list
 
 logger = logging.getLogger(__name__)
@@ -32,8 +32,20 @@ custom_code_module = None
 async def startup_event():
     global zmq_to_manager
     global custom_code_module
+
+    # Read private key from the environment variable, then check if the CLI parameter exists
+    zmq_public_key = os.environ.get("QSERVER_ZMQ_PUBLIC_KEY", None)
+    zmq_public_key = zmq_public_key if zmq_public_key else None  # Case of ""
+    if zmq_public_key is not None:
+        try:
+            validate_zmq_key(zmq_public_key)
+        except Exception as ex:
+            raise ValueError("ZMQ public key is improperly formatted: %s", str(ex))
+
+    # TODO: implement nicer exit with error reporting in case of failure
+
     # ZMQCommSendAsync should be created from the event loop of FastAPI server.
-    zmq_to_manager = ZMQCommSendAsync(raise_exceptions=False)
+    zmq_to_manager = ZMQCommSendAsync(raise_exceptions=False, server_public_key=zmq_public_key)
 
     # Import module with custom code
     module_name = os.getenv("BLUESKY_HTTPSERVER_CUSTOM_MODULE", None)

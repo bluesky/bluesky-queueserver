@@ -473,7 +473,7 @@ def validate_zmq_key(key):
     try:
         generate_zmq_public_key(key)
     except Exception:
-        raise ValueError(f"Invalid key '{key}': secret must be a 40 byte z85 encoded string")
+        raise ValueError(f"Invalid key '{key}': secret key must be a 40 byte z85 encoded string")
 
 
 # =========================================================================================

@@ -7,7 +7,7 @@ import pprint
 import enum
 import uuid
 
-from .comms import PipeJsonRpcSendAsync, CommTimeoutError
+from .comms import PipeJsonRpcSendAsync, CommTimeoutError, validate_zmq_key
 from .profile_ops import load_allowed_plans_and_devices, validate_plan
 from .plan_queue_ops import PlanQueueOperations
 
@@ -85,10 +85,20 @@ class RunEngineManager(Process):
         # Communication with the server using ZMQ
         self._ctx = None
         self._zmq_socket = None
-        self._ip_zmq_server = "tcp://*:60615"
-        if config and ("zmq_addr" in config):
-            self._ip_zmq_server = config["zmq_addr"]
-        logger.info("Starting ZMQ server at '%s'", self._ip_zmq_server)
+        self._zmq_ip_server = "tcp://*:60615"
+        self._zmq_private_key = None
+        if config:
+            if "zmq_addr" in config:
+                self._zmq_ip_server = config["zmq_addr"]
+            if "zmq_private_key" in config:
+                self._zmq_private_key = config["zmq_private_key"]
+                if self._zmq_private_key is not None:
+                    validate_zmq_key(self._zmq_private_key)
+
+        logger.info("Starting ZMQ server at '%s'", self._zmq_ip_server)
+        logger.info(
+            "ZMQ control channels: encryption %s", "disabled" if self._zmq_private_key is None else "enabled"
+        )
 
         self._ip_redis_server = "localhost"
         if config and ("redis_addr" in config):
@@ -1644,10 +1654,13 @@ class RunEngineManager(Process):
 
         logger.info("Starting ZeroMQ server ...")
         self._zmq_socket = self._ctx.socket(zmq.REP)
-        self._zmq_socket.set(zmq.CURVE_SERVER, 1)
-        self._zmq_socket.set(zmq.CURVE_SECRETKEY, ">YXLq7tT:)VGXS>&2f0r*x[S24fFjl*V6b(lISyI".encode("utf-8"))
-        self._zmq_socket.bind(self._ip_zmq_server)
-        logger.info("ZeroMQ server is waiting on %s", str(self._ip_zmq_server))
+
+        if self._zmq_private_key is not None:
+            self._zmq_socket.set(zmq.CURVE_SERVER, 1)
+            self._zmq_socket.set(zmq.CURVE_SECRETKEY, self._zmq_private_key.encode("utf-8"))
+
+        self._zmq_socket.bind(self._zmq_ip_server)
+        logger.info("ZeroMQ server is waiting on %s", str(self._zmq_ip_server))
 
         if self._manager_state == MState.INITIALIZING:
             self._manager_state = MState.IDLE

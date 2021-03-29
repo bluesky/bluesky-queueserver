@@ -7,7 +7,7 @@ from importlib.util import find_spec
 
 from .worker import RunEngineWorker
 from .manager import RunEngineManager
-from .comms import PipeJsonRpcReceive
+from .comms import PipeJsonRpcReceive, validate_zmq_key
 from .profile_ops import get_default_startup_dir
 
 from .. import __version__
@@ -197,6 +197,16 @@ def start_manager():
         type=str,
         default="tcp://*:60615",
         help="The address of ZMQ server (control connection).",
+    )
+    parser.add_argument(
+        "--zmq-private-key",
+        dest="zmq_private_key",
+        type=str,
+        default=None,
+        help="ZMQ server private key (for secured control connection). Setting the private key enables"
+        "the encryption. The parameter value should be 40 character string containing z85 encrypted "
+        "key. The private key passed as CLI parameter overrides the private key contained in the "
+        "environment variable QSERVER_ZMQ_PRIVATE_KEY.",
     )
 
     group = parser.add_mutually_exclusive_group()
@@ -475,7 +485,20 @@ def start_manager():
     config_worker["user_group_permissions_path"] = user_group_pd_path
     config_manager["user_group_permissions_path"] = user_group_pd_path
 
+    # Read private key from the environment variable, then check if the CLI parameter exists
+    zmq_private_key = os.environ.get("QSERVER_ZMQ_PRIVATE_KEY", None)
+    zmq_private_key = zmq_private_key if zmq_private_key else None  # Case of ""
+    if args.zmq_private_key is not None:
+        zmq_private_key = args.zmq_private_key
+    if zmq_private_key is not None:
+        try:
+            validate_zmq_key(zmq_private_key)
+        except Exception as ex:
+            logger.error("ZMQ private key is improperly formatted: %s", str(ex))
+            return 1
+
     config_manager["zmq_addr"] = args.zmq_addr
+    config_manager["zmq_private_key"] = zmq_private_key
 
     redis_addr = args.redis_addr
     if redis_addr.count(":") > 1:

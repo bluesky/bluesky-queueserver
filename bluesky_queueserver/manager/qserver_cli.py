@@ -834,7 +834,7 @@ def qserver_zmq_keys():
 
     parser = argparse.ArgumentParser(
         description="Bluesky-QServer: ZMQ security - generate public-private key pair for "
-                    "ZMQ control communication channel.\n",
+        "ZMQ control communication channel.\n",
         epilog=f"Bluesky-QServer version {qserver_version}.",
     )
     parser.add_argument(
@@ -859,12 +859,12 @@ def qserver_zmq_keys():
             public_key, private_key = generate_new_zmq_key_pair()
             msg = "New public-private key pair."
 
-        print(f"====================================================================================")
+        print("====================================================================================")
         print(f"     ZMQ SECURITY: {msg}")
-        print(f"====================================================================================")
+        print("====================================================================================")
         print(f" Private key (RE Manager):                 {private_key}")
         print(f" Public key (CLI client or HTTP server):   {public_key}")
-        print(f"====================================================================================\n")
+        print("====================================================================================\n")
 
     except Exception as ex:
         print(f"Failed to generate keys: {ex}")

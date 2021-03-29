@@ -4,9 +4,10 @@ from datetime import datetime
 import pprint
 import argparse
 import enum
+import os
 
 import bluesky_queueserver
-from .comms import zmq_single_request
+from .comms import zmq_single_request, validate_zmq_key
 
 import logging
 
@@ -752,7 +753,6 @@ def qserver():
         nargs="+",
         help="a sequence of keywords and parameters that define the command",
     )
-
     parser.add_argument(
         "--address",
         "-a",
@@ -761,18 +761,42 @@ def qserver():
         default=None,
         help="Address of the server (e.g. 'tcp://localhost:60615', quoted string)",
     )
+    parser.add_argument(
+        "--zmq-public-key",
+        dest="zmq_public_key",
+        type=str,
+        default=None,
+        help="ZMQ server public key (for secured control connection). Setting the private key enables "
+        "the encryption. The parameter value should be 40 character string containing z85 encrypted "
+        "key. Alternative, more convenient way to set public key for CLI tool is to set the environment "
+        "variable QSERVER_ZMQ_PUBLIC_KEY. The private key passed as CLI parameter overrides the private "
+        "key set using the environment variable QSERVER_ZMQ_PUBLIC_KEY.",
+    )
 
     args = parser.parse_args()
     print(f"Arguments: {args.command}")
 
     try:
+        # Read public key from the environment variable, then check if the CLI parameter exists
+        zmq_public_key = os.environ.get("QSERVER_ZMQ_PUBLIC_KEY", None)
+        zmq_public_key = zmq_public_key if zmq_public_key else None  # Case of ""
+        if args.zmq_public_key is not None:
+            zmq_public_key = args.zmq_public_key
+        if zmq_public_key is not None:
+            try:
+                validate_zmq_key(zmq_public_key)
+            except Exception as ex:
+                raise CommandParameterError(f"ZMQ private key is improperly formatted: {ex}")
+
         method, params, monitoring_mode = create_msg(args.command)
 
         if monitoring_mode:
             print("Running QServer monitor. Press Ctrl-C to exit ...")
 
         while True:
-            msg, msg_err = zmq_single_request(method, params, zmq_server_address=args.address)
+            msg, msg_err = zmq_single_request(
+                method, params, zmq_server_address=args.address, server_public_key=zmq_public_key
+            )
 
             now = datetime.now()
             current_time = now.strftime("%H:%M:%S")

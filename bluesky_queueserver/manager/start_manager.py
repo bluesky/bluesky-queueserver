@@ -203,7 +203,7 @@ def start_manager():
         dest="zmq_private_key",
         type=str,
         default=None,
-        help="ZMQ server private key (for secured control connection). Setting the private key enables"
+        help="ZMQ server private key (for secured control connection). Setting the private key enables "
         "the encryption. The parameter value should be 40 character string containing z85 encrypted "
         "key. The private key passed as CLI parameter overrides the private key contained in the "
         "environment variable QSERVER_ZMQ_PRIVATE_KEY.",

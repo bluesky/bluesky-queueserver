@@ -127,9 +127,29 @@ def append_code_to_last_startup_file(pc_path, additional_code):
         file_out.writelines(additional_code)
 
 
+# The name of env. variable holding ZMQ public key. Public key is necessary in tests using encryption
+#   and passing it using env variable (set using monkeypatch) is convenient.
+ev_name_TEST_QSERVER_ZMQ_PUBLIC_KEY = "_TEST_QSERVER_ZMQ_PUBLIC_KEY_"
+
+
+def zmq_secure_request(method, params=None, *, zmq_server_address=None):
+    """
+    Wrapper for 'zmq_single_request'. Verifies if environment variable holding public key is set
+    and sends the public key to 'zmq_single_request'. Simplifies testing RE Manager in secure mode.
+    """
+    server_public_key = None
+
+    if ev_name_TEST_QSERVER_ZMQ_PUBLIC_KEY in os.environ:
+        server_public_key = os.environ[ev_name_TEST_QSERVER_ZMQ_PUBLIC_KEY]
+
+    return zmq_single_request(
+        method=method, params=params, zmq_server_address=zmq_server_address, server_public_key=server_public_key
+    )
+
+
 def get_queue_state():
     method, params = "status", None
-    msg, _ = zmq_single_request(method, params)
+    msg, _ = zmq_secure_request(method, params)
     if msg is None:
         raise TimeoutError("Timeout occurred while reading RE Manager status.")
     return msg
@@ -140,7 +160,7 @@ def get_queue():
     Returns current queue.
     """
     method, params = "queue_get", None
-    msg, _ = zmq_single_request(method, params)
+    msg, _ = zmq_secure_request(method, params)
     if msg is None:
         raise TimeoutError("Timeout occurred while loading queue from RE Manager.")
     return msg
@@ -320,7 +340,8 @@ class ReManager:
                 # If the process is already terminated, then don't attempt to communicate with it.
                 if self._p.poll() is None:
                     # Try to stop the manager in a nice way first by sending the command
-                    resp, _ = zmq_single_request(method="manager_stop", params=None)
+                    resp, err_msg = zmq_secure_request(method="manager_stop", params=None)
+                    assert resp, str(err_msg)
                     assert resp["success"] is True, f"Request to stop the manager failed: {resp['msg']}."
 
                     self._p.wait(timeout)

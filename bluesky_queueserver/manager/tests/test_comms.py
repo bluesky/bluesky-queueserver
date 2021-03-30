@@ -1207,5 +1207,9 @@ def test_ZMQCommSendAsync_5_fail():
     """
     Invalid public key
     """
-    with pytest.raises(ValueError):
-        ZMQCommSendAsync(server_public_key="abc")
+
+    async def testing():
+        with pytest.raises(ValueError):
+            ZMQCommSendAsync(server_public_key="abc")
+
+    asyncio.run(testing())

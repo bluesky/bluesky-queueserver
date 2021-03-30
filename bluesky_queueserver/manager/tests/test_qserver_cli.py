@@ -19,9 +19,10 @@ from ._common import (
     get_queue,
     copy_default_profile_collection,
     append_code_to_last_startup_file,
+    set_qserver_zmq_public_key,
 )
 
-from ._common import re_manager, re_manager_pc_copy  # noqa: F401
+from ._common import re_manager, re_manager_pc_copy, re_manager_cmd  # noqa: F401
 
 from ..qserver_cli import QServerExitCodes
 
@@ -1055,6 +1056,75 @@ def test_qserver_reload_permissions(re_manager_pc_copy, tmp_path):  # noqa F811
 
     # Attempt to add the plan to the queue. It should be successful now.
     assert subprocess.call(["qserver", "queue", "add", "plan", plan]) == SUCCESS
+
+
+# fmt: off
+@pytest.mark.parametrize("test_mode", ["none", "ev", "cli"])
+# fmt: on
+def test_qserver_secure_1(monkeypatch, re_manager_cmd, test_mode):  # noqa: F811
+    """
+    Test operation of `qserver` CLI tool with enabled encryption. Test options to
+    set the private key used by `qserver` using CLI parameter and environment variable.
+    """
+    public_key, private_key = generate_new_zmq_key_pair()
+
+    if test_mode == "none":
+        # No encryption
+        cli_p = []
+    elif test_mode == "ev":
+        # Set server public key (for 'qserver') using environment variable
+        cli_p = []
+        monkeypatch.setenv("QSERVER_ZMQ_PUBLIC_KEY", public_key)
+        # Set private key for RE manager
+        monkeypatch.setenv("QSERVER_ZMQ_PRIVATE_KEY", private_key)
+        # Set public key used by test helper functions such as 'wait_for_condition'
+        set_qserver_zmq_public_key(monkeypatch, server_public_key=public_key)
+    elif test_mode == "cli":
+        # Set server public key (for 'qserver') using CLI parmeter
+        cli_p = ["--zmq-public-key", public_key]
+        # Set private key for RE manager
+        monkeypatch.setenv("QSERVER_ZMQ_PRIVATE_KEY", private_key)
+        # Set public key used by test helper functions such as 'wait_for_condition'
+        set_qserver_zmq_public_key(monkeypatch, server_public_key=public_key)
+    else:
+        raise RuntimeError(f"Unrecognized test mode '{test_mode}'")
+
+    # Security enabled by setting
+    re_manager_cmd([])
+
+    _plan1 = '{"name": "count", "args": [["det1", "det2"]], "item_type": "plan"}'
+    _plan2 = '{"name": "scan", "args": [["det1", "det2"], "motor", -1, 1, 10], "item_type": "plan"}'
+
+    # Add 2 plans
+    assert subprocess.call(["qserver", "queue", "add", "plan", _plan1, *cli_p]) == 0
+    assert subprocess.call(["qserver", "queue", "add", "plan", _plan2, *cli_p]) == 0
+
+    # Request the list of allowed plans and devices (we don't check what is returned)
+    assert subprocess.call(["qserver", "allowed", "plans", *cli_p], stdout=subprocess.DEVNULL) == SUCCESS
+    assert subprocess.call(["qserver", "allowed", "devices", *cli_p], stdout=subprocess.DEVNULL) == SUCCESS
+
+    assert subprocess.call(["qserver", "environment", "open", *cli_p]) == SUCCESS
+    assert wait_for_condition(
+        time=3, condition=condition_environment_created
+    ), "Timeout while waiting for environment to be created"
+
+    state = get_queue_state()
+    assert state["items_in_queue"] == 2
+    assert state["items_in_history"] == 0
+
+    assert subprocess.call(["qserver", "queue", "start", *cli_p]) == SUCCESS
+    assert wait_for_condition(
+        time=20, condition=condition_queue_processing_finished
+    ), "Timeout while waiting for process to finish"
+
+    state = get_queue_state()
+    assert state["items_in_queue"] == 0
+    assert state["items_in_history"] == 2
+
+    assert subprocess.call(["qserver", "environment", "close", *cli_p]) == SUCCESS
+    assert wait_for_condition(
+        time=5, condition=condition_environment_closed
+    ), "Timeout while waiting for environment to be closed"
 
 
 # ================================================================================

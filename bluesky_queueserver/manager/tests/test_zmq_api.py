@@ -31,7 +31,7 @@ from ._common import (
     condition_manager_idle,
     copy_default_profile_collection,
     append_code_to_last_startup_file,
-    ev_name_TEST_QSERVER_ZMQ_PUBLIC_KEY,
+    set_qserver_zmq_public_key,
 )
 from ._common import re_manager, re_manager_pc_copy, re_manager_cmd, db_catalog  # noqa: F401
 
@@ -1721,26 +1721,27 @@ def test_zmq_api_queue_execution_2(re_manager):  # noqa: F811
 # fmt: on
 def test_zmq_api_queue_execution_3(monkeypatch, re_manager_cmd, test_mode):  # noqa: F811
     """
-    Run sequence of commands using ENCRYPTION.
+    Test operation of RE Manager and 0MQ API with enabled encryption. Test options to
+    set the server (RE Manager) private key using CLI parameter and environment variable.
     """
     public_key, private_key = generate_new_zmq_key_pair()
 
     if test_mode == "none":
         # No encryption
-        args = []
-        zmq_kwarg = {}
+        cli_params = []
     elif test_mode == "ev":
-        args = []
+        # Set server private key using environment variable
+        cli_params = []
         monkeypatch.setenv("QSERVER_ZMQ_PRIVATE_KEY", private_key)
-        monkeypatch.setenv(ev_name_TEST_QSERVER_ZMQ_PUBLIC_KEY, public_key)
+        set_qserver_zmq_public_key(monkeypatch, server_public_key=public_key)
     elif test_mode == "cli":
-        # args = ["--zmq-private-key", f"'{private_key}'"]
-        args = ["--zmq-private-key", private_key]
-        monkeypatch.setenv(ev_name_TEST_QSERVER_ZMQ_PUBLIC_KEY, public_key)
+        # Set server private key using CLI parmeter
+        cli_params = ["--zmq-private-key", private_key]
+        set_qserver_zmq_public_key(monkeypatch, server_public_key=public_key)
     else:
         raise RuntimeError(f"Unrecognized test mode '{test_mode}'")
 
-    re_manager_cmd(args)
+    re_manager_cmd(cli_params)
 
     # Plan
     params1b = {"item": _plan1, "user": _user, "user_group": _user_group}

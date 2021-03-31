@@ -2,6 +2,8 @@ import os
 import pandas as pd
 import pytest
 
+from ._common import plan_list_sample, create_excel_file_from_plan_list
+
 from bluesky_queueserver.manager.tests._common import (  # noqa F401
     re_manager,
     re_manager_pc_copy,
@@ -178,17 +180,44 @@ def test_http_server_queue_upload_spreasheet_4(
         )
     fastapi_server_fs()
 
-    plan_params = [["count", 5, 1], ["count", 6, 0.5]]
-    col_names = ["name", "num", "delay"]
-    ss_path, plans_expected = _create_test_excel_file1(tmp_path, plan_params=plan_params, col_names=col_names)
+    ss_path = create_excel_file_from_plan_list(tmp_path, plan_list=plan_list_sample)
+    plans_expected = [_ for _ in plan_list_sample if isinstance(_["name"], str)]
 
     # Send the Excel file to the server
     params = {"files": {"spreadsheet": open(ss_path, "rb")}}
     if use_custom:
         params["data"] = {"data_type": "process_with_default_function"}
     resp1 = request_to_json("post", "/queue/upload/spreadsheet", **params)
-    assert resp1["success"] is False, str(resp1)
-    assert resp1["msg"] == "Default function for converting spreadsheet to plan list is not implemented yet"
+    assert resp1["success"] is True, str(resp1)
+    assert "item_list" in resp1, str(resp1)
+    assert len(resp1["item_list"]) == len(plans_expected), str(resp1)
+
+    # Verify that the queue contains correct plans
+    resp2 = request_to_json("get", "/queue/get")
+    assert resp2["success"] is True
+    assert resp2["running_item"] == {}
+    queue = resp2["queue"]
+    assert len(queue) == len(plans_expected), str(queue)
+    for p, p_exp in zip(queue, plans_expected):
+        for k, v in p_exp.items():
+            assert k in p
+            assert v == p[k]
+
+    resp3 = request_to_json("post", "/environment/open")
+    assert resp3["success"] is True
+    assert wait_for_environment_to_be_created(10)
+
+    resp4 = request_to_json("post", "/queue/start")
+    assert resp4["success"] is True
+    assert wait_for_queue_execution_to_complete(60)
+
+    resp5 = request_to_json("get", "/status")
+    assert resp5["items_in_queue"] == 0
+    assert resp5["items_in_history"] == len(plans_expected)
+
+    resp6 = request_to_json("post", "/environment/close")
+    assert resp6 == {"success": True, "msg": ""}
+    assert wait_for_manager_state_idle(10)
 
 
 def test_http_server_queue_upload_spreasheet_5(re_manager, fastapi_server_fs, tmp_path, monkeypatch):  # noqa F811

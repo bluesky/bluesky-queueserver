@@ -458,7 +458,7 @@ def validate_zmq_key(key):
     """
     Validates format of a public or private key by feeding it to the function that generates
     public key from a private key. The function will raise an exception if the key is improperly
-    formatted. The key is expected to be encoded using z85 and represented as a 40 character string.
+    formatted. The key is expected to be encoded using z85 (https://rfc.zeromq.org/spec/32/) and represented as a 40 character string.
 
     Parameters
     ----------

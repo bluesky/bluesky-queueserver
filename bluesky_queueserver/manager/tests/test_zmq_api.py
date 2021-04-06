@@ -1716,7 +1716,6 @@ def test_zmq_api_queue_execution_2(re_manager):  # noqa: F811
     assert wait_for_condition(time=30, condition=condition_environment_closed)
 
 
-
 # fmt: off
 @pytest.mark.parametrize("test_mode", ["none", "ev", "cli"])
 # fmt: on

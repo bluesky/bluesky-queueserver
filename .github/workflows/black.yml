@@ -18,4 +18,4 @@ jobs:
           pip install black
       - name: Run black
         run: |
-          black .
+          black . --check

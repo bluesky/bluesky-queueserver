@@ -345,10 +345,10 @@ be set to the UID of the item to be updated. Additional API parameter 'replace' 
 is updated or replaced. If the parameter is skipped or set *false*, the item is updated. If the
 parameter is set *true*, the item is replaced (i.e. new item UID is generated)::
 
-  http POST http://localhost:60610/queue/item/update item:='{"item_uid": "<existing-uid>", "name":"count", "args":[["det1", "det2"]], "item_type": "plan"}'
-  http POST http://localhost:60610/queue/item/update item:='{"item_uid": "<existing-uid>", "name":"queue_stop", , "item_type": "instruction"}'
-  http POST http://localhost:60610/queue/item/update replace:=true item:='{"item_uid": "<existing-uid>", "name":"count", "args":[["det1", "det2"]], "item_type": "plan"}'
-  http POST http://localhost:60610/queue/item/update replace:=true item:='{"item_uid": "<existing-uid>", "name":"queue_stop", "item_type": "instruction"}'
+  http POST http://localhost:60610/queue/item/update item:='{"item_uid":"<existing-uid>", "name":"count", "args":[["det1", "det2"]], "item_type":"plan"}'
+  http POST http://localhost:60610/queue/item/update item:='{"item_uid":"<existing-uid>", "name":"queue_stop", "item_type":"instruction"}'
+  http POST http://localhost:60610/queue/item/update replace:=true item:='{"item_uid":"<existing-uid>", "name":"count", "args":[["det1", "det2"]], "item_type":"plan"}'
+  http POST http://localhost:60610/queue/item/update replace:=true item:='{"item_uid":"<existing-uid>", "name":"queue_stop", "item_type":"instruction"}'
 
 Remove all entries from the plan queue::
 

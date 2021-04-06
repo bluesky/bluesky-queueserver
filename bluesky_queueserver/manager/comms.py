@@ -458,7 +458,8 @@ def validate_zmq_key(key):
     """
     Validates format of a public or private key by feeding it to the function that generates
     public key from a private key. The function will raise an exception if the key is improperly
-    formatted. The key is expected to be encoded using z85 (https://rfc.zeromq.org/spec/32/) and represented as a 40 character string.
+    formatted. The key is expected to be encoded using z85 (https://rfc.zeromq.org/spec/32/)
+    and represented as a 40 character string.
 
     Parameters
     ----------
@@ -499,6 +500,11 @@ class ZMQCommSendThreads:
         specifying ``raise_exceptions`` parameter of ``send_message()`` function. The exception
         ``CommTimeoutError`` is raised if the parameter is ``True``, otherwise error message
         is returned by ``send_message()``.
+    server_public_key : str or None
+        Server public key (z85-encoded 40 character string). Valid public key from server
+        public/private key pair must be passed if encryption is enabled at the 0MQ server side.
+        Communication requests will time out if the key is invalid. Exception will be raised if
+        the key is improperly formatted. Encryption will be disabled if ``None`` is passed.
 
     Examples
     --------
@@ -853,6 +859,11 @@ class ZMQCommSendAsync:
         specifying ``raise_exceptions`` parameter of ``send_message()`` function. The exception
         ``CommTimeoutError`` is raised if the parameter is ``True``, otherwise error message
         is returned by ``send_message()``.
+    server_public_key : str or None
+        Server public key (z85-encoded 40 character string). Valid public key from server
+        public/private key pair must be passed if encryption is enabled at the 0MQ server side.
+        Communication requests will time out if the key is invalid. Exception will be raised if
+        the key is improperly formatted. Encryption will be disabled if ``None`` is passed.
 
     Examples
     --------
@@ -1036,8 +1047,12 @@ def zmq_single_request(method, params=None, *, zmq_server_address=None, server_p
     params: dict or None
         Dictionary of parameters (payload of the message). If ``None`` then
         the message is sent with empty payload: ``params = {}``.
-    server_public_key: str
-        Public key from the key pair for ZMQ server (40 bytes, z85 encoded).
+    server_public_key: str or None
+        Server public key (z85-encoded 40 character string). Valid public key from server
+        public/private key pair must be passed if encryption is enabled at the 0MQ server side.
+        Communication requests will time out if the key is invalid. Exception will be raised if
+        the key is improperly formatted. Encryption will be disabled if ``None`` is passed.
+
 
     Returns
     -------

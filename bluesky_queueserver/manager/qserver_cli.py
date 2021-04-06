@@ -740,10 +740,19 @@ def qserver():
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger("bluesky_queueserver").setLevel("ERROR")
 
+    s_enc = (
+        "If RE Manager is configured to use encrypted ZeroMQ communication channel,\n"
+        "the encryption must also be enabled before running 'qserver' CLI tool by setting\n"
+        "the environment variable QSERVER_ZMQ_PUBLIC_KEY to the value of a valid public key\n"
+        "(z85-encoded 40 character string):\n\n"
+        "    export QSERVER_ZMQ_PUBLIC_KEY '<public_key>'\n\n"
+        "Encryption is disabled by default."
+    )
     parser = argparse.ArgumentParser(
-        description="Command-line tool for communicating with RE Monitor.",
+        description="Command-line tool for communicating with RE Monitor.\n"
+        f"bluesky-queueserver version {qserver_version}.\n",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"Bluesky-QServer version {qserver_version}.\n{cli_examples}",
+        epilog=f"\n\n{s_enc}\n\n{cli_examples}\n\n",
     )
 
     parser.add_argument(
@@ -761,17 +770,6 @@ def qserver():
         default=None,
         help="Address of the server (e.g. 'tcp://localhost:60615', quoted string)",
     )
-    parser.add_argument(
-        "--zmq-public-key",
-        dest="zmq_public_key",
-        type=str,
-        default=None,
-        help="ZMQ server public key (for secured control connection). Setting the private key enables "
-        "the encryption. The parameter value should be 40 character string containing z85 encrypted "
-        "key. Alternative, more convenient way to set public key for CLI tool is to set the environment "
-        "variable QSERVER_ZMQ_PUBLIC_KEY. The private key passed as CLI parameter overrides the private "
-        "key set using the environment variable QSERVER_ZMQ_PUBLIC_KEY.",
-    )
 
     args = parser.parse_args()
     print(f"Arguments: {args.command}")
@@ -779,14 +777,12 @@ def qserver():
     try:
         # Read public key from the environment variable, then check if the CLI parameter exists
         zmq_public_key = os.environ.get("QSERVER_ZMQ_PUBLIC_KEY", None)
-        zmq_public_key = zmq_public_key if zmq_public_key else None  # Case of ""
-        if args.zmq_public_key is not None:
-            zmq_public_key = args.zmq_public_key
+        zmq_public_key = zmq_public_key if zmq_public_key else None  # Case of key==""
         if zmq_public_key is not None:
             try:
                 validate_zmq_key(zmq_public_key)
             except Exception as ex:
-                raise CommandParameterError(f"ZMQ private key is improperly formatted: {ex}")
+                raise CommandParameterError(f"ZMQ public key is improperly formatted: {ex}")
 
         method, params, monitoring_mode = create_msg(args.command)
 

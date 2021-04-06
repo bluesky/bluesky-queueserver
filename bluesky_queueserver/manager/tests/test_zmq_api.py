@@ -1717,7 +1717,7 @@ def test_zmq_api_queue_execution_2(re_manager):  # noqa: F811
 
 
 # fmt: off
-@pytest.mark.parametrize("test_mode", ["none", "ev", "cli"])
+@pytest.mark.parametrize("test_mode", ["none", "ev"])
 # fmt: on
 def test_zmq_api_queue_execution_3(monkeypatch, re_manager_cmd, test_mode):  # noqa: F811
     """
@@ -1728,20 +1728,15 @@ def test_zmq_api_queue_execution_3(monkeypatch, re_manager_cmd, test_mode):  # n
 
     if test_mode == "none":
         # No encryption
-        cli_params = []
+        pass
     elif test_mode == "ev":
         # Set server private key using environment variable
-        cli_params = []
         monkeypatch.setenv("QSERVER_ZMQ_PRIVATE_KEY", private_key)
-        set_qserver_zmq_public_key(monkeypatch, server_public_key=public_key)
-    elif test_mode == "cli":
-        # Set server private key using CLI parmeter
-        cli_params = ["--zmq-private-key", private_key]
         set_qserver_zmq_public_key(monkeypatch, server_public_key=public_key)
     else:
         raise RuntimeError(f"Unrecognized test mode '{test_mode}'")
 
-    re_manager_cmd(cli_params)
+    re_manager_cmd([])
 
     # Plan
     params1b = {"item": _plan1, "user": _user, "user_group": _user_group}

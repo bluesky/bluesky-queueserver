@@ -314,7 +314,7 @@ Returns       **success**: *boolean*
               **msg**: *str*
                   error message in case of failure, empty string ('') otherwise.
 
-              **history**: *list*
+              **items**: *list*
                   list of items in the plan history, each item is represented by a dictionary of
                   item parameters. Currently the plan history may contain only plans.
 
@@ -460,7 +460,7 @@ Returns       **success**: *boolean*
               **msg**: *str*
                   error message in case of failure, empty string ('') otherwise.
 
-              **queue**: *list*
+              **items**: *list*
                   list of queue items
 
               **running_item**: *dict*
@@ -486,9 +486,10 @@ Description   Add item to the queue. The item may be a plan or an instruction. B
               item is added to the back of the queue. Alternatively the item can be placed at
               the desired position in the queue or before or after one of the existing items.
 ------------  -----------------------------------------------------------------------------------------
-Parameters    **plan or instruction**: *dict*
+Parameters    **item**: *dict*
                   the dictionary of plan or instruction parameters. Plans are distinguished from
-                  instructions based on whether 'plan' or 'instruction' parameter is included.
+                  instructions based the value of the required parameter 'item_type'. Currently
+                  supported item types are 'plan' and 'instruction'.
 
               **user_group**: *str*
                   the name of the user group (e.g. 'admin').
@@ -519,9 +520,10 @@ Returns       **success**: *boolean*
                   the number of items in the plan queue after the plan was added if
                   the operation was successful, *None* otherwise
 
-              **plan** or **instruction**: *dict* (optional)
-                  the inserted item. The item contains the assigned item UID. The parameter
-                  may not be returned in case of error in processing the request.
+              **item**: *dict* or *None* (optional)
+                  the inserted item. The item contains the assigned item UID. In case of error
+                  the item may be returned without modification (with assigned UID). *None* will be
+                  returned if request does not contain item parameters.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
@@ -537,17 +539,16 @@ Method        **'queue_item_add_batch'**
 ------------  -----------------------------------------------------------------------------------------
 Description   Add a batch of items to the back of the queue. The batch may consist of any number
               of supported items (see **queue_item_add** method). The batch is treated as a single
-              unit. Each item in the queue must successfully pass validation before any items are added
+              unit: each item in the queue must successfully pass validation before any items are added
               to the queue. If any item fails validation, the whole batch is rejected. In case the
               batch is rejected, the function returns the detailed report for each item, including
               *success* status indicating if the item passed validation and error message in case
               validation failed.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **items**: *list*
-                  the list containing a batch of items. Each element is a dictionary representing
-                  a valid item. The dictionary must contain a key-value pair with the key representing
-                  one of the supported item types (*'plan'* or *'instruction'*) and the value being
-                  a dictionary of item parameters. An empty item list will also be accepted.
+                  the list containing a batch of items. Each element is a dictionary containing
+                  valid set of item parameters (see instructions for *queue_item_add* API).
+                  An empty item list will also be accepted.
 
               **user_group**: *str*
                   the name of the user group (e.g. 'admin').
@@ -567,22 +568,24 @@ Returns       **success**: *boolean*
                   error message in case of failure, empty string ('') otherwise.
 
               **qsize**: *int* or *None*
-                  the number of items in the plan queue after processing of the request. The correct
+                  the number of items in the plan queue after processing the request. The correct
                   queue size may be returned even if the operation fails. In rare failing cases
                   the parameter may return *None*.
 
-              **item_list** : *list*
-                  the list of processed items inserted item. Each item represents the dictionary
-                  with the following keys:
+              **items**: *list*
+                  the list of processed items. Each item contains inserted item (in case of success),
+                  passed item or None (in case of error). See notes for return *item* parameter
+                  for *queue_add_item* API.
+
+              **results**: *list*
+                  the list of reports for each processed item. The size of the list is equal to the
+                  size of the list returned as *items* parameter. Each element of the list is
+                  a dictionary containing the following keys:
 
                 - **success** - boolean value indicating if the validation of the item was successful.
 
                 - **msg** - error message in case validation of the item failed.
 
-                - **plan** or **instruction** (optional) - item parameters in the same form as
-                  in **queue_item_add** method. If the batch was added to the queue, the parameters for
-                  each item will contain the assigned *'item_uid'*. The item parameters may be missing
-                  if there is an error in processing of the item.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
@@ -600,16 +603,17 @@ Description   Update the existing item in the queue. The method is intended for 
               but may be used for replacing the existing items with completely different ones.
               The updated item may be a plan or an instruction. The item parameter 'item_uid' must
               be set to a UID of an existing queue item that is expected to be replaced. The method
-              fails if the item is not found. By default, the UID of the updated item is not changed
+              fails if the item UID is not found. By default, the UID of the updated item is not changed
               and 'user' and 'user_group' parameters are set to the values provided in the request.
               The 'user_group' is also used for validation of submitted item. If it is preferable
               to replace the item UID with a new random UID (e.g. if the item is replaced with
               completely different item), the method should be called with the optional parameter
               'replace=True'.
 ------------  -----------------------------------------------------------------------------------------
-Parameters    **plan or instruction**: *dict*
+Parameters    **item**: *dict*
                   the dictionary of plan or instruction parameters. Plans are distinguished from
-                  instructions based on whether 'plan' or 'instruction' parameter is included.
+                  instructions based the value of the required parameter 'item_type'. Currently
+                  supported item types are 'plan' and 'instruction'.
 
               **user_group**: *str*
                   the name of the user group (e.g. 'admin').
@@ -633,10 +637,10 @@ Returns       **success**: *boolean*
                   the number of items in the plan queue after the plan was added if
                   the operation was successful, *None* otherwise
 
-              **plan** or **instruction**: *dict* (optional)
-                  the updated item. The item contains the new item UID if the method was called with
-                  'replace=True'. The parameter may not be returned in case of error in processing
-                  the request.
+              **item**: *dict* or *None* (optional)
+                  the inserted item. The item contains the assigned item UID. In case of error
+                  the item may be returned without modification (with assigned UID). *None* will be
+                  returned if request does not contain item parameters.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================

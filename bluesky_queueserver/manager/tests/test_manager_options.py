@@ -24,7 +24,7 @@ from ._common import re_manager_cmd  # noqa: F401
 # User name and user group name used throughout most of the tests.
 _user, _user_group = "Testing Script", "admin"
 
-_plan1 = {"name": "count", "args": [["det1", "det2"]]}
+_plan1 = {"name": "count", "args": [["det1", "det2"]], "item_type": "plan"}
 
 _sample_plan1 = """
 def simple_sample_plan():
@@ -81,8 +81,8 @@ def test_manager_options_startup_profile(re_manager_cmd, tmp_path, monkeypatch, 
     assert wait_for_condition(time=10, condition=condition_environment_created)
 
     # Add the plan to the queue (will fail if incorrect environment is loaded)
-    plan = {"name": "simple_sample_plan"}
-    params = {"plan": plan, "user": _user, "user_group": _user_group}
+    plan = {"name": "simple_sample_plan", "item_type": "plan"}
+    params = {"item": plan, "user": _user, "user_group": _user_group}
     resp2, _ = zmq_single_request("queue_item_add", params)
     assert resp2["success"] is True, f"resp={resp2}"
 
@@ -146,7 +146,7 @@ def test_manager_acq_with_0MQ_proxy(re_manager_cmd, zmq_proxy, zmq_dispatcher): 
     assert wait_for_condition(time=10, condition=condition_environment_created)
 
     # Add the plan to the queue (will fail if incorrect environment is loaded)
-    params = {"plan": _plan1, "user": _user, "user_group": _user_group}
+    params = {"item": _plan1, "user": _user, "user_group": _user_group}
     resp2, _ = zmq_single_request("queue_item_add", params)
     assert resp2["success"] is True, f"resp={resp2}"
 

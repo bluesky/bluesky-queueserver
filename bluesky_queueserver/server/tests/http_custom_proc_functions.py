@@ -10,6 +10,11 @@ def spreadsheet_to_plan_list(*, spreadsheet_file, data_type, file_name, **kwargs
     0   count  5     1
     1   count  6     0.5
 
+    NOTE: this function returns item (plan) parameters without setting 'item_type'.
+    Those items are considered plans (equivalent to ``item_type`` set as ``plan``).
+    The items in the list may also be instructions (or other item types when they
+    are supported). In this case each item should include ``item_type`` set explicitly.
+
     Parameters
     ----------
     spreadsheet_file : file

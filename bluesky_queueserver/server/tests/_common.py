@@ -16,7 +16,7 @@ def create_excel_file_from_plan_list(tmp_path, *, plan_list, ss_filename="spread
     tmp_path : str
         temporary path
     plan_list : list(dict)
-        list of plan parameters
+        list of plan parameters. Plan parameters may contain "item_type", but it will be ignored.
     ss_filename : str
         spreadsheet file name without extension
     ss_ext : str
@@ -132,12 +132,12 @@ def create_excel_file_from_plan_list(tmp_path, *, plan_list, ss_filename="spread
 # Sample list that contains working plans. May be used to create a spreadsheet.
 # Plan with '"name": math.nan' will generate an empty line in the spreadsheet.
 plan_list_sample = [
-    {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10}},
-    {"name": "count", "args": [["det1"]], "kwargs": {"delay": 0.5}},
-    {"name": "count", "kwargs": {"detectors": ["det1"], "delay": 0.5}},
+    {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10}, "item_type": "plan"},
+    {"name": "count", "args": [["det1"]], "kwargs": {"delay": 0.5}, "item_type": "plan"},
+    {"name": "count", "kwargs": {"detectors": ["det1"], "delay": 0.5}, "item_type": "plan"},
     {"name": math.nan},
-    {"name": "scan", "args": [["det1", "det2"], "motor", -1, 1], "kwargs": {"num": 10}},
-    {"name": "scan", "args": [["det1", "det2"], "motor", -1, 1, 10]},
-    {"name": "count", "args": [["det2"]], "kwargs": {"num": 2, "delay": 0.7}},
-    {"name": "count", "args": [["det2"]], "kwargs": {"num": 2}},
+    {"name": "scan", "args": [["det1", "det2"], "motor", -1, 1], "kwargs": {"num": 10}, "item_type": "plan"},
+    {"name": "scan", "args": [["det1", "det2"], "motor", -1, 1, 10], "item_type": "plan"},
+    {"name": "count", "args": [["det2"]], "kwargs": {"num": 2, "delay": 0.7}, "item_type": "plan"},
+    {"name": "count", "args": [["det2"]], "kwargs": {"num": 2}, "item_type": "plan"},
 ]

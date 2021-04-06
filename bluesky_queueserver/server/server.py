@@ -236,39 +236,56 @@ async def queue_upload_spreadsheet(spreadsheet: UploadFile = File(...), data_typ
         f_name = spreadsheet.filename
 
         # Determine which processing function should be used
-        plan_list = []
+        item_list = []
         processed = False
         if custom_code_module and ("spreadsheet_to_plan_list" in custom_code_module.__dict__):
             logger.info("Processing spreadsheet using function from external module ...")
             # Try applying  the custom processing function. Some additional useful data is passed to
             #   the function. Unnecessary parameters can be ignored.
-            plan_list = custom_code_module.spreadsheet_to_plan_list(
+            item_list = custom_code_module.spreadsheet_to_plan_list(
                 spreadsheet_file=f, file_name=f_name, data_type=data_type, user=_login_data["user"]
             )
             # The function is expected to return None if it rejects the file (based on 'data_type').
             #   Then try to apply the default processing function.
-            processed = plan_list is not None
+            processed = item_list is not None
 
         if not processed:
             # Apply default spreadsheet processing function.
             logger.info("Processing spreadsheet using default function ...")
-            plan_list = spreadsheet_to_plan_list(
+            item_list = spreadsheet_to_plan_list(
                 spreadsheet_file=f, file_name=f_name, data_type=data_type, user=_login_data["user"]
             )
 
-        if plan_list is None:
+        if item_list is None:
             raise RuntimeError("Failed to process the spreadsheet: unsupported data type or format")
 
-        logger.debug("The following plans were created: %s", pprint.pformat(plan_list))
+        # Since 'item_list' may be returned by user defined functions, verify the type of the list.
+        if not isinstance(item_list, (tuple, list)):
+            raise ValueError(
+                f"Spreadsheet processing function returned value of '{type(item_list)}' "
+                f"type instead of 'list' or 'tuple'"
+            )
+
+        # Ensure, that 'item_list' is sent as a list
+        item_list = list(item_list)
+
+        # Set item type for all items that don't have item type already set (item list may contain
+        #   instructions, but it is responsibility of the user to set item types correctly.
+        #   By default an item is considered a plan.
+        for item in item_list:
+            if "item_type" not in item:
+                item["item_type"] = "plan"
+
+        logger.debug("The following plans were created: %s", pprint.pformat(item_list))
 
         params = dict()
         params["user"] = _login_data["user"]
         params["user_group"] = _login_data["user_group"]
-        params["items"] = [{"plan": _} for _ in plan_list]
+        params["items"] = item_list
         msg = await zmq_to_manager.send_message(method="queue_item_add_batch", params=params)
 
     except Exception as ex:
-        msg = {"success": False, "msg": str(ex), "item_list": []}
+        msg = {"success": False, "msg": str(ex), "items": [], "results": []}
 
     return msg
 

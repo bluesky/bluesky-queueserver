@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 import os
 import pytest
@@ -178,19 +179,25 @@ def test_spreadsheet_to_plan_list_1(tmp_path, ext):
     #   Check if types will be restored correctly (pandas write/read functions don't like columns
     #   with mixed types). Also check if all possible types are handled correctly.
     extra_plans = [
-        {"name": "count", "args": [["det2"]], "kwargs": {"num": 2, "extra_param": 50}},
-        {"name": "count", "args": [["det2"]], "kwargs": {"num": 2, "extra_param": "some_str"}},
-        {"name": "count", "args": [["det2"]], "kwargs": {"num": 2, "extra_param": 50.256}},
-        {"name": "count", "args": [["det2"]], "kwargs": {"num": 2, "extra_param": None}},
-        {"name": "count", "args": [["det2"]], "kwargs": {"num": 2, "extra_param": ""}},
-        {"name": "count", "args": [["det2"]], "kwargs": {"num": 2, "extra_param": [10, 20, 30]}},
+        {"name": "count", "args": [["det2"]], "kwargs": {"num": 2, "extra_param": 50}, "item_type": "plan"},
+        {"name": "count", "args": [["det2"]], "kwargs": {
+            "num": 2, "extra_param": "some_str"}, "item_type": "plan"},
+        {"name": "count", "args": [["det2"]], "kwargs": {"num": 2, "extra_param": 50.256}, "item_type": "plan"},
+        {"name": "count", "args": [["det2"]], "kwargs": {"num": 2, "extra_param": None}, "item_type": "plan"},
+        {"name": "count", "args": [["det2"]], "kwargs": {"num": 2, "extra_param": ""}, "item_type": "plan"},
+        {"name": "count", "args": [["det2"]], "kwargs": {
+            "num": 2, "extra_param": [10, 20, 30]}, "item_type": "plan"},
         {"name": "count", "args": [["det2"]], "kwargs": {"num": 2, "extra_param": {
-            "p1": 10, "p2": "10", "p3": 50}}},
+            "p1": 10, "p2": "10", "p3": 50}}, "item_type": "plan"},
     ]
 
-    plan_list = plan_list_sample.copy()
+    plan_list = copy.deepcopy(plan_list_sample)  # We are going to change the plans
     for plan in extra_plans:
         plan_list.append(plan)
+
+    for plan in plan_list:
+        if isinstance(plan["name"], str):
+            plan["item_type"] = "plan"
 
     ss_path = create_excel_file_from_plan_list(tmp_path, plan_list=plan_list, ss_ext=ext)
     with open(ss_path, "rb") as f:

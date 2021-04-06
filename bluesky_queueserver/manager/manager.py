@@ -526,7 +526,7 @@ class RunEngineManager(Process):
             elif next_item["item_type"] == "instruction":
                 logger.info("Executing instruction:\n%s.", pprint.pformat(next_item))
 
-                if next_item["action"] == "queue_stop":
+                if next_item["name"] == "queue_stop":
                     # Pop the instruction from the queue
                     await self._plan_queue.pop_item_from_queue(pos="front")
                     self._manager_state = MState.EXECUTING_QUEUE
@@ -535,7 +535,7 @@ class RunEngineManager(Process):
                     success, err_msg = True, ""
                 else:
                     success = False
-                    err_msg = f"Unsupported action: '{next_item['action']}' (item {next_item})"
+                    err_msg = f"Unsupported action: '{next_item['name']}' (item {next_item})"
 
             else:
                 success = False
@@ -898,37 +898,70 @@ class RunEngineManager(Process):
         return {
             "success": True,
             "msg": "",
-            "queue": plan_queue,
+            "items": plan_queue,
             "running_item": running_item,
             "plan_queue_uid": plan_queue_uid,
         }
 
-    def _get_item_from_request(self, *, request):
-        item_type = None
-        item_types = ("plan", "instruction")
-        for itype in item_types:
-            if itype in request:
-                item_type = itype
-                item = request[itype]
-                break
-        if item_type is None:
-            raise Exception(
-                f"Incorrect request format: request contains no item info. Supported item types: {item_types}"
+    def _get_item_from_request(self, *, request=None, item=None):
+        """
+        Extract ``item`` and ``item_type`` from the request, validate the values and report errors
+        """
+        msg_prefix = "Incorrect request format: "
+        supported_item_types = ("plan", "instruction")
+
+        # The following two error reports represent serious bug, which needs to be fixed
+        n_request_or_item = sum([(request is None), (item is None)])
+        if n_request_or_item != 1:
+            raise RuntimeError(
+                "Runtime error: Only one of 'request' or 'item' parameters "
+                f"may be not None: request={request}, item={item}"
             )
-        return item, item_type
+
+        # Generate error message instead of raising exception: we still want to return
+        #   'item' if it exists so that we could send it to the client with error message.
+        msg, item_type = "", None
+
+        if request is not None:
+            if not isinstance(request, dict):
+                raise ValueError(
+                    f"Incorrect type of 'request' parameter: "
+                    f"type(request)='{type(request)}', expected type is 'dict'"
+                )
+            if "item" not in request:
+                raise ValueError(f"{msg_prefix}request contains no item info")
+            item = request["item"]
+
+        if isinstance(item, dict):
+            item_type = item.get("item_type", None)
+            if item_type is None:
+                msg = f"{msg_prefix}'item_type' key is not found"
+            elif item_type not in supported_item_types:
+                msg = (
+                    f"{msg_prefix}unsupported 'item_type' value '{item_type}', "
+                    f"supported item types {supported_item_types}"
+                )
+        else:
+            msg = (
+                f"{msg_prefix}incorrect type ('{type(item)}') of item parameter: "
+                "item parameter must have type 'dict'"
+            )
+
+        success = not bool(msg)
+        return item, item_type, success, msg
 
     def _get_user_info_from_request(self, *, request):
         if "user_group" not in request:
-            raise Exception("Incorrect request format: user group is not specified")
+            raise ValueError("Incorrect request format: user group is not specified")
 
         if "user" not in request:
-            raise Exception("Incorrect request format: user name is not specified")
+            raise ValueError("Incorrect request format: user name is not specified")
 
         user = request["user"]
         user_group = request["user_group"]
 
         if user_group not in self._allowed_plans:
-            raise Exception(f"Unknown user group: '{user_group}'")
+            raise ValueError(f"Unknown user group: '{user_group}'")
 
         return user, user_group
 
@@ -957,8 +990,6 @@ class RunEngineManager(Process):
         -------
         item : dict
             prepared item
-        item_type : str
-            item type: ``plan`` or ``instruction``
         item_uid_original : str or None
             copy of the original ``item_uid`` saved before it is replaced with new UID, ``None`` if the
             original item (passed as part of ``request``) has no UID.
@@ -976,7 +1007,7 @@ class RunEngineManager(Process):
             success, msg = validate_plan(item, allowed_plans=allowed_plans, allowed_devices=allowed_devices)
         elif item_type == "instruction":
             # At this point we support only one instruction ('queue_stop'), so validation is trivial.
-            if ("action" in item) and (item["action"] == "queue_stop"):
+            if ("name" in item) and (item["name"] == "queue_stop"):
                 success, msg = True, ""
             else:
                 success, msg = False, f"Unrecognized instruction: {item}"
@@ -985,8 +1016,6 @@ class RunEngineManager(Process):
 
         if not success:
             raise RuntimeError(msg)
-
-        item["item_type"] = item_type
 
         # Add user name and user_id to the plan (for later reference)
         item["user"] = user
@@ -1012,8 +1041,6 @@ class RunEngineManager(Process):
         if item:
             if "name" in item:
                 log_msg += f" name='{item['name']}'"
-            elif "action" in item:
-                log_msg += f" action='{item['action']}'"
             if "item_uid" in item:
                 log_msg += f" item_uid='{item['item_uid']}'"
         log_msg += f" qsize={qsize}."
@@ -1044,7 +1071,10 @@ class RunEngineManager(Process):
         item_type, item, qsize, msg = None, None, None, ""
 
         try:
-            item, item_type = self._get_item_from_request(request=request)
+            item, item_type, _success, _msg = self._get_item_from_request(request=request)
+            if not _success:
+                raise Exception(_msg)
+
             user, user_group = self._get_user_info_from_request(request=request)
 
             # Always generate a new UID for the added plan!!!
@@ -1068,10 +1098,7 @@ class RunEngineManager(Process):
 
         logger.info(self._generate_item_log_msg("Item added", success, item_type, item, qsize))
 
-        rdict = {"success": success, "msg": msg, "qsize": qsize}
-        if item_type:
-            rdict[item_type] = item
-
+        rdict = {"success": success, "msg": msg, "qsize": qsize, "item": item}
         return rdict
 
     async def _queue_item_add_batch_handler(self, request):
@@ -1101,22 +1128,24 @@ class RunEngineManager(Process):
         logger.info("Adding a batch of items to the queue ...")
         logger.debug("Request: %s", pprint.pformat(request))
 
-        success, msg, item_list, qsize = True, "", [], None
+        success, msg, item_list, report, qsize = True, "", [], [], None
 
         try:
             # Prepare items
             if "items" not in request:
                 raise Exception("Invalid request format: the list of items is not found")
             items = request["items"]
-            items_prepared, items_added, report, success = [], [], [], True
+            items_prepared, report, success = [], [], True
 
             user, user_group = self._get_user_info_from_request(request=request)
 
             # First validate all the items
             for item_info in items:
-                item, item_type = {}, None
+                item, item_type = None, None
                 try:
-                    item, item_type = self._get_item_from_request(request=item_info)
+                    item, item_type, _success, _msg = self._get_item_from_request(item=item_info)
+                    if not _success:
+                        raise Exception(_msg)
 
                     # Always generate a new UID for the added plan!!!
                     item_prepared, _ = self._prepare_item(
@@ -1128,33 +1157,21 @@ class RunEngineManager(Process):
 
                 except Exception as ex:
                     success = False
-                    # If 'item_info' does not contain valid item, then do not return any item.
-                    if item and item_type:
-                        item["item_type"] = item_type
-                    items_prepared.append(item)  # Always add item even if it is '{}'
+                    items_prepared.append(item)  # Add unchanged item or None if no item is found
                     report.append({"success": False, "msg": f"Failed to add a plan: {ex}"})
 
             if len(report) != len(items) != len(items_prepared):
-                # This error should never happen, but it may be useful for debugging.
+                # This error should never happen, but the message may be useful for debugging if it happens.
                 raise Exception("Error in data processing algorithm occurred")
 
             if success:
                 # Adding plan to queue may still raise an exception
                 for item in items_prepared:
                     item_added, _ = await self._plan_queue.add_item_to_queue(item)
-                    items_added.append(item_added)
+                    item_list.append(item_added)
             else:
-                items_added = items_prepared
-
-            # Prepare the list of added items with error messages
-            for item, rep in zip(items_added, report):
-                d = rep.copy()
-                if "item_type" in item:
-                    d[item["item_type"]] = item
-                item_list.append(d)
-
-            if not success:
-                n_items = len(report)
+                item_list = items_prepared
+                n_items = len(item_list)
                 n_failed = sum([not _["success"] for _ in report])
                 msg = f"Failed to add all items: validation of {n_failed} out of {n_items} submitted items failed"
 
@@ -1165,12 +1182,12 @@ class RunEngineManager(Process):
         try:
             qsize = await self._plan_queue.get_queue_size()
         except Exception:
-            qsize = None
+            pass
 
         logger.info(self._generate_item_log_msg("Batch of items added", success, None, None, qsize))
 
         # Note, that 'item_list' may be an empty list []
-        rdict = {"success": success, "msg": msg, "qsize": qsize, "item_list": item_list}
+        rdict = {"success": success, "msg": msg, "qsize": qsize, "items": item_list, "results": report}
 
         return rdict
 
@@ -1188,11 +1205,14 @@ class RunEngineManager(Process):
         (``replace=False`` - UID is not changed) or complete replacement of the item (``replace=True`` -
         new UID is generated).
         """
-        success, msg, qsize, item_type = True, "", 0, None
+        success, msg, qsize, item, item_type = True, "", 0, None, None
 
         try:
 
-            item, item_type = self._get_item_from_request(request=request)
+            item, item_type, _success, _msg = self._get_item_from_request(request=request)
+            if not _success:
+                raise Exception(_msg)
+
             user, user_group = self._get_user_info_from_request(request=request)
 
             # Generate new UID if 'replace' flag is True, otherwise update the plan
@@ -1212,9 +1232,7 @@ class RunEngineManager(Process):
 
         logger.info(self._generate_item_log_msg("Item updated", success, item_type, item, qsize))
 
-        rdict = {"success": success, "msg": msg, "qsize": qsize}
-        if item_type:
-            rdict[item_type] = item
+        rdict = {"success": success, "msg": msg, "qsize": qsize, "item": item}
 
         return rdict
 
@@ -1299,7 +1317,7 @@ class RunEngineManager(Process):
         logger.info("Returning plan history ...")
         plan_history, plan_history_uid = await self._plan_queue.get_history()
 
-        return {"success": True, "msg": "", "history": plan_history, "plan_history_uid": plan_history_uid}
+        return {"success": True, "msg": "", "items": plan_history, "plan_history_uid": plan_history_uid}
 
     async def _history_clear_handler(self, request):
         """

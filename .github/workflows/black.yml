@@ -1,4 +1,4 @@
-name: Check Code Style
+name: Check Code Style - BLACK
 
 on: [push, pull_request]
 

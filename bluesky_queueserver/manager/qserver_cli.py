@@ -4,9 +4,10 @@ from datetime import datetime
 import pprint
 import argparse
 import enum
+import os
 
 import bluesky_queueserver
-from .comms import zmq_single_request
+from .comms import zmq_single_request, validate_zmq_key, generate_zmq_public_key, generate_new_zmq_key_pair
 
 import logging
 
@@ -739,10 +740,19 @@ def qserver():
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger("bluesky_queueserver").setLevel("ERROR")
 
+    s_enc = (
+        "If RE Manager is configured to use encrypted ZeroMQ communication channel,\n"
+        "the encryption must also be enabled before running 'qserver' CLI tool by setting\n"
+        "the environment variable QSERVER_ZMQ_PUBLIC_KEY to the value of a valid public key\n"
+        "(z85-encoded 40 character string):\n\n"
+        "    export QSERVER_ZMQ_PUBLIC_KEY='<public_key>'\n\n"
+        "Encryption is disabled by default."
+    )
     parser = argparse.ArgumentParser(
-        description="Command-line tool for communicating with RE Monitor.",
+        description="Command-line tool for communicating with RE Monitor.\n"
+        f"bluesky-queueserver version {qserver_version}.\n",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"Bluesky-QServer version {qserver_version}.\n{cli_examples}",
+        epilog=f"\n\n{s_enc}\n\n{cli_examples}\n\n",
     )
 
     parser.add_argument(
@@ -752,7 +762,6 @@ def qserver():
         nargs="+",
         help="a sequence of keywords and parameters that define the command",
     )
-
     parser.add_argument(
         "--address",
         "-a",
@@ -766,13 +775,24 @@ def qserver():
     print(f"Arguments: {args.command}")
 
     try:
+        # Read public key from the environment variable, then check if the CLI parameter exists
+        zmq_public_key = os.environ.get("QSERVER_ZMQ_PUBLIC_KEY", None)
+        zmq_public_key = zmq_public_key if zmq_public_key else None  # Case of key==""
+        if zmq_public_key is not None:
+            try:
+                validate_zmq_key(zmq_public_key)
+            except Exception as ex:
+                raise CommandParameterError(f"ZMQ public key is improperly formatted: {ex}")
+
         method, params, monitoring_mode = create_msg(args.command)
 
         if monitoring_mode:
             print("Running QServer monitor. Press Ctrl-C to exit ...")
 
         while True:
-            msg, msg_err = zmq_single_request(method, params, zmq_server_address=args.address)
+            msg, msg_err = zmq_single_request(
+                method, params, zmq_server_address=args.address, server_public_key=zmq_public_key
+            )
 
             now = datetime.now()
             current_time = now.strftime("%H:%M:%S")
@@ -802,3 +822,48 @@ def qserver():
         exit_code = QServerExitCodes.SUCCESS
 
     return exit_code.value
+
+
+def qserver_zmq_keys():
+    logging.basicConfig(level=logging.WARNING)
+    logging.getLogger("bluesky_queueserver").setLevel("INFO")
+
+    parser = argparse.ArgumentParser(
+        description="Bluesky-QServer: ZMQ security - generate public-private key pair for "
+        f"ZeroMQ control communication channel.\nbluesky-queueserver version {qserver_version}.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--zmq-private-key",
+        dest="zmq_private_key",
+        type=str,
+        default=None,
+        help="ZMQ server private key (for secured control connection). Setting the private key enables "
+        "the encryption. The parameter value should be 40 character string containing z85 encrypted "
+        "key. The private key passed as CLI parameter overrides the private key contained in the "
+        "environment variable QSERVER_ZMQ_PRIVATE_KEY.",
+    )
+
+    args = parser.parse_args()
+    try:
+        if args.zmq_private_key is not None:
+            private_key = args.zmq_private_key
+            validate_zmq_key(private_key)  # Will generate nice error message in case the key is invalid
+            public_key = generate_zmq_public_key(private_key)
+            msg = "Private key generated based on provided private key."
+        else:
+            public_key, private_key = generate_new_zmq_key_pair()
+            msg = "New public-private key pair."
+
+        print("====================================================================================")
+        print(f"     ZMQ SECURITY: {msg}")
+        print("====================================================================================")
+        print(f" Private key (RE Manager):                 {private_key}")
+        print(f" Public key (CLI client or HTTP server):   {public_key}")
+        print("====================================================================================\n")
+
+    except Exception as ex:
+        print(f"Failed to generate keys: {ex}")
+        return QServerExitCodes.EXCEPTION_OCCURRED.value
+
+    return QServerExitCodes.SUCCESS.value

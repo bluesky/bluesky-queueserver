@@ -12,9 +12,16 @@ from bluesky_queueserver.manager.profile_ops import (
 
 from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
 
-from ..comms import zmq_single_request, ZMQCommSendThreads, ZMQCommSendAsync, CommTimeoutError
+from ..comms import (
+    zmq_single_request,
+    ZMQCommSendThreads,
+    ZMQCommSendAsync,
+    CommTimeoutError,
+    generate_new_zmq_key_pair,
+)
 
 from ._common import (
+    zmq_secure_request,
     wait_for_condition,
     condition_environment_created,
     condition_queue_processing_finished,
@@ -24,6 +31,7 @@ from ._common import (
     condition_manager_idle,
     copy_default_profile_collection,
     append_code_to_last_startup_file,
+    set_qserver_zmq_public_key,
 )
 from ._common import re_manager, re_manager_pc_copy, re_manager_cmd, db_catalog  # noqa: F401
 
@@ -1706,6 +1714,68 @@ def test_zmq_api_queue_execution_2(re_manager):  # noqa: F811
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
     assert wait_for_condition(time=30, condition=condition_environment_closed)
+
+
+# fmt: off
+@pytest.mark.parametrize("test_mode", ["none", "ev"])
+# fmt: on
+def test_zmq_api_queue_execution_3(monkeypatch, re_manager_cmd, test_mode):  # noqa: F811
+    """
+    Test operation of RE Manager and 0MQ API with enabled encryption. Test options to
+    set the server (RE Manager) private key using the environment variable.
+    """
+    public_key, private_key = generate_new_zmq_key_pair()
+
+    if test_mode == "none":
+        # No encryption
+        pass
+    elif test_mode == "ev":
+        # Set server private key using environment variable
+        monkeypatch.setenv("QSERVER_ZMQ_PRIVATE_KEY", private_key)
+        set_qserver_zmq_public_key(monkeypatch, server_public_key=public_key)
+    else:
+        raise RuntimeError(f"Unrecognized test mode '{test_mode}'")
+
+    re_manager_cmd([])
+
+    # Plan
+    params1b = {"item": _plan1, "user": _user, "user_group": _user_group}
+    resp1b, _ = zmq_secure_request("queue_item_add", params1b)
+    assert resp1b["success"] is True, f"resp={resp1b}"
+
+    # Plan
+    params1d = {"item": _plan2, "user": _user, "user_group": _user_group}
+    resp1d, _ = zmq_secure_request("queue_item_add", params1d)
+    assert resp1d["success"] is True, f"resp={resp1d}"
+
+    params = {"user_group": _user_group}
+    resp1, _ = zmq_secure_request("plans_allowed", params)
+    resp2, _ = zmq_secure_request("devices_allowed", params)
+    assert len(resp1["plans_allowed"])
+    assert len(resp2["devices_allowed"])
+
+    # The queue contains only a single instruction (stop the queue).
+    resp2, _ = zmq_secure_request("environment_open")
+    assert resp2["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    resp2a, _ = zmq_secure_request("status")
+    assert resp2a["items_in_queue"] == 2
+    assert resp2a["items_in_history"] == 0
+
+    resp3, _ = zmq_secure_request("queue_start")
+    assert resp3["success"] is True
+
+    assert wait_for_condition(time=20, condition=condition_queue_processing_finished)
+
+    resp5a, _ = zmq_secure_request("status")
+    assert resp5a["items_in_queue"] == 0
+    assert resp5a["items_in_history"] == 2
+
+    # Close the environment
+    resp6, _ = zmq_secure_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
 """

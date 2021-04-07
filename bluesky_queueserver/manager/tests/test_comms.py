@@ -13,6 +13,9 @@ from bluesky_queueserver.manager.comms import (
     CommJsonRpcError,
     ZMQCommSendThreads,
     ZMQCommSendAsync,
+    generate_new_zmq_key_pair,
+    generate_zmq_public_key,
+    validate_zmq_key,
 )
 from bluesky_queueserver.tests.common import format_jsonrpc_msg
 
@@ -668,13 +671,70 @@ def test_PipeJsonRpcSendAsync_7_fail():
 
 
 # =======================================================================
+#                               ZMQ keys
+
+
+def test_generate_zmq_keys():
+    """
+    Functions ``generate_new_zmq_key_pair()``, ``generate_zmq_public_key()`` and ``validate_zmq_key()``.
+    """
+    key_public, key_private = generate_new_zmq_key_pair()
+    assert isinstance(key_public, str)
+    assert len(key_public) == 40
+    assert isinstance(key_private, str)
+    assert len(key_private) == 40
+
+    validate_zmq_key(key_public)
+    validate_zmq_key(key_private)
+
+    key_public_gen = generate_zmq_public_key(key_private)
+    assert key_public_gen == key_public
+
+
+# fmt: off
+@pytest.mark.parametrize("key", [
+    None,
+    10,
+    "",
+    "abc",
+    "wt8[6a8eoXFRVL<l2JBbOzs(hcI%kRBIr0Do/eL'",  # 40 characters, but contains invalid character "'"
+])
+# fmt: on
+def test_validate_zmq_key(key):
+    """
+    Function ``validate_zmq_key()``: cases of failing validation.
+    """
+    with pytest.raises(ValueError, match="the key must be a 40 byte z85 encoded string"):
+        validate_zmq_key(key)
+
+
+# =======================================================================
 #                       Class ZMQCommSendThreads
 
 
-def _zmq_server_1msg():
-    # ZMQ server that provides single response
+def _gen_server_keys(*, encryption_enabled):
+    """Generate server keys and a set of kwargs."""
+    if encryption_enabled:
+        public_key, private_key = generate_new_zmq_key_pair()
+        server_kwargs = {"private_key": private_key}
+    else:
+        public_key, private_key = None, None
+        server_kwargs = {}
+    return public_key, private_key, server_kwargs
+
+
+def _zmq_server_1msg(*, private_key=None):
+    """
+    ZMQ server that provides single response.
+    ``private_key`` - server private key (for tests with enabled encryption)
+    """
     ctx = zmq.Context()
     zmq_socket = ctx.socket(zmq.REP)
+
+    if private_key is not None:
+        zmq_socket.set(zmq.CURVE_SERVER, 1)
+        zmq_socket.set(zmq.CURVE_SECRETKEY, private_key.encode("utf-8"))
+
     zmq_socket.bind("tcp://*:60615")
     msg_in = zmq_socket.recv_json()
     msg_out = {"success": True, "some_data": 10, "msg_in": msg_in}
@@ -683,18 +743,20 @@ def _zmq_server_1msg():
 
 
 # fmt: off
+@pytest.mark.parametrize("encryption_enabled", [False, True])
 @pytest.mark.parametrize("is_blocking", [True, False])
 # fmt: on
-def test_ZMQCommSendThreads_1(is_blocking):
+def test_ZMQCommSendThreads_1(is_blocking, encryption_enabled):
     """
     Basic test of ZMQCommSendThreads class: single communication with the
     server both in blocking and non-blocking mode.
     """
+    public_key, _, server_kwargs = _gen_server_keys(encryption_enabled=encryption_enabled)
 
-    thread = threading.Thread(target=_zmq_server_1msg)
+    thread = threading.Thread(target=_zmq_server_1msg, kwargs=server_kwargs)
     thread.start()
 
-    zmq_comm = ZMQCommSendThreads()
+    zmq_comm = ZMQCommSendThreads(server_public_key=public_key if encryption_enabled else None)
     method, params = "testing", {"p1": 10, "p2": "abc"}
 
     msg_recv, msg_recv_err = {}, ""
@@ -723,10 +785,18 @@ def test_ZMQCommSendThreads_1(is_blocking):
     thread.join()
 
 
-def _zmq_server_2msg():
-    # ZMQ server: provides ability to communicate twice
+def _zmq_server_2msg(*, private_key=None):
+    """
+    ZMQ server: provides ability to communicate twice.
+    ``private_key`` - server private key (for tests with enabled encryption)
+    """
     ctx = zmq.Context()
     zmq_socket = ctx.socket(zmq.REP)
+
+    if private_key is not None:
+        zmq_socket.set(zmq.CURVE_SERVER, 1)
+        zmq_socket.set(zmq.CURVE_SECRETKEY, private_key.encode("utf-8"))
+
     zmq_socket.bind("tcp://*:60615")
     msg_in = zmq_socket.recv_json()
     msg_out = {"success": True, "some_data": 10, "msg_in": msg_in}
@@ -738,18 +808,20 @@ def _zmq_server_2msg():
 
 
 # fmt: off
+@pytest.mark.parametrize("encryption_enabled", [False, True])
 @pytest.mark.parametrize("is_blocking", [True, False])
 # fmt: on
-def test_ZMQCommSendThreads_2(is_blocking):
+def test_ZMQCommSendThreads_2(is_blocking, encryption_enabled):
     """
     Basic test of ZMQCommSendThreads class: two consecutive communications with the
     server both in blocking and non-blocking mode.
     """
+    public_key, _, server_kwargs = _gen_server_keys(encryption_enabled=encryption_enabled)
 
-    thread = threading.Thread(target=_zmq_server_2msg)
+    thread = threading.Thread(target=_zmq_server_2msg, kwargs=server_kwargs)
     thread.start()
 
-    zmq_comm = ZMQCommSendThreads()
+    zmq_comm = ZMQCommSendThreads(server_public_key=public_key if encryption_enabled else None)
     method, params = "testing", {"p1": 10, "p2": "abc"}
 
     msg_recv, msg_recv_err = {}, ""
@@ -779,10 +851,18 @@ def test_ZMQCommSendThreads_2(is_blocking):
     thread.join()
 
 
-def _zmq_server_2msg_delay1():
-    # ZMQ server: provides ability to communicate twice
+def _zmq_server_2msg_delay1(*, private_key=None):
+    """
+    ZMQ server: provides ability to communicate twice, short delay before sending the 1st response
+    ``private_key`` - server private key (for tests with enabled encryption)
+    """
     ctx = zmq.Context()
     zmq_socket = ctx.socket(zmq.REP)
+
+    if private_key is not None:
+        zmq_socket.set(zmq.CURVE_SERVER, 1)
+        zmq_socket.set(zmq.CURVE_SECRETKEY, private_key.encode("utf-8"))
+
     zmq_socket.bind("tcp://*:60615")
     msg_in = zmq_socket.recv_json()
     ttime.sleep(0.1)  # Delay before the 1st response
@@ -795,9 +875,10 @@ def _zmq_server_2msg_delay1():
 
 
 # fmt: off
+@pytest.mark.parametrize("encryption_enabled", [False, True])
 @pytest.mark.parametrize("is_blocking", [True, False])
 # fmt: on
-def test_ZMQCommSendThreads_3(is_blocking):
+def test_ZMQCommSendThreads_3(is_blocking, encryption_enabled):
     """
     Testing protection of '_zmq_communicate` with lock. In this test the function
     ``send_message` is called twice so that the second call is submitted before
@@ -806,11 +887,12 @@ def test_ZMQCommSendThreads_3(is_blocking):
     ``_zmq_communicate`` is protected by a lock, the second request will not
     be sent until the first message is processed.
     """
+    public_key, _, server_kwargs = _gen_server_keys(encryption_enabled=encryption_enabled)
 
-    thread = threading.Thread(target=_zmq_server_2msg_delay1)
+    thread = threading.Thread(target=_zmq_server_2msg_delay1, kwargs=server_kwargs)
     thread.start()
 
-    zmq_comm = ZMQCommSendThreads()
+    zmq_comm = ZMQCommSendThreads(server_public_key=public_key if encryption_enabled else None)
     method, params = "testing", {"p1": 10, "p2": "abc"}
 
     msg_recv, msg_recv_err = [], []
@@ -857,10 +939,18 @@ def test_ZMQCommSendThreads_3(is_blocking):
     thread.join()
 
 
-def _zmq_server_delay2():
-    # ZMQ server: provides ability to communicate twice
+def _zmq_server_delay2(*, private_key=None):
+    """
+    ZMQ server: provides ability to communicate twice, long delay before sending the 1st response
+    ``private_key`` - server private key (for tests with enabled encryption)
+    """
     ctx = zmq.Context()
     zmq_socket = ctx.socket(zmq.REP)
+
+    if private_key is not None:
+        zmq_socket.set(zmq.CURVE_SERVER, 1)
+        zmq_socket.set(zmq.CURVE_SECRETKEY, private_key.encode("utf-8"))
+
     zmq_socket.bind("tcp://*:60615")
     msg_in = zmq_socket.recv_json()
     ttime.sleep(3)  # Generate timeout at the client
@@ -873,6 +963,7 @@ def _zmq_server_delay2():
 
 
 # fmt: off
+@pytest.mark.parametrize("encryption_enabled", [False, True])
 @pytest.mark.parametrize(
     "is_blocking, raise_exception",
     [(True, False),  # Repeated test are intentional
@@ -884,15 +975,16 @@ def _zmq_server_delay2():
 )
 @pytest.mark.parametrize("delay_between_reads", [2, 0.1])
 # fmt: on
-def test_ZMQCommSendThreads_4(is_blocking, raise_exception, delay_between_reads):
+def test_ZMQCommSendThreads_4(is_blocking, raise_exception, delay_between_reads, encryption_enabled):
     """
     ZMQCommSendThreads: Timeout at the server.
     """
+    public_key, _, server_kwargs = _gen_server_keys(encryption_enabled=encryption_enabled)
 
-    thread = threading.Thread(target=_zmq_server_delay2)
+    thread = threading.Thread(target=_zmq_server_delay2, kwargs=server_kwargs)
     thread.start()
 
-    zmq_comm = ZMQCommSendThreads()
+    zmq_comm = ZMQCommSendThreads(server_public_key=public_key if encryption_enabled else None)
     method, params = "testing", {"p1": 10, "p2": "abc"}
 
     msg_recv, msg_recv_err = {}, ""
@@ -942,19 +1034,31 @@ def test_ZMQCommSendThreads_4(is_blocking, raise_exception, delay_between_reads)
     thread.join()
 
 
+def test_ZMQCommSendThreads_5_fail():
+    """
+    Invalid public key
+    """
+    with pytest.raises(ValueError):
+        ZMQCommSendThreads(server_public_key="abc")
+
+
 # =======================================================================
 #                       Class ZMQCommSendAsync
 
-
-def test_ZMQCommSendAsync_1():
+# fmt: off
+@pytest.mark.parametrize("encryption_enabled", [False, True])
+# fmt: on
+def test_ZMQCommSendAsync_1(encryption_enabled):
     """
     Basic test of ZMQCommSendAsync class: send one message to the server and receive response.
     """
-    thread = threading.Thread(target=_zmq_server_1msg)
+    public_key, _, server_kwargs = _gen_server_keys(encryption_enabled=encryption_enabled)
+
+    thread = threading.Thread(target=_zmq_server_1msg, kwargs=server_kwargs)
     thread.start()
 
     async def testing():
-        zmq_comm = ZMQCommSendAsync()
+        zmq_comm = ZMQCommSendAsync(server_public_key=public_key if encryption_enabled else None)
         method, params = "testing", {"p1": 10, "p2": "abc"}
 
         msg_recv = await zmq_comm.send_message(method=method, params=params)
@@ -968,17 +1072,21 @@ def test_ZMQCommSendAsync_1():
     thread.join()
 
 
-def test_ZMQCommSendAsync_2():
+# fmt: off
+@pytest.mark.parametrize("encryption_enabled", [False, True])
+# fmt: on
+def test_ZMQCommSendAsync_2(encryption_enabled):
     """
     Basic test of ZMQCommSendAsync class: two consecutive communications with the
     server both in blocking and non-blocking mode.
     """
+    public_key, _, server_kwargs = _gen_server_keys(encryption_enabled=encryption_enabled)
 
-    thread = threading.Thread(target=_zmq_server_2msg)
+    thread = threading.Thread(target=_zmq_server_2msg, kwargs=server_kwargs)
     thread.start()
 
     async def testing():
-        zmq_comm = ZMQCommSendAsync()
+        zmq_comm = ZMQCommSendAsync(server_public_key=public_key if encryption_enabled else None)
         method, params = "testing", {"p1": 10, "p2": "abc"}
 
         for val in (10, 20):
@@ -993,7 +1101,10 @@ def test_ZMQCommSendAsync_2():
     thread.join()
 
 
-def test_ZMQCommSendAsync_3():
+# fmt: off
+@pytest.mark.parametrize("encryption_enabled", [False, True])
+# fmt: on
+def test_ZMQCommSendAsync_3(encryption_enabled):
     """
     Testing protection of '_zmq_communicate` with lock. In this test the function
     ``send_message` is called twice so that the second call is submitted before
@@ -1002,13 +1113,14 @@ def test_ZMQCommSendAsync_3():
     ``_zmq_communicate`` is protected by a lock, the second request will not
     be sent until the first message is processed.
     """
+    public_key, _, server_kwargs = _gen_server_keys(encryption_enabled=encryption_enabled)
 
-    thread = threading.Thread(target=_zmq_server_2msg_delay1)
+    thread = threading.Thread(target=_zmq_server_2msg_delay1, kwargs=server_kwargs)
     thread.start()
 
     async def testing():
 
-        zmq_comm = ZMQCommSendAsync()
+        zmq_comm = ZMQCommSendAsync(server_public_key=public_key if encryption_enabled else None)
         method, params = "testing", {"p1": 10, "p2": "abc"}
 
         vals = (10, 20)
@@ -1033,6 +1145,7 @@ def test_ZMQCommSendAsync_3():
 
 
 # fmt: off
+@pytest.mark.parametrize("encryption_enabled", [False, True])
 @pytest.mark.parametrize(
     "raise_exception",
     [False,  # Repeated tests are intentional
@@ -1044,16 +1157,18 @@ def test_ZMQCommSendAsync_3():
 )
 @pytest.mark.parametrize("delay_between_reads", [2, 0.1])
 # fmt: on
-def test_ZMQCommSendAsync_4(raise_exception, delay_between_reads):
+def test_ZMQCommSendAsync_4(raise_exception, delay_between_reads, encryption_enabled):
     """
     ZMQCommSendAsync: Timeout at the server.
     """
-    thread = threading.Thread(target=_zmq_server_delay2)
+    public_key, _, server_kwargs = _gen_server_keys(encryption_enabled=encryption_enabled)
+
+    thread = threading.Thread(target=_zmq_server_delay2, kwargs=server_kwargs)
     thread.start()
 
     async def testing():
 
-        zmq_comm = ZMQCommSendAsync()
+        zmq_comm = ZMQCommSendAsync(server_public_key=public_key if encryption_enabled else None)
         method, params = "testing", {"p1": 10, "p2": "abc"}
 
         msg_recv, msg_recv_err = {}, ""
@@ -1086,3 +1201,15 @@ def test_ZMQCommSendAsync_4(raise_exception, delay_between_reads):
     asyncio.run(testing())
 
     thread.join()
+
+
+def test_ZMQCommSendAsync_5_fail():
+    """
+    Invalid public key
+    """
+
+    async def testing():
+        with pytest.raises(ValueError):
+            ZMQCommSendAsync(server_public_key="abc")
+
+    asyncio.run(testing())

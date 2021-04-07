@@ -12,6 +12,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_fixed_public_key = "wt8[6a8eoXFRVL<l2JBbOzs(hcI%kRBIr0Do/eLC"
+_fixed_private_key = "=@e7WwVuz{*eGcnv{AL@x2hmX!z^)wP3vKsQ{S7s"
+
 
 class CommTimeoutError(TimeoutError):
     """
@@ -421,6 +424,63 @@ class PipeJsonRpcSendAsync:
                 break
 
 
+# =========================================================================================
+#                      Generation and validation of ZMQ key pairs
+
+
+def generate_new_zmq_key_pair():
+    """
+    Generates new public-private key pair for ZMQ encryption.
+
+    Returns
+    -------
+    str, str
+        Public (first) and private (second) keys.
+    """
+    key_public, key_private = zmq.curve_keypair()
+    return key_public.decode("utf-8"), key_private.decode("utf-8")
+
+
+def generate_zmq_public_key(key_private):
+    """
+    Generates public key based on private key for ZMQ encryption.
+
+    Returns
+    -------
+    str
+        Public key.
+    """
+    key_public = zmq.curve_public(key_private.encode("utf-8"))
+    return key_public.decode("utf-8")
+
+
+def validate_zmq_key(key):
+    """
+    Validates format of a public or private key by feeding it to the function that generates
+    public key from a private key. The function will raise an exception if the key is improperly
+    formatted. The key is expected to be encoded using z85 (https://rfc.zeromq.org/spec/32/)
+    and represented as a 40 character string.
+
+    Parameters
+    ----------
+    key: str
+        public or private key.
+
+    Raises
+    ------
+    ValueError
+        raised in case the key is not valid.
+    """
+    try:
+        generate_zmq_public_key(key)
+    except Exception:
+        raise ValueError(f"Invalid key '{key}': the key must be a 40 byte z85 encoded string")
+
+
+# =========================================================================================
+#                                    ZMQ communication
+
+
 class ZMQCommSendThreads:
     """
     Thread-based API for communication with RE Manager via ZMQ.
@@ -440,6 +500,11 @@ class ZMQCommSendThreads:
         specifying ``raise_exceptions`` parameter of ``send_message()`` function. The exception
         ``CommTimeoutError`` is raised if the parameter is ``True``, otherwise error message
         is returned by ``send_message()``.
+    server_public_key : str or None
+        Server public key (z85-encoded 40 character string). The valid public key from the server
+        public/private key pair must be passed if encryption is enabled at the 0MQ server side.
+        Communication requests will time out if the key is invalid. Exception will be raised if
+        the key is improperly formatted. Encryption will be disabled if ``None`` is passed.
 
     Examples
     --------
@@ -485,8 +550,14 @@ class ZMQCommSendThreads:
         timeout_recv=2000,
         timeout_send=500,
         raise_exceptions=True,
+        server_public_key=None,
     ):
+
+        if server_public_key is not None:
+            validate_zmq_key(server_public_key)
+
         zmq_server_address = zmq_server_address or "tcp://localhost:60615"
+        self._server_public_key = server_public_key
 
         self._timeout_receive = timeout_recv  # Timeout for 'recv' operation (ms)
         self._timeout_send = timeout_send  # # Timeout for 'send' operation (ms)
@@ -657,6 +728,14 @@ class ZMQCommSendThreads:
         Open ZMQ socket.
         """
         self._zmq_socket = self._ctx.socket(zmq.REQ)
+
+        if self._server_public_key:
+            # Set server public key
+            self._zmq_socket.set(zmq.CURVE_SERVERKEY, self._server_public_key.encode("utf-8"))
+            # Set public and private keys for the client
+            self._zmq_socket.set(zmq.CURVE_PUBLICKEY, _fixed_public_key.encode("utf-8"))
+            self._zmq_socket.set(zmq.CURVE_SECRETKEY, _fixed_private_key.encode("utf-8"))
+
         # Increment `self._timeout_receive` so that timeout supplied to `self._zmq_socket.poll`
         #   expires first so that correct message is produced.
         self._zmq_socket.RCVTIMEO = self._timeout_receive + 1
@@ -668,6 +747,7 @@ class ZMQCommSendThreads:
         self._zmq_socket.connect(self._zmq_server_address)
 
         logger.info("Connected to ZeroMQ server '%s'" % str(self._zmq_server_address))
+        logger.info("ZMQ encryption: %s", "disabled" if self._server_public_key is None else "enabled")
 
     def _zmq_socket_restart(self):
         """
@@ -779,6 +859,11 @@ class ZMQCommSendAsync:
         specifying ``raise_exceptions`` parameter of ``send_message()`` function. The exception
         ``CommTimeoutError`` is raised if the parameter is ``True``, otherwise error message
         is returned by ``send_message()``.
+    server_public_key : str or None
+        Server public key (z85-encoded 40 character string). The valid public key from the server
+        public/private key pair must be passed if encryption is enabled at the 0MQ server side.
+        Communication requests will time out if the key is invalid. Exception will be raised if
+        the key is improperly formatted. Encryption will be disabled if ``None`` is passed.
 
     Examples
     --------
@@ -804,10 +889,12 @@ class ZMQCommSendAsync:
         timeout_recv=2000,
         timeout_send=500,
         raise_exceptions=True,
+        server_public_key=None,
     ):
         self._loop = loop if loop else asyncio.get_event_loop()
 
         zmq_server_address = zmq_server_address or "tcp://localhost:60615"
+        self._server_public_key = server_public_key
 
         self._timeout_receive = timeout_recv  # Timeout for 'recv' operation (ms)
         self._timeout_send = timeout_send  # # Timeout for 'send' operation (ms)
@@ -817,6 +904,9 @@ class ZMQCommSendAsync:
         self._ctx = zmq.asyncio.Context()
         self._zmq_socket = None
         self._zmq_server_address = zmq_server_address
+
+        if self._server_public_key is not None:
+            validate_zmq_key(self._server_public_key)
 
         self._zmq_socket_open()
         self._lock_zmq = asyncio.Lock()
@@ -853,6 +943,14 @@ class ZMQCommSendAsync:
 
     def _zmq_socket_open(self):
         self._zmq_socket = self._ctx.socket(zmq.REQ)
+
+        if self._server_public_key:
+            # Set server public key
+            self._zmq_socket.set(zmq.CURVE_SERVERKEY, self._server_public_key.encode("utf-8"))
+            # Set public and private keys for the client
+            self._zmq_socket.set(zmq.CURVE_PUBLICKEY, _fixed_public_key.encode("utf-8"))
+            self._zmq_socket.set(zmq.CURVE_SECRETKEY, _fixed_private_key.encode("utf-8"))
+
         # Increment `self._timeout_receive` so that timeout supplied to `self._zmq_socket.poll`
         #   expires first so that correct message is produced.
         self._zmq_socket.RCVTIMEO = self._timeout_receive + 1
@@ -864,6 +962,7 @@ class ZMQCommSendAsync:
         self._zmq_socket.connect(self._zmq_server_address)
 
         logger.info("Connected to ZeroMQ server '%s'" % str(self._zmq_server_address))
+        logger.info("ZMQ encryption: %s", "disabled" if self._server_public_key is None else "enabled")
 
     def _zmq_socket_restart(self):
         self._zmq_socket.close()
@@ -929,10 +1028,11 @@ class ZMQCommSendAsync:
         Close ZMQ socket. Call to close socket if the object is no longer needed, but may
         not be destroyed for some time.
         """
-        self._zmq_socket.close()
+        if self._zmq_socket:
+            self._zmq_socket.close()
 
 
-def zmq_single_request(method, params=None, *, zmq_server_address=None):
+def zmq_single_request(method, params=None, *, zmq_server_address=None, server_public_key=None):
     """
     Send a single request to ZMQ server. The function opens the socket, sends
     a single ZMQ request and closes the socket. The function is not expected
@@ -947,6 +1047,12 @@ def zmq_single_request(method, params=None, *, zmq_server_address=None):
     params: dict or None
         Dictionary of parameters (payload of the message). If ``None`` then
         the message is sent with empty payload: ``params = {}``.
+    server_public_key: str or None
+        Server public key (z85-encoded 40 character string). The Valid public key from the server
+        public/private key pair must be passed if encryption is enabled at the 0MQ server side.
+        Communication requests will time out if the key is invalid. Exception will be raised if
+        the key is improperly formatted. Encryption will be disabled if ``None`` is passed.
+
 
     Returns
     -------
@@ -960,8 +1066,11 @@ def zmq_single_request(method, params=None, *, zmq_server_address=None):
     msg_received = None
 
     async def send_request(method, params):
+
         nonlocal msg_received
-        zmq_to_manager = ZMQCommSendAsync(zmq_server_address=zmq_server_address)
+        zmq_to_manager = ZMQCommSendAsync(
+            zmq_server_address=zmq_server_address, server_public_key=server_public_key
+        )
         msg_received = await zmq_to_manager.send_message(method=method, params=params, raise_exceptions=True)
         zmq_to_manager.close()
 

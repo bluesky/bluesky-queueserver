@@ -5,6 +5,7 @@ import pytest
 from bluesky_queueserver.manager.tests._common import (  # noqa F401
     re_manager,
     re_manager_pc_copy,
+    re_manager_cmd,
     copy_default_profile_collection,
     append_code_to_last_startup_file,
 )
@@ -21,6 +22,7 @@ from bluesky_queueserver.server.tests.conftest import (  # noqa F401
 )
 
 from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
+
 
 # Plans used in most of the tests: '_plan1' and '_plan2' are quickly executed '_plan3' runs for 5 seconds.
 _plan1 = {"name": "count", "args": [["det1", "det2"]], "item_type": "plan"}

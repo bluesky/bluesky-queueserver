@@ -790,7 +790,8 @@ class RunEngineManager(Process):
         """
         Returns status of the manager.
         """
-        logger.info("Processing 'status' request ...")
+        # Status is expected to be requested very often. Print the message only in the debug mode.
+        logger.debug("Processing 'status' request ...")
 
         # Computed/retrieved data
         n_pending_items = await self._plan_queue.get_queue_size()

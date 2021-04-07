@@ -11,6 +11,7 @@ from bluesky_queueserver.manager.tests._common import (  # noqa F401
     copy_default_profile_collection,
     append_code_to_last_startup_file,
     set_qserver_zmq_public_key,
+    set_qserver_zmq_address,
 )
 
 from bluesky_queueserver.server.tests.conftest import (  # noqa F401
@@ -345,6 +346,49 @@ def test_http_server_secure_1(monkeypatch, re_manager_cmd, fastapi_server_fs, te
     resp8 = request_to_json("get", "/status")
     assert resp8["items_in_queue"] == 0
     assert resp8["items_in_history"] == 2
+
+    # Close the environment
+    resp9 = request_to_json("post", "/environment/close")
+    assert resp9 == {"success": True, "msg": ""}
+
+    wait_for_manager_state_idle(10)
+
+
+def test_http_server_set_zmq_address_1(monkeypatch, re_manager_cmd, fastapi_server_fs):  # noqa: F811
+    """
+    Test if ZMQ address of RE Manager is passed to the HTTP server using 'QSERVER_ZMQ_ADDRESS' environment
+    variable. Start RE Manager and HTTP server with ZMQ address for control communication channel
+    different from default address, add and execute a plan.
+    """
+
+    # Change ZMQ address to use port 60616 instead of the default port 60615.
+    zmq_server_address = "tcp://localhost:60616"
+    monkeypatch.setenv("QSERVER_ZMQ_ADDRESS", zmq_server_address)  # RE Manager
+    fastapi_server_fs()
+
+    set_qserver_zmq_address(monkeypatch, zmq_server_address=zmq_server_address)
+    re_manager_cmd(["--zmq-addr", "tcp://*:60616"])
+
+    # Now execute a plan to make sure everything works as expected
+    resp1 = request_to_json("post", "/queue/item/add", json={"item": _plan1})
+    assert resp1["success"] is True, str(resp1)
+
+    resp5 = request_to_json("post", "/environment/open")
+    assert resp5["success"] is True
+    assert wait_for_environment_to_be_created(10)
+
+    resp6 = request_to_json("get", "/status")
+    assert resp6["items_in_queue"] == 1
+    assert resp6["items_in_history"] == 0
+
+    resp7 = request_to_json("post", "/queue/start")
+    assert resp7["success"] is True
+
+    wait_for_queue_execution_to_complete(20)
+
+    resp8 = request_to_json("get", "/status")
+    assert resp8["items_in_queue"] == 0
+    assert resp8["items_in_history"] == 1
 
     # Close the environment
     resp9 = request_to_json("post", "/environment/close")

@@ -1722,7 +1722,7 @@ def test_zmq_api_queue_execution_2(re_manager):  # noqa: F811
 def test_zmq_api_queue_execution_3(monkeypatch, re_manager_cmd, test_mode):  # noqa: F811
     """
     Test operation of RE Manager and 0MQ API with enabled encryption. Test options to
-    set the server (RE Manager) private key using CLI parameter and environment variable.
+    set the server (RE Manager) private key using the environment variable.
     """
     public_key, private_key = generate_new_zmq_key_pair()
 

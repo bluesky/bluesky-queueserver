@@ -1064,7 +1064,7 @@ def test_qserver_reload_permissions(re_manager_pc_copy, tmp_path):  # noqa F811
 def test_qserver_secure_1(monkeypatch, re_manager_cmd, test_mode):  # noqa: F811
     """
     Test operation of `qserver` CLI tool with enabled encryption. Test options to
-    set the private key used by `qserver` using CLI parameter and environment variable.
+    set the private key used by `qserver` using the environment variable.
     """
     public_key, private_key = generate_new_zmq_key_pair()
 

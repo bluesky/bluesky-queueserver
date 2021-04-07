@@ -501,7 +501,7 @@ class ZMQCommSendThreads:
         ``CommTimeoutError`` is raised if the parameter is ``True``, otherwise error message
         is returned by ``send_message()``.
     server_public_key : str or None
-        Server public key (z85-encoded 40 character string). Valid public key from server
+        Server public key (z85-encoded 40 character string). The valid public key from the server
         public/private key pair must be passed if encryption is enabled at the 0MQ server side.
         Communication requests will time out if the key is invalid. Exception will be raised if
         the key is improperly formatted. Encryption will be disabled if ``None`` is passed.

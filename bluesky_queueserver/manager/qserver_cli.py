@@ -745,7 +745,7 @@ def qserver():
         "the encryption must also be enabled before running 'qserver' CLI tool by setting\n"
         "the environment variable QSERVER_ZMQ_PUBLIC_KEY to the value of a valid public key\n"
         "(z85-encoded 40 character string):\n\n"
-        "    export QSERVER_ZMQ_PUBLIC_KEY '<public_key>'\n\n"
+        "    export QSERVER_ZMQ_PUBLIC_KEY='<public_key>'\n\n"
         "Encryption is disabled by default."
     )
     parser = argparse.ArgumentParser(
@@ -830,8 +830,8 @@ def qserver_zmq_keys():
 
     parser = argparse.ArgumentParser(
         description="Bluesky-QServer: ZMQ security - generate public-private key pair for "
-        "ZMQ control communication channel.\n",
-        epilog=f"Bluesky-QServer version {qserver_version}.",
+        f"ZeroMQ control communication channel.\nbluesky-queueserver version {qserver_version}.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--zmq-private-key",

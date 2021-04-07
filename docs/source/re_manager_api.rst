@@ -958,8 +958,7 @@ Returns       **success**: *boolean*
                   UID of the returned run list, identical to the RE Manager status field with
                   the same name.
 ------------  -----------------------------------------------------------------------------------------
-Execution     The request only initiates the operation of pausing the plan. Wait until the plan is
-              paused by polling 'manager_state' status field (expected value is 'paused').
+Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 
 

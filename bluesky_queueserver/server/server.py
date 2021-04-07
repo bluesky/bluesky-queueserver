@@ -44,8 +44,12 @@ async def startup_event():
 
     # TODO: implement nicer exit with error reporting in case of failure
 
+    zmq_server_address = os.getenv("QSERVER_ZMQ_ADDRESS", None)
+
     # ZMQCommSendAsync should be created from the event loop of FastAPI server.
-    zmq_to_manager = ZMQCommSendAsync(raise_exceptions=False, server_public_key=zmq_public_key)
+    zmq_to_manager = ZMQCommSendAsync(
+        raise_exceptions=False, server_public_key=zmq_public_key, zmq_server_address=zmq_server_address
+    )
 
     # Import module with custom code
     module_name = os.getenv("BLUESKY_HTTPSERVER_CUSTOM_MODULE", None)

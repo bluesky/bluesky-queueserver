@@ -156,17 +156,52 @@ def clear_qserver_zmq_public_key(mpatch):
     mpatch.delenv(_name_ev_public_key)
 
 
+_name_ev_zmq_address = "_TEST_QSERVER_ZMQ_ADDRESS_"
+
+
+def set_qserver_zmq_address(mpatch, *, zmq_server_address):
+    """
+    Temporarily set environment variable holding server zmq address for using with ``zmq_secure_request``.
+    Note, that ``monkeypatch`` should precede the fixture that is starting RE Manager in test
+    parameters. Otherwise the environment variable will be cleared before RE Manager is stopped and
+    the test will fail.
+
+    Parameters
+    ----------
+    mpatch
+        instance of ``monkeypatch``.
+    server_zmq_address : str
+        ZMQ address (such as 'tcp://localhost:60615').
+    """
+    mpatch.setenv(_name_ev_zmq_address, zmq_server_address)
+
+
+def clear_qserver_zmq_address(mpatch):
+    """
+    Clear the environment variable holding server zmq address set by ``set_qserver_zmq_address``.
+    """
+    mpatch.delenv(_name_ev_zmq_address)
+
+
 def zmq_secure_request(method, params=None, *, zmq_server_address=None):
     """
     Wrapper for 'zmq_single_request'. Verifies if environment variable holding server public key is set
     and passes the key to 'zmq_single_request' . Simplifies writing tests that use RE Manager in secure mode.
     Use functions `set_qserver_zmq_public_key()` and `clear_qserver_zmq_public_key()` to set and
     clear the environment variable.
+
+    The function also verifies if the environment variable holding ZMQ server address is set, and
+    passes the address to ``zmq_single_request``. If ``zmq_server_address`` is passed as a parameter, then
+    the environment variable is ignored (at least in current implementation).
     """
     server_public_key = None
 
     if _name_ev_public_key in os.environ:
         server_public_key = os.environ[_name_ev_public_key]
+
+    # Use the address passed in environment variable only if the parameter 'zmq_server_address' is None
+    if (_name_ev_zmq_address in os.environ) and (zmq_server_address is None):
+        zmq_server_address = os.environ[_name_ev_zmq_address]
 
     return zmq_single_request(
         method=method, params=params, zmq_server_address=zmq_server_address, server_public_key=server_public_key

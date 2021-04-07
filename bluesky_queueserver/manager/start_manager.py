@@ -207,7 +207,7 @@ def start_manager():
         dest="zmq_addr",
         type=str,
         default="tcp://*:60615",
-        help="The address of ZMQ server (control connection).",
+        help="The address of ZMQ server (control connection), e.g. 'tcp://*:60615.'",
     )
 
     group = parser.add_mutually_exclusive_group()

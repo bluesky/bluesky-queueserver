@@ -1048,7 +1048,7 @@ def zmq_single_request(method, params=None, *, zmq_server_address=None, server_p
         Dictionary of parameters (payload of the message). If ``None`` then
         the message is sent with empty payload: ``params = {}``.
     server_public_key: str or None
-        Server public key (z85-encoded 40 character string). Valid public key from server
+        Server public key (z85-encoded 40 character string). The Valid public key from the server
         public/private key pair must be passed if encryption is enabled at the 0MQ server side.
         Communication requests will time out if the key is invalid. Exception will be raised if
         the key is improperly formatted. Encryption will be disabled if ``None`` is passed.

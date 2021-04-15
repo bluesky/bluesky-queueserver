@@ -900,6 +900,41 @@ def validate_plan(plan, *, allowed_plans, allowed_devices):
     return success, msg
 
 
+def bind_plan_arguments(*, plan_args, plan_kwargs, plan_parameters):
+    """
+    Bind plan arguments given as ``plan_args`` and ``plan_kwargs`` to plan parameters.
+    The function contains shortened version of code executed in ``validate_plan`` function.
+    The dictionary of bound arguments can be accessed as ``bound_args.arguments``.
+
+    Parameters
+    ----------
+    plan_args : list
+        A list containing plan args
+    plan_kwargs : list
+        A list containing plan kwargs
+    plan_parameters : dict
+        A dictionary containing description of plan signature. The dictionary is the entry
+        of ``allowed_plans`` dictionary (e.g. ``allowed_plans['count']``)
+
+    Returns
+    -------
+    bound_args : inspect.BoundArgument
+        Bound arguments of the plan.
+
+    Raises
+    ------
+    TypeError
+        Arguments could not be bound to plan parameters (raised by ``inspect.Signature.bind``.
+    """
+    param_list = copy.deepcopy(plan_parameters["parameters"])
+    parameters, _ = _construct_parameters(param_list)
+    # Create signature based on the list of parameters
+    sig = inspect.Signature(parameters)
+    # Verify the list of parameters based on signature.
+    bound_args = sig.bind(*plan_args, **plan_kwargs)
+    return bound_args
+
+
 def bytes2hex(bytes_array):
     """
     Converts byte array (output of ``pickle.dumps()``) to spaced hexadecimal string representation.

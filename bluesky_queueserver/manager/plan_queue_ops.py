@@ -1033,25 +1033,36 @@ class PlanQueueOperations:
     # ----------------------------------------------------------------------
     #          Standard item operations during queue execution
 
-    async def _process_next_queue_item(self):
-        item_json = await self._r_pool.lpop(self._name_plan_queue)
-        if item_json:
-            item = json.loads(item_json)
+    async def _process_next_item(self):
+        """
+        See ``self.process_next_item()`` method.
+        """
+        loop_mode = self._plan_queue_mode["loop"]
+
+        # Read the item from the front of the queue
+        item = await self._get_item(pos="front")
+        item_to_return = item
+        if item:
             item_type = item["item_type"]
             if item_type == "plan":
                 item_to_return = await self._set_next_item_as_running()
             else:
                 # Items other than plans should be pushed to the back of the queue.
                 await self._pop_item_from_queue(pos="front")
-                item_to_add = self.set_new_item_uuid(item)
-                item_to_return = await self._add_item_to_queue(item_to_add)
-        else:
-            item_to_return = {}
+                if loop_mode:
+                    item_to_add = self.set_new_item_uuid(item)
+                    await self._add_item_to_queue(item_to_add)
         return item_to_return
 
-    async def process_next_queue_item(self):
+    async def process_next_item(self):
+        """
+        Process the next item in the queue. If the item is a plan, it is set as currently
+        running (``self.set_next_item_as_running``), otherwise it is popped from the queue.
+        If the queue is LOOP mode, then it the item other than plan is pushed to the back
+        of the queue. (Plans are pushed to the back of the queue upon successful completion.)
+        """
         async with self._lock:
-            return await self._process_next_queue_item()
+            return await self._process_next_item()
 
     async def _set_next_item_as_running(self):
         """
@@ -1062,9 +1073,11 @@ class PlanQueueOperations:
             plan_json = await self._r_pool.lpop(self._name_plan_queue)
             if plan_json:
                 plan = json.loads(plan_json)
-                if plan["item_uid"] != "plan":
-                    raise RuntimeError("Function 'PlanQueueOperations.set_next_item_as_running' was called for "
-                                       f"an item other than plan: {plan}")
+                if plan["item_type"] != "plan":
+                    raise RuntimeError(
+                        "Function 'PlanQueueOperations.set_next_item_as_running' was called for "
+                        f"an item other than plan: {plan}"
+                    )
                 self._plan_queue_uid = self.new_item_uid()
                 await self._set_running_item_info(plan)
             else:
@@ -1079,6 +1092,9 @@ class PlanQueueOperations:
         (e.g. not an instruction), otherwise an exception will be raised. The item is removed
         from the queue. UID remains in ``self._uid_dict``, i.e. item with the same UID
         may not be added to the queue while it is being executed.
+
+        This function can only be applied to the plans. Use ``process_next_item`` that
+        works correctly for any item (it calls this function if an item is a plan).
 
         Returns
         -------

@@ -153,7 +153,7 @@ def test_verify_item(pq, plan, f_kwargs, result, errmsg):
     Tests for method ``_verify_item()``.
     """
     # Set two existiing plans and then set one of them as running
-    existing_plans = [{"item_uid": "two"}, {"item_uid": "three"}]
+    existing_plans = [{"item_type": "plan", "item_uid": "two"}, {"item_type": "plan", "item_uid": "three"}]
 
     async def set_plans():
         # Add plan to queue
@@ -392,9 +392,9 @@ def test_get_queue_full_1(pq):
     async def testing():
 
         plans = [
-            {"item_uid": "one", "name": "a"},
-            {"item_uid": "two", "name": "b"},
-            {"item_uid": "three", "name": "c"},
+            {"item_type": "plan", "item_uid": "one", "name": "a"},
+            {"item_type": "plan", "item_uid": "two", "name": "b"},
+            {"item_type": "plan", "item_uid": "three", "name": "c"},
         ]
 
         for p in plans:
@@ -466,9 +466,9 @@ def test_get_item_2_fail(pq):
 
     async def testing():
 
-        await pq.add_item_to_queue({"item_uid": "one", "name": "a"})
-        await pq.add_item_to_queue({"item_uid": "two", "name": "b"})
-        await pq.add_item_to_queue({"item_uid": "three", "name": "c"})
+        await pq.add_item_to_queue({"item_type": "plan", "item_uid": "one", "name": "a"})
+        await pq.add_item_to_queue({"item_type": "plan", "item_uid": "two", "name": "b"})
+        await pq.add_item_to_queue({"item_type": "plan", "item_uid": "three", "name": "c"})
         assert await pq.get_queue_size() == 3
 
         pq_uid = pq.plan_queue_uid
@@ -532,15 +532,15 @@ def test_add_item_to_queue_2(pq):
         assert qsize == n, f"plan: {plan}"
 
     async def testing():
-        await add_plan({"name": "a"}, 1)
-        await add_plan({"name": "b"}, 2)
-        await add_plan({"name": "c"}, 3, pos="back")
+        await add_plan({"item_type": "plan", "name": "a"}, 1)
+        await add_plan({"item_type": "plan", "name": "b"}, 2)
+        await add_plan({"item_type": "plan", "name": "c"}, 3, pos="back")
 
         plan_queue, _ = await pq.get_queue()
         displaced_uid = plan_queue[1]["item_uid"]
 
-        await add_plan({"name": "d"}, 4, before_uid=displaced_uid)
-        await add_plan({"name": "e"}, 5, after_uid=displaced_uid)
+        await add_plan({"item_type": "plan", "name": "d"}, 4, before_uid=displaced_uid)
+        await add_plan({"item_type": "plan", "name": "e"}, 5, after_uid=displaced_uid)
 
         # This reduces the number of elements in the queue by one
         await pq.set_next_item_as_running()
@@ -696,7 +696,11 @@ def test_replace_item_3_failing(pq):
     """
 
     async def testing():
-        plans = [{"name": "a"}, {"name": "b"}, {"name": "c"}]
+        plans = [
+            {"item_type": "plan", "name": "a"},
+            {"item_type": "plan", "name": "b"},
+            {"item_type": "plan", "name": "c"},
+        ]
         plans_added = [None] * len(plans)
         qsizes = [None] * len(plans)
 
@@ -897,9 +901,9 @@ def test_pop_item_from_queue_3(pq):
     """
 
     async def testing():
-        await pq.add_item_to_queue({"name": "a"})
-        await pq.add_item_to_queue({"name": "b"})
-        await pq.add_item_to_queue({"name": "c"})
+        await pq.add_item_to_queue({"item_type": "plan", "name": "a"})
+        await pq.add_item_to_queue({"item_type": "plan", "name": "b"})
+        await pq.add_item_to_queue({"item_type": "plan", "name": "c"})
         assert await pq.get_queue_size() == 3
 
         plans, _ = await pq.get_queue()
@@ -958,9 +962,9 @@ def test_clear_queue(pq):
     """
 
     async def testing():
-        await pq.add_item_to_queue({"name": "a"})
-        await pq.add_item_to_queue({"name": "b"})
-        await pq.add_item_to_queue({"name": "c"})
+        await pq.add_item_to_queue({"item_type": "plan", "name": "a"})
+        await pq.add_item_to_queue({"item_type": "plan", "name": "b"})
+        await pq.add_item_to_queue({"item_type": "plan", "name": "c"})
         # Set one of 3 plans as running (removes it from the queue)
         await pq.set_next_item_as_running()
 
@@ -1015,9 +1019,13 @@ def test_add_to_history_functions(pq):
     asyncio.run(testing())
 
 
-def test_set_next_item_as_running(pq):
+@pytest.mark.parametrize("func", ["process_next_item", "set_next_item_as_running"])
+def test_process_next_item_1(pq, func):
     """
-    Test for ``PlanQueueOperations.set_next_item_as_running()`` function
+    Test for ``PlanQueueOperations.process_next_item()`` and
+    ``PlanQueueOperations.set_next_item_as_running()`` functions.
+    Those functions are interchangeable for plans, but ``process_next_item`` works
+    for items and plans.
     """
 
     async def testing():
@@ -1029,13 +1037,20 @@ def test_set_next_item_as_running(pq):
         assert await pq.is_item_running() is False
 
         # Apply to a queue with several plans
-        await pq.add_item_to_queue({"item_type": "plan", "name": "a"})
-        await pq.add_item_to_queue({"item_type": "plan", "name": "b"})
-        await pq.add_item_to_queue({"item_type": "plan", "name": "c"})
+        p1, _ = await pq.add_item_to_queue({"item_type": "plan", "name": "a"})
+        p2, _ = await pq.add_item_to_queue({"item_type": "plan", "name": "b"})
+        p3, _ = await pq.add_item_to_queue({"item_type": "plan", "name": "c"})
+
+        if func == "process_next_item":
+            f = pq.process_next_item
+        elif func == "set_next_item_as_running":
+            f = pq.set_next_item_as_running
+        else:
+            assert False, f"Unknown test case: '{func}'"
 
         # Set one of 3 plans as running (removes it from the queue)
         pq_uid = pq.plan_queue_uid
-        assert await pq.set_next_item_as_running() != {}
+        assert await f() != {}
 
         assert pq.plan_queue_uid != pq_uid
         assert await pq.get_queue_size() == 2
@@ -1043,10 +1058,57 @@ def test_set_next_item_as_running(pq):
 
         # Apply if a plan is already running
         pq_uid = pq.plan_queue_uid
-        assert await pq.set_next_item_as_running() == {}
+        assert await f() == {}
         assert pq.plan_queue_uid == pq_uid
         assert await pq.get_queue_size() == 2
         assert len(pq._uid_dict) == 3
+
+    asyncio.run(testing())
+
+
+@pytest.mark.parametrize("loop_mode", [True, True])
+def test_process_next_item_2(pq, loop_mode):
+    """
+    Test for ``PlanQueueOperations.process_next_item()`` and
+    ``PlanQueueOperations.set_next_item_as_running()`` functions.
+    Those functions are interchangeable for plans, but ``process_next_item`` works
+    for items and plans.
+
+    Test with 'instruction' item.
+    """
+
+    async def testing():
+
+        queue_mode = pq.plan_queue_mode
+        queue_mode["loop"] = loop_mode
+        await pq.set_plan_queue_mode(queue_mode)
+
+        # Apply to empty queue
+        assert await pq.get_queue_size() == 0
+        assert await pq.is_item_running() is False
+        assert await pq.set_next_item_as_running() == {}
+        assert await pq.get_queue_size() == 0
+        assert await pq.is_item_running() is False
+
+        # Apply to a queue with several plans
+        p0, _ = await pq.add_item_to_queue({"item_type": "instruction", "name": "a"})
+        p1, _ = await pq.add_item_to_queue({"item_type": "plan", "name": "b"})
+        p2, _ = await pq.add_item_to_queue({"item_type": "plan", "name": "c"})
+
+        # Set one of 3 plans as running (removes it from the queue)
+        pq_uid = pq.plan_queue_uid
+        assert await pq.process_next_item() == p0
+
+        assert pq.plan_queue_uid != pq_uid
+        assert await pq.get_queue_size() == 3 if loop_mode else 2
+        assert len(pq._uid_dict) == 3 if loop_mode else 2
+
+        queue, _ = await pq.get_queue()
+        assert queue[0] == (p1 if loop_mode else p0)
+        assert queue[1] == (p2 if loop_mode else p1)
+        if loop_mode:
+            assert queue[2]["name"] == p0["name"]
+            assert queue[2]["item_uid"] != p0["name"]
 
     asyncio.run(testing())
 

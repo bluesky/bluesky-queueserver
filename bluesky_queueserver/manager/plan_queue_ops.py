@@ -1,5 +1,6 @@
 import aioredis
 import asyncio
+import copy
 import json
 import uuid
 
@@ -275,6 +276,7 @@ class PlanQueueOperations:
         dict
             Plan with new UID.
         """
+        item = copy.deepcopy(item)
         self._verify_item_type(item)
         item["item_uid"] = self.new_item_uid()
         return item
@@ -635,11 +637,13 @@ class PlanQueueOperations:
 
         Parameters
         ----------
-        pos: int or str or None
+        pos : int or str or None
             Integer index specified position in the queue. Available string values: "front" or "back".
             The range for the index is ``-qsize..qsize-1``: ``0, -qsize`` - front element of the queue,
             ``-1, qsize-1`` - back element of the queue. If ``pos`` is ``None``, then the plan is popped
             from the back of the queue.
+        uid : str or None
+            UID of the item to be removed
 
         Returns
         -------
@@ -1027,7 +1031,27 @@ class PlanQueueOperations:
             await self._clear_history()
 
     # ----------------------------------------------------------------------
-    #          Standard plan operations during queue execution
+    #          Standard item operations during queue execution
+
+    async def _process_next_queue_item(self):
+        item_json = await self._r_pool.lpop(self._name_plan_queue)
+        if item_json:
+            item = json.loads(item_json)
+            item_type = item["item_type"]
+            if item_type == "plan":
+                item_to_return = await self._set_next_item_as_running()
+            else:
+                # Items other than plans should be pushed to the back of the queue.
+                await self._pop_item_from_queue(pos="front")
+                item_to_add = self.set_new_item_uuid(item)
+                item_to_return = await self._add_item_to_queue(item_to_add)
+        else:
+            item_to_return = {}
+        return item_to_return
+
+    async def process_next_queue_item(self):
+        async with self._lock:
+            return await self._process_next_queue_item()
 
     async def _set_next_item_as_running(self):
         """
@@ -1037,8 +1061,11 @@ class PlanQueueOperations:
         if not await self._is_item_running():
             plan_json = await self._r_pool.lpop(self._name_plan_queue)
             if plan_json:
-                self._plan_queue_uid = self.new_item_uid()
                 plan = json.loads(plan_json)
+                if plan["item_uid"] != "plan":
+                    raise RuntimeError("Function 'PlanQueueOperations.set_next_item_as_running' was called for "
+                                       f"an item other than plan: {plan}")
+                self._plan_queue_uid = self.new_item_uid()
                 await self._set_running_item_info(plan)
             else:
                 plan = {}
@@ -1048,7 +1075,8 @@ class PlanQueueOperations:
 
     async def set_next_item_as_running(self):
         """
-        Sets the next item from the queue as 'running'. The item is removed
+        Sets the next item from the queue as 'running'. The item MUST be a plan
+        (e.g. not an instruction), otherwise an exception will be raised. The item is removed
         from the queue. UID remains in ``self._uid_dict``, i.e. item with the same UID
         may not be added to the queue while it is being executed.
 
@@ -1065,14 +1093,23 @@ class PlanQueueOperations:
         """
         See ``self.set_processed_item_as_completed`` method.
         """
+        # If loop_mode is True, then add item to the back of the queue
+        loop_mode = self._plan_queue_mode["loop"]
+
         # Note: UID remains in the `self._uid_dict` after this operation
         if await self._is_item_running():
             item = await self._get_running_item_info()
+            if loop_mode:
+                item_to_add = item.copy()
+                item_to_add = self.set_new_item_uuid(item_to_add)
+                await self._r_pool.rpush(self._name_plan_queue, json.dumps(item_to_add))
+                self._uid_dict_add(item_to_add)
             item.setdefault("result", {})
             item["result"]["exit_status"] = exit_status
             item["result"]["run_uids"] = run_uids
             await self._clear_running_item_info()
-            self._uid_dict_remove(item["item_uid"])
+            if not loop_mode:
+                self._uid_dict_remove(item["item_uid"])
             await self._add_to_history(item)
         else:
             item = {}

@@ -547,6 +547,13 @@ class RunEngineManager(Process):
                     success = False
                     err_msg = f"Unsupported action: '{next_item['name']}' (item {next_item})"
 
+                # Add the instruction to the queue if the queue is in the 'loop' mode.
+                #   (looping is handled for plans in the PlanQueueOperations class).
+                if self._plan_queue.plan_queue_mode["loop"]:
+                    item_to_add = next_item.copy()
+                    item_to_add = self._plan_queue.set_new_item_uuid(item_to_add)
+                    self._plan_queue.add_item_to_queue(item_to_add)
+
             else:
                 success = False
                 err_msg = f"Unrecognized item type: '{next_item['item_type']}' (item {next_item})"

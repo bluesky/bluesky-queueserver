@@ -83,6 +83,37 @@ def test_queue_clean(pq, plan_running, plans, result_running, result_plans):
     asyncio.run(testing())
 
 
+def test_set_plan_queue_mode(pq):
+    """
+    Test basic functionality of ``set_plan_queue_mode`` function.
+    """
+
+    async def testing():
+        # Initially plan queue mode must be default queue mode
+        assert pq.plan_queue_mode == pq.plan_queue_mode_default
+        assert pq.plan_queue_mode["loop"] is False
+
+        # The properties are expecte to return copies
+        assert pq.plan_queue_mode is not pq._plan_queue_mode
+        assert pq.plan_queue_mode_default is not pq._plan_queue_mode_default
+
+        queue_mode = {"loop": True}
+        await pq.set_plan_queue_mode(queue_mode)
+        assert pq._plan_queue_mode is not queue_mode  # Verify that 'set' operation performs copy
+        assert pq.plan_queue_mode == queue_mode
+
+        with pytest.raises(ValueError, match="Unsupported plan queue mode parameter 'nonexisting_key'"):
+            await pq.set_plan_queue_mode({"nonexisting_key": True})
+
+        with pytest.raises(ValueError, match="Parameters {'loop'} are missing"):
+            await pq.set_plan_queue_mode({})
+
+        with pytest.raises(TypeError, match="Unsupported type .* of the parameter 'loop'"):
+            await pq.set_plan_queue_mode({"loop": 10})
+
+    asyncio.run(testing())
+
+
 # fmt: off
 @pytest.mark.parametrize("plan, result",
                          [({"a": 10}, True),

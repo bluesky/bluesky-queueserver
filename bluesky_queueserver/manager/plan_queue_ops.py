@@ -63,6 +63,7 @@ class PlanQueueOperations:
         self._name_running_plan = "running_plan"
         self._name_plan_queue = "plan_queue"
         self._name_plan_history = "plan_history"
+        self._name_plan_queue_mode = "plan_queue_mode"
 
         # Plan queue UID is expected to change each time the contents of the queue is changed.
         #   Since `self._uid_dict` is modified each time the queue is updated, it is sufficient
@@ -72,6 +73,14 @@ class PlanQueueOperations:
         self._plan_history_uid = self.new_item_uid()
 
         self._lock = None
+
+        # Settings that determine the mode of queue operation. The set of supported modes
+        #      may be extended if additional modes are to be implemented. The mode will be saved in
+        #      Redis, so that it is not modified between restarts of the manager.
+        #   Loop mode: loop, True/False. If enabled, then each executed item (plan or instruction)
+        #      will be placed to the back of the queue.
+        self._plan_queue_mode_default = {"loop": False}
+        self._plan_queue_mode = self.plan_queue_mode_default
 
     @property
     def plan_queue_uid(self):
@@ -91,6 +100,78 @@ class PlanQueueOperations:
         """
         return self._plan_history_uid
 
+    @property
+    def plan_queue_mode(self):
+        """
+        Returns current plan queue mode. Plan queue mode is a dictionary with parameters
+        used for selection of the algorithm(s) for handling queue items. Supported parameters:
+        ``loop (boolean)`` enables and disables the loop mode.
+        """
+        return self._plan_queue_mode.copy()
+
+    @property
+    def plan_queue_mode_default(self):
+        """
+        Returns the default queue mode (default settings)
+        """
+        return self._plan_queue_mode_default.copy()
+
+    def _validate_plan_queue_mode(self, plan_queue_mode):
+        """
+        Validate the dictionary 'plan_queue_mode'.
+
+        Parameters
+        ----------
+        plan_queue_mode : dict
+            Dictionary that contains plan queue mode. See ``self.plan_queue_mode_default``.
+        """
+        if not isinstance(plan_queue_mode, dict):
+            raise TypeError(
+                f"Unsupported type '{type(plan_queue_mode)}' of 'plan_queue_mode'. " "Expected type: 'dict'"
+            )
+
+        # It is assumed that 'plan_queue_mode' will be a single-level dictionary that contains
+        #   simple types (bool, int etc), so the following code provide better error reporting
+        #   than schema validation.
+        expected_params = {"loop": bool}
+        missing_keys = set(expected_params.keys())
+        for k, v in plan_queue_mode.items():
+            if k not in expected_params:
+                raise ValueError(
+                    f"Unsupported plan queue mode parameter '{k}': "
+                    f"supported parameters {list(expected_params.keys())}"
+                )
+            missing_keys.remove(k)
+            key_type = expected_params.get(k)  # Using [k] makes PyCharm to display annoying error
+            if not isinstance(v, key_type):
+                raise TypeError(
+                    f"Unsupported type '{type(v)}' of the parameter '{k}': " f"expected type '{key_type}'"
+                )
+        if missing_keys:
+            raise ValueError(
+                f"Parameters {missing_keys} are missing from 'plan_queue_mode' dictionary. "
+                f"The following keys are expected: {list(expected_params.keys())}"
+            )
+
+    async def _load_plan_queue_mode(self):
+        """
+        Load plan queue mode from Redis.
+        """
+        queue_mode = await self._r_pool.get(self._name_plan_queue_mode)
+        self._plan_queue_mode = json.loads(queue_mode) if queue_mode else self.plan_queue_mode_default
+
+    async def set_plan_queue_mode(self, plan_queue_mode):
+        """
+        Set plan queue mode. The plan queue mode can be a string ``default`` or a dictionary with
+        parameters. See ``self.plan_queue_mode_default`` for an example of the parameter dictionary.
+        """
+        if plan_queue_mode == "default":
+            plan_queue_mode = self.plan_queue_mode_default
+
+        self._validate_plan_queue_mode(plan_queue_mode)
+        self._plan_queue_mode = plan_queue_mode.copy()
+        await self._r_pool.set(self._name_plan_queue_mode, json.dumps(self._plan_queue_mode))
+
     async def start(self):
         """
         Create the pool and initialize the set of UIDs from the queue if it exists in the pool.
@@ -101,6 +182,7 @@ class PlanQueueOperations:
                 self._r_pool = await aioredis.create_redis_pool(f"redis://{self._redis_host}", encoding="utf8")
                 await self._queue_clean()
                 await self._uid_dict_initialize()
+                await self._load_plan_queue_mode()
 
                 self._plan_queue_uid = self.new_item_uid()
                 self._plan_history_uid = self.new_item_uid()
@@ -135,6 +217,7 @@ class PlanQueueOperations:
         await self._r_pool.delete(self._name_running_plan)
         await self._r_pool.delete(self._name_plan_queue)
         await self._r_pool.delete(self._name_plan_history)
+        await self._r_pool.delete(self._name_plan_queue_mode)
         self._uid_dict_clear()
 
         self._plan_queue_uid = self.new_item_uid()
@@ -143,7 +226,7 @@ class PlanQueueOperations:
     async def delete_pool_entries(self):
         """
         Delete pool entries used by RE Manager. This method is mostly intended for use in testing,
-        but may be used for other purposes if needed.
+        but may be used for other purposes if needed. Deleting pool entries also resets plan queue mode.
         """
         async with self._lock:
             await self._delete_pool_entries()

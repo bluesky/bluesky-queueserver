@@ -30,6 +30,7 @@ from bluesky_queueserver.manager.profile_ops import (
     load_user_group_permissions,
     _process_plan,
     validate_plan,
+    bind_plan_arguments,
     _select_allowed_items,
     load_allowed_plans_and_devices,
     hex2bytes,
@@ -1834,3 +1835,61 @@ def test_validate_plan_3(plan, allowed_devices, success, errmsg):
         assert errmsg_out == errmsg
     else:
         assert errmsg in errmsg_out
+
+
+# fmt: off
+@pytest.mark.parametrize("func, plan_args, plan_kwargs, plan_bound_params, success, except_type, errmsg", [
+    (_f1, [1, 2, 3], {}, {"a": 1, "b": 2, "c": 3}, True, Exception, ""),
+    (_f1, (1, 2, 3), {}, {"a": 1, "b": 2, "c": 3}, True, Exception, ""),
+    (_f1, [1, 2], {"c": 3}, {"a": 1, "b": 2, "c": 3}, True, Exception, ""),
+    (_f1, [1], {"c": 3, "b": 2}, {"a": 1, "b": 2, "c": 3}, True, Exception, ""),
+    (_f1, [], {"c": 3, "a": 1, "b": 2}, {"a": 1, "b": 2, "c": 3}, True, Exception, ""),
+    (_f1, [1, 2], {}, {"a": 1, "b": 2, "c": 3}, False, TypeError, "missing a required argument"),
+    (_f1, [1, 2], {"c": 3, "d": 4}, {"a": 1, "b": 2, "c": 3}, False, TypeError, "unexpected keyword argument"),
+    (_f1, [1, 2, 3, 4], {}, {"a": 1, "b": 2, "c": 3}, False, TypeError, "too many positional arguments"),
+    (_f1, [1, 2, 3], {"c": 3}, {"a": 1, "b": 2, "c": 3}, False, TypeError, "multiple values for argument"),
+
+    (_f2, [1, 2, 3], {}, {"args": (1, 2, 3)}, True, Exception, ""),
+    (_f2, [1, 2], {"c": 3}, {"args": (1, 2), "kwargs": {"c": 3}}, True, Exception, ""),
+    (_f2, [], {"a": 1, "b": 2, "c": 3}, {"kwargs": {"a": 1, "b": 2, "c": 3}}, True, Exception, ""),
+
+    (_f3, [1, 2], {"c": 3, "d": 4}, {"a": 1, "b": 2, "c": 3, "d": 4}, True, Exception, ""),
+    (_f3, [1, 2, "ab", "cd"], {"c": 3, "d": 4},
+     {"a": 1, "b": 2, "c": 3, "d": 4, "args": ("ab", "cd")}, True, Exception, ""),
+
+    (_f4, [1, 2], {"c": 3, "d": 4}, {"a": 1, "b": 2, "c": 3, "d": 4}, True, Exception, ""),
+    (_f4, [1, 2, "ab", "cd"], {"c": 3, "d": 4},
+     {"a": 1, "b": 2, "c": 3, "d": 4, "args": ("ab", "cd")}, True, Exception, ""),
+    (_f4, [1, 2, "ab", "cd"], {"c": 3},
+     {"a": 1, "b": 2, "c": 3, "args": ("ab", "cd")}, True, Exception, ""),
+    (_f4, [1, 2, "ab", "cd"], {"d": 3},
+     {"a": 1, "b": 2, "d": 3, "args": ("ab", "cd")}, False, TypeError, "missing a required argument"),
+
+    (_f5, [1, 2], {"c": 3, "d": 4}, {"a": 1, "b": 2, "c": 3, "d": 4}, True, Exception, ""),
+    (_f5, [1, 2, "ab", "cd"], {"c": 3, "d": 4},
+     {"a": 1, "b": 2, "c": 3, "d": 4, "args": ("ab", "cd")}, True, Exception, ""),
+    (_f5, [1, 2, "ab", "cd"], {"c": 3},
+     {"a": 1, "b": 2, "c": 3, "args": ("ab", "cd")}, True, Exception, ""),
+    (_f5, [1], {"c": 3}, {"a": 1, "c": 3}, True, Exception, ""),
+])
+# fmt: on
+def test_bind_plan_parameters_1(func, plan_args, plan_kwargs, plan_bound_params, except_type, success, errmsg):
+    """
+    Tests for ``bind_plan_parameters`` function.
+    """
+    allowed_plans = {"existing": _process_plan(func)}
+    if success:
+        plan_parameters_copy = copy.deepcopy(allowed_plans["existing"])
+
+        bound_params = bind_plan_arguments(
+            plan_args=plan_args, plan_kwargs=plan_kwargs, plan_parameters=allowed_plans["existing"]
+        )
+        assert bound_params.arguments == plan_bound_params
+
+        # Make sure that the original plan parameters were not changed
+        assert plan_parameters_copy == allowed_plans["existing"]
+    else:
+        with pytest.raises(except_type, match=errmsg):
+            bind_plan_arguments(
+                plan_args=plan_args, plan_kwargs=plan_kwargs, plan_parameters=allowed_plans["existing"]
+            )

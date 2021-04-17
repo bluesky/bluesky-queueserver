@@ -82,10 +82,11 @@ def test_queue_clean(pq, plan_running, plans, result_running, result_plans):
 
     asyncio.run(testing())
 
-
-def test_set_plan_queue_mode_1(pq):
+@pytest.mark.parametrize("update", [False, True])
+def test_set_plan_queue_mode_1(pq, update):
     """
-    Test basic functionality of ``set_plan_queue_mode`` function.
+    Test basic functionality of ``set_plan_queue_mode`` function:
+    The case: ``update=False``.
     """
 
     async def testing():
@@ -98,25 +99,38 @@ def test_set_plan_queue_mode_1(pq):
         assert pq.plan_queue_mode_default is not pq._plan_queue_mode_default
 
         queue_mode = {"loop": True}
-        await pq.set_plan_queue_mode(queue_mode)
+        await pq.set_plan_queue_mode(queue_mode, update=update)
         assert pq._plan_queue_mode is not queue_mode  # Verify that 'set' operation performs copy
         assert pq.plan_queue_mode == queue_mode
 
         with pytest.raises(ValueError, match="Unsupported plan queue mode parameter 'nonexisting_key'"):
-            await pq.set_plan_queue_mode({"nonexisting_key": True})
+            await pq.set_plan_queue_mode({"nonexisting_key": True}, update=update)
 
-        with pytest.raises(ValueError, match="Parameters {'loop'} are missing"):
-            await pq.set_plan_queue_mode({})
+        if update:
+            await pq.set_plan_queue_mode({}, update=update)
+        else:
+            with pytest.raises(ValueError, match="Parameters {'loop'} are missing"):
+                await pq.set_plan_queue_mode({}, update=update)
 
         with pytest.raises(TypeError, match="Unsupported type .* of the parameter 'loop'"):
-            await pq.set_plan_queue_mode({"loop": 10})
+            await pq.set_plan_queue_mode({"loop": 10}, update=update)
+
+        with pytest.raises(TypeError, match="Unsupported type .* of the parameter 'loop'"):
+            await pq.set_plan_queue_mode({"loop": "some_string"}, update=update)
 
         # Verify that the queue mode is saved to Redis
         pq2 = PlanQueueOperations()
         await pq2.start()
         assert pq2.plan_queue_mode == queue_mode
 
+        # Set queue mode to default
+        assert pq.plan_queue_mode != pq.plan_queue_mode_default
+        await pq.set_plan_queue_mode("default", update=update)
+        assert pq.plan_queue_mode == pq.plan_queue_mode_default
+
     asyncio.run(testing())
+
+
 
 
 # fmt: off
@@ -1020,7 +1034,8 @@ def test_add_to_history_functions(pq):
 
 
 @pytest.mark.parametrize("func", ["process_next_item", "set_next_item_as_running"])
-def test_process_next_item_1(pq, func):
+@pytest.mark.parametrize("loop_mode", [False, True])
+def test_process_next_item_1(pq, func, loop_mode):
     """
     Test for ``PlanQueueOperations.process_next_item()`` and
     ``PlanQueueOperations.set_next_item_as_running()`` functions.
@@ -1029,6 +1044,9 @@ def test_process_next_item_1(pq, func):
     """
 
     async def testing():
+
+        await pq.set_plan_queue_mode({"loop": loop_mode})
+
         # Apply to empty queue
         assert await pq.get_queue_size() == 0
         assert await pq.is_item_running() is False
@@ -1066,7 +1084,7 @@ def test_process_next_item_1(pq, func):
     asyncio.run(testing())
 
 
-@pytest.mark.parametrize("loop_mode", [True, True])
+@pytest.mark.parametrize("loop_mode", [False, True])
 def test_process_next_item_2(pq, loop_mode):
     """
     Test for ``PlanQueueOperations.process_next_item()`` and
@@ -1079,9 +1097,7 @@ def test_process_next_item_2(pq, loop_mode):
 
     async def testing():
 
-        queue_mode = pq.plan_queue_mode
-        queue_mode["loop"] = loop_mode
-        await pq.set_plan_queue_mode(queue_mode)
+        await pq.set_plan_queue_mode({"loop": loop_mode})
 
         # Apply to empty queue
         assert await pq.get_queue_size() == 0
@@ -1104,8 +1120,8 @@ def test_process_next_item_2(pq, loop_mode):
         assert len(pq._uid_dict) == 3 if loop_mode else 2
 
         queue, _ = await pq.get_queue()
-        assert queue[0] == (p1 if loop_mode else p0)
-        assert queue[1] == (p2 if loop_mode else p1)
+        assert queue[0] == p1
+        assert queue[1] == p2
         if loop_mode:
             assert queue[2]["name"] == p0["name"]
             assert queue[2]["item_uid"] != p0["name"]
@@ -1200,9 +1216,7 @@ def test_set_processed_item_as_completed_2(pq):
             await pq.add_item_to_queue(plan)
 
         # Enable LOOP mode: the completed item will be pushed to the back of the queue
-        plan_queue_mode = pq.plan_queue_mode
-        plan_queue_mode["loop"] = True
-        await pq.set_plan_queue_mode(plan_queue_mode)
+        await pq.set_plan_queue_mode({"loop": True})
 
         # No plan is running
         pq_uid = pq.plan_queue_uid

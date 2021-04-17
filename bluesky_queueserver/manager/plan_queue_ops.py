@@ -119,18 +119,14 @@ class PlanQueueOperations:
 
     def _validate_plan_queue_mode(self, plan_queue_mode):
         """
-        Validate the dictionary 'plan_queue_mode'.
+        Validate the dictionary 'plan_queue_mode'. Check that the dictionary contains all
+        the required parameters and no unsupported parameters.
 
         Parameters
         ----------
         plan_queue_mode : dict
             Dictionary that contains plan queue mode. See ``self.plan_queue_mode_default``.
         """
-        if not isinstance(plan_queue_mode, dict):
-            raise TypeError(
-                f"Unsupported type '{type(plan_queue_mode)}' of 'plan_queue_mode'. " "Expected type: 'dict'"
-            )
-
         # It is assumed that 'plan_queue_mode' will be a single-level dictionary that contains
         #   simple types (bool, int etc), so the following code provide better error reporting
         #   than schema validation.
@@ -161,13 +157,38 @@ class PlanQueueOperations:
         queue_mode = await self._r_pool.get(self._name_plan_queue_mode)
         self._plan_queue_mode = json.loads(queue_mode) if queue_mode else self.plan_queue_mode_default
 
-    async def set_plan_queue_mode(self, plan_queue_mode):
+    async def set_plan_queue_mode(self, plan_queue_mode, *, update=True):
         """
         Set plan queue mode. The plan queue mode can be a string ``default`` or a dictionary with
         parameters. See ``self.plan_queue_mode_default`` for an example of the parameter dictionary.
+
+        Parameters
+        ----------
+        plan_queue_mode : dict or str
+            The dictionary of parameters that define queue mode. If ``update`` is ``True``, then
+            the dictionary may contain only the parameters that need to be updated. Otherwise
+            ``plan_queue_mode`` dictionary must contain full valid parameter dictionary. The function
+            fails if the dictionary contains unsupported parameters. Calling the function with the
+            string value ``plan_queue_mode="default"`` will reset all the parameters to the default
+            values.
+        update : boolean (optional)
+            Indicates if the dictionary ``plan_queue_mode`` should be used to update mode parameters.
+            If ``True``, then the dictionary may contain only the parameters that should be changed.
         """
+        if not isinstance(plan_queue_mode, dict) and plan_queue_mode != "default":
+            raise TypeError(
+                f"Unsupported type '{type(plan_queue_mode)}' of the parameter 'plan_queue_mode' "
+                f"({plan_queue_mode}). The parameter types: ('dict', 'str'). Supported "
+                f"string value: 'default'"
+            )
+
         if plan_queue_mode == "default":
             plan_queue_mode = self.plan_queue_mode_default
+        elif update:
+            # Generate full parameter dictionary based on the existing and submitted parameters.
+            queue_mode = self.plan_queue_mode  # Create a copy of current parameters
+            queue_mode.update(plan_queue_mode)
+            plan_queue_mode = queue_mode
 
         self._validate_plan_queue_mode(plan_queue_mode)
         self._plan_queue_mode = plan_queue_mode.copy()

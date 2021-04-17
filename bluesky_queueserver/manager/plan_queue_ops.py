@@ -191,8 +191,11 @@ class PlanQueueOperations:
             plan_queue_mode = queue_mode
 
         self._validate_plan_queue_mode(plan_queue_mode)
-        self._plan_queue_mode = plan_queue_mode.copy()
-        await self._r_pool.set(self._name_plan_queue_mode, json.dumps(self._plan_queue_mode))
+
+        # Prevent changes of the queue mode in the middle of queue operations.
+        async with self._lock:
+            self._plan_queue_mode = plan_queue_mode.copy()
+            await self._r_pool.set(self._name_plan_queue_mode, json.dumps(self._plan_queue_mode))
 
     async def start(self):
         """

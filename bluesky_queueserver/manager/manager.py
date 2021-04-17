@@ -502,7 +502,7 @@ class RunEngineManager(Process):
 
                 self._manager_state = MState.EXECUTING_QUEUE
 
-                new_plan = await self._plan_queue.set_next_item_as_running()
+                new_plan = await self._plan_queue.process_next_item()
 
                 plan_name = new_plan["name"]
                 args = new_plan["args"] if "args" in new_plan else []
@@ -537,8 +537,7 @@ class RunEngineManager(Process):
                 logger.info("Executing instruction:\n%s.", pprint.pformat(next_item))
 
                 if next_item["name"] == "queue_stop":
-                    # Pop the instruction from the queue
-                    await self._plan_queue.pop_item_from_queue(pos="front")
+                    await self._plan_queue.process_next_item()
                     self._manager_state = MState.EXECUTING_QUEUE
                     self._queue_stop_pending = True
                     asyncio.ensure_future(self._start_plan_task())
@@ -546,13 +545,6 @@ class RunEngineManager(Process):
                 else:
                     success = False
                     err_msg = f"Unsupported action: '{next_item['name']}' (item {next_item})"
-
-                # Add the instruction to the queue if the queue is in the 'loop' mode.
-                #   (looping is handled for plans in the PlanQueueOperations class).
-                if self._plan_queue.plan_queue_mode["loop"]:
-                    item_to_add = next_item.copy()
-                    item_to_add = self._plan_queue.set_new_item_uuid(item_to_add)
-                    self._plan_queue.add_item_to_queue(item_to_add)
 
             else:
                 success = False

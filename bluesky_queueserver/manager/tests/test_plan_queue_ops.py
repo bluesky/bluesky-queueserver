@@ -82,6 +82,7 @@ def test_queue_clean(pq, plan_running, plans, result_running, result_plans):
 
     asyncio.run(testing())
 
+
 @pytest.mark.parametrize("update", [False, True])
 def test_set_plan_queue_mode_1(pq, update):
     """
@@ -129,8 +130,6 @@ def test_set_plan_queue_mode_1(pq, update):
         assert pq.plan_queue_mode == pq.plan_queue_mode_default
 
     asyncio.run(testing())
-
-
 
 
 # fmt: off

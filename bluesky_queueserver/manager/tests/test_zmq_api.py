@@ -1361,6 +1361,7 @@ def test_zmq_api_queue_mode_set_1(re_manager):  # noqa: F811
     # Send empty dictionary, this should not change the mode
     resp1, _ = zmq_single_request("queue_mode_set", params={"mode": {}})
     assert resp1["success"] is True, _
+    assert resp1["msg"] == ""
     status = get_queue_state()
     assert status["plan_queue_mode"] == queue_mode_default
 
@@ -1392,9 +1393,15 @@ def test_zmq_api_queue_mode_set_2_fail(re_manager, mode, msg_expected):  # noqa:
     """
     Failing cases for ``queue_mode_set`` API
     """
+    status = get_queue_state()
+    queue_mode_default = status["plan_queue_mode"]
+
     resp, _ = zmq_single_request("queue_mode_set", params={"mode": mode})
     assert resp["success"] is False
     assert msg_expected in resp["msg"]
+
+    status = get_queue_state()
+    assert status["plan_queue_mode"] == queue_mode_default
 
 
 def test_zmq_api_queue_mode_set_3_loop_mode(re_manager):  # noqa: F811

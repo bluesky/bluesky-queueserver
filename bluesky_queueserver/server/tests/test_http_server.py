@@ -51,6 +51,46 @@ def test_http_server_status_handler(re_manager, fastapi_server):  # noqa F811
     assert resp["worker_environment_exists"] is False
 
 
+def test_http_server_queue_mode_set_handler_1(re_manager, fastapi_server):  # noqa F811
+    """
+    Basic tests for ``queue_mode_set`` API
+    """
+    status = request_to_json("get", "/status")
+    queue_mode_default = status["plan_queue_mode"]
+
+    # Send empty dictionary, this should not change the mode
+    resp1 = request_to_json("post", "/queue/mode/set", json={"mode": {}})
+    assert resp1["success"] is True
+    assert resp1["msg"] == ""
+    status = request_to_json("get", "/status")
+    assert status["plan_queue_mode"] == queue_mode_default
+
+    # Meaningful change: enable the LOOP mode
+    resp2 = request_to_json("post", "/queue/mode/set", json={"mode": {"loop": True}})
+    assert resp2["success"] is True
+    status = request_to_json("get", "/status")
+    assert status["plan_queue_mode"] != queue_mode_default
+    queue_mode_expected = queue_mode_default.copy()
+    queue_mode_expected["loop"] = True
+    assert status["plan_queue_mode"] == queue_mode_expected
+
+    # Reset to default
+    resp3 = request_to_json("post", "/queue/mode/set", json={"mode": "default"})
+    assert resp3["success"] is True
+    status = request_to_json("get", "/status")
+    assert status["plan_queue_mode"] == queue_mode_default
+
+
+def test_http_server_queue_mode_set_handler_2(re_manager, fastapi_server):  # noqa F811
+    """
+    Failing cases for ``queue_mode_set`` API
+    """
+    # Meaningful change: enable the LOOP mode
+    resp1 = request_to_json("post", "/queue/mode/set", json={"mode": {"unknown_param": True}})
+    assert resp1["success"] is False
+    assert "Unsupported plan queue mode parameter" in resp1["msg"]
+
+
 def test_http_server_queue_get_handler(re_manager, fastapi_server):  # noqa F811
     resp = request_to_json("get", "/queue/get")
     assert resp["items"] == []

@@ -177,8 +177,8 @@ class PlanQueueOperations:
         """
         if not isinstance(plan_queue_mode, dict) and plan_queue_mode != "default":
             raise TypeError(
-                f"Unsupported type '{type(plan_queue_mode)}' of the parameter 'plan_queue_mode' "
-                f"({plan_queue_mode}). The parameter types: ('dict', 'str'). Supported "
+                f"Queue mode is passed using object of unsupported type '{type(plan_queue_mode)}': "
+                f"({plan_queue_mode}). Supported types: ('dict', 'str'), supported "
                 f"string value: 'default'"
             )
 

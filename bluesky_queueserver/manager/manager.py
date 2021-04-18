@@ -1064,6 +1064,32 @@ class RunEngineManager(Process):
         log_msg += f" qsize={qsize}."
         return log_msg
 
+    async def _queue_mode_set_handler(self, request):
+        """
+        Set plan queue mode. The request must contain the parameter ``mode``,
+        which may be a dictionary containing mode options that need to be updated (not all
+        the parameters that define the mode) or a string ``default``. (The function will
+        accept ``mode={}``: the mode will not be changed in this case). If string value
+        ``default`` is passed, then the queue mode is reset to the default mode.
+        """
+        logger.info("Setting queue mode ...")
+        logger.debug("Request: %s", pprint.pformat(request))
+
+        success, msg = True, ""
+        try:
+            if "mode" not in request:
+                raise Exception(f"Parameter 'mode' is not found in request {request}")
+
+            plan_queue_mode = request["mode"]
+            await self._plan_queue.set_plan_queue_mode(plan_queue_mode, update=True)
+
+        except Exception as ex:
+            success = False
+            msg = f"Failed to set queue mode: {str(ex)}"
+
+        rdict = {"success": success, "msg": msg}
+        return rdict
+
     async def _queue_item_add_handler(self, request):
         """
         Adds new item to the queue. Item may be a plan or an instruction. Request must
@@ -1542,6 +1568,7 @@ class RunEngineManager(Process):
             "environment_open": "_environment_open_handler",
             "environment_close": "_environment_close_handler",
             "environment_destroy": "_environment_destroy_handler",
+            "queue_mode_set": "_queue_mode_set_handler",
             "queue_item_add": "_queue_item_add_handler",
             "queue_item_add_batch": "_queue_item_add_batch_handler",
             "queue_item_update": "_queue_item_update_handler",

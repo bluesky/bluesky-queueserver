@@ -427,6 +427,13 @@ class ReManager:
             clear_redis_pool()
 
 
+def _reset_queue_mode():
+    """Reset queue mode to the default mode"""
+    resp, msg = zmq_secure_request("queue_mode_set", params={"mode": "default"})
+    if resp["success"] is not True:
+        raise RuntimeError(msg)
+
+
 @pytest.fixture
 def re_manager_cmd():
     """
@@ -452,6 +459,8 @@ def re_manager_cmd():
         if not wait_for_condition(time=10, condition=condition_manager_idle):
             failed_to_start = True
             raise TimeoutError("Timeout: RE Manager failed to start.")
+
+        _reset_queue_mode()
 
     def _close():
         """
@@ -487,6 +496,8 @@ def re_manager():
         failed_to_start = True
         raise TimeoutError("Timeout: RE Manager failed to start.")
 
+    _reset_queue_mode()
+
     yield re  # Nothing to return
     if not failed_to_start:
         re.stop_manager()
@@ -508,6 +519,8 @@ def re_manager_pc_copy(tmp_path):
     if not wait_for_condition(time=10, condition=condition_manager_idle):
         failed_to_start = True
         raise TimeoutError("Timeout: RE Manager failed to start.")
+
+    _reset_queue_mode()
 
     yield re, pc_path  # Location of the copy of the default profile collection.
     if not failed_to_start:

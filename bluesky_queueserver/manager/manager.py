@@ -216,6 +216,8 @@ class RunEngineManager(Process):
                 self._environment_exists = True
                 await self._confirm_re_worker_exit()
                 self._environment_exists = False
+                self._worker_state_info = None
+
                 logger.error("Error occurred while opening RE Worker environment.")
                 success, err_msg = False, "Error occurred while opening RE Worker environment."
 
@@ -310,6 +312,8 @@ class RunEngineManager(Process):
 
         self._manager_state = MState.IDLE
         self._environment_exists = False
+        self._worker_state_info = None
+
         # If a plan is running, it needs to be pushed back into the queue
         await self._plan_queue.set_processed_item_as_stopped(exit_status="environment_destroyed", run_uids=[])
 
@@ -331,6 +335,8 @@ class RunEngineManager(Process):
 
             # Environment is not in valid state anyway. So assume it does not exist.
             self._environment_exists = False
+            self._worker_state_info = None
+
             if success:
                 logger.info("Wait for RE Worker process to close (join)")
 

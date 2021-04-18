@@ -153,6 +153,13 @@ def test_zmq_api_ping_status(re_manager, api_name):  # noqa F811
     assert bool(resp["plan_history_uid"])
     assert isinstance(resp["plan_history_uid"], str), type(resp["plan_history_uid"])
 
+    # Run Engine state is None if RE environment does not exist. Otherwise it should
+    #   be a string representing Run Engine state.
+    assert resp["re_state"] is None
+
+    assert isinstance(resp["plan_queue_mode"], dict)
+    assert resp["plan_queue_mode"]["loop"] is False
+
 
 # =======================================================================================
 #                   Methods 'environment_open', 'environment_close'
@@ -162,17 +169,26 @@ def test_zmq_api_environment_open_close_1(re_manager):  # noqa F811
     """
     Basic test for `environment_open` and `environment_close` methods.
     """
+    state = get_queue_state()
+    assert state["re_state"] is None
+
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
     assert resp1["msg"] == ""
 
     assert wait_for_condition(time=3, condition=condition_environment_created)
 
+    state = get_queue_state()
+    assert state["re_state"] == "idle"
+
     resp2, _ = zmq_single_request("environment_close")
     assert resp2["success"] is True
     assert resp2["msg"] == ""
 
     assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+    state = get_queue_state()
+    assert state["re_state"] is None
 
 
 def test_zmq_api_environment_open_close_2(re_manager):  # noqa F811

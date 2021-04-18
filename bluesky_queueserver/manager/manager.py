@@ -808,6 +808,7 @@ class RunEngineManager(Process):
         run_list_uid = self._re_run_list_uid
         plan_queue_uid = self._plan_queue.plan_queue_uid
         plan_history_uid = self._plan_queue.plan_history_uid
+        plan_queue_mode = self._plan_queue.plan_queue_mode
         # worker_state_info = self._worker_state_info
 
         # TODO: consider different levels of verbosity for ping or other command to
@@ -826,6 +827,7 @@ class RunEngineManager(Process):
             "run_list_uid": run_list_uid,
             "plan_queue_uid": plan_queue_uid,
             "plan_history_uid": plan_history_uid,
+            "plan_queue_mode": plan_queue_mode,
             # "worker_state_info": worker_state_info
         }
         return msg

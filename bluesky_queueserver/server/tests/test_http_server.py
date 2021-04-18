@@ -2,7 +2,7 @@ import time as ttime
 
 import pytest
 
-from bluesky_queueserver.manager.tests._common import (  # noqa F401
+from bluesky_queueserver.manager.tests.common import (  # noqa F401
     re_manager,
     re_manager_pc_copy,
     re_manager_cmd,

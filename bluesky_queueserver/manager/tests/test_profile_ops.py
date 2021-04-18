@@ -10,9 +10,9 @@ import sys
 
 import ophyd
 
-from ._common import copy_default_profile_collection, patch_first_startup_file
+from .common import copy_default_profile_collection, patch_first_startup_file
 
-from ._common import reset_sys_modules  # noqa: F401
+from .common import reset_sys_modules  # noqa: F401
 
 from bluesky_queueserver.manager.annotation_decorator import parameter_annotation_decorator
 

@@ -20,7 +20,7 @@ from ..comms import (
     generate_new_zmq_key_pair,
 )
 
-from ._common import (
+from .common import (
     zmq_secure_request,
     wait_for_condition,
     condition_environment_created,
@@ -33,7 +33,7 @@ from ._common import (
     append_code_to_last_startup_file,
     set_qserver_zmq_public_key,
 )
-from ._common import re_manager, re_manager_pc_copy, re_manager_cmd, db_catalog  # noqa: F401
+from .common import re_manager, re_manager_pc_copy, re_manager_cmd, db_catalog  # noqa: F401
 
 # Plans used in most of the tests: '_plan1' and '_plan2' are quickly executed '_plan3' runs for 5 seconds.
 _plan1 = {"name": "count", "args": [["det1", "det2"]], "item_type": "plan"}

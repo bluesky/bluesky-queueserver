@@ -5,7 +5,7 @@ import pytest
 from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
 from bluesky_queueserver.manager.comms import generate_new_zmq_key_pair
 
-from ._common import (
+from .common import (
     patch_first_startup_file,
     patch_first_startup_file_undo,
     wait_for_condition,
@@ -22,7 +22,7 @@ from ._common import (
     set_qserver_zmq_public_key,
 )
 
-from ._common import re_manager, re_manager_pc_copy, re_manager_cmd  # noqa: F401
+from .common import re_manager, re_manager_pc_copy, re_manager_cmd  # noqa: F401
 
 from ..qserver_cli import QServerExitCodes
 

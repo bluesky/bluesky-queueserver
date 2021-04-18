@@ -1352,6 +1352,84 @@ def test_zmq_api_move_plan_1(re_manager, params, src, order, success, msg):  # n
 
 
 # =======================================================================================
+#                              Method `environment_destroy`
+
+
+def test_zmq_api_environment_destroy(re_manager):  # noqa: F811
+    """
+    Test for `environment_destroy` API. The test also checks if valid values of
+    ``re_status`` are returned at for each step.
+    """
+    resp0, _ = zmq_single_request("queue_item_add", {"item": _plan3, "user": _user, "user_group": _user_group})
+
+    status = get_queue_state()
+    assert status["items_in_queue"] == 1, "Incorrect number of plans in the queue"
+    assert status["running_item_uid"] is None
+    assert status["re_state"] is None
+
+    # Open environment, start a plan and then destroy the environment in the middle of
+    #  the plan execution.
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    status = get_queue_state()
+    assert status["re_state"] == "idle"
+
+    resp2, _ = zmq_single_request("queue_start")
+    assert resp2["success"] is True
+
+    ttime.sleep(2)
+    status = get_queue_state()
+    assert status["items_in_queue"] == 0, "Incorrect number of plans in the queue"
+    assert status["running_item_uid"] is not None
+    assert status["re_state"] == "running"
+
+    resp3, _ = zmq_single_request("environment_destroy")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_closed)
+
+    status = get_queue_state()
+    assert status["items_in_queue"] == 1, "Incorrect number of plans in the queue"
+    assert status["items_in_history"] == 1, "Incorrect number of plans in the history"
+    assert status["running_item_uid"] is None
+    assert status["re_state"] is None
+
+    # Make sure that RE Manager is fully functional: open environment, start the plan,
+    # wait for the completion and close the environment.
+
+    resp4, _ = zmq_single_request("environment_open")
+    assert resp4["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    status = get_queue_state()
+    assert status["re_state"] == "idle"
+
+    resp5, _ = zmq_single_request("queue_start")
+    assert resp5["success"] is True
+
+    ttime.sleep(2)
+    status = get_queue_state()
+    assert status["items_in_queue"] == 0, "Incorrect number of plans in the queue"
+    assert status["running_item_uid"] is not None
+    assert status["re_state"] == "running"
+
+    assert wait_for_condition(time=60, condition=condition_queue_processing_finished)
+
+    status = get_queue_state()
+    assert status["items_in_queue"] == 0, "Incorrect number of plans in the queue"
+    assert status["items_in_history"] == 2, "Incorrect number of plans in the history"
+    assert status["running_item_uid"] is None
+    assert status["re_state"] == "idle"
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+# =======================================================================================
 #                              Method `re_runs`
 
 

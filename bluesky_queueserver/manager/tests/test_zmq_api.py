@@ -1397,6 +1397,59 @@ def test_zmq_api_queue_mode_set_2_fail(re_manager, mode, msg_expected):  # noqa:
     assert msg_expected in resp["msg"]
 
 
+def test_zmq_api_queue_mode_set_3_loop_mode(re_manager):  # noqa: F811
+    """
+    More sophisticated test for ``queue_mode_set`` API. Run the queue with enabled and
+    disabled loop mode.
+    """
+
+    items = (_plan1, _plan2, _instruction_stop)
+    for item in items:
+        resp, _ = zmq_single_request(
+            "queue_item_add", params={"item": item, "user": _user, "user_group": _user_group}
+        )
+        assert resp["success"] is True
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    # Continuously test execution of the queue in both modes. The queue contains 2 plans and
+    #   'stop' instruction. In the loop mode the queue stops after the instructions, but
+    #   all the items remain in the queue. After execution of the queue with disable loop
+    #   mode the queue is empty.
+    for loop_mode in (True, False):
+        resp2, _ = zmq_single_request("queue_mode_set", params={"mode": {"loop": loop_mode}})
+        assert resp2["success"] is True
+
+        status = get_queue_state()
+        assert status["items_in_queue"] == 3, f"loop_mode={loop_mode}"
+        assert status["items_in_history"] == (0 if loop_mode else 4), f"loop_mode={loop_mode}"
+
+        resp3, _ = zmq_single_request("queue_start")
+        assert resp3["success"] is True
+
+        assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+        status = get_queue_state()
+        assert status["items_in_queue"] == (3 if loop_mode else 0), f"loop_mode={loop_mode}"
+        assert status["items_in_history"] == (2 if loop_mode else 6), f"loop_mode={loop_mode}"
+
+        resp3, _ = zmq_single_request("queue_start")
+        assert resp3["success"] is True
+
+        assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+        status = get_queue_state()
+        assert status["items_in_queue"] == (3 if loop_mode else 0), f"loop_mode={loop_mode}"
+        assert status["items_in_history"] == (4 if loop_mode else 6), f"loop_mode={loop_mode}"
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
 # =======================================================================================
 #                              Method `environment_destroy`
 

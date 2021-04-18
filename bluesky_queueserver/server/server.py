@@ -224,6 +224,19 @@ async def queue_item_add_handler(payload: dict):
     return msg
 
 
+@app.post("/queue/item/add/batch")
+async def queue_item_add_batch_handler(payload: dict):
+    """
+    Adds new plan to the queue
+    """
+    # TODO: validate inputs!
+    params = payload
+    params["user"] = _login_data["user"]
+    params["user_group"] = _login_data["user_group"]
+    msg = await zmq_to_manager.send_message(method="queue_item_add_batch", params=params)
+    return msg
+
+
 @app.post("/queue/upload/spreadsheet")
 async def queue_upload_spreadsheet(spreadsheet: UploadFile = File(...), data_type: Optional[str] = Form(None)):
 

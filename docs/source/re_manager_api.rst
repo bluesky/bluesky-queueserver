@@ -88,6 +88,7 @@ Open and close RE Worker environment:
 
 Operations with the plan queue:
 
+- :ref:`method_queue_mode_set`
 - :ref:`method_queue_get`
 - :ref:`method_queue_item_add`
 - :ref:`method_queue_item_add_batch`
@@ -204,8 +205,18 @@ Returns       **msg**: *str*
                   - **'run_list_uid'** - UID of the list of the active runs. Monitor this UID and
                     load the updated list of active runs once the UID is changed.
 
+              **re_state**: *str* or *None*
+                  current state of Bluesky Run Engine (see Blue Sky documentation) or *None* if
+                  RE Worker environment does not exist (or closed).
+
+              **plan_queue_mode**: *dict*
+                  the dictionary of parameters that determine queue execution mode. The key/value pairs
+                  in the dictionary represent parameter names and values. Supported parameters:
+                  *'loop'* (*boolean*) - indicates if the LOOP mode is enabled.
+
               **queue_stop_pending**: *boolean*
-                  indicates if the request to stop the queue after completion of the current plan is pending.
+                  indicates if the request to stop the queue after completion of the current plan is
+                  pending.
 
               **worker_environment_exists**: *boolean*
                   indicates if RE Worker environment was created and plans could be executed.
@@ -434,6 +445,36 @@ Execution     The request initiates the sequence of destroying the environment.
               'destroying_environment' while operation is in progress and switch to 'idle' when
               the operation completes and 'worker_environment_exists' is set False if environment
               was destroyed successfully.
+============  =========================================================================================
+
+
+.. _method_queue_mode_set:
+
+**'queue_mode_set'**
+^^^^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'queue_mode_set'**
+------------  -----------------------------------------------------------------------------------------
+Description   Sets parameters that define the mode of plan queue execution. The key/value pairs of the *'mode'*
+              dictionary represent names and values of the parameters that need to be changed.
+              If *mode={}* then the mode will not be changed. To reset the mode parameters to the
+              built-in default values, set *mode="default"*. The request fails if the *'mode'* parameter
+              is not a dictionary or the *'default'* string, the dictionary contains unsupported keys
+              (mode parameters) or key values are of unsupported type. Supported mode parameters
+              (dictionary keys): *'loop'* (*True/False*) - enables/disables loop mode.
+------------  -----------------------------------------------------------------------------------------
+Parameters    **mode**: *dict* or *str*
+                  the dictionary of queue mode parameters or *'default'* string. Supported keys of
+                  the dictionary: *'loop'* (*boolean*).
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 
 

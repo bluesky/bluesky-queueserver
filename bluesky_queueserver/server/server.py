@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException, File, UploadFile, Form
 from typing import Optional
 
 from ..manager.comms import ZMQCommSendAsync, validate_zmq_key
-from .conversions import filter_plan_descriptions, spreadsheet_to_plan_list
+from bluesky_queueserver.manager.conversions import filter_plan_descriptions, spreadsheet_to_plan_list
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -52,7 +52,7 @@ async def startup_event():
     )
 
     # Import module with custom code
-    module_name = os.getenv("BLUESKY_HTTPSERVER_CUSTOM_MODULE", None)
+    module_name = os.getenv("QSERVER_CUSTOM_MODULE", None)
 
     if module_name:
         try:
@@ -148,6 +148,16 @@ async def status_handler():
     return msg
 
 
+@app.post("/queue/mode/set")
+async def queue_mode_set_handler(payload: dict):
+    """
+    Clear the plan queue.
+    """
+    params = payload
+    msg = await zmq_to_manager.send_message(method="queue_mode_set", params=params)
+    return msg
+
+
 @app.get("/queue/get")
 async def queue_get_handler():
     """
@@ -211,6 +221,19 @@ async def queue_item_add_handler(payload: dict):
     params["user"] = _login_data["user"]
     params["user_group"] = _login_data["user_group"]
     msg = await zmq_to_manager.send_message(method="queue_item_add", params=params)
+    return msg
+
+
+@app.post("/queue/item/add/batch")
+async def queue_item_add_batch_handler(payload: dict):
+    """
+    Adds new plan to the queue
+    """
+    # TODO: validate inputs!
+    params = payload
+    params["user"] = _login_data["user"]
+    params["user_group"] = _login_data["user_group"]
+    msg = await zmq_to_manager.send_message(method="queue_item_add_batch", params=params)
     return msg
 
 

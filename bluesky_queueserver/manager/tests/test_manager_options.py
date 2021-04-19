@@ -10,7 +10,7 @@ from bluesky.callbacks.zmq import RemoteDispatcher
 from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
 from bluesky_queueserver.manager.comms import zmq_single_request
 
-from ._common import (
+from .common import (
     copy_default_profile_collection,
     append_code_to_last_startup_file,
     wait_for_condition,
@@ -19,7 +19,7 @@ from ._common import (
     condition_environment_closed,
 )
 
-from ._common import re_manager_cmd  # noqa: F401
+from .common import re_manager_cmd  # noqa: F401
 
 # User name and user group name used throughout most of the tests.
 _user, _user_group = "Testing Script", "admin"

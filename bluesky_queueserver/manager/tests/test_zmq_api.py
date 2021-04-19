@@ -20,7 +20,7 @@ from ..comms import (
     generate_new_zmq_key_pair,
 )
 
-from ._common import (
+from .common import (
     zmq_secure_request,
     wait_for_condition,
     condition_environment_created,
@@ -33,7 +33,7 @@ from ._common import (
     append_code_to_last_startup_file,
     set_qserver_zmq_public_key,
 )
-from ._common import re_manager, re_manager_pc_copy, re_manager_cmd, db_catalog  # noqa: F401
+from .common import re_manager, re_manager_pc_copy, re_manager_cmd, db_catalog  # noqa: F401
 
 # Plans used in most of the tests: '_plan1' and '_plan2' are quickly executed '_plan3' runs for 5 seconds.
 _plan1 = {"name": "count", "args": [["det1", "det2"]], "item_type": "plan"}
@@ -153,6 +153,13 @@ def test_zmq_api_ping_status(re_manager, api_name):  # noqa F811
     assert bool(resp["plan_history_uid"])
     assert isinstance(resp["plan_history_uid"], str), type(resp["plan_history_uid"])
 
+    # Run Engine state is None if RE environment does not exist. Otherwise it should
+    #   be a string representing Run Engine state.
+    assert resp["re_state"] is None
+
+    assert isinstance(resp["plan_queue_mode"], dict)
+    assert resp["plan_queue_mode"]["loop"] is False
+
 
 # =======================================================================================
 #                   Methods 'environment_open', 'environment_close'
@@ -162,17 +169,26 @@ def test_zmq_api_environment_open_close_1(re_manager):  # noqa F811
     """
     Basic test for `environment_open` and `environment_close` methods.
     """
+    state = get_queue_state()
+    assert state["re_state"] is None
+
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
     assert resp1["msg"] == ""
 
     assert wait_for_condition(time=3, condition=condition_environment_created)
 
+    state = get_queue_state()
+    assert state["re_state"] == "idle"
+
     resp2, _ = zmq_single_request("environment_close")
     assert resp2["success"] is True
     assert resp2["msg"] == ""
 
     assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+    state = get_queue_state()
+    assert state["re_state"] is None
 
 
 def test_zmq_api_environment_open_close_2(re_manager):  # noqa F811
@@ -1333,6 +1349,190 @@ def test_zmq_api_move_plan_1(re_manager, params, src, order, success, msg):  # n
         status = get_queue_state()
         # Queue did not change, so UID should remain the same
         assert status["plan_queue_uid"] == pq_uid
+
+
+def test_zmq_api_queue_mode_set_1(re_manager):  # noqa: F811
+    """
+    Basic tests for ``queue_mode_set`` API
+    """
+    status = get_queue_state()
+    queue_mode_default = status["plan_queue_mode"]
+
+    # Send empty dictionary, this should not change the mode
+    resp1, _ = zmq_single_request("queue_mode_set", params={"mode": {}})
+    assert resp1["success"] is True, str(resp1)
+    assert resp1["msg"] == ""
+    status = get_queue_state()
+    assert status["plan_queue_mode"] == queue_mode_default
+
+    # Meaningful change: enable the LOOP mode
+    resp2, _ = zmq_single_request("queue_mode_set", params={"mode": {"loop": True}})
+    assert resp2["success"] is True, str(resp2)
+    status = get_queue_state()
+    assert status["plan_queue_mode"] != queue_mode_default
+    queue_mode_expected = queue_mode_default.copy()
+    queue_mode_expected["loop"] = True
+    assert status["plan_queue_mode"] == queue_mode_expected
+
+    # Reset to default
+    resp3, _ = zmq_single_request("queue_mode_set", params={"mode": "default"})
+    assert resp3["success"] is True, str(resp3)
+    status = get_queue_state()
+    assert status["plan_queue_mode"] == queue_mode_default
+
+
+# fmt: off
+@pytest.mark.parametrize("mode, msg_expected", [
+    ("unknown_str", "Queue mode is passed using object of unsupported type '<class 'str'>'"),
+    (["a", "b"], "Queue mode is passed using object of unsupported type '<class 'list'>'"),
+    ({"unsupported_key": 10}, "Unsupported plan queue mode parameter 'unsupported_key'"),
+    ({"loop": 10}, "Unsupported type '<class 'int'>' of the parameter 'loop'"),
+])
+# fmt: on
+def test_zmq_api_queue_mode_set_2_fail(re_manager, mode, msg_expected):  # noqa: F811
+    """
+    Failing cases for ``queue_mode_set`` API
+    """
+    status = get_queue_state()
+    queue_mode_default = status["plan_queue_mode"]
+
+    resp, _ = zmq_single_request("queue_mode_set", params={"mode": mode})
+    assert resp["success"] is False
+    assert msg_expected in resp["msg"]
+
+    status = get_queue_state()
+    assert status["plan_queue_mode"] == queue_mode_default
+
+
+def test_zmq_api_queue_mode_set_3_loop_mode(re_manager):  # noqa: F811
+    """
+    More sophisticated test for ``queue_mode_set`` API. Run the queue with enabled and
+    disabled loop mode.
+    """
+
+    items = (_plan1, _plan2, _instruction_stop)
+    for item in items:
+        resp, _ = zmq_single_request(
+            "queue_item_add", params={"item": item, "user": _user, "user_group": _user_group}
+        )
+        assert resp["success"] is True
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    # Continuously test execution of the queue in both modes. The queue contains 2 plans and
+    #   'stop' instruction. In the loop mode the queue stops after the instructions, but
+    #   all the items remain in the queue. After execution of the queue with disable loop
+    #   mode the queue is empty.
+    for loop_mode in (True, False):
+        resp2, _ = zmq_single_request("queue_mode_set", params={"mode": {"loop": loop_mode}})
+        assert resp2["success"] is True
+
+        status = get_queue_state()
+        assert status["items_in_queue"] == 3, f"loop_mode={loop_mode}"
+        assert status["items_in_history"] == (0 if loop_mode else 4), f"loop_mode={loop_mode}"
+
+        resp3, _ = zmq_single_request("queue_start")
+        assert resp3["success"] is True
+
+        assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+        status = get_queue_state()
+        assert status["items_in_queue"] == (3 if loop_mode else 0), f"loop_mode={loop_mode}"
+        assert status["items_in_history"] == (2 if loop_mode else 6), f"loop_mode={loop_mode}"
+
+        resp3, _ = zmq_single_request("queue_start")
+        assert resp3["success"] is True
+
+        assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+        status = get_queue_state()
+        assert status["items_in_queue"] == (3 if loop_mode else 0), f"loop_mode={loop_mode}"
+        assert status["items_in_history"] == (4 if loop_mode else 6), f"loop_mode={loop_mode}"
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+# =======================================================================================
+#                              Method `environment_destroy`
+
+
+def test_zmq_api_environment_destroy(re_manager):  # noqa: F811
+    """
+    Test for `environment_destroy` API. The test also checks if valid values of
+    ``re_status`` are returned at for each step.
+    """
+    resp0, _ = zmq_single_request("queue_item_add", {"item": _plan3, "user": _user, "user_group": _user_group})
+
+    status = get_queue_state()
+    assert status["items_in_queue"] == 1, "Incorrect number of plans in the queue"
+    assert status["running_item_uid"] is None
+    assert status["re_state"] is None
+
+    # Open environment, start a plan and then destroy the environment in the middle of
+    #  the plan execution.
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    status = get_queue_state()
+    assert status["re_state"] == "idle"
+
+    resp2, _ = zmq_single_request("queue_start")
+    assert resp2["success"] is True
+
+    ttime.sleep(2)
+    status = get_queue_state()
+    assert status["items_in_queue"] == 0, "Incorrect number of plans in the queue"
+    assert status["running_item_uid"] is not None
+    assert status["re_state"] == "running"
+
+    resp3, _ = zmq_single_request("environment_destroy")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_closed)
+
+    status = get_queue_state()
+    assert status["items_in_queue"] == 1, "Incorrect number of plans in the queue"
+    assert status["items_in_history"] == 1, "Incorrect number of plans in the history"
+    assert status["running_item_uid"] is None
+    assert status["re_state"] is None
+
+    # Make sure that RE Manager is fully functional: open environment, start the plan,
+    # wait for the completion and close the environment.
+
+    resp4, _ = zmq_single_request("environment_open")
+    assert resp4["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    status = get_queue_state()
+    assert status["re_state"] == "idle"
+
+    resp5, _ = zmq_single_request("queue_start")
+    assert resp5["success"] is True
+
+    ttime.sleep(2)
+    status = get_queue_state()
+    assert status["items_in_queue"] == 0, "Incorrect number of plans in the queue"
+    assert status["running_item_uid"] is not None
+    assert status["re_state"] == "running"
+
+    assert wait_for_condition(time=60, condition=condition_queue_processing_finished)
+
+    status = get_queue_state()
+    assert status["items_in_queue"] == 0, "Incorrect number of plans in the queue"
+    assert status["items_in_history"] == 2, "Incorrect number of plans in the history"
+    assert status["running_item_uid"] is None
+    assert status["re_state"] == "idle"
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
 # =======================================================================================

@@ -2,7 +2,7 @@ import time as ttime
 
 import pytest
 
-from bluesky_queueserver.manager.tests._common import (  # noqa F401
+from bluesky_queueserver.manager.tests.common import (  # noqa F401
     re_manager,
     re_manager_pc_copy,
     re_manager_cmd,
@@ -28,6 +28,7 @@ from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_device
 _plan1 = {"name": "count", "args": [["det1", "det2"]], "item_type": "plan"}
 _plan2 = {"name": "scan", "args": [["det1", "det2"], "motor", -1, 1, 10], "item_type": "plan"}
 _plan3 = {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 5, "delay": 1}, "item_type": "plan"}
+_instruction_stop = {"name": "queue_stop", "item_type": "instruction"}
 
 
 # fmt: off
@@ -49,6 +50,46 @@ def test_http_server_status_handler(re_manager, fastapi_server):  # noqa F811
     assert resp["items_in_queue"] == 0
     assert resp["running_item_uid"] is None
     assert resp["worker_environment_exists"] is False
+
+
+def test_http_server_queue_mode_set_handler_1(re_manager, fastapi_server):  # noqa F811
+    """
+    Basic tests for ``queue_mode_set`` API
+    """
+    status = request_to_json("get", "/status")
+    queue_mode_default = status["plan_queue_mode"]
+
+    # Send empty dictionary, this should not change the mode
+    resp1 = request_to_json("post", "/queue/mode/set", json={"mode": {}})
+    assert resp1["success"] is True
+    assert resp1["msg"] == ""
+    status = request_to_json("get", "/status")
+    assert status["plan_queue_mode"] == queue_mode_default
+
+    # Meaningful change: enable the LOOP mode
+    resp2 = request_to_json("post", "/queue/mode/set", json={"mode": {"loop": True}})
+    assert resp2["success"] is True
+    status = request_to_json("get", "/status")
+    assert status["plan_queue_mode"] != queue_mode_default
+    queue_mode_expected = queue_mode_default.copy()
+    queue_mode_expected["loop"] = True
+    assert status["plan_queue_mode"] == queue_mode_expected
+
+    # Reset to default
+    resp3 = request_to_json("post", "/queue/mode/set", json={"mode": "default"})
+    assert resp3["success"] is True
+    status = request_to_json("get", "/status")
+    assert status["plan_queue_mode"] == queue_mode_default
+
+
+def test_http_server_queue_mode_set_handler_2(re_manager, fastapi_server):  # noqa F811
+    """
+    Failing cases for ``queue_mode_set`` API
+    """
+    # Meaningful change: enable the LOOP mode
+    resp1 = request_to_json("post", "/queue/mode/set", json={"mode": {"unknown_param": True}})
+    assert resp1["success"] is False
+    assert "Unsupported plan queue mode parameter" in resp1["msg"]
 
 
 def test_http_server_queue_get_handler(re_manager, fastapi_server):  # noqa F811
@@ -197,6 +238,38 @@ def test_http_server_queue_item_add_handler_5_fail(re_manager, fastapi_server): 
     assert resp1["qsize"] is None
     assert resp1["item"] is None
     assert "Incorrect request format: request contains no item info" in resp1["msg"]
+
+
+def test_http_server_queue_item_add_batch_1(re_manager, fastapi_server):  # noqa: F811
+    """
+    Basic test for ``/queue/item/add/batch`` API.
+    """
+    items = [_plan1, _plan2, _instruction_stop, _plan3]
+
+    resp1 = request_to_json("post", "/queue/item/add/batch", json={"items": items})
+    assert resp1["success"] is True, f"resp={resp1}"
+    assert resp1["msg"] == ""
+    assert resp1["qsize"] == 4
+
+    status = request_to_json("get", "/status")
+    assert status["items_in_queue"] == 4
+    assert status["items_in_history"] == 0
+
+
+def test_http_server_queue_item_add_batch_2_fail(re_manager, fastapi_server):  # noqa: F811
+    """
+    Test for ``/queue/item/add/batch`` API: attempt to add invalid plan
+    """
+    items = [_plan1, _plan2, _instruction_stop, {}, _plan3]
+
+    resp1 = request_to_json("post", "/queue/item/add/batch", json={"items": items})
+    assert resp1["success"] is False, f"resp={resp1}"
+    assert resp1["msg"] != ""
+    assert resp1["qsize"] == 0
+
+    status = request_to_json("get", "/status")
+    assert status["items_in_queue"] == 0
+    assert status["items_in_history"] == 0
 
 
 # fmt: on

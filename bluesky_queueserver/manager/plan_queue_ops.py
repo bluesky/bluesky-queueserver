@@ -1,5 +1,6 @@
 import aioredis
 import asyncio
+import copy
 import json
 import uuid
 
@@ -63,6 +64,7 @@ class PlanQueueOperations:
         self._name_running_plan = "running_plan"
         self._name_plan_queue = "plan_queue"
         self._name_plan_history = "plan_history"
+        self._name_plan_queue_mode = "plan_queue_mode"
 
         # Plan queue UID is expected to change each time the contents of the queue is changed.
         #   Since `self._uid_dict` is modified each time the queue is updated, it is sufficient
@@ -72,6 +74,14 @@ class PlanQueueOperations:
         self._plan_history_uid = self.new_item_uid()
 
         self._lock = None
+
+        # Settings that determine the mode of queue operation. The set of supported modes
+        #      may be extended if additional modes are to be implemented. The mode will be saved in
+        #      Redis, so that it is not modified between restarts of the manager.
+        #   Loop mode: loop, True/False. If enabled, then each executed item (plan or instruction)
+        #      will be placed to the back of the queue.
+        self._plan_queue_mode_default = {"loop": False}
+        self._plan_queue_mode = self.plan_queue_mode_default
 
     @property
     def plan_queue_uid(self):
@@ -91,6 +101,102 @@ class PlanQueueOperations:
         """
         return self._plan_history_uid
 
+    @property
+    def plan_queue_mode(self):
+        """
+        Returns current plan queue mode. Plan queue mode is a dictionary with parameters
+        used for selection of the algorithm(s) for handling queue items. Supported parameters:
+        ``loop (boolean)`` enables and disables the loop mode.
+        """
+        return self._plan_queue_mode.copy()
+
+    @property
+    def plan_queue_mode_default(self):
+        """
+        Returns the default queue mode (default settings)
+        """
+        return self._plan_queue_mode_default.copy()
+
+    def _validate_plan_queue_mode(self, plan_queue_mode):
+        """
+        Validate the dictionary 'plan_queue_mode'. Check that the dictionary contains all
+        the required parameters and no unsupported parameters.
+
+        Parameters
+        ----------
+        plan_queue_mode : dict
+            Dictionary that contains plan queue mode. See ``self.plan_queue_mode_default``.
+        """
+        # It is assumed that 'plan_queue_mode' will be a single-level dictionary that contains
+        #   simple types (bool, int etc), so the following code provide better error reporting
+        #   than schema validation.
+        expected_params = {"loop": bool}
+        missing_keys = set(expected_params.keys())
+        for k, v in plan_queue_mode.items():
+            if k not in expected_params:
+                raise ValueError(
+                    f"Unsupported plan queue mode parameter '{k}': "
+                    f"supported parameters {list(expected_params.keys())}"
+                )
+            missing_keys.remove(k)
+            key_type = expected_params.get(k)  # Using [k] makes PyCharm to display annoying error
+            if not isinstance(v, key_type):
+                raise TypeError(
+                    f"Unsupported type '{type(v)}' of the parameter '{k}': " f"expected type '{key_type}'"
+                )
+        if missing_keys:
+            raise ValueError(
+                f"Parameters {missing_keys} are missing from 'plan_queue_mode' dictionary. "
+                f"The following keys are expected: {list(expected_params.keys())}"
+            )
+
+    async def _load_plan_queue_mode(self):
+        """
+        Load plan queue mode from Redis.
+        """
+        queue_mode = await self._r_pool.get(self._name_plan_queue_mode)
+        self._plan_queue_mode = json.loads(queue_mode) if queue_mode else self.plan_queue_mode_default
+
+    async def set_plan_queue_mode(self, plan_queue_mode, *, update=True):
+        """
+        Set plan queue mode. The plan queue mode can be a string ``default`` or a dictionary with
+        parameters. See ``self.plan_queue_mode_default`` for an example of the parameter dictionary.
+
+        Parameters
+        ----------
+        plan_queue_mode : dict or str
+            The dictionary of parameters that define queue mode. If ``update`` is ``True``, then
+            the dictionary may contain only the parameters that need to be updated. Otherwise
+            ``plan_queue_mode`` dictionary must contain full valid parameter dictionary. The function
+            fails if the dictionary contains unsupported parameters. Calling the function with the
+            string value ``plan_queue_mode="default"`` will reset all the parameters to the default
+            values.
+        update : boolean (optional)
+            Indicates if the dictionary ``plan_queue_mode`` should be used to update mode parameters.
+            If ``True``, then the dictionary may contain only the parameters that should be changed.
+        """
+        if not isinstance(plan_queue_mode, dict) and plan_queue_mode != "default":
+            raise TypeError(
+                f"Queue mode is passed using object of unsupported type '{type(plan_queue_mode)}': "
+                f"({plan_queue_mode}). Supported types: ('dict', 'str'), supported "
+                f"string value: 'default'"
+            )
+
+        if plan_queue_mode == "default":
+            plan_queue_mode = self.plan_queue_mode_default
+        elif update:
+            # Generate full parameter dictionary based on the existing and submitted parameters.
+            queue_mode = self.plan_queue_mode  # Create a copy of current parameters
+            queue_mode.update(plan_queue_mode)
+            plan_queue_mode = queue_mode
+
+        self._validate_plan_queue_mode(plan_queue_mode)
+
+        # Prevent changes of the queue mode in the middle of queue operations.
+        async with self._lock:
+            self._plan_queue_mode = plan_queue_mode.copy()
+            await self._r_pool.set(self._name_plan_queue_mode, json.dumps(self._plan_queue_mode))
+
     async def start(self):
         """
         Create the pool and initialize the set of UIDs from the queue if it exists in the pool.
@@ -101,6 +207,7 @@ class PlanQueueOperations:
                 self._r_pool = await aioredis.create_redis_pool(f"redis://{self._redis_host}", encoding="utf8")
                 await self._queue_clean()
                 await self._uid_dict_initialize()
+                await self._load_plan_queue_mode()
 
                 self._plan_queue_uid = self.new_item_uid()
                 self._plan_history_uid = self.new_item_uid()
@@ -135,6 +242,7 @@ class PlanQueueOperations:
         await self._r_pool.delete(self._name_running_plan)
         await self._r_pool.delete(self._name_plan_queue)
         await self._r_pool.delete(self._name_plan_history)
+        await self._r_pool.delete(self._name_plan_queue_mode)
         self._uid_dict_clear()
 
         self._plan_queue_uid = self.new_item_uid()
@@ -143,7 +251,7 @@ class PlanQueueOperations:
     async def delete_pool_entries(self):
         """
         Delete pool entries used by RE Manager. This method is mostly intended for use in testing,
-        but may be used for other purposes if needed.
+        but may be used for other purposes if needed. Deleting pool entries also resets plan queue mode.
         """
         async with self._lock:
             await self._delete_pool_entries()
@@ -192,6 +300,7 @@ class PlanQueueOperations:
         dict
             Plan with new UID.
         """
+        item = copy.deepcopy(item)
         self._verify_item_type(item)
         item["item_uid"] = self.new_item_uid()
         return item
@@ -552,11 +661,13 @@ class PlanQueueOperations:
 
         Parameters
         ----------
-        pos: int or str or None
+        pos : int or str or None
             Integer index specified position in the queue. Available string values: "front" or "back".
             The range for the index is ``-qsize..qsize-1``: ``0, -qsize`` - front element of the queue,
             ``-1, qsize-1`` - back element of the queue. If ``pos`` is ``None``, then the plan is popped
             from the back of the queue.
+        uid : str or None
+            UID of the item to be removed
 
         Returns
         -------
@@ -944,7 +1055,38 @@ class PlanQueueOperations:
             await self._clear_history()
 
     # ----------------------------------------------------------------------
-    #          Standard plan operations during queue execution
+    #          Standard item operations during queue execution
+
+    async def _process_next_item(self):
+        """
+        See ``self.process_next_item()`` method.
+        """
+        loop_mode = self._plan_queue_mode["loop"]
+
+        # Read the item from the front of the queue
+        item = await self._get_item(pos="front")
+        item_to_return = item
+        if item:
+            item_type = item["item_type"]
+            if item_type == "plan":
+                item_to_return = await self._set_next_item_as_running()
+            else:
+                # Items other than plans should be pushed to the back of the queue.
+                await self._pop_item_from_queue(pos="front")
+                if loop_mode:
+                    item_to_add = self.set_new_item_uuid(item)
+                    await self._add_item_to_queue(item_to_add)
+        return item_to_return
+
+    async def process_next_item(self):
+        """
+        Process the next item in the queue. If the item is a plan, it is set as currently
+        running (``self.set_next_item_as_running``), otherwise it is popped from the queue.
+        If the queue is LOOP mode, then it the item other than plan is pushed to the back
+        of the queue. (Plans are pushed to the back of the queue upon successful completion.)
+        """
+        async with self._lock:
+            return await self._process_next_item()
 
     async def _set_next_item_as_running(self):
         """
@@ -954,8 +1096,13 @@ class PlanQueueOperations:
         if not await self._is_item_running():
             plan_json = await self._r_pool.lpop(self._name_plan_queue)
             if plan_json:
-                self._plan_queue_uid = self.new_item_uid()
                 plan = json.loads(plan_json)
+                if plan["item_type"] != "plan":
+                    raise RuntimeError(
+                        "Function 'PlanQueueOperations.set_next_item_as_running' was called for "
+                        f"an item other than plan: {plan}"
+                    )
+                self._plan_queue_uid = self.new_item_uid()
                 await self._set_running_item_info(plan)
             else:
                 plan = {}
@@ -965,9 +1112,13 @@ class PlanQueueOperations:
 
     async def set_next_item_as_running(self):
         """
-        Sets the next item from the queue as 'running'. The item is removed
+        Sets the next item from the queue as 'running'. The item MUST be a plan
+        (e.g. not an instruction), otherwise an exception will be raised. The item is removed
         from the queue. UID remains in ``self._uid_dict``, i.e. item with the same UID
         may not be added to the queue while it is being executed.
+
+        This function can only be applied to the plans. Use ``process_next_item`` that
+        works correctly for any item (it calls this function if an item is a plan).
 
         Returns
         -------
@@ -982,14 +1133,23 @@ class PlanQueueOperations:
         """
         See ``self.set_processed_item_as_completed`` method.
         """
+        # If loop_mode is True, then add item to the back of the queue
+        loop_mode = self._plan_queue_mode["loop"]
+
         # Note: UID remains in the `self._uid_dict` after this operation
         if await self._is_item_running():
             item = await self._get_running_item_info()
+            if loop_mode:
+                item_to_add = item.copy()
+                item_to_add = self.set_new_item_uuid(item_to_add)
+                await self._r_pool.rpush(self._name_plan_queue, json.dumps(item_to_add))
+                self._uid_dict_add(item_to_add)
             item.setdefault("result", {})
             item["result"]["exit_status"] = exit_status
             item["result"]["run_uids"] = run_uids
             await self._clear_running_item_info()
-            self._uid_dict_remove(item["item_uid"])
+            if not loop_mode:
+                self._uid_dict_remove(item["item_uid"])
             await self._add_to_history(item)
         else:
             item = {}

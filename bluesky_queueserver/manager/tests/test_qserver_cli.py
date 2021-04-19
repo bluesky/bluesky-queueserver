@@ -5,7 +5,7 @@ import pytest
 from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
 from bluesky_queueserver.manager.comms import generate_new_zmq_key_pair
 
-from ._common import (
+from .common import (
     patch_first_startup_file,
     patch_first_startup_file_undo,
     wait_for_condition,
@@ -22,7 +22,7 @@ from ._common import (
     set_qserver_zmq_public_key,
 )
 
-from ._common import re_manager, re_manager_pc_copy, re_manager_cmd  # noqa: F401
+from .common import re_manager, re_manager_pc_copy, re_manager_cmd  # noqa: F401
 
 from ..qserver_cli import QServerExitCodes
 
@@ -564,6 +564,37 @@ def test_qserver_manager_stop_2(re_manager, option):  # noqa: F811
         assert n_plans == 0, "Incorrect number of plans in the queue"
         assert is_plan_running is False
         assert n_history == 2
+
+
+def test_queue_mode_set_1(re_manager):  # noqa F811
+    """
+    Basic test for ``qserver queue mode set`` command
+    """
+    assert subprocess.call(["qserver", "queue", "mode", "set", "loop", "True"]) == SUCCESS
+    status = get_queue_state()
+    assert status["plan_queue_mode"]["loop"] is True
+
+    assert subprocess.call(["qserver", "queue", "mode", "set", "loop", "False"]) == SUCCESS
+    status = get_queue_state()
+    assert status["plan_queue_mode"]["loop"] is False
+
+
+# fmt: off
+@pytest.mark.parametrize("plist, exit_code", [
+    (("set", "loop", "True"), SUCCESS),
+    (("set",), SUCCESS),  # This should also work (no parameters -> the mode is not changed)
+    (("unknown_option",), PARAM_ERROR),
+    (("set", "loop"), PARAM_ERROR),  # Incorrect number of parameters
+    (("set", "unknown_param", "True"), REQ_FAILED),  # Unsupported parameter name
+    (("set", "loop", "true"), REQ_FAILED),  # Invalid parameter value
+    (("set", "loop", "10"), REQ_FAILED),  # Invalid parameter value
+])
+# fmt: on
+def test_queue_mode_set_2_fail(re_manager, plist, exit_code):  # noqa F811
+    """
+    Failing cases of the ``qserver queue mode set`` command
+    """
+    assert subprocess.call(["qserver", "queue", "mode", *plist]) == exit_code, str(plist)
 
 
 # fmt: off

@@ -216,6 +216,8 @@ class RunEngineManager(Process):
                 self._environment_exists = True
                 await self._confirm_re_worker_exit()
                 self._environment_exists = False
+                self._worker_state_info = None
+
                 logger.error("Error occurred while opening RE Worker environment.")
                 success, err_msg = False, "Error occurred while opening RE Worker environment."
 
@@ -310,6 +312,8 @@ class RunEngineManager(Process):
 
         self._manager_state = MState.IDLE
         self._environment_exists = False
+        self._worker_state_info = None
+
         # If a plan is running, it needs to be pushed back into the queue
         await self._plan_queue.set_processed_item_as_stopped(exit_status="environment_destroyed", run_uids=[])
 
@@ -331,6 +335,8 @@ class RunEngineManager(Process):
 
             # Environment is not in valid state anyway. So assume it does not exist.
             self._environment_exists = False
+            self._worker_state_info = None
+
             if success:
                 logger.info("Wait for RE Worker process to close (join)")
 
@@ -502,7 +508,7 @@ class RunEngineManager(Process):
 
                 self._manager_state = MState.EXECUTING_QUEUE
 
-                new_plan = await self._plan_queue.set_next_item_as_running()
+                new_plan = await self._plan_queue.process_next_item()
 
                 plan_name = new_plan["name"]
                 args = new_plan["args"] if "args" in new_plan else []
@@ -537,8 +543,7 @@ class RunEngineManager(Process):
                 logger.info("Executing instruction:\n%s.", pprint.pformat(next_item))
 
                 if next_item["name"] == "queue_stop":
-                    # Pop the instruction from the queue
-                    await self._plan_queue.pop_item_from_queue(pos="front")
+                    await self._plan_queue.process_next_item()
                     self._manager_state = MState.EXECUTING_QUEUE
                     self._queue_stop_pending = True
                     asyncio.ensure_future(self._start_plan_task())
@@ -809,6 +814,7 @@ class RunEngineManager(Process):
         run_list_uid = self._re_run_list_uid
         plan_queue_uid = self._plan_queue.plan_queue_uid
         plan_history_uid = self._plan_queue.plan_history_uid
+        plan_queue_mode = self._plan_queue.plan_queue_mode
         # worker_state_info = self._worker_state_info
 
         # TODO: consider different levels of verbosity for ping or other command to
@@ -827,6 +833,7 @@ class RunEngineManager(Process):
             "run_list_uid": run_list_uid,
             "plan_queue_uid": plan_queue_uid,
             "plan_history_uid": plan_history_uid,
+            "plan_queue_mode": plan_queue_mode,
             # "worker_state_info": worker_state_info
         }
         return msg
@@ -1056,6 +1063,32 @@ class RunEngineManager(Process):
                 log_msg += f" item_uid='{item['item_uid']}'"
         log_msg += f" qsize={qsize}."
         return log_msg
+
+    async def _queue_mode_set_handler(self, request):
+        """
+        Set plan queue mode. The request must contain the parameter ``mode``,
+        which may be a dictionary containing mode options that need to be updated (not all
+        the parameters that define the mode) or a string ``default``. (The function will
+        accept ``mode={}``: the mode will not be changed in this case). If string value
+        ``default`` is passed, then the queue mode is reset to the default mode.
+        """
+        logger.info("Setting queue mode ...")
+        logger.debug("Request: %s", pprint.pformat(request))
+
+        success, msg = True, ""
+        try:
+            if "mode" not in request:
+                raise Exception(f"Parameter 'mode' is not found in request {request}")
+
+            plan_queue_mode = request["mode"]
+            await self._plan_queue.set_plan_queue_mode(plan_queue_mode, update=True)
+
+        except Exception as ex:
+            success = False
+            msg = f"Failed to set queue mode: {str(ex)}"
+
+        rdict = {"success": success, "msg": msg}
+        return rdict
 
     async def _queue_item_add_handler(self, request):
         """
@@ -1535,6 +1568,7 @@ class RunEngineManager(Process):
             "environment_open": "_environment_open_handler",
             "environment_close": "_environment_close_handler",
             "environment_destroy": "_environment_destroy_handler",
+            "queue_mode_set": "_queue_mode_set_handler",
             "queue_item_add": "_queue_item_add_handler",
             "queue_item_add_batch": "_queue_item_add_batch_handler",
             "queue_item_update": "_queue_item_update_handler",

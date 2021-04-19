@@ -100,10 +100,10 @@ variable before starting the server::
 
 The Web Server supports using external modules for processing some requests. Those modules
 are optional and may contain custom instrument-specific processing code. The name of the external
-module may be passed to HTTP server by setting **BLUESKY_HTTPSERVER_CUSTOM_MODULE** environment
+module may be passed to HTTP server by setting **QSERVER_CUSTOM_MODULE** environment
 variable::
 
-  BLUESKY_HTTPSERVER_CUSTOM_MODULE=<name-of-external-module> uvicorn bluesky_queueserver.server.server:app --host localhost --port 60610
+  QSERVER_CUSTOM_MODULE=<name-of-external-module> uvicorn bluesky_queueserver.server.server:app --host localhost --port 60610
 
 If the module name contains '-' (dash) characters, they will be automatically converted to '_'
 (underscore) characters. If the server fails to load custom external module, the server
@@ -254,6 +254,12 @@ The names of the plans and devices are strings. The strings are converted to ref
 Ophyd devices in the worker process. The simulated beamline profile collection includes all simulated
 Ophyd devices and built-in Bluesky plans.
 
+A batch of plans may be submitted to the queue by sending a single request. Every plan in the batch
+is validated and the plans are added to the queue only if all plans pass validation. Otherwise the
+batch is rejected. The following request adds two plans to the queue::
+
+  http POST http://localhost:60610/queue/item/add/batch items:='[{"name":"count", "args":[["det1"]], "item_type": "plan"}, {"name":"count", "args":[["det2"]], "item_type": "plan"}]'
+
 Alternatively the queue may be populated by uploading the list of plans with parameters in the form of
 a spreadsheet to HTTP server. Note that this is an experimental feature, which could be modified at any
 time until API is settled. The format of the spreadsheet will be specific to each beamline
@@ -360,6 +366,15 @@ Remove all entries from the plan queue::
 
   qserver queue clear
   http POST http://localhost:60610/queue/clear
+
+The plan queue can operate in LOOP mode, which is disabled by default. To enable or disable the LOOP mode
+the following commands::
+
+  qserver queue mode set loop True
+  qserver queue mode set loop False
+
+  http POST http://localhost:60610/queue/mode/set mode:='{"loop": true}'
+  http POST http://localhost:60610/queue/mode/set mode:='{"loop": false}'
 
 Start execution of the plan queue. The environment MUST be opened before queue could be started::
 

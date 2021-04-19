@@ -83,6 +83,55 @@ def test_queue_clean(pq, plan_running, plans, result_running, result_plans):
     asyncio.run(testing())
 
 
+@pytest.mark.parametrize("update", [False, True])
+def test_set_plan_queue_mode_1(pq, update):
+    """
+    Test basic functionality of ``set_plan_queue_mode`` function:
+    The case: ``update=False``.
+    """
+
+    async def testing():
+        # Initially plan queue mode must be default queue mode
+        assert pq.plan_queue_mode == pq.plan_queue_mode_default
+        assert pq.plan_queue_mode["loop"] is False
+
+        # The properties are expecte to return copies
+        assert pq.plan_queue_mode is not pq._plan_queue_mode
+        assert pq.plan_queue_mode_default is not pq._plan_queue_mode_default
+
+        queue_mode = {"loop": True}
+        await pq.set_plan_queue_mode(queue_mode, update=update)
+        assert pq._plan_queue_mode is not queue_mode  # Verify that 'set' operation performs copy
+        assert pq.plan_queue_mode == queue_mode
+
+        with pytest.raises(ValueError, match="Unsupported plan queue mode parameter 'nonexisting_key'"):
+            await pq.set_plan_queue_mode({"nonexisting_key": True}, update=update)
+
+        if update:
+            await pq.set_plan_queue_mode({}, update=update)
+        else:
+            with pytest.raises(ValueError, match="Parameters {'loop'} are missing"):
+                await pq.set_plan_queue_mode({}, update=update)
+
+        with pytest.raises(TypeError, match="Unsupported type .* of the parameter 'loop'"):
+            await pq.set_plan_queue_mode({"loop": 10}, update=update)
+
+        with pytest.raises(TypeError, match="Unsupported type .* of the parameter 'loop'"):
+            await pq.set_plan_queue_mode({"loop": "some_string"}, update=update)
+
+        # Verify that the queue mode is saved to Redis
+        pq2 = PlanQueueOperations()
+        await pq2.start()
+        assert pq2.plan_queue_mode == queue_mode
+
+        # Set queue mode to default
+        assert pq.plan_queue_mode != pq.plan_queue_mode_default
+        await pq.set_plan_queue_mode("default", update=update)
+        assert pq.plan_queue_mode == pq.plan_queue_mode_default
+
+    asyncio.run(testing())
+
+
 # fmt: off
 @pytest.mark.parametrize("plan, result",
                          [({"a": 10}, True),
@@ -117,7 +166,7 @@ def test_verify_item(pq, plan, f_kwargs, result, errmsg):
     Tests for method ``_verify_item()``.
     """
     # Set two existiing plans and then set one of them as running
-    existing_plans = [{"item_uid": "two"}, {"item_uid": "three"}]
+    existing_plans = [{"item_type": "plan", "item_uid": "two"}, {"item_type": "plan", "item_uid": "three"}]
 
     async def set_plans():
         # Add plan to queue
@@ -356,9 +405,9 @@ def test_get_queue_full_1(pq):
     async def testing():
 
         plans = [
-            {"item_uid": "one", "name": "a"},
-            {"item_uid": "two", "name": "b"},
-            {"item_uid": "three", "name": "c"},
+            {"item_type": "plan", "item_uid": "one", "name": "a"},
+            {"item_type": "plan", "item_uid": "two", "name": "b"},
+            {"item_type": "plan", "item_uid": "three", "name": "c"},
         ]
 
         for p in plans:
@@ -430,9 +479,9 @@ def test_get_item_2_fail(pq):
 
     async def testing():
 
-        await pq.add_item_to_queue({"item_uid": "one", "name": "a"})
-        await pq.add_item_to_queue({"item_uid": "two", "name": "b"})
-        await pq.add_item_to_queue({"item_uid": "three", "name": "c"})
+        await pq.add_item_to_queue({"item_type": "plan", "item_uid": "one", "name": "a"})
+        await pq.add_item_to_queue({"item_type": "plan", "item_uid": "two", "name": "b"})
+        await pq.add_item_to_queue({"item_type": "plan", "item_uid": "three", "name": "c"})
         assert await pq.get_queue_size() == 3
 
         pq_uid = pq.plan_queue_uid
@@ -496,15 +545,15 @@ def test_add_item_to_queue_2(pq):
         assert qsize == n, f"plan: {plan}"
 
     async def testing():
-        await add_plan({"name": "a"}, 1)
-        await add_plan({"name": "b"}, 2)
-        await add_plan({"name": "c"}, 3, pos="back")
+        await add_plan({"item_type": "plan", "name": "a"}, 1)
+        await add_plan({"item_type": "plan", "name": "b"}, 2)
+        await add_plan({"item_type": "plan", "name": "c"}, 3, pos="back")
 
         plan_queue, _ = await pq.get_queue()
         displaced_uid = plan_queue[1]["item_uid"]
 
-        await add_plan({"name": "d"}, 4, before_uid=displaced_uid)
-        await add_plan({"name": "e"}, 5, after_uid=displaced_uid)
+        await add_plan({"item_type": "plan", "name": "d"}, 4, before_uid=displaced_uid)
+        await add_plan({"item_type": "plan", "name": "e"}, 5, after_uid=displaced_uid)
 
         # This reduces the number of elements in the queue by one
         await pq.set_next_item_as_running()
@@ -660,7 +709,11 @@ def test_replace_item_3_failing(pq):
     """
 
     async def testing():
-        plans = [{"name": "a"}, {"name": "b"}, {"name": "c"}]
+        plans = [
+            {"item_type": "plan", "name": "a"},
+            {"item_type": "plan", "name": "b"},
+            {"item_type": "plan", "name": "c"},
+        ]
         plans_added = [None] * len(plans)
         qsizes = [None] * len(plans)
 
@@ -672,7 +725,7 @@ def test_replace_item_3_failing(pq):
 
         # Set the first item as 'running'
         running_plan = await pq.set_next_item_as_running()
-        assert running_plan == plans[0]
+        assert running_plan == plans_added[0]
 
         queue, _ = await pq.get_queue()
         running_item_info = await pq.get_running_item_info()
@@ -861,9 +914,9 @@ def test_pop_item_from_queue_3(pq):
     """
 
     async def testing():
-        await pq.add_item_to_queue({"name": "a"})
-        await pq.add_item_to_queue({"name": "b"})
-        await pq.add_item_to_queue({"name": "c"})
+        await pq.add_item_to_queue({"item_type": "plan", "name": "a"})
+        await pq.add_item_to_queue({"item_type": "plan", "name": "b"})
+        await pq.add_item_to_queue({"item_type": "plan", "name": "c"})
         assert await pq.get_queue_size() == 3
 
         plans, _ = await pq.get_queue()
@@ -922,9 +975,9 @@ def test_clear_queue(pq):
     """
 
     async def testing():
-        await pq.add_item_to_queue({"name": "a"})
-        await pq.add_item_to_queue({"name": "b"})
-        await pq.add_item_to_queue({"name": "c"})
+        await pq.add_item_to_queue({"item_type": "plan", "name": "a"})
+        await pq.add_item_to_queue({"item_type": "plan", "name": "b"})
+        await pq.add_item_to_queue({"item_type": "plan", "name": "c"})
         # Set one of 3 plans as running (removes it from the queue)
         await pq.set_next_item_as_running()
 
@@ -979,12 +1032,20 @@ def test_add_to_history_functions(pq):
     asyncio.run(testing())
 
 
-def test_set_next_item_as_running(pq):
+@pytest.mark.parametrize("func", ["process_next_item", "set_next_item_as_running"])
+@pytest.mark.parametrize("loop_mode", [False, True])
+def test_process_next_item_1(pq, func, loop_mode):
     """
-    Test for ``PlanQueueOperations.set_next_item_as_running()`` function
+    Test for ``PlanQueueOperations.process_next_item()`` and
+    ``PlanQueueOperations.set_next_item_as_running()`` functions.
+    Those functions are interchangeable for plans, but ``process_next_item`` works
+    for items and plans.
     """
 
     async def testing():
+
+        await pq.set_plan_queue_mode({"loop": loop_mode})
+
         # Apply to empty queue
         assert await pq.get_queue_size() == 0
         assert await pq.is_item_running() is False
@@ -993,13 +1054,20 @@ def test_set_next_item_as_running(pq):
         assert await pq.is_item_running() is False
 
         # Apply to a queue with several plans
-        await pq.add_item_to_queue({"name": "a"})
-        await pq.add_item_to_queue({"name": "b"})
-        await pq.add_item_to_queue({"name": "c"})
+        p1, _ = await pq.add_item_to_queue({"item_type": "plan", "name": "a"})
+        p2, _ = await pq.add_item_to_queue({"item_type": "plan", "name": "b"})
+        p3, _ = await pq.add_item_to_queue({"item_type": "plan", "name": "c"})
+
+        if func == "process_next_item":
+            f = pq.process_next_item
+        elif func == "set_next_item_as_running":
+            f = pq.set_next_item_as_running
+        else:
+            assert False, f"Unknown test case: '{func}'"
 
         # Set one of 3 plans as running (removes it from the queue)
         pq_uid = pq.plan_queue_uid
-        assert await pq.set_next_item_as_running() != {}
+        assert await f() != {}
 
         assert pq.plan_queue_uid != pq_uid
         assert await pq.get_queue_size() == 2
@@ -1007,7 +1075,7 @@ def test_set_next_item_as_running(pq):
 
         # Apply if a plan is already running
         pq_uid = pq.plan_queue_uid
-        assert await pq.set_next_item_as_running() == {}
+        assert await f() == {}
         assert pq.plan_queue_uid == pq_uid
         assert await pq.get_queue_size() == 2
         assert len(pq._uid_dict) == 3
@@ -1015,13 +1083,62 @@ def test_set_next_item_as_running(pq):
     asyncio.run(testing())
 
 
-def test_set_processed_item_as_completed(pq):
+@pytest.mark.parametrize("loop_mode", [False, True])
+def test_process_next_item_2(pq, loop_mode):
+    """
+    Test for ``PlanQueueOperations.process_next_item()`` and
+    ``PlanQueueOperations.set_next_item_as_running()`` functions.
+    Those functions are interchangeable for plans, but ``process_next_item`` works
+    for items and plans.
+
+    Test with 'instruction' item.
+    """
+
+    async def testing():
+
+        await pq.set_plan_queue_mode({"loop": loop_mode})
+
+        # Apply to empty queue
+        assert await pq.get_queue_size() == 0
+        assert await pq.is_item_running() is False
+        assert await pq.set_next_item_as_running() == {}
+        assert await pq.get_queue_size() == 0
+        assert await pq.is_item_running() is False
+
+        # Apply to a queue with several plans
+        p0, _ = await pq.add_item_to_queue({"item_type": "instruction", "name": "a"})
+        p1, _ = await pq.add_item_to_queue({"item_type": "plan", "name": "b"})
+        p2, _ = await pq.add_item_to_queue({"item_type": "plan", "name": "c"})
+
+        # Set one of 3 plans as running (removes it from the queue)
+        pq_uid = pq.plan_queue_uid
+        assert await pq.process_next_item() == p0
+
+        assert pq.plan_queue_uid != pq_uid
+        assert await pq.get_queue_size() == 3 if loop_mode else 2
+        assert len(pq._uid_dict) == 3 if loop_mode else 2
+
+        queue, _ = await pq.get_queue()
+        assert queue[0] == p1
+        assert queue[1] == p2
+        if loop_mode:
+            assert queue[2]["name"] == p0["name"]
+            assert queue[2]["item_uid"] != p0["name"]
+
+    asyncio.run(testing())
+
+
+def test_set_processed_item_as_completed_1(pq):
     """
     Test for ``PlanQueueOperations.set_processed_item_as_completed()`` function.
     The function moves currently running plan to history.
     """
 
-    plans = [{"item_uid": 1, "name": "a"}, {"item_uid": 2, "name": "b"}, {"item_uid": 3, "name": "c"}]
+    plans = [
+        {"item_type": "plan", "item_uid": 1, "name": "a"},
+        {"item_type": "plan", "item_uid": 2, "name": "b"},
+        {"item_type": "plan", "item_uid": 3, "name": "c"},
+    ]
     plans_run_uids = [["abc1"], ["abc2", "abc3"], []]
 
     def add_status_to_plans(plans, run_uids, exit_status):
@@ -1080,6 +1197,69 @@ def test_set_processed_item_as_completed(pq):
     asyncio.run(testing())
 
 
+def test_set_processed_item_as_completed_2(pq):
+    """
+    Test for ``PlanQueueOperations.set_processed_item_as_completed()`` function.
+    Similar test as the previous one, but with LOOP mode ENABLED.
+    """
+
+    plans = [
+        {"item_type": "plan", "item_uid": 1, "name": "a"},
+        {"item_type": "plan", "item_uid": 2, "name": "b"},
+        {"item_type": "plan", "item_uid": 3, "name": "c"},
+    ]
+    plans_run_uids = [["abc1"], ["abc2", "abc3"], []]
+
+    async def testing():
+        for plan in plans:
+            await pq.add_item_to_queue(plan)
+
+        # Enable LOOP mode: the completed item will be pushed to the back of the queue
+        await pq.set_plan_queue_mode({"loop": True})
+
+        # No plan is running
+        pq_uid = pq.plan_queue_uid
+        ph_uid = pq.plan_history_uid
+        plan = await pq.set_processed_item_as_completed(exit_status="completed", run_uids=plans_run_uids[0])
+        assert plan == {}
+        assert pq.plan_queue_uid == pq_uid
+        assert pq.plan_history_uid == ph_uid
+
+        queue, _ = await pq.get_queue()
+        assert [_["name"] for _ in queue] == ["a", "b", "c"]
+
+        # Execute the first plan
+        await pq.set_next_item_as_running()
+        pq_uid = pq.plan_queue_uid
+        plan = await pq.set_processed_item_as_completed(exit_status="completed", run_uids=plans_run_uids[0])
+        assert pq.plan_queue_uid != pq_uid
+        assert pq.plan_history_uid != ph_uid
+
+        queue, _ = await pq.get_queue()
+        assert [_["name"] for _ in queue] == ["b", "c", "a"]
+
+        assert await pq.get_queue_size() == 3
+        assert await pq.get_history_size() == 1
+        assert plan["name"] == plans[0]["name"]
+        assert plan["result"]["exit_status"] == "completed"
+        assert plan["result"]["run_uids"] == plans_run_uids[0]
+
+        # Execute the second plan
+        await pq.set_next_item_as_running()
+        plan = await pq.set_processed_item_as_completed(exit_status="completed", run_uids=plans_run_uids[1])
+
+        queue, _ = await pq.get_queue()
+        assert [_["name"] for _ in queue] == ["c", "a", "b"]
+
+        assert await pq.get_queue_size() == 3
+        assert await pq.get_history_size() == 2
+        assert plan["name"] == plans[1]["name"]
+        assert plan["result"]["exit_status"] == "completed"
+        assert plan["result"]["run_uids"] == plans_run_uids[1]
+
+    asyncio.run(testing())
+
+
 def test_set_processed_item_as_stopped(pq):
     """
     Test for ``PlanQueueOperations.set_processed_item_as_stopped()`` function.
@@ -1088,7 +1268,11 @@ def test_set_processed_item_as_stopped(pq):
     Typically execution of single-run plans result in no UIDs, but in this test we still assign UIDS
     to test functionality.
     """
-    plans = [{"item_uid": 1, "name": "a"}, {"item_uid": 2, "name": "b"}, {"item_uid": 3, "name": "c"}]
+    plans = [
+        {"item_type": "plan", "item_uid": 1, "name": "a"},
+        {"item_type": "plan", "item_uid": 2, "name": "b"},
+        {"item_type": "plan", "item_uid": 3, "name": "c"},
+    ]
     plans_run_uids = [["abc1"], ["abc2", "abc3"], []]
 
     def add_status_to_plans(plans, run_uids, exit_status):

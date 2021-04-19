@@ -14,7 +14,7 @@ from bluesky_queueserver.manager.profile_ops import load_profile_collection, gen
 
 from ..comms import zmq_single_request
 
-from ._common import (
+from .common import (
     wait_for_condition,
     condition_environment_created,
     condition_environment_closed,
@@ -22,7 +22,7 @@ from ._common import (
     copy_default_profile_collection,
     patch_first_startup_file,
 )
-from ._common import re_manager_cmd  # noqa: F401
+from .common import re_manager_cmd  # noqa: F401
 
 # User name and user group name used throughout most of the tests.
 _user, _user_group = "Testing Script", "admin"

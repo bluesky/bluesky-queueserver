@@ -1360,14 +1360,14 @@ def test_zmq_api_queue_mode_set_1(re_manager):  # noqa: F811
 
     # Send empty dictionary, this should not change the mode
     resp1, _ = zmq_single_request("queue_mode_set", params={"mode": {}})
-    assert resp1["success"] is True, _
+    assert resp1["success"] is True, str(resp1)
     assert resp1["msg"] == ""
     status = get_queue_state()
     assert status["plan_queue_mode"] == queue_mode_default
 
     # Meaningful change: enable the LOOP mode
     resp2, _ = zmq_single_request("queue_mode_set", params={"mode": {"loop": True}})
-    assert resp2["success"] is True, _
+    assert resp2["success"] is True, str(resp2)
     status = get_queue_state()
     assert status["plan_queue_mode"] != queue_mode_default
     queue_mode_expected = queue_mode_default.copy()
@@ -1376,7 +1376,7 @@ def test_zmq_api_queue_mode_set_1(re_manager):  # noqa: F811
 
     # Reset to default
     resp3, _ = zmq_single_request("queue_mode_set", params={"mode": "default"})
-    assert resp3["success"] is True, _
+    assert resp3["success"] is True, str(resp3)
     status = get_queue_state()
     assert status["plan_queue_mode"] == queue_mode_default
 

@@ -566,6 +566,37 @@ def test_qserver_manager_stop_2(re_manager, option):  # noqa: F811
         assert n_history == 2
 
 
+def test_queue_mode_set_1(re_manager):  # noqa F811
+    """
+    Basic test for ``qserver queue mode set`` command
+    """
+    assert subprocess.call(["qserver", "queue", "mode", "set", "loop", "True"]) == SUCCESS
+    status = get_queue_state()
+    assert status["plan_queue_mode"]["loop"] is True
+
+    assert subprocess.call(["qserver", "queue", "mode", "set", "loop", "False"]) == SUCCESS
+    status = get_queue_state()
+    assert status["plan_queue_mode"]["loop"] is False
+
+
+# fmt: off
+@pytest.mark.parametrize("plist, exit_code", [
+    (("set", "loop", "True"), SUCCESS),
+    (("set",), SUCCESS),  # This should also work (no parameters -> the mode is not changed)
+    (("unknown_option",), PARAM_ERROR),
+    (("set", "loop"), PARAM_ERROR),  # Incorrect number of parameters
+    (("set", "unknown_param", "True"), REQ_FAILED),  # Unsupported parameter name
+    (("set", "loop", "true"), REQ_FAILED),  # Invalid parameter value
+    (("set", "loop", "10"), REQ_FAILED),  # Invalid parameter value
+])
+# fmt: on
+def test_queue_mode_set_2_fail(re_manager, plist, exit_code):  # noqa F811
+    """
+    Failing cases of the ``qserver queue mode set`` command
+    """
+    assert subprocess.call(["qserver", "queue", "mode", *plist]) == exit_code, str(plist)
+
+
 # fmt: off
 @pytest.mark.parametrize("pos, pos_result, success", [
     (None, 2, True),

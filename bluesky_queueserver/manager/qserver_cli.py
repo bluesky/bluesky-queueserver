@@ -100,6 +100,10 @@ qserver queue start        # Start execution of the queue
 qserver queue stop         # Request execition of the queue to stop after current plan
 qserver queue stop cancel  # Cancel request to stop execution of the queue
 
+# Queue can operate in LOOP mode, which is disabled by default. To enable or disable the LOOP mode use
+qserver queue mode set loop True
+qserver queue mode set loop False
+
 # The following requests are forwarded to the Run Engine:
 qserver re pause           # Request to PAUSE currently executed plan at the next checkpoint
 qserver re pause deferred  # Request to PAUSE currently executed plan at the next checkpoint

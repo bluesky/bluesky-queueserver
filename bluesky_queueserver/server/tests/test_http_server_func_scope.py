@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import pytest
 
-from ._common import plan_list_sample, create_excel_file_from_plan_list
+from bluesky_queueserver.manager.tests.plan_lists import plan_list_sample, create_excel_file_from_plan_list
 
 from bluesky_queueserver.manager.tests.common import (  # noqa F401
     re_manager,
@@ -79,7 +79,7 @@ def test_http_server_queue_upload_spreasheet_1(re_manager, fastapi_server_fs, tm
     """
     monkeypatch.setenv(
         "QSERVER_CUSTOM_MODULE",
-        "bluesky_queueserver.server.tests.http_custom_proc_functions",
+        "bluesky_queueserver.manager.tests.spreadsheet_custom_proc_functions",
         prepend=False,
     )
     fastapi_server_fs()
@@ -140,7 +140,7 @@ def test_http_server_queue_upload_spreasheet_2(re_manager, fastapi_server_fs, tm
     """
     monkeypatch.setenv(
         "QSERVER_CUSTOM_MODULE",
-        "bluesky_queueserver.server.tests.http_custom_proc_functions",
+        "bluesky_queueserver.manager.tests.spreadsheet_custom_proc_functions",
         prepend=False,
     )
     fastapi_server_fs()
@@ -166,7 +166,7 @@ def test_http_server_queue_upload_spreasheet_3(re_manager, fastapi_server_fs, tm
     """
     monkeypatch.setenv(
         "QSERVER_CUSTOM_MODULE",
-        "bluesky_queueserver.server.tests.http_custom_proc_functions",
+        "bluesky_queueserver.manager.tests.spreadsheet_custom_proc_functions",
         prepend=False,
     )
     fastapi_server_fs()
@@ -203,7 +203,7 @@ def test_http_server_queue_upload_spreasheet_4(
     if use_custom:
         monkeypatch.setenv(
             "QSERVER_CUSTOM_MODULE",
-            "bluesky_queueserver.server.tests.http_custom_proc_functions",
+            "bluesky_queueserver.manager.tests.spreadsheet_custom_proc_functions",
             prepend=False,
         )
     fastapi_server_fs()
@@ -257,7 +257,7 @@ def test_http_server_queue_upload_spreasheet_5(re_manager, fastapi_server_fs, tm
     """
     monkeypatch.setenv(
         "QSERVER_CUSTOM_MODULE",
-        "bluesky_queueserver.server.tests.http_custom_proc_functions",
+        "bluesky_queueserver.manager.tests.spreadsheet_custom_proc_functions",
         prepend=False,
     )
     fastapi_server_fs()

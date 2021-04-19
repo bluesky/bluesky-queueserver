@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException, File, UploadFile, Form
 from typing import Optional
 
 from ..manager.comms import ZMQCommSendAsync, validate_zmq_key
-from .conversions import filter_plan_descriptions, spreadsheet_to_plan_list
+from bluesky_queueserver.manager.conversions import filter_plan_descriptions, spreadsheet_to_plan_list
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

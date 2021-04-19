@@ -3,9 +3,9 @@ import numpy as np
 import os
 import pytest
 
-from ._common import plan_list_sample, create_excel_file_from_plan_list
+from bluesky_queueserver.manager.tests.plan_lists import plan_list_sample, create_excel_file_from_plan_list
 
-from bluesky_queueserver.server.conversions import (
+from bluesky_queueserver.manager.conversions import (
     filter_plan_descriptions,
     _read_cell_parameter,
     spreadsheet_to_plan_list,

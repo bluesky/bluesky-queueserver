@@ -52,7 +52,7 @@ async def startup_event():
     )
 
     # Import module with custom code
-    module_name = os.getenv("BLUESKY_HTTPSERVER_CUSTOM_MODULE", None)
+    module_name = os.getenv("QSERVER_CUSTOM_MODULE", None)
 
     if module_name:
         try:

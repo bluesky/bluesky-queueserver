@@ -489,6 +489,67 @@ def msg_queue_item(params):
     return method, prms
 
 
+def msg_queue_mode(params):
+    """
+    Generate outgoing messages for `queue_mode_...` commands. The supported option is ``set``.
+
+    Parameters
+    ----------
+    params : list
+        List of parameters of the command. The first two elements of the list are expected to
+        be ``mode`` and ``set`` keywords.
+
+    Returns
+    -------
+    str
+        Name of the method from RE Manager API
+    dict
+        Dictionary of the method parameters
+    """
+    # Check if the function was called for the appropriate command
+    command = "queue"
+    expected_p0 = "mode"
+    if params[0] != expected_p0:
+        raise ValueError(f"Incorrect parameter value '{params[0]}'. Expected value: '{expected_p0}'")
+
+    # Make sure that there is a sufficient number of parameters to start processing
+    if len(params) < 2:
+        raise CommandParameterError(f"Item type and options are not specified '{command} {params[0]}'")
+
+    p_item_type = params[1]
+    if p_item_type != "set":
+        raise_request_not_supported([command, params[0], params[1]])
+
+    try:
+        if p_item_type == "set":
+            params_mode = params[2:]
+            if len(params_mode) % 2:
+                raise CommandParameterError(
+                    f"The list of queue mode parameters must have even number of elements: {params_mode}"
+                )
+
+            queue_mode = {params_mode[i]: params_mode[i + 1] for i in range(0, len(params_mode), 2)}
+            for k in queue_mode.keys():
+                # Attempt to evaluate key parameters (e.g. "True" should become boolean True)
+                #   If a parameter fails to evaluate, it should remain a string.
+                try:
+                    queue_mode[k] = eval(queue_mode[k], {}, {})
+                except Exception:
+                    pass
+            cmd_prms = {"mode": queue_mode}
+        else:
+            # This indicates a bug in the program.
+            raise ValueError(f"Unknown item type: {p_item_type}")
+
+    except IndexError:
+        raise CommandParameterError(f"The command '{params}' contain insufficient number of parameters")
+
+    method = f"{command}_{params[0]}_{params[1]}"
+    prms = cmd_prms
+
+    return method, prms
+
+
 def msg_queue_stop(params):
     """
     Generate outgoing message for `queue stop` command.
@@ -654,7 +715,7 @@ def create_msg(params):
     elif command == "queue":
         if len(params) < 1:
             raise CommandParameterError(f"Request '{command}' must include at least one parameter")
-        supported_params = ("add", "update", "replace", "get", "clear", "item", "start", "stop")
+        supported_params = ("add", "update", "replace", "get", "clear", "item", "start", "stop", "mode")
         if params[0] in supported_params:
             if params[0] in ("add", "update", "replace"):
                 method, prms = msg_queue_add_update(params, cmd_opt=params[0])
@@ -669,6 +730,9 @@ def create_msg(params):
 
             elif params[0] == "item":
                 method, prms = msg_queue_item(params)
+
+            elif params[0] == "mode":
+                method, prms = msg_queue_mode(params)
 
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")

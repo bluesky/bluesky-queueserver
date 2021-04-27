@@ -51,7 +51,7 @@ def move_then_count(
         )
 
     mv_args = [val for tup in zip(motors, positions) for val in tup]
-    yield from mv(*mv_args)
+    yield from bps.mv(*mv_args)
     yield from count(detectors)
 
 

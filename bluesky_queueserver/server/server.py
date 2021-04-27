@@ -273,6 +273,7 @@ async def queue_upload_spreadsheet(spreadsheet: UploadFile = File(...), data_typ
         # File name is also passed to the processing function (may be useful in user created
         #   processing code, since processing may differ based on extension or file name)
         f_name = spreadsheet.filename
+        logger.info(f"Spreadsheet file '{f_name}' was uploaded")
 
         # Determine which processing function should be used
         item_list = []

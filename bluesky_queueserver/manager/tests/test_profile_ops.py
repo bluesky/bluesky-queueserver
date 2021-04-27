@@ -1455,7 +1455,7 @@ def test_select_allowed_items(item_dict, allow_patterns, disallow_patterns, resu
 ])
 # fmt: on
 def test_load_allowed_plans_and_devices_1(fln_existing_items, fln_user_groups, empty_dict, all_users):
-    """"""
+    """ """
     pc_path = get_default_startup_dir()
 
     fln_existing_items = None if (fln_existing_items is None) else os.path.join(pc_path, fln_existing_items)

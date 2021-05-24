@@ -1339,4 +1339,10 @@ def test_set_processed_item_as_stopped(pq):
         plan_history_expected[1]["item_uid"] = plan_modified_uid
         assert plan_history == plan_history_expected
 
+        # Verify that `_uid_dict` still has correct size. `_uid_dict` should never be accessed directly.
+        assert len(pq._uid_dict) == 3
+        # Also it should not contain UIDs of already executed plans.
+        for plan in plan_history:
+            assert plan["item_uid"] not in pq._uid_dict
+
     asyncio.run(testing())

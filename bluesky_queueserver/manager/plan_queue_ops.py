@@ -346,15 +346,15 @@ class PlanQueueOperations:
         """
         return uid in self._uid_dict
 
-    def _uid_dict_add(self, plan):
+    def _uid_dict_add(self, item):
         """
         Add UID to ``self._uid_dict``.
         """
-        uid = plan["item_uid"]
+        uid = item["item_uid"]
         if self._is_uid_in_dict(uid):
             raise RuntimeError(f"Trying to add plan with UID '{uid}', which is already in the queue")
         self._plan_queue_uid = self.new_item_uid()
-        self._uid_dict.update({uid: plan})
+        self._uid_dict.update({uid: item})
 
     def _uid_dict_remove(self, uid):
         """
@@ -365,15 +365,15 @@ class PlanQueueOperations:
         self._plan_queue_uid = self.new_item_uid()
         self._uid_dict.pop(uid)
 
-    def _uid_dict_update(self, plan):
+    def _uid_dict_update(self, item):
         """
         Update a plan with UID that is already in the dictionary.
         """
-        uid = plan["item_uid"]
+        uid = item["item_uid"]
         if not self._is_uid_in_dict(uid):
             raise RuntimeError(f"Trying to update plan with UID '{uid}', which is not in the queue")
         self._plan_queue_uid = self.new_item_uid()
-        self._uid_dict.update({uid: plan})
+        self._uid_dict.update({uid: item})
 
     def _uid_dict_get_item(self, uid):
         """

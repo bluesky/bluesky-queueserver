@@ -1187,9 +1187,17 @@ class PlanQueueOperations:
             item.setdefault("result", {})
             item["result"]["exit_status"] = exit_status
             item["result"]["run_uids"] = run_uids
+
             await self._clear_running_item_info()
-            await self._r_pool.lpush(self._name_plan_queue, json.dumps(item))
-            self._uid_dict_update(item)
+
+            # Generate new UID for the item that is pushed back into the queue.
+            item_pushed_to_queue = copy.deepcopy(item)
+            item_pushed_to_queue["item_uid"] = self.new_item_uid()
+            await self._r_pool.lpush(self._name_plan_queue, json.dumps(item_pushed_to_queue))
+            # Replace item in '_uid_dict'
+            self._uid_dict_remove(item["item_uid"])
+            self._uid_dict_add(item_pushed_to_queue)
+
             await self._add_to_history(item)
         else:
             item = {}
@@ -1199,7 +1207,8 @@ class PlanQueueOperations:
         """
         Pushes currently executed item to the beginning of the queue and adds
         it to history with additional sets ``exit_status`` key.
-        UID is remains in ``self._uid_dict``.
+        UID is remains in ``self._uid_dict``. New ``item_uid`` is generated for the item
+        that is pushed back into the queue.
 
         Parameters
         ----------
@@ -1211,8 +1220,9 @@ class PlanQueueOperations:
         Returns
         -------
         dict
-            The item (plan) added to the history including ``exit_status``. If another item (plan)
-            is currently running, then ``{}`` is returned.
+            The item (plan) added to the history including ``exit_status``. If no item (plan)
+            is running, then the function returns ``{}``. The item pushed back into the queue
+            will have different ``item_uid`` than the item added to the history.
         """
         async with self._lock:
             return await self._set_processed_item_as_stopped(exit_status=exit_status, run_uids=run_uids)

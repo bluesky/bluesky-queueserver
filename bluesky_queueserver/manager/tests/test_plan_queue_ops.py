@@ -1269,9 +1269,9 @@ def test_set_processed_item_as_stopped(pq):
     to test functionality.
     """
     plans = [
-        {"item_type": "plan", "item_uid": 1, "name": "a"},
-        {"item_type": "plan", "item_uid": 2, "name": "b"},
-        {"item_type": "plan", "item_uid": 3, "name": "c"},
+        {"item_type": "plan", "item_uid": "1", "name": "a"},
+        {"item_type": "plan", "item_uid": "2", "name": "b"},
+        {"item_type": "plan", "item_uid": "3", "name": "c"},
     ]
     plans_run_uids = [["abc1"], ["abc2", "abc3"], []]
 
@@ -1309,6 +1309,13 @@ def test_set_processed_item_as_stopped(pq):
         assert plan["name"] == plans[0]["name"]
         assert plan["result"]["exit_status"] == "stopped"
         assert plan["result"]["run_uids"] == plans_run_uids[0]
+        assert plan["item_uid"] == plans[0]["item_uid"]
+
+        # New plan UID is generated when the plan is pushed back into the queue
+        queue, _ = await pq.get_queue()
+        plan_modified_uid = queue[0]["item_uid"]
+        # Make sure that the item UID was changed
+        assert plan_modified_uid != plans[0]["item_uid"]
 
         plan_history, _ = await pq.get_history()
         plan_history_expected = add_status_to_plans([plans[0]], [plans_run_uids[0]], "stopped")
@@ -1328,6 +1335,8 @@ def test_set_processed_item_as_stopped(pq):
         plan_history_expected = add_status_to_plans(
             [plans[0].copy(), plans[0].copy()], [plans_run_uids[0], plans_run_uids[1]], "stopped"
         )
+        # Plan 0 has different UID after it was inserted in the queue during the 1st attempt
+        plan_history_expected[1]["item_uid"] = plan_modified_uid
         assert plan_history == plan_history_expected
 
     asyncio.run(testing())

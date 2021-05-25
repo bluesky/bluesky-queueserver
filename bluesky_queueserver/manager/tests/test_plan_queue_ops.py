@@ -2,6 +2,7 @@ import asyncio
 import pytest
 import json
 import copy
+import pprint
 from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
 
 
@@ -22,8 +23,9 @@ def pq():
 # fmt: off
 @pytest.mark.parametrize("item_in, item_out", [
     ({"name": "plan1", "item_uid": "abcde"}, {"name": "plan1", "item_uid": "abcde"}),
+    ({"user": "user1", "user_group": "group1"}, {"user": "user1", "user_group": "group1"}),
     ({"args": [1, 2], "kwargs": {"a": 1, "b": 2}}, {"args": [1, 2], "kwargs": {"a": 1, "b": 2}}),
-    ({"name": "plan1", "meta": {"md1": 1, "md2": 2}}, {"name": "plan1", "meta": {"md1": 1, "md2": 2}}),
+    ({"item_type": "plan", "meta": {"md1": 1, "md2": 2}}, {"item_type": "plan", "meta": {"md1": 1, "md2": 2}}),
     ({"name": "plan1", "result": {}}, {"name": "plan1"}),
 ])
 # fmt: on
@@ -596,10 +598,9 @@ def test_add_item_to_queue_2(pq):
 
 @pytest.mark.parametrize("filter_params", [False, True])
 def test_add_item_to_queue_3(pq, filter_params):
-    async def add_plan(plan, n, **kwargs):
-        plan_added, qsize = await pq.add_item_to_queue(plan, **kwargs)
-        assert plan_added["name"] == plan["name"], f"plan: {plan}"
-        assert qsize == n, f"plan: {plan}"
+    """
+    Test if parameter filtering works as expected with `add_item_to_queue` function.
+    """
 
     async def testing():
 
@@ -743,7 +744,71 @@ def test_replace_item_2(pq):
     asyncio.run(testing())
 
 
-def test_replace_item_3_failing(pq):
+# fmt: off
+@pytest.mark.parametrize("mode", ["exact_copy", "change_uid", "change_plan"])
+# fmt: on
+def test_replace_item_3(pq, mode):
+    """
+    ``PlanQueueOperations.replace_item()`` function: make sure that filtering
+      is applied to the parameters of edited plan if the plan was changed
+    """
+
+    async def testing():
+        plans = [{"name": "a", "result": {}}, {"name": "b"}, {"name": "c"}]
+
+        for n, plan in enumerate(plans):
+            await pq.add_item_to_queue(plan, filter_parameters=False)
+
+        assert await pq.get_queue_size() == 3
+
+        queue, _ = await pq.get_queue()
+        plan0_before = queue[0]
+        assert "result" in plan0_before
+
+        if mode == "exact_copy":
+            # Replace the plan with the exact copy of it. Filtering is not be applied.
+            plan_new = plan0_before
+            plan_replaced, qsize = await pq.replace_item(plan_new, item_uid=plan_new["item_uid"])
+
+            queue, _ = await pq.get_queue()
+            plan0_after = queue[0]
+
+            assert plan_replaced == plan0_after
+            assert "result" in plan_replaced, pprint.pformat(plan_replaced)
+
+        elif mode == "change_uid":
+            # Modify plan UID. Filtering is applied
+            plan_new = plan0_before
+            item_uid_to_replace = plan_new["item_uid"]
+            plan_new = pq.set_new_item_uuid(plan_new)
+            plan_replaced, qsize = await pq.replace_item(plan_new, item_uid=item_uid_to_replace)
+
+            queue, _ = await pq.get_queue()
+            plan0_after = queue[0]
+
+            assert plan_replaced == plan0_after
+            assert "result" not in plan_replaced, pprint.pformat(plan_replaced)
+
+        elif mode == "change_plan":
+            # Modify plan, keep UID the same. Filtering is applied
+            plan_new = plan0_before
+            new_name = "h"
+            plan_new["name"] = new_name
+            plan_replaced, qsize = await pq.replace_item(plan_new, item_uid=plan_new["item_uid"])
+
+            queue, _ = await pq.get_queue()
+            plan0_after = queue[0]
+
+            assert plan_replaced == plan0_after
+            assert "result" not in plan_replaced, pprint.pformat(plan_replaced)
+
+        else:
+            raise Exception(f"Test mode '{mode}' does not exist.")
+
+    asyncio.run(testing())
+
+
+def test_replace_item_4_failing(pq):
     """
     ``PlanQueueOperations.replace_item()`` - failing cases
     """

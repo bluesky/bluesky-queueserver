@@ -850,6 +850,9 @@ class PlanQueueOperations:
         #   different from 'item_uid'. Then inserting the item may violate integrity of the queue.
         self._verify_item(item, ignore_uids=[item_uid])
 
+        # Parameters of the edited item should be verified against the list of the allowed parameters
+        item = self.filter_item_parameters(item)
+
         # Insert the new item after the old one and remove the old one. At this point it is guaranteed
         #   that they are not equal.
         await self._r_pool.linsert(self._name_plan_queue, json.dumps(item_to_replace), json.dumps(item))
@@ -962,7 +965,8 @@ class PlanQueueOperations:
             item, _ = await self._pop_item_from_queue(uid=uid_source)
             kw = {"before_uid": uid_dest} if before else {"after_uid": uid_dest}
             kw.update({"item": item})
-            item, qsize = await self._add_item_to_queue(**kw)
+            # The item is moved 'as is'. No filtering of parameters is applied.
+            item, qsize = await self._add_item_to_queue(**kw, filter_parameters=False)
         else:
             item = item_dest
             qsize = await self._get_queue_size()
@@ -970,7 +974,9 @@ class PlanQueueOperations:
 
     async def move_item(self, *, pos=None, uid=None, pos_dest=None, before_uid=None, after_uid=None):
         """
-        Move existing item within the queue.
+        Move existing item within the queue. Plan is moved within the queue without modification.
+        No parameter filtering is applied, so the ``result`` item parameter will not be removed if
+        present.
 
         Parameters
         ----------

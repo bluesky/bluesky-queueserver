@@ -68,7 +68,16 @@ class PlanQueueOperations:
 
         # The list of allowed item parameters. The new inserted items are filtered and
         #   only the parameters from this list are left.
-        self._allowed_item_parameters = ("item_uid", "item_type", "name", "args", "kwargs", "meta")
+        self._allowed_item_parameters = (
+            "item_uid",
+            "item_type",
+            "name",
+            "args",
+            "kwargs",
+            "meta",
+            "user",
+            "user_group",
+        )
 
         # Plan queue UID is expected to change each time the contents of the queue is changed.
         #   Since `self._uid_dict` is modified each time the queue is updated, it is sufficient
@@ -692,7 +701,7 @@ class PlanQueueOperations:
         """
         Remove parameters that are not in the list of allowed parameters.
         Current parameter list includes parameters ``item_type``, ``item_uid``,
-        ``name``, ``args``, ``kwargs``, ``meta``.
+        ``name``, ``args``, ``kwargs``, ``meta``, ``user``, ``user_group``.
 
         The list does not include ``result`` parameter, i.e. ``result`` will
         be removed from the list of parameters.

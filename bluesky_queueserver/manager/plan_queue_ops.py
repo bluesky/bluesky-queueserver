@@ -66,6 +66,10 @@ class PlanQueueOperations:
         self._name_plan_history = "plan_history"
         self._name_plan_queue_mode = "plan_queue_mode"
 
+        # The list of allowed item parameters. The new inserted items are filtered and
+        #   only the parameters from this list are left.
+        self._allowed_item_parameters = ("item_uid", "item_type", "name", "args", "kwargs", "meta")
+
         # Plan queue UID is expected to change each time the contents of the queue is changed.
         #   Since `self._uid_dict` is modified each time the queue is updated, it is sufficient
         #   to update Plan queue UID in the functions that update `self._uid_dict`.
@@ -684,7 +688,28 @@ class PlanQueueOperations:
         async with self._lock:
             return await self._pop_item_from_queue(pos=pos, uid=uid)
 
-    async def _add_item_to_queue(self, item, *, pos=None, before_uid=None, after_uid=None):
+    def filter_item_parameters(self, item):
+        """
+        Remove parameters that are not in the list of allowed parameters.
+        Current parameter list includes parameters ``item_type``, ``item_uid``,
+        ``name``, ``args``, ``kwargs``, ``meta``.
+
+        The list does not include ``result`` parameter, i.e. ``result`` will
+        be removed from the list of parameters.
+
+        Parameters
+        ----------
+        item : dict
+            dictionary of item parameters
+
+        Returns
+        -------
+        dict
+            dictionary of filtered item parameters
+        """
+        return {k: w for k, w in item.items() if k in self._allowed_item_parameters}
+
+    async def _add_item_to_queue(self, item, *, pos=None, before_uid=None, after_uid=None, filter_parameters=True):
         """
         See ``self.add_item_to_queue()`` method.
         """
@@ -702,6 +727,9 @@ class PlanQueueOperations:
             item = self.set_new_item_uuid(item)
         else:
             self._verify_item(item)
+
+        if filter_parameters:
+            item = self.filter_item_parameters(item)
 
         qsize0 = await self._get_queue_size()
         if (before_uid is not None) or (after_uid is not None):
@@ -742,7 +770,7 @@ class PlanQueueOperations:
         self._uid_dict_add(item)
         return item, qsize
 
-    async def add_item_to_queue(self, item, *, pos=None, before_uid=None, after_uid=None):
+    async def add_item_to_queue(self, item, *, pos=None, before_uid=None, after_uid=None, filter_parameters=True):
         """
         Add an item to the queue. By default, the item is added to the back of the queue.
         If position is integer, it is clipped to fit within the range of meaningful indices.
@@ -750,9 +778,9 @@ class PlanQueueOperations:
 
         Parameters
         ----------
-        item: dict
+        item : dict
             Item (plan or instruction) represented as a dictionary of parameters
-        pos: int, str or None
+        pos : int, str or None
             Integer that specifies the position index, "front" or "back".
             If ``pos`` is in the range ``1..qsize-1`` the item is inserted
             to the specified position and items at positions ``pos..qsize-1``
@@ -761,11 +789,14 @@ class PlanQueueOperations:
             (-1 - the last element of the queue). If ``pos>=qsize``,
             the plan is added to the back of the queue. If ``pos==0`` or
             ``pos<=-qsize``, the plan is pushed to the front of the queue.
-        before_uid: str or None
+        before_uid : str or None
             If UID is specified, then the item is inserted before the plan with UID.
             ``before_uid`` has precedence over ``after_uid``.
-        after_uid: str or None
+        after_uid : str or None
             If UID is specified, then the item is inserted before the plan with UID.
+        filter_parameters : boolean (optional)
+            Remove all parameters that do not belong to the list of allowed parameters.
+            Default: ``True``.
 
         Returns
         -------
@@ -780,7 +811,9 @@ class PlanQueueOperations:
             Incorrect type of ``item`` (should be dict)
         """
         async with self._lock:
-            return await self._add_item_to_queue(item, pos=pos, before_uid=before_uid, after_uid=after_uid)
+            return await self._add_item_to_queue(
+                item, pos=pos, before_uid=before_uid, after_uid=after_uid, filter_parameters=filter_parameters
+            )
 
     async def _replace_item(self, item, *, item_uid):
         """
@@ -1188,17 +1221,13 @@ class PlanQueueOperations:
             item["result"]["exit_status"] = exit_status
             item["result"]["run_uids"] = run_uids
 
+            await self._add_to_history(item)
             await self._clear_running_item_info()
 
             # Generate new UID for the item that is pushed back into the queue.
-            item_pushed_to_queue = copy.deepcopy(item)
-            item_pushed_to_queue["item_uid"] = self.new_item_uid()
-            await self._r_pool.lpush(self._name_plan_queue, json.dumps(item_pushed_to_queue))
-            # Replace item in '_uid_dict'
+            item_pushed_to_queue = self.set_new_item_uuid(item)
             self._uid_dict_remove(item["item_uid"])
-            self._uid_dict_add(item_pushed_to_queue)
-
-            await self._add_to_history(item)
+            await self._add_item_to_queue(item_pushed_to_queue, pos="front", filter_parameters=False)
         else:
             item = {}
         return item

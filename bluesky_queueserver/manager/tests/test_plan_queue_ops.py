@@ -19,6 +19,22 @@ def pq():
     asyncio.run(pq.delete_pool_entries())
 
 
+# fmt: off
+@pytest.mark.parametrize("item_in, item_out", [
+    ({"name": "plan1", "item_uid": "abcde"}, {"name": "plan1", "item_uid": "abcde"}),
+    ({"args": [1, 2], "kwargs": {"a": 1, "b": 2}}, {"args": [1, 2], "kwargs": {"a": 1, "b": 2}}),
+    ({"name": "plan1", "meta": {"md1": 1, "md2": 2}}, {"name": "plan1", "meta": {"md1": 1, "md2": 2}}),
+    ({"name": "plan1", "result": {}}, {"name": "plan1"}),
+])
+# fmt: on
+def test_filter_item_parameters(pq, item_in, item_out):
+    """
+    Tests for ``filter_item_parameters``.
+    """
+    item = pq.filter_item_parameters(item_in)
+    assert item == item_out
+
+
 def test_running_plan_info(pq):
     """
     Basic test for the following methods:
@@ -578,7 +594,31 @@ def test_add_item_to_queue_2(pq):
     asyncio.run(testing())
 
 
-def test_add_item_to_queue_3_fail(pq):
+@pytest.mark.parametrize("filter_params", [False, True])
+def test_add_item_to_queue_3(pq, filter_params):
+    async def add_plan(plan, n, **kwargs):
+        plan_added, qsize = await pq.add_item_to_queue(plan, **kwargs)
+        assert plan_added["name"] == plan["name"], f"plan: {plan}"
+        assert qsize == n, f"plan: {plan}"
+
+    async def testing():
+
+        # Parameter 'result' should be removed if filtering is enabled
+        plan1 = {"item_type": "plan", "name": "a", "item_uid": "1"}
+        plan2 = plan1.copy()
+        plan2["result"] = {}
+
+        plan_added, qsize = await pq.add_item_to_queue(plan2, filter_parameters=filter_params)
+
+        if filter_params:
+            assert plan_added == plan1
+        else:
+            assert plan_added == plan2
+
+    asyncio.run(testing())
+
+
+def test_add_item_to_queue_4_fail(pq):
     """
     Failing tests for the function ``PlanQueueOperations.add_item_to_queue()``
     """

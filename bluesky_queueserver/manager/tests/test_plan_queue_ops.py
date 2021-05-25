@@ -951,6 +951,41 @@ def test_move_item_1(pq, params, src, order, success, pquid_changed, msg):
     asyncio.run(testing())
 
 
+def test_move_item_2(pq):
+    """
+    ``move_item``: test if the item is moved 'as is', i.e. no parameter filtering is applied to it.
+    """
+
+    async def testing():
+        plans = [
+            {"item_uid": "p1", "name": "a", "result": {}},
+            {"item_uid": "p2", "name": "b"},
+            {"item_uid": "p3", "name": "c"},
+        ]
+
+        for plan in plans:
+            await pq.add_item_to_queue(plan, filter_parameters=False)
+
+        queue, _ = await pq.get_queue()
+        assert await pq.get_queue_size() == 3
+        assert "result" in queue[0]
+
+        uid_src = queue[0]["item_uid"]
+        uid_dest = queue[1]["item_uid"]
+
+        await pq.move_item(uid=uid_src, after_uid=uid_dest)
+
+        queue, _ = await pq.get_queue()
+        assert await pq.get_queue_size() == 3
+        # Make sure that the items were rearranged
+        assert queue[0]["item_uid"] == uid_dest, pprint.pformat(queue)
+        assert queue[1]["item_uid"] == uid_src, pprint.pformat(queue)
+        # Make sure that the 'result' parameter was not removed
+        assert "result" in queue[1]
+
+    asyncio.run(testing())
+
+
 # fmt: off
 @pytest.mark.parametrize("pos, name", [
     ("front", "a"),

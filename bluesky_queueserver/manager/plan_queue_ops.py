@@ -824,6 +824,76 @@ class PlanQueueOperations:
                 item, pos=pos, before_uid=before_uid, after_uid=after_uid, filter_parameters=filter_parameters
             )
 
+    async def _add_batch_to_queue(
+        self, items, *, pos=None, before_uid=None, after_uid=None, filter_parameters=True
+    ):
+        """
+        See ``self.add_batch_to_queue()`` method.
+        """
+        items_added, results = [], []
+
+        # Approach: attempt ot add each item to queue. In case of a failure remove all added item.
+        # Operation of adding items to queue is perfectly reversible.
+
+        # Adding a batch to a specified position in the queue:
+        #   - add the first plan by passing all positional parameters to 'self._add_item_to_queue'.
+        #   - add the remaining plans after the first plan (it doesn't matter how position of the first
+        #     plan was defined.
+
+        success = True
+        added_item_uids = []  # List of plans with successfully added UIDs. Used for 'undo' operation.
+        for item in items:
+            try:
+                if not added_item_uids:
+                    item_added, _ = self._add_item_to_queue(
+                        item,
+                        pos=pos,
+                        before_uid=before_uid,
+                        after_uid=after_uid,
+                        filter_parameters=filter_parameters,
+                    )
+                else:
+                    item_added, _ = self._add_item_to_queue(
+                        item, after_uid=added_item_uids[-1], filter_parameters=filter_parameters
+                    )
+                added_item_uids.append(item_added["item_uid"])
+                items_added.append(item_added)
+                results.append({"success": True, "msg": ""})
+            except Exception as ex:
+                success = False
+                items_added.append(item)
+                msg = f"Failed to add item to queue: {ex}"
+                results.append({"success": False, "msg": msg})
+
+        # 'Undo' operation: remove all inserted items
+        if not success:
+            for uid in added_item_uids:
+                # The 'try-except' here is just in case anything goes wrong. Operation of removing
+                #   items that were just added are expected to succeed.
+                try:
+                    self._pop_item_from_queue(uid=uid)
+                except Exception as ex:
+                    logging.warning(
+                        "Failed to remove an item with uid='%s' after failure to add a batch of plans", str(ex)
+                    )
+
+            # Also do not return 'changed' items if adding the batch failed.
+            items_added = items
+
+        qsize = await self.get_queue_size()
+
+        # 'items_added' and 'results' ALWAYS have the same number of elements as 'items'
+        return items_added, results, qsize
+
+    async def add_batch_to_queue(
+        self, items, *, pos=None, before_uid=None, after_uid=None, filter_parameters=True
+    ):
+
+        async with self._lock:
+            return await self._add_batch_to_queue(
+                items, pos=pos, before_uid=before_uid, after_uid=after_uid, filter_parameters=filter_parameters
+            )
+
     async def _replace_item(self, item, *, item_uid):
         """
         See ``self._replace_item()`` method

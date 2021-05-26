@@ -656,6 +656,68 @@ def test_add_item_to_queue_4_fail(pq):
 
 
 # fmt: off
+@pytest.mark.parametrize("params, queue_seq, batch_seq, expected_seq", [
+    ({}, "", "def", "def"),
+    ({"pos": "front"}, "", "def", "def"),
+    ({"pos": "back"}, "", "def", "def"),
+    ({}, "abc", "def", "abcdef"),
+    ({"pos": "front"}, "abc", "def", "defabc"),
+    ({"pos": "back"}, "abc", "def", "abcdef"),
+    ({"pos": 0}, "abc", "def", "defabc"),
+    ({"pos": 1}, "abc", "def", "adefbc"),
+    ({"pos": 100}, "abc", "def", "abcdef"),
+    ({"pos": -1}, "abc", "def", "abdefc"),
+    ({"pos": -100}, "abc", "def", "defabc"),
+    ({"before_uid": "aa"}, "abc", "def", "defabc"),
+    ({"before_uid": "bb"}, "abc", "def", "adefbc"),
+    ({"before_uid": "cc"}, "abc", "def", "abdefc"),
+    ({"after_uid": "aa"}, "abc", "def", "adefbc"),
+    ({"after_uid": "bb"}, "abc", "def", "abdefc"),
+    ({"after_uid": "cc"}, "abc", "def", "abcdef"),
+])
+# fmt: on
+def test_add_batch_to_queue_1(pq, params, queue_seq, batch_seq, expected_seq):
+    """
+    Basic test for the function ``PlanQueueOperations.add_batch_to_queue()``
+    """
+
+    async def add_plan(plan, n, **kwargs):
+        plan_added, qsize = await pq.add_item_to_queue(plan, **kwargs)
+        assert plan_added["name"] == plan["name"], f"plan: {plan}"
+        assert qsize == n, f"plan: {plan}"
+
+    async def testing():
+        # Create the queue with plans
+        for n, p_name in enumerate(queue_seq):
+            await add_plan({"name": p_name, "item_uid": p_name + p_name}, n + 1)
+
+        items = []
+        for p_name in batch_seq:
+            items.append({"name": p_name, "item_uid": p_name + p_name})
+        items_added, results, qsize, success = await pq.add_batch_to_queue(items, **params)
+        assert success is True, pprint.pformat(results)
+        assert qsize == len(queue_seq) + len(batch_seq)
+        assert await pq.get_queue_size() == len(queue_seq) + len(batch_seq)
+        assert len(items_added) == len(items)
+        assert len(results) == len(items)
+
+        # Verify that the results are set correctly (success)
+        for res in results:
+            assert res["success"] is True, pprint.pformat(results)
+            assert res["msg"] == "", pprint.pformat(results)
+
+        # Verify the sequence of items in the queue
+        queue, _ = await pq.get_queue()
+        queue_sequence = [_["name"] for _ in queue]
+        queue_sequence = "".join(queue_sequence)
+        assert queue_sequence == expected_seq
+
+        await pq.clear_queue()
+
+    asyncio.run(testing())
+
+
+# fmt: off
 @pytest.mark.parametrize("replace_uid", [False, True])
 # fmt: on
 def test_replace_item_1(pq, replace_uid):

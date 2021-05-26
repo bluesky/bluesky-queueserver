@@ -848,7 +848,7 @@ class PlanQueueOperations:
         for item in items:
             try:
                 if not added_item_uids:
-                    item_added, _ = self._add_item_to_queue(
+                    item_added, _ = await self._add_item_to_queue(
                         item,
                         pos=pos,
                         before_uid=before_uid,
@@ -856,7 +856,7 @@ class PlanQueueOperations:
                         filter_parameters=filter_parameters,
                     )
                 else:
-                    item_added, _ = self._add_item_to_queue(
+                    item_added, _ = await self._add_item_to_queue(
                         item, after_uid=added_item_uids[-1], filter_parameters=filter_parameters
                     )
                 added_item_uids.append(item_added["item_uid"])
@@ -883,7 +883,7 @@ class PlanQueueOperations:
             # Also do not return 'changed' items if adding the batch failed.
             items_added = items
 
-        qsize = await self.get_queue_size()
+        qsize = await self._get_queue_size()
 
         # 'items_added' and 'results' ALWAYS have the same number of elements as 'items'
         return items_added, results, qsize, success

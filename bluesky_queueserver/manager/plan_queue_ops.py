@@ -883,11 +883,51 @@ class PlanQueueOperations:
         qsize = await self.get_queue_size()
 
         # 'items_added' and 'results' ALWAYS have the same number of elements as 'items'
-        return items_added, results, qsize
+        return items_added, results, qsize, success
 
     async def add_batch_to_queue(
         self, items, *, pos=None, before_uid=None, after_uid=None, filter_parameters=True
     ):
+        """
+        Add a batch of item to the queue. The behavior of the function is similar
+        to ``add_item_to_queue`` except that it accepts the list of items to add.
+        The function will not add any plans to the queue if at least one of the plans
+        is rejected. The function returns ``success`` flag, which is ``True`` if
+        the batch was added and ``False`` otherwise. Success status and error messages
+        for each added plan can be found in ``results`` list. If the batch was added
+        successfully, then all ``results`` element indicate success.
+
+        The function is not expected to raise exceptions in case of failure, but instead
+        report results of processing for each item in the ``results`` list.
+
+        Parameters
+        ----------
+        items : list(dict)
+            List of items (plans or instructions). Each element of the list is a dictionary
+            of plan parameters
+        pos, before_uid, after_uid, filter_parmeters
+            see documentation for ``add_item_to_queue`` for details.
+
+        Returns
+        -------
+        items_added : list(dict)
+            List of items that were added to queue. In case the operation fails, the list
+            of submitted items is returned. The list always has the same number of elements
+            as ``items``.
+        results : list(dict)
+            List of processing results. The list always has the same number of elements as
+            ``items``. Each element contains a report on processing the respective item in
+            the form of a dictionary with the keys ``success`` (boolean) and ``msg`` (str).
+            ``msg`` is always an empty string if ``success==True``. In case the batch was
+            added successfully, all elements are ``{"success": True, "msg": ""}``.
+        qsize : int
+            Size of the queue after the batch was added. The size will not change if the
+            batch is rejected.
+        success : bool
+            Indicates success of the operation of adding the batch. If ``False``, then
+            the batch is rejected and error messages for each item could be found in
+            the ``results`` list.
+        """
 
         async with self._lock:
             return await self._add_batch_to_queue(

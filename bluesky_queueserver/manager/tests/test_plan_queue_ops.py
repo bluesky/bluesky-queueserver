@@ -717,6 +717,37 @@ def test_add_batch_to_queue_1(pq, params, queue_seq, batch_seq, expected_seq):
     asyncio.run(testing())
 
 
+@pytest.mark.parametrize("filter_params", [False, True, None])
+def test_add_batch_to_queue_2(pq, filter_params):
+    """
+    Test if parameter filtering works as expected with `add_batch_to_queue` function.
+    """
+
+    async def testing():
+
+        # Parameter 'result' should be removed if filtering is enabled.
+        params = {"filter_parameters": filter_params} if (filter_params is not None) else {}
+        do_filtering = True if (filter_params is None) else filter_params
+
+        items = [{"name": _, "result": {}} for _ in ("a", "b", "c")]
+        items_added, results, qsize, success = await pq.add_batch_to_queue(items, **params)
+        assert success is True
+        assert qsize == len(items)
+        assert len(items_added) == len(items)
+        assert len(results) == len(items)
+
+        queue, _ = await pq.get_queue()
+
+        assert [_["name"] for _ in queue] == [_["name"] for _ in items]
+        for queue_item in queue:
+            if do_filtering:
+                assert "result" not in queue_item, pprint.pformat(queue_item)
+            else:
+                assert "result" in queue_item, pprint.pformat(queue_item)
+
+    asyncio.run(testing())
+
+
 # fmt: off
 @pytest.mark.parametrize("replace_uid", [False, True])
 # fmt: on

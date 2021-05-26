@@ -658,6 +658,7 @@ def test_add_item_to_queue_4_fail(pq):
 
 # fmt: off
 @pytest.mark.parametrize("params, queue_seq, batch_seq, expected_seq", [
+    ({}, "", "", ""),  # Add an empty batch
     ({}, "", "def", "def"),
     ({"pos": "front"}, "", "def", "def"),
     ({"pos": "back"}, "", "def", "def"),

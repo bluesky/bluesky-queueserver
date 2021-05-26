@@ -1172,16 +1172,21 @@ class RunEngineManager(Process):
         logger.info("Adding a batch of items to the queue ...")
         logger.debug("Request: %s", pprint.pformat(request))
 
-        success, msg, item_list, report, qsize = True, "", [], [], None
+        success, msg, item_list, results, qsize = True, "", [], [], None
 
         try:
             # Prepare items
             if "items" not in request:
                 raise Exception("Invalid request format: the list of items is not found")
             items = request["items"]
-            items_prepared, report, success = [], [], True
+            items_prepared, results, success = [], [], True
 
             user, user_group = self._get_user_info_from_request(request=request)
+
+            # Optional parameters
+            pos = request.get("pos", None)
+            before_uid = request.get("before_uid", None)
+            after_uid = request.get("after_uid", None)
 
             # First validate all the items
             for item_info in items:
@@ -1197,26 +1202,28 @@ class RunEngineManager(Process):
                     )
 
                     items_prepared.append(item_prepared)
-                    report.append({"success": True, "msg": ""})
+                    results.append({"success": True, "msg": ""})
 
                 except Exception as ex:
                     success = False
                     items_prepared.append(item)  # Add unchanged item or None if no item is found
-                    report.append({"success": False, "msg": f"Failed to add a plan: {ex}"})
+                    results.append({"success": False, "msg": f"Failed to add a plan: {ex}"})
 
-            if len(report) != len(items) != len(items_prepared):
+            if len(results) != len(items) != len(items_prepared):
                 # This error should never happen, but the message may be useful for debugging if it happens.
                 raise Exception("Error in data processing algorithm occurred")
 
             if success:
-                # Adding plan to queue may still raise an exception
-                for item in items_prepared:
-                    item_added, _ = await self._plan_queue.add_item_to_queue(item)
-                    item_list.append(item_added)
+                # 'success' may still change
+                item_list, results, _, success = await self._plan_queue.add_batch_to_queue(
+                    items, pos=pos, before_uid=before_uid, after_uid=after_uid
+                )
             else:
                 item_list = items_prepared
+
+            if not success:
                 n_items = len(item_list)
-                n_failed = sum([not _["success"] for _ in report])
+                n_failed = sum([not _["success"] for _ in results])
                 msg = f"Failed to add all items: validation of {n_failed} out of {n_items} submitted items failed"
 
         except Exception as ex:
@@ -1231,7 +1238,7 @@ class RunEngineManager(Process):
         logger.info(self._generate_item_log_msg("Batch of items added", success, None, None, qsize))
 
         # Note, that 'item_list' may be an empty list []
-        rdict = {"success": success, "msg": msg, "qsize": qsize, "items": item_list, "results": report}
+        rdict = {"success": success, "msg": msg, "qsize": qsize, "items": item_list, "results": results}
 
         return rdict
 

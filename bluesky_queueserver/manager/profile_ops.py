@@ -427,24 +427,25 @@ def plans_from_nspace(nspace):
 
 def devices_from_nspace(nspace):
     """
-    Extract devices from the namespace. Currently the function returns the dict of ophyd.Device objects.
+    Extract signals and devices from the namespace. Currently the function returns the dict of
+    namespace items of types inherited from ophyd.ophydobj.OphydObject objects.
 
     Parameters
     ----------
     nspace: dict
-        Namespace that may contain plans.
+        Namespace that may contain plans and devices.
 
     Returns
     -------
     dict(str: callable)
-        Dictionary of devices.
+        Dictionary that maps device names to device objects.
     """
     import ophyd
 
     devices = {}
-    for item in nspace.items():
-        if isinstance(item[1], ophyd.Device):
-            devices[item[0]] = item[1]
+    for name, obj in nspace.items():
+        if isinstance(obj, ophyd.ophydobj.OphydObject):
+            devices[name] = obj
     return devices
 
 

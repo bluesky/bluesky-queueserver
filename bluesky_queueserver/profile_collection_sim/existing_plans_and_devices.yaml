@@ -4,6 +4,18 @@ existing_devices:
     classname: ABDetector
     is_movable: false
     module: ophyd.sim
+  bool_sig:
+    classname: Signal
+    is_movable: true
+    module: ophyd.signal
+  custom_test_device:
+    classname: Device
+    is_movable: false
+    module: ophyd.device
+  custom_test_signal:
+    classname: Signal
+    is_movable: true
+    module: ophyd.signal
   det:
     classname: SynGauss
     is_movable: false
@@ -47,6 +59,18 @@ existing_devices:
   identical_det:
     classname: SynGauss
     is_movable: false
+    module: ophyd.sim
+  img:
+    classname: SynSignalWithRegistry
+    is_movable: true
+    module: ophyd.sim
+  invariant1:
+    classname: InvariantSignal
+    is_movable: true
+    module: ophyd.sim
+  invariant2:
+    classname: InvariantSignal
+    is_movable: true
     module: ophyd.sim
   jittery_motor1:
     classname: SynAxis
@@ -102,6 +126,22 @@ existing_devices:
     module: ophyd.sim
   pseudo3x3:
     classname: SPseudo3x3
+    is_movable: true
+    module: ophyd.sim
+  rand:
+    classname: SynPeriodicSignal
+    is_movable: true
+    module: ophyd.sim
+  rand2:
+    classname: SynPeriodicSignal
+    is_movable: true
+    module: ophyd.sim
+  sig:
+    classname: Signal
+    is_movable: true
+    module: ophyd.signal
+  signal:
+    classname: SynSignal
     is_movable: true
     module: ophyd.sim
 existing_plans:

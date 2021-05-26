@@ -1031,7 +1031,11 @@ def test_devices_from_nspace():
     nspace = load_profile_collection(pc_path)
     devices = devices_from_nspace(nspace)
     for name, device in devices.items():
-        assert isinstance(device, ophyd.Device), f"The object '{device}' is not an Ophyd device"
+        assert isinstance(device, ophyd.ophydobj.OphydObject), f"The object '{device}' is not an Ophyd Object"
+
+    # Check that both devices and signals are recognized by the function
+    assert "custom_test_device" in devices
+    assert "custom_test_signal" in devices
 
 
 @pytest.mark.parametrize(

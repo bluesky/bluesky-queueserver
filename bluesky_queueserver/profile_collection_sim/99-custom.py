@@ -7,6 +7,11 @@ import bluesky.plan_stubs as bps
 from bluesky_queueserver.manager.annotation_decorator import parameter_annotation_decorator
 
 
+# Ophyd Device and Signal: Used in unit tests.
+custom_test_device = ophyd.Device(name="custom_test_device")
+custom_test_signal = ophyd.Signal(name="custom_test_signal")
+
+
 @parameter_annotation_decorator(
     {
         "description": "Move motors into positions; then count dets.",

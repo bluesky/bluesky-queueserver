@@ -3,6 +3,9 @@ import asyncio
 import copy
 import json
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class PlanQueueOperations:
@@ -873,7 +876,7 @@ class PlanQueueOperations:
                 try:
                     self._pop_item_from_queue(uid=uid)
                 except Exception as ex:
-                    logging.warning(
+                    logger.error(
                         "Failed to remove an item with uid='%s' after failure to add a batch of plans", str(ex)
                     )
 

@@ -2,6 +2,7 @@ import asyncio
 import pytest
 import json
 import copy
+import re
 import pprint
 from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
 
@@ -744,6 +745,55 @@ def test_add_batch_to_queue_2(pq, filter_params):
                 assert "result" not in queue_item, pprint.pformat(queue_item)
             else:
                 assert "result" in queue_item, pprint.pformat(queue_item)
+
+    asyncio.run(testing())
+
+
+# fmt: off
+@pytest.mark.parametrize("params, queue_seq, batch_seq, err_msgs", [
+    ({}, "abcd", "eaf", ["", "Item with UID .+ is already in the queue", ""]),
+    ({}, "abcd", "ead", [""] + ["Item with UID .+ is already in the queue"] * 2),
+    ({"before_uid": "unknown"}, "abcd", "efg", ["Plan with UID .* is not in the queue"] * 3),
+    ({"after_uid": "unknown"}, "abcd", "efg", ["Plan with UID .* is not in the queue"] * 3),
+    ({"before_uid": "unknown", "after_uid": "unknown"}, "abcd", "efg", ["Ambiguous parameters"] * 3),
+    ({"pos": "front", "after_uid": "unknown"}, "abcd", "efg", ["Ambiguous parameters"] * 3),
+])
+# fmt: on
+def test_add_batch_to_queue_3_fail(pq, params, queue_seq, batch_seq, err_msgs):
+    """
+    Failing cases for the function ``PlanQueueOperations.add_batch_to_queue()``
+    """
+
+    async def add_plan(plan, n, **kwargs):
+        plan_added, qsize = await pq.add_item_to_queue(plan, **kwargs)
+        assert plan_added["name"] == plan["name"], f"plan: {plan}"
+        assert qsize == n, f"plan: {plan}"
+
+    async def testing():
+        # Create the queue with plans
+        for n, p_name in enumerate(queue_seq):
+            await add_plan({"name": p_name, "item_uid": p_name + p_name}, n + 1)
+
+        items = []
+        for p_name in batch_seq:
+            items.append({"name": p_name, "item_uid": p_name + p_name})
+        items_added, results, qsize, success = await pq.add_batch_to_queue(items, **params)
+
+        assert success is False
+        assert qsize == len(queue_seq)
+        assert len(items_added) == len(items)
+        assert len(results) == len(items)
+
+        # The returned item list is expected to be identical to the original list
+        assert items_added == items, pprint.pformat(items_added)
+
+        for res, msg in zip(results, err_msgs):
+            if not msg:
+                assert res["success"] is True, pprint.pformat(res)
+                assert res["msg"] == "", pprint.pformat(res)
+            else:
+                assert res["success"] is False, pprint.pformat(res)
+                assert re.search(msg, res["msg"]), pprint.pformat(res)
 
     asyncio.run(testing())
 

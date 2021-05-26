@@ -874,7 +874,7 @@ class PlanQueueOperations:
                 # The 'try-except' here is just in case anything goes wrong. Operation of removing
                 #   items that were just added are expected to succeed.
                 try:
-                    self._pop_item_from_queue(uid=uid)
+                    await self._pop_item_from_queue(uid=uid)
                 except Exception as ex:
                     logger.error(
                         "Failed to remove an item with uid='%s' after failure to add a batch of plans", str(ex)

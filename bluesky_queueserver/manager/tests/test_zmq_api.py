@@ -2,7 +2,7 @@ import pytest
 import os
 import time as ttime
 import asyncio
-from copy import deepcopy
+import copy
 
 from bluesky_queueserver.manager.profile_ops import (
     get_default_startup_dir,
@@ -509,7 +509,7 @@ def test_zmq_api_queue_item_add_7(db_catalog, re_manager_cmd, meta_param, meta_s
     cat = db_catalog["catalog"]
 
     # Plan
-    plan = deepcopy(_plan2)
+    plan = copy.deepcopy(_plan2)
     plan["meta"] = meta_param
     params1 = {"item": plan, "user": _user, "user_group": _user_group}
     resp1, _ = zmq_single_request("queue_item_add", params1)
@@ -630,10 +630,106 @@ def test_zmq_api_queue_item_add_8_fail(re_manager):  # noqa F811
 # =======================================================================================
 #                          Method 'queue_item_add_batch'
 
-
-def test_zmq_api_queue_item_add_batch_1(re_manager):  # noqa: F811
+# fmt: off
+@pytest.mark.parametrize("batch_params, queue_seq, batch_seq, expected_seq", [
+    ({}, "", "", ""),  # Add an empty batch
+    ({}, "", "567", "567"),
+    ({"pos": "front"}, "", "567", "567"),
+    ({"pos": "back"}, "", "567", "567"),
+    ({}, "1234", "567", "1234567"),
+    ({"pos": "front"}, "1234", "567", "5671234"),
+    ({"pos": "back"}, "1234", "567", "1234567"),
+    ({"pos": 0}, "1234", "567", "5671234"),
+    ({"pos": 1}, "1234", "567", "1567234"),
+    ({"pos": 100}, "1234", "567", "1234567"),
+    ({"pos": -1}, "1234", "567", "1235674"),
+    ({"pos": -100}, "1234", "567", "5671234"),
+    ({"before_uid": "1"}, "1234", "567", "5671234"),
+    ({"before_uid": "2"}, "1234", "567", "1567234"),
+    ({"before_uid": "3"}, "1234", "567", "1256734"),
+    ({"after_uid": "1"}, "1234", "567", "1567234"),
+    ({"after_uid": "2"}, "1234", "567", "1256734"),
+    ({"after_uid": "4"}, "1234", "567", "1234567"),
+])
+# fmt: on
+def test_zmq_api_queue_item_add_batch_1(
+    re_manager, batch_params, queue_seq, batch_seq, expected_seq  # noqa: F811
+):
     """
     Basic test for ``queue_item_add_batch`` API.
+    """
+    plan_template = {
+        "name": "count",
+        "args": [["det1"]],
+        "kwargs": {"num": 50, "delay": 0.01},
+        "item_type": "plan",
+    }
+
+    # Fill the queue with the initial set of plans
+    for item_code in queue_seq:
+        item = copy.deepcopy(plan_template)
+        item["kwargs"]["num"] = int(item_code)
+        params = {"item": item, "user": _user, "user_group": _user_group}
+        resp1a, _ = zmq_single_request("queue_item_add", params)
+        assert resp1a["success"] is True
+
+    state = get_queue_state()
+    assert state["items_in_queue"] == len(queue_seq)
+    assert state["items_in_history"] == 0
+
+    resp1b, _ = zmq_single_request("queue_get")
+    assert resp1b["success"] is True
+    queue_initial = resp1b["items"]
+
+    # If there are 'before_uid' or 'after_uid' parameters, then convert values of those
+    #   parameters to actual item UIDs.
+    def find_uid(dummy_uid):
+        ind = queue_seq.index(dummy_uid)
+        return queue_initial[ind]["item_uid"]
+
+    if "before_uid" in batch_params:
+        batch_params["before_uid"] = find_uid(batch_params["before_uid"])
+
+    if "after_uid" in batch_params:
+        batch_params["after_uid"] = find_uid(batch_params["after_uid"])
+
+    # Create a list of items to add
+    items_to_add = []
+    for item_code in batch_seq:
+        item = copy.deepcopy(plan_template)
+        item["kwargs"]["num"] = int(item_code)
+        items_to_add.append(item)
+
+    # Add the batch
+    params = {"items": items_to_add, "user": _user, "user_group": _user_group}
+    params.update(batch_params)
+    resp2a, _ = zmq_single_request("queue_item_add_batch", params)
+
+    assert resp2a["success"] is True
+    assert resp2a["msg"] == ""
+    assert resp2a["qsize"] == len(queue_seq) + len(batch_seq)
+    items_added = resp2a["items"]
+    assert len(items_added) == len(batch_seq)
+    added_seq = [str(_["kwargs"]["num"]) for _ in items_added]
+    added_seq = "".join(added_seq)
+    assert added_seq == batch_seq
+
+    resp2b, _ = zmq_single_request("queue_get")
+    assert resp2b["success"] is True
+    queue_final = resp2b["items"]
+    queue_final_seq = [str(_["kwargs"]["num"]) for _ in queue_final]
+    queue_final_seq = "".join(queue_final_seq)
+    assert queue_final_seq == expected_seq
+
+    state = get_queue_state()
+    assert state["items_in_queue"] == len(queue_seq) + len(batch_seq)
+    assert state["items_in_history"] == 0
+
+
+def test_zmq_api_queue_item_add_batch_2(re_manager):  # noqa: F811
+    """
+    Test for ``queue_item_add_batch``: add a batch of items (including plans and instructions)
+    and execute the queue.
     """
     items = [_plan1, _plan2, _instruction_stop, _plan3]
 
@@ -695,7 +791,7 @@ def test_zmq_api_queue_item_add_batch_1(re_manager):  # noqa: F811
     assert wait_for_condition(time=5, condition=condition_manager_idle)
 
 
-def test_zmq_api_queue_item_add_batch_2(re_manager):  # noqa: F811
+def test_zmq_api_queue_item_add_batch_3(re_manager):  # noqa: F811
     """
     Test for ``queue_item_add_batch`` API. Attempt to add a batch that contains invalid plans.
     Make sure that the invalid plans are detected, correct error messages are returned and the
@@ -744,24 +840,6 @@ def test_zmq_api_queue_item_add_batch_2(re_manager):  # noqa: F811
                 assert "kwargs" not in item_res
         else:
             assert item_res == {}
-
-    state = get_queue_state()
-    assert state["items_in_queue"] == 0
-    assert state["items_in_history"] == 0
-
-
-def test_zmq_api_queue_item_add_batch_3(re_manager):  # noqa: F811
-    """
-    Test for ``queue_item_add_batch`` API. Add an empty batch. The operation should return success.
-    """
-    items = []
-
-    params = {"items": items, "user": _user, "user_group": _user_group}
-    resp1a, _ = zmq_single_request("queue_item_add_batch", params)
-    assert resp1a["success"] is True, f"resp={resp1a}"
-    assert resp1a["msg"] == ""
-    assert resp1a["items"] == []
-    assert resp1a["results"] == []
 
     state = get_queue_state()
     assert state["items_in_queue"] == 0

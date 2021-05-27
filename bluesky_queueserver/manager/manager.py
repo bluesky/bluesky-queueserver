@@ -1219,7 +1219,8 @@ class RunEngineManager(Process):
                     items, pos=pos, before_uid=before_uid, after_uid=after_uid
                 )
             else:
-                item_list = items_prepared
+                # Return the copy of the items received as part of the request without change
+                item_list = items
 
             if not success:
                 n_items = len(item_list)

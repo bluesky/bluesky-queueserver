@@ -657,28 +657,48 @@ def test_add_item_to_queue_4_fail(pq):
 
 
 # fmt: off
-@pytest.mark.parametrize("params, queue_seq, batch_seq, expected_seq", [
+# @pytest.mark.parametrize("params, queue_seq, batch_seq, expected_seq", [
+#     ({}, "", "", ""),  # Add an empty batch
+#     ({}, "", "efg", "efg"),
+#     ({"pos": "front"}, "", "efg", "efg"),
+#     ({"pos": "back"}, "", "efg", "efg"),
+#     ({}, "abcd", "efg", "abcdefg"),
+#     ({"pos": "front"}, "abcd", "efg", "efgabcd"),
+#     ({"pos": "back"}, "abcd", "efg", "abcdefg"),
+#     ({"pos": 0}, "abcd", "efg", "efgabcd"),
+#     ({"pos": 1}, "abcd", "efg", "aefgbcd"),
+#     ({"pos": 100}, "abcd", "efg", "abcdefg"),
+#     ({"pos": -1}, "abcd", "efg", "abcefgd"),
+#     ({"pos": -100}, "abcd", "efg", "efgabcd"),
+#     ({"before_uid": "aa"}, "abcd", "efg", "efgabcd"),
+#     ({"before_uid": "bb"}, "abcd", "efg", "aefgbcd"),
+#     ({"before_uid": "cc"}, "abcd", "efg", "abefgcd"),
+#     ({"after_uid": "aa"}, "abcd", "efg", "aefgbcd"),
+#     ({"after_uid": "bb"}, "abcd", "efg", "abefgcd"),
+#     ({"after_uid": "dd"}, "abcd", "efg", "abcdefg"),
+# ])
+@pytest.mark.parametrize("batch_params, queue_seq, batch_seq, expected_seq", [
     ({}, "", "", ""),  # Add an empty batch
-    ({}, "", "efg", "efg"),
-    ({"pos": "front"}, "", "efg", "efg"),
-    ({"pos": "back"}, "", "efg", "efg"),
-    ({}, "abcd", "efg", "abcdefg"),
-    ({"pos": "front"}, "abcd", "efg", "efgabcd"),
-    ({"pos": "back"}, "abcd", "efg", "abcdefg"),
-    ({"pos": 0}, "abcd", "efg", "efgabcd"),
-    ({"pos": 1}, "abcd", "efg", "aefgbcd"),
-    ({"pos": 100}, "abcd", "efg", "abcdefg"),
-    ({"pos": -1}, "abcd", "efg", "abcefgd"),
-    ({"pos": -100}, "abcd", "efg", "efgabcd"),
-    ({"before_uid": "aa"}, "abcd", "efg", "efgabcd"),
-    ({"before_uid": "bb"}, "abcd", "efg", "aefgbcd"),
-    ({"before_uid": "cc"}, "abcd", "efg", "abefgcd"),
-    ({"after_uid": "aa"}, "abcd", "efg", "aefgbcd"),
-    ({"after_uid": "bb"}, "abcd", "efg", "abefgcd"),
-    ({"after_uid": "dd"}, "abcd", "efg", "abcdefg"),
+    ({}, "", "567", "567"),
+    ({"pos": "front"}, "", "567", "567"),
+    ({"pos": "back"}, "", "567", "567"),
+    ({}, "1234", "567", "1234567"),
+    ({"pos": "front"}, "1234", "567", "5671234"),
+    ({"pos": "back"}, "1234", "567", "1234567"),
+    ({"pos": 0}, "1234", "567", "5671234"),
+    ({"pos": 1}, "1234", "567", "1567234"),
+    ({"pos": 100}, "1234", "567", "1234567"),
+    ({"pos": -1}, "1234", "567", "1235674"),
+    ({"pos": -100}, "1234", "567", "5671234"),
+    ({"before_uid": "1"}, "1234", "567", "5671234"),
+    ({"before_uid": "2"}, "1234", "567", "1567234"),
+    ({"before_uid": "3"}, "1234", "567", "1256734"),
+    ({"after_uid": "1"}, "1234", "567", "1567234"),
+    ({"after_uid": "2"}, "1234", "567", "1256734"),
+    ({"after_uid": "4"}, "1234", "567", "1234567"),
 ])
 # fmt: on
-def test_add_batch_to_queue_1(pq, params, queue_seq, batch_seq, expected_seq):
+def test_add_batch_to_queue_1(pq, batch_params, queue_seq, batch_seq, expected_seq):
     """
     Basic test for the function ``PlanQueueOperations.add_batch_to_queue()``
     """
@@ -691,12 +711,20 @@ def test_add_batch_to_queue_1(pq, params, queue_seq, batch_seq, expected_seq):
     async def testing():
         # Create the queue with plans
         for n, p_name in enumerate(queue_seq):
-            await add_plan({"name": p_name, "item_uid": p_name + p_name}, n + 1)
+            await add_plan({"name": p_name, "item_uid": f"{p_name}{p_name}"}, n + 1)
+
+        def fix_uid(uid):
+            return f"{uid}{uid}"
+
+        if "before_uid" in batch_params:
+            batch_params["before_uid"] = fix_uid(batch_params["before_uid"])
+        if "after_uid" in batch_params:
+            batch_params["after_uid"] = fix_uid(batch_params["after_uid"])
 
         items = []
         for p_name in batch_seq:
             items.append({"name": p_name, "item_uid": p_name + p_name})
-        items_added, results, qsize, success = await pq.add_batch_to_queue(items, **params)
+        items_added, results, qsize, success = await pq.add_batch_to_queue(items, **batch_params)
         assert success is True, pprint.pformat(results)
         assert qsize == len(queue_seq) + len(batch_seq)
         assert await pq.get_queue_size() == len(queue_seq) + len(batch_seq)

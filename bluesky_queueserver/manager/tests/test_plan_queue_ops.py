@@ -657,26 +657,6 @@ def test_add_item_to_queue_4_fail(pq):
 
 
 # fmt: off
-# @pytest.mark.parametrize("params, queue_seq, batch_seq, expected_seq", [
-#     ({}, "", "", ""),  # Add an empty batch
-#     ({}, "", "efg", "efg"),
-#     ({"pos": "front"}, "", "efg", "efg"),
-#     ({"pos": "back"}, "", "efg", "efg"),
-#     ({}, "abcd", "efg", "abcdefg"),
-#     ({"pos": "front"}, "abcd", "efg", "efgabcd"),
-#     ({"pos": "back"}, "abcd", "efg", "abcdefg"),
-#     ({"pos": 0}, "abcd", "efg", "efgabcd"),
-#     ({"pos": 1}, "abcd", "efg", "aefgbcd"),
-#     ({"pos": 100}, "abcd", "efg", "abcdefg"),
-#     ({"pos": -1}, "abcd", "efg", "abcefgd"),
-#     ({"pos": -100}, "abcd", "efg", "efgabcd"),
-#     ({"before_uid": "aa"}, "abcd", "efg", "efgabcd"),
-#     ({"before_uid": "bb"}, "abcd", "efg", "aefgbcd"),
-#     ({"before_uid": "cc"}, "abcd", "efg", "abefgcd"),
-#     ({"after_uid": "aa"}, "abcd", "efg", "aefgbcd"),
-#     ({"after_uid": "bb"}, "abcd", "efg", "abefgcd"),
-#     ({"after_uid": "dd"}, "abcd", "efg", "abcdefg"),
-# ])
 @pytest.mark.parametrize("batch_params, queue_seq, batch_seq, expected_seq", [
     ({}, "", "", ""),  # Add an empty batch
     ({}, "", "567", "567"),

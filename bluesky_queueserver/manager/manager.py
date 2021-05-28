@@ -1216,7 +1216,7 @@ class RunEngineManager(Process):
             if success:
                 # 'success' may still change
                 item_list, results, _, success = await self._plan_queue.add_batch_to_queue(
-                    items, pos=pos, before_uid=before_uid, after_uid=after_uid
+                    items_prepared, pos=pos, before_uid=before_uid, after_uid=after_uid
                 )
             else:
                 # Return the copy of the items received as part of the request without change

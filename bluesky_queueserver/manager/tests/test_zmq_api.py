@@ -3,6 +3,7 @@ import os
 import time as ttime
 import asyncio
 import copy
+import pprint
 
 from bluesky_queueserver.manager.profile_ops import (
     get_default_startup_dir,
@@ -728,6 +729,62 @@ def test_zmq_api_queue_item_add_batch_1(
 
 def test_zmq_api_queue_item_add_batch_2(re_manager):  # noqa: F811
     """
+    Test for ``queue_item_add_batch``: copy a batch of existing items from the queue.
+    The items have duplicate UIDs, but they still should be added successfully, since
+    new UIDs are generated for newly inserted items anyway. This is important feature of
+    the API and should be tested.
+    """
+    plan_template = {
+        "name": "count",
+        "args": [["det1"]],
+        "kwargs": {"num": 50, "delay": 0.01},
+        "item_type": "plan",
+    }
+
+    queue_seq = "12345"
+    expected_seq = "12342345"
+
+    # Fill the queue with the initial set of plans
+    for item_code in queue_seq:
+        item = copy.deepcopy(plan_template)
+        item["kwargs"]["num"] = int(item_code)
+        params = {"item": item, "user": _user, "user_group": _user_group}
+        resp1a, _ = zmq_single_request("queue_item_add", params)
+        assert resp1a["success"] is True
+
+    state = get_queue_state()
+    assert state["items_in_queue"] == len(queue_seq)
+    assert state["items_in_history"] == 0
+
+    resp1b, _ = zmq_single_request("queue_get")
+    assert resp1b["success"] is True
+    queue_initial = resp1b["items"]
+
+    # Copy items 1, 2, 3 to create the batch
+    items_to_add = queue_initial[1:4]
+
+    # Add the batch
+    params = {
+        "items": items_to_add,
+        "after_uid": items_to_add[-1]["item_uid"],
+        "user": _user,
+        "user_group": _user_group,
+    }
+    resp2a, _ = zmq_single_request("queue_item_add_batch", params)
+    assert resp2a["success"] is True, pprint.pformat(resp2a)
+    assert resp2a["msg"] == ""
+    assert resp2a["qsize"] == len(queue_initial) + len(items_to_add)
+
+    resp2b, _ = zmq_single_request("queue_get")
+    assert resp2b["success"] is True
+    queue_final = resp2b["items"]
+    queue_final_seq = [str(_["kwargs"]["num"]) for _ in queue_final]
+    queue_final_seq = "".join(queue_final_seq)
+    assert queue_final_seq == expected_seq
+
+
+def test_zmq_api_queue_item_add_batch_3(re_manager):  # noqa: F811
+    """
     Test for ``queue_item_add_batch``: add a batch of items (including plans and instructions)
     and execute the queue.
     """
@@ -791,7 +848,7 @@ def test_zmq_api_queue_item_add_batch_2(re_manager):  # noqa: F811
     assert wait_for_condition(time=5, condition=condition_manager_idle)
 
 
-def test_zmq_api_queue_item_add_batch_3(re_manager):  # noqa: F811
+def test_zmq_api_queue_item_add_batch_4_fail(re_manager):  # noqa: F811
     """
     Test for ``queue_item_add_batch`` API. Attempt to add a batch that contains invalid plans.
     Make sure that the invalid plans are detected, correct error messages are returned and the

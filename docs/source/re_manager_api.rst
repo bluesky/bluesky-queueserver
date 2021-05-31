@@ -578,12 +578,13 @@ Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 Method        **'queue_item_add_batch'**
 ------------  -----------------------------------------------------------------------------------------
-Description   Add a batch of items to the back of the queue. The batch may consist of any number
-              of supported items (see **queue_item_add** method). The batch is treated as a single
-              unit: each item in the queue must successfully pass validation before any items are added
-              to the queue. If any item fails validation, the whole batch is rejected. In case the
-              batch is rejected, the function returns the detailed report for each item, including
-              *success* status indicating if the item passed validation and error message in case
+Description   Add a batch of items to the queue. The behavior of the function is identical to
+              **queue_item_add**, except that it adds the batch of items instead of a single item.
+              The batch may consist of any number of supported items (see **queue_item_add** method).
+              Each item in the queue must successfully pass validation before any items are added
+              to the queue. If an item fails validation, the whole batch is rejected. In case the
+              batch is rejected, the function returns the detailed report for each item: *success*
+              status indicating if the item passed validation and error message in case
               validation failed.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **items**: *list*
@@ -598,6 +599,18 @@ Parameters    **items**: *list*
                   the name of the user (e.g. 'John Doe'). The name is included in the item metadata
                   and may be used to identify the user who added the item to the queue. It is not
                   passed to the Run Engine or included in run metadata.
+
+              **pos**: *int*, *'front'* or *'back'* (optional)
+                  position of the first item of the batch in the queue. RE Manager will attempt to
+                  insert the batch of items so that the first item in the batch is at the specified
+                  position. The position may be positive or negative (counted from the back of the queue)
+                  integer. If 'pos' value is a string 'front' or 'back', then the items are inserted at
+                  the front or the back of the queue.
+
+              **before_uid**, **after_uid**: *str* (optional)
+                  insert the batch of items before or after the item with the given item UID.
+
+              *Parameters 'pos', 'before_uid' and 'after_uid' are mutually exclusive.*
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully. The request fails if any item

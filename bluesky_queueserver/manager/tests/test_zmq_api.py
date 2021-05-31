@@ -656,7 +656,6 @@ def test_zmq_api_queue_item_add_8_fail(re_manager):  # noqa F811
     ({"before_uid": "unknown", "after_uid": "unknown"}, "1234", "567", "1234",
      False, ["Ambiguous parameters"] * 3),
     ({"pos": "front", "after_uid": "unknown"}, "1234", "567", "1234", False, ["Ambiguous parameters"] * 3),
-
 ])
 # fmt: on
 def test_zmq_api_queue_item_add_batch_1(

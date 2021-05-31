@@ -1,4 +1,5 @@
 import time as ttime
+import copy
 
 import pytest
 
@@ -240,19 +241,118 @@ def test_http_server_queue_item_add_handler_5_fail(re_manager, fastapi_server): 
     assert "Incorrect request format: request contains no item info" in resp1["msg"]
 
 
-def test_http_server_queue_item_add_batch_1(re_manager, fastapi_server):  # noqa: F811
+# fmt: off
+@pytest.mark.parametrize("batch_params, queue_seq, batch_seq, expected_seq, success, msgs", [
+    ({}, "", "", "", True, "" * 3),  # Add an empty batch
+    ({}, "", "567", "567", True, "" * 3),
+    ({"pos": "front"}, "", "567", "567", True, "" * 3),
+    ({"pos": "back"}, "", "567", "567", True, "" * 3),
+    ({}, "1234", "567", "1234567", True, "" * 3),
+    ({"pos": "front"}, "1234", "567", "5671234", True, "" * 3),
+    ({"pos": "back"}, "1234", "567", "1234567", True, "" * 3),
+    ({"pos": 0}, "1234", "567", "5671234", True, "" * 3),
+    ({"pos": 1}, "1234", "567", "1567234", True, "" * 3),
+    ({"pos": 100}, "1234", "567", "1234567", True, "" * 3),
+    ({"pos": -1}, "1234", "567", "1235674", True, "" * 3),
+    ({"pos": -100}, "1234", "567", "5671234", True, "" * 3),
+    ({"before_uid": "1"}, "1234", "567", "5671234", True, "" * 3),
+    ({"before_uid": "2"}, "1234", "567", "1567234", True, "" * 3),
+    ({"before_uid": "3"}, "1234", "567", "1256734", True, "" * 3),
+    ({"after_uid": "1"}, "1234", "567", "1567234", True, "" * 3),
+    ({"after_uid": "2"}, "1234", "567", "1256734", True, "" * 3),
+    ({"after_uid": "4"}, "1234", "567", "1234567", True, "" * 3),
+    ({"before_uid": "unknown"}, "1234", "567", "1234", False, ["Plan with UID .* is not in the queue"] * 3),
+    ({"after_uid": "unknown"}, "1234", "567", "1234", False, ["Plan with UID .* is not in the queue"] * 3),
+    ({"before_uid": "unknown", "after_uid": "unknown"}, "1234", "567", "1234",
+     False, ["Ambiguous parameters"] * 3),
+    ({"pos": "front", "after_uid": "unknown"}, "1234", "567", "1234", False, ["Ambiguous parameters"] * 3),
+])
+# fmt: on
+def test_http_server_queue_item_add_batch_1(
+    re_manager, fastapi_server, batch_params, queue_seq, batch_seq, expected_seq, success, msgs  # noqa: F811
+):
     """
     Basic test for ``/queue/item/add/batch`` API.
+    The test is identical to ``test_zmq_api_queue_item_add_batch_1`` and checks if the API performs
+    correctly in all modes when called via HTTP server.
     """
-    items = [_plan1, _plan2, _instruction_stop, _plan3]
+    plan_template = {
+        "name": "count",
+        "args": [["det1"]],
+        "kwargs": {"num": 50, "delay": 0.01},
+        "item_type": "plan",
+    }
 
-    resp1 = request_to_json("post", "/queue/item/add/batch", json={"items": items})
-    assert resp1["success"] is True, f"resp={resp1}"
-    assert resp1["msg"] == ""
-    assert resp1["qsize"] == 4
+    # Fill the queue with the initial set of plans
+    for item_code in queue_seq:
+        item = copy.deepcopy(plan_template)
+        item["kwargs"]["num"] = int(item_code)
+        resp1a = request_to_json("post", "/queue/item/add", json={"item": item})
+        assert resp1a["success"] is True
+
+    resp1b = request_to_json("get", "/queue/get")
+    assert resp1b["success"] is True, str(resp1b)
+    queue_initial = resp1b["items"]
+
+    # If there are 'before_uid' or 'after_uid' parameters, then convert values of those
+    #   parameters to actual item UIDs.
+    def find_uid(dummy_uid):
+        """If item is not found, then return ``dummy_uid``"""
+        try:
+            ind = queue_seq.index(dummy_uid)
+            return queue_initial[ind]["item_uid"]
+        except Exception:
+            return dummy_uid
+
+    if "before_uid" in batch_params:
+        batch_params["before_uid"] = find_uid(batch_params["before_uid"])
+
+    if "after_uid" in batch_params:
+        batch_params["after_uid"] = find_uid(batch_params["after_uid"])
+
+    # Create a list of items to add
+    items_to_add = []
+    for item_code in batch_seq:
+        item = copy.deepcopy(plan_template)
+        item["kwargs"]["num"] = int(item_code)
+        items_to_add.append(item)
+
+    # Add the batch
+    params = {"items": items_to_add}
+    params.update(batch_params)
+    resp2a = request_to_json("post", "/queue/item/add/batch", json=params)
+    assert resp2a["success"] is success, f"resp={resp2a}"
+
+    if success:
+        assert resp2a["success"] is True
+        assert resp2a["msg"] == ""
+        assert resp2a["qsize"] == len(expected_seq)
+        items_added = resp2a["items"]
+        assert len(items_added) == len(batch_seq)
+        added_seq = [str(_["kwargs"]["num"]) for _ in items_added]
+        added_seq = "".join(added_seq)
+        assert added_seq == batch_seq
+    else:
+        n_total = len(msgs)
+        n_success = len([_ for _ in msgs if not (_)])
+        n_failed = n_total - n_success
+        msg = (
+            f"Failed to add all items: validation of {n_failed} out of {n_total} submitted items failed"
+            if n_failed
+            else ""
+        )
+
+        assert resp2a["success"] is False
+        assert resp2a["msg"] == msg
+        assert resp2a["qsize"] == len(expected_seq)
+        items_added = resp2a["items"]
+        assert len(items_added) == len(batch_seq)
+        added_seq = [str(_["kwargs"]["num"]) for _ in items_added]
+        added_seq = "".join(added_seq)
+        assert added_seq == batch_seq
 
     status = request_to_json("get", "/status")
-    assert status["items_in_queue"] == 4
+    assert status["items_in_queue"] == len(expected_seq)
     assert status["items_in_history"] == 0
 
 

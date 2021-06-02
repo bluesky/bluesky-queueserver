@@ -347,6 +347,38 @@ class PlanQueueOperations:
                 return n
         raise IndexError(f"No plan with UID '{uid}' was found in the list.")
 
+    async def _get_index_by_uid_batch(self, *, uids):
+        """
+        Batch version of ``_get_index_by_uid``. The operation is implemented efficiently
+        and should be used for finding indices of large number of items (in batch operations).
+        Returns a list of indices. Index is set to -1 for items that are not found.
+
+        Parameters
+        ----------
+        uids: list(str)
+            List of UIDs of the items in the batch to find.
+
+        Returns
+        -------
+        list(int)
+            List of indices of the items. The list has the same number of items as the list ``uids``.
+            Indices are set to -1 for the items that were not found in the queue.
+        """
+        queue, _ = await self._get_queue()
+
+        uids_set = set(uids)  # Set should be more efficient for searching elements
+        uid_to_index = {}
+        for n, plan in enumerate(queue):
+            uid = plan["item_uid"]
+            if uid in uids_set:
+                uid_to_index[uid] = n
+
+        indices = [None] * len(uids)
+        for n, uid in enumerate(uids):
+            indices[n] = uid_to_index.get(uid, -1)
+
+        return indices
+
     # --------------------------------------------------------------------------
     #                          Operations with UID set
     def _uid_dict_clear(self):
@@ -1125,7 +1157,63 @@ class PlanQueueOperations:
         """
         See ``self.move_batch()`` method.
         """
-        items_moved, qsize = [], [], 0
+        uids = uids or []
+
+        if not isinstance(uids, list):
+            raise TypeError(f"Parameter 'uids' must be a list: type(uids) = {type(uids)}")
+
+        # Make sure only one of the mutually exclusive parameters is not None
+        if [pos_dest, before_uid, after_uid].count(None) < 2:
+            raise ValueError(
+                "More than one mutually exclusive parameter (pos_dest, before_uid, after_uid) was used"
+            )
+
+        # Check if 'uids' contains only unique items
+        uids_set = set(uids)
+        if len(uids_set) != len(uids):
+            raise ValueError(f"The list of UIDs contains {len(uids) - len(uids_set)} UIDs that are not unique")
+
+        # Check if all UIDs in 'uids' exist in the queue
+        uids_missing = []
+        for uid in uids:
+            if not self._is_uid_in_dict(uid):
+                uids_missing.append(uid)
+        if uids_missing:
+            raise ValueError(f"The queue does not contain items with the following UIDs: {uids_missing}")
+
+        # Check that 'before_uid' and 'after_uid' are not in 'uids'
+        if (before_uid is not None) and (before_uid in uids):
+            raise ValueError(f"Parameter 'before_uid': item with UID '{before_uid}' is in the batch")
+        if (after_uid is not None) and (after_uid in uids):
+            raise ValueError(f"Parameter 'after_uid': item with UID '{after_uid}' is in the batch")
+
+        # Rearrange UIDs in the list if items need to be reordered
+        if reorder:
+            indices = await self._get_index_by_uid_batch(uids)
+
+            def sorting_key(element):
+                return element[0]
+
+            uids_with_indices = list(zip(indices, uids))
+            uids_with_indices.sort(key=sorting_key)
+            uids_prepared = [_[1] for _ in uids_with_indices]
+        else:
+            uids_prepared = uids
+
+        # Perform the 'move' operation.
+        last_item_uid = None
+        items_moved = []
+        for uid in uids_prepared:
+            if last_item_uid is None:
+                # First item is moved according to specified parameters
+                item, _ = await self._move_item(uid=uid, before_uid=before_uid, after_uid=after_uid)
+            else:
+                # Consecutive items are placed after the first item
+                item, _ = await self._move_item(uid=uid, after_uid=last_item_uid)
+            last_item_uid = uid
+            items_moved.append(item)
+
+        qsize = await self._get_queue_size()
         return items_moved, qsize
 
     async def move_batch(self, *, uids=None, pos_dest=None, before_uid=None, after_uid=None, reorder=False):
@@ -1161,13 +1249,17 @@ class PlanQueueOperations:
         Returns
         -------
         list(dict), int
-            The list of items that were moved and the size of the queue.
+            The list of items that were moved and the size of the queue. The order of the items
+            matches the order of the items in the moved batch. Depending on the value of ``reorder``
+            it may or may not match the order of ``uids``.
 
         Raises
         ------
         ValueError
             Operation could not be performed due to incorrectly specified parameters or invalid
             list of ``uids``.
+        TypeError
+            Incorrect type of parameter ``uids``.
         """
         async with self._lock:
             return await self._move_batch(

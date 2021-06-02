@@ -1169,6 +1169,85 @@ def test_move_item_2(pq):
 
 
 # fmt: off
+@pytest.mark.parametrize("batch_params, queue_seq, selection_seq, batch_seq, expected_seq, success, msg", [
+    ({"pos_dest": "front"}, "abcdefg", "cd", "cd", "cdabefg", True, ""),
+    ({"before_uid": "a"}, "abcdefg", "cd", "cd", "cdabefg", True, ""),
+    ({"pos_dest": "back"}, "abcdefg", "cd", "cd", "abefgcd", True, ""),
+    ({"after_uid": "g"}, "abcdefg", "cd", "cd", "abefgcd", True, ""),
+    ({"before_uid": "f"}, "abcdefg", "cd", "cd", "abecdfg", True, ""),
+    ({"after_uid": "f"}, "abcdefg", "cd", "cd", "abefcdg", True, ""),
+    # Controlling the order of moved items
+    ({"after_uid": "f"}, "abcdefg", "acd", "acd", "befacdg", True, ""),
+    ({"after_uid": "f"}, "abcdefg", "cad", "cad", "befcadg", True, ""),
+    ({"after_uid": "f"}, "abcdefg", "dac", "dac", "befdacg", True, ""),
+    ({"after_uid": "f", "reorder": False}, "abcdefg", "dac", "dac", "befdacg", True, ""),
+    ({"after_uid": "f", "reorder": True}, "abcdefg", "acd", "acd", "befacdg", True, ""),
+    ({"after_uid": "f", "reorder": True}, "abcdefg", "cad", "acd", "befacdg", True, ""),
+    ({"after_uid": "f", "reorder": True}, "abcdefg", "dac", "acd", "befacdg", True, ""),
+    # Empty list of UIDS
+    ({"pos_dest": "front"}, "abcdefg", "", "", "abcdefg", True, ""),
+    # Move the batch which is already in the front or back to front or back of the queue
+    #   (nothing is done, but operation is still successful)
+    ({"pos_dest": "front"}, "abcdefg", "ab", "ab", "abcdefg", True, ""),
+    ({"pos_dest": "back"}, "abcdefg", "fg", "fg", "abcdefg", True, ""),
+    # Same, but change the order of moved items
+    ({"pos_dest": "front"}, "abcdefg", "ba", "ba", "bacdefg", True, ""),
+    ({"pos_dest": "back"}, "abcdefg", "gf", "gf", "abcdegf", True, ""),
+    # Failing cases
+    ({}, "abcdefg", "cd", "cd", "abcdefg", False, "Destination for the batch is not specified"),
+    ({"pos_dest": "front", "before_uid": "f"}, "abcdefg", "cd", "cd", "abcdefg", False,
+     "more than one mutually exclusive parameter"),
+    ({"after_uid": "c"}, "abcdefg", "acd", "acd", "abcdefg", False, "item with UID 'cc' is in the batch"),
+    ({"before_uid": "c"}, "abcdefg", "acd", "acd", "abcdefg", False, "item with UID 'cc' is in the batch"),
+    ({"after_uid": "f"}, "abcdefg", "azd", "azd", "abcdefg", False,
+     re.escape("The queue does not contain items with the following UIDs: ['zz']")),
+    ({"after_uid": "f"}, "abcdefg", "axyzd", "axyzd", "abcdefg", False,
+     re.escape("The queue does not contain items with the following UIDs: ['xx', 'yy', 'zz']")),
+    ({"after_uid": "f"}, "abcdefg", "accd", "accd", "abcdefg", False,
+     re.escape("The list of contains repeated UIDs (1 UIDs)")),
+])
+# fmt: on
+def test_move_batch_1(pq, batch_params, queue_seq, selection_seq, batch_seq, expected_seq, success, msg):
+    async def add_plan(plan, n, **kwargs):
+        plan_added, qsize = await pq.add_item_to_queue(plan, **kwargs)
+        assert plan_added["name"] == plan["name"], f"plan: {plan}"
+        assert qsize == n, f"plan: {plan}"
+
+    def name_to_uid(uid):
+        return f"{uid}{uid}"
+
+    async def testing():
+        # Create the queue with plans
+        for n, p_name in enumerate(queue_seq):
+            await add_plan({"name": p_name, "item_uid": f"{name_to_uid(p_name)}"}, n + 1)
+        qsize = await pq.get_queue_size()
+        assert qsize == len(queue_seq)
+
+        if "before_uid" in batch_params:
+            batch_params["before_uid"] = name_to_uid(batch_params["before_uid"])
+        if "after_uid" in batch_params:
+            batch_params["after_uid"] = name_to_uid(batch_params["after_uid"])
+
+        uids = [name_to_uid(_) for _ in selection_seq]
+        if success:
+            items_moved, qsize_after = await pq.move_batch(uids=uids, **batch_params)
+            items_seq = "".join([_["name"] for _ in items_moved])
+            assert items_seq == batch_seq
+            assert qsize_after == qsize
+        else:
+            with pytest.raises(Exception, match=msg):
+                await pq.move_batch(uids=uids, **batch_params)
+
+        # Make sure that the queue is in the correct state
+        queue, _ = await pq.get_queue()
+        seq = "".join([_["name"] for _ in queue])
+        assert seq == expected_seq
+        assert len(queue) == qsize
+
+    asyncio.run(testing())
+
+
+# fmt: off
 @pytest.mark.parametrize("pos, name", [
     ("front", "a"),
     ("back", "c"),

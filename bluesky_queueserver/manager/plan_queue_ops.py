@@ -1163,15 +1163,23 @@ class PlanQueueOperations:
             raise TypeError(f"Parameter 'uids' must be a list: type(uids) = {type(uids)}")
 
         # Make sure only one of the mutually exclusive parameters is not None
-        if [pos_dest, before_uid, after_uid].count(None) < 2:
+        param_list = [pos_dest, before_uid, after_uid]
+        n_params = len(param_list) - param_list.count(None)
+        if n_params < 1:
             raise ValueError(
-                "More than one mutually exclusive parameter (pos_dest, before_uid, after_uid) was used"
+                "Destination for the batch is not specified: use parameters 'pos_dest', "
+                "'before_uid' or 'after_uid'"
+            )
+        elif n_params > 1:
+            raise ValueError(
+                "The function was called with more than one mutually exclusive parameter "
+                "('pos_dest', 'before_uid', 'after_uid')"
             )
 
         # Check if 'uids' contains only unique items
         uids_set = set(uids)
         if len(uids_set) != len(uids):
-            raise ValueError(f"The list of UIDs contains {len(uids) - len(uids_set)} UIDs that are not unique")
+            raise ValueError(f"The list of contains repeated UIDs ({len(uids) - len(uids_set)} UIDs)")
 
         # Check if all UIDs in 'uids' exist in the queue
         uids_missing = []
@@ -1189,7 +1197,7 @@ class PlanQueueOperations:
 
         # Rearrange UIDs in the list if items need to be reordered
         if reorder:
-            indices = await self._get_index_by_uid_batch(uids)
+            indices = await self._get_index_by_uid_batch(uids=uids)
 
             def sorting_key(element):
                 return element[0]
@@ -1206,7 +1214,9 @@ class PlanQueueOperations:
         for uid in uids_prepared:
             if last_item_uid is None:
                 # First item is moved according to specified parameters
-                item, _ = await self._move_item(uid=uid, before_uid=before_uid, after_uid=after_uid)
+                item, _ = await self._move_item(
+                    uid=uid, pos_dest=pos_dest, before_uid=before_uid, after_uid=after_uid
+                )
             else:
                 # Consecutive items are placed after the first item
                 item, _ = await self._move_item(uid=uid, after_uid=last_item_uid)

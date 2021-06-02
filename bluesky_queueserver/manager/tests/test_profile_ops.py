@@ -7,6 +7,7 @@ import typing
 import subprocess
 import pprint
 import sys
+from bluesky import abc
 
 import ophyd
 
@@ -1031,7 +1032,7 @@ def test_devices_from_nspace():
     nspace = load_profile_collection(pc_path)
     devices = devices_from_nspace(nspace)
     for name, device in devices.items():
-        assert isinstance(device, ophyd.ophydobj.OphydObject), f"The object '{device}' is not an Ophyd Object"
+        assert isinstance(device, (abc.Readable, abc.Flyable)), f"The object '{device}' is not a device"
 
     # Check that both devices and signals are recognized by the function
     assert "custom_test_device" in devices

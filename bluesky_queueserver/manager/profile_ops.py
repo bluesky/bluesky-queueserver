@@ -440,11 +440,11 @@ def devices_from_nspace(nspace):
     dict(str: callable)
         Dictionary that maps device names to device objects.
     """
-    import ophyd
+    from bluesky import abc
 
     devices = {}
     for name, obj in nspace.items():
-        if isinstance(obj, ophyd.ophydobj.OphydObject):
+        if isinstance(obj, (abc.Readable, abc.Flyable)):
             devices[name] = obj
     return devices
 

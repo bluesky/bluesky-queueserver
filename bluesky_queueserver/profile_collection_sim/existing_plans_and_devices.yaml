@@ -56,6 +56,14 @@ existing_devices:
     classname: DirectImage
     is_movable: false
     module: ophyd.sim
+  flyer1:
+    classname: MockFlyer
+    is_movable: false
+    module: ophyd.sim
+  flyer2:
+    classname: MockFlyer
+    is_movable: false
+    module: ophyd.sim
   identical_det:
     classname: SynGauss
     is_movable: false
@@ -104,17 +112,13 @@ existing_devices:
     classname: SynAxisEmptyHints
     is_movable: true
     module: ophyd.sim
-  motor_no_hints1:
-    classname: SynAxisNoHints
-    is_movable: true
-    module: ophyd.sim
-  motor_no_hints2:
-    classname: SynAxisNoHints
-    is_movable: true
-    module: ophyd.sim
   motor_no_pos:
     classname: SynAxisNoPosition
     is_movable: true
+    module: ophyd.sim
+  new_trivial_flyer:
+    classname: NewTrivialFlyer
+    is_movable: false
     module: ophyd.sim
   noisy_det:
     classname: SynGauss
@@ -143,6 +147,10 @@ existing_devices:
   signal:
     classname: SynSignal
     is_movable: true
+    module: ophyd.sim
+  trivial_flyer:
+    classname: TrivialFlyer
+    is_movable: false
     module: ophyd.sim
 existing_plans:
   _sim_plan_inner:

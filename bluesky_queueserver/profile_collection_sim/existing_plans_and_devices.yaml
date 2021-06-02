@@ -12,6 +12,10 @@ existing_devices:
     classname: Device
     is_movable: false
     module: ophyd.device
+  custom_test_flyer:
+    classname: MockFlyer
+    is_movable: false
+    module: ophyd.sim
   custom_test_signal:
     classname: Signal
     is_movable: true

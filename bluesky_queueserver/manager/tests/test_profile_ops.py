@@ -1037,6 +1037,7 @@ def test_devices_from_nspace():
     # Check that both devices and signals are recognized by the function
     assert "custom_test_device" in devices
     assert "custom_test_signal" in devices
+    assert "custom_test_flyer" in devices
 
 
 @pytest.mark.parametrize(

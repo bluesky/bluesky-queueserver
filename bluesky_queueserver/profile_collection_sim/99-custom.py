@@ -10,7 +10,8 @@ from bluesky_queueserver.manager.annotation_decorator import parameter_annotatio
 # Some useless devices for unit tests.
 custom_test_device = ophyd.Device(name="custom_test_device")
 custom_test_signal = ophyd.Signal(name="custom_test_signal")
-custom_test_flyer = ophyd.sim.MockFlyer('custom_test_flyer', ophyd.sim.det, ophyd.sim.motor, 1, 5, 20)
+custom_test_flyer = ophyd.sim.MockFlyer("custom_test_flyer", ophyd.sim.det, ophyd.sim.motor, 1, 5, 20)
+
 
 @parameter_annotation_decorator(
     {

@@ -234,7 +234,7 @@ def test_set_new_item_uuid(pq, plan):
     assert new_plan["item_uid"] != uid
 
 
-def test_get_index_by_uid(pq):
+def test_get_index_by_uid_1(pq):
     """
     Test for ``_get_index_by_uid()``
     """
@@ -248,10 +248,40 @@ def test_get_index_by_uid(pq):
         for plan in plans:
             await pq.add_item_to_queue(plan)
 
-        assert await pq._get_index_by_uid("b") == 1
+        assert await pq._get_index_by_uid(uid="b") == 1
 
         with pytest.raises(IndexError, match="No plan with UID 'nonexistent'"):
-            assert await pq._get_index_by_uid("nonexistent")
+            assert await pq._get_index_by_uid(uid="nonexistent")
+
+    asyncio.run(testing())
+
+
+# fmt: off
+@pytest.mark.parametrize("sequence, indices_expected", [
+    (["a", "b", "c"], [0, 1, 2]),
+    (["a", "b"], [0, 1]),
+    (["c", "b"], [2, 1]),
+    (["c", "d", "b"], [2, -1, 1]),
+])
+# fmt: on
+def test_get_index_by_uid_batch_1(pq, sequence, indices_expected):
+    """
+    Test for ``_get_index_by_uid_batch()``
+    """
+    plans = [
+        {"item_uid": "a", "name": "name_a"},
+        {"item_uid": "b", "name": "name_b"},
+        {"item_uid": "c", "name": "name_c"},
+    ]
+
+    async def testing():
+        for plan in plans:
+            await pq.add_item_to_queue(plan)
+
+        indices = await pq._get_index_by_uid_batch(uids=sequence)
+        assert indices == indices_expected
+
+    asyncio.run(testing())
 
 
 def test_uid_dict_1(pq):

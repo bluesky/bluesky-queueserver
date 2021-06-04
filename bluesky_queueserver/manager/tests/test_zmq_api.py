@@ -1497,7 +1497,7 @@ def test_zmq_api_item_remove_batch_1(
 
 def test_zmq_api_item_remove_batch_2_fail(re_manager):  # noqa: F811
     """
-    Test for ``queue_item_move_batch`` API
+    Test for ``queue_item_remove_batch`` API
     """
     resp1, _ = zmq_single_request("queue_item_remove_batch", params={})
     assert resp1["success"] is False

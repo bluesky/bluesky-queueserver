@@ -19,6 +19,22 @@ def pq():
     asyncio.run(pq.delete_pool_entries())
 
 
+# fmt: off
+@pytest.mark.parametrize("item_in, item_out", [
+    ({"name": "plan1", "item_uid": "abcde"}, {"name": "plan1", "item_uid": "abcde"}),
+    ({"args": [1, 2], "kwargs": {"a": 1, "b": 2}}, {"args": [1, 2], "kwargs": {"a": 1, "b": 2}}),
+    ({"name": "plan1", "meta": {"md1": 1, "md2": 2}}, {"name": "plan1", "meta": {"md1": 1, "md2": 2}}),
+    ({"name": "plan1", "result": {}}, {"name": "plan1"}),
+])
+# fmt: on
+def test_filter_item_parameters(pq, item_in, item_out):
+    """
+    Tests for ``filter_item_parameters``.
+    """
+    item = pq.filter_item_parameters(item_in)
+    assert item == item_out
+
+
 def test_running_plan_info(pq):
     """
     Basic test for the following methods:
@@ -578,7 +594,31 @@ def test_add_item_to_queue_2(pq):
     asyncio.run(testing())
 
 
-def test_add_item_to_queue_3_fail(pq):
+@pytest.mark.parametrize("filter_params", [False, True])
+def test_add_item_to_queue_3(pq, filter_params):
+    async def add_plan(plan, n, **kwargs):
+        plan_added, qsize = await pq.add_item_to_queue(plan, **kwargs)
+        assert plan_added["name"] == plan["name"], f"plan: {plan}"
+        assert qsize == n, f"plan: {plan}"
+
+    async def testing():
+
+        # Parameter 'result' should be removed if filtering is enabled
+        plan1 = {"item_type": "plan", "name": "a", "item_uid": "1"}
+        plan2 = plan1.copy()
+        plan2["result"] = {}
+
+        plan_added, qsize = await pq.add_item_to_queue(plan2, filter_parameters=filter_params)
+
+        if filter_params:
+            assert plan_added == plan1
+        else:
+            assert plan_added == plan2
+
+    asyncio.run(testing())
+
+
+def test_add_item_to_queue_4_fail(pq):
     """
     Failing tests for the function ``PlanQueueOperations.add_item_to_queue()``
     """
@@ -1269,9 +1309,9 @@ def test_set_processed_item_as_stopped(pq):
     to test functionality.
     """
     plans = [
-        {"item_type": "plan", "item_uid": 1, "name": "a"},
-        {"item_type": "plan", "item_uid": 2, "name": "b"},
-        {"item_type": "plan", "item_uid": 3, "name": "c"},
+        {"item_type": "plan", "item_uid": "1", "name": "a"},
+        {"item_type": "plan", "item_uid": "2", "name": "b"},
+        {"item_type": "plan", "item_uid": "3", "name": "c"},
     ]
     plans_run_uids = [["abc1"], ["abc2", "abc3"], []]
 
@@ -1309,6 +1349,13 @@ def test_set_processed_item_as_stopped(pq):
         assert plan["name"] == plans[0]["name"]
         assert plan["result"]["exit_status"] == "stopped"
         assert plan["result"]["run_uids"] == plans_run_uids[0]
+        assert plan["item_uid"] == plans[0]["item_uid"]
+
+        # New plan UID is generated when the plan is pushed back into the queue
+        queue, _ = await pq.get_queue()
+        plan_modified_uid = queue[0]["item_uid"]
+        # Make sure that the item UID was changed
+        assert plan_modified_uid != plans[0]["item_uid"]
 
         plan_history, _ = await pq.get_history()
         plan_history_expected = add_status_to_plans([plans[0]], [plans_run_uids[0]], "stopped")
@@ -1328,6 +1375,14 @@ def test_set_processed_item_as_stopped(pq):
         plan_history_expected = add_status_to_plans(
             [plans[0].copy(), plans[0].copy()], [plans_run_uids[0], plans_run_uids[1]], "stopped"
         )
+        # Plan 0 has different UID after it was inserted in the queue during the 1st attempt
+        plan_history_expected[1]["item_uid"] = plan_modified_uid
         assert plan_history == plan_history_expected
+
+        # Verify that `_uid_dict` still has correct size. `_uid_dict` should never be accessed directly.
+        assert len(pq._uid_dict) == 3
+        # Also it should not contain UIDs of already executed plans.
+        for plan in plan_history:
+            assert plan["item_uid"] not in pq._uid_dict
 
     asyncio.run(testing())

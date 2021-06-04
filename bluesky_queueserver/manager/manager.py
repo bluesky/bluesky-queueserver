@@ -1381,7 +1381,7 @@ class RunEngineManager(Process):
             if uids is None:
                 raise Exception("Request does not contain the list of UIDs")
 
-            items, qsize = await self._plan_queue.move_item(
+            items, qsize = await self._plan_queue.move_batch(
                 uids=uids, pos_dest=pos_dest, before_uid=before_uid, after_uid=after_uid, reorder=reorder
             )
             success = True

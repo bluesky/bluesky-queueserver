@@ -66,8 +66,8 @@ class PlanQueueOperations:
         self._name_plan_history = "plan_history"
         self._name_plan_queue_mode = "plan_queue_mode"
 
-        # The list of allowed item parameters. The new inserted items are filtered and
-        #   only the parameters from this list are left.
+        # The list of allowed item parameters used for parameter filtering. Filtering operation
+        #   involves removing all parameters that are not in the list.
         self._allowed_item_parameters = (
             "item_uid",
             "item_type",

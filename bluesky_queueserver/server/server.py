@@ -356,9 +356,18 @@ async def queue_item_remove_handler(payload: dict):
 @app.post("/queue/item/move")
 async def queue_item_move_handler(payload: dict):
     """
-    Remove plan from the queue
+    Move plan in the queue
     """
     msg = await zmq_to_manager.send_message(method="queue_item_move", params=payload)
+    return msg
+
+
+@app.post("/queue/item/move/batch")
+async def queue_item_move_batch_handler(payload: dict):
+    """
+    Move a batch of plans in the queue
+    """
+    msg = await zmq_to_manager.send_message(method="queue_item_move_batch", params=payload)
     return msg
 
 

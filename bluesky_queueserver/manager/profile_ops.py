@@ -440,7 +440,10 @@ def devices_from_nspace(nspace):
     dict(str: callable)
         Dictionary that maps device names to device objects.
     """
-    from bluesky import abc
+    try:
+        from bluesky import abc
+    except ImportError:
+        import bluesky_queueserver.manager._abc as abc
 
     devices = {}
     for name, obj in nspace.items():

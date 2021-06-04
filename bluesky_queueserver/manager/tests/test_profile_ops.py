@@ -7,7 +7,11 @@ import typing
 import subprocess
 import pprint
 import sys
-from bluesky import abc
+
+try:
+    from bluesky import abc
+except ImportError:
+    import bluesky_queueserver.manager._abc as abc
 
 import ophyd
 

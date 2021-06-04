@@ -662,7 +662,7 @@ class PlanQueueOperations:
 
     async def _pop_item_from_queue(self, *, pos=None, uid=None):
         """
-        See ``self._pop_item_from_queue()`` method
+        See ``self.pop_item_from_queue()`` method
         """
 
         if (pos is not None) and (uid is not None):
@@ -721,6 +721,8 @@ class PlanQueueOperations:
         -------
         dict or None
             The last plan in the queue represented as a dictionary.
+        int
+            The size of the queue after completion of the operation.
 
         Raises
         ------
@@ -731,6 +733,71 @@ class PlanQueueOperations:
         """
         async with self._lock:
             return await self._pop_item_from_queue(pos=pos, uid=uid)
+
+    async def _pop_item_from_queue_batch(self, *, uids=None, ignore_missing=True):
+        """
+        See ``self.pop_item_from_queue_batch()`` method
+        """
+
+        uids = uids or []
+
+        if not isinstance(uids, list):
+            raise TypeError(f"Parameter 'uids' must be a list: type(uids) = {type(uids)}")
+
+        if not ignore_missing:
+            # Check if 'uids' contains only unique items
+            uids_set = set(uids)
+            if len(uids_set) != len(uids):
+                raise ValueError(f"The list of contains repeated UIDs ({len(uids) - len(uids_set)} UIDs)")
+
+            # Check if all UIDs in 'uids' exist in the queue
+            uids_missing = []
+            for uid in uids:
+                if not self._is_uid_in_dict(uid):
+                    uids_missing.append(uid)
+            if uids_missing:
+                raise ValueError(f"The queue does not contain items with the following UIDs: {uids_missing}")
+
+        items = []
+        for uid in uids:
+            try:
+                item, _ = await self._pop_item_from_queue(uid=uid)
+                items.append(item)
+            except Exception as ex:
+                logger.debug("Failed to remove item with UID '%s' from the queue: %s", uid, str(ex))
+
+        qsize = await self._get_queue_size()
+        return items, qsize
+
+    async def pop_item_from_queue_batch(self, *, uids=None, ignore_missing=True):
+        """
+        Pop a batch of items from the queue. Raises ``IndexError`` if plan with index ``pos`` is unavailable
+        or if the queue is empty.
+
+        Parameters
+        ----------
+        uids : list(str)
+            list of UIDs of items to be removed. The list may be empty.
+        ignore_missing : boolean
+            if the parameter is ``True`` (default), then all items from the batch that are found in
+            the queue are removed, if ``False``, then the function fails if the list contains repeated
+            entries or at least one of the items is not found in the queue. No items are removed
+            from the queue if the function fails.
+
+        Returns
+        -------
+        list(dict)
+            The list of items that were removed from the queue.
+        int
+            Size of the queue after completion of the operation.
+
+        Raises
+        ------
+        ValueError
+            Function failed due to missing or repeated items in the batch.
+        """
+        async with self._lock:
+            return await self._pop_item_from_queue_batch(uids=uids, ignore_missing=ignore_missing)
 
     def filter_item_parameters(self, item):
         """

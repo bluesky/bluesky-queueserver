@@ -1,5 +1,7 @@
 import time as ttime
 import copy
+import re
+import pprint
 
 import pytest
 
@@ -637,7 +639,7 @@ def test_http_server_queue_item_get_remove_handler_4_failing(re_manager, fastapi
     ({"pos": 1, "before_uid": 0, "after_uid": 0}, 2, [], False, "Ambiguous parameters"),
 ])
 # fmt: on
-def test_http_server_move_plan_1(re_manager, fastapi_server, params, src, order, success, msg):  # noqa F811
+def test_http_server_item_move_1(re_manager, fastapi_server, params, src, order, success, msg):  # noqa F811
     """
     The tests are derived from the ZMQ API tests. The number of tests are reduced to save time.
     """
@@ -682,6 +684,136 @@ def test_http_server_move_plan_1(re_manager, fastapi_server, params, src, order,
     else:
         assert resp2["success"] is False
         assert msg in resp2["msg"]
+
+
+# fmt: off
+@pytest.mark.parametrize("batch_params, queue_seq, selection_seq, batch_seq, expected_seq, success, msg", [
+    ({"pos_dest": "front"}, "0123456", "23", "23", "2301456", True, ""),
+    ({"before_uid": "0"}, "0123456", "23", "23", "2301456", True, ""),
+    ({"pos_dest": "back"}, "0123456", "23", "23", "0145623", True, ""),
+    ({"after_uid": "6"}, "0123456", "23", "23", "0145623", True, ""),
+    ({"before_uid": "5"}, "0123456", "23", "23", "0142356", True, ""),
+    ({"after_uid": "5"}, "0123456", "23", "23", "0145236", True, ""),
+    # Controlling the order of moved items
+    ({"after_uid": "5"}, "0123456", "023", "023", "1450236", True, ""),
+    ({"after_uid": "5"}, "0123456", "203", "203", "1452036", True, ""),
+    ({"after_uid": "5"}, "0123456", "302", "302", "1453026", True, ""),
+    ({"after_uid": "5", "reorder": False}, "0123456", "302", "302", "1453026", True, ""),
+    ({"after_uid": "5", "reorder": True}, "0123456", "023", "023", "1450236", True, ""),
+    ({"after_uid": "5", "reorder": True}, "0123456", "203", "023", "1450236", True, ""),
+    ({"after_uid": "5", "reorder": True}, "0123456", "302", "023", "1450236", True, ""),
+    # Empty list of UIDS
+    ({"pos_dest": "front"}, "0123456", "", "", "0123456", True, ""),
+    ({"pos_dest": "front"}, "", "", "", "", True, ""),
+    # Move the batch which is already in the front or back to front or back of the queue
+    #   (nothing is done, but operation is still successful)
+    ({"pos_dest": "front"}, "0123456", "01", "01", "0123456", True, ""),
+    ({"pos_dest": "back"}, "0123456", "56", "56", "0123456", True, ""),
+    # Same, but change the order of moved items
+    ({"pos_dest": "front"}, "0123456", "10", "10", "1023456", True, ""),
+    ({"pos_dest": "back"}, "0123456", "65", "65", "0123465", True, ""),
+    # Failing cases
+    ({}, "0123456", "23", "23", "0123456", False, "Destination for the batch is not specified"),
+    ({"pos_dest": "front", "before_uid": "5"}, "0123456", "23", "23", "0123456", False,
+     "more than one mutually exclusive parameter"),
+    ({"after_uid": "3"}, "0123456", "023", "023", "0123456", False, "item with UID '.*' is in the batch"),
+    ({"before_uid": "3"}, "0123456", "023", "023", "0123456", False, "item with UID '.*' is in the batch"),
+    ({"after_uid": "5"}, "0123456", "093", "093", "0123456", False,
+     re.escape("The queue does not contain items with the following UIDs: ['9']")),
+    ({"after_uid": "5"}, "0123456", "07893", "07893", "0123456", False,
+     re.escape("The queue does not contain items with the following UIDs: ['7', '8', '9']")),
+    ({"after_uid": "5"}, "0123456", "0223", "0223", "0123456", False,
+     re.escape("The list of contains repeated UIDs (1 UIDs)")),
+])
+# fmt: on
+def test_http_server_item_move_batch_1(
+    re_manager,  # noqa: F811
+    fastapi_server,  # noqa: F811
+    batch_params,
+    queue_seq,
+    selection_seq,
+    batch_seq,
+    expected_seq,
+    success,
+    msg,
+):
+    """
+    Tests for ``queue_item_move_batch`` API.
+    """
+    plan_template = {
+        "name": "count",
+        "args": [["det1"]],
+        "kwargs": {"num": 50, "delay": 0.01},
+        "item_type": "plan",
+    }
+
+    # Fill the queue with the initial set of plans
+    for item_code in queue_seq:
+        item = copy.deepcopy(plan_template)
+        item["kwargs"]["num"] = int(item_code)
+        resp1a = request_to_json("post", "/queue/item/add", json={"item": item})
+        assert resp1a["success"] is True
+
+    state = request_to_json("get", "/status")
+    assert state["items_in_queue"] == len(queue_seq)
+    assert state["items_in_history"] == 0
+
+    resp1b = request_to_json("get", "/queue/get")
+    assert resp1b["success"] is True
+    queue_initial = resp1b["items"]
+
+    # If there are 'before_uid' or 'after_uid' parameters, then convert values of those
+    #   parameters to actual item UIDs.
+    def find_uid(dummy_uid):
+        """If item is not found, then return ``dummy_uid``"""
+        try:
+            ind = queue_seq.index(dummy_uid)
+            return queue_initial[ind]["item_uid"]
+        except Exception:
+            return dummy_uid
+
+    if "before_uid" in batch_params:
+        batch_params["before_uid"] = find_uid(batch_params["before_uid"])
+
+    if "after_uid" in batch_params:
+        batch_params["after_uid"] = find_uid(batch_params["after_uid"])
+
+    # Create a list of UIDs of items to be moved
+    uids_of_items_to_move = []
+    for item_code in selection_seq:
+        uids_of_items_to_move.append(find_uid(item_code))
+
+    # Move the batch
+    params = {"uids": uids_of_items_to_move}
+    params.update(batch_params)
+
+    resp2a = request_to_json("post", "/queue/item/move/batch", json=params)
+
+    if success:
+        assert resp2a["success"] is True, pprint.pformat(resp2a)
+        assert resp2a["msg"] == ""
+        assert resp2a["qsize"] == len(expected_seq)
+        items_moved = resp2a["items"]
+        assert len(items_moved) == len(batch_seq)
+        added_seq = [str(_["kwargs"]["num"]) for _ in items_moved]
+        added_seq = "".join(added_seq)
+        assert added_seq == batch_seq
+    else:
+        assert resp2a["success"] is False, pprint.pformat(resp2a)
+        assert re.search(msg, resp2a["msg"]), pprint.pformat(resp2a)
+        assert resp2a["qsize"] is None
+        assert resp2a["items"] == []
+
+    resp2b = request_to_json("get", "/queue/get")
+    assert resp2b["success"] is True
+    queue_final = resp2b["items"]
+    queue_final_seq = [str(_["kwargs"]["num"]) for _ in queue_final]
+    queue_final_seq = "".join(queue_final_seq)
+    assert queue_final_seq == expected_seq
+
+    state = request_to_json("get", "/status")
+    assert state["items_in_queue"] == len(expected_seq)
+    assert state["items_in_history"] == 0
 
 
 def test_http_server_open_environment_handler(re_manager, fastapi_server):  # noqa F811

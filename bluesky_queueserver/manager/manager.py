@@ -1354,6 +1354,43 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg, "item": item, "qsize": qsize}
 
+    async def _queue_item_move_batch_handler(self, request):
+        """
+        Moves a batch of items to a new position in the queue. The batch if items
+        is specified as a list of non-repeated UIDs. All items in the batch must
+        exist in the queue, otherwise the operation fails. The batch may be empty
+        (``uids`` is an empty list). The destination may be specified as a position
+        ``pos_dest`` (accepts string values ``front`` and ``back``) or UID of the
+        existing item that is not included in the batch. The batch items are moved
+        after the item (parameter ``after_uid``) or before the item (parameter
+        ``before_uid``). If ``reorder==False``, then the items in the batch are arranged
+        in the order in which they are listed in ``uids``, otherwise they are moved
+        in the same order they are in the queue (the order in ``uids`` is ignored).
+        The parameters ``pos_dest``, ``before_uid`` and ``after_uid`` are mutually
+        exclusive. The destionation MUST be specified, otherwise the operation fails.
+        """
+        logger.info("Removing item from the queue ...")
+        try:
+            items, qsize, msg = [], None, ""
+            uids = request.get("uids", None)
+            pos_dest = request.get("pos_dest", None)
+            before_uid = request.get("before_uid", None)
+            after_uid = request.get("after_uid", None)
+            reorder = request.get("reorder", False)
+
+            if uids is None:
+                raise Exception("Request does not contain the list of UIDs")
+
+            items, qsize = await self._plan_queue.move_batch(
+                uids=uids, pos_dest=pos_dest, before_uid=before_uid, after_uid=after_uid, reorder=reorder
+            )
+            success = True
+        except Exception as ex:
+            success = False
+            msg = f"Failed to move the batch of items: {str(ex)}"
+
+        return {"success": success, "msg": msg, "qsize": qsize, "items": items}
+
     async def _queue_clear_handler(self, request):
         """
         Remove all entries from the plan queue (does not affect currently executed run)
@@ -1583,6 +1620,7 @@ class RunEngineManager(Process):
             "queue_item_get": "_queue_item_get_handler",
             "queue_item_remove": "_queue_item_remove_handler",
             "queue_item_move": "_queue_item_move_handler",
+            "queue_item_move_batch": "_queue_item_move_batch_handler",
             "queue_clear": "_queue_clear_handler",
             "queue_start": "_queue_start_handler",
             "queue_stop": "_queue_stop_handler",

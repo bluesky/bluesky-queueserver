@@ -347,6 +347,38 @@ class PlanQueueOperations:
                 return n
         raise IndexError(f"No plan with UID '{uid}' was found in the list.")
 
+    async def _get_index_by_uid_batch(self, *, uids):
+        """
+        Batch version of ``_get_index_by_uid``. The operation is implemented efficiently
+        and should be used for finding indices of large number of items (in batch operations).
+        Returns a list of indices. Index is set to -1 for items that are not found.
+
+        Parameters
+        ----------
+        uids: list(str)
+            List of UIDs of the items in the batch to find.
+
+        Returns
+        -------
+        list(int)
+            List of indices of the items. The list has the same number of items as the list ``uids``.
+            Indices are set to -1 for the items that were not found in the queue.
+        """
+        queue, _ = await self._get_queue()
+
+        uids_set = set(uids)  # Set should be more efficient for searching elements
+        uid_to_index = {}
+        for n, plan in enumerate(queue):
+            uid = plan["item_uid"]
+            if uid in uids_set:
+                uid_to_index[uid] = n
+
+        indices = [None] * len(uids)
+        for n, uid in enumerate(uids):
+            indices[n] = uid_to_index.get(uid, -1)
+
+        return indices
+
     # --------------------------------------------------------------------------
     #                          Operations with UID set
     def _uid_dict_clear(self):
@@ -1003,7 +1035,7 @@ class PlanQueueOperations:
 
     async def _move_item(self, *, pos=None, uid=None, pos_dest=None, before_uid=None, after_uid=None):
         """
-        See ``self.move_plan()`` method.
+        See ``self.move_item()`` method.
         """
         if (pos is None) and (uid is None):
             raise ValueError("Source position or UID is not specified.")
@@ -1098,7 +1130,7 @@ class PlanQueueOperations:
             of the item in the queue or a string from the set {"back", "front"}.
         uid: str
             UID of the source item. UID overrides the position
-        pos_dext: str or int
+        pos_dest: str or int
             Index of the new position of the item in the queue: positive or negative integer that
             specifieds the index of the item in the queue or a string from the set {"back", "front"}.
         before_uid: str
@@ -1119,6 +1151,129 @@ class PlanQueueOperations:
         async with self._lock:
             return await self._move_item(
                 pos=pos, uid=uid, pos_dest=pos_dest, before_uid=before_uid, after_uid=after_uid
+            )
+
+    async def _move_batch(self, *, uids=None, pos_dest=None, before_uid=None, after_uid=None, reorder=False):
+        """
+        See ``self.move_batch()`` method.
+        """
+        uids = uids or []
+
+        if not isinstance(uids, list):
+            raise TypeError(f"Parameter 'uids' must be a list: type(uids) = {type(uids)}")
+
+        # Make sure only one of the mutually exclusive parameters is not None
+        param_list = [pos_dest, before_uid, after_uid]
+        n_params = len(param_list) - param_list.count(None)
+        if n_params < 1:
+            raise ValueError(
+                "Destination for the batch is not specified: use parameters 'pos_dest', "
+                "'before_uid' or 'after_uid'"
+            )
+        elif n_params > 1:
+            raise ValueError(
+                "The function was called with more than one mutually exclusive parameter "
+                "('pos_dest', 'before_uid', 'after_uid')"
+            )
+
+        # Check if 'uids' contains only unique items
+        uids_set = set(uids)
+        if len(uids_set) != len(uids):
+            raise ValueError(f"The list of contains repeated UIDs ({len(uids) - len(uids_set)} UIDs)")
+
+        # Check if all UIDs in 'uids' exist in the queue
+        uids_missing = []
+        for uid in uids:
+            if not self._is_uid_in_dict(uid):
+                uids_missing.append(uid)
+        if uids_missing:
+            raise ValueError(f"The queue does not contain items with the following UIDs: {uids_missing}")
+
+        # Check that 'before_uid' and 'after_uid' are not in 'uids'
+        if (before_uid is not None) and (before_uid in uids):
+            raise ValueError(f"Parameter 'before_uid': item with UID '{before_uid}' is in the batch")
+        if (after_uid is not None) and (after_uid in uids):
+            raise ValueError(f"Parameter 'after_uid': item with UID '{after_uid}' is in the batch")
+
+        # Rearrange UIDs in the list if items need to be reordered
+        if reorder:
+            indices = await self._get_index_by_uid_batch(uids=uids)
+
+            def sorting_key(element):
+                return element[0]
+
+            uids_with_indices = list(zip(indices, uids))
+            uids_with_indices.sort(key=sorting_key)
+            uids_prepared = [_[1] for _ in uids_with_indices]
+        else:
+            uids_prepared = uids
+
+        # Perform the 'move' operation.
+        last_item_uid = None
+        items_moved = []
+        for uid in uids_prepared:
+            if last_item_uid is None:
+                # First item is moved according to specified parameters
+                item, _ = await self._move_item(
+                    uid=uid, pos_dest=pos_dest, before_uid=before_uid, after_uid=after_uid
+                )
+            else:
+                # Consecutive items are placed after the first item
+                item, _ = await self._move_item(uid=uid, after_uid=last_item_uid)
+            last_item_uid = uid
+            items_moved.append(item)
+
+        qsize = await self._get_queue_size()
+        return items_moved, qsize
+
+    async def move_batch(self, *, uids=None, pos_dest=None, before_uid=None, after_uid=None, reorder=False):
+        """
+        Move a batch of existing items within the queue. The items are specified as a list of uids.
+        If at least one of the uids can not be found in the queue, the operation fails and no items
+        are moved. The moved items can be ordered based on the order of uids in the list (``reorder=False``)
+        or based on the original order in the queue (``reorder=True``). Plan is moved within the queue
+        without modification. No parameter filtering is applied, so the ``result`` item parameter
+        will not be removed if present.
+
+        The items in the batch do not have to be contiguous. Destination items specified by ``after_uid``
+        and ``before_uid`` may not belong to the batch. The parameters ``pos_dest``, ``before_uid`` and
+        ``after_uid`` are mutually exclusive.
+
+        The function raises an exception with error message in case the operation fails.
+
+        Parameters
+        ----------
+        uids : list(str)
+            List of UIDs of the items in the batch. The list may not contain repeated UIDs. All UIDs
+            must be present in the queue.
+        pos_dest : str
+            Destination of the moved batch. Only string values ``front`` and ``back`` are allowed.
+        before_uid : str
+            Insert the batch before the item with the given UID.
+        after_uid : str
+            Insert the batch after the item with the given UID.
+        reorder : boolean
+            Arranged moved items according to the order of UIDs in the ``uids`` list (``False``) or
+            according to the original order of items in the queue (``True``).
+
+        Returns
+        -------
+        list(dict), int
+            The list of items that were moved and the size of the queue. The order of the items
+            matches the order of the items in the moved batch. Depending on the value of ``reorder``
+            it may or may not match the order of ``uids``.
+
+        Raises
+        ------
+        ValueError
+            Operation could not be performed due to incorrectly specified parameters or invalid
+            list of ``uids``.
+        TypeError
+            Incorrect type of parameter ``uids``.
+        """
+        async with self._lock:
+            return await self._move_batch(
+                uids=uids, pos_dest=pos_dest, before_uid=before_uid, after_uid=after_uid, reorder=reorder
             )
 
     async def _clear_queue(self):

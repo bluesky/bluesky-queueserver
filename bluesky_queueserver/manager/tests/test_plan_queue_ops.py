@@ -234,7 +234,7 @@ def test_set_new_item_uuid(pq, plan):
     assert new_plan["item_uid"] != uid
 
 
-def test_get_index_by_uid(pq):
+def test_get_index_by_uid_1(pq):
     """
     Test for ``_get_index_by_uid()``
     """
@@ -248,10 +248,40 @@ def test_get_index_by_uid(pq):
         for plan in plans:
             await pq.add_item_to_queue(plan)
 
-        assert await pq._get_index_by_uid("b") == 1
+        assert await pq._get_index_by_uid(uid="b") == 1
 
         with pytest.raises(IndexError, match="No plan with UID 'nonexistent'"):
-            assert await pq._get_index_by_uid("nonexistent")
+            assert await pq._get_index_by_uid(uid="nonexistent")
+
+    asyncio.run(testing())
+
+
+# fmt: off
+@pytest.mark.parametrize("sequence, indices_expected", [
+    (["a", "b", "c"], [0, 1, 2]),
+    (["a", "b"], [0, 1]),
+    (["c", "b"], [2, 1]),
+    (["c", "d", "b"], [2, -1, 1]),
+])
+# fmt: on
+def test_get_index_by_uid_batch_1(pq, sequence, indices_expected):
+    """
+    Test for ``_get_index_by_uid_batch()``
+    """
+    plans = [
+        {"item_uid": "a", "name": "name_a"},
+        {"item_uid": "b", "name": "name_b"},
+        {"item_uid": "c", "name": "name_c"},
+    ]
+
+    async def testing():
+        for plan in plans:
+            await pq.add_item_to_queue(plan)
+
+        indices = await pq._get_index_by_uid_batch(uids=sequence)
+        assert indices == indices_expected
+
+    asyncio.run(testing())
 
 
 def test_uid_dict_1(pq):
@@ -1134,6 +1164,86 @@ def test_move_item_2(pq):
         assert queue[1]["item_uid"] == uid_src, pprint.pformat(queue)
         # Make sure that the 'result' parameter was not removed
         assert "result" in queue[1]
+
+    asyncio.run(testing())
+
+
+# fmt: off
+@pytest.mark.parametrize("batch_params, queue_seq, selection_seq, batch_seq, expected_seq, success, msg", [
+    ({"pos_dest": "front"}, "0123456", "23", "23", "2301456", True, ""),
+    ({"before_uid": "0"}, "0123456", "23", "23", "2301456", True, ""),
+    ({"pos_dest": "back"}, "0123456", "23", "23", "0145623", True, ""),
+    ({"after_uid": "6"}, "0123456", "23", "23", "0145623", True, ""),
+    ({"before_uid": "5"}, "0123456", "23", "23", "0142356", True, ""),
+    ({"after_uid": "5"}, "0123456", "23", "23", "0145236", True, ""),
+    # Controlling the order of moved items
+    ({"after_uid": "5"}, "0123456", "023", "023", "1450236", True, ""),
+    ({"after_uid": "5"}, "0123456", "203", "203", "1452036", True, ""),
+    ({"after_uid": "5"}, "0123456", "302", "302", "1453026", True, ""),
+    ({"after_uid": "5", "reorder": False}, "0123456", "302", "302", "1453026", True, ""),
+    ({"after_uid": "5", "reorder": True}, "0123456", "023", "023", "1450236", True, ""),
+    ({"after_uid": "5", "reorder": True}, "0123456", "203", "023", "1450236", True, ""),
+    ({"after_uid": "5", "reorder": True}, "0123456", "302", "023", "1450236", True, ""),
+    # Empty list of UIDS
+    ({"pos_dest": "front"}, "0123456", "", "", "0123456", True, ""),
+    ({"pos_dest": "front"}, "", "", "", "", True, ""),
+    # Move the batch which is already in the front or back to front or back of the queue
+    #   (nothing is done, but operation is still successful)
+    ({"pos_dest": "front"}, "0123456", "01", "01", "0123456", True, ""),
+    ({"pos_dest": "back"}, "0123456", "56", "56", "0123456", True, ""),
+    # Same, but change the order of moved items
+    ({"pos_dest": "front"}, "0123456", "10", "10", "1023456", True, ""),
+    ({"pos_dest": "back"}, "0123456", "65", "65", "0123465", True, ""),
+    # Failing cases
+    ({}, "0123456", "23", "23", "0123456", False, "Destination for the batch is not specified"),
+    ({"pos_dest": "front", "before_uid": "5"}, "0123456", "23", "23", "0123456", False,
+     "more than one mutually exclusive parameter"),
+    ({"after_uid": "3"}, "0123456", "023", "023", "0123456", False, "item with UID '33' is in the batch"),
+    ({"before_uid": "3"}, "0123456", "023", "023", "0123456", False, "item with UID '33' is in the batch"),
+    ({"after_uid": "5"}, "0123456", "093", "093", "0123456", False,
+     re.escape("The queue does not contain items with the following UIDs: ['99']")),
+    ({"after_uid": "5"}, "0123456", "07893", "07893", "0123456", False,
+     re.escape("The queue does not contain items with the following UIDs: ['77', '88', '99']")),
+    ({"after_uid": "5"}, "0123456", "0223", "0223", "0123456", False,
+     re.escape("The list of contains repeated UIDs (1 UIDs)")),
+])
+# fmt: on
+def test_move_batch_1(pq, batch_params, queue_seq, selection_seq, batch_seq, expected_seq, success, msg):
+    async def add_plan(plan, n, **kwargs):
+        plan_added, qsize = await pq.add_item_to_queue(plan, **kwargs)
+        assert plan_added["name"] == plan["name"], f"plan: {plan}"
+        assert qsize == n, f"plan: {plan}"
+
+    def name_to_uid(uid):
+        return f"{uid}{uid}"
+
+    async def testing():
+        # Create the queue with plans
+        for n, p_name in enumerate(queue_seq):
+            await add_plan({"name": p_name, "item_uid": f"{name_to_uid(p_name)}"}, n + 1)
+        qsize = await pq.get_queue_size()
+        assert qsize == len(queue_seq)
+
+        if "before_uid" in batch_params:
+            batch_params["before_uid"] = name_to_uid(batch_params["before_uid"])
+        if "after_uid" in batch_params:
+            batch_params["after_uid"] = name_to_uid(batch_params["after_uid"])
+
+        uids = [name_to_uid(_) for _ in selection_seq]
+        if success:
+            items_moved, qsize_after = await pq.move_batch(uids=uids, **batch_params)
+            items_seq = "".join([_["name"] for _ in items_moved])
+            assert items_seq == batch_seq
+            assert qsize_after == qsize
+        else:
+            with pytest.raises(Exception, match=msg):
+                await pq.move_batch(uids=uids, **batch_params)
+
+        # Make sure that the queue is in the correct state
+        queue, _ = await pq.get_queue()
+        seq = "".join([_["name"] for _ in queue])
+        assert seq == expected_seq
+        assert len(queue) == qsize
 
     asyncio.run(testing())
 

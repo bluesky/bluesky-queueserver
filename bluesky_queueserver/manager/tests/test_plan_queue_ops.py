@@ -2,6 +2,7 @@ import asyncio
 import pytest
 import json
 import copy
+import re
 import pprint
 from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
 
@@ -651,6 +652,157 @@ def test_add_item_to_queue_4_fail(pq):
         with pytest.raises(ValueError, match="Ambiguous parameters"):
             await pq.add_item_to_queue({"name": "abc"}, before_uid="abc", after_uid="abc")
         assert pq.plan_queue_uid == pq_uid
+
+    asyncio.run(testing())
+
+
+# fmt: off
+@pytest.mark.parametrize("batch_params, queue_seq, batch_seq, expected_seq", [
+    ({}, "", "", ""),  # Add an empty batch
+    ({}, "", "567", "567"),
+    ({"pos": "front"}, "", "567", "567"),
+    ({"pos": "back"}, "", "567", "567"),
+    ({}, "1234", "567", "1234567"),
+    ({"pos": "front"}, "1234", "567", "5671234"),
+    ({"pos": "back"}, "1234", "567", "1234567"),
+    ({"pos": 0}, "1234", "567", "5671234"),
+    ({"pos": 1}, "1234", "567", "1567234"),
+    ({"pos": 100}, "1234", "567", "1234567"),
+    ({"pos": -1}, "1234", "567", "1235674"),
+    ({"pos": -100}, "1234", "567", "5671234"),
+    ({"before_uid": "1"}, "1234", "567", "5671234"),
+    ({"before_uid": "2"}, "1234", "567", "1567234"),
+    ({"before_uid": "3"}, "1234", "567", "1256734"),
+    ({"after_uid": "1"}, "1234", "567", "1567234"),
+    ({"after_uid": "2"}, "1234", "567", "1256734"),
+    ({"after_uid": "4"}, "1234", "567", "1234567"),
+])
+# fmt: on
+def test_add_batch_to_queue_1(pq, batch_params, queue_seq, batch_seq, expected_seq):
+    """
+    Basic test for the function ``PlanQueueOperations.add_batch_to_queue()``
+    """
+
+    async def add_plan(plan, n, **kwargs):
+        plan_added, qsize = await pq.add_item_to_queue(plan, **kwargs)
+        assert plan_added["name"] == plan["name"], f"plan: {plan}"
+        assert qsize == n, f"plan: {plan}"
+
+    async def testing():
+        # Create the queue with plans
+        for n, p_name in enumerate(queue_seq):
+            await add_plan({"name": p_name, "item_uid": f"{p_name}{p_name}"}, n + 1)
+
+        def fix_uid(uid):
+            return f"{uid}{uid}"
+
+        if "before_uid" in batch_params:
+            batch_params["before_uid"] = fix_uid(batch_params["before_uid"])
+        if "after_uid" in batch_params:
+            batch_params["after_uid"] = fix_uid(batch_params["after_uid"])
+
+        items = []
+        for p_name in batch_seq:
+            items.append({"name": p_name, "item_uid": p_name + p_name})
+        items_added, results, qsize, success = await pq.add_batch_to_queue(items, **batch_params)
+        assert success is True, pprint.pformat(results)
+        assert qsize == len(queue_seq) + len(batch_seq)
+        assert await pq.get_queue_size() == len(queue_seq) + len(batch_seq)
+        assert len(items_added) == len(items)
+        assert len(results) == len(items)
+
+        # Verify that the results are set correctly (success)
+        for res in results:
+            assert res["success"] is True, pprint.pformat(results)
+            assert res["msg"] == "", pprint.pformat(results)
+
+        # Verify the sequence of items in the queue
+        queue, _ = await pq.get_queue()
+        queue_sequence = [_["name"] for _ in queue]
+        queue_sequence = "".join(queue_sequence)
+        assert queue_sequence == expected_seq
+
+        await pq.clear_queue()
+
+    asyncio.run(testing())
+
+
+@pytest.mark.parametrize("filter_params", [False, True, None])
+def test_add_batch_to_queue_2(pq, filter_params):
+    """
+    Test if parameter filtering works as expected with `add_batch_to_queue` function.
+    """
+
+    async def testing():
+
+        # Parameter 'result' should be removed if filtering is enabled.
+        params = {"filter_parameters": filter_params} if (filter_params is not None) else {}
+        do_filtering = True if (filter_params is None) else filter_params
+
+        items = [{"name": _, "result": {}} for _ in ("a", "b", "c")]
+        items_added, results, qsize, success = await pq.add_batch_to_queue(items, **params)
+        assert success is True
+        assert qsize == len(items)
+        assert len(items_added) == len(items)
+        assert len(results) == len(items)
+
+        queue, _ = await pq.get_queue()
+
+        assert [_["name"] for _ in queue] == [_["name"] for _ in items]
+        for queue_item in queue:
+            if do_filtering:
+                assert "result" not in queue_item, pprint.pformat(queue_item)
+            else:
+                assert "result" in queue_item, pprint.pformat(queue_item)
+
+    asyncio.run(testing())
+
+
+# fmt: off
+@pytest.mark.parametrize("params, queue_seq, batch_seq, err_msgs", [
+    ({}, "abcd", "eaf", ["", "Item with UID .+ is already in the queue", ""]),
+    ({}, "abcd", "ead", [""] + ["Item with UID .+ is already in the queue"] * 2),
+    ({"before_uid": "unknown"}, "abcd", "efg", ["Plan with UID .* is not in the queue"] * 3),
+    ({"after_uid": "unknown"}, "abcd", "efg", ["Plan with UID .* is not in the queue"] * 3),
+    ({"before_uid": "unknown", "after_uid": "unknown"}, "abcd", "efg", ["Ambiguous parameters"] * 3),
+    ({"pos": "front", "after_uid": "unknown"}, "abcd", "efg", ["Ambiguous parameters"] * 3),
+])
+# fmt: on
+def test_add_batch_to_queue_3_fail(pq, params, queue_seq, batch_seq, err_msgs):
+    """
+    Failing cases for the function ``PlanQueueOperations.add_batch_to_queue()``
+    """
+
+    async def add_plan(plan, n, **kwargs):
+        plan_added, qsize = await pq.add_item_to_queue(plan, **kwargs)
+        assert plan_added["name"] == plan["name"], f"plan: {plan}"
+        assert qsize == n, f"plan: {plan}"
+
+    async def testing():
+        # Create the queue with plans
+        for n, p_name in enumerate(queue_seq):
+            await add_plan({"name": p_name, "item_uid": p_name + p_name}, n + 1)
+
+        items = []
+        for p_name in batch_seq:
+            items.append({"name": p_name, "item_uid": p_name + p_name})
+        items_added, results, qsize, success = await pq.add_batch_to_queue(items, **params)
+
+        assert success is False
+        assert qsize == len(queue_seq)
+        assert len(items_added) == len(items)
+        assert len(results) == len(items)
+
+        # The returned item list is expected to be identical to the original list
+        assert items_added == items, pprint.pformat(items_added)
+
+        for res, msg in zip(results, err_msgs):
+            if not msg:
+                assert res["success"] is True, pprint.pformat(res)
+                assert res["msg"] == "", pprint.pformat(res)
+            else:
+                assert res["success"] is False, pprint.pformat(res)
+                assert re.search(msg, res["msg"]), pprint.pformat(res)
 
     asyncio.run(testing())
 

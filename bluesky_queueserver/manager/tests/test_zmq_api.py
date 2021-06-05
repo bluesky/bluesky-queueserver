@@ -2,7 +2,8 @@ import pytest
 import os
 import time as ttime
 import asyncio
-from copy import deepcopy
+import copy
+import pprint
 
 from bluesky_queueserver.manager.profile_ops import (
     get_default_startup_dir,
@@ -509,7 +510,7 @@ def test_zmq_api_queue_item_add_7(db_catalog, re_manager_cmd, meta_param, meta_s
     cat = db_catalog["catalog"]
 
     # Plan
-    plan = deepcopy(_plan2)
+    plan = copy.deepcopy(_plan2)
     plan["meta"] = meta_param
     params1 = {"item": plan, "user": _user, "user_group": _user_group}
     resp1, _ = zmq_single_request("queue_item_add", params1)
@@ -630,10 +631,190 @@ def test_zmq_api_queue_item_add_8_fail(re_manager):  # noqa F811
 # =======================================================================================
 #                          Method 'queue_item_add_batch'
 
-
-def test_zmq_api_queue_item_add_batch_1(re_manager):  # noqa: F811
+# fmt: off
+@pytest.mark.parametrize("batch_params, queue_seq, batch_seq, expected_seq, success, msgs", [
+    ({}, "", "", "", True, "" * 3),  # Add an empty batch
+    ({}, "", "567", "567", True, "" * 3),
+    ({"pos": "front"}, "", "567", "567", True, "" * 3),
+    ({"pos": "back"}, "", "567", "567", True, "" * 3),
+    ({}, "1234", "567", "1234567", True, "" * 3),
+    ({"pos": "front"}, "1234", "567", "5671234", True, "" * 3),
+    ({"pos": "back"}, "1234", "567", "1234567", True, "" * 3),
+    ({"pos": 0}, "1234", "567", "5671234", True, "" * 3),
+    ({"pos": 1}, "1234", "567", "1567234", True, "" * 3),
+    ({"pos": 100}, "1234", "567", "1234567", True, "" * 3),
+    ({"pos": -1}, "1234", "567", "1235674", True, "" * 3),
+    ({"pos": -100}, "1234", "567", "5671234", True, "" * 3),
+    ({"before_uid": "1"}, "1234", "567", "5671234", True, "" * 3),
+    ({"before_uid": "2"}, "1234", "567", "1567234", True, "" * 3),
+    ({"before_uid": "3"}, "1234", "567", "1256734", True, "" * 3),
+    ({"after_uid": "1"}, "1234", "567", "1567234", True, "" * 3),
+    ({"after_uid": "2"}, "1234", "567", "1256734", True, "" * 3),
+    ({"after_uid": "4"}, "1234", "567", "1234567", True, "" * 3),
+    ({"before_uid": "unknown"}, "1234", "567", "1234", False, ["Plan with UID .* is not in the queue"] * 3),
+    ({"after_uid": "unknown"}, "1234", "567", "1234", False, ["Plan with UID .* is not in the queue"] * 3),
+    ({"before_uid": "unknown", "after_uid": "unknown"}, "1234", "567", "1234",
+     False, ["Ambiguous parameters"] * 3),
+    ({"pos": "front", "after_uid": "unknown"}, "1234", "567", "1234", False, ["Ambiguous parameters"] * 3),
+])
+# fmt: on
+def test_zmq_api_queue_item_add_batch_1(
+    re_manager, batch_params, queue_seq, batch_seq, expected_seq, success, msgs  # noqa: F811
+):
     """
     Basic test for ``queue_item_add_batch`` API.
+    """
+    plan_template = {
+        "name": "count",
+        "args": [["det1"]],
+        "kwargs": {"num": 50, "delay": 0.01},
+        "item_type": "plan",
+    }
+
+    # Fill the queue with the initial set of plans
+    for item_code in queue_seq:
+        item = copy.deepcopy(plan_template)
+        item["kwargs"]["num"] = int(item_code)
+        params = {"item": item, "user": _user, "user_group": _user_group}
+        resp1a, _ = zmq_single_request("queue_item_add", params)
+        assert resp1a["success"] is True
+
+    state = get_queue_state()
+    assert state["items_in_queue"] == len(queue_seq)
+    assert state["items_in_history"] == 0
+
+    resp1b, _ = zmq_single_request("queue_get")
+    assert resp1b["success"] is True
+    queue_initial = resp1b["items"]
+
+    # If there are 'before_uid' or 'after_uid' parameters, then convert values of those
+    #   parameters to actual item UIDs.
+    def find_uid(dummy_uid):
+        """If item is not found, then return ``dummy_uid``"""
+        try:
+            ind = queue_seq.index(dummy_uid)
+            return queue_initial[ind]["item_uid"]
+        except Exception:
+            return dummy_uid
+
+    if "before_uid" in batch_params:
+        batch_params["before_uid"] = find_uid(batch_params["before_uid"])
+
+    if "after_uid" in batch_params:
+        batch_params["after_uid"] = find_uid(batch_params["after_uid"])
+
+    # Create a list of items to add
+    items_to_add = []
+    for item_code in batch_seq:
+        item = copy.deepcopy(plan_template)
+        item["kwargs"]["num"] = int(item_code)
+        items_to_add.append(item)
+
+    # Add the batch
+    params = {"items": items_to_add, "user": _user, "user_group": _user_group}
+    params.update(batch_params)
+    resp2a, _ = zmq_single_request("queue_item_add_batch", params)
+
+    if success:
+        assert resp2a["success"] is True
+        assert resp2a["msg"] == ""
+        assert resp2a["qsize"] == len(expected_seq)
+        items_added = resp2a["items"]
+        assert len(items_added) == len(batch_seq)
+        added_seq = [str(_["kwargs"]["num"]) for _ in items_added]
+        added_seq = "".join(added_seq)
+        assert added_seq == batch_seq
+    else:
+        n_total = len(msgs)
+        n_success = len([_ for _ in msgs if not (_)])
+        n_failed = n_total - n_success
+        msg = (
+            f"Failed to add all items: validation of {n_failed} out of {n_total} submitted items failed"
+            if n_failed
+            else ""
+        )
+
+        assert resp2a["success"] is False
+        assert resp2a["msg"] == msg
+        assert resp2a["qsize"] == len(expected_seq)
+        items_added = resp2a["items"]
+        assert len(items_added) == len(batch_seq)
+        added_seq = [str(_["kwargs"]["num"]) for _ in items_added]
+        added_seq = "".join(added_seq)
+        assert added_seq == batch_seq
+
+    resp2b, _ = zmq_single_request("queue_get")
+    assert resp2b["success"] is True
+    queue_final = resp2b["items"]
+    queue_final_seq = [str(_["kwargs"]["num"]) for _ in queue_final]
+    queue_final_seq = "".join(queue_final_seq)
+    assert queue_final_seq == expected_seq
+
+    state = get_queue_state()
+    assert state["items_in_queue"] == len(expected_seq)
+    assert state["items_in_history"] == 0
+
+
+def test_zmq_api_queue_item_add_batch_2(re_manager):  # noqa: F811
+    """
+    Test for ``queue_item_add_batch``: copy a batch of existing items from the queue.
+    The items have duplicate UIDs, but they still should be added successfully, since
+    new UIDs are generated for newly inserted items anyway. This is important feature of
+    the API and should be tested.
+    """
+    plan_template = {
+        "name": "count",
+        "args": [["det1"]],
+        "kwargs": {"num": 50, "delay": 0.01},
+        "item_type": "plan",
+    }
+
+    queue_seq = "12345"
+    expected_seq = "12342345"
+
+    # Fill the queue with the initial set of plans
+    for item_code in queue_seq:
+        item = copy.deepcopy(plan_template)
+        item["kwargs"]["num"] = int(item_code)
+        params = {"item": item, "user": _user, "user_group": _user_group}
+        resp1a, _ = zmq_single_request("queue_item_add", params)
+        assert resp1a["success"] is True
+
+    state = get_queue_state()
+    assert state["items_in_queue"] == len(queue_seq)
+    assert state["items_in_history"] == 0
+
+    resp1b, _ = zmq_single_request("queue_get")
+    assert resp1b["success"] is True
+    queue_initial = resp1b["items"]
+
+    # Copy items 1, 2, 3 to create the batch
+    items_to_add = queue_initial[1:4]
+
+    # Add the batch
+    params = {
+        "items": items_to_add,
+        "after_uid": items_to_add[-1]["item_uid"],
+        "user": _user,
+        "user_group": _user_group,
+    }
+    resp2a, _ = zmq_single_request("queue_item_add_batch", params)
+    assert resp2a["success"] is True, pprint.pformat(resp2a)
+    assert resp2a["msg"] == ""
+    assert resp2a["qsize"] == len(queue_initial) + len(items_to_add)
+
+    resp2b, _ = zmq_single_request("queue_get")
+    assert resp2b["success"] is True
+    queue_final = resp2b["items"]
+    queue_final_seq = [str(_["kwargs"]["num"]) for _ in queue_final]
+    queue_final_seq = "".join(queue_final_seq)
+    assert queue_final_seq == expected_seq
+
+
+def test_zmq_api_queue_item_add_batch_3(re_manager):  # noqa: F811
+    """
+    Test for ``queue_item_add_batch``: add a batch of items (including plans and instructions)
+    and execute the queue.
     """
     items = [_plan1, _plan2, _instruction_stop, _plan3]
 
@@ -695,7 +876,7 @@ def test_zmq_api_queue_item_add_batch_1(re_manager):  # noqa: F811
     assert wait_for_condition(time=5, condition=condition_manager_idle)
 
 
-def test_zmq_api_queue_item_add_batch_2(re_manager):  # noqa: F811
+def test_zmq_api_queue_item_add_batch_4_fail(re_manager):  # noqa: F811
     """
     Test for ``queue_item_add_batch`` API. Attempt to add a batch that contains invalid plans.
     Make sure that the invalid plans are detected, correct error messages are returned and the
@@ -711,57 +892,16 @@ def test_zmq_api_queue_item_add_batch_2(re_manager):  # noqa: F811
     resp1a, _ = zmq_single_request("queue_item_add_batch", params)
     assert resp1a["success"] is False, f"resp={resp1a}"
     assert resp1a["msg"] == "Failed to add all items: validation of 2 out of 5 submitted items failed"
+    assert resp1a["qsize"] == 0
     item_list = resp1a["items"]
     item_results = resp1a["results"]
     assert len(item_list) == len(items)
     assert len(item_results) == len(items)
 
-    for n, item in enumerate(items):
-        item_res, res = item_list[n], item_results[n]
-        scs, msg = success_expected[n], msg_expected[n]
-        assert res["success"] == scs, str(item)
-        if not msg:
-            assert res["msg"] == "", str(item)
-        else:
-            assert msg in res["msg"], str(item)
-
-        if item:  # We should attempt to access elements of an item, which is {}
-            assert "name" in item_res, str(item_res)
-            assert item_res["name"] == item["name"]
-            if scs:
-                assert isinstance(item_res["item_uid"], str)
-                assert item_res["item_uid"]
-            else:
-                assert "item_uid" not in item_res
-
-            if "args" in item:
-                assert item_res["args"] == item["args"]
-            else:
-                assert "args" not in item_res
-            if "kwargs" in item:
-                assert item_res["kwargs"] == item["kwargs"]
-            else:
-                assert "kwargs" not in item_res
-        else:
-            assert item_res == {}
-
-    state = get_queue_state()
-    assert state["items_in_queue"] == 0
-    assert state["items_in_history"] == 0
-
-
-def test_zmq_api_queue_item_add_batch_3(re_manager):  # noqa: F811
-    """
-    Test for ``queue_item_add_batch`` API. Add an empty batch. The operation should return success.
-    """
-    items = []
-
-    params = {"items": items, "user": _user, "user_group": _user_group}
-    resp1a, _ = zmq_single_request("queue_item_add_batch", params)
-    assert resp1a["success"] is True, f"resp={resp1a}"
-    assert resp1a["msg"] == ""
-    assert resp1a["items"] == []
-    assert resp1a["results"] == []
+    assert item_list == items
+    for n, res in enumerate(item_results):
+        assert res["success"] == success_expected[n], str(res)
+        assert msg_expected[n] in res["msg"], str(res)
 
     state = get_queue_state()
     assert state["items_in_queue"] == 0

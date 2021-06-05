@@ -3,6 +3,9 @@ import asyncio
 import copy
 import json
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class PlanQueueOperations:
@@ -822,6 +825,116 @@ class PlanQueueOperations:
         async with self._lock:
             return await self._add_item_to_queue(
                 item, pos=pos, before_uid=before_uid, after_uid=after_uid, filter_parameters=filter_parameters
+            )
+
+    async def _add_batch_to_queue(
+        self, items, *, pos=None, before_uid=None, after_uid=None, filter_parameters=True
+    ):
+        """
+        See ``self.add_batch_to_queue()`` method.
+        """
+        items_added, results = [], []
+
+        # Approach: attempt ot add each item to queue. In case of a failure remove all added item.
+        # Operation of adding items to queue is perfectly reversible.
+
+        # Adding a batch to a specified position in the queue:
+        #   - add the first plan by passing all positional parameters to 'self._add_item_to_queue'.
+        #   - add the remaining plans after the first plan (it doesn't matter how position of the first
+        #     plan was defined.
+
+        success = True
+        added_item_uids = []  # List of plans with successfully added UIDs. Used for 'undo' operation.
+        for item in items:
+            try:
+                if not added_item_uids:
+                    item_added, _ = await self._add_item_to_queue(
+                        item,
+                        pos=pos,
+                        before_uid=before_uid,
+                        after_uid=after_uid,
+                        filter_parameters=filter_parameters,
+                    )
+                else:
+                    item_added, _ = await self._add_item_to_queue(
+                        item, after_uid=added_item_uids[-1], filter_parameters=filter_parameters
+                    )
+                added_item_uids.append(item_added["item_uid"])
+                items_added.append(item_added)
+                results.append({"success": True, "msg": ""})
+            except Exception as ex:
+                success = False
+                items_added.append(item)
+                msg = f"Failed to add item to queue: {ex}"
+                results.append({"success": False, "msg": msg})
+
+        # 'Undo' operation: remove all inserted items
+        if not success:
+            for uid in added_item_uids:
+                # The 'try-except' here is just in case anything goes wrong. Operation of removing
+                #   items that were just added are expected to succeed.
+                try:
+                    await self._pop_item_from_queue(uid=uid)
+                except Exception as ex:
+                    logger.error(
+                        "Failed to remove an item with uid='%s' after failure to add a batch of plans", str(ex)
+                    )
+
+            # Also do not return 'changed' items if adding the batch failed.
+            items_added = items
+
+        qsize = await self._get_queue_size()
+
+        # 'items_added' and 'results' ALWAYS have the same number of elements as 'items'
+        return items_added, results, qsize, success
+
+    async def add_batch_to_queue(
+        self, items, *, pos=None, before_uid=None, after_uid=None, filter_parameters=True
+    ):
+        """
+        Add a batch of item to the queue. The behavior of the function is similar
+        to ``add_item_to_queue`` except that it accepts the list of items to add.
+        The function will not add any plans to the queue if at least one of the plans
+        is rejected. The function returns ``success`` flag, which is ``True`` if
+        the batch was added and ``False`` otherwise. Success status and error messages
+        for each added plan can be found in ``results`` list. If the batch was added
+        successfully, then all ``results`` element indicate success.
+
+        The function is not expected to raise exceptions in case of failure, but instead
+        report results of processing for each item in the ``results`` list.
+
+        Parameters
+        ----------
+        items : list(dict)
+            List of items (plans or instructions). Each element of the list is a dictionary
+            of plan parameters
+        pos, before_uid, after_uid, filter_parmeters
+            see documentation for ``add_item_to_queue`` for details.
+
+        Returns
+        -------
+        items_added : list(dict)
+            List of items that were added to queue. In case the operation fails, the list
+            of submitted items is returned. The list always has the same number of elements
+            as ``items``.
+        results : list(dict)
+            List of processing results. The list always has the same number of elements as
+            ``items``. Each element contains a report on processing the respective item in
+            the form of a dictionary with the keys ``success`` (boolean) and ``msg`` (str).
+            ``msg`` is always an empty string if ``success==True``. In case the batch was
+            added successfully, all elements are ``{"success": True, "msg": ""}``.
+        qsize : int
+            Size of the queue after the batch was added. The size will not change if the
+            batch is rejected.
+        success : bool
+            Indicates success of the operation of adding the batch. If ``False``, then
+            the batch is rejected and error messages for each item could be found in
+            the ``results`` list.
+        """
+
+        async with self._lock:
+            return await self._add_batch_to_queue(
+                items, pos=pos, before_uid=before_uid, after_uid=after_uid, filter_parameters=filter_parameters
             )
 
     async def _replace_item(self, item, *, item_uid):

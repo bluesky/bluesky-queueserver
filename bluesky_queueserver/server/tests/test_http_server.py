@@ -612,6 +612,113 @@ def test_http_server_queue_item_get_remove_handler_4_failing(re_manager, fastapi
 
 
 # fmt: off
+@pytest.mark.parametrize("batch_params, queue_seq, selection_seq, batch_seq, expected_seq, success, msg", [
+    ({}, "0123456", "", "", "0123456", True, ""),
+    ({}, "0123456", "23", "23", "01456", True, ""),
+    ({}, "0123456", "32", "32", "01456", True, ""),
+    ({}, "0123456", "06", "06", "12345", True, ""),
+    ({}, "0123456", "283", "23", "01456", True, ""),
+    ({}, "0123456", "2893", "23", "01456", True, ""),
+    ({}, "0123456", "2443", "243", "0156", True, ""),
+    ({"ignore_missing": True}, "0123456", "2443", "243", "0156", True, ""),
+    ({"ignore_missing": True}, "0123456", "283", "23", "01456", True, ""),
+    ({"ignore_missing": False}, "0123456", "2443", "", "0123456", False, "The list of contains repeated UIDs"),
+    ({"ignore_missing": False}, "0123456", "283", "", "0123456", False,
+     "The queue does not contain items with the following UIDs"),
+    ({"ignore_missing": False}, "0123456", "2883", "", "0123456", False, "The list of contains repeated UIDs"),
+    ({}, "0123456", "", "", "0123456", True, ""),
+    ({}, "", "", "", "", True, ""),
+    ({}, "", "23", "", "", True, ""),
+    ({"ignore_missing": False}, "", "", "", "", True, ""),
+    ({"ignore_missing": False}, "", "23", "", "", False,
+     "The queue does not contain items with the following UIDs"),
+])
+# fmt: on
+def test_http_server_item_remove_batch_1(
+    re_manager,  # noqa: F811
+    fastapi_server,  # noqa: F811
+    batch_params,
+    queue_seq,
+    selection_seq,
+    batch_seq,
+    expected_seq,
+    success,
+    msg,
+):
+    """
+    Tests for ``queue_item_remove_batch`` API.
+    """
+    plan_template = {
+        "name": "count",
+        "args": [["det1"]],
+        "kwargs": {"num": 50, "delay": 0.01},
+        "item_type": "plan",
+    }
+
+    # Fill the queue with the initial set of plans
+    for item_code in queue_seq:
+        item = copy.deepcopy(plan_template)
+        item["kwargs"]["num"] = int(item_code)
+        resp1a = request_to_json("post", "/queue/item/add", json={"item": item})
+        assert resp1a["success"] is True
+
+    state = request_to_json("get", "/status")
+    assert state["items_in_queue"] == len(queue_seq)
+    assert state["items_in_history"] == 0
+
+    resp1b = request_to_json("get", "/queue/get")
+    assert resp1b["success"] is True
+    queue_initial = resp1b["items"]
+
+    # If there are 'before_uid' or 'after_uid' parameters, then convert values of those
+    #   parameters to actual item UIDs.
+    def find_uid(dummy_uid):
+        """If item is not found, then return ``dummy_uid``"""
+        try:
+            ind = queue_seq.index(dummy_uid)
+            return queue_initial[ind]["item_uid"]
+        except Exception:
+            return dummy_uid
+
+    # Create a list of UIDs of items to be moved
+    uids_of_items_to_remove = []
+    for item_code in selection_seq:
+        uids_of_items_to_remove.append(find_uid(item_code))
+
+    # Move the batch
+    params = {"uids": uids_of_items_to_remove}
+    params.update(batch_params)
+
+    resp2a = request_to_json("post", "/queue/item/remove/batch", json=params)
+
+    if success:
+        assert resp2a["success"] is True, pprint.pformat(resp2a)
+        assert resp2a["msg"] == ""
+        assert resp2a["qsize"] == len(expected_seq)
+        items_moved = resp2a["items"]
+        assert len(items_moved) == len(batch_seq)
+        added_seq = [str(_["kwargs"]["num"]) for _ in items_moved]
+        added_seq = "".join(added_seq)
+        assert added_seq == batch_seq
+    else:
+        assert resp2a["success"] is False, pprint.pformat(resp2a)
+        assert re.search(msg, resp2a["msg"]), pprint.pformat(resp2a)
+        assert resp2a["qsize"] is None
+        assert resp2a["items"] == []
+
+    resp2b = request_to_json("get", "/queue/get")
+    assert resp2b["success"] is True
+    queue_final = resp2b["items"]
+    queue_final_seq = [str(_["kwargs"]["num"]) for _ in queue_final]
+    queue_final_seq = "".join(queue_final_seq)
+    assert queue_final_seq == expected_seq
+
+    state = request_to_json("get", "/status")
+    assert state["items_in_queue"] == len(expected_seq)
+    assert state["items_in_history"] == 0
+
+
+# fmt: off
 @pytest.mark.parametrize("params, src, order, success, msg", [
     ({"pos": 1, "pos_dest": 1}, 1, [0, 1, 2], True, ""),
     ({"pos": 1, "pos_dest": 0}, 1, [1, 0, 2], True, ""),

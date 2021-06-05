@@ -1371,6 +1371,70 @@ def test_pop_item_from_queue_4_fail(pq):
     asyncio.run(testing())
 
 
+# fmt: off
+@pytest.mark.parametrize("batch_params, queue_seq, selection_seq, batch_seq, expected_seq, success, msg", [
+    ({}, "0123456", "", "", "0123456", True, ""),
+    ({}, "0123456", "23", "23", "01456", True, ""),
+    ({}, "0123456", "32", "32", "01456", True, ""),
+    ({}, "0123456", "06", "06", "12345", True, ""),
+    ({}, "0123456", "283", "23", "01456", True, ""),
+    ({}, "0123456", "2893", "23", "01456", True, ""),
+    ({}, "0123456", "2443", "243", "0156", True, ""),
+    ({"ignore_missing": True}, "0123456", "2443", "243", "0156", True, ""),
+    ({"ignore_missing": True}, "0123456", "283", "23", "01456", True, ""),
+    ({"ignore_missing": False}, "0123456", "2443", "", "0123456", False, "The list of contains repeated UIDs"),
+    ({"ignore_missing": False}, "0123456", "283", "", "0123456", False,
+     "The queue does not contain items with the following UIDs"),
+    ({"ignore_missing": False}, "0123456", "2883", "", "0123456", False, "The list of contains repeated UIDs"),
+    ({}, "0123456", "", "", "0123456", True, ""),
+    ({}, "", "", "", "", True, ""),
+    ({}, "", "23", "", "", True, ""),
+    ({"ignore_missing": False}, "", "", "", "", True, ""),
+    ({"ignore_missing": False}, "", "23", "", "", False,
+     "The queue does not contain items with the following UIDs"),
+])
+# fmt: on
+def test_pop_items_from_queue_batch_1(
+    pq, batch_params, queue_seq, selection_seq, batch_seq, expected_seq, success, msg
+):
+    """
+    Tests for ``pop_items_from_queue_batch``.
+    """
+
+    async def add_plan(plan, n, **kwargs):
+        plan_added, qsize = await pq.add_item_to_queue(plan, **kwargs)
+        assert plan_added["name"] == plan["name"], f"plan: {plan}"
+        assert qsize == n, f"plan: {plan}"
+
+    def name_to_uid(uid):
+        return f"{uid}{uid}"
+
+    async def testing():
+        # Create the queue with plans
+        for n, p_name in enumerate(queue_seq):
+            await add_plan({"name": p_name, "item_uid": f"{name_to_uid(p_name)}"}, n + 1)
+        qsize = await pq.get_queue_size()
+        assert qsize == len(queue_seq)
+
+        uids = [name_to_uid(_) for _ in selection_seq]
+        if success:
+            items_removed, qsize_after = await pq.pop_item_from_queue_batch(uids=uids, **batch_params)
+            items_seq = "".join([_["name"] for _ in items_removed])
+            assert items_seq == batch_seq
+            assert qsize_after == len(expected_seq)
+        else:
+            with pytest.raises(Exception, match=msg):
+                await pq.pop_item_from_queue_batch(uids=uids, **batch_params)
+
+        # Make sure that the queue is in the correct state
+        queue, _ = await pq.get_queue()
+        seq = "".join([_["name"] for _ in queue])
+        assert seq == expected_seq
+        assert len(queue) == len(expected_seq)
+
+    asyncio.run(testing())
+
+
 def test_clear_queue(pq):
     """
     Test for ``PlanQueueOperations.clear_queue`` function

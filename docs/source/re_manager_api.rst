@@ -95,6 +95,7 @@ Operations with the plan queue:
 - :ref:`method_queue_item_update`
 - :ref:`method_queue_item_get`
 - :ref:`method_queue_item_remove`
+- :ref:`method_queue_item_remove_batch`
 - :ref:`method_queue_item_move`
 - :ref:`method_queue_item_move_batch`
 - :ref:`method_queue_clear`
@@ -771,6 +772,50 @@ Returns       **success**: *boolean*
               **qsize**: *int* or *None*
                   the number of items in the plan queue after the plan was added if
                   the operation was successful, *None* otherwise
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+
+.. _method_queue_item_remove_batch:
+
+**'queue_item_remove_batch'**
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'queue_item_remove_batch'**
+------------  -----------------------------------------------------------------------------------------
+Description   Remove a batch of items from the queue. The batch of items is defined as a list
+              of item UIDs and passed as the parameter *'uids'*. The list of UIDs may be empty.
+              By default, the function does not validate the batch and deletes all batch items
+              found in the queue. Batch validation may be enabled by setting *'ignore_missing=False'*.
+              In this case the method succeeds only if the batch does not contain repeated items
+              and all items are found in the queue. If validation fails then no items are removed
+              from the queue.
+------------  -----------------------------------------------------------------------------------------
+Parameters    **uids**: *list(str)* (*required*)
+                  list of UIDs of the items in the batch. The list may not contain repeated UIDs.
+                  All UIDs must be present in the queue. The list may be empty.
+
+              **ignore_missing**: *boolean* (*optional, default: True*)
+                  if the value is *'False'*, then the method fails if the batch contains repeating
+                  items or some of the batch items are not found in the queue. If *'True'* (default),
+                  then the method attempts to remove all items in the batch and ignores missing items.
+                  The method returns the list of items that were removed from the queue.
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **items**: *list(dict)*
+                  the list of items that were removed during the operation. The items in the list are
+                  arranged in the order in which they were removed. Returns empty list if the operation
+                  fails.
+
+              **qsize**: *int* or *None*
+                  the size of the queue or *None* if operation fails.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================

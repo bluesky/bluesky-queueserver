@@ -1328,6 +1328,34 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg, "item": item, "qsize": qsize}
 
+    async def _queue_item_remove_batch_handler(self, request):
+        """
+        Removes (pops) a batch of items from the queue. The batch of items is defined as a list
+        of item UIDs (parameter ``uids``). The list of UIDs may be empty. By default the function
+        ignores the errors (skips items that are not found in the queue and does not check
+        the batch for repeated items). If the parameter ``ignore_missing=False``, then the
+        method fails if the batch contains repeated items or if any of the items are not found
+        in the queue. If the method fails, then no items are removed from the queue.
+        """
+        logger.info("Removing a batch of items from the queue ...")
+        try:
+            items, qsize, msg = [], None, ""
+            uids = request.get("uids", None)
+            ignore_missing = request.get("ignore_missing", True)
+
+            if uids is None:
+                raise Exception("Request does not contain the list of UIDs")
+
+            items, qsize = await self._plan_queue.pop_item_from_queue_batch(
+                uids=uids, ignore_missing=ignore_missing
+            )
+            success = True
+        except Exception as ex:
+            success = False
+            msg = f"Failed to remove a batch of items: {str(ex)}"
+
+        return {"success": success, "msg": msg, "items": items, "qsize": qsize}
+
     async def _queue_item_move_handler(self, request):
         """
         Moves a plan to a new position in the queue. Source and destination
@@ -1336,7 +1364,7 @@ class RunEngineManager(Process):
         UID. The 'source' plan is moved to the new position or placed before
         or after the 'destination' plan. Both source and destination must be specified.
         """
-        logger.info("Removing item from the queue ...")
+        logger.info("Moving a queue item ...")
         try:
             item, qsize, msg = {}, None, ""
             pos = request.get("pos", None)
@@ -1369,7 +1397,7 @@ class RunEngineManager(Process):
         The parameters ``pos_dest``, ``before_uid`` and ``after_uid`` are mutually
         exclusive. The destionation MUST be specified, otherwise the operation fails.
         """
-        logger.info("Removing item from the queue ...")
+        logger.info("Moving a batch of queue items ...")
         try:
             items, qsize, msg = [], None, ""
             uids = request.get("uids", None)
@@ -1619,6 +1647,7 @@ class RunEngineManager(Process):
             "queue_item_update": "_queue_item_update_handler",
             "queue_item_get": "_queue_item_get_handler",
             "queue_item_remove": "_queue_item_remove_handler",
+            "queue_item_remove_batch": "_queue_item_remove_batch_handler",
             "queue_item_move": "_queue_item_move_handler",
             "queue_item_move_batch": "_queue_item_move_batch_handler",
             "queue_clear": "_queue_clear_handler",

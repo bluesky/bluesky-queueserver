@@ -2,9 +2,9 @@
 #   This module is temporarily used by the Queue Server code.
 #   Do not import anything from this module!
 #
-#   The code in this file is vendored from 'bluesky.abc' module. This module will be removed
+#   The code in this file is vendored from 'bluesky.protocols' module. This module will be removed
 #   once the respective Bluesky PR is merged and the new version of Bluesky that supporting
-#   'bluesky.abc' is released and widely deployed. It is not intended to replace 'bluesky.abc'.
+#   'bluesky.protocols' is released and widely deployed.
 # ===============================================================================================
 
 try:

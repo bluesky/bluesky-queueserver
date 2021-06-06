@@ -441,13 +441,13 @@ def devices_from_nspace(nspace):
         Dictionary that maps device names to device objects.
     """
     try:
-        from bluesky import abc
+        from bluesky import protocols
     except ImportError:
-        import bluesky_queueserver.manager._abc as abc
+        import bluesky_queueserver.manager._protocols as protocols
 
     devices = {}
     for name, obj in nspace.items():
-        if isinstance(obj, (abc.Readable, abc.Flyable)):
+        if isinstance(obj, (protocols.Readable, protocols.Flyable)):
             devices[name] = obj
     return devices
 

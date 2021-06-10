@@ -827,9 +827,6 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
-      description: "List of motors to be moved into specified positions before the\
-        \ measurement\nAllowed devices:\n    'Motors': motor1, motor2\nKind: positional\
-        \ or keyword."
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -849,8 +846,6 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
-      description: "Detectors to use for measurement.\nAllowed devices:\n    'Detectors':\
-        \ det1, det2, det3\nKind: positional or keyword."
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -866,12 +861,6 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
-      description: 'Motor positions. The number of positions must be equal to the
-        number of the
-
-        motors.
-
-        Kind: positional or keyword.'
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -886,7 +875,6 @@ existing_plans:
       custom:
         annotation: typing.Generator[tuple, None, None]
         description: Yields a sequence of plan messages.
-      description: "tuple\n    Yields a sequence of plan messages."
   ramp_plan:
     description: Take data while ramping one or more positioners.
     name: ramp_plan
@@ -2042,12 +2030,6 @@ existing_plans:
       default: ''
       default_pickled: 80 03 63 69 6e 73 70 65 63 74 0a 5f 65 6d 70 74 79 0a 71 00
         2e
-      description: 'The number of measurements in the outer run. Inner run will contain
-        ''npts+1''
-
-        measurements.
-
-        Kind: positional or keyword.'
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -2059,11 +2041,6 @@ existing_plans:
         description: Delay between measurements.
       default: '1.0'
       default_pickled: 80 03 47 3f f0 00 00 00 00 00 00 2e
-      description: 'Delay between measurements.
-
-        Kind: positional or keyword.
-
-        Default: 1.0.'
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1

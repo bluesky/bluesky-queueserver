@@ -781,9 +781,22 @@ def _process_annotation(encoded_annotation, *, ns=None):
     return annotation_type, ns
 
 
+def _instantiate_parameter_types_and_defaults(param_list):
+
+    parameter_types = {}
+    for p in param_list:
+        if "annotation" in p:
+            p_type, _ = _process_annotation(p["annotation"])
+        else:
+            p_type = typing.Any
+        parameter_types[p["name"]] = p_type
+
+    return parameter_types
+
+
 def _construct_parameters(param_list):
     """
-    Construct the list of ``inspect.Parameter`` parameters based on parameter list.
+    Construct the list of ``inspect.Parameter`` parameters based on the parameter list.
     """
     parameters = []
     created_type_list = []
@@ -1245,7 +1258,7 @@ def _process_plan(plan):
         Error occurred while creating plan description.
     """
 
-    def process_annotation(annotation):
+    def convert_annotation_to_string(annotation):
         """
         Ignore the type if it can not be properly reconstructed using 'eval'
         """
@@ -1283,6 +1296,23 @@ def _process_plan(plan):
             )
         return s_value
 
+    def assemble_custom_annotation(parameter):
+        """
+        Assemble annotation from decorator parameters. It will be stored as a separate dictionary.
+        Returns ``None`` if there is no annotation.
+        """
+        annotation = {}
+        if "annotation" not in parameter:
+            return None
+
+        annotation["type"] = parameter["annotation"]
+        keys = {"devices", "plans", "enums"}
+        for k in keys:
+            if k in parameter:
+                annotation[k] = copy.copy(parameter[k])
+
+        return annotation
+
     sig = inspect.signature(plan)
     docstring = getattr(plan, "__doc__", None)
 
@@ -1318,15 +1348,20 @@ def _process_plan(plan):
             desc, annotation = None, None
             if use_custom and (p.name in param_annotation["parameters"]):
                 desc = param_annotation["parameters"][p.name].get("description", None)
-                annotation = param_annotation["parameters"][p.name].get("annotation", None)
+                annotation = assemble_custom_annotation(param_annotation["parameters"][p.name])
             if not desc and use_docstring and (p.name in doc_annotation["parameters"]):
                 desc = doc_annotation["parameters"][p.name].get("description", None)
             if not annotation and p.annotation is not inspect.Parameter.empty:
-                annotation = process_annotation(p.annotation)
+                annotation = {"type": convert_annotation_to_string(p.annotation)}
 
             if desc:
                 working_dict["description"] = desc
             if annotation:
+                # Verify that the type could be instantiated from the annotation. Use the same
+                #   function that is going to be used for instantiating types later.
+                #   Exception will be raised if type can not be instantiated.
+                _process_annotation(annotation)
+
                 working_dict["annotation"] = annotation
 
             # Parameter default value (only from the function signature).

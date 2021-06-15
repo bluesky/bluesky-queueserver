@@ -1153,19 +1153,19 @@ _pf2f_processed = {
             "name": "val1",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "default": "10.5",
-            "annotation": "float",
+            "annotation": {"type": "float"},
         },
         {
             "name": "val2",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "default": "'some_str'",
-            "annotation": "str",
+            "annotation": {"type": "str"},
         },
         {
             "name": "val3",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "default": "None",
-            "annotation": "None",
+            "annotation": {"type": "None"},
         },
     ],
     "properties": {"is_generator": True},
@@ -1186,19 +1186,19 @@ _pf2g_processed = {
             "name": "val1",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "default": "(50,)",
-            "annotation": "typing.Tuple[typing.Union[float, int]]",
+            "annotation": {"type": "typing.Tuple[typing.Union[float, int]]"},
         },
         {
             "name": "val2",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "default": "'some_str'",
-            "annotation": "typing.Union[typing.List[str], str]",
+            "annotation": {"type": "typing.Union[typing.List[str], str]"},
         },
         {
             "name": "val3",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "default": "{'ab': 10, 'cd': 50}",
-            "annotation": "typing.Dict[str, int]",
+            "annotation": {"type": "typing.Dict[str, int]"},
         },
     ],
     "properties": {"is_generator": True},
@@ -1229,7 +1229,236 @@ def test_process_plan_2(plan_func, plan_info_expected):
     assert pf_info == plan_info_expected, pprint.pformat(pf_info)
 
 
-def _pf3a_factory():
+@parameter_annotation_decorator(
+    {
+        "description": "This is a sample plan",
+        "parameters": {
+            "val1": {"description": "Parameter 'val1'"},
+            "val2": {"description": "Parameter 'val2'"},
+            "val3": {"description": "Parameter 'val3'"},
+        },
+    }
+)
+def _pf3a(val1: float = 10.5, val2: str = "some_str", val3: None = None):
+    yield from [val1, val2, val3]
+
+
+_pf3a_processed = {
+    "description": "This is a sample plan",
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "10.5",
+            "annotation": {"type": "float"},
+            "description": "Parameter 'val1'",
+        },
+        {
+            "name": "val2",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "'some_str'",
+            "annotation": {"type": "str"},
+            "description": "Parameter 'val2'",
+        },
+        {
+            "name": "val3",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "None",
+            "annotation": {"type": "None"},
+            "description": "Parameter 'val3'",
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+@parameter_annotation_decorator(
+    {
+        "description": "This is a sample plan",
+        "parameters": {
+            "val1": {"description": "Parameter 'val1'"},
+            "val2": {"description": "Parameter 'val2'"},
+        },
+    }
+)
+def _pf3b(val1: float = 10.5, val2: str = "some_str", val3: None = None):
+    """
+    Plan description will be overwritten by the description
+    in the decorator.
+
+    Parameters
+    ----------
+    val1 : float
+        Will be overwritten
+    val2
+        Will be overwritten
+    val3 : str
+        The description for 'val3' from the docstring
+    """
+    yield from [val1, val2, val3]
+
+
+_pf3b_processed = {
+    "description": "This is a sample plan",
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "10.5",
+            "annotation": {"type": "float"},
+            "description": "Parameter 'val1'",
+        },
+        {
+            "name": "val2",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "'some_str'",
+            "annotation": {"type": "str"},
+            "description": "Parameter 'val2'",
+        },
+        {
+            "name": "val3",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "None",
+            "annotation": {"type": "None"},
+            "description": "The description for 'val3' from the docstring",
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+@parameter_annotation_decorator(
+    {
+        "parameters": {"val3": {"annotation": "typing.Union[typing.List[str], str]"}},
+    }
+)
+def _pf3c(val1: float = 10.5, val2: str = "some_str", val3: None = None):
+    """
+    Visible description.
+
+    Parameters
+    ----------
+    val1 : float
+        The description for 'val1' from the docstring
+    val2
+        The description for 'val2' from the docstring
+    val3 : str
+        The description for 'val3' from the docstring
+    """
+    yield from [val1, val2, val3]
+
+
+_pf3c_processed = {
+    "description": "Visible description.",
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "10.5",
+            "annotation": {"type": "float"},
+            "description": "The description for 'val1' from the docstring",
+        },
+        {
+            "name": "val2",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "'some_str'",
+            "annotation": {"type": "str"},
+            "description": "The description for 'val2' from the docstring",
+        },
+        {
+            "name": "val3",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "None",
+            "annotation": {"type": "typing.Union[typing.List[str], str]"},
+            "description": "The description for 'val3' from the docstring",
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+@parameter_annotation_decorator(
+    {
+        "parameters": {
+            "val3": {
+                "annotation": "typing.List[typing.Union[Devices1, Plans1, Enums1]]",
+                "devices": {"Devices1": ("dev1", "dev2", "dev3")},
+                "plans": {"Plans1": ("plan1", "plan2", "plan3")},
+                "enums": {"Enums1": ("enum1", "enum2", "enum3")},
+            }
+        },
+    }
+)
+def _pf3d(val1, val2: str = "some_str", val3: None = None):
+    """
+    Visible description.
+
+    Parameters
+    ----------
+    val1 : float
+        The description for 'val1' from the docstring
+    val2
+        The description for 'val2' from the docstring
+    val3 : str
+        The description for 'val3' from the docstring
+    """
+    yield from [val1, val2, val3]
+
+
+_pf3d_processed = {
+    "description": "Visible description.",
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "description": "The description for 'val1' from the docstring",
+        },
+        {
+            "name": "val2",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "'some_str'",
+            "annotation": {"type": "str"},
+            "description": "The description for 'val2' from the docstring",
+        },
+        {
+            "name": "val3",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "None",
+            "annotation": {
+                "type": "typing.List[typing.Union[Devices1, Plans1, Enums1]]",
+                "devices": {"Devices1": ("dev1", "dev2", "dev3")},
+                "plans": {"Plans1": ("plan1", "plan2", "plan3")},
+                "enums": {"Enums1": ("enum1", "enum2", "enum3")},
+            },
+            "description": "The description for 'val3' from the docstring",
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+# fmt: off
+@pytest.mark.parametrize("plan_func, plan_info_expected", [
+    (_pf3a, _pf3a_processed),
+    (_pf3b, _pf3b_processed),
+    (_pf3c, _pf3c_processed),
+    (_pf3d, _pf3d_processed),
+])
+# fmt: on
+def test_process_plan_3(plan_func, plan_info_expected):
+    """
+    Function '_process_plan': parameter annotations from the signature
+    """
+
+    plan_info_expected = plan_info_expected.copy()
+    plan_info_expected["name"] = plan_func.__name__
+
+    pf_info = _process_plan(plan_func)
+
+    assert pf_info == plan_info_expected, pprint.pformat(pf_info)
+
+
+def _pf4a_factory():
     """Arbitrary classes are not supported"""
 
     class SomeClass:
@@ -1241,12 +1470,30 @@ def _pf3a_factory():
     return f
 
 
+# Failure to process custom types with dynamically generated enums
+@parameter_annotation_decorator(
+    {
+        "parameters": {
+            "val3": {
+                "annotation": "typing.List[typing.Union[Devices1, Plans1, Enums1]]",
+                "devices": {"Devices1": ("dev1", "dev2", "dev3")},
+                # 'plans' is missing, so 'Plans1' is undefined
+                "enums": {"Enums1": ("enum1", "enum2", "enum3")},
+            }
+        },
+    }
+)
+def _pf4b(val1, val2: str = "some_str", val3: None = None):
+    yield from [val1, val2, val3]
+
+
 # fmt: off
 @pytest.mark.parametrize("plan_func, err_msg", [
-    (_pf3a_factory(), "unsupported default value type"),
+    (_pf4a_factory(), "unsupported default value type"),
+    (_pf4b, "name 'Plans1' is not defined'"),
 ])
 # fmt: on
-def test_process_plan_3_fail(plan_func, err_msg):
+def test_process_plan_4_fail(plan_func, err_msg):
     """
     Failing cases for 'process_plan' function. Some plans are expected to be rejected.
     """

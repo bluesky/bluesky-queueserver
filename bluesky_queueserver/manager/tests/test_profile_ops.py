@@ -8,6 +8,7 @@ import subprocess
 import pprint
 import sys
 import enum
+import inspect
 
 try:
     from bluesky import protocols
@@ -44,6 +45,8 @@ from bluesky_queueserver.manager.profile_ops import (
     _unpickle_types,
     StartupLoadingError,
     _process_annotation,
+    _instantiate_parameter_types_and_defaults,
+    _process_default_value,
 )
 
 
@@ -1657,6 +1660,126 @@ def test_process_annotation_3(encoded_annotation, type_expected, success, errmsg
     else:
         with pytest.raises(TypeError, match=errmsg):
             _process_annotation(encoded_annotation)
+
+
+# -----------------------------------------------------------------------------------------------------
+#                                 _process_default_value
+
+# fmt: off
+@pytest.mark.parametrize("default_encoded, default_expected, success, errmsg", [
+    ("10", 10, True, ""),
+    ("10.453", 10.453, True, ""),
+    ("'some-str'", "some-str", True, ""),
+    ("int(5.6)", 5, False, r"Failed to decode the default value 'int\(5.6\)'"),
+    ("some-str", "some-str", False, "Failed to decode the default value 'some-str'"),
+
+])
+# fmt: on
+def test_process_default_value_1(default_encoded, default_expected, success, errmsg):
+
+    if success:
+        default = _process_default_value(default_encoded)
+        assert default == default_expected
+    else:
+        with pytest.raises(Exception, match=errmsg):
+            _process_default_value(default_encoded)
+
+
+# -----------------------------------------------------------------------------------------------------
+#                          _instantiate_parameter_types_and_defaults
+
+_ipt1 = [
+    {"name": "param1", "annotation": {"type": "int"}, "default": "10"},
+    {"name": "param2", "annotation": {"type": "str"}, "default": "'some-string'"},
+    {"name": "param3", "annotation": {"type": "typing.Union[typing.List[int], int, None]"}, "default": "50"},
+]
+
+_ipt1_result = {
+    "param1": {"type": int, "default": 10},
+    "param2": {"type": str, "default": "some-string"},
+    "param3": {"type": typing.Union[typing.List[int], int, None], "default": 50},
+}
+
+_ipt2 = [
+    {
+        "name": "param1",
+        "annotation": {"type": "_ipt2_Detectors1", "devices": {"_ipt2_Detectors1": ("det1", "det2")}},
+        "default": "'det1'",
+    },
+    {
+        "name": "param2",
+        "annotation": {"type": "typing.List[_ipt2_Detectors1]", "devices": {"_ipt2_Detectors1": ("det1", "det2")}},
+        "default": "'det2'",
+    },
+]
+
+_ipt2_Detectors1 = enum.Enum("_ipt2_Detectors1", {"det1": "det1", "det2": "det2"})
+
+_ipt2_result = {
+    "param1": {"type": _ipt2_Detectors1, "default": "det1"},
+    "param2": {"type": typing.List[_ipt2_Detectors1], "default": "det2"},
+}
+
+_ipt3 = [
+    {"name": "param1", "annotation": {"type": "int"}},
+    {"name": "param2", "default": "'some-string'"},
+    {"name": "param3"},
+]
+
+_ipt3_result = {
+    "param1": {"type": int, "default": inspect.Parameter.empty},
+    "param2": {"type": typing.Any, "default": "some-string"},
+    "param3": {"type": typing.Any, "default": inspect.Parameter.empty},
+}
+
+
+_ipt4_fail = [  # 'name' is missing
+    {},
+]
+
+
+_ipt5_fail = [  # Failed to decode the default value
+    {"name": "param1", "annotation": {"type": "int"}, "default": "det"},
+]
+
+
+_ipt6_fail = [  # Failed to decode the type (just one simple case)
+    {"name": "param1", "annotation": {"type": "some-type"}, "default": "det"},
+]
+
+
+# fmt: off
+@pytest.mark.parametrize("parameters, expected_types, compare_types, success, errmsg", [
+    (_ipt1, _ipt1_result, True, True, ""),
+    (_ipt2, _ipt2_result, False, True, ""),
+    (_ipt3, _ipt3_result, True, True, ""),
+    (_ipt4_fail, None, True, False, "No 'name' key in the parameter description"),
+    (_ipt5_fail, None, True, False, "Failed to decode the default value 'det'"),
+    (_ipt6_fail, None, True, False, "Failed to process annotation 'some-type'"),
+])
+# fmt: on
+def test_instantiate_parameter_types_and_defaults_1(parameters, expected_types, compare_types, success, errmsg):
+
+    if success:
+        inst_types = _instantiate_parameter_types_and_defaults(parameters)
+        if compare_types:
+            assert inst_types == expected_types
+
+        # Compare types using JSON schema
+        for p in parameters:
+            name = p["name"]
+            schema_created = _create_schema_for_testing(inst_types[name]["type"])
+            schema_expected = _create_schema_for_testing(expected_types[name]["type"])
+            assert schema_created == schema_expected
+
+        # Compare default values (important if 'compare_types == False')
+        for p in parameters:
+            name = p["name"]
+            assert inst_types[name]["default"] == expected_types[name]["default"]
+
+    else:
+        with pytest.raises(Exception, match=errmsg):
+            _instantiate_parameter_types_and_defaults(parameters)
 
 
 # ---------------------------------------------------------------------------------

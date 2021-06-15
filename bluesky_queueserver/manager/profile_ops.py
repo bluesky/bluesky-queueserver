@@ -776,22 +776,75 @@ def _process_annotation(encoded_annotation, *, ns=None):
         annotation_type = eval(annotation_type_str, ns, ns)
 
     except Exception as ex:
-        raise TypeError(f"Failed to process annotation '{annotation_type_str}: {ex}'")
+        raise TypeError(f"Failed to process annotation '{annotation_type_str}': {ex}'")
 
     return annotation_type, ns
 
 
-def _instantiate_parameter_types_and_defaults(param_list):
+def _process_default_value(encoded_default_value):
+    """
+    Evaluates the default value represented as a string.
 
-    parameter_types = {}
+    Parameters
+    ----------
+    encoded_default_value : str
+        Default value represented as a string (e.g. "10" or "'some-str'"
+
+    Returns
+    -------
+    p_default
+        Default value.
+
+    Raises
+    ------
+    ValueError
+        Raised if evaluation of the string containing the default value fails
+    """
+    try:
+        p_default = ast.literal_eval(encoded_default_value)
+    except Exception as ex:
+        raise ValueError(f"Failed to decode the default value '{encoded_default_value}': {ex}")
+    return p_default
+
+
+def _instantiate_parameter_types_and_defaults(param_list):
+    """
+    Instantiate parameter types and default values by using string representations of
+    types and defaults stored in list of available devices.
+
+    Parameters
+    ----------
+    parameters : list(dict)
+        List of dictionaries that contains annotations and default values of parameters.
+        Used keys of the dictionaries: ``annotation`` and ``default``. If ``annotation``
+        key is missing, then the the type is set to ``typing.Any``. If ``default`` is
+        missing, then the default value is set to ``inspect.Parameter.empty``.
+
+    Returns
+    -------
+    dict
+        Mapping of parameter names to the dictionaries containing type (``type`` key)
+        and default value (``default`` key).
+    """
+
+    instantiated_types_and_defaults = {}
     for p in param_list:
+        if "name" not in p:
+            raise KeyError(f"No 'name' key in the parameter description {p}")
+
         if "annotation" in p:
             p_type, _ = _process_annotation(p["annotation"])
         else:
             p_type = typing.Any
-        parameter_types[p["name"]] = p_type
 
-    return parameter_types
+        if "default" in p:
+            p_default = _process_default_value(p["default"])
+        else:
+            p_default = inspect.Parameter.empty
+
+        instantiated_types_and_defaults[p["name"]] = {"type": p_type, "default": p_default}
+
+    return instantiated_types_and_defaults
 
 
 def _construct_parameters(param_list):

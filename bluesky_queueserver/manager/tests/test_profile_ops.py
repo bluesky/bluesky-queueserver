@@ -7,6 +7,7 @@ import typing
 import subprocess
 import pprint
 import sys
+import enum
 
 try:
     from bluesky import protocols
@@ -38,12 +39,11 @@ from bluesky_queueserver.manager.profile_ops import (
     bind_plan_arguments,
     _select_allowed_items,
     load_allowed_plans_and_devices,
-    hex2bytes,
-    bytes2hex,
     _prepare_plans,
     _prepare_devices,
     _unpickle_types,
     StartupLoadingError,
+    _process_annotation,
 )
 
 
@@ -888,13 +888,15 @@ _pf1a_processed = {
         {
             "name": "val1",
             "description": "Description of the parameter Value 1.",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
         },
         {
             "name": "val2",
             "description": "Description of the parameter Value 2.",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
         },
     ],
-    "returns": {"description": "v : int\n    Description for the return statement"},
+    "properties": {"is_generator": False},
 }
 
 
@@ -909,48 +911,21 @@ def _pf1b(val1, val2):
 
 
 _pf1b_processed = {
-    "returns": {"description": "int\n    Description for the return statement"},
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+        },
+        {
+            "name": "val2",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+        },
+    ],
+    "properties": {"is_generator": False},
 }
 
 
 def _pf1c(val1, val2):
-    """
-    Returns
-    -------
-    Description for the return statement
-    """
-    return int(val1 + int(val2[0]))
-
-
-_pf1c_processed = {
-    "returns": {"description": "Description for the return statement"},
-}
-
-
-def _pf1d(val1, val2):
-    """
-    Returns
-    -------
-    int
-        Description for the return statement - Line 1
-        Description for the return statement - Line 2
-
-        Description for the return statement - Line 3
-
-    """
-    return int(val1 + int(val2[0]))
-
-
-_pf1d_processed = {
-    "returns": {
-        "description": "int\n    Description for the return statement - Line 1\n"
-        "    Description for the return statement - Line 2\n\n"
-        "    Description for the return statement - Line 3"
-    },
-}
-
-
-def _pf1e(val1, val2):
     """
     Parameters
     ----------
@@ -969,21 +944,60 @@ def _pf1e(val1, val2):
     return int(val1 + int(val2[0]))
 
 
-_pf1e_processed = {
+_pf1c_processed = {
     "parameters": [
         {
             "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "description": "Description of the parameter Value 1 - Line 1.\n"
             "Description of the parameter Value 1 - Line 2.\n\n"
             "Description of the parameter Value 1 - Line 3.",
         },
         {
             "name": "val2",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "description": "Description of the parameter Value 2 - Line 1.\n"
             "Description of the parameter Value 2 - Line 2.\n\n"
             "Description of the parameter Value 2 - Line 3.",
         },
     ],
+    "properties": {"is_generator": False},
+}
+
+
+def _pf1d(val1, val2):
+    return int(val1 + int(val2[0]))
+
+
+# fmt: off
+def _pf1d1(val1, val2):
+    """
+    """
+    return int(val1 + int(val2[0]))
+# fmt: on
+
+
+# fmt: off
+def _pf1d2(val1, val2):
+    """
+
+    """
+    return int(val1 + int(val2[0]))
+# fmt: on
+
+
+_pf1d_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+        },
+        {
+            "name": "val2",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+        },
+    ],
+    "properties": {"is_generator": False},
 }
 
 
@@ -996,22 +1010,406 @@ _pf1e_processed = {
     (_pf1b, _pf1b_processed),
     (_pf1c, _pf1c_processed),
     (_pf1d, _pf1d_processed),
-    (_pf1e, _pf1e_processed),
+    (_pf1d1, _pf1d_processed),
+    (_pf1d2, _pf1d_processed),
 ])
 # fmt: on
 def test_process_plan_1(plan_func, plan_info_expected):
-    def compare_values(pf_info, plan_info_expected):
-        if isinstance(plan_info_expected, (tuple, list)):
-            for pfp, pfe in zip(pf_info, plan_info_expected):
-                compare_values(pfp, pfe)
-        elif isinstance(plan_info_expected, dict):
-            for name in plan_info_expected:
-                compare_values(pf_info[name], plan_info_expected[name])
-        else:
-            assert pf_info == plan_info_expected
+    """
+    Function '_process_plan': loading descriptions from a docstring
+    """
+
+    plan_info_expected = plan_info_expected.copy()
+    plan_info_expected["name"] = plan_func.__name__
 
     pf_info = _process_plan(plan_func)
-    compare_values(pf_info, plan_info_expected)
+
+    assert pf_info == plan_info_expected
+
+
+def _pf2a(val1, val2):
+    pass
+
+
+_pf2a_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+        },
+        {
+            "name": "val2",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+        },
+    ],
+    "properties": {"is_generator": False},
+}
+
+
+def _pf2b(val1, val2):
+    yield from [val1, val2]
+
+
+_pf2b_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+        },
+        {
+            "name": "val2",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+def _pf2c(val1=10.5, val2="some_str", val3=None):
+    yield from [val1, val2, val3]
+
+
+_pf2c_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "10.5",
+        },
+        {
+            "name": "val2",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "'some_str'",
+        },
+        {
+            "name": "val3",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "None",
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+def _pf2d(val1, *, val2, val3=None):
+    yield from [val1, val2, val3]
+
+
+_pf2d_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+        },
+        {
+            "name": "val2",
+            "kind": {"name": "KEYWORD_ONLY", "value": 3},
+        },
+        {
+            "name": "val3",
+            "kind": {"name": "KEYWORD_ONLY", "value": 3},
+            "default": "None",
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+def _pf2e(val1, *args, val2=None, **kwargs):
+    yield from [val1, *args, val2, *kwargs.values()]
+
+
+_pf2e_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+        },
+        {
+            "name": "args",
+            "kind": {"name": "VAR_POSITIONAL", "value": 2},
+        },
+        {
+            "name": "val2",
+            "kind": {"name": "KEYWORD_ONLY", "value": 3},
+            "default": "None",
+        },
+        {
+            "name": "kwargs",
+            "kind": {"name": "VAR_KEYWORD", "value": 4},
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+def _pf2f(val1: float = 10.5, val2: str = "some_str", val3: None = None):
+    yield from [val1, val2, val3]
+
+
+_pf2f_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "10.5",
+            "annotation": "float",
+        },
+        {
+            "name": "val2",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "'some_str'",
+            "annotation": "str",
+        },
+        {
+            "name": "val3",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "None",
+            "annotation": "None",
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+def _pf2g(
+    val1: typing.Tuple[typing.Union[float, int]] = (50,),
+    val2: typing.Union[typing.List[str], str] = "some_str",
+    val3: typing.Dict[str, int] = {"ab": 10, "cd": 50},
+):
+    yield from [val1, val2, val3]
+
+
+_pf2g_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "(50,)",
+            "annotation": "typing.Tuple[typing.Union[float, int]]",
+        },
+        {
+            "name": "val2",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "'some_str'",
+            "annotation": "typing.Union[typing.List[str], str]",
+        },
+        {
+            "name": "val3",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "{'ab': 10, 'cd': 50}",
+            "annotation": "typing.Dict[str, int]",
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+# fmt: off
+@pytest.mark.parametrize("plan_func, plan_info_expected", [
+    (_pf2a, _pf2a_processed),
+    (_pf2b, _pf2b_processed),
+    (_pf2c, _pf2c_processed),
+    (_pf2d, _pf2d_processed),
+    (_pf2e, _pf2e_processed),
+    (_pf2f, _pf2f_processed),
+    (_pf2g, _pf2g_processed),
+])
+# fmt: on
+def test_process_plan_2(plan_func, plan_info_expected):
+    """
+    Function '_process_plan': parameter annotations from the signature
+    """
+
+    plan_info_expected = plan_info_expected.copy()
+    plan_info_expected["name"] = plan_func.__name__
+
+    pf_info = _process_plan(plan_func)
+
+    assert pf_info == plan_info_expected, pprint.pformat(pf_info)
+
+
+def _pf3a_factory():
+    """Arbitrary classes are not supported"""
+
+    class SomeClass:
+        ...
+
+    def f(val1, *, val2, val3=SomeClass()):
+        yield from [val1, val2, val3]
+
+    return f
+
+
+# fmt: off
+@pytest.mark.parametrize("plan_func, err_msg", [
+    (_pf3a_factory(), "unsupported default value type"),
+])
+# fmt: on
+def test_process_plan_3_fail(plan_func, err_msg):
+    """
+    Failing cases for 'process_plan' function. Some plans are expected to be rejected.
+    """
+    with pytest.raises(ValueError, match=err_msg):
+        _process_plan(plan_func)
+
+
+# ---------------------------------------------------------------------------------
+#                      _process_custom_annotation()
+
+
+def _create_schema_for_testing(annotation_type):
+    import pydantic
+
+    model_kwargs = {"par": (annotation_type, ...)}
+    func_model = pydantic.create_model("func_model", **model_kwargs)
+    schema = func_model.schema()
+    return schema
+
+
+# fmt: off
+@pytest.mark.parametrize("encoded_annotation, type_expected, success, errmsg", [
+    ({"type": "int"}, int, True, ""),
+    ({"type": "str"}, str, True, ""),
+    ({"type": "typing.List[int]"}, typing.List[int], True, ""),
+    ({"type": "typing.List[typing.Union[int, float]]"}, typing.List[typing.Union[int, float]], True, ""),
+    ({"type": "List[int]"}, typing.List[int], False, "name 'List' is not defined"),
+
+    # Type specification that would allow ANY values to pass, but would specify structure
+    ({"type": "Device1", "devices": {"Device1": None}}, str, True, ""),
+    ({"type": "Plan1", "plans": {"Plan1": None}}, str, True, ""),
+    ({"type": "Enum1", "enums": {"Enum1": None}}, str, True, ""),
+    ({"type": "typing.Union[typing.List[Device1], Device1]",
+      "devices": {"Device1": None}}, typing.Union[typing.List[str], str], True, ""),
+    ({"type": "typing.Union[typing.List[Device1], Device2]",
+      "devices": {"Device1": None, "Device2": None}}, typing.Union[typing.List[str], str], True, ""),
+    ({"type": "typing.Union[typing.List[Device1], Device2]",
+      "devices": {"Device1": None}}, typing.Union[typing.List[str], str], False, "name 'Device2' is not defined"),
+    ({"type": "Enum1", "unknown": {"Enum1": None}}, str, False,
+     r"Annotation contains unsupported keys: \['unknown'\]"),
+])
+# fmt: on
+def test_process_annotation_1(encoded_annotation, type_expected, success, errmsg):
+    """
+    Function ``_process_annotation``: generate type based on annotation and compare it with the expected type.
+    Also verify that JSON schema can be created from the class.
+    """
+    if success:
+        # Compare types directly
+        type_recovered, ns = _process_annotation(encoded_annotation)
+        assert type_recovered == type_expected
+
+        # Compare generated JSON schemas
+        schema_recovered = _create_schema_for_testing(type_recovered)
+        schema_expected = _create_schema_for_testing(type_expected)
+        assert schema_recovered == schema_expected
+    else:
+        with pytest.raises(TypeError, match=errmsg):
+            _process_annotation(encoded_annotation)
+
+
+pa2_Device1 = enum.Enum("pa2_Device1", {"dev1": "dev1", "dev2": "dev2", "dev3": "dev3"})
+pa2_Device2 = enum.Enum("pa2_Device2", {"dev4": "dev4", "dev5": "dev5"})
+pa2_Plan1 = enum.Enum("pa2_Plan1", {"plan1": "plan1", "plan2": "plan2"})
+pa2_Enum1 = enum.Enum("pa2_Enum1", {"enum1": "enum1", "enum2": "enum2"})
+
+
+# fmt: off
+@pytest.mark.parametrize("encoded_annotation, type_expected, success, errmsg", [
+    # Use custom type specifications
+    ({"type": "pa2_Device1", "devices": {"pa2_Device1": ("dev1", "dev2", "dev3")}}, pa2_Device1, True, ""),
+    ({"type": "typing.List[pa2_Device1]", "devices": {"pa2_Device1": ("dev1", "dev2", "dev3")}},
+     typing.List[pa2_Device1], True, ""),
+    ({"type": "typing.List[typing.Union[pa2_Device1, pa2_Device2]]", "devices":
+        {"pa2_Device1": ("dev1", "dev2", "dev3"),
+         "pa2_Device2": ("dev4", "dev5")}}, typing.List[typing.Union[pa2_Device1, pa2_Device2]], True, ""),
+    ({"type": "typing.Union[typing.List[pa2_Device1], typing.List[pa2_Plan1]]", "devices":
+        {"pa2_Device1": ("dev1", "dev2", "dev3"),
+         "pa2_Plan1": ("plan1", "plan2")}},
+     typing.Union[typing.List[pa2_Device1], typing.List[pa2_Plan1]], True, ""),
+    ({"type": "typing.Union[typing.List[pa2_Device1], typing.List[pa2_Enum1]]", "devices":
+        {"pa2_Device1": ("dev1", "dev2", "dev3"),
+         "pa2_Enum1": ("enum1", "enum2")}},
+     typing.Union[typing.List[pa2_Device1], typing.List[pa2_Enum1]], True, ""),
+    # Use Tuple instead of List (different type, but the same JSON schema)
+    ({"type": "typing.Union[typing.Tuple[pa2_Device1], typing.List[pa2_Enum1]]", "devices":
+        {"pa2_Device1": ("dev1", "dev2", "dev3"),
+         "pa2_Enum1": ("enum1", "enum2")}},
+     typing.Union[typing.List[pa2_Device1], typing.List[pa2_Enum1]], True, ""),
+    # Failing case: unknown 'custom' type in the annotation
+    ({"type": "typing.Union[typing.List[unknown_type], typing.List[pa2_Enum1]]", "devices":
+        {"pa2_Device1": ("dev1", "dev2", "dev3"),
+         "pa2_Enum1": ("enum1", "enum2")}},
+     typing.Union[typing.List[pa2_Device1], typing.List[pa2_Enum1]], False, "name 'unknown_type' is not defined"),
+    # Name for custom type is not a valid Python name
+    ({"type": "typing.Union[typing.List[unknown-type], typing.List[pa2_Enum1]]", "devices":
+        {"pa2_Device1": ("dev1", "dev2", "dev3"),
+         "pa2_Enum1": ("enum1", "enum2")}},
+     typing.Union[typing.List[pa2_Device1], typing.List[pa2_Enum1]], False, "name 'unknown' is not defined"),
+    # Non-existing type 'typing.list'
+    ({"type": "typing.Union[typing.list[pa2_Device1], typing.List[pa2_Enum1]]", "devices":
+        {"pa2_Device1": ("dev1", "dev2", "dev3"),
+         "pa2_Enum1": ("enum1", "enum2")}},
+     typing.Union[typing.List[pa2_Device1], typing.List[pa2_Enum1]], False,
+     "module 'typing' has no attribute 'list'"),
+    # Non-existing type 'List'
+    ({"type": "typing.Union[List[pa2_Device1], List[pa2_Enum1]]", "devices":
+        {"pa2_Device1": ("dev1", "dev2", "dev3"),
+         "pa2_Enum1": ("enum1", "enum2")}},
+     typing.Union[typing.List[pa2_Device1], typing.List[pa2_Enum1]], False, "name 'List' is not defined'"),
+])
+# fmt: on
+def test_process_annotation_2(encoded_annotation, type_expected, success, errmsg):
+    """
+    Function ``_process_annotation``: cases where types can not be compared directly (types are based
+    on independently created ``enum.Enum`` classes are always not equal), but generated JSON schemas
+    can be compared. The types are used to create Pydantic model classes and JSON schemas, so  this is
+    a meaningful test.
+    """
+    if success:
+        type_recovered, ns = _process_annotation(encoded_annotation)
+
+        schema_recovered = _create_schema_for_testing(type_recovered)
+        schema_expected = _create_schema_for_testing(type_expected)
+        assert schema_recovered == schema_expected
+    else:
+        with pytest.raises(TypeError, match=errmsg):
+            _process_annotation(encoded_annotation)
+
+
+# fmt: off
+@pytest.mark.parametrize("encoded_annotation, type_expected, success, errmsg", [
+    # Missing 'dev3'
+    ({"type": "typing.Union[typing.List[pa2_Device1], typing.List[pa2_Enum1]]", "devices":
+        {"pa2_Device1": ("dev1", "dev2"),
+         "pa2_Enum1": ("enum1", "enum2")}},
+     typing.Union[typing.List[pa2_Device1], typing.List[pa2_Enum1]], True, ""),
+    # Extra 'enum3'
+    ({"type": "typing.Union[typing.List[pa2_Device1], typing.List[pa2_Enum1]]", "devices":
+        {"pa2_Device1": ("dev1", "dev2", "dev3"),
+         "pa2_Enum1": ("enum1", "enum2", "enum3")}},
+     typing.Union[typing.List[pa2_Device1], typing.List[pa2_Enum1]], True, ""),
+    # Changed device name 'dev2x'
+    ({"type": "typing.Union[typing.List[pa2_Device1], typing.List[pa2_Enum1]]", "devices":
+        {"pa2_Device1": ("dev1", "dev2x", "dev3"),
+         "pa2_Enum1": ("enum1", "enum2")}},
+     typing.Union[typing.List[pa2_Device1], typing.List[pa2_Enum1]], True, ""),
+])
+# fmt: on
+def test_process_annotation_3(encoded_annotation, type_expected, success, errmsg):
+    """
+    Function ``_process_annotation``: make sure that different JSON schemas are generated if
+    type definitions are different.
+    """
+    if success:
+        type_recovered, ns = _process_annotation(encoded_annotation)
+
+        schema_recovered = _create_schema_for_testing(type_recovered)
+        schema_expected = _create_schema_for_testing(type_expected)
+        assert schema_recovered != schema_expected  # NOT EQUAL !!!
+    else:
+        with pytest.raises(TypeError, match=errmsg):
+            _process_annotation(encoded_annotation)
 
 
 # ---------------------------------------------------------------------------------
@@ -1740,10 +2138,6 @@ def test_validate_plan_2(allowed_plans, success):
                 "annotation": "typing.Union[typing.List[Plans], Plans]",
                 "plans": {"Plans": ("p1", "p3")},
             },
-        },
-        "returns": {
-            "description": "Yields a sequence of plan messages.",
-            "annotation": "typing.Generator[tuple, None, None]",
         },
     }
 )

@@ -27,15 +27,6 @@ _parameter_annotation_schema = {
                 },
             },
         },
-        "returns": {
-            "type": "object",
-            "properties": {
-                "description": {"type": "string"},
-            },
-            "additionalProperties": {
-                "annotation": {"type": "string"},
-            },
-        },
     },
     "additionalProperties": False,
     "definitions": {

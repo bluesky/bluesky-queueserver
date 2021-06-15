@@ -1,3 +1,4 @@
+import ast
 import os
 import glob
 import runpy
@@ -607,79 +608,177 @@ def _compare_in_out(kwargs_in, kwargs_out):
     return match, msg
 
 
-def _process_custom_annotation(custom_annotation):
+# def _process_custom_annotation(custom_annotation):
+#     """
+#     Process custom annotation if it exists (custom_annotation["annotation"]).
+#     If there is no annotation, then return None and empty list of temporary type objects.
+#     If it exists, then return reference to the annotation (type object) and the list
+#     temporary types that need to be deleted once the processing (parameter validation)
+#     is complete.
+#
+#     Parameters
+#     ----------
+#     custom_annotation: dict
+#         Dictionary that may contain custom annotation (key ``custom_annotation``).
+#
+#     Returns
+#     -------
+#     type, list
+#         Tuple (annotation type, list of temporary types).
+#     """
+#     created_type_list = []
+#     annotation = None
+#     try:
+#         if "annotation" in custom_annotation:
+#             # Read annotation (as a string)
+#             annotation_str = custom_annotation["annotation"]
+#
+#             # Create the dictionary of devices or plans
+#             devices = custom_annotation.get("devices", {})
+#             plans = custom_annotation.get("plans", {})
+#             items = devices.copy()
+#             items.update(plans)
+#
+#             if items:
+#                 # Create types
+#                 for item_name in items:
+#                     # The dictionary value for the devices/plans may be a list(tuple) of items
+#                     #   or None. If the value is None, then any device or plan will be accepted.
+#                     #   The list of device or plan names will be used to construct enum.Enum
+#                     #   type, which is used to verify if the name in args or kwargs matches
+#                     #   one of the arguments.
+#                     if items[item_name] is not None:
+#                         # Create temporary unique type name
+#                         while True:
+#                             type_name = f"_type__{random.randint(0, 100000)}_"
+#                             if type_name not in globals():
+#                                 break
+#
+#                         # Replace all occurrences of the type nae in the custom annotation.
+#                         annotation_str = annotation_str.replace(item_name, type_name)
+#
+#                         # Create temporary type as a subclass of enum.Enum, e.g.
+#                         # enum.Enum('Device', {'det1': 'det1', 'det2': 'det2', 'det3': 'det3'})
+#                         type_code = f"enum.Enum('{type_name}', {{"
+#                         for d in items[item_name]:
+#                             type_code += f"'{d}': '{d}',"
+#                         type_code += "})"
+#                         globals()[type_name] = eval(type_code)
+#                         created_type_list.append(type_name)
+#
+#                     else:
+#                         # Accept any device or plan: any string will be accepted without
+#                         #   verification.
+#                         annotation_str = annotation_str.replace(item_name, "str")
+#
+#             # Once all the types are created,  execute the code for annotation.
+#             annotation = eval(annotation_str)
+#
+#     except Exception:
+#         # In case of exception, delete all types that were already created
+#         for type_name in created_type_list:
+#             globals().pop(type_name)
+#         raise
+#
+#     return annotation, created_type_list
+
+
+def _process_annotation(encoded_annotation, *, ns=None):
     """
-    Process custom annotation if it exists (custom_annotation["annotation"]).
-    If there is no annotation, then return None and empty list of temporary type objects.
-    If it exists, then return reference to the annotation (type object) and the list
-    temporary types that need to be deleted once the processing (parameter validation)
-    is complete.
+    Process annotation encoded the same way as in the descriptions of exisitng plans.
+    Returns reference to the annotation (type object) and the list temporary types
+    that needs to be deleted once the processing (parameter validation) is complete.
 
     Parameters
     ----------
-    custom_annotation: dict
-        Dictionary that may contain custom annotation (key ``custom_annotation``).
+    encoded_annotation : dict
+        Dictionary that contains encoded annotation. The dictionary may contain the following
+        keys: ``type`` - type represented as a string, ``devices`` - a dictionary that maps
+        device types and lists of device names, ``plans`` - similar dictionary for plan types
+        and ``enums`` - similar dictionary for simple enums (strings).
+    ns : dict
+        Namespace that is used to evaluate the annotations. Custom types with unique names
+        may be added to the namesace by the function.
 
     Returns
     -------
-    type, list
-        Tuple (annotation type, list of temporary types).
+    type
+        Type reconstructed from annotation.
+    dict
+        Namespace dictionary with created types.
     """
-    created_type_list = []
-    annotation = None
+    # Namespace that contains the types created in the process of processing the annotation
+    ns = ns or {}
+    if "typing" not in ns:
+        ns.update({"typing": typing})
+    if "enum" not in ns:
+        ns.update({"enum": enum})
+
+    annotation_type_str = "<not-specified>"
+
+    annotation_type = None
     try:
-        if "annotation" in custom_annotation:
-            # Read annotation (as a string)
-            annotation_str = custom_annotation["annotation"]
+        if "type" not in encoded_annotation:
+            raise ValueError("Type is not specififed")
 
-            # Create the dictionary of devices or plans
-            devices = custom_annotation.get("devices", {})
-            plans = custom_annotation.get("plans", {})
-            items = devices.copy()
-            items.update(plans)
+        # Verify that the annotation does not have any unsupported keys
+        allowed_keys = ("type", "devices", "plans", "enums")
+        invalid_keys = []
+        for k in encoded_annotation:
+            if k not in allowed_keys:
+                invalid_keys.append(k)
+        if invalid_keys:
+            raise ValueError(
+                f"Annotation contains unsupported keys: {invalid_keys}. Supported keys: {allowed_keys}"
+            )
 
-            if items:
-                # Create types
-                for item_name in items:
-                    # The dictionary value for the devices/plans may be a list(tuple) of items
-                    #   or None. If the value is None, then any device or plan will be accepted.
-                    #   The list of device or plan names will be used to construct enum.Enum
-                    #   type, which is used to verify if the name in args or kwargs matches
-                    #   one of the arguments.
-                    if items[item_name] is not None:
-                        # Create temporary unique type name
-                        while True:
-                            type_name = f"_type__{random.randint(0, 100000)}_"
-                            if type_name not in globals():
-                                break
+        annotation_type_str = encoded_annotation.get("type")  # Required!
+        devices = encoded_annotation.get("devices", {})
+        plans = encoded_annotation.get("plans", {})
+        enums = encoded_annotation.get("enums", {})
+        items = devices.copy()
+        items.update(plans)
+        items.update(enums)
 
-                        # Replace all occurrences of the type nae in the custom annotation.
-                        annotation_str = annotation_str.replace(item_name, type_name)
+        # Create types
+        for item_name in items:
+            # The dictionary value for the devices/plans may be a list(tuple) of items
+            #   or None. If the value is None, then any device or plan will be accepted.
+            #   The list of device or plan names will be used to construct enum.Enum
+            #   type, which is used to verify if the name in args or kwargs matches
+            #   one of the arguments.
+            if items[item_name] is not None:
+                # Create temporary unique type name
+                type_name = type_name_base = item_name
+                while True:
+                    # Try the original name first
+                    if type_name not in ns:
+                        break
+                    type_name = f"{type_name_base}_{random.randint(0, 100000)}_"
 
-                        # Create temporary type as a subclass of enum.Enum, e.g.
-                        # enum.Enum('Device', {'det1': 'det1', 'det2': 'det2', 'det3': 'det3'})
-                        type_code = f"enum.Enum('{type_name}', {{"
-                        for d in items[item_name]:
-                            type_code += f"'{d}': '{d}',"
-                        type_code += "})"
-                        globals()[type_name] = eval(type_code)
-                        created_type_list.append(type_name)
+                # Replace all occurrences of the type nae in the custom annotation.
+                annotation_type_str = annotation_type_str.replace(item_name, type_name)
 
-                    else:
-                        # Accept any device or plan: any string will be accepted without
-                        #   verification.
-                        annotation_str = annotation_str.replace(item_name, "str")
+                # Create temporary type as a subclass of enum.Enum, e.g.
+                # enum.Enum('Device', {'det1': 'det1', 'det2': 'det2', 'det3': 'det3'})
+                type_code = f"enum.Enum('{type_name}', {{"
+                for d in items[item_name]:
+                    type_code += f"'{d}': '{d}',"
+                type_code += "})"
+                ns[type_name] = eval(type_code, ns, ns)
 
-            # Once all the types are created,  execute the code for annotation.
-            annotation = eval(annotation_str)
+            else:
+                # Accept any device or plan: any string will be accepted without
+                #   verification.
+                annotation_type_str = annotation_type_str.replace(item_name, "str")
 
-    except Exception:
-        # In case of exception, delete all types that were already created
-        for type_name in created_type_list:
-            globals().pop(type_name)
-        raise
+        # Once all the types are created,  execute the code for annotation.
+        annotation_type = eval(annotation_type_str, ns, ns)
 
-    return annotation, created_type_list
+    except Exception as ex:
+        raise TypeError(f"Failed to process annotation '{annotation_type_str}: {ex}'")
+
+    return annotation_type, ns
 
 
 def _construct_parameters(param_list):
@@ -939,42 +1038,42 @@ def bind_plan_arguments(*, plan_args, plan_kwargs, plan_parameters):
     return bound_args
 
 
-def bytes2hex(bytes_array):
-    """
-    Converts byte array (output of ``pickle.dumps()``) to spaced hexadecimal string representation.
-
-    Parameters
-    ----------
-    bytes_array: bytes
-        Array of bytes to be converted.
-
-    Returns
-    -------
-    str
-        Hexadecimal representation of the byte array.
-    """
-    s_hex = bytes_array.hex()
-    # Insert spaces between each hex number. It makes YAML file formatting better.
-    return " ".join([s_hex[n : n + 2] for n in range(0, len(s_hex), 2)])  # noqa: E203
-
-
-def hex2bytes(hex_str):
-    """
-    Converts spaced hexadecimal string (output of ``bytes2hex()``) function to an array of bytes.
-
-    Parameters
-    ----------
-    hex_str: str
-        String of hexadecimal numbers separated by spaces.
-
-    Returns
-    -------
-    bytes
-        Array of bytes (ready to be unpicked).
-    """
-    # Delete spaces from the string to prepare it for conversion.
-    hex_str = hex_str.replace(" ", "")
-    return bytes.fromhex(hex_str)
+# def bytes2hex(bytes_array):
+#     """
+#     Converts byte array (output of ``pickle.dumps()``) to spaced hexadecimal string representation.
+#
+#     Parameters
+#     ----------
+#     bytes_array: bytes
+#         Array of bytes to be converted.
+#
+#     Returns
+#     -------
+#     str
+#         Hexadecimal representation of the byte array.
+#     """
+#     s_hex = bytes_array.hex()
+#     # Insert spaces between each hex number. It makes YAML file formatting better.
+#     return " ".join([s_hex[n : n + 2] for n in range(0, len(s_hex), 2)])  # noqa: E203
+#
+#
+# def hex2bytes(hex_str):
+#     """
+#     Converts spaced hexadecimal string (output of ``bytes2hex()``) function to an array of bytes.
+#
+#     Parameters
+#     ----------
+#     hex_str: str
+#         String of hexadecimal numbers separated by spaces.
+#
+#     Returns
+#     -------
+#     bytes
+#         Array of bytes (ready to be unpicked).
+#     """
+#     # Delete spaces from the string to prepare it for conversion.
+#     hex_str = hex_str.replace(" ", "")
+#     return bytes.fromhex(hex_str)
 
 
 def _parse_docstring(docstring):
@@ -1077,26 +1176,112 @@ def _parse_docstring(docstring):
 
 def _process_plan(plan):
     """
-    Returns parameters of a plan.
+    Returns parameters of a plan. The function accepts callable object that implements the plan
+    and returns the dictionary with descriptions of the plan and plan parameters. The function
+    extracts the parameters and their annotations from the plan signature and plan and parameter
+    descriptions from the docstring. If the plan is decorated with``parameter_annotation_decorator``,
+    then the specifications of plan and parameter descriptions and parameter annotations passed
+    to the decorator override the descriptions from the docstring and Python parameter annotations
+    from the function header.
+
+    Limitation on the support types of the plan parameters and the default values that could be
+    used in function signatures. Parameter types must be native Python types (such as ``int``,
+    ``float``, ``str``, etc.) or generic types based on Python native types
+    (``typing.List[typing.Union[int]]``). The operation of recreating the type from its
+    string representation using ``eval`` and the namespace with only ``typing`` module imported
+    should be successful. The default values are reconstructed using ``ast.literal_eval`` and
+    the operation ``ast.literal_eval(f"{v!r}")`` must run successfully.
+
+    The description of the plan is represented as a Python dictionary in the following format
+    (all elements are optional unless they are labeled as REQUIRED):
+
+    .. code-block:: python
+
+        {
+            "name": <plan name>  # REQUIRED
+            "description": <plan description (multiline text)>
+            "properties": {  # REQUIRED, may be empty
+                "is_generator": <boolean that indicates if this is a generator function>
+            }
+            "parameters": [  # REQUIRED, may be empty
+                <param_name_1>: {
+                     "name": <parameter name>  # REQUIRED
+                     "description": <parameter description>
+                     # For values of the 'kind' see documentation for 'inspect.Parameter'
+                     "kind": {  # REQUIRED
+                         "name": <string representation>
+                         "value": <integer representation>
+                     }
+                     "annotation": {
+                         # 'type' is REQUIRED if annotation is present
+                         "type": <parameter type represented as a string>
+                         # Enums for devices, plans and simple enums are in the same format as
+                         #   the 'parameter_annotation_decorator'.
+                         "devices": <dict of device types (lists of device names)>
+                         "plans": <dict of plan types (lists of plan names)>
+                         "enums": <dict of enum types (lists of strings)>
+                     }
+                     "default": <string representation of the default value>
+                }
+                <parameter_name_2>: ...
+                <parameter_name_3>: ...
+                ...
+            ]
+        }
 
     Parameters
     ----------
-    plan: function
-        reference to the function implementing the plan
+    plan: callable
+        Reference to the function implementing the plan
 
     Returns
     -------
     dict
-        Dictionary with plan parameters with the following keys: ``module`` - name
-        of the module where the plan is located, ``name`` - name of the plan, ``parameters`` -
-        the list of plan parameters. The list of plan parameters include ``name``, ``kind``,
-        ``default`` (if available) and ``annotation`` (if available).
+        Dictionary with plan parameters.
+
+    Raises
+    ------
+    ValueError
+        Error occurred while creating plan description.
     """
 
-    def filter_values(v):
-        if v is inspect.Parameter.empty:
-            return ""
-        return str(v)
+    def process_annotation(annotation):
+        """
+        Ignore the type if it can not be properly reconstructed using 'eval'
+        """
+        ns = {"typing": typing}
+
+        if hasattr(annotation, "__name__"):
+            # This should take care of the Python base types such as 'int', 'float' etc.
+            a_str = annotation.__name__
+        else:
+            # This will work for generic types like 'typing.List[int]'
+            a_str = f"{annotation!r}"
+
+        # Verify if the type could be recreated by evaluating the string during validation.
+        try:
+            an = eval(a_str, ns, ns)
+            if an != annotation:
+                raise Exception()
+        except Exception:
+            # Ignore the type if it can not be recreated.
+            a_str = None
+
+        return a_str
+
+    def process_default(value):
+        """
+        Raise 'ValueError' if the string representation of the value can not be evaluated
+        """
+        s_value = f"{value!r}"
+        try:
+            ast.literal_eval(s_value)
+        except Exception:
+            raise ValueError(
+                f"Default value ({s_value}) can not be evaluated with 'ast.literal_eval()': "
+                "unsupported default value type."
+            )
+        return s_value
 
     sig = inspect.signature(plan)
     docstring = getattr(plan, "__doc__", None)
@@ -1104,52 +1289,59 @@ def _process_plan(plan):
     param_annotation = getattr(plan, "_custom_parameter_annotation_", None)
     doc_annotation = _parse_docstring(docstring)
 
-    ret = {"name": plan.__name__, "parameters": []}
+    ret = {"name": plan.__name__, "properties": {}, "parameters": []}
 
-    desc = None
-    if param_annotation:
-        desc = param_annotation.get("description", "")
+    try:
 
-    # Try extracting description from docstring data
-    if not desc and doc_annotation:
-        desc = doc_annotation.get("description", "")
+        # Properties
+        ret["properties"]["is_generator"] = inspect.isgeneratorfunction(plan) or inspect.isgenerator(plan)
 
-    ret["description"] = desc
+        # Plan description
+        desc = None
+        if param_annotation:
+            desc = param_annotation.get("description", None)
+        if not desc and doc_annotation:
+            desc = doc_annotation.get("description", None)
+        if desc:
+            ret["description"] = desc
 
-    # Function parameters
-    for p in sig.parameters.values():
-        working_dict = {"name": p.name}
-        ret["parameters"].append(working_dict)
+        # Function parameters
+        use_docstring = "parameters" in doc_annotation
+        use_custom = param_annotation and ("parameters" in param_annotation)
+        for p in sig.parameters.values():
+            working_dict = {"name": p.name}
+            ret["parameters"].append(working_dict)
 
-        if ("parameters" in doc_annotation) and (p.name in doc_annotation["parameters"]):
-            desc = doc_annotation["parameters"][p.name].get("description", None)
+            working_dict["kind"] = {"name": p.kind.name, "value": p.kind.value}
+
+            # Parameter description (attempt to get it from the decorator, then from docstring)
+            desc, annotation = None, None
+            if use_custom and (p.name in param_annotation["parameters"]):
+                desc = param_annotation["parameters"][p.name].get("description", None)
+                annotation = param_annotation["parameters"][p.name].get("annotation", None)
+            if not desc and use_docstring and (p.name in doc_annotation["parameters"]):
+                desc = doc_annotation["parameters"][p.name].get("description", None)
+            if not annotation and p.annotation is not inspect.Parameter.empty:
+                annotation = process_annotation(p.annotation)
+
             if desc:
                 working_dict["description"] = desc
+            if annotation:
+                working_dict["annotation"] = annotation
 
-        working_dict["kind"] = {"name": p.kind.name, "value": p.kind.value}
+            # Parameter default value (only from the function signature).
+            default = None
+            if p.default is not inspect.Parameter.empty:
+                try:
+                    default = process_default(p.default)  # May raise an exception
+                except Exception as ex:
+                    raise ValueError(f"Parameter '{p.name}': {ex}")
+            if default is not None:
+                working_dict["default"] = default
 
-        working_dict["default"] = str(filter_values(p.default))
-        working_dict["default_pickled"] = bytes2hex(pickle.dumps(p.default))
+    except Exception as ex:
+        raise ValueError(f"Failed to create description of plan '{plan.__name__}': {ex}")
 
-        working_dict["annotation"] = str(filter_values(p.annotation))
-        working_dict["annotation_pickled"] = bytes2hex(pickle.dumps(p.annotation))
-
-        if param_annotation and ("parameters" in param_annotation):
-            working_dict["custom"] = param_annotation["parameters"].get(p.name, {})
-
-    # Return value
-    return_info = {}
-
-    if "returns" in doc_annotation:
-        desc = doc_annotation["returns"].get("description", None)
-        if desc:
-            return_info["description"] = desc
-
-    return_info["annotation"] = str(filter_values(sig.return_annotation))
-    return_info["annotation_pickled"] = bytes2hex(pickle.dumps(sig.return_annotation))
-    if param_annotation and ("returns" in param_annotation):
-        return_info["custom"] = param_annotation["returns"]
-    ret["returns"] = return_info
     return ret
 
 

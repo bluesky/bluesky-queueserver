@@ -33,36 +33,6 @@ _simple_annotation_no_pdesc = {
 }
 
 
-_simple_annotation_with_return = {
-    "description": "Simple function with return value",
-    "parameters": {
-        "val_arg": {"description": "Parameter 'val_arg'"},
-        "val_kwarg": {"description": "Parameter 'val_kwarg'"},
-    },
-    "returns": {"description": "Return value"},
-}
-
-
-_simple_annotation_with_return_empty = {
-    "description": "Simple function with return value",
-    "parameters": {
-        "val_arg": {"description": "Parameter 'val_arg'"},
-        "val_kwarg": {"description": "Parameter 'val_kwarg'"},
-    },
-    "returns": {},
-}
-
-
-_simple_annotation_with_return_type_only = {
-    "description": "Simple function with return value",
-    "parameters": {
-        "val_arg": {"description": "Parameter 'val_arg'"},
-        "val_kwarg": {"description": "Parameter 'val_kwarg'"},
-    },
-    "returns": {"annotation": "float"},
-}
-
-
 # Note: the types in the following annotation don't match the types in the function
 # parameter annotation on purpose. It allows to verify which types are actually placed
 # in the docstring.
@@ -72,7 +42,6 @@ _simple_annotation_with_types = {
         "val_arg": {"description": "Parameter 'val_arg'", "annotation": "float"},
         "val_kwarg": {"description": "Parameter 'val_kwarg'", "annotation": "int"},
     },
-    "returns": {"description": "Return value", "annotation": "float"},
 }
 
 
@@ -94,7 +63,6 @@ _simple_annotation_list_devices_and_plans = {
             },
         },
     },
-    "returns": {"description": "Return value", "annotation": "float"},
 }
 
 
@@ -116,7 +84,6 @@ _simple_annotation_enums = {
             },
         },
     },
-    "returns": {"description": "Return value", "annotation": "float"},
 }
 
 
@@ -129,7 +96,6 @@ _simple_annotation_long_descriptions = {
             "annotation": "int",
         },
     },
-    "returns": {"description": "Very long description of the return value. " * 10, "annotation": "float"},
 }
 
 
@@ -139,9 +105,6 @@ _simple_annotation_long_descriptions = {
     _simple_annotation,
     _simple_annotation_no_fdesc,
     _simple_annotation_no_pdesc,
-    _simple_annotation_with_return,
-    _simple_annotation_with_return_empty,
-    _simple_annotation_with_return_type_only,
     _simple_annotation_with_types,
     _simple_annotation_list_devices_and_plans,
     _simple_annotation_enums,
@@ -190,7 +153,6 @@ _simple_annotation_no_types = {
         "val_arg": {"description": "Parameter 'val_arg'"},
         "val_kwarg": {"description": "Parameter 'val_kwarg'"},
     },
-    "returns": {"description": "Return value"},
 }
 
 
@@ -249,7 +211,6 @@ _custom_annotation_plans_and_devices = {
             "devices": {"Device": ("det1", "det2", "det3")},
         },
     },
-    "returns": {"description": "Sequence of numbers"},
 }
 
 
@@ -299,7 +260,6 @@ _more_complicated_annotation = {
             "description": "Detectors or floats",
         },
     },
-    "returns": {"description": "Yields strings from the list of three strings."},
 }
 
 

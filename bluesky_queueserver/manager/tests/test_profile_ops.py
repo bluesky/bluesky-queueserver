@@ -45,7 +45,7 @@ from bluesky_queueserver.manager.profile_ops import (
     _unpickle_types,
     StartupLoadingError,
     _process_annotation,
-    _instantiate_parameter_types_and_defaults,
+    _decode_parameter_types_and_defaults,
     _process_default_value,
     _construct_parameters,
 )
@@ -1687,7 +1687,7 @@ def test_process_default_value_1(default_encoded, default_expected, success, err
 
 
 # -----------------------------------------------------------------------------------------------------
-#                          _instantiate_parameter_types_and_defaults
+#                          _decode_parameter_types_and_defaults
 
 _ipt1 = [
     {"name": "param1", "annotation": {"type": "int"}, "default": "10"},
@@ -1759,10 +1759,13 @@ _ipt6_fail = [  # Failed to decode the type (just one simple case)
     (_ipt6_fail, None, True, False, "Failed to process annotation 'some-type'"),
 ])
 # fmt: on
-def test_instantiate_parameter_types_and_defaults_1(parameters, expected_types, compare_types, success, errmsg):
+def test_decode_parameter_types_and_defaults_1(parameters, expected_types, compare_types, success, errmsg):
+    """
+    Basic test for ``_decode_parameter_types_and_defaults``
+    """
 
     if success:
-        inst_types = _instantiate_parameter_types_and_defaults(parameters)
+        inst_types = _decode_parameter_types_and_defaults(parameters)
         if compare_types:
             assert inst_types == expected_types
 
@@ -1780,7 +1783,7 @@ def test_instantiate_parameter_types_and_defaults_1(parameters, expected_types, 
 
     else:
         with pytest.raises(Exception, match=errmsg):
-            _instantiate_parameter_types_and_defaults(parameters)
+            _decode_parameter_types_and_defaults(parameters)
 
 
 # ---------------------------------------------------------------------------------
@@ -1816,8 +1819,8 @@ _cparam1 = [
 
 # fmt: off
 @pytest.mark.parametrize("testmode, success, errmsg", [
-    ("external_inst", True, ""),
-    ("internal_inst", True, ""),
+    ("external_decode", True, ""),
+    ("internal_decode", True, ""),
     ("name_missing", False, "Description for parameter contains no key 'name'"),
     ("kind_missing", False, "Description for parameter contains no key 'kind'"),
 ])
@@ -1828,27 +1831,27 @@ def test_construct_parameters_1(testmode, success, errmsg):
     validation of results.
     """
     param_list = _cparam1
-    if testmode == "external_inst":
-        # Instantiate types using separate call to the function
-        param_inst = _instantiate_parameter_types_and_defaults(param_list)
-        parameters = _construct_parameters(param_list, params_instantiated=param_inst)
-    elif testmode == "internal_inst":
-        # Instantiate types internally
+    if testmode == "external_decode":
+        # Decode types using separate call to the function
+        param_inst = _decode_parameter_types_and_defaults(param_list)
+        parameters = _construct_parameters(param_list, params_decoded=param_inst)
+    elif testmode == "internal_decode":
+        # Decode types internally
         parameters = _construct_parameters(param_list)
     elif testmode == "name_missing":
         # Remove 'name' key
-        param_inst = _instantiate_parameter_types_and_defaults(param_list)
+        param_inst = _decode_parameter_types_and_defaults(param_list)
         param_list2 = copy.deepcopy(param_list)
         del param_list2[0]["name"]
         with pytest.raises(ValueError, match=errmsg):
-            _construct_parameters(param_list2, params_instantiated=param_inst)
+            _construct_parameters(param_list2, params_decoded=param_inst)
     elif testmode == "kind_missing":
         # Remove 'kind' key
-        param_inst = _instantiate_parameter_types_and_defaults(param_list)
+        param_inst = _decode_parameter_types_and_defaults(param_list)
         param_list2 = copy.deepcopy(param_list)
         del param_list2[0]["kind"]
         with pytest.raises(ValueError, match=errmsg):
-            _construct_parameters(param_list2, params_instantiated=param_inst)
+            _construct_parameters(param_list2, params_decoded=param_inst)
     else:
         assert False, f"Unsupported mode {testmode}"
 

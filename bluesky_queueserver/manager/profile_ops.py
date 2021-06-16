@@ -807,9 +807,9 @@ def _process_default_value(encoded_default_value):
     return p_default
 
 
-def _instantiate_parameter_types_and_defaults(param_list):
+def _decode_parameter_types_and_defaults(param_list):
     """
-    Instantiate parameter types and default values by using string representations of
+    Decode parameter types and default values by using string representations of
     types and defaults stored in list of available devices.
 
     Parameters
@@ -827,7 +827,7 @@ def _instantiate_parameter_types_and_defaults(param_list):
         and default value (``default`` key).
     """
 
-    instantiated_types_and_defaults = {}
+    decoded_types_and_defaults = {}
     for p in param_list:
         if "name" not in p:
             raise KeyError(f"No 'name' key in the parameter description {p}")
@@ -842,12 +842,12 @@ def _instantiate_parameter_types_and_defaults(param_list):
         else:
             p_default = inspect.Parameter.empty
 
-        instantiated_types_and_defaults[p["name"]] = {"type": p_type, "default": p_default}
+        decoded_types_and_defaults[p["name"]] = {"type": p_type, "default": p_default}
 
-    return instantiated_types_and_defaults
+    return decoded_types_and_defaults
 
 
-def _construct_parameters(param_list, *, params_instantiated=None):
+def _construct_parameters(param_list, *, params_decoded=None):
     """
     Construct the list of ``inspect.Parameter`` parameters based on the parameter list.
 
@@ -857,13 +857,13 @@ def _construct_parameters(param_list, *, params_instantiated=None):
         List of item (plan) parameters as it is stored in the list of existing plans.
         Used keys of each parameter dictionary: ``name``, ``kind``, ``default``,
         ``annotation``.
-    params_instantiated : dict or None
-        Dictionary that maps parameter name to the instantiated (decoded) parameter type
+    params_decoded : dict or None
+        Dictionary that maps parameter name to the decoded parameter type
         and default value. The dictionary is created by calling
-        ``_instantiate_parameter_types_and_defaults()``.  If the value is ``None``,
-        then the instantiated parameters are created automatically from the list ``param_list``.
-        The parameter exists for cases when the instantiated values are used repeatedly
-        in calls to multiple functions.
+        ``_decode_parameter_types_and_defaults()``.  If the value is ``None``,
+        then the decoded parameters are created automatically from the list ``param_list``.
+        The parameter is intended for cases when the instantiated values are used repeatedly
+        to avoid unnecessary multiple calls to ``_decode_parameter_types_and_defaults()``.
 
     Returns
     -------
@@ -876,8 +876,8 @@ def _construct_parameters(param_list, *, params_instantiated=None):
     Exceptions with meaningful error messages are generated if parameters can not be
     instantiated.
     """
-    if params_instantiated is None:
-        params_instantiated = _instantiate_parameter_types_and_defaults(param_list)
+    if params_decoded is None:
+        params_decoded = _decode_parameter_types_and_defaults(param_list)
 
     parameters = []
     try:
@@ -891,8 +891,8 @@ def _construct_parameters(param_list, *, params_instantiated=None):
                 raise ValueError(f"Description for parameter contains no key 'kind': {p}")
 
             # The following values are ALWAYS created by '_instantiate_parameter_types_and_defaults'
-            p_type = params_instantiated[p_name]["type"]
-            p_default = params_instantiated[p_name]["default"]
+            p_type = params_decoded[p_name]["type"]
+            p_default = params_decoded[p_name]["default"]
 
             param = inspect.Parameter(name=p_name, kind=p_kind, default=p_default, annotation=p_type)
             parameters.append(param)
@@ -910,7 +910,7 @@ def pydantic_create_model(kwargs, parameters):
     Parameters
     ----------
     kwargs: dict
-        Bound parameters of the functioncall
+        Bound parameters of the function call
     parameters: list
         Parameters of the plan with annotation.
     """

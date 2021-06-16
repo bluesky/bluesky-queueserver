@@ -47,6 +47,7 @@ from bluesky_queueserver.manager.profile_ops import (
     _process_annotation,
     _instantiate_parameter_types_and_defaults,
     _process_default_value,
+    _construct_parameters,
 )
 
 
@@ -1780,6 +1781,81 @@ def test_instantiate_parameter_types_and_defaults_1(parameters, expected_types, 
     else:
         with pytest.raises(Exception, match=errmsg):
             _instantiate_parameter_types_and_defaults(parameters)
+
+
+# ---------------------------------------------------------------------------------
+#                                _construct_parameters
+
+_cparam1 = [
+    {
+        "name": "val1",
+        "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+        "description": "The description for 'val1' from the docstring",
+    },
+    {
+        "name": "val2",
+        "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+        "default": "'some_str'",
+        "annotation": {"type": "str"},
+        "description": "The description for 'val2' from the docstring",
+    },
+    {
+        "name": "val3",
+        "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+        "default": "'dev1'",
+        "annotation": {
+            "type": "typing.List[typing.Union[Devices1, Plans1, Enums1]]",
+            "devices": {"Devices1": ("dev1", "dev2", "dev3")},
+            "plans": {"Plans1": ("plan1", "plan2", "plan3")},
+            "enums": {"Enums1": ("enum1", "enum2", "enum3")},
+        },
+        "description": "The description for 'val3' from the docstring",
+    },
+]
+
+
+# fmt: off
+@pytest.mark.parametrize("testmode, success, errmsg", [
+    ("external_inst", True, ""),
+    ("internal_inst", True, ""),
+    ("name_missing", False, "Description for parameter contains no key 'name'"),
+    ("kind_missing", False, "Description for parameter contains no key 'kind'"),
+])
+# fmt: on
+def test_construct_parameters_1(testmode, success, errmsg):
+    """
+    Smoke test for ``_construct_parameters``. Tests that the function runs, but no detailed
+    validation of results.
+    """
+    param_list = _cparam1
+    if testmode == "external_inst":
+        # Instantiate types using separate call to the function
+        param_inst = _instantiate_parameter_types_and_defaults(param_list)
+        parameters = _construct_parameters(param_list, params_instantiated=param_inst)
+    elif testmode == "internal_inst":
+        # Instantiate types internally
+        parameters = _construct_parameters(param_list)
+    elif testmode == "name_missing":
+        # Remove 'name' key
+        param_inst = _instantiate_parameter_types_and_defaults(param_list)
+        param_list2 = copy.deepcopy(param_list)
+        del param_list2[0]["name"]
+        with pytest.raises(ValueError, match=errmsg):
+            _construct_parameters(param_list2, params_instantiated=param_inst)
+    elif testmode == "kind_missing":
+        # Remove 'kind' key
+        param_inst = _instantiate_parameter_types_and_defaults(param_list)
+        param_list2 = copy.deepcopy(param_list)
+        del param_list2[0]["kind"]
+        with pytest.raises(ValueError, match=errmsg):
+            _construct_parameters(param_list2, params_instantiated=param_inst)
+    else:
+        assert False, f"Unsupported mode {testmode}"
+
+    if success:
+        sig_param_names = [_.name for _ in parameters]
+        expected_names = [_["name"] for _ in param_list]
+        assert sig_param_names == expected_names
 
 
 # ---------------------------------------------------------------------------------

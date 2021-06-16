@@ -847,54 +847,60 @@ def _instantiate_parameter_types_and_defaults(param_list):
     return instantiated_types_and_defaults
 
 
-def _construct_parameters(param_list):
+def _construct_parameters(param_list, *, params_instantiated=None):
     """
     Construct the list of ``inspect.Parameter`` parameters based on the parameter list.
+
+    Parameters
+    ----------
+    param_list : list(dict)
+        List of item (plan) parameters as it is stored in the list of existing plans.
+        Used keys of each parameter dictionary: ``name``, ``kind``, ``default``,
+        ``annotation``.
+    params_instantiated : dict or None
+        Dictionary that maps parameter name to the instantiated (decoded) parameter type
+        and default value. The dictionary is created by calling
+        ``_instantiate_parameter_types_and_defaults()``.  If the value is ``None``,
+        then the instantiated parameters are created automatically from the list ``param_list``.
+        The parameter exists for cases when the instantiated values are used repeatedly
+        in calls to multiple functions.
+
+    Returns
+    -------
+    parameters : inspect.Parameters
+        Item (plan) parameters represented in the form accepted by ``inspect.Signature``:
+        ``sig=inspect.Signature(parameters)``.
+
+    Raises
+    ------
+    Exceptions with meaningful error messages are generated if parameters can not be
+    instantiated.
     """
+    if params_instantiated is None:
+        params_instantiated = _instantiate_parameter_types_and_defaults(param_list)
+
     parameters = []
-    created_type_list = []
     try:
-
         for p in param_list:
+            p_name = p.get("name", None)
+            p_kind = p.get("kind", {}).get("value", None)
 
-            # Generate annotation from custom annotation data if possible.
-            #   'annotation == None', then use 'official' Python annotation
-            annotation_custom = None
-            if "custom" in p:
-                annotation_custom, type_list = _process_custom_annotation(p["custom"])
-                created_type_list += type_list
+            if p_name is None:
+                raise ValueError(f"Description for parameter contains no key 'name': {p}")
+            if p_kind is None:
+                raise ValueError(f"Description for parameter contains no key 'kind': {p}")
 
-            # Custom annotation always overrides Python annotation
-            if annotation_custom:
-                annotation = annotation_custom
-            elif "annotation_pickled" in p:
-                annotation = pickle.loads(hex2bytes(p["annotation_pickled"]))
-            else:
-                # If no annotation is provided, then accept any value
-                annotation = typing.Any
+            # The following values are ALWAYS created by '_instantiate_parameter_types_and_defaults'
+            p_type = params_instantiated[p_name]["type"]
+            p_default = params_instantiated[p_name]["default"]
 
-            # If there is no annotation, then accepty any value:
-            #   'pydantic' doesn't understand 'empty' annotation.
-            if annotation == inspect.Parameter.empty:
-                annotation = typing.Any
-
-            if "default_pickled" in p:
-                default = pickle.loads(hex2bytes(p["default_pickled"]))
-            else:
-                default = inspect.Parameter.empty
-
-            param = inspect.Parameter(
-                name=p["name"], kind=p["kind"]["value"], default=default, annotation=annotation
-            )
+            param = inspect.Parameter(name=p_name, kind=p_kind, default=p_default, annotation=p_type)
             parameters.append(param)
 
-    except Exception:
-        # In case of exception, delete all types that were already created
-        for type_name in created_type_list:
-            globals().pop(type_name)
-        raise
+    except Exception as ex:
+        raise ValueError(f"Failed to construct 'inspect.Parameters': {ex}")
 
-    return parameters, created_type_list
+    return parameters
 
 
 def pydantic_create_model(kwargs, parameters):

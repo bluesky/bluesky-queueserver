@@ -27,7 +27,7 @@ from bluesky_queueserver.manager.conversions import (
                 "parameters": [
                     {"name": "p1",
                      "kind": "POSITIONAL_OR_KEYWORD",
-                     "annotation": "int"}
+                     "annotation": {"type": "int"}}
                  ]}},
      {"plan1": {"name": "plan1",
                 "description": "Description of Plan 1.",
@@ -45,26 +45,22 @@ from bluesky_queueserver.manager.conversions import (
                 "description": "Description of Plan 1.",
                 "parameters": [
                     {"name": "p1",
+                     "description": "Description for parameter 'p1'.",
                      "kind": "POSITIONAL_OR_KEYWORD",
-                     "annotation": "int",  # This is ignored, because custom annotation overrides it.
+                     "annotation": {"type": "typing.List[float]"},
                      "default": 10,
-                     "custom": {
-                         "description": "Description for parameter 'p1'.",
-                         "annotation": "typing.List[float]",
-                     }},
+                     },
                     {"name": "p2",
+                     "description": "Description for parameter 'p2'.",
                      "kind": "POSITIONAL_OR_KEYWORD",
-                     "annotation": "int",  # This is ignored, because custom annotation overrides it.
+                     "annotation": {"type": "List[float]"},
                      "default": 10,
-                     "custom": {
-                         "description": "Description for parameter 'p2'.",
-                         "annotation": "List[float]",
-                     }},
+                     },
                     {"name": "p3",
+                     "description": "Description for parameter 'p3'.",
+                     "kind": "POSITIONAL_OR_KEYWORD",
                      "default": 10,
-                     "custom": {
-                         "description": "Description for parameter 'p3'.",
-                     }},
+                     },
                 ]},
       },
      {"plan1": {"name": "plan1",
@@ -86,6 +82,7 @@ from bluesky_queueserver.manager.conversions import (
                      "is_optional": True},
                     {"name": "p3",
                      "description": "Description for parameter 'p3'.",
+                     "kind": "POSITIONAL_OR_KEYWORD",
                      "default": 10,
                      "is_optional": True},
                 ]},
@@ -98,10 +95,9 @@ from bluesky_queueserver.manager.conversions import (
                 "parameters": [
                     {"name": "p1",
                      "kind": "POSITIONAL_OR_KEYWORD",
-                     "custom": {
-                         "description": "Description for parameter 'p1'.",
-                         # This example is artificial and used only to test the filtering function.
-                         "annotation": "typing.List[typing.Union[Motor1, Motor2, Plan, Enum1, Enum2]]",
+                     "description": "Description for parameter 'p1'.",
+                     "annotation": {
+                         "type": "typing.List[typing.Union[Motor1, Motor2, Plan, Enum1, Enum2]]",
                          "devices": {"Motor1": ("m1", "m2"), "Motor2": ("m3")},
                          "plans": {"Plan": ("p1", "p2")},
                          "enums": {"Enum1": ("e1"), "Enum2": ("e2", "e3")},

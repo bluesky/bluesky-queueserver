@@ -3,6 +3,7 @@ import pytest
 import copy
 import yaml
 import typing
+from typing import Dict, Optional
 import subprocess
 import pprint
 import sys
@@ -1161,8 +1162,10 @@ def _pf2g(
     val1: typing.Tuple[typing.Union[float, int]] = (50,),
     val2: typing.Union[typing.List[str], str] = "some_str",
     val3: typing.Dict[str, int] = {"ab": 10, "cd": 50},
+    val4: Dict[str, int] = {"ab": 10, "cd": 50},  # No module name 'typing'
+    val5: Optional[float] = None,  # typing.Optional[float] == typing.Union[float, NoneType]
 ):
-    yield from [val1, val2, val3]
+    yield from [val1, val2, val3, val4, val5]
 
 
 _pf2g_processed = {
@@ -1184,6 +1187,18 @@ _pf2g_processed = {
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "default": "{'ab': 10, 'cd': 50}",
             "annotation": {"type": "typing.Dict[str, int]"},
+        },
+        {
+            "name": "val4",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "{'ab': 10, 'cd': 50}",
+            "annotation": {"type": "typing.Dict[str, int]"},
+        },
+        {
+            "name": "val5",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "None",
+            "annotation": {"type": "typing.Union[float, NoneType]"},
         },
     ],
     "properties": {"is_generator": True},

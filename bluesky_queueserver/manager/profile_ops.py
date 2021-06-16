@@ -712,6 +712,8 @@ def _process_annotation(encoded_annotation, *, ns=None):
         ns.update({"typing": typing})
     if "enum" not in ns:
         ns.update({"enum": enum})
+    if "NoneType" not in ns:
+        ns.update({"NoneType": type(None)})
 
     annotation_type_str = "<not-specified>"
     annotation_type = None
@@ -1333,7 +1335,7 @@ def _process_plan(plan):
         """
         Ignore the type if it can not be properly reconstructed using 'eval'
         """
-        ns = {"typing": typing}
+        ns = {"typing": typing, "NoneType": type(None)}
 
         if hasattr(annotation, "__name__"):
             # This should take care of the Python base types such as 'int', 'float' etc.
@@ -1423,7 +1425,10 @@ def _process_plan(plan):
             if not desc and use_docstring and (p.name in doc_annotation["parameters"]):
                 desc = doc_annotation["parameters"][p.name].get("description", None)
             if not annotation and p.annotation is not inspect.Parameter.empty:
-                annotation = {"type": convert_annotation_to_string(p.annotation)}
+                annotation = convert_annotation_to_string(p.annotation)
+                if annotation:
+                    # The case when annotation does exist (otherwise it is None)
+                    annotation = {"type": annotation}
 
             if desc:
                 working_dict["description"] = desc

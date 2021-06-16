@@ -33,10 +33,6 @@ custom_test_flyer = ophyd.sim.MockFlyer("custom_test_flyer", ophyd.sim.det, ophy
                 "annotation": "typing.List[float]",
             },
         },
-        "returns": {
-            "description": "Yields a sequence of plan messages.",
-            "annotation": "typing.Generator[tuple, None, None]",
-        },
     }
 )
 def move_then_count(

@@ -2,7 +2,6 @@ import os
 import pytest
 import copy
 import yaml
-import pickle
 import typing
 import subprocess
 import pprint
@@ -42,30 +41,12 @@ from bluesky_queueserver.manager.profile_ops import (
     load_allowed_plans_and_devices,
     _prepare_plans,
     _prepare_devices,
-    _unpickle_types,
     StartupLoadingError,
     _process_annotation,
     _decode_parameter_types_and_defaults,
     _process_default_value,
     _construct_parameters,
 )
-
-
-def test_hex2bytes_bytes2hex():
-    """
-    Basic test for the functions ``hex2bytes`` and ``bytes2hex``.
-    """
-    dict_initial = {"abc": 50, "def": {"some_key": "some_value"}}
-
-    # Check if pickling/unpickling a dictionary works.
-    b_in = pickle.dumps(dict_initial)
-    s = bytes2hex(b_in)
-    assert isinstance(s, str)
-    assert len(s) == 3 * len(b_in) - 1
-    b_out = hex2bytes(s)
-    assert b_out == b_in
-    dict_result = pickle.loads(b_out)
-    assert dict_result == dict_initial
 
 
 def test_get_default_startup_dir():
@@ -2048,42 +2029,6 @@ def test_load_existing_plans_and_devices():
     assert existing_devices == {}
 
 
-def test_unpickle_items():
-    """
-    Simple test for ``_unpickle_items()``.
-    """
-    # Dictionary that contains pickled values. The dictionary may contain lists (tuples)
-    #   of dictionaries, so the conversion function must be able to handle the lists.
-    item_dict_pickled = {
-        "a": "abc",
-        "b": typing.Any,
-        "b_pickled": bytes2hex(pickle.dumps(typing.Any)),
-        "e": {
-            "f": {
-                "a": "abc",
-                "b": typing.List[typing.Any],
-                "b_pickled": bytes2hex(pickle.dumps(typing.List[typing.Any])),
-            },
-            "g": [
-                {
-                    "d": {
-                        "p_pickled": bytes2hex(pickle.dumps(typing.Union[float, str])),
-                    }
-                }
-            ],
-        },
-    }
-
-    # The dictionary with raw binary items.
-    item_dict = copy.deepcopy(item_dict_pickled)
-    item_dict["b_pickled"] = typing.Any
-    item_dict["e"]["f"]["b_pickled"] = typing.List[typing.Any]
-    item_dict["e"]["g"][0]["d"]["p_pickled"] = typing.Union[float, str]
-
-    _unpickle_types(item_dict_pickled)
-    assert item_dict_pickled == item_dict
-
-
 def test_verify_default_profile_collection():
     """
     Verify if the list of existing plans and devices matches current default profile collection.
@@ -2104,13 +2049,6 @@ def test_verify_default_profile_collection():
     # Read the list of the existing plans of devices
     file_path = os.path.join(pc_path, "existing_plans_and_devices.yaml")
     existing_plans, existing_devices = load_existing_plans_and_devices(file_path)
-
-    # The types must be unpicked before they could be compared (pickling format may
-    #   differ depending on Python version)
-    _unpickle_types(plans)
-    _unpickle_types(devices)
-    _unpickle_types(existing_plans)
-    _unpickle_types(existing_devices)
 
     # Compare
     assert set(plans.keys()) == set(existing_plans.keys())

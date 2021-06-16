@@ -12,7 +12,6 @@ import sys
 import pprint
 import jsonschema
 import copy
-import pickle
 import typing
 import pydantic
 import enum
@@ -685,7 +684,7 @@ def _compare_in_out(kwargs_in, kwargs_out):
 
 def _process_annotation(encoded_annotation, *, ns=None):
     """
-    Process annotation encoded the same way as in the descriptions of exisitng plans.
+    Process annotation encoded the same way as in the descriptions of existing plans.
     Returns reference to the annotation (type object) and the list temporary types
     that needs to be deleted once the processing (parameter validation) is complete.
 
@@ -715,8 +714,8 @@ def _process_annotation(encoded_annotation, *, ns=None):
         ns.update({"enum": enum})
 
     annotation_type_str = "<not-specified>"
-
     annotation_type = None
+
     try:
         if "type" not in encoded_annotation:
             raise ValueError("Type is not specififed")
@@ -903,16 +902,19 @@ def _construct_parameters(param_list, *, params_decoded=None):
     return parameters
 
 
-def pydantic_create_model(kwargs, parameters):
+def pydantic_construct_model_class(parameters):
     """
-    Create the 'pydantic' model based on parameters.
+    Construct the 'pydantic' model based on parameters.
 
     Parameters
     ----------
-    kwargs: dict
-        Bound parameters of the function call
-    parameters: list
-        Parameters of the plan with annotation.
+    parameters : inspect.Parameters
+        Parameters of the plan with annotations created by ``_create_parameters`` function.
+
+    Returns
+    -------
+    class
+        Dynamically created Pydantic model class
     """
     model_kwargs = {}
     for p in parameters:
@@ -925,7 +927,6 @@ def pydantic_create_model(kwargs, parameters):
                 default = {}
             else:
                 default = ...
-
         if hasattr(p, "annotation"):
             if p.kind == p.VAR_POSITIONAL:
                 annotation = typing.List[p.annotation]
@@ -935,16 +936,33 @@ def pydantic_create_model(kwargs, parameters):
                 annotation = p.annotation
         else:
             annotation = None
-
         if annotation is not None:
             model_kwargs[p.name] = (annotation, default)
         else:
             model_kwargs[p.name] = default
+    return pydantic.create_model("Model", **model_kwargs)
 
-    Model = pydantic.create_model("Model", **model_kwargs)
 
-    # Verify the arguments using 'pydantic' model
-    return Model(**kwargs)
+def pydantic_validate_model(kwargs, pydantic_model_class):
+    """
+    Validate the function parameters using 'pydantic' model based
+    (by instantiating the model using model class and bound model parameters).
+
+    Parameters
+    ----------
+    kwargs: dict
+        Bound parameters of the function call.
+    pydantic_model_class : class
+        Pydantic model class (created using ``pydantic_construct_model_class()``).
+
+    Returns
+    -------
+    class
+        Constructed Pydantic model class
+    """
+
+    # Verify the arguments by instantiating the 'pydantic' model
+    return pydantic_model_class(**kwargs)
 
 
 def _validate_plan_parameters(param_list, call_args, call_kwargs):
@@ -971,11 +989,9 @@ def _validate_plan_parameters(param_list, call_args, call_kwargs):
         Exception is raised if the plan is invalid. The exception message contains
         information on the error.
     """
-    # Reconstruct signature
-    created_type_list = []
     try:
         # Reconstruct 'inspect.Parameter' parameters based on the parameter list
-        parameters, created_type_list = _construct_parameters(param_list)
+        parameters = _construct_parameters(param_list)
 
         # Create signature based on the list of parameters
         sig = inspect.Signature(parameters)
@@ -983,7 +999,8 @@ def _validate_plan_parameters(param_list, call_args, call_kwargs):
         # Verify the list of parameters based on signature.
         bound_args = sig.bind(*call_args, **call_kwargs)
 
-        m = pydantic_create_model(bound_args.arguments, parameters)
+        pydantic_model_class = pydantic_construct_model_class(parameters)
+        m = pydantic_validate_model(bound_args.arguments, pydantic_model_class)
 
         # The final step: match types of the output value of the pydantic model with input
         #   types. 'Pydantic' is converting types whenever possible, but we need precise
@@ -994,11 +1011,6 @@ def _validate_plan_parameters(param_list, call_args, call_kwargs):
 
     except Exception:
         raise
-
-    finally:
-        # Delete all temporary types from global namespace.
-        for type_name in created_type_list:
-            globals().pop(type_name)
 
     return bound_args.arguments
 
@@ -1044,12 +1056,12 @@ def validate_plan(plan, *, allowed_plans, allowed_devices):
             # Filter 'devices' and 'plans' entries of 'param_list'. Leave only plans that are
             #   in 'allowed_plans' and devices that are in 'allowed_devices'
             for p in param_list:
-                if ("custom" in p) and ("plans" in p["custom"]):
-                    p_plans = p["custom"]["plans"]
+                if ("annotation" in p) and ("plans" in p["annotation"]):
+                    p_plans = p["annotation"]["plans"]
                     for p_type in p_plans:
                         p_plans[p_type] = tuple(_ for _ in p_plans[p_type] if _ in allowed_plans)
-                if (allowed_devices is not None) and ("custom" in p) and ("devices" in p["custom"]):
-                    p_dev = p["custom"]["devices"]
+                if (allowed_devices is not None) and ("annotation" in p) and ("devices" in p["annotation"]):
+                    p_dev = p["annotation"]["devices"]
                     for p_type in p_dev:
                         p_dev[p_type] = tuple(_ for _ in p_dev[p_type] if _ in allowed_devices)
 
@@ -1102,7 +1114,7 @@ def bind_plan_arguments(*, plan_args, plan_kwargs, plan_parameters):
         Arguments could not be bound to plan parameters (raised by ``inspect.Signature.bind``.
     """
     param_list = copy.deepcopy(plan_parameters["parameters"])
-    parameters, _ = _construct_parameters(param_list)
+    parameters = _construct_parameters(param_list)
     # Create signature based on the list of parameters
     sig = inspect.Signature(parameters)
     # Verify the list of parameters based on signature.
@@ -1460,29 +1472,6 @@ def _prepare_devices(devices):
         }
         for k, v in devices.items()
     }
-
-
-def _unpickle_types(existing_dict):
-    """
-    Unpickle types in the dictionary of existing devices or plans. Unpickling is needed if
-    two dictionaries need to be compared (representation of pickled items may differ between
-    different versions of Python). Currently used in unit tests.
-
-    The data structure contains lists of dictionaries, so unpickling function must be able
-    to iteratively process the list elements. The data is processed in place, the function
-    does not return anything.
-    """
-    if isinstance(existing_dict, dict):
-        for key, value in existing_dict.items():
-            if key.endswith("_pickled"):
-                if isinstance(value, str):
-                    unpickled_value = pickle.loads(hex2bytes(value))
-                    existing_dict[key] = unpickled_value
-            else:
-                _unpickle_types(value)
-    elif isinstance(existing_dict, list) or isinstance(existing_dict, tuple):
-        for item in existing_dict:
-            _unpickle_types(item)
 
 
 def gen_list_of_plans_and_devices(

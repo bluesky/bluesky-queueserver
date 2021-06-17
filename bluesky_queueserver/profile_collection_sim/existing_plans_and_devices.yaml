@@ -116,6 +116,14 @@ existing_devices:
     classname: SynAxisEmptyHints
     is_movable: true
     module: ophyd.sim
+  motor_no_hints1:
+    classname: SynAxisNoHints
+    is_movable: true
+    module: ophyd.sim
+  motor_no_hints2:
+    classname: SynAxisNoHints
+    is_movable: true
+    module: ophyd.sim
   motor_no_pos:
     classname: SynAxisNoPosition
     is_movable: true

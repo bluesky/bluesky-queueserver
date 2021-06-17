@@ -24,6 +24,7 @@ _parameter_annotation_schema = {
                     "enums": {
                         "$ref": "#/definitions/custom_types",
                     },
+                    "default": {"type": "string"},
                 },
             },
         },

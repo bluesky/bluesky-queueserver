@@ -2683,9 +2683,9 @@ def test_validate_plan_3(plan, allowed_devices, success, errmsg):
     (_f5, [1], {"c": 3}, {"a": 1, "c": 3}, True, Exception, ""),
 ])
 # fmt: on
-def test_bind_plan_parameters_1(func, plan_args, plan_kwargs, plan_bound_params, except_type, success, errmsg):
+def test_bind_plan_arguments_1(func, plan_args, plan_kwargs, plan_bound_params, except_type, success, errmsg):
     """
-    Tests for ``bind_plan_parameters`` function.
+    Tests for ``bind_plan_arguments()`` function.
     """
     allowed_plans = {"existing": _process_plan(func)}
     if success:

@@ -1474,6 +1474,36 @@ _pf3e_processed = {
 }
 
 
+class _Pf3f_val1:
+    ...
+
+
+@parameter_annotation_decorator(
+    {
+        "parameters": {
+            "val1": {"default": "'device_name'"},  # Replace unsupported value
+        },
+    }
+)
+def _pf3f(val1=ophyd.Device(name="some_device")):  # Default value has unsupported type
+    # This test case would fail because the default value has type that is not supported.
+    #   Replacing the default value in the signature by a different value in the decorator
+    #   allows to use the plan without change.
+    yield from [val1]
+
+
+_pf3f_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "'device_name'",
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
 # fmt: off
 @pytest.mark.parametrize("plan_func, plan_info_expected", [
     (_pf3a, _pf3a_processed),
@@ -1481,6 +1511,7 @@ _pf3e_processed = {
     (_pf3c, _pf3c_processed),
     (_pf3d, _pf3d_processed),
     (_pf3e, _pf3e_processed),
+    (_pf3f, _pf3f_processed),
 ])
 # fmt: on
 def test_process_plan_3(plan_func, plan_info_expected):

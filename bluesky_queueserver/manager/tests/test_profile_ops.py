@@ -1437,12 +1437,50 @@ _pf3d_processed = {
 }
 
 
+@parameter_annotation_decorator(
+    {
+        "parameters": {
+            "val1": {"default": "1000"},
+            "val2": {"default": "'replacement_str'"},
+            "val3": {"default": "False"},
+        },
+    }
+)
+def _pf3e(val1, val2: str = "some_str", val3: typing.Any = None):
+    yield from [val1, val2, val3]
+
+
+_pf3e_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "1000",
+        },
+        {
+            "name": "val2",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "str"},
+            "default": "'replacement_str'",
+        },
+        {
+            "name": "val3",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "default": "False",
+            "annotation": {"type": "typing.Any"},
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
 # fmt: off
 @pytest.mark.parametrize("plan_func, plan_info_expected", [
     (_pf3a, _pf3a_processed),
     (_pf3b, _pf3b_processed),
     (_pf3c, _pf3c_processed),
     (_pf3d, _pf3d_processed),
+    (_pf3e, _pf3e_processed),
 ])
 # fmt: on
 def test_process_plan_3(plan_func, plan_info_expected):
@@ -1487,10 +1525,22 @@ def _pf4b(val1, val2: str = "some_str", val3: None = None):
     yield from [val1, val2, val3]
 
 
+@parameter_annotation_decorator(
+    {
+        "parameters": {
+            "val2": {"default": "replacement_str"},  # String is not quoted
+        },
+    }
+)
+def _pf4c(val1, val2: str = "some_str", val3: typing.Any = None):
+    yield from [val1, val2, val3]
+
+
 # fmt: off
 @pytest.mark.parametrize("plan_func, err_msg", [
     (_pf4a_factory(), "unsupported default value type"),
     (_pf4b, "name 'Plans1' is not defined'"),
+    (_pf4c, "Failed to decode the default value 'replacement_str'"),
 ])
 # fmt: on
 def test_process_plan_4_fail(plan_func, err_msg):

@@ -1355,7 +1355,7 @@ def _process_plan(plan):
 
         return a_str
 
-    def process_default(value):
+    def convert_default_to_string(value):
         """
         Raise 'ValueError' if the string representation of the value can not be evaluated
         """
@@ -1363,6 +1363,8 @@ def _process_plan(plan):
         try:
             ast.literal_eval(s_value)
         except Exception:
+            # If default value can not be accepted, then the plan is considered invalid.
+            #    Processing should be interrupted.
             raise ValueError(
                 f"Default value ({s_value}) can not be evaluated with 'ast.literal_eval()': "
                 "unsupported default value type."
@@ -1418,10 +1420,11 @@ def _process_plan(plan):
             working_dict["kind"] = {"name": p.kind.name, "value": p.kind.value}
 
             # Parameter description (attempt to get it from the decorator, then from docstring)
-            desc, annotation = None, None
+            desc, annotation, default = None, None, None
             if use_custom and (p.name in param_annotation["parameters"]):
                 desc = param_annotation["parameters"][p.name].get("description", None)
                 annotation = assemble_custom_annotation(param_annotation["parameters"][p.name])
+                default = param_annotation["parameters"][p.name].get("default", None)
             if not desc and use_docstring and (p.name in doc_annotation["parameters"]):
                 desc = doc_annotation["parameters"][p.name].get("description", None)
             if not annotation and p.annotation is not inspect.Parameter.empty:
@@ -1429,25 +1432,23 @@ def _process_plan(plan):
                 if annotation:
                     # The case when annotation does exist (otherwise it is None)
                     annotation = {"type": annotation}
+            if not default and (p.default is not inspect.Parameter.empty):
+                try:
+                    default = convert_default_to_string(p.default)  # May raise an exception
+                except Exception as ex:
+                    raise ValueError(f"Parameter '{p.name}': {ex}")
 
             if desc:
                 working_dict["description"] = desc
-            if annotation:
-                # Verify that the type could be instantiated from the annotation. Use the same
-                #   function that is going to be used for instantiating types later.
-                #   Exception will be raised if type can not be instantiated.
-                _process_annotation(annotation)
 
+            if annotation:
+                # Verify that the encoded type could be decoded.
+                _process_annotation(annotation)  # May raises exception
                 working_dict["annotation"] = annotation
 
-            # Parameter default value (only from the function signature).
-            default = None
-            if p.default is not inspect.Parameter.empty:
-                try:
-                    default = process_default(p.default)  # May raise an exception
-                except Exception as ex:
-                    raise ValueError(f"Parameter '{p.name}': {ex}")
-            if default is not None:
+            if default:
+                # Verify that the encoded representation of the default can be decoded.
+                _process_default_value(default)  # May raises exception
                 working_dict["default"] = default
 
     except Exception as ex:

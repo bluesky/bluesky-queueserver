@@ -773,7 +773,7 @@ def _decode_parameter_types_and_defaults(param_list):
     return decoded_types_and_defaults
 
 
-def _construct_parameters(param_list, *, params_decoded=None):
+def construct_parameters(param_list, *, params_decoded=None):
     """
     Construct the list of ``inspect.Parameter`` parameters based on the parameter list.
 
@@ -918,7 +918,7 @@ def _validate_plan_parameters(param_list, call_args, call_kwargs):
     """
     try:
         # Reconstruct 'inspect.Parameter' parameters based on the parameter list
-        parameters = _construct_parameters(param_list)
+        parameters = construct_parameters(param_list)
 
         # Create signature based on the list of parameters
         sig = inspect.Signature(parameters)
@@ -1041,7 +1041,7 @@ def bind_plan_arguments(*, plan_args, plan_kwargs, plan_parameters):
         Arguments could not be bound to plan parameters (raised by ``inspect.Signature.bind``.
     """
     param_list = copy.deepcopy(plan_parameters["parameters"])
-    parameters = _construct_parameters(param_list)
+    parameters = construct_parameters(param_list)
     # Create signature based on the list of parameters
     sig = inspect.Signature(parameters)
     # Verify the list of parameters based on signature.

@@ -46,7 +46,7 @@ from bluesky_queueserver.manager.profile_ops import (
     _process_annotation,
     _decode_parameter_types_and_defaults,
     _process_default_value,
-    _construct_parameters,
+    construct_parameters,
 )
 
 
@@ -1864,7 +1864,7 @@ def test_decode_parameter_types_and_defaults_1(parameters, expected_types, compa
 
 
 # ---------------------------------------------------------------------------------
-#                                _construct_parameters
+#                                construct_parameters
 
 _cparam1 = [
     {
@@ -1904,31 +1904,31 @@ _cparam1 = [
 # fmt: on
 def test_construct_parameters_1(testmode, success, errmsg):
     """
-    Smoke test for ``_construct_parameters``. Tests that the function runs, but no detailed
+    Smoke test for ``construct_parameters``. Tests that the function runs, but no detailed
     validation of results.
     """
     param_list = _cparam1
     if testmode == "external_decode":
         # Decode types using separate call to the function
         param_inst = _decode_parameter_types_and_defaults(param_list)
-        parameters = _construct_parameters(param_list, params_decoded=param_inst)
+        parameters = construct_parameters(param_list, params_decoded=param_inst)
     elif testmode == "internal_decode":
         # Decode types internally
-        parameters = _construct_parameters(param_list)
+        parameters = construct_parameters(param_list)
     elif testmode == "name_missing":
         # Remove 'name' key
         param_inst = _decode_parameter_types_and_defaults(param_list)
         param_list2 = copy.deepcopy(param_list)
         del param_list2[0]["name"]
         with pytest.raises(ValueError, match=errmsg):
-            _construct_parameters(param_list2, params_decoded=param_inst)
+            construct_parameters(param_list2, params_decoded=param_inst)
     elif testmode == "kind_missing":
         # Remove 'kind' key
         param_inst = _decode_parameter_types_and_defaults(param_list)
         param_list2 = copy.deepcopy(param_list)
         del param_list2[0]["kind"]
         with pytest.raises(ValueError, match=errmsg):
-            _construct_parameters(param_list2, params_decoded=param_inst)
+            construct_parameters(param_list2, params_decoded=param_inst)
     else:
         assert False, f"Unsupported mode {testmode}"
 

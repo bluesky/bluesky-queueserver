@@ -607,81 +607,6 @@ def _compare_in_out(kwargs_in, kwargs_out):
     return match, msg
 
 
-# def _process_custom_annotation(custom_annotation):
-#     """
-#     Process custom annotation if it exists (custom_annotation["annotation"]).
-#     If there is no annotation, then return None and empty list of temporary type objects.
-#     If it exists, then return reference to the annotation (type object) and the list
-#     temporary types that need to be deleted once the processing (parameter validation)
-#     is complete.
-#
-#     Parameters
-#     ----------
-#     custom_annotation: dict
-#         Dictionary that may contain custom annotation (key ``custom_annotation``).
-#
-#     Returns
-#     -------
-#     type, list
-#         Tuple (annotation type, list of temporary types).
-#     """
-#     created_type_list = []
-#     annotation = None
-#     try:
-#         if "annotation" in custom_annotation:
-#             # Read annotation (as a string)
-#             annotation_str = custom_annotation["annotation"]
-#
-#             # Create the dictionary of devices or plans
-#             devices = custom_annotation.get("devices", {})
-#             plans = custom_annotation.get("plans", {})
-#             items = devices.copy()
-#             items.update(plans)
-#
-#             if items:
-#                 # Create types
-#                 for item_name in items:
-#                     # The dictionary value for the devices/plans may be a list(tuple) of items
-#                     #   or None. If the value is None, then any device or plan will be accepted.
-#                     #   The list of device or plan names will be used to construct enum.Enum
-#                     #   type, which is used to verify if the name in args or kwargs matches
-#                     #   one of the arguments.
-#                     if items[item_name] is not None:
-#                         # Create temporary unique type name
-#                         while True:
-#                             type_name = f"_type__{random.randint(0, 100000)}_"
-#                             if type_name not in globals():
-#                                 break
-#
-#                         # Replace all occurrences of the type nae in the custom annotation.
-#                         annotation_str = annotation_str.replace(item_name, type_name)
-#
-#                         # Create temporary type as a subclass of enum.Enum, e.g.
-#                         # enum.Enum('Device', {'det1': 'det1', 'det2': 'det2', 'det3': 'det3'})
-#                         type_code = f"enum.Enum('{type_name}', {{"
-#                         for d in items[item_name]:
-#                             type_code += f"'{d}': '{d}',"
-#                         type_code += "})"
-#                         globals()[type_name] = eval(type_code)
-#                         created_type_list.append(type_name)
-#
-#                     else:
-#                         # Accept any device or plan: any string will be accepted without
-#                         #   verification.
-#                         annotation_str = annotation_str.replace(item_name, "str")
-#
-#             # Once all the types are created,  execute the code for annotation.
-#             annotation = eval(annotation_str)
-#
-#     except Exception:
-#         # In case of exception, delete all types that were already created
-#         for type_name in created_type_list:
-#             globals().pop(type_name)
-#         raise
-#
-#     return annotation, created_type_list
-
-
 def _process_annotation(encoded_annotation, *, ns=None):
     """
     Process annotation encoded the same way as in the descriptions of existing plans.
@@ -1122,44 +1047,6 @@ def bind_plan_arguments(*, plan_args, plan_kwargs, plan_parameters):
     # Verify the list of parameters based on signature.
     bound_args = sig.bind(*plan_args, **plan_kwargs)
     return bound_args
-
-
-# def bytes2hex(bytes_array):
-#     """
-#     Converts byte array (output of ``pickle.dumps()``) to spaced hexadecimal string representation.
-#
-#     Parameters
-#     ----------
-#     bytes_array: bytes
-#         Array of bytes to be converted.
-#
-#     Returns
-#     -------
-#     str
-#         Hexadecimal representation of the byte array.
-#     """
-#     s_hex = bytes_array.hex()
-#     # Insert spaces between each hex number. It makes YAML file formatting better.
-#     return " ".join([s_hex[n : n + 2] for n in range(0, len(s_hex), 2)])  # noqa: E203
-#
-#
-# def hex2bytes(hex_str):
-#     """
-#     Converts spaced hexadecimal string (output of ``bytes2hex()``) function to an array of bytes.
-#
-#     Parameters
-#     ----------
-#     hex_str: str
-#         String of hexadecimal numbers separated by spaces.
-#
-#     Returns
-#     -------
-#     bytes
-#         Array of bytes (ready to be unpicked).
-#     """
-#     # Delete spaces from the string to prepare it for conversion.
-#     hex_str = hex_str.replace(" ", "")
-#     return bytes.fromhex(hex_str)
 
 
 def _parse_docstring(docstring):

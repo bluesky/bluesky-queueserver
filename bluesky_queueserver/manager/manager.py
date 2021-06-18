@@ -871,6 +871,7 @@ class RunEngineManager(Process):
             "success": success,
             "msg": msg,
             "plans_allowed": plans_allowed,
+            "plans_allowed_uid": self._allowed_plans_uid,
         }
 
     async def _devices_allowed_handler(self, request):
@@ -898,6 +899,7 @@ class RunEngineManager(Process):
             "success": success,
             "msg": msg,
             "devices_allowed": devices_allowed,
+            "devices_allowed_uid": self._allowed_devices_uid,
         }
 
     async def _permissions_reload_handler(self, request):

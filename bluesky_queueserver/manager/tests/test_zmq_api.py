@@ -1934,17 +1934,35 @@ def test_permission_reload_1(re_manager, tmp_path):  # noqa: F811
     status, _ = zmq_single_request("status")
     plans_allowed_uid = status["plans_allowed_uid"]
     devices_allowed_uid = status["devices_allowed_uid"]
+    assert plans_allowed_uid != devices_allowed_uid
+
+    resp1a, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
+    assert resp1a["success"] is True, f"resp={resp1a}"
+    assert resp1a["plans_allowed_uid"] == plans_allowed_uid
+
+    resp1b, _ = zmq_single_request("devices_allowed", params={"user_group": _user_group})
+    assert resp1b["success"] is True, f"resp={resp1b}"
+    assert resp1b["devices_allowed_uid"] == devices_allowed_uid
 
     assert isinstance(plans_allowed_uid, str)
     assert isinstance(devices_allowed_uid, str)
 
-    resp1, _ = zmq_single_request("permissions_reload")
-    assert resp1["success"] is True, f"resp={resp1}"
+    resp2, _ = zmq_single_request("permissions_reload")
+    assert resp2["success"] is True, f"resp={resp2}"
 
     # Check that 'plans_allowed_uid' and 'devices_allowed_uid' changed while permissions were reloaded
     status, _ = zmq_single_request("status")
     plans_allowed_uid2 = status["plans_allowed_uid"]
     devices_allowed_uid2 = status["devices_allowed_uid"]
+    assert plans_allowed_uid2 != devices_allowed_uid2
+
+    resp3a, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
+    assert resp3a["success"] is True, f"resp={resp3a}"
+    assert resp3a["plans_allowed_uid"] == plans_allowed_uid2
+
+    resp3b, _ = zmq_single_request("devices_allowed", params={"user_group": _user_group})
+    assert resp3b["success"] is True, f"resp={resp3b}"
+    assert resp3b["devices_allowed_uid"] == devices_allowed_uid2
 
     assert isinstance(plans_allowed_uid2, str)
     assert isinstance(devices_allowed_uid2, str)

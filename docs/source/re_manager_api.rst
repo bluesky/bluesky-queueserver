@@ -180,6 +180,16 @@ Returns       **msg**: *str*
                  plan history UID, which is updated each time the contents of the history is changed.
                  Monitor this parameter to determine when the history data should be downloaded.
 
+              **plans_allowed_uid**: *str*
+                 UID for the list of allowed plans. Updated each time the list of allowed plans
+                 is changed. Monitor this parameter to determine when the list of allowed plans
+                 should be downloaded from the server.
+
+              **devices_allowed_uid**: *str*
+                 UID for the list of allowed devices. Updated each time the list of allowed devices
+                 is changed. Monitor this parameter to determine when the list of allowed devices
+                 should be downloaded from the server.
+
               **manager_state**: *str*
                   state of RE Manager. Supported states:
 
@@ -236,7 +246,8 @@ Execution     Immediate: no follow-up requests are required.
 Method        **'plans_allowed'**
 ------------  -----------------------------------------------------------------------------------------
 Description   Returns a dictionary that contains information on the allowed plans for a given user
-              group.
+              group. Monitor *'plans_allowed_uid'* status field and download the list from the
+              server only when the UID is changed.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **user_group**: *str*
                   the name of the user group (e.g. 'admin').
@@ -250,6 +261,9 @@ Returns       **success**: *boolean*
               **plans_allowed**: *dict*
                   the dictionary that contains information on the allowed plans.
                   Dictionary keys are plan names.
+
+              **plans_allowed_uid**: *str*
+                  UID of the list of allowed plans
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
@@ -264,7 +278,8 @@ Execution     Immediate: no follow-up requests are required.
 Method        **'devices_allowed'**
 ------------  -----------------------------------------------------------------------------------------
 Description   Returns a dictionary that contains information on the allowed devices for a given user
-              group.
+              group. Monitor *'devices_allowed_uid'* status field and download the list from the
+              server only when the UID is changed.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **user_group**: *str*
                   the name of the user group (e.g. 'admin').
@@ -278,6 +293,9 @@ Returns       **success**: *boolean*
               **devices_allowed**: *dict*
                   the dictionary that contains information on the allowed devices.
                   Dictionary keys are device names.
+
+              **devices_allowed_uid**: *str*
+                  UID of the list of allowed devices
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================

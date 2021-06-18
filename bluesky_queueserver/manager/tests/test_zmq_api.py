@@ -1926,31 +1926,31 @@ def test_zmq_api_environment_destroy(re_manager):  # noqa: F811
 def test_permission_reload_1(re_manager, tmp_path):  # noqa: F811
     """
     Check that calling the 'permissions_reload' method changes the values of
-    ``allowed_plans_uid`` and ``allowed_devices_uid``. The test doesn't check
+    ``plans_allowed_uid`` and ``devices_allowed_uid``. The test doesn't check
     that the new lists are loaded. This is checked elsewhere.
     """
 
     # 'allowed_plans_uid' and 'allowed_devices_uid'
     status, _ = zmq_single_request("status")
-    allowed_plans_uid = status["allowed_plans_uid"]
-    allowed_devices_uid = status["allowed_devices_uid"]
+    plans_allowed_uid = status["plans_allowed_uid"]
+    devices_allowed_uid = status["devices_allowed_uid"]
 
-    assert isinstance(allowed_plans_uid, str)
-    assert isinstance(allowed_devices_uid, str)
+    assert isinstance(plans_allowed_uid, str)
+    assert isinstance(devices_allowed_uid, str)
 
     resp1, _ = zmq_single_request("permissions_reload")
     assert resp1["success"] is True, f"resp={resp1}"
 
-    # Check that 'allowed_plans_uid' and 'allowed_devices_uid' changed while permissions were reloaded
+    # Check that 'plans_allowed_uid' and 'devices_allowed_uid' changed while permissions were reloaded
     status, _ = zmq_single_request("status")
-    allowed_plans_uid2 = status["allowed_plans_uid"]
-    allowed_devices_uid2 = status["allowed_devices_uid"]
+    plans_allowed_uid2 = status["plans_allowed_uid"]
+    devices_allowed_uid2 = status["devices_allowed_uid"]
 
-    assert isinstance(allowed_plans_uid2, str)
-    assert isinstance(allowed_devices_uid2, str)
+    assert isinstance(plans_allowed_uid2, str)
+    assert isinstance(devices_allowed_uid2, str)
 
-    assert allowed_plans_uid2 != allowed_plans_uid
-    assert allowed_devices_uid2 != allowed_devices_uid
+    assert plans_allowed_uid2 != plans_allowed_uid
+    assert devices_allowed_uid2 != devices_allowed_uid
 
 
 # =======================================================================================
@@ -2010,18 +2010,18 @@ def test_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_restart):  # 
     # Generate the new list of allowed plans and devices and reload them
     gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, overwrite=True)
 
-    # 'allowed_plans_uid' and 'allowed_devices_uid'
+    # 'plans_allowed_uid' and 'devices_allowed_uid'
     status, _ = zmq_single_request("status")
-    allowed_plans_uid = status["allowed_plans_uid"]
-    allowed_devices_uid = status["allowed_devices_uid"]
+    plans_allowed_uid = status["plans_allowed_uid"]
+    devices_allowed_uid = status["devices_allowed_uid"]
 
     resp1, _ = zmq_single_request("permissions_reload")
     assert resp1["success"] is True, f"resp={resp1}"
 
-    # Check that 'allowed_plans_uid' and 'allowed_devices_uid' changed while permissions were reloaded
+    # Check that 'plans_allowed_uid' and 'devices_allowed_uid' changed while permissions were reloaded
     status, _ = zmq_single_request("status")
-    assert status["allowed_plans_uid"] != allowed_plans_uid
-    assert status["allowed_devices_uid"] != allowed_devices_uid
+    assert status["plans_allowed_uid"] != plans_allowed_uid
+    assert status["devices_allowed_uid"] != devices_allowed_uid
 
     # Add plan to the queue
     params = {

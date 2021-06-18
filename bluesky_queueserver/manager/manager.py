@@ -818,8 +818,8 @@ class RunEngineManager(Process):
         run_list_uid = self._re_run_list_uid
         plan_queue_uid = self._plan_queue.plan_queue_uid
         plan_history_uid = self._plan_queue.plan_history_uid
-        allowed_devices_uid = self._allowed_devices_uid
-        allowed_plans_uid = self._allowed_plans_uid
+        devices_allowed_uid = self._allowed_devices_uid
+        plans_allowed_uid = self._allowed_plans_uid
         plan_queue_mode = self._plan_queue.plan_queue_mode
         # worker_state_info = self._worker_state_info
 
@@ -839,8 +839,8 @@ class RunEngineManager(Process):
             "run_list_uid": run_list_uid,
             "plan_queue_uid": plan_queue_uid,
             "plan_history_uid": plan_history_uid,
-            "allowed_devices_uid": allowed_devices_uid,
-            "allowed_plans_uid": allowed_plans_uid,
+            "devices_allowed_uid": devices_allowed_uid,
+            "plans_allowed_uid": plans_allowed_uid,
             "plan_queue_mode": plan_queue_mode,
             # "worker_state_info": worker_state_info
         }

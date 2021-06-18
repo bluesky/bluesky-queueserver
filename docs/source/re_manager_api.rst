@@ -181,14 +181,12 @@ Returns       **msg**: *str*
                  Monitor this parameter to determine when the history data should be downloaded.
 
               **plans_allowed_uid**: *str*
-                 UID for the list of allowed plans. Updated each time the list of allowed plans
-                 is changed. Monitor this parameter to determine when the list of allowed plans
-                 should be downloaded from the server.
+                 UID for the list of allowed plans. UID is updated each time the contents of
+                 the list is changed. Monitor the UID to detect changes in the list of allowed
+                 plans and download the list from the server only when it is updated.
 
               **devices_allowed_uid**: *str*
-                 UID for the list of allowed devices. Updated each time the list of allowed devices
-                 is changed. Monitor this parameter to determine when the list of allowed devices
-                 should be downloaded from the server.
+                 UID for the list of allowed devices. Similar to **plans_allowed_uid**.
 
               **manager_state**: *str*
                   state of RE Manager. Supported states:

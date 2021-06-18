@@ -2340,14 +2340,14 @@ def test_select_allowed_items(item_dict, allow_patterns, disallow_patterns, resu
 
 
 # fmt: off
-@pytest.mark.parametrize("fln_existing_items, fln_user_groups, empty_dict, all_users", [
+@pytest.mark.parametrize("fln_existing_items, fln_user_groups, empty_dicts, all_users", [
     ("existing_plans_and_devices.yaml", "user_group_permissions.yaml", False, True),
     ("existing_plans_and_devices.yaml", None, False, False),
     (None, "user_group_permissions.yaml", True, True),
     (None, None, True, False),
 ])
 # fmt: on
-def test_load_allowed_plans_and_devices_1(fln_existing_items, fln_user_groups, empty_dict, all_users):
+def test_load_allowed_plans_and_devices_1(fln_existing_items, fln_user_groups, empty_dicts, all_users):
     """
     Basic test for ``load_allowed_plans_and_devices``.
     """
@@ -2360,34 +2360,38 @@ def test_load_allowed_plans_and_devices_1(fln_existing_items, fln_user_groups, e
         path_existing_plans_and_devices=fln_existing_items, path_user_group_permissions=fln_user_groups
     )
 
-    if empty_dict:
-        assert allowed_plans == {}
-        assert allowed_devices == {}
-    else:
-        assert "root" in allowed_plans
-        assert "root" in allowed_devices
-        assert allowed_plans["root"]
-        assert allowed_devices["root"]
-
-        if all_users:
-            assert "admin" in allowed_plans
-            assert "admin" in allowed_devices
-            assert allowed_plans["admin"]
-            assert allowed_devices["admin"]
-            assert "test_user" in allowed_plans
-            assert "test_user" in allowed_devices
-            assert allowed_plans["test_user"]
-            assert allowed_devices["test_user"]
+    def check_dict(d):
+        if empty_dicts:
+            assert d == {}
         else:
-            assert "admin" not in allowed_plans
-            assert "admin" not in allowed_devices
-            assert "test_user" not in allowed_plans
-            assert "test_user" not in allowed_devices
+            assert isinstance(d, dict)
+            assert d
+
+    assert "root" in allowed_plans
+    assert "root" in allowed_devices
+    check_dict(allowed_plans["root"])
+    check_dict(allowed_devices["root"])
+
+    if all_users:
+        assert "admin" in allowed_plans
+        assert "admin" in allowed_devices
+        check_dict(allowed_plans["admin"])
+        check_dict(allowed_devices["admin"])
+        assert "test_user" in allowed_plans
+        assert "test_user" in allowed_devices
+        check_dict(allowed_plans["test_user"])
+        check_dict(allowed_devices["test_user"])
+    else:
+        assert "admin" not in allowed_plans
+        assert "admin" not in allowed_devices
+        assert "test_user" not in allowed_plans
+        assert "test_user" not in allowed_devices
 
 
 _patch_junk_plan_and_device = """
 
 from ophyd import Device
+from bluesky_queueserver.manager.annotation_decorator import parameter_annotation_decorator
 
 class JunkDevice(Device):
     ...
@@ -2395,6 +2399,24 @@ class JunkDevice(Device):
 junk_device = JunkDevice('ABC', name='stage')
 
 def junk_plan():
+    yield None
+
+
+@parameter_annotation_decorator({
+    "parameters":{
+        "device_param": {
+            "annotation": "Devices",
+            "devices": {"Devices": ("det1", "det2", "junk_device")
+            }
+        },
+        "plan_param": {
+            "annotation": "Plans",
+            "plans": {"Plans": ("count", "scan", "junk_plan")
+            }
+        }
+    }
+})
+def plan_check_filtering(device_param, plan_param):
     yield None
 
 """
@@ -2463,19 +2485,45 @@ _user_permissions_excluding_junk2 = """user_groups:
       - null  # Nothing is forbidden
 """
 
+# Restrictions only on 'admin'
+_user_permissions_excluding_junk3 = """user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - ".*"  # A different way to allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - ".*"  # A different way to allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - "^(?!.*junk)"  # Allow all plans that don't contain 'junk' in their names
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - "^(?!.*junk)"  # Allow all devices that don't contain 'junk' in their names
+    forbidden_devices:
+      - null  # Nothing is forbidden
+"""
+
 
 # fmt: off
-@pytest.mark.parametrize("permissions_str, items_are_removed", [
-    (_user_permissions_clear, False),
-    (_user_permissions_excluding_junk1, True),
-    (_user_permissions_excluding_junk2, True),
+@pytest.mark.parametrize("permissions_str, items_are_removed, only_admin", [
+    (_user_permissions_clear, False, False),
+    (_user_permissions_excluding_junk1, True, False),
+    (_user_permissions_excluding_junk2, True, False),
+    (_user_permissions_excluding_junk3, True, True),
 ])
 # fmt: on
-def test_load_allowed_plans_and_devices_2(tmp_path, permissions_str, items_are_removed):
+def test_load_allowed_plans_and_devices_2(tmp_path, permissions_str, items_are_removed, only_admin):
     """
     Tests if filtering settings for the "root" group are also applied to other groups.
     The purpose of the "root" group is to filter junk from the list of existing devices and
-    plans.
+    plans. Additionally check if the plans and devices were removed from the parameter
+    descriptions.
+
+    Parameter 'only_admin' - permissions are applied only to the 'admin' user
     """
     pc_path = copy_default_profile_collection(tmp_path)
     create_local_imports_dirs(pc_path)
@@ -2496,15 +2544,35 @@ def test_load_allowed_plans_and_devices_2(tmp_path, permissions_str, items_are_r
     )
 
     if items_are_removed:
-        assert "junk_device" not in allowed_devices["root"]
+        if only_admin:
+            assert "junk_device" in allowed_devices["root"]
+        else:
+            assert "junk_device" not in allowed_devices["root"]
         assert "junk_device" not in allowed_devices["admin"]
-        assert "junk_plan" not in allowed_plans["root"]
+        if only_admin:
+            assert "junk_plan" in allowed_plans["root"]
+        else:
+            assert "junk_plan" not in allowed_plans["root"]
         assert "junk_plan" not in allowed_plans["admin"]
     else:
         assert "junk_device" in allowed_devices["root"]
         assert "junk_device" in allowed_devices["admin"]
         assert "junk_plan" in allowed_plans["root"]
         assert "junk_plan" in allowed_plans["admin"]
+
+    # Make sure that the 'junk' devices are removed from the description of 'plan_check_filtering'
+    # for user in ("root", "admin"):
+    for user in ("admin",):
+        params = allowed_plans[user]["plan_check_filtering"]["parameters"]
+        devs = params[0]["annotation"]["devices"]["Devices"]
+        plans = params[1]["annotation"]["plans"]["Plans"]
+        test_case = f"only_admin = {only_admin} user = '{user}'"
+        if items_are_removed and not (only_admin and user == "root"):
+            assert devs == ("det1", "det2"), test_case
+            assert plans == ("count", "scan"), test_case
+        else:
+            assert devs == ("det1", "det2", "junk_device"), test_case
+            assert plans == ("count", "scan", "junk_plan"), test_case
 
 
 def _f1(a, b, c):

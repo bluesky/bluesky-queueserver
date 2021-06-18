@@ -942,6 +942,78 @@ def _validate_plan_parameters(param_list, call_args, call_kwargs):
     return bound_args.arguments
 
 
+def filter_plan_description(plan_description, *, allowed_plans, allowed_devices):
+    """
+    Filter plan description from the list of existing plans (modify parameters
+    ``plan["annotation"]["plans"]`` and ``plan["annotation"]["devices"]``)
+    to include only plans and devices from the lists of allowed plans and allowed devices
+    for the given group. Creates and returns a modified copy of the plan.
+
+    Parameters
+    ----------
+    plan_description: dict
+        The dictionary containing plan description from the list of existing plans
+    allowed_plans: dict or None
+        The dictionary with allowed plans: key - plan name. If None, then
+        all plans are allowed (may change in the future). If ``{}`` then no
+        plans are allowed.
+    allowed_devices: dict or None
+        The dictionary with allowed devices: key - device name. If None, then
+        all devices are allowed (may change in the future). If ``{}`` then no
+        devices are allowed.
+
+    Returns
+    -------
+    dict
+        The dictionary with modified plan description.
+    """
+    plan_description = copy.deepcopy(plan_description)
+
+    if "parameters" in plan_description:
+        param_list = plan_description["parameters"]
+
+        # Filter 'devices' and 'plans' entries of 'param_list'. Leave only plans that are
+        #   in 'allowed_plans' and devices that are in 'allowed_devices'
+        for p in param_list:
+            if "annotation" in p:
+                if (allowed_plans is not None) and ("plans" in p["annotation"]):
+                    p_plans = p["annotation"]["plans"]
+                    for p_type in p_plans:
+                        p_plans[p_type] = tuple(_ for _ in p_plans[p_type] if _ in allowed_plans)
+                if (allowed_devices is not None) and ("devices" in p["annotation"]):
+                    p_dev = p["annotation"]["devices"]
+                    for p_type in p_dev:
+                        p_dev[p_type] = tuple(_ for _ in p_dev[p_type] if _ in allowed_devices)
+    return plan_description
+
+
+def _filter_allowed_plans(*, allowed_plans, allowed_devices):
+    """
+    Apply ``filter_plan_description`` to each plan in the list of allowed plans so that
+    only the allowed plans and devices are left in the enums for ``plans`` and ``devices``.
+
+    Parameters
+    ----------
+    allowed_plans: dict or None
+        The dictionary with allowed plans: key - plan name. If None, then
+        all plans are allowed (may change in the future). If ``{}`` then no
+        plans are allowed.
+    allowed_devices: dict or None
+        The dictionary with allowed devices: key - device name. If None, then
+        all devices are allowed (may change in the future). If ``{}`` then no
+        devices are allowed.
+
+    Returns
+    -------
+    dict
+       The modified copy of ``allowed_plans``.
+    """
+    return {
+        k: filter_plan_description(v, allowed_plans=allowed_plans, allowed_devices=allowed_devices)
+        for k, v in allowed_plans.items()
+    }
+
+
 def validate_plan(plan, *, allowed_plans, allowed_devices):
     """
     Validate the dictionary of plan parameters. Expected to be called before the plan
@@ -978,19 +1050,13 @@ def validate_plan(plan, *, allowed_plans, allowed_devices):
                 msg = f"Plan '{plan['name']}' is not in the list of allowed plans."
                 raise Exception(msg)
 
-            param_list = copy.deepcopy(allowed_plans[plan_name]["parameters"])
-
-            # Filter 'devices' and 'plans' entries of 'param_list'. Leave only plans that are
-            #   in 'allowed_plans' and devices that are in 'allowed_devices'
-            for p in param_list:
-                if ("annotation" in p) and ("plans" in p["annotation"]):
-                    p_plans = p["annotation"]["plans"]
-                    for p_type in p_plans:
-                        p_plans[p_type] = tuple(_ for _ in p_plans[p_type] if _ in allowed_plans)
-                if (allowed_devices is not None) and ("annotation" in p) and ("devices" in p["annotation"]):
-                    p_dev = p["annotation"]["devices"]
-                    for p_type in p_dev:
-                        p_dev[p_type] = tuple(_ for _ in p_dev[p_type] if _ in allowed_devices)
+            plan_description = allowed_plans[plan_name]
+            # Plan description should contain only allowed plans and devices as parameters at
+            #   this point. But run the filtering again just in case.
+            plan_description = filter_plan_description(
+                plan_description, allowed_plans=allowed_plans, allowed_devices=allowed_devices
+            )
+            param_list = plan_description["parameters"]
 
             call_args = plan.get("args", {})
             call_kwargs = plan.get("kwargs", {})
@@ -1725,8 +1791,9 @@ def load_allowed_plans_and_devices(path_existing_plans_and_devices=None, path_us
     ----------
     path_existing_plans_and_devices: str or None
         Full path to YAML file, which contains dictionaries of existing plans and devices.
-        Raises an exception if the file does not exist. If None, then the empty dictionaries
-        for the allowed plans and devices are returned.
+        Raises an exception if the file does not exist. If ``None`` or the file contains
+        no plans and/or devices, then empty dictionaries of the allowed plans and devices
+        are returned for all groups.
     path_user_group_permissions: str or None
         Full path to YAML file, which contains information on user group permissions.
         Exception is raised if the file does not exist. If None, then the output
@@ -1746,7 +1813,13 @@ def load_allowed_plans_and_devices(path_existing_plans_and_devices=None, path_us
 
     allowed_plans, allowed_devices = {}, {}
 
-    if user_group_permissions:
+    if path_user_group_permissions is not None:
+
+        # If the file was loaded, but it contains no valid user groups, then the exception
+        #   should be raised. Incorrect file path could be specified.
+        if not user_group_permissions:
+            raise RuntimeError(f"The file '{path_user_group_permissions}' contains no user group information")
+
         user_groups = list(user_group_permissions["user_groups"].keys())
 
         # First filter the plans and devices based on the permissions for 'root' user group.
@@ -1756,39 +1829,47 @@ def load_allowed_plans_and_devices(path_existing_plans_and_devices=None, path_us
         plans_root, devices_root = existing_plans, existing_devices
         if "root" in user_groups:
             group_permissions_root = user_group_permissions["user_groups"]["root"]
-            if existing_plans:
-                plans_root = _select_allowed_items(
-                    existing_plans,
-                    group_permissions_root["allowed_plans"],
-                    group_permissions_root["forbidden_plans"],
-                )
             if existing_devices:
                 devices_root = _select_allowed_items(
                     existing_devices,
                     group_permissions_root["allowed_devices"],
                     group_permissions_root["forbidden_devices"],
                 )
+            if existing_plans:
+                plans_root = _select_allowed_items(
+                    existing_plans,
+                    group_permissions_root["allowed_plans"],
+                    group_permissions_root["forbidden_plans"],
+                )
 
         # Now create lists of allowed devices and plans based on the lists for the 'root' user group
         for group in user_groups:
-            group_permissions = user_group_permissions["user_groups"][group]
+            selected_devices, selected_plans = {}, {}
+            if group == "root":
+                selected_devices = devices_root
+                selected_plans = plans_root
+            else:
+                group_permissions = user_group_permissions["user_groups"][group]
 
-            if existing_plans:
-                selected_plans = _select_allowed_items(
-                    plans_root, group_permissions["allowed_plans"], group_permissions["forbidden_plans"]
-                )
-                allowed_plans[group] = selected_plans
+                if existing_devices:
+                    selected_devices = _select_allowed_items(
+                        devices_root, group_permissions["allowed_devices"], group_permissions["forbidden_devices"]
+                    )
 
-            if existing_devices:
-                selected_devices = _select_allowed_items(
-                    devices_root, group_permissions["allowed_devices"], group_permissions["forbidden_devices"]
-                )
-                allowed_devices[group] = selected_devices
+                if existing_plans:
+                    selected_plans = _select_allowed_items(
+                        plans_root, group_permissions["allowed_plans"], group_permissions["forbidden_plans"]
+                    )
 
-    if not allowed_plans and existing_plans:
+            selected_plans = _filter_allowed_plans(allowed_plans=selected_plans, allowed_devices=selected_devices)
+
+            allowed_devices[group] = selected_devices
+            allowed_plans[group] = selected_plans
+
+    else:
+
+        # No user groups are specified
         allowed_plans["root"] = existing_plans
-
-    if not allowed_devices and existing_devices:
         allowed_devices["root"] = existing_devices
 
     return allowed_plans, allowed_devices

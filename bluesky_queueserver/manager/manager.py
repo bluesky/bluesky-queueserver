@@ -16,7 +16,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def _generate_run_list_uid():
+def _generate_uid():
     """
     Generate a new Run List UID.
 
@@ -78,7 +78,7 @@ class RunEngineManager(Process):
         self._worker_state_info = None  # Copy of the last downloaded state of RE Worker
 
         self._re_run_list = []
-        self._re_run_list_uid = _generate_run_list_uid()
+        self._re_run_list_uid = _generate_uid()
 
         self._loop = None
 
@@ -124,6 +124,8 @@ class RunEngineManager(Process):
         #   this variable may lead to unpredictable and hard to debug issues.
         self._config_dict = config or {}
         self._allowed_plans, self._allowed_devices = {}, {}
+        self._allowed_plans_uid = _generate_uid()
+        self._allowed_devices_uid = _generate_uid()
 
     async def _heartbeat_generator(self):
         """
@@ -451,7 +453,7 @@ class RunEngineManager(Process):
             logger.error(f"Failed to download plan report: {err_msg}.")
         else:
             self._re_run_list = run_list["run_list"]
-            self._re_run_list_uid = _generate_run_list_uid()
+            self._re_run_list_uid = _generate_uid()
 
     async def _start_plan(self):
         """
@@ -626,6 +628,8 @@ class RunEngineManager(Process):
             self._allowed_plans, self._allowed_devices = load_allowed_plans_and_devices(
                 path_existing_plans_and_devices=path_pd, path_user_group_permissions=path_ug
             )
+            self._allowed_plans_uid = _generate_uid()
+            self._allowed_devices_uid = _generate_uid()
         except Exception as ex:
             raise Exception(
                 f"Error occurred while loading lists of allowed plans and devices from '{path_pd}': {str(ex)}"
@@ -814,6 +818,8 @@ class RunEngineManager(Process):
         run_list_uid = self._re_run_list_uid
         plan_queue_uid = self._plan_queue.plan_queue_uid
         plan_history_uid = self._plan_queue.plan_history_uid
+        allowed_devices_uid = self._allowed_devices_uid
+        allowed_plans_uid = self._allowed_plans_uid
         plan_queue_mode = self._plan_queue.plan_queue_mode
         # worker_state_info = self._worker_state_info
 
@@ -833,6 +839,8 @@ class RunEngineManager(Process):
             "run_list_uid": run_list_uid,
             "plan_queue_uid": plan_queue_uid,
             "plan_history_uid": plan_history_uid,
+            "allowed_devices_uid": allowed_devices_uid,
+            "allowed_plans_uid": allowed_plans_uid,
             "plan_queue_mode": plan_queue_mode,
             # "worker_state_info": worker_state_info
         }
@@ -1725,7 +1733,7 @@ class RunEngineManager(Process):
             # Attempt to load the list of active runs.
             re_run_list, _ = await self._worker_request_run_list()
             self._re_run_list = re_run_list["run_list"] if re_run_list else []
-            self._re_run_list_uid = _generate_run_list_uid()
+            self._re_run_list_uid = _generate_uid()
 
             self._worker_state_info, err_msg = await self._worker_request_state()
             if self._worker_state_info:

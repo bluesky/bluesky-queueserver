@@ -1008,7 +1008,7 @@ def test_process_plan_1(plan_func, plan_info_expected):
     plan_info_expected = plan_info_expected.copy()
     plan_info_expected["name"] = plan_func.__name__
     plan_info_expected["module"] = plan_func.__module__
-    pf_info = _process_plan(plan_func)
+    pf_info = _process_plan(plan_func, existing_devices={})
 
     assert pf_info == plan_info_expected
 
@@ -1225,7 +1225,7 @@ def test_process_plan_2(plan_func, plan_info_expected):
     plan_info_expected["name"] = plan_func.__name__
     plan_info_expected["module"] = plan_func.__module__
 
-    pf_info = _process_plan(plan_func)
+    pf_info = _process_plan(plan_func, existing_devices={})
 
     assert pf_info == plan_info_expected, pprint.pformat(pf_info)
 
@@ -1524,7 +1524,7 @@ def test_process_plan_3(plan_func, plan_info_expected):
     plan_info_expected["name"] = plan_func.__name__
     plan_info_expected["module"] = plan_func.__module__
 
-    pf_info = _process_plan(plan_func)
+    pf_info = _process_plan(plan_func, existing_devices={})
 
     assert pf_info == plan_info_expected, pprint.pformat(pf_info)
 
@@ -1581,7 +1581,7 @@ def test_process_plan_4_fail(plan_func, err_msg):
     Failing cases for 'process_plan' function. Some plans are expected to be rejected.
     """
     with pytest.raises(ValueError, match=err_msg):
-        _process_plan(plan_func)
+        _process_plan(plan_func, existing_devices={})
 
 
 # ---------------------------------------------------------------------------------
@@ -2138,11 +2138,11 @@ def test_verify_default_profile_collection():
     pc_path = get_default_startup_dir()
     nspace = load_profile_collection(pc_path)
 
-    plans = plans_from_nspace(nspace)
-    plans = _prepare_plans(plans)
-
     devices = devices_from_nspace(nspace)
     devices = _prepare_devices(devices)
+
+    plans = plans_from_nspace(nspace)
+    plans = _prepare_plans(plans, existing_devices=devices)
 
     # Read the list of the existing plans of devices
     file_path = os.path.join(pc_path, "existing_plans_and_devices.yaml")
@@ -2647,7 +2647,7 @@ def test_validate_plan_1(func, plan, success, errmsg):
     """
     Tests for the plan validation algorithm.
     """
-    allowed_plans = {"existing": _process_plan(func)}
+    allowed_plans = {"existing": _process_plan(func, existing_devices={})}
     success_out, errmsg_out = validate_plan(plan, allowed_plans=allowed_plans, allowed_devices=None)
 
     assert success_out == success, f"errmsg: {errmsg_out}"
@@ -2782,7 +2782,7 @@ def test_validate_plan_3(plan, allowed_devices, success, errmsg):
     """
     plan["name"] = "_some_strange_plan"
     allowed_plans = {
-        "_some_strange_plan": _process_plan(_some_strange_plan),
+        "_some_strange_plan": _process_plan(_some_strange_plan, existing_devices={}),
         "p1": {},  # The plan is used only as a parameter value
         "p2": {},  # The plan is used only as a parameter value
     }
@@ -2838,7 +2838,7 @@ def test_bind_plan_arguments_1(func, plan_args, plan_kwargs, plan_bound_params, 
     """
     Tests for ``bind_plan_arguments()`` function.
     """
-    allowed_plans = {"existing": _process_plan(func)}
+    allowed_plans = {"existing": _process_plan(func, existing_devices={})}
     if success:
         plan_parameters_copy = copy.deepcopy(allowed_plans["existing"])
 

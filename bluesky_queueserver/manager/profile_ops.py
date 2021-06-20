@@ -1214,7 +1214,7 @@ def _parse_docstring(docstring):
     return doc_annotation
 
 
-def _process_plan(plan):
+def _process_plan(plan, *, existing_devices):
     """
     Returns parameters of a plan. The function accepts callable object that implements the plan
     and returns the dictionary with descriptions of the plan and plan parameters. The function
@@ -1279,6 +1279,11 @@ def _process_plan(plan):
     -------
     dict
         Dictionary with plan parameters.
+    existing_devices : dict
+        Prepared dictionary of existing devices (returned by the function ``_prepare_devices``.
+        The dictionary is used to create lists of devices for built-in custom types
+        ``AllDetectors``, ``AllMotors``, ``AllFlyers``. If it is known that built-in plans
+        are not used, then empty dictionary can be passed instead of the list of existing devices.
 
     Raises
     ------
@@ -1326,7 +1331,7 @@ def _process_plan(plan):
             )
         return s_value
 
-    def assemble_custom_annotation(parameter):
+    def assemble_custom_annotation(parameter, *, existing_devices):
         """
         Assemble annotation from decorator parameters. It will be stored as a separate dictionary.
         Returns ``None`` if there is no annotation.
@@ -1340,6 +1345,43 @@ def _process_plan(plan):
         for k in keys:
             if k in parameter:
                 annotation[k] = copy.copy(parameter[k])
+
+        # Add lists of device names for built-in types
+        built_in_types = ("AllDetectors", "AllMotors", "AllFlyers")
+        for btype in built_in_types:
+            type_found = False
+            nvchars = "[^_A-Za-z0-9]"
+            for start, end in (("^", "$"), ("^", nvchars), (nvchars, "$"), (nvchars, nvchars)):
+                pattern = f"{start}{btype}{end}"
+                if re.search(pattern, annotation["type"]):
+                    type_found = True
+                    break
+
+            if type_found:
+                if "devices" not in annotation:
+                    annotation["devices"] = {}
+                # If annotation already contains type definition for 'built-in' type
+                #   then no name list is created.
+                if btype not in annotation["devices"]:
+                    if btype == "AllDetectors":
+
+                        def condition(_btype):
+                            return _btype["is_readable"]
+
+                    elif btype == "AllMotors":
+
+                        def condition(_btype):
+                            return _btype["is_readable"] and _btype["is_movable"]
+
+                    elif btype == "AllFlyers":
+
+                        def condition(_btype):
+                            return _btype["is_flyable"]
+
+                    else:
+                        raise RuntimeError(f"Error in processing algorithm: unsupported built-in type '{btype}'")
+                    device_names = [_["name"] for _ in existing_devices if condition(_)]
+                    annotation["devices"][btype] = device_names
 
         return annotation
 
@@ -1382,7 +1424,9 @@ def _process_plan(plan):
             desc, annotation, default = None, None, None
             if use_custom and (p.name in param_annotation["parameters"]):
                 desc = param_annotation["parameters"][p.name].get("description", None)
-                annotation = assemble_custom_annotation(param_annotation["parameters"][p.name])
+                annotation = assemble_custom_annotation(
+                    param_annotation["parameters"][p.name], existing_devices=existing_devices
+                )
                 default = param_annotation["parameters"][p.name].get("default", None)
             if not desc and use_docstring and (p.name in doc_annotation["parameters"]):
                 desc = doc_annotation["parameters"][p.name].get("description", None)
@@ -1416,11 +1460,23 @@ def _process_plan(plan):
     return ret
 
 
-def _prepare_plans(plans):
+def _prepare_plans(plans, *, existing_devices):
     """
     Prepare dictionary of existing plans for saving to YAML file.
+
+    Parameters
+    ----------
+    plans : dict
+        Dictionary of plans extracted from the workspace
+    existing_devices : dict
+        Prepared dictionary of existing devices (returned by the function ``_prepare_devices``.
+
+    Returns
+    -------
+    dict
+        Dictionary that maps plan names to plan descriptions
     """
-    return {k: _process_plan(v) for k, v in plans.items()}
+    return {k: _process_plan(v, existing_devices=existing_devices) for k, v in plans.items()}
 
 
 def _prepare_devices(devices):
@@ -1506,9 +1562,12 @@ def gen_list_of_plans_and_devices(
         plans = plans_from_nspace(nspace)
         devices = devices_from_nspace(nspace)
 
+        existing_devices = _prepare_devices(devices)
+        existing_plans = _prepare_plans(plans, existing_devices=existing_devices)
+
         existing_plans_and_devices = {
-            "existing_plans": _prepare_plans(plans),
-            "existing_devices": _prepare_devices(devices),
+            "existing_plans": existing_plans,
+            "existing_devices": existing_devices,
         }
 
         file_path = os.path.join(file_dir, file_name)

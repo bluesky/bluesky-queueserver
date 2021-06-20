@@ -1007,7 +1007,7 @@ def test_process_plan_1(plan_func, plan_info_expected):
 
     plan_info_expected = plan_info_expected.copy()
     plan_info_expected["name"] = plan_func.__name__
-
+    plan_info_expected["module"] = plan_func.__module__
     pf_info = _process_plan(plan_func)
 
     assert pf_info == plan_info_expected
@@ -1223,6 +1223,7 @@ def test_process_plan_2(plan_func, plan_info_expected):
 
     plan_info_expected = plan_info_expected.copy()
     plan_info_expected["name"] = plan_func.__name__
+    plan_info_expected["module"] = plan_func.__module__
 
     pf_info = _process_plan(plan_func)
 
@@ -1521,6 +1522,7 @@ def test_process_plan_3(plan_func, plan_info_expected):
 
     plan_info_expected = plan_info_expected.copy()
     plan_info_expected["name"] = plan_func.__name__
+    plan_info_expected["module"] = plan_func.__module__
 
     pf_info = _process_plan(plan_func)
 

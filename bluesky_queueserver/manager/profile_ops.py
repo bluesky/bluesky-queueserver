@@ -440,6 +440,7 @@ def devices_from_nspace(nspace):
     dict(str: callable)
         Dictionary that maps device names to device objects.
     """
+
     try:
         from bluesky import protocols
     except ImportError:
@@ -1238,6 +1239,7 @@ def _process_plan(plan):
 
         {
             "name": <plan name>  # REQUIRED
+            "module": <module name>  # whenever available
             "description": <plan description (multiline text)>
             "properties": {  # REQUIRED, may be empty
                 "is_generator": <boolean that indicates if this is a generator function>
@@ -1349,6 +1351,10 @@ def _process_plan(plan):
 
     ret = {"name": plan.__name__, "properties": {}, "parameters": []}
 
+    module_name = plan.__module__
+    if module_name != "<run_path>":
+        ret.update({"module": module_name})
+
     try:
 
         # Properties
@@ -1421,11 +1427,16 @@ def _prepare_devices(devices):
     """
     Prepare dictionary of existing devices for saving to YAML file.
     """
-    from bluesky.utils import is_movable
+    try:
+        from bluesky import protocols
+    except ImportError:
+        import bluesky_queueserver.manager._protocols as protocols
 
     return {
         k: {
-            "is_movable": is_movable(v),  # True - motor, False - detector
+            "is_readable": isinstance(v, protocols.Readable),
+            "is_movable": isinstance(v, protocols.Movable),
+            "is_flyable": isinstance(v, protocols.Flyable),
             "classname": type(v).__name__,
             "module": type(v).__module__,
         }

@@ -1505,26 +1505,165 @@ _pf3f_processed = {
 }
 
 
+@parameter_annotation_decorator(
+    {
+        "parameters": {"val1": {"annotation": "AllDetectors"}},
+    }
+)
+def _pf3g(val1):
+    yield from [val1]
+
+
+_pf3g_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "AllDetectors", "devices": {"AllDetectors": ["dev_det1", "dev_det2"]}},
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+_pf3g_empty_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "AllDetectors", "devices": {"AllDetectors": []}},
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+@parameter_annotation_decorator(
+    {
+        "parameters": {
+            "val1": {
+                "annotation": "AllDetectors",
+                # Type 'AllDetectors' is explicitly defined, so it is not treated as default
+                "devices": {"AllDetectors": ["dev1", "dev2", "dev3"]},
+            }
+        },
+    }
+)
+def _pf3h(val1):
+    yield from [val1]
+
+
+_pf3h_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "AllDetectors", "devices": {"AllDetectors": ["dev1", "dev2", "dev3"]}},
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+@parameter_annotation_decorator(
+    {
+        "parameters": {"val1": {"annotation": "typing.List[AllMotors]"}},
+    }
+)
+def _pf3i(val1):
+    yield from [val1]
+
+
+_pf3i_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "typing.List[AllMotors]", "devices": {"AllMotors": ["dev_m1"]}},
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+@parameter_annotation_decorator(
+    {
+        "parameters": {"val1": {"annotation": "typing.List[AllFlyers]"}},
+    }
+)
+def _pf3j(val1):
+    yield from [val1]
+
+
+_pf3j_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "typing.List[AllFlyers]", "devices": {"AllFlyers": ["dev_fly1"]}},
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+@parameter_annotation_decorator(
+    {
+        "parameters": {"val1": {"annotation": "typing.Union[AllMotors, AllFlyers]"}},
+    }
+)
+def _pf3k(val1):
+    yield from [val1]
+
+
+_pf3k_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "typing.Union[AllMotors, AllFlyers]",
+                "devices": {"AllMotors": ["dev_m1"], "AllFlyers": ["dev_fly1"]},
+            },
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+_pf3_existing_devices = {
+    "dev_det1": {"is_readable": True, "is_movable": False, "is_flyable": False},
+    "dev_det2": {"is_readable": True, "is_movable": False, "is_flyable": False},
+    "dev_m1": {"is_readable": True, "is_movable": True, "is_flyable": False},
+    "dev_fly1": {"is_readable": False, "is_movable": False, "is_flyable": True},
+}
+
+
 # fmt: off
-@pytest.mark.parametrize("plan_func, plan_info_expected", [
-    (_pf3a, _pf3a_processed),
-    (_pf3b, _pf3b_processed),
-    (_pf3c, _pf3c_processed),
-    (_pf3d, _pf3d_processed),
-    (_pf3e, _pf3e_processed),
-    (_pf3f, _pf3f_processed),
+@pytest.mark.parametrize("plan_func, existing_devices, plan_info_expected", [
+    (_pf3a, {}, _pf3a_processed),
+    (_pf3b, {}, _pf3b_processed),
+    (_pf3c, {}, _pf3c_processed),
+    (_pf3d, {}, _pf3d_processed),
+    (_pf3e, {}, _pf3e_processed),
+    (_pf3f, {}, _pf3f_processed),
+    (_pf3g, _pf3_existing_devices, _pf3g_processed),
+    (_pf3g, {}, _pf3g_empty_processed),
+    (_pf3h, _pf3_existing_devices, _pf3h_processed),
+    (_pf3i, _pf3_existing_devices, _pf3i_processed),
+    (_pf3j, _pf3_existing_devices, _pf3j_processed),
+    (_pf3k, _pf3_existing_devices, _pf3k_processed),
 ])
 # fmt: on
-def test_process_plan_3(plan_func, plan_info_expected):
+def test_process_plan_3(plan_func, existing_devices, plan_info_expected):
     """
-    Function '_process_plan': parameter annotations from the signature
+    Function '_process_plan': parameter annotations from the annotation
     """
 
     plan_info_expected = plan_info_expected.copy()
     plan_info_expected["name"] = plan_func.__name__
     plan_info_expected["module"] = plan_func.__module__
 
-    pf_info = _process_plan(plan_func, existing_devices={})
+    pf_info = _process_plan(plan_func, existing_devices=existing_devices)
 
     assert pf_info == plan_info_expected, pprint.pformat(pf_info)
 

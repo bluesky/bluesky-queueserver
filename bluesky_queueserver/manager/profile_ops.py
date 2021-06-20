@@ -1366,7 +1366,7 @@ def _process_plan(plan, *, existing_devices):
                     if btype == "AllDetectors":
 
                         def condition(_btype):
-                            return _btype["is_readable"]
+                            return _btype["is_readable"] and not _btype["is_movable"]
 
                     elif btype == "AllMotors":
 
@@ -1380,7 +1380,8 @@ def _process_plan(plan, *, existing_devices):
 
                     else:
                         raise RuntimeError(f"Error in processing algorithm: unsupported built-in type '{btype}'")
-                    device_names = [_["name"] for _ in existing_devices if condition(_)]
+                    device_names = [k for k, v in existing_devices.items() if condition(v)]
+
                     annotation["devices"][btype] = device_names
 
         return annotation

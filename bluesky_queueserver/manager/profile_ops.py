@@ -503,10 +503,12 @@ def prepare_plan(plan, *, existing_plans, existing_devices, allowed_plans, allow
     group_plans = allowed_plans[user_group]
     group_devices = allowed_devices[user_group]
 
-    if plan_name not in group_plans:
-        raise RuntimeError(f"Users from the group '{user_group}' are not allowed to start the plan '{plan_name}'")
+    # Run full validation of parameters (same as during plan submission)
+    success, errmsg = validate_plan(plan, allowed_plans=group_plans, allowed_devices=group_devices)
+    if not success:
+        raise RuntimeError(f"Validation of plan parameters failed: {errmsg}")
 
-    # Create the signature based on EXISTING plan from the workspace (this is the plan that will be executed
+    # Create the signature based on EXISTING plan from the workspace
     signature = inspect.signature(existing_plans[plan_name])
 
     # Compare parameters in the signature and in the list of allowed plans. Make sure that the parameters
@@ -528,7 +530,8 @@ def prepare_plan(plan, *, existing_plans, existing_devices, allowed_plans, allow
     for p in group_plans[plan_name]["parameters"]:
         if ("default" in p) and p.get("default_defined_in_decorator", False):
             if p["name"] not in bound_args.arguments:
-                default_params.update({p["name"]: p["default"]})
+                default_value = _process_default_value(p["default"])
+                default_params.update({p["name"]: default_value})
 
     def ref_from_name(v, existing_items, allowed_items):
         if isinstance(v, str):
@@ -562,10 +565,10 @@ def prepare_plan(plan, *, existing_plans, existing_devices, allowed_plans, allow
             # 'Custom' annotation: attempt to convert strings only to the devices
             #    and plans that are part of the description.
             pname_list, dname_list = [], []
-            for _ in pp["annotation"].get("plans", []):
-                pname_list.extend(pp["annotation"][_])
-            for _ in pp["annotation"].get("devices", []):
-                dname_list.extend(pp["annotation"][_])
+            for _ in pp["annotation"].get("plans", {}).values():
+                pname_list.extend(_)
+            for _ in pp["annotation"].get("devices", {}).values():
+                dname_list.extend(list(_))
             # Make sure the names are  in the allowed list
             pname_list = set([_ for _ in pname_list if _ in group_plans])
             dname_list = set([_ for _ in dname_list if _ in group_devices])
@@ -589,10 +592,12 @@ def prepare_plan(plan, *, existing_plans, existing_devices, allowed_plans, allow
         success = False
         err_msg = f"Plan '{plan_name}' is not allowed or does not exist"
 
+    # Map names to parameter descriptions
+    param_descriptions = {_["name"]: _ for _ in group_plans[plan_name]["parameters"]}
     for p_name in bound_args.arguments:
         value = bound_args.arguments[p_name]
         # Fetch parameter description ({} if parameter is not found)
-        pp = group_plans[plan_name].get(p_name, {})
+        pp = param_descriptions.get(p_name, {})
         bound_args.arguments[p_name] = process_parameter_value(
             value, pp, existing_items, group_plans, group_devices
         )
@@ -603,7 +608,7 @@ def prepare_plan(plan, *, existing_plans, existing_devices, allowed_plans, allow
         pp = group_plans[plan_name].get(p_name, {})
         default_params[p_name] = process_parameter_value(value, pp, existing_items, group_plans, group_devices)
 
-    plan_args_parsed = bound_args.args
+    plan_args_parsed = list(bound_args.args)
     plan_kwargs_parsed = bound_args.kwargs
     plan_kwargs_parsed.update(default_params)
 

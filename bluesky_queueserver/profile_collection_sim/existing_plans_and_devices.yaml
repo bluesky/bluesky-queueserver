@@ -659,6 +659,8 @@ existing_plans:
           - det2
           - det3
         type: typing.List[Detectors]
+      default: '[''det1'', ''det2'']'
+      default_defined_in_decorator: true
       description: Detectors to use for measurement.
       kind:
         name: POSITIONAL_OR_KEYWORD
@@ -666,6 +668,7 @@ existing_plans:
       name: detectors
     - annotation:
         type: typing.List[float]
+      default: None
       description: Motor positions. The number of positions must be equal to the number
         of the motors.
       kind:

@@ -16,6 +16,7 @@ except ImportError:
     import bluesky_queueserver.manager._protocols as protocols
 
 import ophyd
+import ophyd.sim
 
 from .common import copy_default_profile_collection, patch_first_startup_file
 
@@ -2120,21 +2121,41 @@ def test_devices_from_nspace():
 
 # fmt: off
 @pytest.mark.parametrize(
-    "plan, success, err_msg",
+    "plan, exp_args, exp_kwargs, success, err_msg",
     [
-        ({"name": "count", "user_group": _user_group, "args": [["det1", "det2"]]}, True, ""),
-        ({"name": "scan", "user_group": _user_group, "args": [["det1", "det2"], "motor", -1, 1, 10]}, True, ""),
+        ({"name": "count", "user_group": _user_group, "args": [["det1", "det2"]]},
+         [[ophyd.sim.det1, ophyd.sim.det2]], {}, True, ""),
+        ({"name": "scan", "user_group": _user_group, "args": [["det1", "det2"], "motor", -1, 1, 10]},
+         [[ophyd.sim.det1, ophyd.sim.det2], ophyd.sim.motor, -1, 1, 10], {}, True, ""),
         ({"name": "count", "user_group": _user_group, "args": [["det1", "det2"]],
-         "kwargs": {"num": 10, "delay": 1}}, True, ""),
-        ({"name": "count", "args": [["det1", "det2"]]}, False,
+         "kwargs": {"num": 10, "delay": 1}},
+         [[ophyd.sim.det1, ophyd.sim.det2], 10, 1], {}, True, ""),
+        # Explicitly specify the value for 'detectors'.
+        ({"name": "move_then_count", "user_group": _user_group,
+          "args": [["motor1"], ["det1", "det3"]],
+          "kwargs": {"positions": [50, 70]}},
+         [[ophyd.sim.motor1], [ophyd.sim.det1, ophyd.sim.det3], [50, 70]], {}, True, ""),
+        # Explicitly specify the value for 'detectors': 'det4' is not in the list of allowed values.
+        ({"name": "move_then_count", "user_group": _user_group,
+          "args": [["motor1"], ["det1", "det4"]],
+          "kwargs": {"positions": [50, 70]}},
+         [[ophyd.sim.motor1], [ophyd.sim.det1], [50, 70]], {}, False,
+         "value is not a valid enumeration member; permitted: 'det1', 'det2', 'det3'"),
+        # Use default value for 'detectors' defined in parameter annotation
+        ({"name": "move_then_count", "user_group": _user_group, "args": [["motor1"]],
+          "kwargs": {"positions": [50, 70]}},
+         [[ophyd.sim.motor1]], {"positions": [50, 70], "detectors": [ophyd.sim.det1, ophyd.sim.det2]}, True, ""),
+        ({"name": "count", "args": [["det1", "det2"]]}, [], {}, False,
          "No user group is specified in parameters for the plan 'count'"),
-        ({"name": "countABC", "user_group": _user_group, "args": [["det1", "det2"]]}, False,
-         "Users from the group 'admin' are not allowed to start the plan 'countABC'"),
+        ({"name": "countABC", "user_group": _user_group, "args": [["det1", "det2"]]}, [], {}, False,
+         "Plan 'countABC' is not in the list of allowed plans"),
     ],
 )
 # fmt: on
-def test_prepare_plan_1(plan, success, err_msg):
-
+def test_prepare_plan_1(plan, exp_args, exp_kwargs, success, err_msg):
+    """
+    Basic test for ``prepare_plan``. Use the simulated profile collection.
+    """
     pc_path = get_default_startup_dir()
     nspace = load_profile_collection(pc_path)
     plans = plans_from_nspace(nspace)
@@ -2155,6 +2176,8 @@ def test_prepare_plan_1(plan, success, err_msg):
         expected_keys = ("name", "args", "kwargs")
         for k in expected_keys:
             assert k in plan_parsed, f"Key '{k}' does not exist: {plan_parsed.keys()}"
+        assert f"{plan_parsed['args']}" == f"{exp_args}"  # Compare as strings
+        assert f"{plan_parsed['kwargs']}" == f"{exp_kwargs}"
     else:
         with pytest.raises(Exception, match=err_msg):
             prepare_plan(
@@ -2164,6 +2187,56 @@ def test_prepare_plan_1(plan, success, err_msg):
                 allowed_plans=allowed_plans,
                 allowed_devices=allowed_devices,
             )
+
+
+# # fmt: off
+# @pytest.mark.parametrize(
+#     "plan, success, err_msg",
+#     [
+#         ({"name": "count", "user_group": _user_group, "args": [["det1", "det2"]]}, True, ""),
+#         ({"name": "scan", "user_group": _user_group, "args": [["det1", "det2"], "motor", -1, 1, 10]}, True, ""),
+#         ({"name": "count", "user_group": _user_group, "args": [["det1", "det2"]],
+#          "kwargs": {"num": 10, "delay": 1}}, True, ""),
+#         ({"name": "count", "args": [["det1", "det2"]]}, False,
+#          "No user group is specified in parameters for the plan 'count'"),
+#         ({"name": "countABC", "user_group": _user_group, "args": [["det1", "det2"]]}, False,
+#          "Users from the group 'admin' are not allowed to start the plan 'countABC'"),
+#     ],
+# )
+# # fmt: on
+# def test_prepare_plan_2(plan, success, err_msg):
+#     """
+#     Detailed tests for ``prepare_plan``.
+#     """
+#     pc_path = get_default_startup_dir()
+#     nspace = load_profile_collection(pc_path)
+#     plans = plans_from_nspace(nspace)
+#     devices = devices_from_nspace(nspace)
+#
+#     path_allowed_plans = os.path.join(pc_path, "existing_plans_and_devices.yaml")
+#     path_permissions = os.path.join(pc_path, "user_group_permissions.yaml")
+#     allowed_plans, allowed_devices = load_allowed_plans_and_devices(path_allowed_plans, path_permissions)
+#
+#     if success:
+#         plan_parsed = prepare_plan(
+#             plan,
+#             existing_plans=plans,
+#             existing_devices=devices,
+#             allowed_plans=allowed_plans,
+#             allowed_devices=allowed_devices,
+#         )
+#         expected_keys = ("name", "args", "kwargs")
+#         for k in expected_keys:
+#             assert k in plan_parsed, f"Key '{k}' does not exist: {plan_parsed.keys()}"
+#     else:
+#         with pytest.raises(Exception, match=err_msg):
+#             prepare_plan(
+#                 plan,
+#                 existing_plans=plans,
+#                 existing_devices=devices,
+#                 allowed_plans=allowed_plans,
+#                 allowed_devices=allowed_devices,
+#             )
 
 
 def test_gen_list_of_plans_and_devices_1(tmp_path):

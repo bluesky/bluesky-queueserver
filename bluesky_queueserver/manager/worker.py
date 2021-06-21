@@ -179,7 +179,11 @@ class RunEngineWorker(Process):
 
         try:
             plan_parsed = prepare_plan(
-                plan_info, allowed_plans=self._existing_plans, allowed_devices=self._existing_devices
+                plan_info,
+                existing_plans=self._existing_plans,
+                existing_devices=self._existing_devices,
+                allowed_plans=self._allowed_plans,
+                allowed_devices=self._allowed_devices,
             )
 
             plan_func = plan_parsed["name"]
@@ -191,8 +195,8 @@ class RunEngineWorker(Process):
                 def plan():
                     if self._RE._state == "panicked":
                         raise RuntimeError(
-                            "Run Engine is in the 'panicked' state. "
-                            "You need to recreate the environment before you can run plans."
+                            "Run Engine is in the 'panicked' state. The environment must be "
+                            "closed and opened again before plans could be executed."
                         )
                     elif self._RE._state != "idle":
                         raise RuntimeError(
@@ -355,7 +359,7 @@ class RunEngineWorker(Process):
         Initiate execution of a new plan.
         """
         logger.info("Starting execution of a plan ...")
-        # TODO: refine the criteria of acceptance of the new plan.
+        # TODO: refine the conditions that are verified before a new plan is accepted.
         invalid_state = 0
         if not self._execution_queue.empty():
             invalid_state = 1

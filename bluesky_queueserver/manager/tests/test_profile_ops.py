@@ -49,6 +49,9 @@ from bluesky_queueserver.manager.profile_ops import (
     construct_parameters,
 )
 
+# User name and user group name used throughout most of the tests.
+_user, _user_group = "Testing Script", "admin"
+
 
 def test_get_default_startup_dir():
     """
@@ -1457,18 +1460,21 @@ _pf3e_processed = {
             "name": "val1",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "default": "1000",
+            "default_defined_in_decorator": True,
         },
         {
             "name": "val2",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "annotation": {"type": "str"},
             "default": "'replacement_str'",
+            "default_defined_in_decorator": True,
         },
         {
             "name": "val3",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "default": "False",
             "annotation": {"type": "typing.Any"},
+            "default_defined_in_decorator": True,
         },
     ],
     "properties": {"is_generator": True},
@@ -1499,6 +1505,7 @@ _pf3f_processed = {
             "name": "val1",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "default": "'device_name'",
+            "default_defined_in_decorator": True,
         },
     ],
     "properties": {"is_generator": True},
@@ -2111,34 +2118,52 @@ def test_devices_from_nspace():
     assert "custom_test_flyer" in devices
 
 
+# fmt: off
 @pytest.mark.parametrize(
     "plan, success, err_msg",
     [
-        ({"name": "count", "args": [["det1", "det2"]]}, True, ""),
-        ({"name": "scan", "args": [["det1", "det2"], "motor", -1, 1, 10]}, True, ""),
-        ({"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}, True, ""),
-        (
-            {"name": "countABC", "args": [["det1", "det2"]]},
-            False,
-            "Plan 'countABC' is not allowed or does not exist.",
-        ),
+        ({"name": "count", "user_group": _user_group, "args": [["det1", "det2"]]}, True, ""),
+        ({"name": "scan", "user_group": _user_group, "args": [["det1", "det2"], "motor", -1, 1, 10]}, True, ""),
+        ({"name": "count", "user_group": _user_group, "args": [["det1", "det2"]],
+         "kwargs": {"num": 10, "delay": 1}}, True, ""),
+        ({"name": "count", "args": [["det1", "det2"]]}, False,
+         "No user group is specified in parameters for the plan 'count'"),
+        ({"name": "countABC", "user_group": _user_group, "args": [["det1", "det2"]]}, False,
+         "Users from the group 'admin' are not allowed to start the plan 'countABC'"),
     ],
 )
-def test_prepare_plan(plan, success, err_msg):
+# fmt: on
+def test_prepare_plan_1(plan, success, err_msg):
 
     pc_path = get_default_startup_dir()
     nspace = load_profile_collection(pc_path)
     plans = plans_from_nspace(nspace)
     devices = devices_from_nspace(nspace)
 
+    path_allowed_plans = os.path.join(pc_path, "existing_plans_and_devices.yaml")
+    path_permissions = os.path.join(pc_path, "user_group_permissions.yaml")
+    allowed_plans, allowed_devices = load_allowed_plans_and_devices(path_allowed_plans, path_permissions)
+
     if success:
-        plan_parsed = prepare_plan(plan, allowed_plans=plans, allowed_devices=devices)
+        plan_parsed = prepare_plan(
+            plan,
+            existing_plans=plans,
+            existing_devices=devices,
+            allowed_plans=allowed_plans,
+            allowed_devices=allowed_devices,
+        )
         expected_keys = ("name", "args", "kwargs")
         for k in expected_keys:
             assert k in plan_parsed, f"Key '{k}' does not exist: {plan_parsed.keys()}"
     else:
-        with pytest.raises(RuntimeError, match=err_msg):
-            prepare_plan(plan, allowed_plans=plans, allowed_devices=devices)
+        with pytest.raises(Exception, match=err_msg):
+            prepare_plan(
+                plan,
+                existing_plans=plans,
+                existing_devices=devices,
+                allowed_plans=allowed_plans,
+                allowed_devices=allowed_devices,
+            )
 
 
 def test_gen_list_of_plans_and_devices_1(tmp_path):

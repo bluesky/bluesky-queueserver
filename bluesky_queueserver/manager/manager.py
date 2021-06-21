@@ -515,6 +515,8 @@ class RunEngineManager(Process):
                 plan_name = new_plan["name"]
                 args = new_plan["args"] if "args" in new_plan else []
                 kwargs = new_plan["kwargs"] if "kwargs" in new_plan else {}
+                user_name = new_plan["user"]
+                user_group = new_plan["user_group"]
                 meta = new_plan["meta"] if "meta" in new_plan else {}
                 item_uid = new_plan["item_uid"]
 
@@ -522,6 +524,8 @@ class RunEngineManager(Process):
                     "name": plan_name,
                     "args": args,
                     "kwargs": kwargs,
+                    "user": user_name,
+                    "user_group": user_group,
                     "meta": meta,
                     "item_uid": item_uid,
                 }

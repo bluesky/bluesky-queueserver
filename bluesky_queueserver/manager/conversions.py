@@ -68,67 +68,57 @@ def filter_plan_descriptions(plans_source):
         # Plan name - mandatory (actually it always equals 'pname')
         plan["name"] = p_items["name"]
         # "description" is optional, don't include empty description.
-        if "description" in p_items and p_items["description"]:
+        if "description" in p_items:
             plan["description"] = p_items["description"]
 
         if "parameters" in p_items and p_items["parameters"]:
             plan["parameters"] = []
             for param in p_items["parameters"]:
                 p = dict()
+                p["name"] = param["name"]  # "name" is mandatory
+                p["kind"] = param["kind"]  # Always present in the description
 
-                # "name" is mandatory
-                p["name"] = param["name"]
+                if "description" in param:
+                    p["description"] = param["description"]
 
-                # "kind" is optional, but it is always present in the description
-                if "kind" in param:
-                    p["kind"] = param["kind"]
+                # Annotation
+                an = param.get("annotation", None)
 
-                # Get description
-                desc = None
-                if "custom" in param:
-                    desc = param["custom"].get("description", None)
-                if not desc:
-                    desc = param.get("description", None)
-                if desc:
-                    p["description"] = desc
+                if an is not None:
+                    p_type = an.get("type", None)
 
-                # Choose the parameter annotation
-                an = None
-                if "custom" in param:
-                    an = param["custom"].get("annotation", None)
-                if not an:
-                    an = param.get("annotation", None)
-
-                # Check if the parameter is enum
-                en = []
-                for kwd in ("devices", "plans", "enums"):
-                    if "custom" in param:
-                        enums = param["custom"].get(kwd, None)
+                    # Check if the parameter is enum
+                    en = []
+                    for kwd in ("devices", "plans", "enums"):
+                        enums = an.get(kwd, None)
                         if enums:
                             for v in enums.values():
                                 if not isinstance(v, (list, tuple)):
                                     v = [v]
                                 en.extend(v)
-                if en:
-                    # Parameter is enum, so the type is 'str'
-                    p["type"] = "str"
-                    p["enum"] = en
-                else:
-                    # Otherwise try to determine type
-                    if an:
-                        if re.search(r"\bfloat\b", an.lower()):
-                            p["type"] = "float"
-                        elif re.search(r"\bint\b", an.lower()):
-                            p["type"] = "int"
-                        elif re.search(r"\bstr\b", an.lower()):
-                            p["type"] = "str"
 
-                # Determine if the parameter is list
-                if an:
-                    if re.search(r"^typing.list\[.+]$", an.lower()) or re.search(r"^list\[.+]$", an.lower()):
-                        p["is_list"] = True
+                    if en:
+                        # Parameter is enum, so the type is 'str'
+                        p["type"] = "str"
+                        p["enum"] = en
                     else:
-                        p["is_list"] = False
+                        # Otherwise try to determine type
+                        if p_type:
+                            if re.search(r"\bfloat\b", p_type.lower()):
+                                p["type"] = "float"
+                            elif re.search(r"\bint\b", p_type.lower()):
+                                p["type"] = "int"
+                            elif re.search(r"\bstr\b", p_type.lower()):
+                                p["type"] = "str"
+
+                    # Determine if the parameter is list
+                    if p_type:
+                        if re.search(r"^typing.list\[.+]$", p_type.lower()) or re.search(
+                            r"^list\[.+]$", p_type.lower()
+                        ):
+                            p["is_list"] = True
+                        else:
+                            p["is_list"] = False
 
                 # Set the default value (optional) and decide if the parameter is optional
                 if "default" in param:

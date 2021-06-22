@@ -41,15 +41,6 @@ class Readable(Protocol):
         """``None``, or a reference to a parent device."""
         ...
 
-    @property
-    def hints(self) -> Dict:
-        """A dictionary of suggestions for best-effort visualization and processing.
-        This does not affect what data is read or saved; it is only
-        a suggestion to enable automated tools to provide helpful information
-        with minimal guidance from the user. See :ref:`hints`.
-        """
-        ...
-
     def trigger(self) -> Status:
         """Return a ``Status`` that is marked done when the device is done triggering.
         If the device does not need to be triggered, simply return a ``Status``

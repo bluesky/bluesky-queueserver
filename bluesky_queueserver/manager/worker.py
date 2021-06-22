@@ -86,7 +86,7 @@ class RunEngineWorker(Process):
         # Initialized with 'RunList()' in 'run()' method.
         self._active_run_list = None
 
-        self._re_namespace, self._existing_plans, self._existing_devices = {}, {}, {}
+        self._re_namespace, self._plans_in_nspace, self._devices_in_nspace = {}, {}, {}
 
     def _execute_plan(self, plan, is_resuming):
         """
@@ -180,13 +180,13 @@ class RunEngineWorker(Process):
         try:
             plan_parsed = prepare_plan(
                 plan_info,
-                existing_plans=self._existing_plans,
-                existing_devices=self._existing_devices,
+                plans_in_nspace=self._plans_in_nspace,
+                devices_in_nspace=self._devices_in_nspace,
                 allowed_plans=self._allowed_plans,
                 allowed_devices=self._allowed_devices,
             )
 
-            plan_func = plan_parsed["name"]
+            plan_func = plan_parsed["callable"]
             plan_args_parsed = plan_parsed["args"]
             plan_kwargs_parsed = plan_parsed["kwargs"]
             plan_meta_parsed = plan_parsed["meta"]
@@ -553,8 +553,8 @@ class RunEngineWorker(Process):
                 raise RuntimeError(
                     "Run Engine is not created in the startup code and 'keep_re' option is activated."
                 )
-            self._existing_plans = plans_from_nspace(self._re_namespace)
-            self._existing_devices = devices_from_nspace(self._re_namespace)
+            self._plans_in_nspace = plans_from_nspace(self._re_namespace)
+            self._devices_in_nspace = devices_from_nspace(self._re_namespace)
             logger.info("Startup code loading was completed")
 
         except Exception as ex:

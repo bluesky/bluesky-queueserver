@@ -9,6 +9,7 @@ import pprint
 import sys
 import enum
 import inspect
+from collections.abc import Callable
 
 try:
     from bluesky import protocols
@@ -2171,7 +2172,7 @@ def test_devices_from_nspace():
 # fmt: on
 def test_prepare_plan_1(plan, exp_args, exp_kwargs, success, err_msg):
     """
-    Basic test for ``prepare_plan``. Use the simulated profile collection.
+    Basic test for ``prepare_plan``: test main features using the simulated profile collection.
     """
     pc_path = get_default_startup_dir()
     nspace = load_profile_collection(pc_path)
@@ -2185,12 +2186,12 @@ def test_prepare_plan_1(plan, exp_args, exp_kwargs, success, err_msg):
     if success:
         plan_parsed = prepare_plan(
             plan,
-            existing_plans=plans,
-            existing_devices=devices,
+            plans_in_nspace=plans,
+            devices_in_nspace=devices,
             allowed_plans=allowed_plans,
             allowed_devices=allowed_devices,
         )
-        expected_keys = ("name", "args", "kwargs")
+        expected_keys = ("callable", "args", "kwargs")
         for k in expected_keys:
             assert k in plan_parsed, f"Key '{k}' does not exist: {plan_parsed.keys()}"
         assert f"{plan_parsed['args']}" == f"{exp_args}"  # Compare as strings
@@ -2199,61 +2200,232 @@ def test_prepare_plan_1(plan, exp_args, exp_kwargs, success, err_msg):
         with pytest.raises(Exception, match=err_msg):
             prepare_plan(
                 plan,
-                existing_plans=plans,
-                existing_devices=devices,
+                plans_in_nspace=plans,
+                devices_in_nspace=devices,
                 allowed_plans=allowed_plans,
                 allowed_devices=allowed_devices,
             )
 
 
-# # fmt: off
-# @pytest.mark.parametrize(
-#     "plan, success, err_msg",
-#     [
-#         ({"name": "count", "user_group": _user_group, "args": [["det1", "det2"]]}, True, ""),
-#         ({"name": "scan", "user_group": _user_group, "args": [["det1", "det2"], "motor", -1, 1, 10]}, True, ""),
-#         ({"name": "count", "user_group": _user_group, "args": [["det1", "det2"]],
-#          "kwargs": {"num": 10, "delay": 1}}, True, ""),
-#         ({"name": "count", "args": [["det1", "det2"]]}, False,
-#          "No user group is specified in parameters for the plan 'count'"),
-#         ({"name": "countABC", "user_group": _user_group, "args": [["det1", "det2"]]}, False,
-#          "Users from the group 'admin' are not allowed to start the plan 'countABC'"),
-#     ],
-# )
-# # fmt: on
-# def test_prepare_plan_2(plan, success, err_msg):
-#     """
-#     Detailed tests for ``prepare_plan``.
-#     """
-#     pc_path = get_default_startup_dir()
-#     nspace = load_profile_collection(pc_path)
-#     plans = plans_from_nspace(nspace)
-#     devices = devices_from_nspace(nspace)
-#
-#     path_allowed_plans = os.path.join(pc_path, "existing_plans_and_devices.yaml")
-#     path_permissions = os.path.join(pc_path, "user_group_permissions.yaml")
-#     allowed_plans, allowed_devices = load_allowed_plans_and_devices(path_allowed_plans, path_permissions)
-#
-#     if success:
-#         plan_parsed = prepare_plan(
-#             plan,
-#             existing_plans=plans,
-#             existing_devices=devices,
-#             allowed_plans=allowed_plans,
-#             allowed_devices=allowed_devices,
-#         )
-#         expected_keys = ("name", "args", "kwargs")
-#         for k in expected_keys:
-#             assert k in plan_parsed, f"Key '{k}' does not exist: {plan_parsed.keys()}"
-#     else:
-#         with pytest.raises(Exception, match=err_msg):
-#             prepare_plan(
-#                 plan,
-#                 existing_plans=plans,
-#                 existing_devices=devices,
-#                 allowed_plans=allowed_plans,
-#                 allowed_devices=allowed_devices,
-#             )
+_pp_dev1 = ophyd.Device(name="_pp_dev1")
+_pp_dev2 = ophyd.Device(name="_pp_dev2")
+_pp_dev3 = ophyd.Device(name="_pp_dev3")
+
+
+def _pp_p1():
+    yield from []
+
+
+def _pp_p2():
+    yield from []
+
+
+def _pp_p3():
+    yield from []
+
+
+def _gen_environment_pp2():
+    def plan1(a, b, c):
+        yield from [a, b, c]
+
+    def plan2(a: int = 5, b: float = 0.5, s: str = "abc"):
+        yield from [a, b, s]
+
+    @parameter_annotation_decorator(
+        {
+            "parameters": {
+                "a": {"annotation": "float", "default": "0.5"},
+                "b": {"annotation": "int", "default": "5"},
+                "s": {"annotation": "int", "default": "50"},
+            }
+        }
+    )
+    def plan3(a: int = 5, b: float = 0.5, s: str = "abc"):
+        # Override all the types and defaults (just the test of features)
+        yield from [a, b, s]
+
+    @parameter_annotation_decorator(
+        {
+            "parameters": {
+                "detectors": {
+                    "annotation": "typing.List[Detectors]",
+                    "devices": {"Detectors": ["_pp_dev1", "_pp_dev2", "_pp_dev3"]},
+                    # Default list of the detectors
+                    "default": "['_pp_dev2', '_pp_dev3']",
+                }
+            }
+        }
+    )
+    def plan4(detectors: typing.Optional[typing.List[ophyd.Device]] = None):
+        # Default for 'detectors' is None, which is converted to the default list of detectors
+        detectors = detectors or [_pp_dev2, _pp_dev3]
+        yield from detectors
+
+    @parameter_annotation_decorator(
+        {
+            "parameters": {
+                "plan_to_execute": {
+                    "annotation": "Plans",
+                    "plans": {"Plans": ["_pp_p1", "_pp_p2", "_pp_p3"]},
+                    # Default list of plans
+                    "default": "'_pp_p2'",
+                }
+            }
+        }
+    )
+    def plan5(plan_to_execute: typing.Callable = _pp_p2):
+        yield from plan_to_execute
+
+    @parameter_annotation_decorator(
+        {
+            "parameters": {
+                "strings": {
+                    "annotation": "typing.Union[typing.List[Selection], typing.Tuple[Selection]]",
+                    "enums": {"Selection": ["one", "two", "three"]},
+                    "default": "('one', 'three')",
+                }
+            }
+        }
+    )
+    def plan6(strings: typing.Union[typing.List[str], typing.Tuple[str]] = ("one", "three")):
+        yield from strings
+
+    def plan7(a, b: str):
+        # All strings passed as 'a' should be converted to devices/plans when possible.
+        #   Strings passed to 'b' should not be converted.
+        yield from [a, b]
+
+    # Create namespace
+    nspace = {"_pp_dev1": _pp_dev1, "_pp_dev2": _pp_dev2, "_pp_dev3": _pp_dev3}
+    nspace.update({"_pp_p1": _pp_p1, "_pp_p2": _pp_p2, "_pp_p3": _pp_p3})
+    nspace.update({"plan1": plan1})
+    nspace.update({"plan2": plan2})
+    nspace.update({"plan3": plan3})
+    nspace.update({"plan4": plan4})
+    nspace.update({"plan5": plan5})
+    nspace.update({"plan6": plan6})
+    nspace.update({"plan7": plan7})
+
+    plans_in_nspace = plans_from_nspace(nspace)
+    devices_in_nspace = devices_from_nspace(nspace)
+
+    existing_devices = _prepare_devices(devices_in_nspace)
+    existing_plans = _prepare_plans(plans_in_nspace, existing_devices=existing_devices)
+    allowed_plans, allowed_devices = {}, {}
+    allowed_plans["root"], allowed_devices["root"] = existing_plans.copy(), existing_devices.copy()
+    allowed_plans["admin"], allowed_devices["admin"] = existing_plans.copy(), existing_devices.copy()
+
+    return plans_in_nspace, devices_in_nspace, allowed_plans, allowed_devices
+
+
+# fmt: off
+@pytest.mark.parametrize(
+    "plan_name, plan, exp_args, exp_kwargs, exp_meta, success, err_msg",
+    [
+        ("plan1", {"user_group": "admin", "args": [3, 4, 5]},
+         [3, 4, 5], {}, {}, True, ""),
+        ("plan1", {"user_group": "admin", "args": [3, 4], "kwargs": {"c": 5}},
+         [3, 4, 5], {}, {}, True, ""),
+        ("plan1", {"user_group": "admin", "args": [3, 4], "kwargs": {"b": 5}},
+         [3, 4, 5], {}, {}, False, "Plan validation failed: multiple values for argument 'b'"),
+        ("plan1", {"user_group": "admin", "args": [3, 4, 5], "meta": {"p1": 10, "p2": "abc"}},
+         [3, 4, 5], {}, {"p1": 10, "p2": "abc"}, True, ""),
+        ("plan1", {"user_group": "admin", "args": [3, 4, 5], "meta": [{"p1": 10}, {"p2": "abc"}]},
+         [3, 4, 5], {}, {"p1": 10, "p2": "abc"}, True, ""),
+        ("plan1", {"user_group": "admin", "args": [3, 4, 5], "meta": [{"p1": 10}, {"p1": 5, "p2": "abc"}]},
+         [3, 4, 5], {}, {"p1": 10, "p2": "abc"}, True, ""),
+
+        ("plan2", {"user_group": "admin"},
+         [], {}, {}, True, ""),
+        ("plan2", {"user_group": "admin", "args": [3, 2.6]},
+         [3, 2.6], {}, {}, True, ""),
+        ("plan2", {"user_group": "admin", "args": [2.6, 3]},
+         [2.6, 3], {}, {}, False, " Incorrect parameter type: key='a', value='2.6'"),
+        ("plan2", {"user_group": "admin", "kwargs": {"b": 9.9, "s": "def"}},
+         [], {"b": 9.9, "s": "def"}, {}, True, ""),
+
+        ("plan3", {"user_group": "admin"},
+         [], {'a': 0.5, 'b': 5, 's': 50}, {}, True, ""),
+        ("plan3", {"user_group": "admin", "args": [2.8]},
+         [2.8], {'b': 5, 's': 50}, {}, True, ""),
+        ("plan3", {"user_group": "admin", "args": [2.8], "kwargs": {"a": 2.8}},
+         [2.8], {'b': 5, 's': 50}, {}, False, "multiple values for argument 'a'"),
+        ("plan3", {"user_group": "admin", "args": [], "kwargs": {"b": 30}},
+         [], {'a': 0.5, 'b': 30, 's': 50}, {}, True, ""),
+        ("plan3", {"user_group": "admin", "args": [], "kwargs": {"b": 2.8}},
+         [], {'a': 0.5, 'b': 2.8, 's': 50}, {}, False, "Incorrect parameter type: key='b', value='2.8'"),
+
+        ("plan4", {"user_group": "admin"},
+         [], {"detectors": [_pp_dev2, _pp_dev3]}, {}, True, ""),
+        ("plan4", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3"]]},
+         [[_pp_dev1, _pp_dev3]], {}, {}, True, ""),
+        ("plan4", {"user_group": "admin", "kwargs": {"detectors": ["_pp_dev1", "_pp_dev3"]}},
+         [[_pp_dev1, _pp_dev3]], {}, {}, True, ""),
+        ("plan4", {"user_group": "admin", "kwargs": {"detectors": ["nonexisting_dev", "_pp_dev3"]}},
+         [[_pp_dev1, _pp_dev3]], {}, {}, False, "value is not a valid enumeration member"),
+
+        ("plan5", {"user_group": "admin"},
+         [], {"plan_to_execute": _pp_p2}, {}, True, ""),
+        ("plan5", {"user_group": "admin", "args": ["_pp_p3"]},
+         [_pp_p3], {}, {}, True, ""),
+        ("plan5", {"user_group": "admin", "args": ["nonexisting_plan"]},
+         [_pp_p3], {}, {}, False, "value is not a valid enumeration member"),
+
+        ("plan6", {"user_group": "admin"},
+         [], {"strings": ["one", "three"]}, {}, True, ""),
+        ("plan6", {"user_group": "admin", "args": [["one", "two"]]},
+         [["one", "two"]], {}, {}, True, ""),
+        ("plan6", {"user_group": "admin", "args": [("one", "two")]},
+         [("one", "two")], {}, {}, True, ""),
+        ("plan6", {"user_group": "admin", "args": [("one", "nonexisting")]},
+         [("one", "two")], {}, {}, False, "value is not a valid enumeration member"),
+
+        ("plan7", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3"], "_pp_dev2"]},
+         [[_pp_dev1, _pp_dev3], "_pp_dev2"], {}, {}, True, ""),
+        ("plan7", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3", "some_str"], "_pp_dev2"]},
+         [[_pp_dev1, _pp_dev3, "some_str"], "_pp_dev2"], {}, {}, True, ""),
+
+        ("nonexisting_plan", {"user_group": "admin"},
+         [], {}, {}, False, "Plan 'nonexisting_plan' is not in the list of allowed plans"),
+        ("plan2", {"user_group": "nonexisting_group"},
+         [], {}, {}, False,
+         "Lists of allowed plans and devices is not defined for the user group 'nonexisting_group'"),
+    ],
+)
+# fmt: on
+def test_prepare_plan_2(plan_name, plan, exp_args, exp_kwargs, exp_meta, success, err_msg):
+    """
+    Detailed tests for ``prepare_plan``. Preparation of plan parameters before execution
+    is one of the key features, so unit tests are needed for all use cases.
+    """
+    plans_in_nspace, devices_in_nspace, allowed_plans, allowed_devices = _gen_environment_pp2()
+
+    plan["name"] = plan_name
+
+    if success:
+        plan_parsed = prepare_plan(
+            plan,
+            plans_in_nspace=plans_in_nspace,
+            devices_in_nspace=devices_in_nspace,
+            allowed_plans=allowed_plans,
+            allowed_devices=allowed_devices,
+        )
+        expected_keys = ("callable", "args", "kwargs", "meta")
+        for k in expected_keys:
+            assert k in plan_parsed, f"Key '{k}' does not exist: {plan_parsed.keys()}"
+        assert isinstance(plan_parsed["callable"], Callable)
+        assert plan_parsed["args"] == exp_args
+        assert plan_parsed["kwargs"] == exp_kwargs
+        assert plan_parsed["meta"] == exp_meta
+    else:
+        with pytest.raises(Exception, match=err_msg):
+            prepare_plan(
+                plan,
+                plans_in_nspace=plans_in_nspace,
+                devices_in_nspace=devices_in_nspace,
+                allowed_plans=allowed_plans,
+                allowed_devices=allowed_devices,
+            )
 
 
 def test_gen_list_of_plans_and_devices_1(tmp_path):

@@ -453,19 +453,19 @@ def devices_from_nspace(nspace):
     return devices
 
 
-def prepare_plan(plan, *, existing_plans, existing_devices, allowed_plans, allowed_devices):
+def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, allowed_devices):
     """
-    Prepare the plan: replace the device names (str) in the plan specification by
-    references to ophyd objects; replace plan name by the reference to the plan.
+    Prepare the plan for execution: replace the device names (str) in the plan specification
+    by references to ophyd objects; replace plan name by the reference to the plan.
 
     Parameters
     ----------
     plan : dict
         Plan specification. Keys: `name` (str) - plan name, `args` - plan args,
         `kwargs` - plan kwargs. The plan parameters must contain ``user_group``.
-    existing_plans : dict(str, callable)
+    plans_in_nspace : dict(str, callable)
         Dictionary of existing plans from the RE workspace.
-    existing_devices : dict(str, ophyd.Device)
+    devices_in_nspace : dict(str, ophyd.Device)
         Dictionary of existing devices from RE workspace.
     allowed_plans : dict(str, dict)
         Dictionary of allowed plans that maps group name to dictionary of plans allowed
@@ -509,7 +509,7 @@ def prepare_plan(plan, *, existing_plans, existing_devices, allowed_plans, allow
         raise RuntimeError(f"Validation of plan parameters failed: {errmsg}")
 
     # Create the signature based on EXISTING plan from the workspace
-    signature = inspect.signature(existing_plans[plan_name])
+    signature = inspect.signature(plans_in_nspace[plan_name])
 
     # Compare parameters in the signature and in the list of allowed plans. Make sure that the parameters
     #   in the list of allowed plans are a subset of the existing parameters (otherwise the plan can not
@@ -533,27 +533,27 @@ def prepare_plan(plan, *, existing_plans, existing_devices, allowed_plans, allow
                 default_value = _process_default_value(p["default"])
                 default_params.update({p["name"]: default_value})
 
-    def ref_from_name(v, existing_items, allowed_items):
+    def ref_from_name(v, items_in_nspace, allowed_items):
         if isinstance(v, str):
-            if (v in allowed_items) and (v in existing_items):
-                v = existing_items[v]
+            if (v in allowed_items) and (v in items_in_nspace):
+                v = items_in_nspace[v]
         return v
 
-    def process_argument(v, existing_items, allowed_items):
+    def process_argument(v, items_in_nspace, allowed_items):
         # Recursively process lists (iterables) and dictionaries
         if isinstance(v, str):
-            v = ref_from_name(v, existing_items, allowed_items)
+            v = ref_from_name(v, items_in_nspace, allowed_items)
         elif isinstance(v, dict):
             for key, value in v.copy().items():
-                v[key] = process_argument(value, existing_items, allowed_items)
+                v[key] = process_argument(value, items_in_nspace, allowed_items)
         elif isinstance(v, Iterable):
             v_original = v
             v = list()
             for item in v_original:
-                v.append(process_argument(item, existing_items, allowed_items))
+                v.append(process_argument(item, items_in_nspace, allowed_items))
         return v
 
-    def process_parameter_value(value, pp, existing_items, group_plans, group_devices):
+    def process_parameter_value(value, pp, items_in_nspace, group_plans, group_devices):
         """
         Process a parameter value ``value`` based on parameter description ``pp``
         (``pp = allowed_plans[<plan_name>][<param_name>]``).
@@ -579,15 +579,15 @@ def prepare_plan(plan, *, existing_plans, existing_devices, allowed_plans, allow
             sel_item_list = set()
 
         if sel_item_list:
-            value = process_argument(value, existing_items, sel_item_list)
+            value = process_argument(value, items_in_nspace, sel_item_list)
 
         return value
 
     # Existing items include existing devices and existing plans
-    existing_items = existing_devices.copy()
-    existing_items.update(existing_plans)
+    items_in_nspace = devices_in_nspace.copy()
+    items_in_nspace.update(plans_in_nspace)
 
-    plan_func = process_argument(plan_name, existing_plans, group_plans)
+    plan_func = process_argument(plan_name, plans_in_nspace, group_plans)
     if isinstance(plan_func, str):
         success = False
         err_msg = f"Plan '{plan_name}' is not allowed or does not exist"
@@ -599,14 +599,14 @@ def prepare_plan(plan, *, existing_plans, existing_devices, allowed_plans, allow
         # Fetch parameter description ({} if parameter is not found)
         pp = param_descriptions.get(p_name, {})
         bound_args.arguments[p_name] = process_parameter_value(
-            value, pp, existing_items, group_plans, group_devices
+            value, pp, items_in_nspace, group_plans, group_devices
         )
 
     for p_name in default_params:
         value = default_params[p_name]
         # Fetch parameter description ({} if parameter is not found)
         pp = group_plans[plan_name].get(p_name, {})
-        default_params[p_name] = process_parameter_value(value, pp, existing_items, group_plans, group_devices)
+        default_params[p_name] = process_parameter_value(value, pp, items_in_nspace, group_plans, group_devices)
 
     plan_args_parsed = list(bound_args.args)
     plan_kwargs_parsed = bound_args.kwargs
@@ -635,7 +635,7 @@ def prepare_plan(plan, *, existing_plans, existing_devices, allowed_plans, allow
         raise RuntimeError(f"Error while parsing the plan: {err_msg}")
 
     plan_prepared = {
-        "name": plan_func,
+        "callable": plan_func,
         "args": plan_args_parsed,
         "kwargs": plan_kwargs_parsed,
         "meta": plan_meta,

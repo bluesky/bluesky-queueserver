@@ -101,6 +101,13 @@ class Readable(Protocol):
 
 
 @runtime_checkable
+class Movable(Readable, Protocol):
+    def set(self, value) -> Status:
+        """Return a ``Status`` that is marked done when the device is done moving."""
+        ...
+
+
+@runtime_checkable
 class Flyable(Protocol):
     name: str
 

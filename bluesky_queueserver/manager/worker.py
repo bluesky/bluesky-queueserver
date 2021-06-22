@@ -86,7 +86,7 @@ class RunEngineWorker(Process):
         # Initialized with 'RunList()' in 'run()' method.
         self._active_run_list = None
 
-        self._re_namespace, self._existing_plans, self._existing_devices = {}, {}, {}
+        self._re_namespace, self._plans_in_nspace, self._devices_in_nspace = {}, {}, {}
 
     def _execute_plan(self, plan, is_resuming):
         """
@@ -179,10 +179,14 @@ class RunEngineWorker(Process):
 
         try:
             plan_parsed = prepare_plan(
-                plan_info, allowed_plans=self._existing_plans, allowed_devices=self._existing_devices
+                plan_info,
+                plans_in_nspace=self._plans_in_nspace,
+                devices_in_nspace=self._devices_in_nspace,
+                allowed_plans=self._allowed_plans,
+                allowed_devices=self._allowed_devices,
             )
 
-            plan_func = plan_parsed["name"]
+            plan_func = plan_parsed["callable"]
             plan_args_parsed = plan_parsed["args"]
             plan_kwargs_parsed = plan_parsed["kwargs"]
             plan_meta_parsed = plan_parsed["meta"]
@@ -191,8 +195,8 @@ class RunEngineWorker(Process):
                 def plan():
                     if self._RE._state == "panicked":
                         raise RuntimeError(
-                            "Run Engine is in the 'panicked' state. "
-                            "You need to recreate the environment before you can run plans."
+                            "Run Engine is in the 'panicked' state. The environment must be "
+                            "closed and opened again before plans could be executed."
                         )
                     elif self._RE._state != "idle":
                         raise RuntimeError(
@@ -355,7 +359,7 @@ class RunEngineWorker(Process):
         Initiate execution of a new plan.
         """
         logger.info("Starting execution of a plan ...")
-        # TODO: refine the criteria of acceptance of the new plan.
+        # TODO: refine the conditions that are verified before a new plan is accepted.
         invalid_state = 0
         if not self._execution_queue.empty():
             invalid_state = 1
@@ -549,8 +553,8 @@ class RunEngineWorker(Process):
                 raise RuntimeError(
                     "Run Engine is not created in the startup code and 'keep_re' option is activated."
                 )
-            self._existing_plans = plans_from_nspace(self._re_namespace)
-            self._existing_devices = devices_from_nspace(self._re_namespace)
+            self._plans_in_nspace = plans_from_nspace(self._re_namespace)
+            self._devices_in_nspace = devices_from_nspace(self._re_namespace)
             logger.info("Startup code loading was completed")
 
         except Exception as ex:

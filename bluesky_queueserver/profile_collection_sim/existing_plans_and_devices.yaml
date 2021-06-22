@@ -2,167 +2,249 @@
 existing_devices:
   ab_det:
     classname: ABDetector
+    is_flyable: false
     is_movable: false
+    is_readable: true
     module: ophyd.sim
   bool_sig:
     classname: Signal
+    is_flyable: false
     is_movable: true
+    is_readable: true
     module: ophyd.signal
   custom_test_device:
     classname: Device
+    is_flyable: false
     is_movable: false
+    is_readable: true
     module: ophyd.device
   custom_test_flyer:
     classname: MockFlyer
+    is_flyable: true
     is_movable: false
+    is_readable: false
     module: ophyd.sim
   custom_test_signal:
     classname: Signal
+    is_flyable: false
     is_movable: true
+    is_readable: true
     module: ophyd.signal
   det:
     classname: SynGauss
+    is_flyable: false
     is_movable: false
+    is_readable: true
     module: ophyd.sim
   det1:
     classname: SynGauss
+    is_flyable: false
     is_movable: false
+    is_readable: true
     module: ophyd.sim
   det2:
     classname: SynGauss
+    is_flyable: false
     is_movable: false
+    is_readable: true
     module: ophyd.sim
   det3:
     classname: SynGauss
+    is_flyable: false
     is_movable: false
+    is_readable: true
     module: ophyd.sim
   det4:
     classname: Syn2DGauss
+    is_flyable: false
     is_movable: false
+    is_readable: true
     module: ophyd.sim
   det5:
     classname: Syn2DGauss
+    is_flyable: false
     is_movable: false
+    is_readable: true
     module: ophyd.sim
   det_with_conf:
     classname: DetWithConf
+    is_flyable: false
     is_movable: false
+    is_readable: true
     module: ophyd.sim
   det_with_count_time:
     classname: DetWithCountTime
+    is_flyable: false
     is_movable: false
+    is_readable: true
     module: ophyd.sim
   direct_img:
     classname: DirectImage
+    is_flyable: false
     is_movable: false
+    is_readable: true
     module: ophyd.sim
   direct_img_list:
     classname: DirectImage
+    is_flyable: false
     is_movable: false
+    is_readable: true
     module: ophyd.sim
   flyer1:
     classname: MockFlyer
+    is_flyable: true
     is_movable: false
+    is_readable: false
     module: ophyd.sim
   flyer2:
     classname: MockFlyer
+    is_flyable: true
     is_movable: false
+    is_readable: false
     module: ophyd.sim
   identical_det:
     classname: SynGauss
+    is_flyable: false
     is_movable: false
+    is_readable: true
     module: ophyd.sim
   img:
     classname: SynSignalWithRegistry
+    is_flyable: false
     is_movable: true
+    is_readable: true
     module: ophyd.sim
   invariant1:
     classname: InvariantSignal
+    is_flyable: false
     is_movable: true
+    is_readable: true
     module: ophyd.sim
   invariant2:
     classname: InvariantSignal
+    is_flyable: false
     is_movable: true
+    is_readable: true
     module: ophyd.sim
   jittery_motor1:
     classname: SynAxis
+    is_flyable: false
     is_movable: true
+    is_readable: true
     module: ophyd.sim
   jittery_motor2:
     classname: SynAxis
+    is_flyable: false
     is_movable: true
+    is_readable: true
     module: ophyd.sim
   motor:
     classname: SynAxis
+    is_flyable: false
     is_movable: true
+    is_readable: true
     module: ophyd.sim
   motor1:
     classname: SynAxis
+    is_flyable: false
     is_movable: true
+    is_readable: true
     module: ophyd.sim
   motor2:
     classname: SynAxis
+    is_flyable: false
     is_movable: true
+    is_readable: true
     module: ophyd.sim
   motor3:
     classname: SynAxis
+    is_flyable: false
     is_movable: true
+    is_readable: true
     module: ophyd.sim
   motor_empty_hints1:
     classname: SynAxisEmptyHints
+    is_flyable: false
     is_movable: true
+    is_readable: true
     module: ophyd.sim
   motor_empty_hints2:
     classname: SynAxisEmptyHints
+    is_flyable: false
     is_movable: true
+    is_readable: true
     module: ophyd.sim
   motor_no_hints1:
     classname: SynAxisNoHints
+    is_flyable: false
     is_movable: true
+    is_readable: true
     module: ophyd.sim
   motor_no_hints2:
     classname: SynAxisNoHints
+    is_flyable: false
     is_movable: true
+    is_readable: true
     module: ophyd.sim
   motor_no_pos:
     classname: SynAxisNoPosition
+    is_flyable: false
     is_movable: true
+    is_readable: true
     module: ophyd.sim
   new_trivial_flyer:
     classname: NewTrivialFlyer
+    is_flyable: true
     is_movable: false
+    is_readable: false
     module: ophyd.sim
   noisy_det:
     classname: SynGauss
+    is_flyable: false
     is_movable: false
+    is_readable: true
     module: ophyd.sim
   pseudo1x3:
     classname: SPseudo1x3
+    is_flyable: false
     is_movable: true
+    is_readable: true
     module: ophyd.sim
   pseudo3x3:
     classname: SPseudo3x3
+    is_flyable: false
     is_movable: true
+    is_readable: true
     module: ophyd.sim
   rand:
     classname: SynPeriodicSignal
+    is_flyable: false
     is_movable: true
+    is_readable: true
     module: ophyd.sim
   rand2:
     classname: SynPeriodicSignal
+    is_flyable: false
     is_movable: true
+    is_readable: true
     module: ophyd.sim
   sig:
     classname: Signal
+    is_flyable: false
     is_movable: true
+    is_readable: true
     module: ophyd.signal
   signal:
     classname: SynSignal
+    is_flyable: false
     is_movable: true
+    is_readable: true
     module: ophyd.sim
   trivial_flyer:
     classname: TrivialFlyer
+    is_flyable: true
     is_movable: false
+    is_readable: false
     module: ophyd.sim
 existing_plans:
   _sim_plan_inner:
@@ -185,6 +267,7 @@ existing_plans:
       is_generator: true
   adaptive_scan:
     description: Scan over one variable with adaptively tuned step size.
+    module: bluesky.plans
     name: adaptive_scan
     parameters:
     - description: list of 'readable' objects
@@ -250,6 +333,7 @@ existing_plans:
       is_generator: true
   count:
     description: Take one or more readings from detectors.
+    module: bluesky.plans
     name: count
     parameters:
     - description: list of 'readable' objects
@@ -290,6 +374,7 @@ existing_plans:
       is_generator: true
   fly:
     description: Perform a fly scan with one or more 'flyers'.
+    module: bluesky.plans
     name: fly
     parameters:
     - description: objects that support the flyer interface
@@ -307,6 +392,7 @@ existing_plans:
       is_generator: true
   grid_scan:
     description: Scan over a mesh; each motor is on an independent trajectory.
+    module: bluesky.plans
     name: grid_scan
     parameters:
     - description: list of 'readable' objects
@@ -354,6 +440,7 @@ existing_plans:
     properties:
       is_generator: true
   inner_product_scan:
+    module: bluesky.plans
     name: inner_product_scan
     parameters:
     - kind:
@@ -382,6 +469,7 @@ existing_plans:
       is_generator: true
   list_grid_scan:
     description: Scan over a mesh; each motor is on an independent trajectory.
+    module: bluesky.plans
     name: list_grid_scan
     parameters:
     - description: list of 'readable' objects
@@ -436,6 +524,7 @@ existing_plans:
       is_generator: true
   list_scan:
     description: Scan over one or more variables in steps simultaneously (inner product).
+    module: bluesky.plans
     name: list_scan
     parameters:
     - description: list of 'readable' objects
@@ -471,6 +560,7 @@ existing_plans:
       is_generator: true
   log_scan:
     description: Scan over one variable in log-spaced steps.
+    module: bluesky.plans
     name: log_scan
     parameters:
     - description: list of 'readable' objects
@@ -569,6 +659,8 @@ existing_plans:
           - det2
           - det3
         type: typing.List[Detectors]
+      default: '[''det1'', ''det2'']'
+      default_defined_in_decorator: true
       description: Detectors to use for measurement.
       kind:
         name: POSITIONAL_OR_KEYWORD
@@ -576,6 +668,7 @@ existing_plans:
       name: detectors
     - annotation:
         type: typing.List[float]
+      default: None
       description: Motor positions. The number of positions must be equal to the number
         of the motors.
       kind:
@@ -586,6 +679,7 @@ existing_plans:
       is_generator: true
   ramp_plan:
     description: Take data while ramping one or more positioners.
+    module: bluesky.plans
     name: ramp_plan
     parameters:
     - description: 'plan to start the ramp.  This will be run inside of a open/close
@@ -652,6 +746,7 @@ existing_plans:
       is_generator: true
   rel_adaptive_scan:
     description: Relative scan over one variable with adaptively tuned step size.
+    module: bluesky.plans
     name: rel_adaptive_scan
     parameters:
     - description: list of 'readable' objects
@@ -717,6 +812,7 @@ existing_plans:
       is_generator: true
   rel_grid_scan:
     description: Scan over a mesh relative to current position.
+    module: bluesky.plans
     name: rel_grid_scan
     parameters:
     - description: list of 'readable' objects
@@ -768,6 +864,7 @@ existing_plans:
       point is
 
       relative to the current position.'
+    module: bluesky.plans
     name: rel_list_grid_scan
     parameters:
     - description: list of 'readable' objects
@@ -822,6 +919,7 @@ existing_plans:
       is_generator: true
   rel_list_scan:
     description: Scan over one variable in steps relative to current position.
+    module: bluesky.plans
     name: rel_list_scan
     parameters:
     - description: list of 'readable' objects
@@ -856,6 +954,7 @@ existing_plans:
       is_generator: true
   rel_log_scan:
     description: Scan over one variable in log-spaced steps relative to current position.
+    module: bluesky.plans
     name: rel_log_scan
     parameters:
     - description: list of 'readable' objects
@@ -901,6 +1000,7 @@ existing_plans:
       is_generator: true
   rel_scan:
     description: Scan over one multi-motor trajectory relative to current position.
+    module: bluesky.plans
     name: rel_scan
     parameters:
     - description: list of 'readable' objects
@@ -942,6 +1042,7 @@ existing_plans:
       is_generator: true
   rel_spiral:
     description: Relative spiral scan
+    module: bluesky.plans
     name: rel_spiral
     parameters:
     - kind:
@@ -1012,6 +1113,7 @@ existing_plans:
       is_generator: true
   rel_spiral_fermat:
     description: Relative fermat spiral scan
+    module: bluesky.plans
     name: rel_spiral_fermat
     parameters:
     - description: list of 'readable' objects
@@ -1083,6 +1185,7 @@ existing_plans:
       is_generator: true
   rel_spiral_square:
     description: Relative square spiral scan, centered around current (x, y) position.
+    module: bluesky.plans
     name: rel_spiral_square
     parameters:
     - description: list of 'readable' objects
@@ -1139,6 +1242,7 @@ existing_plans:
     properties:
       is_generator: true
   relative_inner_product_scan:
+    module: bluesky.plans
     name: relative_inner_product_scan
     parameters:
     - kind:
@@ -1167,6 +1271,7 @@ existing_plans:
       is_generator: true
   scan:
     description: Scan over one multi-motor trajectory.
+    module: bluesky.plans
     name: scan
     parameters:
     - description: list of 'readable' objects
@@ -1208,6 +1313,7 @@ existing_plans:
       is_generator: true
   scan_nd:
     description: Scan over an arbitrary N-dimensional trajectory.
+    module: bluesky.plans
     name: scan_nd
     parameters:
     - kind:
@@ -1262,6 +1368,7 @@ existing_plans:
       is_generator: true
   spiral:
     description: Spiral scan, centered around (x_start, y_start)
+    module: bluesky.plans
     name: spiral
     parameters:
     - kind:
@@ -1343,6 +1450,7 @@ existing_plans:
       is_generator: true
   spiral_fermat:
     description: Absolute fermat spiral scan, centered around (x_start, y_start)
+    module: bluesky.plans
     name: spiral_fermat
     parameters:
     - description: list of 'readable' objects
@@ -1424,6 +1532,7 @@ existing_plans:
       is_generator: true
   spiral_square:
     description: Absolute square spiral scan, centered around (x_center, y_center)
+    module: bluesky.plans
     name: spiral_square
     parameters:
     - description: list of 'readable' objects
@@ -1491,6 +1600,7 @@ existing_plans:
       is_generator: true
   tune_centroid:
     description: 'plan: tune a motor to the centroid of signal(motor)'
+    module: bluesky.plans
     name: tune_centroid
     parameters:
     - description: list of 'readable' objects
@@ -1554,6 +1664,7 @@ existing_plans:
       is_generator: true
   tweak:
     description: Move and motor and read a detector with an interactive prompt.
+    module: bluesky.plans
     name: tweak
     parameters:
     - kind:
@@ -1584,6 +1695,7 @@ existing_plans:
       is_generator: true
   x2x_scan:
     description: Relatively scan over two motors in a 2:1 ratio
+    module: bluesky.plans
     name: x2x_scan
     parameters:
     - description: list of 'readable' objects

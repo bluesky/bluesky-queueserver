@@ -440,6 +440,7 @@ def devices_from_nspace(nspace):
     dict(str: callable)
         Dictionary that maps device names to device objects.
     """
+
     try:
         from bluesky import protocols
     except ImportError:
@@ -452,20 +453,26 @@ def devices_from_nspace(nspace):
     return devices
 
 
-def prepare_plan(plan, *, allowed_plans, allowed_devices):
+def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, allowed_devices):
     """
-    Prepare the plan: replace the device names (str) in the plan specification by
-    references to ophyd objects; replace plan name by the reference to the plan.
+    Prepare the plan for execution: replace the device names (str) in the plan specification
+    by references to ophyd objects; replace plan name by the reference to the plan.
 
     Parameters
     ----------
-    plan: dict
+    plan : dict
         Plan specification. Keys: `name` (str) - plan name, `args` - plan args,
-        `kwargs` - plan kwargs.
-    allowed_plans: dict(str, callable)
-        Dictionary of allowed plans.
-    allowed_devices: dict(str, ophyd.Device)
-        Dictionary of allowed devices
+        `kwargs` - plan kwargs. The plan parameters must contain ``user_group``.
+    plans_in_nspace : dict(str, callable)
+        Dictionary of existing plans from the RE workspace.
+    devices_in_nspace : dict(str, ophyd.Device)
+        Dictionary of existing devices from RE workspace.
+    allowed_plans : dict(str, dict)
+        Dictionary of allowed plans that maps group name to dictionary of plans allowed
+        to the members of the group (group name can be found in ``plan["user_group"]``.
+    allowed_devices : dict(str, dict)
+        Dictionary of allowed devices that maps group name to dictionary of devices allowed
+        to the members of the group.
 
     Returns
     -------
@@ -486,36 +493,124 @@ def prepare_plan(plan, *, allowed_plans, allowed_devices):
     plan_kwargs = plan["kwargs"] if "kwargs" in plan else {}
     plan_meta = plan["meta"] if "meta" in plan else {}
 
-    def ref_from_name(v, allowed_items):
+    if "user_group" not in plan:
+        raise RuntimeError(f"No user group is specified in parameters for the plan '{plan_name}'")
+
+    user_group = plan["user_group"]  # User group is REQUIRED parameter of the plan
+    if (user_group not in allowed_plans) or (user_group not in allowed_devices):
+        raise RuntimeError(f"Lists of allowed plans and devices is not defined for the user group '{user_group}'")
+
+    group_plans = allowed_plans[user_group]
+    group_devices = allowed_devices[user_group]
+
+    # Run full validation of parameters (same as during plan submission)
+    success, errmsg = validate_plan(plan, allowed_plans=group_plans, allowed_devices=group_devices)
+    if not success:
+        raise RuntimeError(f"Validation of plan parameters failed: {errmsg}")
+
+    # Create the signature based on EXISTING plan from the workspace
+    signature = inspect.signature(plans_in_nspace[plan_name])
+
+    # Compare parameters in the signature and in the list of allowed plans. Make sure that the parameters
+    #   in the list of allowed plans are a subset of the existing parameters (otherwise the plan can not
+    #   be started). This not full validation.
+    existing_names = set([_.name for _ in signature.parameters.values()])
+    allowed_names = set([_["name"] for _ in group_plans[plan_name]["parameters"]])
+    extra_names = allowed_names - existing_names
+    if extra_names:
+        raise RuntimeError(f"Plan description in the list of allowed plans has extra parameters {extra_names}")
+
+    # Bind arguments of the plan
+    bound_args = signature.bind(*plan_args, **plan_kwargs)
+    # Separate dictionary for the default values define in the annotation decorator
+    default_params = {}
+
+    # Apply the default values defined in the annotation decorator. Default values defined in
+    #   the decorator may still be converted to device references (e.g. str->ophyd.Device).
+    for p in group_plans[plan_name]["parameters"]:
+        if ("default" in p) and p.get("default_defined_in_decorator", False):
+            if p["name"] not in bound_args.arguments:
+                default_value = _process_default_value(p["default"])
+                default_params.update({p["name"]: default_value})
+
+    def ref_from_name(v, items_in_nspace, allowed_items):
         if isinstance(v, str):
-            if v in allowed_items:
-                v = allowed_items[v]
+            if (v in allowed_items) and (v in items_in_nspace):
+                v = items_in_nspace[v]
         return v
 
-    def process_argument(v, allowed_items):
+    def process_argument(v, items_in_nspace, allowed_items):
         # Recursively process lists (iterables) and dictionaries
         if isinstance(v, str):
-            v = ref_from_name(v, allowed_items)
+            v = ref_from_name(v, items_in_nspace, allowed_items)
         elif isinstance(v, dict):
             for key, value in v.copy().items():
-                v[key] = process_argument(value, allowed_items)
+                v[key] = process_argument(value, items_in_nspace, allowed_items)
         elif isinstance(v, Iterable):
             v_original = v
             v = list()
             for item in v_original:
-                v.append(process_argument(item, allowed_items))
+                v.append(process_argument(item, items_in_nspace, allowed_items))
         return v
 
-    # TODO: should we allow plan names as arguments?
-    allowed_items = allowed_devices
+    def process_parameter_value(value, pp, items_in_nspace, group_plans, group_devices):
+        """
+        Process a parameter value ``value`` based on parameter description ``pp``
+        (``pp = allowed_plans[<plan_name>][<param_name>]``).
+        """
+        if "annotation" not in pp:
+            # No annotation - attempt to convert all strings to devices
+            sel_item_list = set(group_devices).union(set(group_plans))
+        elif ("plans" in pp["annotation"]) or ("devices" in pp["annotation"]):
+            # 'Custom' annotation: attempt to convert strings only to the devices
+            #    and plans that are part of the description.
+            pname_list, dname_list = [], []
+            for _ in pp["annotation"].get("plans", {}).values():
+                pname_list.extend(_)
+            for _ in pp["annotation"].get("devices", {}).values():
+                dname_list.extend(list(_))
+            # Make sure the names are  in the allowed list
+            pname_list = set([_ for _ in pname_list if _ in group_plans])
+            dname_list = set([_ for _ in dname_list if _ in group_devices])
+            sel_item_list = pname_list.union(dname_list)
+        else:
+            # If annotation (from decorator or function signature) does not contain
+            #   lists of devices or plans, then don't attempt to do the conversion
+            sel_item_list = set()
 
-    plan_func = process_argument(plan_name, allowed_plans)
+        if sel_item_list:
+            value = process_argument(value, items_in_nspace, sel_item_list)
+
+        return value
+
+    # Existing items include existing devices and existing plans
+    items_in_nspace = devices_in_nspace.copy()
+    items_in_nspace.update(plans_in_nspace)
+
+    plan_func = process_argument(plan_name, plans_in_nspace, group_plans)
     if isinstance(plan_func, str):
         success = False
-        err_msg = f"Plan '{plan_name}' is not allowed or does not exist."
+        err_msg = f"Plan '{plan_name}' is not allowed or does not exist"
 
-    plan_args_parsed = process_argument(plan_args, allowed_items)
-    plan_kwargs_parsed = process_argument(plan_kwargs, allowed_items)
+    # Map names to parameter descriptions
+    param_descriptions = {_["name"]: _ for _ in group_plans[plan_name]["parameters"]}
+    for p_name in bound_args.arguments:
+        value = bound_args.arguments[p_name]
+        # Fetch parameter description ({} if parameter is not found)
+        pp = param_descriptions.get(p_name, {})
+        bound_args.arguments[p_name] = process_parameter_value(
+            value, pp, items_in_nspace, group_plans, group_devices
+        )
+
+    for p_name in default_params:
+        value = default_params[p_name]
+        # Fetch parameter description ({} if parameter is not found)
+        pp = group_plans[plan_name].get(p_name, {})
+        default_params[p_name] = process_parameter_value(value, pp, items_in_nspace, group_plans, group_devices)
+
+    plan_args_parsed = list(bound_args.args)
+    plan_kwargs_parsed = bound_args.kwargs
+    plan_kwargs_parsed.update(default_params)
 
     # If metadata is a list of dictionaries, then merge the dictionaries into one
     #   with dictionaries with lower index having higher priority.
@@ -540,7 +635,7 @@ def prepare_plan(plan, *, allowed_plans, allowed_devices):
         raise RuntimeError(f"Error while parsing the plan: {err_msg}")
 
     plan_prepared = {
-        "name": plan_func,
+        "callable": plan_func,
         "args": plan_args_parsed,
         "kwargs": plan_kwargs_parsed,
         "meta": plan_meta,
@@ -942,6 +1037,78 @@ def _validate_plan_parameters(param_list, call_args, call_kwargs):
     return bound_args.arguments
 
 
+def filter_plan_description(plan_description, *, allowed_plans, allowed_devices):
+    """
+    Filter plan description from the list of existing plans (modify parameters
+    ``plan["annotation"]["plans"]`` and ``plan["annotation"]["devices"]``)
+    to include only plans and devices from the lists of allowed plans and allowed devices
+    for the given group. Creates and returns a modified copy of the plan.
+
+    Parameters
+    ----------
+    plan_description: dict
+        The dictionary containing plan description from the list of existing plans
+    allowed_plans: dict or None
+        The dictionary with allowed plans: key - plan name. If None, then
+        all plans are allowed (may change in the future). If ``{}`` then no
+        plans are allowed.
+    allowed_devices: dict or None
+        The dictionary with allowed devices: key - device name. If None, then
+        all devices are allowed (may change in the future). If ``{}`` then no
+        devices are allowed.
+
+    Returns
+    -------
+    dict
+        The dictionary with modified plan description.
+    """
+    plan_description = copy.deepcopy(plan_description)
+
+    if "parameters" in plan_description:
+        param_list = plan_description["parameters"]
+
+        # Filter 'devices' and 'plans' entries of 'param_list'. Leave only plans that are
+        #   in 'allowed_plans' and devices that are in 'allowed_devices'
+        for p in param_list:
+            if "annotation" in p:
+                if (allowed_plans is not None) and ("plans" in p["annotation"]):
+                    p_plans = p["annotation"]["plans"]
+                    for p_type in p_plans:
+                        p_plans[p_type] = tuple(_ for _ in p_plans[p_type] if _ in allowed_plans)
+                if (allowed_devices is not None) and ("devices" in p["annotation"]):
+                    p_dev = p["annotation"]["devices"]
+                    for p_type in p_dev:
+                        p_dev[p_type] = tuple(_ for _ in p_dev[p_type] if _ in allowed_devices)
+    return plan_description
+
+
+def _filter_allowed_plans(*, allowed_plans, allowed_devices):
+    """
+    Apply ``filter_plan_description`` to each plan in the list of allowed plans so that
+    only the allowed plans and devices are left in the enums for ``plans`` and ``devices``.
+
+    Parameters
+    ----------
+    allowed_plans: dict or None
+        The dictionary with allowed plans: key - plan name. If None, then
+        all plans are allowed (may change in the future). If ``{}`` then no
+        plans are allowed.
+    allowed_devices: dict or None
+        The dictionary with allowed devices: key - device name. If None, then
+        all devices are allowed (may change in the future). If ``{}`` then no
+        devices are allowed.
+
+    Returns
+    -------
+    dict
+       The modified copy of ``allowed_plans``.
+    """
+    return {
+        k: filter_plan_description(v, allowed_plans=allowed_plans, allowed_devices=allowed_devices)
+        for k, v in allowed_plans.items()
+    }
+
+
 def validate_plan(plan, *, allowed_plans, allowed_devices):
     """
     Validate the dictionary of plan parameters. Expected to be called before the plan
@@ -978,19 +1145,13 @@ def validate_plan(plan, *, allowed_plans, allowed_devices):
                 msg = f"Plan '{plan['name']}' is not in the list of allowed plans."
                 raise Exception(msg)
 
-            param_list = copy.deepcopy(allowed_plans[plan_name]["parameters"])
-
-            # Filter 'devices' and 'plans' entries of 'param_list'. Leave only plans that are
-            #   in 'allowed_plans' and devices that are in 'allowed_devices'
-            for p in param_list:
-                if ("annotation" in p) and ("plans" in p["annotation"]):
-                    p_plans = p["annotation"]["plans"]
-                    for p_type in p_plans:
-                        p_plans[p_type] = tuple(_ for _ in p_plans[p_type] if _ in allowed_plans)
-                if (allowed_devices is not None) and ("annotation" in p) and ("devices" in p["annotation"]):
-                    p_dev = p["annotation"]["devices"]
-                    for p_type in p_dev:
-                        p_dev[p_type] = tuple(_ for _ in p_dev[p_type] if _ in allowed_devices)
+            plan_description = allowed_plans[plan_name]
+            # Plan description should contain only allowed plans and devices as parameters at
+            #   this point. But run the filtering again just in case.
+            plan_description = filter_plan_description(
+                plan_description, allowed_plans=allowed_plans, allowed_devices=allowed_devices
+            )
+            param_list = plan_description["parameters"]
 
             call_args = plan.get("args", {})
             call_kwargs = plan.get("kwargs", {})
@@ -1024,8 +1185,8 @@ def bind_plan_arguments(*, plan_args, plan_kwargs, plan_parameters):
     ----------
     plan_args : list
         A list containing plan args
-    plan_kwargs : list
-        A list containing plan kwargs
+    plan_kwargs : dict
+        A dictionary containing plan kwargs
     plan_parameters : dict
         A dictionary containing description of plan signature. The dictionary is the entry
         of ``allowed_plans`` dictionary (e.g. ``allowed_plans['count']``)
@@ -1147,7 +1308,7 @@ def _parse_docstring(docstring):
     return doc_annotation
 
 
-def _process_plan(plan):
+def _process_plan(plan, *, existing_devices):
     """
     Returns parameters of a plan. The function accepts callable object that implements the plan
     and returns the dictionary with descriptions of the plan and plan parameters. The function
@@ -1172,6 +1333,7 @@ def _process_plan(plan):
 
         {
             "name": <plan name>  # REQUIRED
+            "module": <module name>  # whenever available
             "description": <plan description (multiline text)>
             "properties": {  # REQUIRED, may be empty
                 "is_generator": <boolean that indicates if this is a generator function>
@@ -1195,6 +1357,8 @@ def _process_plan(plan):
                          "enums": <dict of enum types (lists of strings)>
                      }
                      "default": <string representation of the default value>
+                     "default_defined_in_decorator": boolean  # True if the default value is defined
+                                                              # in decorator, otherwise False/not set
                 }
                 <parameter_name_2>: ...
                 <parameter_name_3>: ...
@@ -1211,6 +1375,11 @@ def _process_plan(plan):
     -------
     dict
         Dictionary with plan parameters.
+    existing_devices : dict
+        Prepared dictionary of existing devices (returned by the function ``_prepare_devices``.
+        The dictionary is used to create lists of devices for built-in custom types
+        ``AllDetectors``, ``AllMotors``, ``AllFlyers``. If it is known that built-in plans
+        are not used, then empty dictionary can be passed instead of the list of existing devices.
 
     Raises
     ------
@@ -1258,7 +1427,7 @@ def _process_plan(plan):
             )
         return s_value
 
-    def assemble_custom_annotation(parameter):
+    def assemble_custom_annotation(parameter, *, existing_devices):
         """
         Assemble annotation from decorator parameters. It will be stored as a separate dictionary.
         Returns ``None`` if there is no annotation.
@@ -1273,6 +1442,44 @@ def _process_plan(plan):
             if k in parameter:
                 annotation[k] = copy.copy(parameter[k])
 
+        # Add lists of device names for built-in types
+        built_in_types = ("AllDetectors", "AllMotors", "AllFlyers")
+        for btype in built_in_types:
+            type_found = False
+            nvchars = "[^_A-Za-z0-9]"
+            for start, end in (("^", "$"), ("^", nvchars), (nvchars, "$"), (nvchars, nvchars)):
+                pattern = f"{start}{btype}{end}"
+                if re.search(pattern, annotation["type"]):
+                    type_found = True
+                    break
+
+            if type_found:
+                if "devices" not in annotation:
+                    annotation["devices"] = {}
+                # If annotation already contains type definition for 'built-in' type
+                #   then no name list is created.
+                if btype not in annotation["devices"]:
+                    if btype == "AllDetectors":
+
+                        def condition(_btype):
+                            return _btype["is_readable"] and not _btype["is_movable"]
+
+                    elif btype == "AllMotors":
+
+                        def condition(_btype):
+                            return _btype["is_readable"] and _btype["is_movable"]
+
+                    elif btype == "AllFlyers":
+
+                        def condition(_btype):
+                            return _btype["is_flyable"]
+
+                    else:
+                        raise RuntimeError(f"Error in processing algorithm: unsupported built-in type '{btype}'")
+                    device_names = [k for k, v in existing_devices.items() if condition(v)]
+
+                    annotation["devices"][btype] = device_names
+
         return annotation
 
     sig = inspect.signature(plan)
@@ -1282,6 +1489,10 @@ def _process_plan(plan):
     doc_annotation = _parse_docstring(docstring)
 
     ret = {"name": plan.__name__, "properties": {}, "parameters": []}
+
+    module_name = plan.__module__
+    if module_name != "<run_path>":
+        ret.update({"module": module_name})
 
     try:
 
@@ -1308,10 +1519,15 @@ def _process_plan(plan):
 
             # Parameter description (attempt to get it from the decorator, then from docstring)
             desc, annotation, default = None, None, None
+            default_defined_in_decorator = False
             if use_custom and (p.name in param_annotation["parameters"]):
                 desc = param_annotation["parameters"][p.name].get("description", None)
-                annotation = assemble_custom_annotation(param_annotation["parameters"][p.name])
+                annotation = assemble_custom_annotation(
+                    param_annotation["parameters"][p.name], existing_devices=existing_devices
+                )
                 default = param_annotation["parameters"][p.name].get("default", None)
+                if default:
+                    default_defined_in_decorator = True
             if not desc and use_docstring and (p.name in doc_annotation["parameters"]):
                 desc = doc_annotation["parameters"][p.name].get("description", None)
             if not annotation and p.annotation is not inspect.Parameter.empty:
@@ -1319,12 +1535,20 @@ def _process_plan(plan):
                 if annotation:
                     # The case when annotation does exist (otherwise it is None)
                     annotation = {"type": annotation}
+            if default and p.default is inspect.Parameter.empty:
+                # The default value in the decorator overrides the default value in the header,
+                #   not replace it. Therefore the default value is required in the header if
+                #   one is specified in the decorator.
+                raise ValueError(
+                    f"Missing default value for the parameter '{p.name}' in the plan signature: "
+                    f"The default value {default} is specified in the annotation decorator, "
+                    f"there for a default value is required in the plan header."
+                )
             if not default and (p.default is not inspect.Parameter.empty):
                 try:
                     default = convert_default_to_string(p.default)  # May raise an exception
                 except Exception as ex:
                     raise ValueError(f"Parameter '{p.name}': {ex}")
-
             if desc:
                 working_dict["description"] = desc
 
@@ -1337,6 +1561,8 @@ def _process_plan(plan):
                 # Verify that the encoded representation of the default can be decoded.
                 _process_default_value(default)  # May raises exception
                 working_dict["default"] = default
+                if default_defined_in_decorator:
+                    working_dict["default_defined_in_decorator"] = True
 
     except Exception as ex:
         raise ValueError(f"Failed to create description of plan '{plan.__name__}': {ex}")
@@ -1344,22 +1570,39 @@ def _process_plan(plan):
     return ret
 
 
-def _prepare_plans(plans):
+def _prepare_plans(plans, *, existing_devices):
     """
     Prepare dictionary of existing plans for saving to YAML file.
+
+    Parameters
+    ----------
+    plans : dict
+        Dictionary of plans extracted from the workspace
+    existing_devices : dict
+        Prepared dictionary of existing devices (returned by the function ``_prepare_devices``.
+
+    Returns
+    -------
+    dict
+        Dictionary that maps plan names to plan descriptions
     """
-    return {k: _process_plan(v) for k, v in plans.items()}
+    return {k: _process_plan(v, existing_devices=existing_devices) for k, v in plans.items()}
 
 
 def _prepare_devices(devices):
     """
     Prepare dictionary of existing devices for saving to YAML file.
     """
-    from bluesky.utils import is_movable
+    try:
+        from bluesky import protocols
+    except ImportError:
+        import bluesky_queueserver.manager._protocols as protocols
 
     return {
         k: {
-            "is_movable": is_movable(v),  # True - motor, False - detector
+            "is_readable": isinstance(v, protocols.Readable),
+            "is_movable": isinstance(v, protocols.Movable),
+            "is_flyable": isinstance(v, protocols.Flyable),
             "classname": type(v).__name__,
             "module": type(v).__module__,
         }
@@ -1429,9 +1672,12 @@ def gen_list_of_plans_and_devices(
         plans = plans_from_nspace(nspace)
         devices = devices_from_nspace(nspace)
 
+        existing_devices = _prepare_devices(devices)
+        existing_plans = _prepare_plans(plans, existing_devices=existing_devices)
+
         existing_plans_and_devices = {
-            "existing_plans": _prepare_plans(plans),
-            "existing_devices": _prepare_devices(devices),
+            "existing_plans": existing_plans,
+            "existing_devices": existing_devices,
         }
 
         file_path = os.path.join(file_dir, file_name)
@@ -1725,8 +1971,9 @@ def load_allowed_plans_and_devices(path_existing_plans_and_devices=None, path_us
     ----------
     path_existing_plans_and_devices: str or None
         Full path to YAML file, which contains dictionaries of existing plans and devices.
-        Raises an exception if the file does not exist. If None, then the empty dictionaries
-        for the allowed plans and devices are returned.
+        Raises an exception if the file does not exist. If ``None`` or the file contains
+        no plans and/or devices, then empty dictionaries of the allowed plans and devices
+        are returned for all groups.
     path_user_group_permissions: str or None
         Full path to YAML file, which contains information on user group permissions.
         Exception is raised if the file does not exist. If None, then the output
@@ -1746,7 +1993,13 @@ def load_allowed_plans_and_devices(path_existing_plans_and_devices=None, path_us
 
     allowed_plans, allowed_devices = {}, {}
 
-    if user_group_permissions:
+    if path_user_group_permissions is not None:
+
+        # If the file was loaded, but it contains no valid user groups, then the exception
+        #   should be raised. Incorrect file path could be specified.
+        if not user_group_permissions:
+            raise RuntimeError(f"The file '{path_user_group_permissions}' contains no user group information")
+
         user_groups = list(user_group_permissions["user_groups"].keys())
 
         # First filter the plans and devices based on the permissions for 'root' user group.
@@ -1756,39 +2009,47 @@ def load_allowed_plans_and_devices(path_existing_plans_and_devices=None, path_us
         plans_root, devices_root = existing_plans, existing_devices
         if "root" in user_groups:
             group_permissions_root = user_group_permissions["user_groups"]["root"]
-            if existing_plans:
-                plans_root = _select_allowed_items(
-                    existing_plans,
-                    group_permissions_root["allowed_plans"],
-                    group_permissions_root["forbidden_plans"],
-                )
             if existing_devices:
                 devices_root = _select_allowed_items(
                     existing_devices,
                     group_permissions_root["allowed_devices"],
                     group_permissions_root["forbidden_devices"],
                 )
+            if existing_plans:
+                plans_root = _select_allowed_items(
+                    existing_plans,
+                    group_permissions_root["allowed_plans"],
+                    group_permissions_root["forbidden_plans"],
+                )
 
         # Now create lists of allowed devices and plans based on the lists for the 'root' user group
         for group in user_groups:
-            group_permissions = user_group_permissions["user_groups"][group]
+            selected_devices, selected_plans = {}, {}
+            if group == "root":
+                selected_devices = devices_root
+                selected_plans = plans_root
+            else:
+                group_permissions = user_group_permissions["user_groups"][group]
 
-            if existing_plans:
-                selected_plans = _select_allowed_items(
-                    plans_root, group_permissions["allowed_plans"], group_permissions["forbidden_plans"]
-                )
-                allowed_plans[group] = selected_plans
+                if existing_devices:
+                    selected_devices = _select_allowed_items(
+                        devices_root, group_permissions["allowed_devices"], group_permissions["forbidden_devices"]
+                    )
 
-            if existing_devices:
-                selected_devices = _select_allowed_items(
-                    devices_root, group_permissions["allowed_devices"], group_permissions["forbidden_devices"]
-                )
-                allowed_devices[group] = selected_devices
+                if existing_plans:
+                    selected_plans = _select_allowed_items(
+                        plans_root, group_permissions["allowed_plans"], group_permissions["forbidden_plans"]
+                    )
 
-    if not allowed_plans and existing_plans:
+            selected_plans = _filter_allowed_plans(allowed_plans=selected_plans, allowed_devices=selected_devices)
+
+            allowed_devices[group] = selected_devices
+            allowed_plans[group] = selected_plans
+
+    else:
+
+        # No user groups are specified
         allowed_plans["root"] = existing_plans
-
-    if not allowed_devices and existing_devices:
         allowed_devices["root"] = existing_devices
 
     return allowed_plans, allowed_devices

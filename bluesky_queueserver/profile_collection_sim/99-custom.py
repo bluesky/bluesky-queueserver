@@ -26,6 +26,7 @@ custom_test_flyer = ophyd.sim.MockFlyer("custom_test_flyer", ophyd.sim.det, ophy
                 "description": "Detectors to use for measurement.",
                 "annotation": "typing.List[Detectors]",
                 "devices": {"Detectors": ("det1", "det2", "det3")},
+                "default": "['det1', 'det2']",
             },
             "positions": {
                 "description": "Motor positions. The number of positions must be equal "
@@ -37,8 +38,8 @@ custom_test_flyer = ophyd.sim.MockFlyer("custom_test_flyer", ophyd.sim.det, ophy
 )
 def move_then_count(
     motors: typing.List[ophyd.device.Device],
-    detectors: typing.List[ophyd.device.Device],
-    positions: typing.List[float],
+    detectors: typing.Optional[typing.List[ophyd.device.Device]] = None,
+    positions: typing.Optional[typing.List[float]] = None,
 ) -> typing.Generator[bluesky.utils.Msg, None, None]:
     if not isinstance(motors, (list, tuple)):
         raise TypeError(f"Parameter 'motors' should be a list or a tuple: type(motors) = {type(motors)}")

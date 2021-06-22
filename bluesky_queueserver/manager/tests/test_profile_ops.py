@@ -9,6 +9,7 @@ import pprint
 import sys
 import enum
 import inspect
+from collections.abc import Callable
 
 try:
     from bluesky import protocols
@@ -16,6 +17,7 @@ except ImportError:
     import bluesky_queueserver.manager._protocols as protocols
 
 import ophyd
+import ophyd.sim
 
 from .common import copy_default_profile_collection, patch_first_startup_file
 
@@ -48,6 +50,9 @@ from bluesky_queueserver.manager.profile_ops import (
     _process_default_value,
     construct_parameters,
 )
+
+# User name and user group name used throughout most of the tests.
+_user, _user_group = "Testing Script", "admin"
 
 
 def test_get_default_startup_dir():
@@ -1007,8 +1012,8 @@ def test_process_plan_1(plan_func, plan_info_expected):
 
     plan_info_expected = plan_info_expected.copy()
     plan_info_expected["name"] = plan_func.__name__
-
-    pf_info = _process_plan(plan_func)
+    plan_info_expected["module"] = plan_func.__module__
+    pf_info = _process_plan(plan_func, existing_devices={})
 
     assert pf_info == plan_info_expected
 
@@ -1223,8 +1228,9 @@ def test_process_plan_2(plan_func, plan_info_expected):
 
     plan_info_expected = plan_info_expected.copy()
     plan_info_expected["name"] = plan_func.__name__
+    plan_info_expected["module"] = plan_func.__module__
 
-    pf_info = _process_plan(plan_func)
+    pf_info = _process_plan(plan_func, existing_devices={})
 
     assert pf_info == plan_info_expected, pprint.pformat(pf_info)
 
@@ -1446,7 +1452,7 @@ _pf3d_processed = {
         },
     }
 )
-def _pf3e(val1, val2: str = "some_str", val3: typing.Any = None):
+def _pf3e(val1=None, val2: str = "some_str", val3: typing.Any = None):
     yield from [val1, val2, val3]
 
 
@@ -1456,18 +1462,21 @@ _pf3e_processed = {
             "name": "val1",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "default": "1000",
+            "default_defined_in_decorator": True,
         },
         {
             "name": "val2",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "annotation": {"type": "str"},
             "default": "'replacement_str'",
+            "default_defined_in_decorator": True,
         },
         {
             "name": "val3",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "default": "False",
             "annotation": {"type": "typing.Any"},
+            "default_defined_in_decorator": True,
         },
     ],
     "properties": {"is_generator": True},
@@ -1498,31 +1507,172 @@ _pf3f_processed = {
             "name": "val1",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "default": "'device_name'",
+            "default_defined_in_decorator": True,
         },
     ],
     "properties": {"is_generator": True},
 }
 
 
+@parameter_annotation_decorator(
+    {
+        "parameters": {"val1": {"annotation": "AllDetectors"}},
+    }
+)
+def _pf3g(val1):
+    yield from [val1]
+
+
+_pf3g_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "AllDetectors", "devices": {"AllDetectors": ["dev_det1", "dev_det2"]}},
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+_pf3g_empty_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "AllDetectors", "devices": {"AllDetectors": []}},
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+@parameter_annotation_decorator(
+    {
+        "parameters": {
+            "val1": {
+                "annotation": "AllDetectors",
+                # Type 'AllDetectors' is explicitly defined, so it is not treated as default
+                "devices": {"AllDetectors": ["dev1", "dev2", "dev3"]},
+            }
+        },
+    }
+)
+def _pf3h(val1):
+    yield from [val1]
+
+
+_pf3h_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "AllDetectors", "devices": {"AllDetectors": ["dev1", "dev2", "dev3"]}},
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+@parameter_annotation_decorator(
+    {
+        "parameters": {"val1": {"annotation": "typing.List[AllMotors]"}},
+    }
+)
+def _pf3i(val1):
+    yield from [val1]
+
+
+_pf3i_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "typing.List[AllMotors]", "devices": {"AllMotors": ["dev_m1"]}},
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+@parameter_annotation_decorator(
+    {
+        "parameters": {"val1": {"annotation": "typing.List[AllFlyers]"}},
+    }
+)
+def _pf3j(val1):
+    yield from [val1]
+
+
+_pf3j_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "typing.List[AllFlyers]", "devices": {"AllFlyers": ["dev_fly1"]}},
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+@parameter_annotation_decorator(
+    {
+        "parameters": {"val1": {"annotation": "typing.Union[AllMotors, AllFlyers]"}},
+    }
+)
+def _pf3k(val1):
+    yield from [val1]
+
+
+_pf3k_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "typing.Union[AllMotors, AllFlyers]",
+                "devices": {"AllMotors": ["dev_m1"], "AllFlyers": ["dev_fly1"]},
+            },
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+_pf3_existing_devices = {
+    "dev_det1": {"is_readable": True, "is_movable": False, "is_flyable": False},
+    "dev_det2": {"is_readable": True, "is_movable": False, "is_flyable": False},
+    "dev_m1": {"is_readable": True, "is_movable": True, "is_flyable": False},
+    "dev_fly1": {"is_readable": False, "is_movable": False, "is_flyable": True},
+}
+
+
 # fmt: off
-@pytest.mark.parametrize("plan_func, plan_info_expected", [
-    (_pf3a, _pf3a_processed),
-    (_pf3b, _pf3b_processed),
-    (_pf3c, _pf3c_processed),
-    (_pf3d, _pf3d_processed),
-    (_pf3e, _pf3e_processed),
-    (_pf3f, _pf3f_processed),
+@pytest.mark.parametrize("plan_func, existing_devices, plan_info_expected", [
+    (_pf3a, {}, _pf3a_processed),
+    (_pf3b, {}, _pf3b_processed),
+    (_pf3c, {}, _pf3c_processed),
+    (_pf3d, {}, _pf3d_processed),
+    (_pf3e, {}, _pf3e_processed),
+    (_pf3f, {}, _pf3f_processed),
+    (_pf3g, _pf3_existing_devices, _pf3g_processed),
+    (_pf3g, {}, _pf3g_empty_processed),
+    (_pf3h, _pf3_existing_devices, _pf3h_processed),
+    (_pf3i, _pf3_existing_devices, _pf3i_processed),
+    (_pf3j, _pf3_existing_devices, _pf3j_processed),
+    (_pf3k, _pf3_existing_devices, _pf3k_processed),
 ])
 # fmt: on
-def test_process_plan_3(plan_func, plan_info_expected):
+def test_process_plan_3(plan_func, existing_devices, plan_info_expected):
     """
-    Function '_process_plan': parameter annotations from the signature
+    Function '_process_plan': parameter annotations from the annotation
     """
 
     plan_info_expected = plan_info_expected.copy()
     plan_info_expected["name"] = plan_func.__name__
+    plan_info_expected["module"] = plan_func.__module__
 
-    pf_info = _process_plan(plan_func)
+    pf_info = _process_plan(plan_func, existing_devices=existing_devices)
 
     assert pf_info == plan_info_expected, pprint.pformat(pf_info)
 
@@ -1567,11 +1717,28 @@ def _pf4c(val1, val2: str = "some_str", val3: typing.Any = None):
     yield from [val1, val2, val3]
 
 
+@parameter_annotation_decorator(
+    {
+        "parameters": {
+            "detector": {
+                "annotation": "Detectors1]",
+                "devices": {"Detectors1": ("d1", "d2", "d3")},
+                "default": "'d1'",
+            },
+        },
+    }
+)
+def _pf4d(detector: Optional[ophyd.Device]):
+    # Expected to fail: the default value is in the decorator, but not in the header
+    yield from [detector]
+
+
 # fmt: off
 @pytest.mark.parametrize("plan_func, err_msg", [
     (_pf4a_factory(), "unsupported default value type"),
     (_pf4b, "name 'Plans1' is not defined'"),
     (_pf4c, "Failed to decode the default value 'replacement_str'"),
+    (_pf4d, "Missing default value for the parameter 'detector' in the plan signature"),
 ])
 # fmt: on
 def test_process_plan_4_fail(plan_func, err_msg):
@@ -1579,7 +1746,7 @@ def test_process_plan_4_fail(plan_func, err_msg):
     Failing cases for 'process_plan' function. Some plans are expected to be rejected.
     """
     with pytest.raises(ValueError, match=err_msg):
-        _process_plan(plan_func)
+        _process_plan(plan_func, existing_devices={})
 
 
 # ---------------------------------------------------------------------------------
@@ -1970,34 +2137,295 @@ def test_devices_from_nspace():
     assert "custom_test_flyer" in devices
 
 
+# fmt: off
 @pytest.mark.parametrize(
-    "plan, success, err_msg",
+    "plan, exp_args, exp_kwargs, success, err_msg",
     [
-        ({"name": "count", "args": [["det1", "det2"]]}, True, ""),
-        ({"name": "scan", "args": [["det1", "det2"], "motor", -1, 1, 10]}, True, ""),
-        ({"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}, True, ""),
-        (
-            {"name": "countABC", "args": [["det1", "det2"]]},
-            False,
-            "Plan 'countABC' is not allowed or does not exist.",
-        ),
+        ({"name": "count", "user_group": _user_group, "args": [["det1", "det2"]]},
+         [[ophyd.sim.det1, ophyd.sim.det2]], {}, True, ""),
+        ({"name": "scan", "user_group": _user_group, "args": [["det1", "det2"], "motor", -1, 1, 10]},
+         [[ophyd.sim.det1, ophyd.sim.det2], ophyd.sim.motor, -1, 1, 10], {}, True, ""),
+        ({"name": "count", "user_group": _user_group, "args": [["det1", "det2"]],
+         "kwargs": {"num": 10, "delay": 1}},
+         [[ophyd.sim.det1, ophyd.sim.det2], 10, 1], {}, True, ""),
+        # Explicitly specify the value for 'detectors'.
+        ({"name": "move_then_count", "user_group": _user_group,
+          "args": [["motor1"], ["det1", "det3"]],
+          "kwargs": {"positions": [50, 70]}},
+         [[ophyd.sim.motor1], [ophyd.sim.det1, ophyd.sim.det3], [50, 70]], {}, True, ""),
+        # Explicitly specify the value for 'detectors': 'det4' is not in the list of allowed values.
+        ({"name": "move_then_count", "user_group": _user_group,
+          "args": [["motor1"], ["det1", "det4"]],
+          "kwargs": {"positions": [50, 70]}},
+         [[ophyd.sim.motor1], [ophyd.sim.det1], [50, 70]], {}, False,
+         "value is not a valid enumeration member; permitted: 'det1', 'det2', 'det3'"),
+        # Use default value for 'detectors' defined in parameter annotation
+        ({"name": "move_then_count", "user_group": _user_group, "args": [["motor1"]],
+          "kwargs": {"positions": [50, 70]}},
+         [[ophyd.sim.motor1]], {"positions": [50, 70], "detectors": [ophyd.sim.det1, ophyd.sim.det2]}, True, ""),
+        ({"name": "count", "args": [["det1", "det2"]]}, [], {}, False,
+         "No user group is specified in parameters for the plan 'count'"),
+        ({"name": "countABC", "user_group": _user_group, "args": [["det1", "det2"]]}, [], {}, False,
+         "Plan 'countABC' is not in the list of allowed plans"),
     ],
 )
-def test_prepare_plan(plan, success, err_msg):
-
+# fmt: on
+def test_prepare_plan_1(plan, exp_args, exp_kwargs, success, err_msg):
+    """
+    Basic test for ``prepare_plan``: test main features using the simulated profile collection.
+    """
     pc_path = get_default_startup_dir()
     nspace = load_profile_collection(pc_path)
     plans = plans_from_nspace(nspace)
     devices = devices_from_nspace(nspace)
 
+    path_allowed_plans = os.path.join(pc_path, "existing_plans_and_devices.yaml")
+    path_permissions = os.path.join(pc_path, "user_group_permissions.yaml")
+    allowed_plans, allowed_devices = load_allowed_plans_and_devices(path_allowed_plans, path_permissions)
+
     if success:
-        plan_parsed = prepare_plan(plan, allowed_plans=plans, allowed_devices=devices)
-        expected_keys = ("name", "args", "kwargs")
+        plan_parsed = prepare_plan(
+            plan,
+            plans_in_nspace=plans,
+            devices_in_nspace=devices,
+            allowed_plans=allowed_plans,
+            allowed_devices=allowed_devices,
+        )
+        expected_keys = ("callable", "args", "kwargs")
         for k in expected_keys:
             assert k in plan_parsed, f"Key '{k}' does not exist: {plan_parsed.keys()}"
+        assert f"{plan_parsed['args']}" == f"{exp_args}"  # Compare as strings
+        assert f"{plan_parsed['kwargs']}" == f"{exp_kwargs}"
     else:
-        with pytest.raises(RuntimeError, match=err_msg):
-            prepare_plan(plan, allowed_plans=plans, allowed_devices=devices)
+        with pytest.raises(Exception, match=err_msg):
+            prepare_plan(
+                plan,
+                plans_in_nspace=plans,
+                devices_in_nspace=devices,
+                allowed_plans=allowed_plans,
+                allowed_devices=allowed_devices,
+            )
+
+
+_pp_dev1 = ophyd.Device(name="_pp_dev1")
+_pp_dev2 = ophyd.Device(name="_pp_dev2")
+_pp_dev3 = ophyd.Device(name="_pp_dev3")
+
+
+def _pp_p1():
+    yield from []
+
+
+def _pp_p2():
+    yield from []
+
+
+def _pp_p3():
+    yield from []
+
+
+def _gen_environment_pp2():
+    def plan1(a, b, c):
+        yield from [a, b, c]
+
+    def plan2(a: int = 5, b: float = 0.5, s: str = "abc"):
+        yield from [a, b, s]
+
+    @parameter_annotation_decorator(
+        {
+            "parameters": {
+                "a": {"annotation": "float", "default": "0.5"},
+                "b": {"annotation": "int", "default": "5"},
+                "s": {"annotation": "int", "default": "50"},
+            }
+        }
+    )
+    def plan3(a: int = 5, b: float = 0.5, s: str = "abc"):
+        # Override all the types and defaults (just the test of features)
+        yield from [a, b, s]
+
+    @parameter_annotation_decorator(
+        {
+            "parameters": {
+                "detectors": {
+                    "annotation": "typing.List[Detectors]",
+                    "devices": {"Detectors": ["_pp_dev1", "_pp_dev2", "_pp_dev3"]},
+                    # Default list of the detectors
+                    "default": "['_pp_dev2', '_pp_dev3']",
+                }
+            }
+        }
+    )
+    def plan4(detectors: typing.Optional[typing.List[ophyd.Device]] = None):
+        # Default for 'detectors' is None, which is converted to the default list of detectors
+        detectors = detectors or [_pp_dev2, _pp_dev3]
+        yield from detectors
+
+    @parameter_annotation_decorator(
+        {
+            "parameters": {
+                "plan_to_execute": {
+                    "annotation": "Plans",
+                    "plans": {"Plans": ["_pp_p1", "_pp_p2", "_pp_p3"]},
+                    # Default list of plans
+                    "default": "'_pp_p2'",
+                }
+            }
+        }
+    )
+    def plan5(plan_to_execute: typing.Callable = _pp_p2):
+        yield from plan_to_execute
+
+    @parameter_annotation_decorator(
+        {
+            "parameters": {
+                "strings": {
+                    "annotation": "typing.Union[typing.List[Selection], typing.Tuple[Selection]]",
+                    "enums": {"Selection": ["one", "two", "three"]},
+                    "default": "('one', 'three')",
+                }
+            }
+        }
+    )
+    def plan6(strings: typing.Union[typing.List[str], typing.Tuple[str]] = ("one", "three")):
+        yield from strings
+
+    def plan7(a, b: str):
+        # All strings passed as 'a' should be converted to devices/plans when possible.
+        #   Strings passed to 'b' should not be converted.
+        yield from [a, b]
+
+    # Create namespace
+    nspace = {"_pp_dev1": _pp_dev1, "_pp_dev2": _pp_dev2, "_pp_dev3": _pp_dev3}
+    nspace.update({"_pp_p1": _pp_p1, "_pp_p2": _pp_p2, "_pp_p3": _pp_p3})
+    nspace.update({"plan1": plan1})
+    nspace.update({"plan2": plan2})
+    nspace.update({"plan3": plan3})
+    nspace.update({"plan4": plan4})
+    nspace.update({"plan5": plan5})
+    nspace.update({"plan6": plan6})
+    nspace.update({"plan7": plan7})
+
+    plans_in_nspace = plans_from_nspace(nspace)
+    devices_in_nspace = devices_from_nspace(nspace)
+
+    existing_devices = _prepare_devices(devices_in_nspace)
+    existing_plans = _prepare_plans(plans_in_nspace, existing_devices=existing_devices)
+    allowed_plans, allowed_devices = {}, {}
+    allowed_plans["root"], allowed_devices["root"] = existing_plans.copy(), existing_devices.copy()
+    allowed_plans["admin"], allowed_devices["admin"] = existing_plans.copy(), existing_devices.copy()
+
+    return plans_in_nspace, devices_in_nspace, allowed_plans, allowed_devices
+
+
+# fmt: off
+@pytest.mark.parametrize(
+    "plan_name, plan, exp_args, exp_kwargs, exp_meta, success, err_msg",
+    [
+        ("plan1", {"user_group": "admin", "args": [3, 4, 5]},
+         [3, 4, 5], {}, {}, True, ""),
+        ("plan1", {"user_group": "admin", "args": [3, 4], "kwargs": {"c": 5}},
+         [3, 4, 5], {}, {}, True, ""),
+        ("plan1", {"user_group": "admin", "args": [3, 4], "kwargs": {"b": 5}},
+         [3, 4, 5], {}, {}, False, "Plan validation failed: multiple values for argument 'b'"),
+        ("plan1", {"user_group": "admin", "args": [3, 4, 5], "meta": {"p1": 10, "p2": "abc"}},
+         [3, 4, 5], {}, {"p1": 10, "p2": "abc"}, True, ""),
+        ("plan1", {"user_group": "admin", "args": [3, 4, 5], "meta": [{"p1": 10}, {"p2": "abc"}]},
+         [3, 4, 5], {}, {"p1": 10, "p2": "abc"}, True, ""),
+        ("plan1", {"user_group": "admin", "args": [3, 4, 5], "meta": [{"p1": 10}, {"p1": 5, "p2": "abc"}]},
+         [3, 4, 5], {}, {"p1": 10, "p2": "abc"}, True, ""),
+
+        ("plan2", {"user_group": "admin"},
+         [], {}, {}, True, ""),
+        ("plan2", {"user_group": "admin", "args": [3, 2.6]},
+         [3, 2.6], {}, {}, True, ""),
+        ("plan2", {"user_group": "admin", "args": [2.6, 3]},
+         [2.6, 3], {}, {}, False, " Incorrect parameter type: key='a', value='2.6'"),
+        ("plan2", {"user_group": "admin", "kwargs": {"b": 9.9, "s": "def"}},
+         [], {"b": 9.9, "s": "def"}, {}, True, ""),
+
+        ("plan3", {"user_group": "admin"},
+         [], {'a': 0.5, 'b': 5, 's': 50}, {}, True, ""),
+        ("plan3", {"user_group": "admin", "args": [2.8]},
+         [2.8], {'b': 5, 's': 50}, {}, True, ""),
+        ("plan3", {"user_group": "admin", "args": [2.8], "kwargs": {"a": 2.8}},
+         [2.8], {'b': 5, 's': 50}, {}, False, "multiple values for argument 'a'"),
+        ("plan3", {"user_group": "admin", "args": [], "kwargs": {"b": 30}},
+         [], {'a': 0.5, 'b': 30, 's': 50}, {}, True, ""),
+        ("plan3", {"user_group": "admin", "args": [], "kwargs": {"b": 2.8}},
+         [], {'a': 0.5, 'b': 2.8, 's': 50}, {}, False, "Incorrect parameter type: key='b', value='2.8'"),
+
+        ("plan4", {"user_group": "admin"},
+         [], {"detectors": [_pp_dev2, _pp_dev3]}, {}, True, ""),
+        ("plan4", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3"]]},
+         [[_pp_dev1, _pp_dev3]], {}, {}, True, ""),
+        ("plan4", {"user_group": "admin", "kwargs": {"detectors": ["_pp_dev1", "_pp_dev3"]}},
+         [[_pp_dev1, _pp_dev3]], {}, {}, True, ""),
+        ("plan4", {"user_group": "admin", "kwargs": {"detectors": ["nonexisting_dev", "_pp_dev3"]}},
+         [[_pp_dev1, _pp_dev3]], {}, {}, False, "value is not a valid enumeration member"),
+
+        ("plan5", {"user_group": "admin"},
+         [], {"plan_to_execute": _pp_p2}, {}, True, ""),
+        ("plan5", {"user_group": "admin", "args": ["_pp_p3"]},
+         [_pp_p3], {}, {}, True, ""),
+        ("plan5", {"user_group": "admin", "args": ["nonexisting_plan"]},
+         [_pp_p3], {}, {}, False, "value is not a valid enumeration member"),
+
+        ("plan6", {"user_group": "admin"},
+         [], {"strings": ["one", "three"]}, {}, True, ""),
+        ("plan6", {"user_group": "admin", "args": [["one", "two"]]},
+         [["one", "two"]], {}, {}, True, ""),
+        ("plan6", {"user_group": "admin", "args": [("one", "two")]},
+         [("one", "two")], {}, {}, True, ""),
+        ("plan6", {"user_group": "admin", "args": [("one", "nonexisting")]},
+         [("one", "two")], {}, {}, False, "value is not a valid enumeration member"),
+
+        ("plan7", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3"], "_pp_dev2"]},
+         [[_pp_dev1, _pp_dev3], "_pp_dev2"], {}, {}, True, ""),
+        ("plan7", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3", "some_str"], "_pp_dev2"]},
+         [[_pp_dev1, _pp_dev3, "some_str"], "_pp_dev2"], {}, {}, True, ""),
+
+        ("nonexisting_plan", {"user_group": "admin"},
+         [], {}, {}, False, "Plan 'nonexisting_plan' is not in the list of allowed plans"),
+        ("plan2", {"user_group": "nonexisting_group"},
+         [], {}, {}, False,
+         "Lists of allowed plans and devices is not defined for the user group 'nonexisting_group'"),
+    ],
+)
+# fmt: on
+def test_prepare_plan_2(plan_name, plan, exp_args, exp_kwargs, exp_meta, success, err_msg):
+    """
+    Detailed tests for ``prepare_plan``. Preparation of plan parameters before execution
+    is one of the key features, so unit tests are needed for all use cases.
+    """
+    plans_in_nspace, devices_in_nspace, allowed_plans, allowed_devices = _gen_environment_pp2()
+
+    plan["name"] = plan_name
+
+    if success:
+        plan_parsed = prepare_plan(
+            plan,
+            plans_in_nspace=plans_in_nspace,
+            devices_in_nspace=devices_in_nspace,
+            allowed_plans=allowed_plans,
+            allowed_devices=allowed_devices,
+        )
+        expected_keys = ("callable", "args", "kwargs", "meta")
+        for k in expected_keys:
+            assert k in plan_parsed, f"Key '{k}' does not exist: {plan_parsed.keys()}"
+        assert isinstance(plan_parsed["callable"], Callable)
+        assert plan_parsed["args"] == exp_args
+        assert plan_parsed["kwargs"] == exp_kwargs
+        assert plan_parsed["meta"] == exp_meta
+    else:
+        with pytest.raises(Exception, match=err_msg):
+            prepare_plan(
+                plan,
+                plans_in_nspace=plans_in_nspace,
+                devices_in_nspace=devices_in_nspace,
+                allowed_plans=allowed_plans,
+                allowed_devices=allowed_devices,
+            )
 
 
 def test_gen_list_of_plans_and_devices_1(tmp_path):
@@ -2136,11 +2564,11 @@ def test_verify_default_profile_collection():
     pc_path = get_default_startup_dir()
     nspace = load_profile_collection(pc_path)
 
-    plans = plans_from_nspace(nspace)
-    plans = _prepare_plans(plans)
-
     devices = devices_from_nspace(nspace)
     devices = _prepare_devices(devices)
+
+    plans = plans_from_nspace(nspace)
+    plans = _prepare_plans(plans, existing_devices=devices)
 
     # Read the list of the existing plans of devices
     file_path = os.path.join(pc_path, "existing_plans_and_devices.yaml")
@@ -2340,14 +2768,14 @@ def test_select_allowed_items(item_dict, allow_patterns, disallow_patterns, resu
 
 
 # fmt: off
-@pytest.mark.parametrize("fln_existing_items, fln_user_groups, empty_dict, all_users", [
+@pytest.mark.parametrize("fln_existing_items, fln_user_groups, empty_dicts, all_users", [
     ("existing_plans_and_devices.yaml", "user_group_permissions.yaml", False, True),
     ("existing_plans_and_devices.yaml", None, False, False),
     (None, "user_group_permissions.yaml", True, True),
     (None, None, True, False),
 ])
 # fmt: on
-def test_load_allowed_plans_and_devices_1(fln_existing_items, fln_user_groups, empty_dict, all_users):
+def test_load_allowed_plans_and_devices_1(fln_existing_items, fln_user_groups, empty_dicts, all_users):
     """
     Basic test for ``load_allowed_plans_and_devices``.
     """
@@ -2360,34 +2788,38 @@ def test_load_allowed_plans_and_devices_1(fln_existing_items, fln_user_groups, e
         path_existing_plans_and_devices=fln_existing_items, path_user_group_permissions=fln_user_groups
     )
 
-    if empty_dict:
-        assert allowed_plans == {}
-        assert allowed_devices == {}
-    else:
-        assert "root" in allowed_plans
-        assert "root" in allowed_devices
-        assert allowed_plans["root"]
-        assert allowed_devices["root"]
-
-        if all_users:
-            assert "admin" in allowed_plans
-            assert "admin" in allowed_devices
-            assert allowed_plans["admin"]
-            assert allowed_devices["admin"]
-            assert "test_user" in allowed_plans
-            assert "test_user" in allowed_devices
-            assert allowed_plans["test_user"]
-            assert allowed_devices["test_user"]
+    def check_dict(d):
+        if empty_dicts:
+            assert d == {}
         else:
-            assert "admin" not in allowed_plans
-            assert "admin" not in allowed_devices
-            assert "test_user" not in allowed_plans
-            assert "test_user" not in allowed_devices
+            assert isinstance(d, dict)
+            assert d
+
+    assert "root" in allowed_plans
+    assert "root" in allowed_devices
+    check_dict(allowed_plans["root"])
+    check_dict(allowed_devices["root"])
+
+    if all_users:
+        assert "admin" in allowed_plans
+        assert "admin" in allowed_devices
+        check_dict(allowed_plans["admin"])
+        check_dict(allowed_devices["admin"])
+        assert "test_user" in allowed_plans
+        assert "test_user" in allowed_devices
+        check_dict(allowed_plans["test_user"])
+        check_dict(allowed_devices["test_user"])
+    else:
+        assert "admin" not in allowed_plans
+        assert "admin" not in allowed_devices
+        assert "test_user" not in allowed_plans
+        assert "test_user" not in allowed_devices
 
 
 _patch_junk_plan_and_device = """
 
 from ophyd import Device
+from bluesky_queueserver.manager.annotation_decorator import parameter_annotation_decorator
 
 class JunkDevice(Device):
     ...
@@ -2395,6 +2827,24 @@ class JunkDevice(Device):
 junk_device = JunkDevice('ABC', name='stage')
 
 def junk_plan():
+    yield None
+
+
+@parameter_annotation_decorator({
+    "parameters":{
+        "device_param": {
+            "annotation": "Devices",
+            "devices": {"Devices": ("det1", "det2", "junk_device")
+            }
+        },
+        "plan_param": {
+            "annotation": "Plans",
+            "plans": {"Plans": ("count", "scan", "junk_plan")
+            }
+        }
+    }
+})
+def plan_check_filtering(device_param, plan_param):
     yield None
 
 """
@@ -2463,19 +2913,45 @@ _user_permissions_excluding_junk2 = """user_groups:
       - null  # Nothing is forbidden
 """
 
+# Restrictions only on 'admin'
+_user_permissions_excluding_junk3 = """user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - ".*"  # A different way to allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - ".*"  # A different way to allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - "^(?!.*junk)"  # Allow all plans that don't contain 'junk' in their names
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - "^(?!.*junk)"  # Allow all devices that don't contain 'junk' in their names
+    forbidden_devices:
+      - null  # Nothing is forbidden
+"""
+
 
 # fmt: off
-@pytest.mark.parametrize("permissions_str, items_are_removed", [
-    (_user_permissions_clear, False),
-    (_user_permissions_excluding_junk1, True),
-    (_user_permissions_excluding_junk2, True),
+@pytest.mark.parametrize("permissions_str, items_are_removed, only_admin", [
+    (_user_permissions_clear, False, False),
+    (_user_permissions_excluding_junk1, True, False),
+    (_user_permissions_excluding_junk2, True, False),
+    (_user_permissions_excluding_junk3, True, True),
 ])
 # fmt: on
-def test_load_allowed_plans_and_devices_2(tmp_path, permissions_str, items_are_removed):
+def test_load_allowed_plans_and_devices_2(tmp_path, permissions_str, items_are_removed, only_admin):
     """
     Tests if filtering settings for the "root" group are also applied to other groups.
     The purpose of the "root" group is to filter junk from the list of existing devices and
-    plans.
+    plans. Additionally check if the plans and devices were removed from the parameter
+    descriptions.
+
+    Parameter 'only_admin' - permissions are applied only to the 'admin' user
     """
     pc_path = copy_default_profile_collection(tmp_path)
     create_local_imports_dirs(pc_path)
@@ -2496,15 +2972,35 @@ def test_load_allowed_plans_and_devices_2(tmp_path, permissions_str, items_are_r
     )
 
     if items_are_removed:
-        assert "junk_device" not in allowed_devices["root"]
+        if only_admin:
+            assert "junk_device" in allowed_devices["root"]
+        else:
+            assert "junk_device" not in allowed_devices["root"]
         assert "junk_device" not in allowed_devices["admin"]
-        assert "junk_plan" not in allowed_plans["root"]
+        if only_admin:
+            assert "junk_plan" in allowed_plans["root"]
+        else:
+            assert "junk_plan" not in allowed_plans["root"]
         assert "junk_plan" not in allowed_plans["admin"]
     else:
         assert "junk_device" in allowed_devices["root"]
         assert "junk_device" in allowed_devices["admin"]
         assert "junk_plan" in allowed_plans["root"]
         assert "junk_plan" in allowed_plans["admin"]
+
+    # Make sure that the 'junk' devices are removed from the description of 'plan_check_filtering'
+    # for user in ("root", "admin"):
+    for user in ("admin",):
+        params = allowed_plans[user]["plan_check_filtering"]["parameters"]
+        devs = params[0]["annotation"]["devices"]["Devices"]
+        plans = params[1]["annotation"]["plans"]["Plans"]
+        test_case = f"only_admin = {only_admin} user = '{user}'"
+        if items_are_removed and not (only_admin and user == "root"):
+            assert devs == ("det1", "det2"), test_case
+            assert plans == ("count", "scan"), test_case
+        else:
+            assert devs == ("det1", "det2", "junk_device"), test_case
+            assert plans == ("count", "scan", "junk_plan"), test_case
 
 
 def _f1(a, b, c):
@@ -2577,7 +3073,7 @@ def test_validate_plan_1(func, plan, success, errmsg):
     """
     Tests for the plan validation algorithm.
     """
-    allowed_plans = {"existing": _process_plan(func)}
+    allowed_plans = {"existing": _process_plan(func, existing_devices={})}
     success_out, errmsg_out = validate_plan(plan, allowed_plans=allowed_plans, allowed_devices=None)
 
     assert success_out == success, f"errmsg: {errmsg_out}"
@@ -2624,7 +3120,7 @@ def test_validate_plan_2(allowed_plans, success):
         },
     }
 )
-def _some_strange_plan(
+def _vp3a(
     motors: typing.List[typing.Any],  # The actual type should be a list of 'ophyd.device.Device'
     detectors: typing.List[typing.Any],  # The actual type should be a list of 'ophyd.device.Device'
     plans_to_run: typing.Union[typing.List[callable], callable],
@@ -2634,85 +3130,85 @@ def _some_strange_plan(
 
 
 # fmt: off
-@pytest.mark.parametrize("plan, allowed_devices, success, errmsg", [
+@pytest.mark.parametrize("plan_func, plan, allowed_devices, success, errmsg", [
     # Basic use of the function.
-    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), True, ""),
     # The same as the previous call, but all parameters are passed as kwargs.
-    ({"args": [], "kwargs": {"motors": ("m1", "m2"), "detectors": ("d1", "d2"), "plans_to_run": ("p1",),
-                             "positions": (10.0, 20.0)}},
+    (_vp3a, {"args": [], "kwargs": {"motors": ("m1", "m2"), "detectors": ("d1", "d2"), "plans_to_run": ("p1",),
+                                    "positions": (10.0, 20.0)}},
      ("m1", "m2", "d1", "d2"), True, ""),
     # Positions are int (instead of float). Should be converted to float.
-    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10, 20)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10, 20)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), True, ""),
     # Position is a single value (part of type description).
-    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",), 10], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",), 10], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), True, ""),
     # Position is None (part of type description).
-    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",), None], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",), None], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), True, ""),
     # Position is not specified (default value is used).
-    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), True, ""),
 
     # Use motor that is not listed in the annotation (but exists in the list of allowed devices).
-    ({"args": [("m2", "m4"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m2", "m4"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m2", "m4", "d1", "d2"), False, "value is not a valid enumeration member; permitted: 'm2'"),
     # The motor is not in the list of allowed devices.
-    ({"args": [("m2", "m3"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m2", "m3"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m2", "m4", "d1", "d2"), False, "value is not a valid enumeration member; permitted: 'm2'"),
     # Both motors are not in the list of allowed devices.
-    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m4", "m5", "d1", "d2"), False, "value is not a valid enumeration member; permitted:"),
     # Empty list of allowed devices (should be the same result as above).
-    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
      (), False, "value is not a valid enumeration member; permitted:"),
     # Single motor is passed as a scalar (instead of a list element)
-    ({"args": ["m2", ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": ["m2", ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m2", "m4", "d1", "d2"), False, "value is not a valid list"),
 
     # Pass single detector (allowed).
-    ({"args": [("m1", "m2"), "d4", ("p1",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), "d4", ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2", "d4"), True, ""),
     # Pass single detector from 'Detectors2' group, which is not in the list of allowed devices.
-    ({"args": [("m1", "m2"), "d4", ("p1",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), "d4", ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), False, "value is not a valid enumeration member; permitted:"),
     # Pass single detector from 'Detectors1' group (not allowed).
-    ({"args": [("m1", "m2"), "d2", ("p1",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), "d2", ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2", "d4"), False, " value is not a valid list"),
     # Pass a detector from a group 'Detector2' as a list element.
-    ({"args": [("m1", "m2"), ("d4",), ("p1",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d4",), ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2", "d4"), False, "value is not a valid enumeration member; permitted: 'd1', 'd2'"),
 
     # Plan 'p3' is not in the list of allowed plans
-    ({"args": [("m1", "m2"), ("d1", "d2"), ("p3",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p3",), (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), False, "value is not a valid enumeration member; permitted: 'p1'"),
     # Plan 'p2' is in the list of allowed plans, but not listed in the annotation.
-    ({"args": [("m1", "m2"), ("d1", "d2"), ("p2",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p2",), (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), False, "value is not a valid enumeration member; permitted: 'p1'"),
     # Plan 'p2' is in the list of allowed plans, but not listed in the annotation.
-    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1", "p2"), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1", "p2"), (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), False, "value is not a valid enumeration member; permitted: 'p1'"),
     # Single plan is passed as a scalar (allowed in the annotation).
-    ({"args": [("m1", "m2"), ("d1", "d2"), "p1", (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), "p1", (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), True, ""),
 
     # Position is passed as a string (validation should fail)
-    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",), ("10.0", 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",), ("10.0", 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), False, "Incorrect parameter type"),
     # Int instead of a motor name (validation should fail)
-    ({"args": [(0, "m2"), ("d1", "d2"), ("p1",), ("10.0", 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [(0, "m2"), ("d1", "d2"), ("p1",), ("10.0", 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), False, "value is not a valid enumeration member"),
 ])
 # fmt: on
-def test_validate_plan_3(plan, allowed_devices, success, errmsg):
+def test_validate_plan_3(plan_func, plan, allowed_devices, success, errmsg):
     """
     Test ``validate_plan`` on a function with more complicated signature and custom annotation.
     Mostly testing verification of types and use of the list of available devices.
     """
-    plan["name"] = "_some_strange_plan"
+    plan["name"] = plan_func.__name__
     allowed_plans = {
-        "_some_strange_plan": _process_plan(_some_strange_plan),
+        "_vp3a": _process_plan(_vp3a, existing_devices={}),
         "p1": {},  # The plan is used only as a parameter value
         "p2": {},  # The plan is used only as a parameter value
     }
@@ -2726,6 +3222,9 @@ def test_validate_plan_3(plan, allowed_devices, success, errmsg):
         assert errmsg_out == errmsg
     else:
         assert errmsg in errmsg_out
+
+
+# def test_validate_plan_4(plan, allowed_devices, success, errmsg):
 
 
 # fmt: off
@@ -2768,7 +3267,7 @@ def test_bind_plan_arguments_1(func, plan_args, plan_kwargs, plan_bound_params, 
     """
     Tests for ``bind_plan_arguments()`` function.
     """
-    allowed_plans = {"existing": _process_plan(func)}
+    allowed_plans = {"existing": _process_plan(func, existing_devices={})}
     if success:
         plan_parameters_copy = copy.deepcopy(allowed_plans["existing"])
 

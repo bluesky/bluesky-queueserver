@@ -1451,7 +1451,7 @@ _pf3d_processed = {
         },
     }
 )
-def _pf3e(val1, val2: str = "some_str", val3: typing.Any = None):
+def _pf3e(val1=None, val2: str = "some_str", val3: typing.Any = None):
     yield from [val1, val2, val3]
 
 
@@ -1716,11 +1716,28 @@ def _pf4c(val1, val2: str = "some_str", val3: typing.Any = None):
     yield from [val1, val2, val3]
 
 
+@parameter_annotation_decorator(
+    {
+        "parameters": {
+            "detector": {
+                "annotation": "Detectors1]",
+                "devices": {"Detectors1": ("d1", "d2", "d3")},
+                "default": "'d1'",
+            },
+        },
+    }
+)
+def _pf4d(detector: Optional[ophyd.Device]):
+    # Expected to fail: the default value is in the decorator, but not in the header
+    yield from [detector]
+
+
 # fmt: off
 @pytest.mark.parametrize("plan_func, err_msg", [
     (_pf4a_factory(), "unsupported default value type"),
     (_pf4b, "name 'Plans1' is not defined'"),
     (_pf4c, "Failed to decode the default value 'replacement_str'"),
+    (_pf4d, "Missing default value for the parameter 'detector' in the plan signature"),
 ])
 # fmt: on
 def test_process_plan_4_fail(plan_func, err_msg):
@@ -2931,7 +2948,7 @@ def test_validate_plan_2(allowed_plans, success):
         },
     }
 )
-def _some_strange_plan(
+def _vp3a(
     motors: typing.List[typing.Any],  # The actual type should be a list of 'ophyd.device.Device'
     detectors: typing.List[typing.Any],  # The actual type should be a list of 'ophyd.device.Device'
     plans_to_run: typing.Union[typing.List[callable], callable],
@@ -2941,85 +2958,85 @@ def _some_strange_plan(
 
 
 # fmt: off
-@pytest.mark.parametrize("plan, allowed_devices, success, errmsg", [
+@pytest.mark.parametrize("plan_func, plan, allowed_devices, success, errmsg", [
     # Basic use of the function.
-    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), True, ""),
     # The same as the previous call, but all parameters are passed as kwargs.
-    ({"args": [], "kwargs": {"motors": ("m1", "m2"), "detectors": ("d1", "d2"), "plans_to_run": ("p1",),
-                             "positions": (10.0, 20.0)}},
+    (_vp3a, {"args": [], "kwargs": {"motors": ("m1", "m2"), "detectors": ("d1", "d2"), "plans_to_run": ("p1",),
+                                    "positions": (10.0, 20.0)}},
      ("m1", "m2", "d1", "d2"), True, ""),
     # Positions are int (instead of float). Should be converted to float.
-    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10, 20)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10, 20)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), True, ""),
     # Position is a single value (part of type description).
-    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",), 10], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",), 10], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), True, ""),
     # Position is None (part of type description).
-    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",), None], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",), None], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), True, ""),
     # Position is not specified (default value is used).
-    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), True, ""),
 
     # Use motor that is not listed in the annotation (but exists in the list of allowed devices).
-    ({"args": [("m2", "m4"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m2", "m4"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m2", "m4", "d1", "d2"), False, "value is not a valid enumeration member; permitted: 'm2'"),
     # The motor is not in the list of allowed devices.
-    ({"args": [("m2", "m3"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m2", "m3"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m2", "m4", "d1", "d2"), False, "value is not a valid enumeration member; permitted: 'm2'"),
     # Both motors are not in the list of allowed devices.
-    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m4", "m5", "d1", "d2"), False, "value is not a valid enumeration member; permitted:"),
     # Empty list of allowed devices (should be the same result as above).
-    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
      (), False, "value is not a valid enumeration member; permitted:"),
     # Single motor is passed as a scalar (instead of a list element)
-    ({"args": ["m2", ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": ["m2", ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m2", "m4", "d1", "d2"), False, "value is not a valid list"),
 
     # Pass single detector (allowed).
-    ({"args": [("m1", "m2"), "d4", ("p1",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), "d4", ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2", "d4"), True, ""),
     # Pass single detector from 'Detectors2' group, which is not in the list of allowed devices.
-    ({"args": [("m1", "m2"), "d4", ("p1",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), "d4", ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), False, "value is not a valid enumeration member; permitted:"),
     # Pass single detector from 'Detectors1' group (not allowed).
-    ({"args": [("m1", "m2"), "d2", ("p1",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), "d2", ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2", "d4"), False, " value is not a valid list"),
     # Pass a detector from a group 'Detector2' as a list element.
-    ({"args": [("m1", "m2"), ("d4",), ("p1",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d4",), ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2", "d4"), False, "value is not a valid enumeration member; permitted: 'd1', 'd2'"),
 
     # Plan 'p3' is not in the list of allowed plans
-    ({"args": [("m1", "m2"), ("d1", "d2"), ("p3",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p3",), (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), False, "value is not a valid enumeration member; permitted: 'p1'"),
     # Plan 'p2' is in the list of allowed plans, but not listed in the annotation.
-    ({"args": [("m1", "m2"), ("d1", "d2"), ("p2",), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p2",), (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), False, "value is not a valid enumeration member; permitted: 'p1'"),
     # Plan 'p2' is in the list of allowed plans, but not listed in the annotation.
-    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1", "p2"), (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1", "p2"), (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), False, "value is not a valid enumeration member; permitted: 'p1'"),
     # Single plan is passed as a scalar (allowed in the annotation).
-    ({"args": [("m1", "m2"), ("d1", "d2"), "p1", (10.0, 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), "p1", (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), True, ""),
 
     # Position is passed as a string (validation should fail)
-    ({"args": [("m1", "m2"), ("d1", "d2"), ("p1",), ("10.0", 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",), ("10.0", 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), False, "Incorrect parameter type"),
     # Int instead of a motor name (validation should fail)
-    ({"args": [(0, "m2"), ("d1", "d2"), ("p1",), ("10.0", 20.0)], "kwargs": {}},
+    (_vp3a, {"args": [(0, "m2"), ("d1", "d2"), ("p1",), ("10.0", 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), False, "value is not a valid enumeration member"),
 ])
 # fmt: on
-def test_validate_plan_3(plan, allowed_devices, success, errmsg):
+def test_validate_plan_3(plan_func, plan, allowed_devices, success, errmsg):
     """
     Test ``validate_plan`` on a function with more complicated signature and custom annotation.
     Mostly testing verification of types and use of the list of available devices.
     """
-    plan["name"] = "_some_strange_plan"
+    plan["name"] = plan_func.__name__
     allowed_plans = {
-        "_some_strange_plan": _process_plan(_some_strange_plan, existing_devices={}),
+        "_vp3a": _process_plan(_vp3a, existing_devices={}),
         "p1": {},  # The plan is used only as a parameter value
         "p2": {},  # The plan is used only as a parameter value
     }
@@ -3033,6 +3050,9 @@ def test_validate_plan_3(plan, allowed_devices, success, errmsg):
         assert errmsg_out == errmsg
     else:
         assert errmsg in errmsg_out
+
+
+# def test_validate_plan_4(plan, allowed_devices, success, errmsg):
 
 
 # fmt: off

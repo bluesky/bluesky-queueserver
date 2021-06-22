@@ -462,7 +462,7 @@ def prepare_plan(plan, *, existing_plans, existing_devices, allowed_plans, allow
     ----------
     plan : dict
         Plan specification. Keys: `name` (str) - plan name, `args` - plan args,
-        `kwargs` - plan kwargs.
+        `kwargs` - plan kwargs. The plan parameters must contain ``user_group``.
     existing_plans : dict(str, callable)
         Dictionary of existing plans from the RE workspace.
     existing_devices : dict(str, ophyd.Device)
@@ -1535,12 +1535,20 @@ def _process_plan(plan, *, existing_devices):
                 if annotation:
                     # The case when annotation does exist (otherwise it is None)
                     annotation = {"type": annotation}
+            if default and p.default is inspect.Parameter.empty:
+                # The default value in the decorator overrides the default value in the header,
+                #   not replace it. Therefore the default value is required in the header if
+                #   one is specified in the decorator.
+                raise ValueError(
+                    f"Missing default value for the parameter '{p.name}' in the plan signature: "
+                    f"The default value {default} is specified in the annotation decorator, "
+                    f"there for a default value is required in the plan header."
+                )
             if not default and (p.default is not inspect.Parameter.empty):
                 try:
                     default = convert_default_to_string(p.default)  # May raise an exception
                 except Exception as ex:
                     raise ValueError(f"Parameter '{p.name}': {ex}")
-
             if desc:
                 working_dict["description"] = desc
 

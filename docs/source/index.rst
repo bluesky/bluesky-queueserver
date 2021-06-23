@@ -11,6 +11,7 @@ Bluesky-QueueServer Documentation
 
    installation
    usage
+   plan_annotation
    re_manager_api
    release-history
    min_versions

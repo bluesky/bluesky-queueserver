@@ -7,7 +7,7 @@ Bluesky-QueueServer Documentation
 =================================
 
 .. toctree::
-   :titlesonly:
+   :maxdepth: 1
 
    installation
    usage

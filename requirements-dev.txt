@@ -13,7 +13,7 @@ ipython
 matplotlib
 numpydoc
 scikit-image
-sphinx-copybutton
+sphinx
 sphinx_rtd_theme
 # Extra dependencies for development
 fastapi[all]

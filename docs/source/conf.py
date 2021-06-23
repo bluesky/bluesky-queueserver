@@ -42,7 +42,6 @@ extensions = [
     'IPython.sphinxext.ipython_console_highlighting',
     'matplotlib.sphinxext.plot_directive',
     'numpydoc',
-    'sphinx_copybutton',
 ]
 
 # Configuration options for plot_directive. See:
@@ -68,7 +67,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'bluesky-queueserver'
-copyright = '2019, Brookhaven National Laboratory'
+copyright = '2019-2021, Brookhaven National Laboratory'
 author = 'Brookhaven National Laboratory'
 
 # The version info for the project you're documenting, acts as replacement for

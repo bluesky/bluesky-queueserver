@@ -20,7 +20,7 @@ Installation Steps
 
   Mac OS:
 
-    Instruction can be found at https://gist.github.com/tomysmile/1b8a321e7c58499ef9f9441b2faa0aa8.
+    See https://gist.github.com/tomysmile/1b8a321e7c58499ef9f9441b2faa0aa8.
 
 * **Create Conda environment**
 
@@ -49,4 +49,4 @@ Installation Steps
   REST API requests. Examples of REST API requests assume that **httpie** is installed. **httpie** is not
   needed for normal operation of the Queue Server.
 
-  Instructions for installation of **httpie** may be found at https://httpie.org/docs#installation.
+  See https://httpie.org/docs#installation for installation instructions.

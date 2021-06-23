@@ -55,24 +55,7 @@ and then kill the processes::
 
 Installation
 ------------
-
-**Install Redis.** On Linux::
-
-  sudo apt install redis
-
-On Mac OS::
-
-  https://gist.github.com/tomysmile/1b8a321e7c58499ef9f9441b2faa0aa8
-
-**Install QueueServer** (from source)::
-
-  pip install -e .
-
-This also sets up an entry points for the 'qserver' and 'qserver-list-plans-devices' CLI tools.
-
-**Install httpie (optional)**::
-
-  https://httpie.org/docs#installation
+(see documentation at https://blueskyproject.io/bluesky-queueserver)
 
 Starting QueueServer
 --------------------

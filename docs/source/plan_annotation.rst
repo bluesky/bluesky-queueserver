@@ -1,5 +1,6 @@
-Annotation of Bluesky Plans
-===========================
+========================
+Annotating Bluesky Plans
+========================
 
 Plan Validation
 ---------------

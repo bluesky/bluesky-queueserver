@@ -1321,10 +1321,10 @@ def _process_plan(plan, *, existing_devices):
     Limitation on the support types of the plan parameters and the default values that could be
     used in function signatures. Parameter types must be native Python types (such as ``int``,
     ``float``, ``str``, etc.) or generic types based on Python native types
-    (``typing.List[typing.Union[int]]``). The operation of recreating the type from its
-    string representation using ``eval`` and the namespace with only ``typing`` module imported
-    should be successful. The default values are reconstructed using ``ast.literal_eval`` and
-    the operation ``ast.literal_eval(f"{v!r}")`` must run successfully.
+    (``typing.List[typing.Union[int, str]]``). The operation of recreating the type from its
+    string representation using ``eval`` and the namespace with imported ``typing`` module
+    and ``NoneType`` type should be successful. The default values are reconstructed using
+    ``ast.literal_eval`` and the operation ``ast.literal_eval(f"{v!r}")`` must run successfully.
 
     The description of the plan is represented as a Python dictionary in the following format
     (all elements are optional unless they are labeled as REQUIRED):

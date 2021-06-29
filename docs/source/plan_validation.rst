@@ -4,6 +4,8 @@ Plan Validation
 
 .. currentmodule:: bluesky_queueserver
 
+.. _plan_validation:
+
 Plan Validation
 ---------------
 
@@ -50,11 +52,10 @@ may perform validation before sending the plan to the queue by calling `validate
   or user group permissions (*'user_group_permissions.yaml'*) are modified while the plan is
   in the queue, validation may still fail.
 
+.. _plan_validation_api:
 
 API for Plan Validation
 -----------------------
-
-.. _plan_validation_api:
 
 .. autosummary::
    :nosignatures:

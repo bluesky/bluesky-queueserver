@@ -14,6 +14,8 @@ qserver
 Documentation is coming soon ...
 
 
+.. _qserver_list_plans_devices_cli:
+
 qserver-list-plans-devices
 --------------------------
 

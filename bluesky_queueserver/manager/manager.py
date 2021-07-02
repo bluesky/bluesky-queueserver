@@ -10,6 +10,7 @@ import uuid
 from .comms import PipeJsonRpcSendAsync, CommTimeoutError, validate_zmq_key
 from .profile_ops import load_allowed_plans_and_devices, validate_plan
 from .plan_queue_ops import PlanQueueOperations
+from .logs import LogStream, override_streams
 
 import logging
 
@@ -1831,8 +1832,13 @@ class RunEngineManager(Process):
         Overrides the `run()` function of the `multiprocessing.Process` class. Called
         by the `start` method.
         """
+        fobj = LogStream(source="MANAGER")
+        override_streams(fobj)
+
         logging.basicConfig(level=max(logging.WARNING, self._log_level))
         logging.getLogger(__name__).setLevel(self._log_level)
+
+        print(f"running the 'RUN' function")
 
         logger.info("Starting RE Manager process")
         try:

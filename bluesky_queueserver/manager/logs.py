@@ -9,7 +9,7 @@ class LogStream(io.TextIOBase):
         self._stdout = sys.__stdout__
 
     def write(self, s):
-        msg = f"==> {s}"
+        msg = f"{self._source} ==> {s}"
         return self._stdout.write(msg)
 
 

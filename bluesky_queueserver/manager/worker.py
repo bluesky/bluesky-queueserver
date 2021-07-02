@@ -8,6 +8,7 @@ from functools import partial
 import logging
 
 from .comms import PipeJsonRpcReceive
+from .logs import LogStream, override_streams
 
 from event_model import RunRouter
 
@@ -492,6 +493,9 @@ class RunEngineWorker(Process):
         Overrides the `run()` function of the `multiprocessing.Process` class. Called
         by the `start` method.
         """
+        fobj = LogStream(source="WORKER")
+        override_streams(fobj)
+
         logging.basicConfig(level=max(logging.WARNING, self._log_level))
         logging.getLogger(__name__).setLevel(self._log_level)
 

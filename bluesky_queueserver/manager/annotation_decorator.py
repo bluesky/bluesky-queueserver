@@ -134,12 +134,12 @@ def parameter_annotation_decorator(annotation):
 
                 "devices": {
                     "description": "Parameter that accepts the list of devices.",
-                    "annotation": "typing.List[Device]",
+                    "annotation": "typing.List[DeviceType1]",
                     # Here we provide the list of devices. 'devices' and 'plans' are
                     #   treated similarly, but it may be useful to distinguish lists of
                     #    plans and devices on the stage of plan parameter validation.
                     "devices": {
-                        "Device": ("det1", "det2", "det3"),
+                        "DeviceType1": ("det1", "det2", "det3"),
                     },
                     # Set default value to string 'det1'. The default value MUST be
                     #   defined in the function header for the parameter that has

@@ -9,6 +9,7 @@ from .worker import RunEngineWorker
 from .manager import RunEngineManager
 from .comms import PipeJsonRpcReceive, validate_zmq_key
 from .profile_ops import get_default_startup_dir
+from .logs import LogStream, override_streams
 
 from .. import __version__
 
@@ -188,6 +189,9 @@ class WatchdogProcess:
 
 
 def start_manager():
+
+    fobj = LogStream(source="WATCHDOG")
+    override_streams(fobj)
 
     s_enc = (
         "Encryption for ZeroMQ communication server may be enabled by setting QSERVER_ZMQ_PRIVATE_KEY\n"

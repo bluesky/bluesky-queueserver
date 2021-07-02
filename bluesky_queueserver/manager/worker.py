@@ -8,7 +8,7 @@ from functools import partial
 import logging
 
 from .comms import PipeJsonRpcReceive
-from .logs import LogStream, override_streams
+from .output_streaming import LogStream, override_streams
 
 from event_model import RunRouter
 
@@ -38,7 +38,7 @@ class RunEngineWorker(Process):
         `args` and `kwargs` of the `multiprocessing.Process`
     """
 
-    def __init__(self, *args, conn, config=None, log_level=logging.DEBUG, **kwargs):
+    def __init__(self, *args, conn, config=None, msg_queue=None, log_level=logging.DEBUG, **kwargs):
 
         if not conn:
             raise RuntimeError("Invalid value of parameter 'conn': %S.", str(conn))
@@ -46,6 +46,7 @@ class RunEngineWorker(Process):
         super().__init__(*args, **kwargs)
 
         self._log_level = log_level
+        self._msg_queue = msg_queue
 
         # The end of bidirectional Pipe assigned to the worker (for communication with Manager process)
         self._conn = conn
@@ -493,8 +494,9 @@ class RunEngineWorker(Process):
         Overrides the `run()` function of the `multiprocessing.Process` class. Called
         by the `start` method.
         """
-        fobj = LogStream(source="WORKER")
-        override_streams(fobj)
+        if self._msg_queue:
+            fobj = LogStream(msg_queue=self._msg_queue)
+            override_streams(fobj)
 
         logging.basicConfig(level=max(logging.WARNING, self._log_level))
         logging.getLogger(__name__).setLevel(self._log_level)

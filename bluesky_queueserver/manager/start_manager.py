@@ -1,5 +1,5 @@
 import argparse
-from multiprocessing import Pipe
+from multiprocessing import Pipe, Queue
 import threading
 import time as ttime
 import os
@@ -9,7 +9,7 @@ from .worker import RunEngineWorker
 from .manager import RunEngineManager
 from .comms import PipeJsonRpcReceive, validate_zmq_key
 from .profile_ops import get_default_startup_dir
-from .logs import LogStream, override_streams
+from .output_streaming import LogStream, override_streams, PublishStreamOutput
 
 from .. import __version__
 
@@ -26,6 +26,7 @@ class WatchdogProcess:
         config_manager=None,
         cls_run_engine_worker=RunEngineWorker,
         cls_run_engine_manager=RunEngineManager,
+        msg_queue=None,
         log_level=logging.DEBUG,
     ):
 
@@ -33,6 +34,8 @@ class WatchdogProcess:
 
         self._cls_run_engine_worker = cls_run_engine_worker
         self._cls_run_engine_manager = cls_run_engine_manager
+
+        self._msg_queue = msg_queue
 
         self._re_manager = None
         self._re_worker = None
@@ -79,6 +82,7 @@ class WatchdogProcess:
                 conn=self._manager_conn,
                 name="RE Worker Process",
                 config=self._config_worker,
+                msg_queue=self._msg_queue,
                 log_level=self._log_level,
             )
             self._re_worker.start()
@@ -144,6 +148,7 @@ class WatchdogProcess:
             conn_worker=self._worker_conn,
             config=self._config_manager,
             name="RE Manager Process",
+            msg_queue=self._msg_queue,
             log_level=self._log_level,
         )
         self._re_manager.start()
@@ -190,8 +195,12 @@ class WatchdogProcess:
 
 def start_manager():
 
-    fobj = LogStream(source="WATCHDOG")
-    override_streams(fobj)
+    msg_queue = Queue()
+    if msg_queue:
+        fobj = LogStream(msg_queue=msg_queue)
+        override_streams(fobj)
+        stream_publisher = PublishStreamOutput(msg_queue=msg_queue)
+        stream_publisher.start()
 
     s_enc = (
         "Encryption for ZeroMQ communication server may be enabled by setting QSERVER_ZMQ_PRIVATE_KEY\n"
@@ -509,7 +518,9 @@ def start_manager():
         return 1
     config_manager["redis_addr"] = redis_addr
 
-    wp = WatchdogProcess(config_worker=config_worker, config_manager=config_manager, log_level=log_level)
+    wp = WatchdogProcess(
+        config_worker=config_worker, config_manager=config_manager, msg_queue=msg_queue, log_level=log_level
+    )
     try:
         wp.run()
     except KeyboardInterrupt:

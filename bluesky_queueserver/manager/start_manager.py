@@ -9,7 +9,7 @@ from .worker import RunEngineWorker
 from .manager import RunEngineManager
 from .comms import PipeJsonRpcReceive, validate_zmq_key
 from .profile_ops import get_default_startup_dir
-from .output_streaming import LogStream, override_streams, PublishStreamOutput
+from .output_streaming import ConsoleOutputStream, redirect_output_streams, PublishConsoleOutput
 
 from .. import __version__
 
@@ -195,13 +195,6 @@ class WatchdogProcess:
 
 def start_manager():
 
-    msg_queue = Queue()
-    if msg_queue:
-        fobj = LogStream(msg_queue=msg_queue)
-        override_streams(fobj)
-        stream_publisher = PublishStreamOutput(msg_queue=msg_queue)
-        stream_publisher.start()
-
     s_enc = (
         "Encryption for ZeroMQ communication server may be enabled by setting QSERVER_ZMQ_PRIVATE_KEY\n"
         "environment variable to a valid private key (z85-encoded 40 character string):\n\n"
@@ -221,6 +214,14 @@ def start_manager():
         type=str,
         default="tcp://*:60615",
         help="The address of ZMQ server (control connection), e.g. 'tcp://*:60615'.",
+    )
+
+    parser.add_argument(
+        "--zmq-publish-addr",
+        dest="zmq_publish_addr",
+        type=str,
+        default="tcp://*:60625",
+        help="The address of ZMQ server (stdout and stderr publishing), e.g. 'tcp://*:60625'.",
     )
 
     group = parser.add_mutually_exclusive_group()
@@ -372,6 +373,14 @@ def start_manager():
         log_level = logging.WARNING
     elif args.logger_silent:
         log_level = logging.CRITICAL + 1
+
+    msg_queue = Queue()
+    if msg_queue:
+        fobj = ConsoleOutputStream(msg_queue=msg_queue)
+        redirect_output_streams(fobj)
+        stream_publisher = PublishConsoleOutput(msg_queue=msg_queue, zmq_publish_addr=args.zmq_publish_addr)
+        ttime.sleep(1)
+        stream_publisher.start()
 
     logging.basicConfig(level=max(logging.WARNING, log_level))
     logging.getLogger("bluesky_queueserver").setLevel(log_level)

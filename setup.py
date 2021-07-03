@@ -51,6 +51,7 @@ setup(
             "qserver-list-plans-devices = bluesky_queueserver.manager."
             "profile_ops:gen_list_of_plans_and_devices_cli",
             "qserver-zmq-keys = bluesky_queueserver.manager.qserver_cli:qserver_zmq_keys",
+            "qserver-console-monitor = bluesky_queueserver.manager.output_streaming:qserver_console_monitor_cli",
         ],
     },
     include_package_data=True,

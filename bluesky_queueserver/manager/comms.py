@@ -12,8 +12,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-_fixed_public_key = "wt8[6a8eoXFRVL<l2JBbOzs(hcI%kRBIr0Do/eLC"
-_fixed_private_key = "=@e7WwVuz{*eGcnv{AL@x2hmX!z^)wP3vKsQ{S7s"
+fixed_public_key = "wt8[6a8eoXFRVL<l2JBbOzs(hcI%kRBIr0Do/eLC"
+fixed_private_key = "=@e7WwVuz{*eGcnv{AL@x2hmX!z^)wP3vKsQ{S7s"
 
 
 class CommTimeoutError(TimeoutError):
@@ -733,8 +733,8 @@ class ZMQCommSendThreads:
             # Set server public key
             self._zmq_socket.set(zmq.CURVE_SERVERKEY, self._server_public_key.encode("utf-8"))
             # Set public and private keys for the client
-            self._zmq_socket.set(zmq.CURVE_PUBLICKEY, _fixed_public_key.encode("utf-8"))
-            self._zmq_socket.set(zmq.CURVE_SECRETKEY, _fixed_private_key.encode("utf-8"))
+            self._zmq_socket.set(zmq.CURVE_PUBLICKEY, fixed_public_key.encode("utf-8"))
+            self._zmq_socket.set(zmq.CURVE_SECRETKEY, fixed_private_key.encode("utf-8"))
 
         # Increment `self._timeout_receive` so that timeout supplied to `self._zmq_socket.poll`
         #   expires first so that correct message is produced.
@@ -948,8 +948,8 @@ class ZMQCommSendAsync:
             # Set server public key
             self._zmq_socket.set(zmq.CURVE_SERVERKEY, self._server_public_key.encode("utf-8"))
             # Set public and private keys for the client
-            self._zmq_socket.set(zmq.CURVE_PUBLICKEY, _fixed_public_key.encode("utf-8"))
-            self._zmq_socket.set(zmq.CURVE_SECRETKEY, _fixed_private_key.encode("utf-8"))
+            self._zmq_socket.set(zmq.CURVE_PUBLICKEY, fixed_public_key.encode("utf-8"))
+            self._zmq_socket.set(zmq.CURVE_SECRETKEY, fixed_private_key.encode("utf-8"))
 
         # Increment `self._timeout_receive` so that timeout supplied to `self._zmq_socket.poll`
         #   expires first so that correct message is produced.

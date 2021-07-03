@@ -10,7 +10,7 @@ import uuid
 from .comms import PipeJsonRpcSendAsync, CommTimeoutError, validate_zmq_key
 from .profile_ops import load_allowed_plans_and_devices, validate_plan
 from .plan_queue_ops import PlanQueueOperations
-from .output_streaming import LogStream, override_streams
+from .output_streaming import ConsoleOutputStream, redirect_output_streams
 
 import logging
 
@@ -1836,8 +1836,8 @@ class RunEngineManager(Process):
         by the `start` method.
         """
         if self._msg_queue:
-            fobj = LogStream(msg_queue=self._msg_queue)
-            override_streams(fobj)
+            fobj = ConsoleOutputStream(msg_queue=self._msg_queue)
+            redirect_output_streams(fobj)
 
         logging.basicConfig(level=max(logging.WARNING, self._log_level))
         logging.getLogger(__name__).setLevel(self._log_level)

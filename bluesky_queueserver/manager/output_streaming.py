@@ -38,6 +38,12 @@ def redirect_output_streams(file_obj):
     sys.stderr = file_obj
 
 
+def setup_console_output_redirection(msg_queue):
+    if msg_queue:
+        fobj = ConsoleOutputStream(msg_queue=msg_queue)
+        redirect_output_streams(fobj)
+
+
 _default_zmq_console_topic = "QS_Console"
 
 
@@ -55,6 +61,10 @@ class PublishConsoleOutput:
     msg_queue : multiprocessing.Queue
         Reference to the queue object, used for collecting of the output messages.
         The messages added to the queue will be automatically published to 0MQ socket.
+    console_output_on : boolean
+        Enable/disable printing console output to the terminal
+    zmq_publishing_on : boolean
+        Enable/disable publishing console output to 0MQ socket
     zmq_publish_addr : str, None
         Address of 0MQ PUB socket for the publishing server. If ``None``, then
         the default address ``tcp://*:60625`` is used.
@@ -65,27 +75,43 @@ class PublishConsoleOutput:
     """
 
     def __init__(
-        self, *, msg_queue, zmq_publish_addr=None, zmq_topic=_default_zmq_console_topic, name="Output Publisher"
+        self,
+        *,
+        msg_queue,
+        console_output_on=True,
+        zmq_publish_on=True,
+        zmq_publish_addr=None,
+        zmq_topic=_default_zmq_console_topic,
+        name="Output Publisher",
     ):
         self._thread_running = False  # Set True to exit the thread
         self._thread_name = name
         self._msg_queue = msg_queue
         self._polling_timeout = 0.1  # in sec.
 
+        self._console_output_on = console_output_on
+        self._zmq_publish_on = zmq_publish_on
+
         zmq_publish_addr = zmq_publish_addr or "tcp://*:60625"
 
-        logger.info(f"Console output is published to 0MQ address: {zmq_publish_addr}")
         self._zmq_publish_addr = zmq_publish_addr
         self._zmq_topic = zmq_topic
 
         self._socket = None
-        if self._zmq_publish_addr:
+        if self._zmq_publish_on:
             try:
                 context = zmq.Context()
                 self._socket = context.socket(zmq.PUB)
                 self._socket.bind(self._zmq_publish_addr)
-            except Exception:
-                pass
+            except Exception as ex:
+                logger.error(
+                    "Failed to create 0MQ socket at %s. Console output will not be published. " "Exception: %s",
+                    self._zmq_publish_addr,
+                    str(ex),
+                )
+
+        if self._socket and self._zmq_publish_on:
+            logging.info("Publishing console output to 0MQ socket at %s", zmq_publish_addr)
 
     def start(self):
         """
@@ -124,8 +150,10 @@ class PublishConsoleOutput:
                 break
 
     def _publish(self, payload):
-        sys.__stdout__.write(payload["msg"])
-        if self._socket:
+        if self._console_output_on:
+            sys.__stdout__.write(payload["msg"])
+
+        if self._zmq_publish_on and self._socket:
             topic = self._zmq_topic
             payload_json = json.dumps(payload)
             self._socket.send_multipart([topic.encode("ascii"), payload_json.encode("utf8")])
@@ -206,7 +234,10 @@ class ReceiveConsoleOutput:
 
 
 def qserver_console_monitor_cli():
-
+    """
+    CLI tool for remote monitoring of console output from RE Manager. The function is also
+    expected to be used as an example of using  ``ReceiveConsoleOutput`` class.
+    """
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger("bluesky_queueserver").setLevel("INFO")
 
@@ -220,7 +251,7 @@ def qserver_console_monitor_cli():
         dest="zmq_subscribe_addr",
         type=str,
         default="tcp://localhost:60625",
-        help="The address of ZMQ server to subscribe, e.g. 'tcp://127.0.0.1:60625'.",
+        help="The address of ZMQ server to subscribe, e.g. 'tcp://127.0.0.1:60625' (default: %(default)s).",
     )
 
     args = parser.parse_args()

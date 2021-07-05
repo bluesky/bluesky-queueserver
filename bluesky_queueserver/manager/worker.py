@@ -8,7 +8,7 @@ from functools import partial
 import logging
 
 from .comms import PipeJsonRpcReceive
-from .output_streaming import ConsoleOutputStream, redirect_output_streams
+from .output_streaming import setup_console_output_redirection
 
 from event_model import RunRouter
 
@@ -494,9 +494,7 @@ class RunEngineWorker(Process):
         Overrides the `run()` function of the `multiprocessing.Process` class. Called
         by the `start` method.
         """
-        if self._msg_queue:
-            fobj = ConsoleOutputStream(msg_queue=self._msg_queue)
-            redirect_output_streams(fobj)
+        setup_console_output_redirection(msg_queue=self._msg_queue)
 
         logging.basicConfig(level=max(logging.WARNING, self._log_level))
         logging.getLogger(__name__).setLevel(self._log_level)

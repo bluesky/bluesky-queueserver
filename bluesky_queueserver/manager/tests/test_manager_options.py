@@ -132,8 +132,7 @@ class _StartDispatcherProcess(multiprocessing.Process):
 
 @pytest.fixture
 def zmq_dispatcher():
-    # The following code was mostly borrowed from 'bluesky.tests.test_zmq.py' (test_zmq_no_RE)
-
+    # The following code is refactored code from 'bluesky.tests.test_zmq.py' (test_zmq_no_RE)
     queue = multiprocessing.Queue()
     dispatcher_proc = _StartDispatcherProcess(queue=queue, daemon=True)
     dispatcher_proc.start()

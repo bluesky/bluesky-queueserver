@@ -15,18 +15,26 @@ qserver_version = bluesky_queueserver.__version__
 
 
 class ConsoleOutputStream(io.TextIOBase):
+    """
+    Class that implements writable text file object that collects printed console messages
+    and adds timestamps to messages and adds the message to the queue. The messages are
+    dictionaries in the form ``{"time": <timestamp>, "msg": <printed text>}.
+
+    Parameters
+    ----------
+    msg_queue : multiprocessing.Queue
+        Reference to the queue used for collecting messages.
+    """
+
     def __init__(self, *, msg_queue):
-        """
-        Parameters
-        ----------
-        msg_queue : multiprocessing.Queue
-            Queue that is used to collect messages from processes
-        """
         super().__init__()
         self._msg_queue = msg_queue
         self._stdout = sys.__stdout__
 
     def write(self, s):
+        """
+        Overrides the method of ``io.TextIOBase``.
+        """
         s = str(s)
         msg = {"time": ttime.time(), "msg": s}
         self._msg_queue.put(msg)
@@ -34,11 +42,28 @@ class ConsoleOutputStream(io.TextIOBase):
 
 
 def redirect_output_streams(file_obj):
+    """
+    Override the default output streams with custom file object.
+    The object may be an instance of ``ConsoleOutputStream``.
+
+    Parameters
+    ----------
+    file_obj : ConsoleOutputStream
+        Reference for the open writable file object (text output).
+    """
     sys.stdout = file_obj
     sys.stderr = file_obj
 
 
 def setup_console_output_redirection(msg_queue):
+    """
+    Set up redirection of console output. If ``msg_queue`` is ``None``, then do nothing.
+
+    Parameters
+    ----------
+    msg_queue : multiprocessing.Queue
+        Queue that is used to collect console output messages.
+    """
     if msg_queue:
         fobj = ConsoleOutputStream(msg_queue=msg_queue)
         redirect_output_streams(fobj)
@@ -165,6 +190,30 @@ class ReceiveConsoleOutput:
     The class allows to subscribing to published 0MQ messages and reading the message one by
     one as they arrive. Subscription is performed based on remote 0MQ address and topic.
 
+    The class provides blocking (with timeout) ``recv`` method that waits for the next
+    published message. The following example using the ``recv`` method. In real-world
+    application the loop will be running in a separate thread and generating
+    callbacks on each received message.
+
+    .. code-block:: python
+
+        rco = ReceiveConsoleOutput(zmq_subscribe_addr=zmq_subscribe_addr)
+        while True:
+            try:
+                payload = rco.recv()
+                time, msg = payload.get("time", None), payload.get("msg", None)
+                # In this example the messages are printed in the terminal.
+                sys.stdout.write(msg)
+                sys.stdout.flush()
+            except TimeoutError:
+                # Timeout does not mean communication error!!!
+                # Insert the code that needs to be executed on timeout (if any).
+                pass
+            # Place for the code that should be executed after receiving each
+            #   message or after timeout (e.g. check a condition and exit
+            #   the loop once the condition is satisfied).
+
+
     Parameters
     ----------
     zmq_subscribe_addr : str or None
@@ -193,7 +242,7 @@ class ReceiveConsoleOutput:
             context = zmq.Context()
             self._socket = context.socket(zmq.SUB)
             self._socket.connect(self._zmq_subscribe_addr)
-            self._socket.subscribe("QS_Console")
+            self._socket.subscribe(self._zmq_topic)
 
     def recv(self, timeout=-1):
         """

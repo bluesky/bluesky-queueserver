@@ -5,7 +5,6 @@ import glob
 import subprocess
 import time as ttime
 import multiprocessing
-from bluesky.callbacks.zmq import RemoteDispatcher
 
 from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
 from bluesky_queueserver.manager.comms import zmq_single_request
@@ -112,13 +111,17 @@ def zmq_proxy():
     p.kill()
 
 
-@pytest.fixture
-def zmq_dispatcher():
-    # The following code was mostly borrowed from 'bluesky.tests.test_zmq.py' (test_zmq_no_RE)
-    def make_and_start_dispatcher(queue):
+class _StartDispatcherProcess(multiprocessing.Process):
+    def __init__(self, queue, **kwargs):
+        super().__init__(**kwargs)
+        self._queue = queue
+
+    def run(self):
         def put_in_queue(name, doc):
             print("putting ", name, "in queue")
-            queue.put((name, doc))
+            self._queue.put((name, doc))
+
+        from bluesky.callbacks.zmq import RemoteDispatcher
 
         d = RemoteDispatcher("127.0.0.1:5568")
         d.subscribe(put_in_queue)
@@ -126,8 +129,13 @@ def zmq_dispatcher():
         d.loop.call_later(9, d.stop)
         d.start()
 
+
+@pytest.fixture
+def zmq_dispatcher():
+    # The following code was mostly borrowed from 'bluesky.tests.test_zmq.py' (test_zmq_no_RE)
+
     queue = multiprocessing.Queue()
-    dispatcher_proc = multiprocessing.Process(target=make_and_start_dispatcher, daemon=True, args=(queue,))
+    dispatcher_proc = _StartDispatcherProcess(queue=queue, daemon=True)
     dispatcher_proc.start()
     ttime.sleep(2)  # As above, give this plenty of time to start.
 

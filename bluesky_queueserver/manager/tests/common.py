@@ -342,18 +342,22 @@ sources:
 
 
 class ReManager:
-    def __init__(self, params=None):
+    def __init__(self, params=None, *, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL):
         self._p = None
-        self._start_manager(params)
+        self._start_manager(params, stdout=stdout, stderr=stderr)
 
-    def _start_manager(self, params=None):
+    def _start_manager(self, params=None, *, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL):
         """
         Start RE manager.
 
         Parameters
         ----------
-        params: list(str)
+        params : list(str)
             The list of command line parameters passed to the manager at startup
+        stdout
+            Device to forward stdout, ``None`` - print to console
+        stderr
+            Device to forward stdout, ``None`` - print to console
 
         Returns
         -------
@@ -366,9 +370,7 @@ class ReManager:
             cmd = ["start-re-manager"]
             if params:
                 cmd += params
-            self._p = subprocess.Popen(
-                cmd, universal_newlines=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            )
+            self._p = subprocess.Popen(cmd, universal_newlines=True, stdout=stdout, stderr=stderr)
 
     def check_if_stopped(self, timeout=5):
         """
@@ -447,13 +449,13 @@ def re_manager_cmd():
     re = {"re": None}
     failed_to_start = False
 
-    def _create(params):
+    def _create(params, *, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL):
         """
         Create RE Manager. ``start-re-manager`` is called with command line parameters from
           the list ``params``.
         """
         nonlocal re, failed_to_start
-        re["re"] = ReManager(params)
+        re["re"] = ReManager(params, stdout=stdout, stderr=stderr)
 
         # Wait until RE Manager is started. Raise exception if the server failed to start.
         if not wait_for_condition(time=10, condition=condition_manager_idle):
@@ -473,10 +475,11 @@ def re_manager_cmd():
             else:
                 re["re"].kill_manager()
 
-    def create_re_manager(params=None):
+    def create_re_manager(params=None, *, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL):
         params = params or []
         _close()
-        _create(params)
+        _create(params, stdout=stdout, stderr=stderr)
+        return re["re"]
 
     yield create_re_manager
 

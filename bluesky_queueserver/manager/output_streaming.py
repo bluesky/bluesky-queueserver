@@ -152,6 +152,7 @@ class PublishConsoleOutput:
     def _publish(self, payload):
         if self._console_output_on:
             sys.__stdout__.write(payload["msg"])
+            sys.__stdout__.flush()
 
         if self._zmq_publish_on and self._socket:
             topic = self._zmq_topic
@@ -264,6 +265,7 @@ def qserver_console_monitor_cli():
                 payload = rco.recv()
                 time, msg = payload.get("time", None), payload.get("msg", None)  # noqa: F841
                 sys.stdout.write(msg)
+                sys.stdout.flush()
             except TimeoutError:
                 # Timeout does not mean communication error!!!
                 # There is no need to use or process timeouts. This code

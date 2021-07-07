@@ -896,10 +896,14 @@ def qserver_zmq_keys():
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger("bluesky_queueserver").setLevel("INFO")
 
+    def formatter(prog):
+        # Set maximum width such that printed help mostly fits in the RTD theme code block (documentation).
+        return argparse.RawDescriptionHelpFormatter(prog, max_help_position=20, width=90)
+
     parser = argparse.ArgumentParser(
-        description="Bluesky-QServer: ZMQ security - generate public-private key pair for "
+        description="Bluesky-QServer:\nZMQ security - generate public-private key pair for "
         f"ZeroMQ control communication channel.\nbluesky-queueserver version {qserver_version}.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        formatter_class=formatter,
     )
     parser.add_argument(
         "--zmq-private-key",

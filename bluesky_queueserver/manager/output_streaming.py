@@ -292,10 +292,14 @@ def qserver_console_monitor_cli():
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger("bluesky_queueserver").setLevel("INFO")
 
+    def formatter(prog):
+        # Set maximum width such that printed help mostly fits in the RTD theme code block (documentation).
+        return argparse.RawDescriptionHelpFormatter(prog, max_help_position=20, width=90)
+
     parser = argparse.ArgumentParser(
-        description="Queue Server Console Monitor: CLI tool for remote monitoring of console output "
-        "published by RE Manager.",
-        epilog=f"Bluesky-QServer version {qserver_version}.",
+        description="Queue Server Console Monitor:\nCLI tool for remote monitoring of console output "
+        f"published by RE Manager.\nbluesky-queueserver version {qserver_version}\n",
+        formatter_class=formatter,
     )
     parser.add_argument(
         "--zmq-subscribe-addr",

@@ -1712,10 +1712,14 @@ def gen_list_of_plans_and_devices_cli():
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger("bluesky_queueserver").setLevel("INFO")
 
+    def formatter(prog):
+        # Set maximum width such that printed help mostly fits in the RTD theme code block (documentation).
+        return argparse.RawDescriptionHelpFormatter(prog, max_help_position=20, width=90)
+
     parser = argparse.ArgumentParser(
-        description="Bluesky-QServer: CLI tool for generating the list of plans and devices\n"
-        "  from beamline profile collection.",
-        epilog=f"Bluesky-QServer version {qserver_version}.",
+        description="Bluesky-QServer:\nCLI tool for generating the list of plans and devices "
+        f"from beamline startup scripts.\nbluesky-queueserver version {qserver_version}\n",
+        formatter_class=formatter,
     )
     parser.add_argument(
         "--file-dir",
@@ -1763,7 +1767,7 @@ def gen_list_of_plans_and_devices_cli():
         type=str,
         default=None,
         help="The path to the script with startup code. Example: "
-        "'qserver-list-plans-devices --startup-script ~/startup/scripts/script.py' loads"
+        "'qserver-list-plans-devices --startup-script ~/startup/scripts/script.py' loads "
         "startup code from the script and saves the results to the file in the current directory.",
     )
 

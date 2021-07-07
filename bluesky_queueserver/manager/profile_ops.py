@@ -1111,8 +1111,11 @@ def _filter_allowed_plans(*, allowed_plans, allowed_devices):
 
 def validate_plan(plan, *, allowed_plans, allowed_devices):
     """
-    Validate the dictionary of plan parameters. Expected to be called before the plan
-    is added to the queue.
+    Validate the dictionary of plan parameters. The function is called before the plan
+    is added to the queue. The function can also be called by the client application
+    to validate a plan before it is submitted to the queue. The dictionaries
+    ``allowed_plans`` and ``allowed_devices`` must contain plans and devices
+    that are allowed for the user and can be downloaded from the server.
 
     Parameters
     ----------
@@ -1129,9 +1132,11 @@ def validate_plan(plan, *, allowed_plans, allowed_devices):
 
     Returns
     -------
-    (boolean, str)
-        Success (True/False) and error message that indicates the reason for plan
-        rejection
+    boolean
+        Indicates if validation was successful (``True``) or failed (``False``).
+    str
+        Error message that explains the reason for validation failure. Empty string
+        if validation is successful.
     """
     try:
         success, msg = True, ""
@@ -1321,10 +1326,10 @@ def _process_plan(plan, *, existing_devices):
     Limitation on the support types of the plan parameters and the default values that could be
     used in function signatures. Parameter types must be native Python types (such as ``int``,
     ``float``, ``str``, etc.) or generic types based on Python native types
-    (``typing.List[typing.Union[int]]``). The operation of recreating the type from its
-    string representation using ``eval`` and the namespace with only ``typing`` module imported
-    should be successful. The default values are reconstructed using ``ast.literal_eval`` and
-    the operation ``ast.literal_eval(f"{v!r}")`` must run successfully.
+    (``typing.List[typing.Union[int, str]]``). The operation of recreating the type from its
+    string representation using ``eval`` and the namespace with imported ``typing`` module
+    and ``NoneType`` type should be successful. The default values are reconstructed using
+    ``ast.literal_eval`` and the operation ``ast.literal_eval(f"{v!r}")`` must run successfully.
 
     The description of the plan is represented as a Python dictionary in the following format
     (all elements are optional unless they are labeled as REQUIRED):

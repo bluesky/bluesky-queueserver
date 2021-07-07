@@ -3,7 +3,28 @@ import pytest
 import time as ttime
 import threading
 
-from bluesky_queueserver.manager.output_streaming import PublishConsoleOutput, ReceiveConsoleOutput
+from bluesky_queueserver.manager.output_streaming import (
+    ConsoleOutputStream,
+    PublishConsoleOutput,
+    ReceiveConsoleOutput,
+)
+
+
+def test_ConsoleOutputStream_1():
+    """
+    Basic test for ``ConsoleOutputStream`` class
+    """
+    queue = multiprocessing.Queue()
+    cos = ConsoleOutputStream(msg_queue=queue)
+
+    msgs = ["message-one\n", "message-two\n", "message-three\n"]
+    for msg in msgs:
+        cos.write(msg)
+
+    for msg in msgs:
+        msg_in_queue = queue.get(timeout=1)  # Timeout is just in case
+        assert isinstance(msg_in_queue["time"], float)
+        assert msg_in_queue["msg"] == msg
 
 
 # fmt: off

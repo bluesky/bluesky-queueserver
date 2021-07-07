@@ -88,7 +88,7 @@ class PublishConsoleOutput:
         The messages added to the queue will be automatically published to 0MQ socket.
     console_output_on : boolean
         Enable/disable printing console output to the terminal
-    zmq_publishing_on : boolean
+    zmq_publish_on : boolean
         Enable/disable publishing console output to 0MQ socket
     zmq_publish_addr : str, None
         Address of 0MQ PUB socket for the publishing server. If ``None``, then
@@ -107,7 +107,7 @@ class PublishConsoleOutput:
         zmq_publish_on=True,
         zmq_publish_addr=None,
         zmq_topic=_default_zmq_console_topic,
-        name="Output Publisher",
+        name="RE Console Output Publisher",
     ):
         self._thread_running = False  # Set True to exit the thread
         self._thread_name = name
@@ -130,7 +130,7 @@ class PublishConsoleOutput:
                 self._socket.bind(self._zmq_publish_addr)
             except Exception as ex:
                 logger.error(
-                    "Failed to create 0MQ socket at %s. Console output will not be published. " "Exception: %s",
+                    "Failed to create 0MQ socket at %s. Console output will not be published. Exception: %s",
                     self._zmq_publish_addr,
                     str(ex),
                 )

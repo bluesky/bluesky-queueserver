@@ -816,10 +816,15 @@ def qserver():
         "    export QSERVER_ZMQ_PUBLIC_KEY='<public_key>'\n\n"
         "Encryption is disabled by default."
     )
+
+    def formatter(prog):
+        # Set maximum width such that printed help mostly fits in the RTD theme code block (documentation).
+        return argparse.RawDescriptionHelpFormatter(prog, max_help_position=20, width=90)
+
     parser = argparse.ArgumentParser(
         description="Command-line tool for communicating with RE Monitor.\n"
         f"bluesky-queueserver version {qserver_version}.\n",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        formatter_class=formatter,
         epilog=f"\n\n{s_enc}\n\n{cli_examples}\n\n",
     )
 
@@ -835,8 +840,8 @@ def qserver():
         "-a",
         dest="address",
         action="store",
-        default=None,
-        help="Address of the server (e.g. 'tcp://localhost:60615', quoted string)",
+        default="tcp://localhost:60615",
+        help="Address of the server, e.g. 'tcp://127.0.0.1:60615' (default: '%(default)s').",
     )
 
     args = parser.parse_args()

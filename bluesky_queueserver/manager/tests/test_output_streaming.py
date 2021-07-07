@@ -83,7 +83,7 @@ def test_setup_console_output_redirection_1(sys_stdout_stderr_restore):
     (True, True, 0.5, None, 0),
     (True, True, 1.2, None, 3),
     (True, True, 1.2, 500, 6),  # Timeout is in ms (500 == 0.5 s)
-    (True, True, 0.25, 200, 3),
+    (True, True, 0.55, 500, 3),
 ])
 # fmt: on
 def test_ReceiveConsoleOutput_1(capfd, console_output_on, zmq_publish_on, period, timeout, n_timeouts):
@@ -138,9 +138,12 @@ def test_ReceiveConsoleOutput_1(capfd, console_output_on, zmq_publish_on, period
         queue.put({"time": ttime.time(), "msg": msg})
         ttime.sleep(period)
 
+    # Wait for all messages to be sent
     ttime.sleep(0.1)
-
     pco.stop()
+    # Wait for all message to be received and for the publishing thread to exit.
+    ttime.sleep(pco._polling_timeout * 2)
+
     rm.stop()
     rm.join()
 

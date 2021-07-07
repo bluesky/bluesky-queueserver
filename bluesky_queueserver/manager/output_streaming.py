@@ -152,7 +152,8 @@ class PublishConsoleOutput:
 
     def __del__(self):
         self.stop()
-        self._socket.close()
+        if self._socket:
+            self._socket.close()
 
     def _start_processing_thread(self):
         # The thread should not be started of Message Queue object does not exist

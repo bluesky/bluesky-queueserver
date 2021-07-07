@@ -1,10 +1,12 @@
 import multiprocessing
 import pytest
+import sys
 import time as ttime
 import threading
 
 from bluesky_queueserver.manager.output_streaming import (
     ConsoleOutputStream,
+    setup_console_output_redirection,
     PublishConsoleOutput,
     ReceiveConsoleOutput,
 )
@@ -25,6 +27,49 @@ def test_ConsoleOutputStream_1():
         msg_in_queue = queue.get(timeout=1)  # Timeout is just in case
         assert isinstance(msg_in_queue["time"], float)
         assert msg_in_queue["msg"] == msg
+
+
+@pytest.fixture
+def sys_stdout_stderr_restore():
+    """
+    Saves and restores ``sys.stdout`` and ``sys.stderr`` in case they are overridden in the test.
+    """
+    # Save references to stdout and stderr
+    _stdout = sys.stdout
+    _stderr = sys.stderr
+
+    # Now 'sys.stdout' and 'sys.stderr' can be overridden
+    yield
+
+    # Restore to the original
+    sys.stdout = _stdout
+    sys.stderr = _stderr
+
+
+def test_setup_console_output_redirection_1(sys_stdout_stderr_restore):
+    """
+    Test for ``setup_console_output_redirection``.
+    """
+    queue = multiprocessing.Queue()
+    setup_console_output_redirection(msg_queue=queue)
+
+    msgs = ["message-one", "message-two", "message-three"]
+    for msg in msgs:
+        print(msg)
+
+    # Note: print statement results in two message:
+    #      (1) printed text
+    #      (2) automaticall inserted "\n"
+    for msg in msgs:
+        # Message itself
+        msg_in_queue = queue.get(timeout=1)  # Timeout is just in case
+        assert isinstance(msg_in_queue["time"], float)
+        assert msg_in_queue["msg"] == msg
+
+        # "\n"
+        msg_in_queue = queue.get(timeout=1)  # Timeout is just in case
+        assert isinstance(msg_in_queue["time"], float)
+        assert msg_in_queue["msg"] == "\n"
 
 
 # fmt: off

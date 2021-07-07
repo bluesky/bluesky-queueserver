@@ -54,12 +54,14 @@ def test_setup_console_output_redirection_1(sys_stdout_stderr_restore):
     setup_console_output_redirection(msg_queue=queue)
 
     msgs = ["message-one", "message-two", "message-three"]
+
+    # Printing to redirected stream
     for msg in msgs:
         print(msg)
 
-    # Note: print statement results in two message:
+    # Note: print statement results in two messages:
     #      (1) printed text
-    #      (2) automaticall inserted "\n"
+    #      (2) automatically inserted "\n"
     for msg in msgs:
         # Message itself
         msg_in_queue = queue.get(timeout=1)  # Timeout is just in case

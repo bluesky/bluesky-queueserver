@@ -388,6 +388,28 @@ periodically requests and displays the status of Queue Server.
 qserver-list-plans-devices
 --------------------------
 
+It is recommended to run ``qserver-list-plans-devices`` each time the startup code is modified,
+which and serves two purposes:
+
+- Validation of startup code. If startup code is successfully loaded by ``qserver-list-plans-devices``
+  it is very likely that it will be successfully loaded into the RE Worker environment.
+
+- Generation of the list of existing plans and devices (``existing_plans_and_devices.yaml``).
+
+It is **REQUIRED** to run the tool each time new devices or plans are added to the startup code
+or signatures of the existing plans are modified (e.g. a parameter is added or removed, type
+annotation or text description is changed etc.), since those changes require a new
+``existing_plans_and_devices.yaml`` file to be generated.
+
+The default name for the output file is ``existing_plans_and_devices.yaml``. The file is always
+saved to the current directory unless a different path is specified using the ``--file-dir``
+parameter. If the output file must have name different from the default, the new name
+can be specified using the ``--file-name`` parameter.
+
+The tool may load startup code from IPython startup script collection, Python script or Python module.
+Use ``--startup-dir``, ``--startup-script`` and ``--startup-module`` parameters to specify
+the path to the directory with startup files, the path to a startup script or module name respectively.
+
 ``qserver-list-plans-devices -h`` displays help information:
 
 .. code-block::
@@ -398,33 +420,33 @@ qserver-list-plans-devices
 
     Bluesky-QServer:
     CLI tool for generating the list of plans and devices from beamline startup scripts.
-    bluesky-queueserver version 0.0.3.post59.dev0+g32a7a24
+    bluesky-queueserver version 0.0.3.post61.dev0+g45f1afb
 
     optional arguments:
       -h, --help        show this help message and exit
       --file-dir FILE_DIR
-                        Directory where the list of plans and devices is saved. By default,
-                        the list is saved to the file 'existing_plans_and_devices.yaml' in the
-                        current directory.
+                        Directory name where the list of plans and devices is saved. By
+                        default, the list is saved to the file
+                        'existing_plans_and_devices.yaml' in the current directory.
       --file-name FILE_NAME
                         Name of the file where the list of plans and devices is saved. Default
-                        file name 'existing_plans_and_devices.yaml' is used unless the
-                        parameter is not specified.
+                        file name: 'existing_plans_and_devices.yaml'.
       --startup-dir STARTUP_DIR
                         Path to directory that contains a set of startup files (*.py and
                         *.ipy). All the scripts in the directory will be sorted in
                         alphabetical order of their names and loaded in the Run Engine Worker
                         environment. The set of startup files may be located in any accessible
-                        directory. Example: 'qserver-list-plans-devices --startup-dir .' load
-                        startup files from the current directory and saves the lists to the
-                        file in current directory.
+                        directory. For example, 'qserver-list-plans-devices --startup-dir .'
+                        loads startup files from the current directory and saves the lists to
+                        the file in current directory.
       --startup-module STARTUP_MODULE_NAME
-                        The name of the module with startup code. Example: 'qserver-list-
+                        The name of the module that contains the startup code. The module must
+                        be installed in the current environment For example, 'qserver-list-
                         plans-devices --startup-module some.startup.module' loads startup code
                         from the module 'some.startup.module' and saves results to the file in
                         the current directory.
       --startup-script STARTUP_SCRIPT_PATH
-                        The path to the script with startup code. Example: 'qserver-list-
+                        The path to the script with startup code. For example, 'qserver-list-
                         plans-devices --startup-script ~/startup/scripts/script.py' loads
                         startup code from the script and saves the results to the file in the
                         current directory.
@@ -434,6 +456,19 @@ qserver-list-plans-devices
 qserver-zmq-keys
 ----------------
 
+Use this tool to generate random public-private key pairs for securing 0MQ control communication
+channel used by RE Manager:
+
+- **private key** - set as a value of ``QSERVER_ZMQ_PRIVATE_KEY`` environment variable at
+  workstation or server running RE Manager
+
+- **public key** - set as a value of `QSERVER_ZMQ_PUBLIC_KEY`` environment variable at
+  the workstation(s) running the client application(s).
+
+If server private key is know, the public key may be generated by passing the private
+key to ``qserver-zmq-keys`` using ``--zmq-private_key``.
+
+
 ``qserver-zmq-keys -h`` displays help information:
 
 .. code-block::
@@ -442,17 +477,21 @@ qserver-zmq-keys
     usage: qserver-zmq-keys [-h] [--zmq-private-key ZMQ_PRIVATE_KEY]
 
     Bluesky-QServer:
-    ZMQ security - generate public-private key pair for ZeroMQ control communication channel.
-    bluesky-queueserver version 0.0.3.post59.dev0+g32a7a24.
+    ZMQ security: Generate public-private key pair for ZeroMQ control communication channel.
+    bluesky-queueserver version 0.0.3.post61.dev0+g45f1afb.
+
+    Generate new public-private key pair for secured 0MQ control connection between
+    RE Manager and client applications. If private key is passed as ``--zmq-private-key``
+    parameter, then the generated key pair is based on the provided private key.
 
     optional arguments:
       -h, --help        show this help message and exit
       --zmq-private-key ZMQ_PRIVATE_KEY
-                        ZMQ server private key (for secured control connection). Setting the
-                        private key enables the encryption. The parameter value should be 40
-                        character string containing z85 encrypted key. The private key passed
-                        as CLI parameter overrides the private key contained in the
-                        environment variable QSERVER_ZMQ_PRIVATE_KEY.
+                        Private key used by RE Manager. If the private key is provided, then
+                        the public key is generated based on the private key. This option
+                        allows to create (recover) public key based on known private key. The
+                        passed value should be 40 character string containing z85 encrypted
+                        key.
 
 .. _qserver_console_monitor_cli:
 

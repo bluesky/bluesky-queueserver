@@ -188,15 +188,17 @@ class PublishConsoleOutput:
 
 class ReceiveConsoleOutput:
     """
-    The class allows to subscribing to published 0MQ messages and reading the message one by
-    one as they arrive. Subscription is performed based on remote 0MQ address and topic.
+    The class allows to subscribe to published 0MQ messages and read the messages one by
+    one as they arrive. Subscription is performed using the remote 0MQ address and topic.
 
     The class provides blocking (with timeout) ``recv`` method that waits for the next
-    published message. The following example using the ``recv`` method. In real-world
-    application the loop will be running in a separate thread and generating
+    published message. The following example contains the code illustrating using the class.
+    In real-world  application the loop will be running in a separate thread and generating
     callbacks on each received message.
 
     .. code-block:: python
+
+        from bluesky_queueserver import ReceiveConsoleOutput
 
         rco = ReceiveConsoleOutput(zmq_subscribe_addr=zmq_subscribe_addr)
         while True:
@@ -254,8 +256,8 @@ class ReceiveConsoleOutput:
         ----------
         timeout : int, float or None
             Timeout for the receive operation in milliseconds. If timeout is
-            a negative number (default) the use timeout passed to the class
-            constructor. If `None`, then wait indefinitely.
+            a negative number (default), the timeout value passed to the class
+            constructor is used. If `None`, then wait indefinitely.
 
         Returns
         -------

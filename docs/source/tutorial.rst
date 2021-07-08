@@ -19,6 +19,8 @@ Starting and Stopping the Queue
 Running RE Manager with Custom Startup Code
 -------------------------------------------
 
+.. _remote_monitoring_tutorial:
+
 Remote Monitoring of RE Manager Console Output
 ----------------------------------------------
 

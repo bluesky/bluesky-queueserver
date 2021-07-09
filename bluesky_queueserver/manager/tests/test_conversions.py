@@ -2,6 +2,7 @@ import copy
 import numpy as np
 import os
 import pytest
+import pprint
 
 from bluesky_queueserver.manager.tests.plan_lists import plan_list_sample, create_excel_file_from_plan_list
 
@@ -48,18 +49,21 @@ from bluesky_queueserver.manager.conversions import (
                      "description": "Description for parameter 'p1'.",
                      "kind": "POSITIONAL_OR_KEYWORD",
                      "annotation": {"type": "typing.List[float]"},
-                     "default": 10,
+                     "default": "[10, 20]",
+                     "min": "5",
+                     "max": "50",
+                     "step": "0.01"
                      },
                     {"name": "p2",
                      "description": "Description for parameter 'p2'.",
                      "kind": "POSITIONAL_OR_KEYWORD",
                      "annotation": {"type": "List[float]"},
-                     "default": 10,
+                     "default": "[30, 40]",
                      },
                     {"name": "p3",
                      "description": "Description for parameter 'p3'.",
                      "kind": "POSITIONAL_OR_KEYWORD",
-                     "default": 10,
+                     "default": "10",
                      },
                 ]},
       },
@@ -70,14 +74,17 @@ from bluesky_queueserver.manager.conversions import (
                      "description": "Description for parameter 'p1'.",
                      "kind": "POSITIONAL_OR_KEYWORD",
                      "type": "float",
-                     "default": 10,
+                     "default": [10, 20],
                      "is_list": True,
-                     "is_optional": True},
+                     "is_optional": True,
+                     "min": 5,
+                     "max": 50,
+                     "step": 0.01},
                     {"name": "p2",
                      "description": "Description for parameter 'p2'.",
                      "kind": "POSITIONAL_OR_KEYWORD",
                      "type": "float",
-                     "default": 10,
+                     "default": [30, 40],
                      "is_list": True,
                      "is_optional": True},
                     {"name": "p3",
@@ -121,8 +128,8 @@ def test_filter_plan_descriptions_1(plans_in, plans_out_expected):
     """
     Function ``filter_plan_descriptions``. Basic test.
     """
-    plans_out = filter_plan_descriptions((plans_in))
-    assert plans_out == plans_out_expected
+    plans_out = filter_plan_descriptions(plans_in)
+    assert plans_out == plans_out_expected, pprint.pformat(plans_out)
 
 
 # fmt: off

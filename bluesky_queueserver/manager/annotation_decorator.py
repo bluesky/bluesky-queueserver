@@ -25,9 +25,9 @@ _parameter_annotation_schema = {
                         "$ref": "#/definitions/custom_types",
                     },
                     "default": {"type": "string"},
-                    "min": {"type": ["number", "string"]},
-                    "max": {"type": ["number", "string"]},
-                    "step": {"type": ["number", "string"]},
+                    "min": {"type": "string"},
+                    "max": {"type": "string"},
+                    "step": {"type": "string"},
                 },
             },
         },
@@ -167,9 +167,9 @@ def parameter_annotation_decorator(annotation):
                     #   a parameter hint, but it can also be specified here. Putting
                     #   it in both places will also work.
                     "annotation": "float",
-                    "min": "0.1",  # Can be a number or a string representing a number
-                    "max": "10.0",  # Can be a number or a string representing a number
-                    "step": "0.1",  # Can be a number or a string representing a number
+                    "min": "0.1",  # A number must be represented as a string
+                    "max": "10.0",
+                    "step": "0.1",
                 }
 
                 "str_or_int_or_float": {

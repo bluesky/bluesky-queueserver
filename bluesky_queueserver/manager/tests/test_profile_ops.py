@@ -1639,6 +1639,29 @@ _pf3k_processed = {
 }
 
 
+@parameter_annotation_decorator(
+    {
+        "parameters": {"val1": {"min": "0.1", "max": "100", "step": "0.02"}},
+    }
+)
+def _pf3l(val1):
+    yield from [val1]
+
+
+_pf3l_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "min": "0.1",
+            "max": "100",
+            "step": "0.02",
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
 _pf3_existing_devices = {
     "dev_det1": {"is_readable": True, "is_movable": False, "is_flyable": False},
     "dev_det2": {"is_readable": True, "is_movable": False, "is_flyable": False},
@@ -1661,6 +1684,7 @@ _pf3_existing_devices = {
     (_pf3i, _pf3_existing_devices, _pf3i_processed),
     (_pf3j, _pf3_existing_devices, _pf3j_processed),
     (_pf3k, _pf3_existing_devices, _pf3k_processed),
+    (_pf3l, {}, _pf3l_processed),
 ])
 # fmt: on
 def test_process_plan_3(plan_func, existing_devices, plan_info_expected):
@@ -1733,12 +1757,30 @@ def _pf4d(detector: Optional[ophyd.Device]):
     yield from [detector]
 
 
+@parameter_annotation_decorator({"parameters": {"val1": {"min": "a0.1"}}})
+def _pf4e1(val1):
+    yield from [val1]
+
+
+@parameter_annotation_decorator({"parameters": {"val1": {"max": "0.1a"}}})
+def _pf4e2(val1):
+    yield from [val1]
+
+
+@parameter_annotation_decorator({"parameters": {"val1": {"step": "abc"}}})
+def _pf4e3(val1):
+    yield from [val1]
+
+
 # fmt: off
 @pytest.mark.parametrize("plan_func, err_msg", [
     (_pf4a_factory(), "unsupported default value type"),
     (_pf4b, "name 'Plans1' is not defined'"),
     (_pf4c, "Failed to decode the default value 'replacement_str'"),
     (_pf4d, "Missing default value for the parameter 'detector' in the plan signature"),
+    (_pf4e1, "Failed to process min. value.* could not convert string to float"),
+    (_pf4e2, "Failed to process max. value.* could not convert string to float"),
+    (_pf4e3, "Failed to process step value.* could not convert string to float"),
 ])
 # fmt: on
 def test_process_plan_4_fail(plan_func, err_msg):

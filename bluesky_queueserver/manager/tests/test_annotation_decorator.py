@@ -112,14 +112,7 @@ _simple_annotation_with_min_max_step = {
         "val_arg": {
             "description": "Parameter 'val_arg'",
             "default": "10",
-            "min": 1,  # As numbers
-            "max": 100,
-            "step": 0.1,
-        },
-        "val_kwarg": {
-            "description": "Parameter 'val_kwarg'",
-            "default": "10",
-            "min": "1",  # As strings
+            "min": "1",
             "max": "100",
             "step": "0.1",
         },

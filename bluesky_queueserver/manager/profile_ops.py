@@ -1364,6 +1364,9 @@ def _process_plan(plan, *, existing_devices):
                      "default": <string representation of the default value>
                      "default_defined_in_decorator": boolean  # True if the default value is defined
                                                               # in decorator, otherwise False/not set
+                     "min": <string representing int or float>
+                     "max": <string representing int or float>
+                     "step": <string representing int or float>
                 }
                 <parameter_name_2>: ...
                 <parameter_name_3>: ...
@@ -1431,6 +1434,23 @@ def _process_plan(plan, *, existing_devices):
                 "unsupported default value type."
             )
         return s_value
+
+    def convert_str_to_number(value_in):
+        """
+        Interpret a string ``value_in`` as ``int`` or ``float`` (whichever is sufficient).
+        Raise the exception if conversion fails.
+        """
+        try:
+            # Try to convert string value to float
+            if isinstance(value_in, str):
+                value_out = float(value_in)
+            else:
+                raise ValueError(f"Value '{value_in}' is not a string (type: {type(value_in)})")
+            if int(value_out) == value_out:
+                value_out = int(value_out)
+        except Exception as ex:
+            raise ValueError(f"Failed to interpret the value {value_in!r} as integer or float number: {ex}")
+        return value_out
 
     def assemble_custom_annotation(parameter, *, existing_devices):
         """
@@ -1524,6 +1544,7 @@ def _process_plan(plan, *, existing_devices):
 
             # Parameter description (attempt to get it from the decorator, then from docstring)
             desc, annotation, default = None, None, None
+            min, max, step = None, None, None
             default_defined_in_decorator = False
             if use_custom and (p.name in param_annotation["parameters"]):
                 desc = param_annotation["parameters"][p.name].get("description", None)
@@ -1533,6 +1554,9 @@ def _process_plan(plan, *, existing_devices):
                 default = param_annotation["parameters"][p.name].get("default", None)
                 if default:
                     default_defined_in_decorator = True
+                min = param_annotation["parameters"][p.name].get("min", None)
+                max = param_annotation["parameters"][p.name].get("max", None)
+                step = param_annotation["parameters"][p.name].get("step", None)
             if not desc and use_docstring and (p.name in doc_annotation["parameters"]):
                 desc = doc_annotation["parameters"][p.name].get("description", None)
             if not annotation and p.annotation is not inspect.Parameter.empty:
@@ -1554,6 +1578,7 @@ def _process_plan(plan, *, existing_devices):
                     default = convert_default_to_string(p.default)  # May raise an exception
                 except Exception as ex:
                     raise ValueError(f"Parameter '{p.name}': {ex}")
+
             if desc:
                 working_dict["description"] = desc
 
@@ -1568,6 +1593,26 @@ def _process_plan(plan, *, existing_devices):
                 working_dict["default"] = default
                 if default_defined_in_decorator:
                     working_dict["default_defined_in_decorator"] = True
+
+            # 'min', 'max' and 'step' (may exist only in decorator)
+            if min is not None:
+                try:
+                    min = convert_str_to_number(min)  # Attempt to convert to number
+                    working_dict["min"] = f"{min}"  # Save as a string
+                except Exception as ex:
+                    raise ValueError(f"Failed to process min. value: {ex}")
+            if max is not None:
+                try:
+                    max = convert_str_to_number(max)
+                    working_dict["max"] = f"{max}"
+                except Exception as ex:
+                    raise ValueError(f"Failed to process max. value: {ex}")
+            if step is not None:
+                try:
+                    step = convert_str_to_number(step)
+                    working_dict["step"] = f"{step}"
+                except Exception as ex:
+                    raise ValueError(f"Failed to process step value: {ex}")
 
     except Exception as ex:
         raise ValueError(f"Failed to create description of plan '{plan.__name__}': {ex}")

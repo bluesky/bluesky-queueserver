@@ -32,6 +32,9 @@ custom_test_flyer = ophyd.sim.MockFlyer("custom_test_flyer", ophyd.sim.det, ophy
                 "description": "Motor positions. The number of positions must be equal "
                 "to the number of the motors.",
                 "annotation": "typing.List[float]",
+                "min": "-10",
+                "max": "10",
+                "step": "0.01",
             },
         },
     }

@@ -25,6 +25,9 @@ _parameter_annotation_schema = {
                         "$ref": "#/definitions/custom_types",
                     },
                     "default": {"type": "string"},
+                    "min": {"type": ["number", "string"]},
+                    "max": {"type": ["number", "string"]},
+                    "step": {"type": ["number", "string"]},
                 },
             },
         },
@@ -67,6 +70,16 @@ def parameter_annotation_decorator(annotation):
     (names of devices from RE Worker namespace), ``plans`` (names of plans from RE Worker namespace)
     and ``enums`` (string literals). Type annotations in the decorator may use custom enum types
     to define complex types (using generic types based on ``typing`` module).
+
+    The decorator allows to define additional parameter annotation items: ``min``, ``max`` and
+    ``step``. Those items are applied only to numbers in data structures passed as parameter values.
+    If ``min`` or ``max`` values are defined for a parameter, each number found
+    in the data structure (such as list, tuple, dictionary, list of dictionaries etc.)
+    is compared to the values of ``min`` and ``max`` and the plan is rejected if any value
+    is out of range. Range validation is inteded primarily for using with parameters that
+    accept numbers or lists/tuples of numbers. The ``step`` value specified in annotation
+    is not used by Queue Server, but passed to the client application and may be useful for
+    generating GUI components (e.g. spin boxes).
 
     Another potential use of the decorator is to provide shorter text descriptions (e.g. for tooltips)
     for the parameters in case long description extracted from the function docstring is too detailed.
@@ -154,6 +167,9 @@ def parameter_annotation_decorator(annotation):
                     #   a parameter hint, but it can also be specified here. Putting
                     #   it in both places will also work.
                     "annotation": "float",
+                    "min": "0.1",  # Can be a number or a string representing a number
+                    "max": "10.0",  # Can be a number or a string representing a number
+                    "step": "0.1",  # Can be a number or a string representing a number
                 }
 
                 "str_or_int_or_float": {

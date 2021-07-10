@@ -12,13 +12,14 @@ from .profile_ops import _convert_str_to_number
 logger = logging.getLogger(__name__)
 
 
-def filter_plan_descriptions(plans_source):
+def simplify_plan_descriptions(plans_source):
     """
-    Convert descriptions of the allowed plans to satisfy requirements of the web client.
-    The conversion accurately supports only simple data types: ``int``, ``float``, ``str``,
-    lists of ints, floats or strings (expressed as ``List[int]`` or ``typing.List[int]``),
-    enums and lists of enums. Enum can be specified in custom description of plan
-    parameter with enum values which are string or names of plans or devices.
+    Simplify plan representations in the list of allowed plans. Simplified representations
+    may be more convenient for the web client applications. The conversion accurately supports
+    only simple data types: ``int``, ``float``, ``str``, lists of ints, floats or strings
+    (expressed as ``List[int]`` or ``typing.List[int]``), enums and lists of enums. Enum
+    can be specified in custom description of plan parameter with enum values which are string
+    or names of plans or devices.
 
     The limitation on processed types is based on potential capabilities of the web client.
     Complex type hints may also be processed correctly if the result could be expressed

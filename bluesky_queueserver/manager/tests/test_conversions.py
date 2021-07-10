@@ -7,7 +7,7 @@ import pprint
 from bluesky_queueserver.manager.tests.plan_lists import plan_list_sample, create_excel_file_from_plan_list
 
 from bluesky_queueserver.manager.conversions import (
-    filter_plan_descriptions,
+    simplify_plan_descriptions,
     _read_cell_parameter,
     spreadsheet_to_plan_list,
 )
@@ -124,11 +124,11 @@ from bluesky_queueserver.manager.conversions import (
      ),
 ])
 # fmt: on
-def test_filter_plan_descriptions_1(plans_in, plans_out_expected):
+def test_simplify_plan_descriptions_1(plans_in, plans_out_expected):
     """
     Function ``filter_plan_descriptions``. Basic test.
     """
-    plans_out = filter_plan_descriptions(plans_in)
+    plans_out = simplify_plan_descriptions(plans_in)
     assert plans_out == plans_out_expected, pprint.pformat(plans_out)
 
 

@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException, File, UploadFile, Form
 from typing import Optional
 
 from ..manager.comms import ZMQCommSendAsync, validate_zmq_key
-from bluesky_queueserver.manager.conversions import filter_plan_descriptions, spreadsheet_to_plan_list
+from bluesky_queueserver.manager.conversions import simplify_plan_descriptions, spreadsheet_to_plan_list
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -530,7 +530,7 @@ async def plans_allowed_handler():
     params = {"user_group": _login_data["user_group"]}
     msg = await zmq_to_manager.send_message(method="plans_allowed", params=params)
     if "plans_allowed" in msg:
-        msg["plans_allowed"] = filter_plan_descriptions(msg["plans_allowed"])
+        msg["plans_allowed"] = simplify_plan_descriptions(msg["plans_allowed"])
     return msg
 
 

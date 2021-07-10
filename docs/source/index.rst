@@ -23,7 +23,7 @@ Bluesky-QueueServer Documentation
    workflow
    startup_code
    ipython
-   plan_validation
+   item_validation
    plan_annotation
    cli_tools
 

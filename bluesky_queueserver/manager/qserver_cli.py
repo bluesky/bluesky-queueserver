@@ -816,10 +816,15 @@ def qserver():
         "    export QSERVER_ZMQ_PUBLIC_KEY='<public_key>'\n\n"
         "Encryption is disabled by default."
     )
+
+    def formatter(prog):
+        # Set maximum width such that printed help mostly fits in the RTD theme code block (documentation).
+        return argparse.RawDescriptionHelpFormatter(prog, max_help_position=20, width=90)
+
     parser = argparse.ArgumentParser(
         description="Command-line tool for communicating with RE Monitor.\n"
         f"bluesky-queueserver version {qserver_version}.\n",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        formatter_class=formatter,
         epilog=f"\n\n{s_enc}\n\n{cli_examples}\n\n",
     )
 
@@ -835,8 +840,8 @@ def qserver():
         "-a",
         dest="address",
         action="store",
-        default=None,
-        help="Address of the server (e.g. 'tcp://localhost:60615', quoted string)",
+        default="tcp://localhost:60615",
+        help="Address of the server, e.g. 'tcp://127.0.0.1:60615' (default: '%(default)s').",
     )
 
     args = parser.parse_args()
@@ -896,20 +901,27 @@ def qserver_zmq_keys():
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger("bluesky_queueserver").setLevel("INFO")
 
+    def formatter(prog):
+        # Set maximum width such that printed help mostly fits in the RTD theme code block (documentation).
+        return argparse.RawDescriptionHelpFormatter(prog, max_help_position=20, width=90)
+
     parser = argparse.ArgumentParser(
-        description="Bluesky-QServer: ZMQ security - generate public-private key pair for "
-        f"ZeroMQ control communication channel.\nbluesky-queueserver version {qserver_version}.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="Bluesky-QServer:\nZMQ security: Generate public-private key pair for "
+        f"ZeroMQ control communication channel.\nbluesky-queueserver version {qserver_version}.\n\n"
+        f"Generate new public-private key pair for secured 0MQ control connection between\n"
+        f"RE Manager and client applications. If private key is passed as ``--zmq-private-key``\n"
+        f"parameter, then the generated key pair is based on the provided private key.\n",
+        formatter_class=formatter,
     )
     parser.add_argument(
         "--zmq-private-key",
         dest="zmq_private_key",
         type=str,
         default=None,
-        help="ZMQ server private key (for secured control connection). Setting the private key enables "
-        "the encryption. The parameter value should be 40 character string containing z85 encrypted "
-        "key. The private key passed as CLI parameter overrides the private key contained in the "
-        "environment variable QSERVER_ZMQ_PRIVATE_KEY.",
+        help="Private key used by RE Manager. If the private key is provided, then the public "
+        "key is generated based on the private key. This option allows to create (recover) "
+        "public key based on known private key. The passed value should be 40 character "
+        "string containing z85 encrypted key.",
     )
 
     args = parser.parse_args()

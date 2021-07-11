@@ -16,7 +16,9 @@ class ReManagerEmulation(threading.Thread):
     'heartbeat' messages to inform RE Manager that it is running.
     """
 
-    def __init__(self, *args, conn_watchdog, conn_worker, config=None, log_level=logging.DEBUG, **kwargs):
+    def __init__(
+        self, *args, conn_watchdog, conn_worker, config=None, msg_queue=None, log_level=logging.DEBUG, **kwargs
+    ):
         super().__init__(*args, **kwargs)
         self._conn_watchdog = conn_watchdog
         self.n_loops = 0
@@ -98,7 +100,7 @@ class ReManagerEmulation(threading.Thread):
 
 
 class ReWorkerEmulation(threading.Thread):
-    def __init__(self, *args, conn, config=None, log_level=logging.DEBUG, **kwargs):
+    def __init__(self, *args, conn, config=None, msg_queue=None, log_level=logging.DEBUG, **kwargs):
         super().__init__(*args, **kwargs)
         self._config_dict = config or {}
         self._exit = False

@@ -19,6 +19,7 @@ Bluesky-QueueServer Documentation
    :caption: User's Guide
 
    introduction_for_users
+   features_and_config
    workflow
    startup_code
    ipython

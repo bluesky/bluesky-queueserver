@@ -10,6 +10,8 @@ import uuid
 from .comms import PipeJsonRpcSendAsync, CommTimeoutError, validate_zmq_key
 from .profile_ops import load_allowed_plans_and_devices, validate_plan
 from .plan_queue_ops import PlanQueueOperations
+from .output_streaming import setup_console_output_redirection
+
 
 import logging
 
@@ -53,7 +55,9 @@ class RunEngineManager(Process):
         `args` and `kwargs` of the `multiprocessing.Process`
     """
 
-    def __init__(self, *args, conn_watchdog, conn_worker, config=None, log_level=logging.DEBUG, **kwargs):
+    def __init__(
+        self, *args, conn_watchdog, conn_worker, config=None, msg_queue=None, log_level=logging.DEBUG, **kwargs
+    ):
 
         if not conn_watchdog:
             raise RuntimeError(
@@ -66,6 +70,7 @@ class RunEngineManager(Process):
         super().__init__(*args, **kwargs)
 
         self._log_level = log_level
+        self._msg_queue = msg_queue
 
         self._watchdog_conn = conn_watchdog
         self._worker_conn = conn_worker
@@ -1831,6 +1836,8 @@ class RunEngineManager(Process):
         Overrides the `run()` function of the `multiprocessing.Process` class. Called
         by the `start` method.
         """
+        setup_console_output_redirection(msg_queue=self._msg_queue)
+
         logging.basicConfig(level=max(logging.WARNING, self._log_level))
         logging.getLogger(__name__).setLevel(self._log_level)
 

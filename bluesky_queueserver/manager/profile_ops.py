@@ -383,7 +383,7 @@ def load_worker_startup_code(
     if startup_dir is not None:
         logger.info("Loading RE Worker startup code from directory '%s' ...", startup_dir)
         startup_dir = os.path.abspath(os.path.expanduser(startup_dir))
-        print(f"startup_dir={startup_dir}")
+        logger.info("Startup directory: '%s'", startup_dir)
         nspace = load_profile_collection(startup_dir, keep_re=keep_re)
 
     elif startup_module_name is not None:
@@ -1712,10 +1712,14 @@ def gen_list_of_plans_and_devices_cli():
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger("bluesky_queueserver").setLevel("INFO")
 
+    def formatter(prog):
+        # Set maximum width such that printed help mostly fits in the RTD theme code block (documentation).
+        return argparse.RawDescriptionHelpFormatter(prog, max_help_position=20, width=90)
+
     parser = argparse.ArgumentParser(
-        description="Bluesky-QServer: CLI tool for generating the list of plans and devices\n"
-        "  from beamline profile collection.",
-        epilog=f"Bluesky-QServer version {qserver_version}.",
+        description="Bluesky-QServer:\nCLI tool for generating the list of plans and devices "
+        f"from beamline startup scripts.\nbluesky-queueserver version {qserver_version}\n",
+        formatter_class=formatter,
     )
     parser.add_argument(
         "--file-dir",
@@ -1723,7 +1727,7 @@ def gen_list_of_plans_and_devices_cli():
         action="store",
         required=False,
         default=None,
-        help="Directory where the list of plans and devices is saved. By default, the list is saved "
+        help="Directory name where the list of plans and devices is saved. By default, the list is saved "
         "to the file 'existing_plans_and_devices.yaml' in the current directory.",
     )
     parser.add_argument(
@@ -1732,8 +1736,8 @@ def gen_list_of_plans_and_devices_cli():
         action="store",
         required=False,
         default=None,
-        help="Name of the file where the list of plans and devices is saved. Default file name "
-        "'existing_plans_and_devices.yaml' is used unless the parameter is not specified.",
+        help="Name of the file where the list of plans and devices is saved. Default file name: "
+        "'existing_plans_and_devices.yaml'.",
     )
 
     group = parser.add_mutually_exclusive_group()
@@ -1745,7 +1749,7 @@ def gen_list_of_plans_and_devices_cli():
         help="Path to directory that contains a set of startup files (*.py and *.ipy). All the scripts "
         "in the directory will be sorted in alphabetical order of their names and loaded in "
         "the Run Engine Worker environment. The set of startup files may be located in any accessible "
-        "directory. Example: 'qserver-list-plans-devices --startup-dir .' load startup "
+        "directory. For example, 'qserver-list-plans-devices --startup-dir .' loads startup "
         "files from the current directory and saves the lists to the file in current directory.",
     )
     group.add_argument(
@@ -1753,17 +1757,18 @@ def gen_list_of_plans_and_devices_cli():
         dest="startup_module_name",
         type=str,
         default=None,
-        help="The name of the module with startup code. Example: "
-        "'qserver-list-plans-devices --startup-module some.startup.module' loads startup "
-        "code from the module 'some.startup.module' and saves results to the file in the current directory.",
+        help="The name of the module that contains the startup code. The module must be installed "
+        " in the current environment For example, 'qserver-list-plans-devices "
+        "--startup-module some.startup.module' loads startup code from the module 'some.startup.module' "
+        "and saves results to the file in the current directory.",
     )
     group.add_argument(
         "--startup-script",
         dest="startup_script_path",
         type=str,
         default=None,
-        help="The path to the script with startup code. Example: "
-        "'qserver-list-plans-devices --startup-script ~/startup/scripts/script.py' loads"
+        help="The path to the script with startup code. For example, "
+        "'qserver-list-plans-devices --startup-script ~/startup/scripts/script.py' loads "
         "startup code from the script and saves the results to the file in the current directory.",
     )
 

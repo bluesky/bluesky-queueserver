@@ -552,19 +552,19 @@ device names).
       #   detectors belong to different lists).
       <code implementing the plan>
 
-Similar syntax may be used to define custom enums for plans (use ``"plans"`` dictionary key
-instead of ``"devices"``) or strings (use ``"enums"`` dictionary key). The strings listed
+Similar syntax may be used to define custom enum types for plans (use ``"plans"`` dictionary key
+instead of ``"devices"``) or string literals (use ``"enums"`` dictionary key). The strings listed
 as ``"devices"`` are converted to references to devices and the strings listed as ``"plans"``
 are converted to references to plans before plan execution. Strings listed under ``"enums"``
-are not converted to references, but still used for plan parameter validation.
+are not converted to references, but are still used for plan parameter validation.
 Mixing devices, plans and enums in one type definition is possible (Queue Server will handle
 the types correctly), but not recommended.
 
 The decorator supports three built-in enum types: ``AllDetectors``, ``AllMotors`` and ``AllFlyers``.
-The built-in enum types should not be defined in the parameter annotation. The enums
-include lists of all detectors (readable devices), all motors (readable and writable devices) or
-all flyers (flyable devices) from the namespace. Explicitly defining those types in the annotation
-for a parameter overrides the default behavior (only for one plan parameter).
+The built-in enum types should not be defined in the parameter annotation. Those enum types are
+automaticall generated based on lists of all detectors (readable devices), all motors (readable
+and writable devices) or all flyers (flyable devices) from the namespace. Explicitly defining
+those types in the annotation for a parameter overrides the default behavior.
 
 .. code-block:: python
 
@@ -586,16 +586,16 @@ for a parameter overrides the default behavior (only for one plan parameter).
   def plan_demo5c(detectors, npts: int, delay: float=1.0):
       <code implementing the plan>
 
-Definitions of custom enums for devices or plans may include any devices from RE Worker
-namespace. The definitions are included in representation of plans in the list of existing
-plans. If built-in enum types are used, the definitions will contain full lists of
-devices from the namespace. When lists of allowed plans are generated for user groups,
-type definitions are filtered based on user group permissions, so that only the devices
-and plans that are allowed for the user group remain. This allows to use entries
-from downloaded lists of allowed plans for validation of plans and for generation of
-user interfaces without verification user permissions, since it is guaranteed,
-that the type definitions contain only devices and plans that the current user
-is allowed to use. Filtering of type definitions may cause some lists to become empty
+Definitions of custom enum types for devices or plans may include any devices defined in
+startup scripts and loaded into RE Worker namespace. The type definitions are saved
+as part of plan representations in the list of existing plans. If built-in enum types are used,
+the definitions will contain full lists of devices from the namespace. When lists of allowed
+plans are generated for user groups, custom type definitions are filtered based on user group
+permissions, so that only the devices and plans that are allowed for the user group remain.
+This allows to use entries from downloaded lists of allowed plans for validation of plans and
+for generation of user interfaces directly, without verification user permissions,
+since it is guaranteed, that the type definitions contain only devices and plans that the current user
+is allowed to use. Filtering type definitions may cause some lists to become empty
 in case current user does not have permission to use any devices or plans that are
 listed in type definition.
 
@@ -607,10 +607,9 @@ Default Values
 Using decorator to override default values defined in plan header with different values
 is possible, but generally not recommended unless absolutely necessary. Overriding the default
 value is justified when the type of the default value defined in the header is not supported,
-but the type of the default value defined in the decorator is supported
-and passing this value with the plan submitted to the queue leads to the same
-result as directly passing the default value defined in the header to the plan
-(e.g. in IPython).
+and there different default value of supported type can be defined in the decorator that
+will lead to identical default behavior of the plan when it is executed in Queue Server or
+in IPython.
 
 .. note::
 
@@ -618,13 +617,13 @@ result as directly passing the default value defined in the header to the plan
   annotation). E.g. ``"10"`` represents integer value ``10``, ``"'det1'"`` represents
   the string value ``'det1'`` and ``"['det1', 'det2']"`` represents an array of strings.
 
-The following example illustrates the user case which requires overriding the default value.
+The following example illustrates the use case which requires overriding the default value.
 In this example, the default value for the parameter ``detector`` is a reference to ``det1``,
-which has unsupported type. It is required that when the plan is submitted to Queue Server,
-and no value for ``detector`` parameter is provided, then the string ``"det1"`` is used
-as a default value, which is then substituted by reference to ``det1``. The decorator
-contains the definition of custom enum for supported device names and sets the default
-value as a string representing the name of one of the supported devices.
+which has unsupported type. When submitting the plan to the queue, the default parameter
+value must be the string literal ``"det1"``, which is then substituted by reference to ``det1``.
+The decorator contains the definition of custom enum type based on the list of supported
+device names and sets the default value as a string representing the name of one of
+the supported devices.
 
 .. code-block:: python
 

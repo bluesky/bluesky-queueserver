@@ -648,7 +648,64 @@ the supported devices.
       #   before the plan is executed.
       <code implementing the plan>
 
+Minimum, Maximum and Step Values
+++++++++++++++++++++++++++++++++
 
+The decorator allows to define optional parameters for numeric values passed to plans,
+including minimum and maxumum values and step size. The minimum and maximum values determine
+the allowed range of numerical values used in parameter validation. Step size is not
+used by Queue Server and intended for generating user interfaces in client applications
+(e.g. combination of minimum, maximum values and step size may be used to set up a spin box).
+If maximum and/or minimum values are defined for a parameter, validation includes checking
+if each numerical value in the data structure passed to the parameter is within this range.
+The algorithm is searching the data structure for numerical values by iterating through
+list elements and dictionary values. Non-numeric values are ignored. Dictionary keys are
+not validated.
+
+Setting both minimum and maximum values defines closed range for the parameter value
+(including the range boundaries). If only maximum or minimum boundary is set, the range
+is limited only from above or below (assuming the missing maximum or minimum
+is ``-Inf`` or ``Inf`` respectively). If no minimum or maximum value is specified,
+then the range is not validated.
+
+.. note::
+
+  Minimum, maximum values and step size must be integer or floating point numbers
+  represented as string literals (similarly to the types and default values).
+  For example, value ``10`` must be entered as ``"10"``, ``90.9`` as ``"90.9"``.
+
+.. code-block:: python
+
+  @parameter_annotation_decorator({
+      "parameters": {
+          "v": {
+              "default": "50",
+              "min": "20",  # Numbers must be represented as string literals
+              "max": "99.9",
+              "step": "0.1",
+          }
+      }
+  })
+  def plan_demo7a(v):
+      <code implementing the plan>
+
+This example defines the range ``[20, 99.9]`` for the parameter ``v``. The plan is accepted
+by Queue Server in the following cases:
+
+.. code-block:: python
+
+  {"v": 30}
+  {"v": [20, 20.001, 20.002]}
+  {"v": {"a": 30, "b": [50.5, 90.4]}}
+
+The plan will be rejected if
+
+.. code-block:: python
+
+  {"v": 10}  # Value 10 is out of range
+  {"v": [20, 100.5, 90]}  # Value 100.5 is out of range
+  {"v": {"a": -2, "b": 80}}  # Value -2 is out of range
+  {"v": {"a": 30, "b": [50.5, 190.4]}}  # Value 190.4 is out of range
 
 .. _plan_annotation_api:
 

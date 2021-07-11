@@ -82,34 +82,42 @@ and should be used only when necessary.
   generator function. Only the default values defined in the plan header are used.
   Any elements defined in ``parameter_annotation_decorator`` are ignored.
 
+
 .. _plans_without_annotation:
 
-Plans Without Annotation (Default Rules)
-----------------------------------------
+Plans Without Annotation (Default Behavior)
+-------------------------------------------
 
-All elements of arameter annotations are optional. Plans without annotations can be
-successfully managed by Queue Server. The text descriptions of plans and plan
-parameters are intended for use by client applications and have no influence on
-Queue Server operation.
+All elements of parameter annotations are optional. Plans without annotations can be
+successfully managed by Queue Server. Some of the elements, such as text descriptions
+of plans and plan parameters or step values for numerical parameters are not used
+by Queue Server, but may be downloaded and used by client applications. The other
+elements, such as parameter types and default values are used for plan parameter
+validation in Queue Server. All the elements may be downloaded and used by client
+applications.
 
-Parameter types and default values are used for plan parameter validation. The parameters
-with defined default values are **optional**. Values for the **required** parameters
-(without default values) must be specified when plans are submitted to the queue.
+Depending on whether plan annotation contains a default value for a parameter,
+the parameter is considered **required** or **optional**. Plans submitted to the queue
+must contain values for all required parameters and default values are used for
+missing optional parameters.
 
-For each parameter with specified type annotation, parameter validation includes
-checking the type of the submitted parameter value. The parameters with no type
-annotation are treated according to the default rules:
+For each plan parameter, annotation may contain optional specification of type
+for values expected for this parameter. All submitted parameter values undergo
+type validation. For parameter with type annotation, validation includes matching
+the type of the submitted value and the expected parameter type. The parameters
+with no type annotations are treated according to the default rules:
 
-* type checking always succeeds, i.e. any submitted value is accepted
-  and passed to the plan (the plan execution may fail due to incorrect parameter type).
+* Type checking always succeeds, i.e. any submitted value is accepted
+  and passed to the plan. Plan execution may fail due to incorrect parameter type.
 
-* the parameter values parsed and all detected strings that are matching names of
-  objects (plans or devices) in the RE Worker namespace are replaced with references
-  to the objects (see details below).
+* All strings found in the submitted parameter value (elements of lists, values of
+  dictionaries, etc.) are matched against the lists of plans and devices allowed for
+  the user submitting the plan. The matching strings are replaced by references to
+  respective objects (plans or devices) from RE Worker namespace.
 
-The validation algorithm is processing annotations for each parameter independently.
-The parameters with defined types are subjected to type checking, while the parameters
-with no type annotations are processed using the default rules.
+The validation algorithm is processing each parameter independently. Type validation
+is applied to the parameters with specified type annotation and default rules to
+the parameters without specified type.
 
 The examples of the plans with no annotation:
 
@@ -117,9 +125,8 @@ The examples of the plans with no annotation:
 
   def plan_demo1a(npts, delay):
       # Parameters 'npts' and 'delay' accept values of any type.
-      #   No validation of parameter value types will be performed
-      #   before execution of the plan is started. The plan will probably
-      #   fail if parameters are of incorrect type.
+      #   No type validation is performed on the parameter values.
+      #   The plan may fail during execution if value is not accepted by the plan.
       <code implementing the plan>
 
   def plan_demo1b(npts, delay=1.0):
@@ -128,17 +135,17 @@ The examples of the plans with no annotation:
       #   No type validation is performed for any parameter.
       <code implementing the plan>
 
-Queue Server supports plans that are accepting references to devices or other plans.
-The devices or plans passed as parameters must be defined in startup scripts and
+Queue Server supports plans with parameters accepting references to devices or other plans.
+The devices or plans passed as parameters must be defined in startup scripts,
 loaded in RE Worker namespace and represented in ``existing_plans_and_devices.yaml``.
-When plan parameters are submitted Queue Server, the devices and plans must
+In parameter values of plans submitted to the queue, the devices and plans must
 be represented by their names (type ``str``). The names are replaced by
-references to objects in RE Worker namespace before the parameters are passed to the plan
-for execution. Submitted parameter values are parsed and each strings found in the tree
-formed by lists, tuples and dictionaries is replaced with a reference to an objects with
+references to objects in RE Worker namespace before the parameter values are passed to
+the plans for execution. Submitted parameter values are parsed and each string found in the tree
+formed by lists, tuples and dictionaries is replaced with a reference to an object with
 the matching name. If there is no object with the name matching the string or the name
 is not in the list of allowed plans or allowed devices for the user submitting the plan,
-then the string is not modified. Dictionary keys are never modified.
+then the string is not modified. Dictionary keys are never modified by the algorithm.
 
 The operation of replacing plan and device names with references to objects from RE Worker
 namespace is performed for each parameter with no type annotation. This means that
@@ -169,11 +176,11 @@ using
 
   RE(plan_demo1c([det1, det3], <value of npts>))
 
-Blindly attempting to convert all strings in the passed parameter to references
-works well in most of the simple cases, unless the workflow requires to pass strings
-that are names of existing objects without converting them to references. If automated
-conversion is causing issues, it can be disabled for any given parameter by
-specifying the parameter type (e.g. using type hints in the plan header).
+The default behavior of blindly attempting to convert all strings in the passed parameter
+to references may works well simple cases (especially in demos). In practice, it may
+be necessary to pass strings that match names of the existing objects without change.
+In those cases the conversion may be disabled for a given parameter by specifying
+the parameter type, e.g. using type hints in the plan header.
 For example, one may need to pass plan or device names to the plan:
 
 .. code-block:: python
@@ -185,12 +192,12 @@ For example, one may need to pass plan or device names to the plan:
 
     def plan_demo1d(detector_names, npts):
         # The parameter 'detector_names' is expected to receive a list of detector names.
-        #   DOES NOT WORK: references to objects will be passed
+        #   DOES NOT WORK: references to objects are passed to the plan
         <code implementing the plan>
 
     def plan_demo1e(detector_names: typing.List[str], npts):
         # The parameter 'detector_names' is expected to receive a list of detector names.
-        #   WORKS !!!
+        #   WORKS: names of detectors are passed without change
         <code implementing the plan>
 
 If the value ``"detector_names": ["det1", "det3"]`` is passed to the plan ``plan_demo1d``,
@@ -203,17 +210,17 @@ type hint ``typing.Any`` will still disable conversion of strings, but the serve
 value of any type.
 
 The operation of string conversion always succeeds. If the device name is incorrectly spelled
-or not in the list of allowed plans or devices, then name remains a string and is passed
-to the plan unchanged. For example, assume that ``"detectors": ["det1", "det4"]`` is passed to
+or not in the list of allowed plans or devices, then the name is passed
+to the plan as a string. For example, assume that ``"detectors": ["det1", "det4"]`` is passed to
 ``plan_demo1c``. There is no device named ``det4`` in the RE Worker namespace, so it will
-not be converted to reference. As a result, the ``detectors`` parameter will receive a list
-``[det1, "det4"]`` and the plan will fail during execution. Queue Server provides
+not be converted to the reference. As a result, the plan will receive the value of
+``detectors=[det1, "det4"]`` and the plan will fail during execution. Queue Server provides
 ``parameter_annotation_decorator`` (:ref:`parameter_annotation_decorator`), which can be
-used to define types for advanced parameter validation. In particular, the decorator
-allows to define custom enums based on lists of device or plan names that could be used
-to restrict object names that that could be passed to the parameter. Specifying lists
-of plans or devices enables the string conversion, but only the listed names will
-be converted to references.
+used to define custom types for advanced parameter validation. In particular, the decorator
+allows to define custom enums based on lists of device or plan names and
+thus restrict object names that that could be passed to the parameter. Setting up custom enums
+with specified lists of plans or devices enables the string conversion, but only
+the listed names will be converted to references:
 
 .. code-block:: python
 
@@ -236,63 +243,63 @@ be converted to references.
         <code implementing the plan>
 
 The type annotation in the decorator overrides the type annotation in the function header.
-Only the lists of device names from the predefined set are accepted by the server.
-If the submitted plan contains ``"detectors": ["det1", "det4"]``, then the plan is rejected.
+Custom enums are also used in type validation and only the device/plan names from the defined
+in the enum are accepted. For example, if the submitted plan contains ``"detectors": ["det1", "det4"]``,
+then the plan is rejected, because there is no detector ``det4`` in the enum type ``DeviceType1``.
 
 .. note::
 
   Value of any type that is serializable to JSON can be passed to the plan if
   the respective parameter type is not defined or defined as ``typing.Any``.
-  In the latter case the server does not attempt to convert strings to references
-  to objects.
+  In the latter case the server does not attempt to convert strings to object
+  references.
 
 .. _supported_types:
 
 Supported Types
 ---------------
 
-Queue Server puts restrictions on types used for type annotations and default values. If a plan header
-contains parameter type annotation that is not supported, Queue Server ignores the annotation
-and the plan is processed as if the parameter contained no annotation. If unsupported type annotation
-is defined in ``parameter_annotation_decorator``, then processing of the plan fails and plan
-representation for ``existing_plans_and_devices.yaml`` can not be generated.
-Processing also fails if the default value defined in the plan header or in the decorator has
-unsupported type.
+Queue Server can process limited number of types used in type annotations and default values.
+If a plan header contains parameter unsupported type hint, Queue Server ignores the hint
+and the plan is processed as if the parameter contained no type annotation. If unsupported
+type annotation is defined in ``parameter_annotation_decorator``, then processing of the plan
+fails and ``existing_plans_and_devices.yaml`` can not be generated. The processing also fails
+if the default value defined in the plan header or in the decorator has unsupported type.
 
 .. note::
 
   Type annotations and default values defined in ``parameter_annotation_decorator`` override type
   annotations and default values defined in the plan header. If type or default value is defined
   in the decorator, the respective type and default value from the header are not analyzed.
-  If it is unavoidable that the plan must have unsupported type annotation or default value
-  in the header, then the ``parameter_annotation_decorator`` should be used to override
-  the type or default value in order for the plan processing to work.
+  If it is necessary to define a plan parameter with unsupported type hint or default value
+  in the header, then the ``parameter_annotation_decorator`` must be used to override
+  the type or the default value in order for the plan processing to work.
 
 **Supported types for type annotations.** Type annotations may be native Python types
 (such as ``int``, ``float``, ``str``, etc.), ``NoneType``, or generic types that are based
-on native Python types (``typing.List[typing.Union[int, str]]``). Technically the type will
-be accepted if the operation of creating the type object from its string representation
-using ``eval`` function and the namespace that contains imported ``typing`` module and
-``NoneType`` type should be successful.
+on native Python types (such as ``typing.List[typing.Union[int, str]]``). Technically the type will
+be accepted if the operation of recreating the type object from its string representation
+using ``eval`` function with the namespace that contains imported ``typing`` module and
+``NoneType`` type is successful.
 
 **Supported types of default values.** The default values can be objects of native Python
 types and literal expressions with objects of native Python types. The default value should
-be reconstructable with function ``ast.literal_eval``, i.e. for the default value ``vdefault``,
+be reconstructable with ``ast.literal_eval()``, i.e. for the default value ``vdefault``,
 the operation ``ast.literal_eval(f"{vdefault!r}")`` should complete successfully.
 
-The following is an example of a plan with type annotation that is not be accepted
-by Queue Server. The type annotation is defined in the plan header,  so it is ignored
-and no type annotation is included in the plan representation for the parameter ``detector``.
+The following is an example of a plan with type annotation that discarded by Queue Server.
+The type annotation is defined in the plan header, so it is ignored and parameter ``detector``
+is viewed as having no type annotation.
 
 .. code-block:: python
 
   from ophyd import Device
 
   def plan_demo2a(detector: Device, npts=10):
-      # Type 'Device' is not recognized by Queue Server, because it needs to be imported
-      #   from Ophyd. Type annotation will be ignored by Queue Server.
+      # Type 'Device' is not recognized by Queue Server, because it is imported
+      #   from an external module. Type annotation is ignored by Queue Server.
       #   Use 'parameter_annotation_decorator' to override annotation for
-      #   'detector' of type annotation is required.
+      #   'detector' if type validation is needed.
       <code implementing the plan>
 
 In the following example, the type of the default value of the ``detector`` parameter is not
@@ -312,10 +319,11 @@ using ``parameter_annotation_decorator`` (:ref:`parameter_annotation_decorator`)
 Defining Types in Plan Header
 -----------------------------
 
-As part of processing plans from RE Worker namespace, Queue Server is analyzing
-plan signatures. If a plan signature contains type hints, the types are validated, and their string
-representation is saved. Type hints that fail validation are ignored and Queue Server assumes
-that the parameter has not type annotation.
+Signatures of plans from RE Worker namespace are analyzed by ``qserver-list-plans-devices`` tool.
+If a plan signature contains type hints, the processing algorithm verify if the types are supported
+and saves their string representations of supported types. Unsupported types are ignored and
+the respective parameters are treated as having no type hints (unless type annotations for those
+parameters are defined in ``parameter_annotation_decorator``).
 
 .. note::
 
@@ -331,14 +339,14 @@ The acceptable types include Python base types, ``NoneType`` and imports from ``
   from typing import List, Optional
 
   def plan_demo3a(detector, name: str, npts: int, delay: float=1.0):
-      # Type of 'detector' not defined, therefore Queue Server will find and attempt to
+      # Type of 'detector' is not defined, therefore Queue Server will find and attempt to
       #   replace all strings passed to this parameter by references to objects in
       #   RE Worker namespace. Specifying a type hint for the ``detector`` parameter
-      #   will disable the automatic string conversion.
+      #   would disable the automatic string conversion.
       <code implementing the plan>
 
   def plan_demo3b(positions: typing.Union[typing.List[float], None]=None):
-      # Explicitly using the 'typing' module. Setting default value to 'None'.
+      # Generic type using the 'typing' module. Setting default value to 'None'.
       <code implementing the plan>
 
   def plan_demo3c(positions: Optional[List[float]]=None):
@@ -353,8 +361,8 @@ Defining Default Values in Plan Header
 
 Follow Python syntax guidelines for defining default values. The type of
 the default value must be supported by the Queue Server (see :ref:`supported_types`).
-If the default value must have type, which is not supported, override the default
-value in ``parameter_annotation_decorator``.
+If the default value in the plan header must have unsupported type, override it by
+specifying the default value of supported type in ``parameter_annotation_decorator``.
 
 .. note::
 
@@ -365,7 +373,7 @@ value in ``parameter_annotation_decorator``.
 Parameter Descriptions in Docstring
 -----------------------------------
 
-Queue Server will collect text descriptions of the plan and parameters from NumPy-style
+Queue Server collects text descriptions of the plan and parameters from NumPy-style
 docstrings. Type information specified in docstrings is ignored. The example below
 shows a plan with a docstring:
 
@@ -400,30 +408,31 @@ shows a plan with a docstring:
 Parameter Annotation Decorator
 ------------------------------
 
-The ``parameter_annotation_decorator`` allows to override any annotation item of the plan,
-including text descriptions of the plan and parameters, parameter type annotations and
-default values. The decorator can be used to define all annotation items of a plan, but
-it is generally advised that it is used only when absolutely necessary.
+The ``parameter_annotation_decorator`` (:ref:`plan_annotation_api`) allows to override
+any annotation item of the plan, including text descriptions of the plan and parameters,
+parameter type annotations and default values. The decorator can be used to define all
+annotation items of a plan, but it is generally advised that it is used only when
+absolutely necessary.
 
 .. note::
 
   If the default value of a parameter is defined in the decorator, the parameter **must**
   have a default value defined in the header. The default values in the decorator and
-  the header do not have to match. See the :ref:`notes <default_values_in_decorator>`
-  for the use case.
+  the header do not have to match. See the use case in
+  :ref:`notes <default_values_in_decorator>`.
 
 Plan and Parameter Descriptions
 +++++++++++++++++++++++++++++++
 
 Text descriptions of plans and parameters are not used by Queue Server and do not
 affect processing of plans. In some applications it may be desirable to have
-different versions of text descriptions in plan documentation (e.g. technical description)
-and in user interface (e.g. instructions on how to use plans remotely). The decorator
-allows to override plan and/or parameter descriptions from the docstring. In this
-case the descriptions defined in the decorator will be displayed to the user.
+different versions of text descriptions for documentation (e.g. technical description)
+and for user interface (e.g. instructions on how to use plans remotely). The decorator
+allows to override plan and/or parameter descriptions extracted from the docstring. In this
+case the descriptions defined in the decorator are displayed to the user.
 
 All parameters in `parameter_annotation_decorator` are optional. In the following
-example, the description for the parameter `npts` is not overridden by the decorator:
+example, the description for the parameter `npts` is not overridden in the decorator:
 
 .. code-block::  python
 
@@ -435,7 +444,7 @@ example, the description for the parameter `npts` is not overridden by the decor
           "detector": {
               "description":
                   "Description of the parameter 'detector'\n" \
-                   "displayed to Queue Server users",
+                  "displayed to Queue Server users",
 
           }
           "name": {
@@ -469,7 +478,7 @@ example, the description for the parameter `npts` is not overridden by the decor
 Parameter Types
 +++++++++++++++
 
-Parameter type hints defined in the plan header can be overridden in
+Parameter type hints defined in a plan header can be overridden in
 ``parameter_annotation_decorator``. The type annotations defined in the decorator
 do not influence execution of plans in Python. Overriding types should be avoided
 whenever possible.
@@ -479,18 +488,19 @@ whenever possible.
   Types in the decorator must be represented as string literals. E.g. ``"str"``
   represents string type, ``"typing.List[int]"`` represents an array
   of integers, etc. Module name ``typing`` must be explictly used when
-  defining generic types.
+  defining generic types in the decorator.
 
 Type annotations defined in the decorator may be used to override unsupported type hints
-in plan headers. But the main application of the decorator is to define custom enums
-based on lists of names of plans and devices or string literals. Support for custom enums
-is integrated in functionality of Queue Server, including type validation and string
-conversion. If parameter type defined in the annotation includes custom enum type
-based on plans or devices, all plan or device names passed to the parameter that match
-the names used in type definition are converted to references to plans and devices in
-RE Worker namespace. The lists of names of plans and devices or string literals may
-also be used by client applications to generate user interfaces
-(e.g. populate combo boxes for selecting device names).
+in plan headers. But the main application of the decorator is to define custom enum types
+based on lists of names of plans and devices or string literals. Support for custom enum
+types is integrated in functionality of Queue Server, including the functionality such as
+type validation and string conversion. If a parameter type defined in the annotation
+decorator is using on a custom enum types, which are based on lists of plans or devices,
+then all strings passed to the parameter that match the names of plans and devices
+in enum definition are converted to references to plans and devices in RE Worker namespace.
+The lists of names of plans and devices or string literals may also be used by
+client applications to generate user interfaces (e.g. populate combo boxes for selecting
+device names).
 
 .. code-block:: python
 
@@ -512,10 +522,10 @@ also be used by client applications to generate user interfaces
   })
   def plan_demo5a(detector, npts: int, delay: float=1.0):
       # Type hint for the parameter 'detector' in the header is not required.
-      # Queue Server will accept the plan if 'detector' parameter value is
-      #   a string with values 'det1', 'det2' or 'det3'. The string will
-      #   be replaced with the respective reference before the plan is executed.
-      #   Plan validation will fail if the parameter value is not in the set.
+      # Queue Server accepts the plan if 'detector' parameter value is
+      #   a string with values 'det1', 'det2' or 'det3'. The string is
+      #   replaced with the respective reference before the plan is executed.
+      #   Plan validation fails if the parameter value is not in the set.
       <code implementing the plan>
 
   @parameter_annotation_decorator({
@@ -536,9 +546,9 @@ also be used by client applications to generate user interfaces
   def plan_demo5b(detectors: List[Device], npts: int, delay: float=1.0):
       # Type hint contains correct Python type that will be passed to the parameter
       #   before execution.
-      # Queue Server will accept the plan if 'detectors' is a list of strings
+      # Queue Server accepta the plan if 'detectors' is a list of strings
       #   from any of the two sets. E.g. ['det1', 'det3'] or ['det4', 'det5']
-      #   will be accepted but ['det2', 'det4'] will be rejected (because the
+      #   are accepted but ['det2', 'det4'] is rejected (because the
       #   detectors belong to different lists).
       <code implementing the plan>
 

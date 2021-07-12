@@ -39,3 +39,17 @@ class parameters and code example.
 
     ReceiveConsoleOutput
     ReceiveConsoleOutput.recv
+
+
+Formatting Descriptions of Plans and Plan Parameters
+----------------------------------------------------
+
+``format_text_descriptions`` function may be used to generate formatted text descriptions of
+plans and plan parameters. The formatted descriptions are intended to be displayed to users
+by client applications. See the docstring for the function for more details.
+
+.. autosummary::
+   :nosignatures:
+   :toctree: generated
+
+    format_text_descriptions

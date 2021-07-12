@@ -2190,7 +2190,7 @@ def load_profile_collection_from_ipython(path=None):
     print("Profile collection was loaded successfully.")
 
 
-def format_text_descriptions(item_parameters, *, use_html=True):
+def format_text_descriptions(item_parameters, *, use_html=False):
     """
     Format parameter descriptions for a plan from the list of allowed plans.
     Returns description of the plan and each parameter represented as formatted strings
@@ -2212,9 +2212,9 @@ def format_text_descriptions(item_parameters, *, use_html=True):
     Parameters
     ----------
     item_parameters : dict
-        Item parameters represented using the schema for entries used for the list of allowed plans.
+        A dictionary of item parameters, e.g. an element from the list of existing or allowed plans.
     use_html : boolean
-        Select if the formatted text should be returned as HTML (default) or plain text.
+        Select if the formatted text should be returned as plain text (default) or HTML.
 
     Returns
     -------

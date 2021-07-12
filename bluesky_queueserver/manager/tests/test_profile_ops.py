@@ -49,6 +49,7 @@ from bluesky_queueserver.manager.profile_ops import (
     _decode_parameter_types_and_defaults,
     _process_default_value,
     construct_parameters,
+    _check_ranges,
 )
 
 # User name and user group name used throughout most of the tests.
@@ -1639,6 +1640,29 @@ _pf3k_processed = {
 }
 
 
+@parameter_annotation_decorator(
+    {
+        "parameters": {"val1": {"min": "0.1", "max": "100", "step": "0.02"}},
+    }
+)
+def _pf3l(val1):
+    yield from [val1]
+
+
+_pf3l_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "min": "0.1",
+            "max": "100",
+            "step": "0.02",
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
 _pf3_existing_devices = {
     "dev_det1": {"is_readable": True, "is_movable": False, "is_flyable": False},
     "dev_det2": {"is_readable": True, "is_movable": False, "is_flyable": False},
@@ -1661,6 +1685,7 @@ _pf3_existing_devices = {
     (_pf3i, _pf3_existing_devices, _pf3i_processed),
     (_pf3j, _pf3_existing_devices, _pf3j_processed),
     (_pf3k, _pf3_existing_devices, _pf3k_processed),
+    (_pf3l, {}, _pf3l_processed),
 ])
 # fmt: on
 def test_process_plan_3(plan_func, existing_devices, plan_info_expected):
@@ -1733,12 +1758,30 @@ def _pf4d(detector: Optional[ophyd.Device]):
     yield from [detector]
 
 
+@parameter_annotation_decorator({"parameters": {"val1": {"min": "a0.1"}}})
+def _pf4e1(val1):
+    yield from [val1]
+
+
+@parameter_annotation_decorator({"parameters": {"val1": {"max": "0.1a"}}})
+def _pf4e2(val1):
+    yield from [val1]
+
+
+@parameter_annotation_decorator({"parameters": {"val1": {"step": "abc"}}})
+def _pf4e3(val1):
+    yield from [val1]
+
+
 # fmt: off
 @pytest.mark.parametrize("plan_func, err_msg", [
     (_pf4a_factory(), "unsupported default value type"),
     (_pf4b, "name 'Plans1' is not defined'"),
     (_pf4c, "Failed to decode the default value 'replacement_str'"),
     (_pf4d, "Missing default value for the parameter 'detector' in the plan signature"),
+    (_pf4e1, "Failed to process min. value.* could not convert string to float"),
+    (_pf4e2, "Failed to process max. value.* could not convert string to float"),
+    (_pf4e3, "Failed to process step value.* could not convert string to float"),
 ])
 # fmt: on
 def test_process_plan_4_fail(plan_func, err_msg):
@@ -2151,18 +2194,18 @@ def test_devices_from_nspace():
         # Explicitly specify the value for 'detectors'.
         ({"name": "move_then_count", "user_group": _user_group,
           "args": [["motor1"], ["det1", "det3"]],
-          "kwargs": {"positions": [50, 70]}},
-         [[ophyd.sim.motor1], [ophyd.sim.det1, ophyd.sim.det3], [50, 70]], {}, True, ""),
+          "kwargs": {"positions": [5, 7]}},
+         [[ophyd.sim.motor1], [ophyd.sim.det1, ophyd.sim.det3], [5, 7]], {}, True, ""),
         # Explicitly specify the value for 'detectors': 'det4' is not in the list of allowed values.
         ({"name": "move_then_count", "user_group": _user_group,
           "args": [["motor1"], ["det1", "det4"]],
-          "kwargs": {"positions": [50, 70]}},
-         [[ophyd.sim.motor1], [ophyd.sim.det1], [50, 70]], {}, False,
+          "kwargs": {"positions": [5, 7]}},
+         [[ophyd.sim.motor1], [ophyd.sim.det1], [5, 7]], {}, False,
          "value is not a valid enumeration member; permitted: 'det1', 'det2', 'det3'"),
         # Use default value for 'detectors' defined in parameter annotation
         ({"name": "move_then_count", "user_group": _user_group, "args": [["motor1"]],
-          "kwargs": {"positions": [50, 70]}},
-         [[ophyd.sim.motor1]], {"positions": [50, 70], "detectors": [ophyd.sim.det1, ophyd.sim.det2]}, True, ""),
+          "kwargs": {"positions": [5, 7]}},
+         [[ophyd.sim.motor1]], {"positions": [5, 7], "detectors": [ophyd.sim.det1, ophyd.sim.det2]}, True, ""),
         ({"name": "count", "args": [["det1", "det2"]]}, [], {}, False,
          "No user group is specified in parameters for the plan 'count'"),
         ({"name": "countABC", "user_group": _user_group, "args": [["det1", "det2"]]}, [], {}, False,
@@ -3003,6 +3046,60 @@ def test_load_allowed_plans_and_devices_2(tmp_path, permissions_str, items_are_r
             assert plans == ("count", "scan", "junk_plan"), test_case
 
 
+# fmt: off
+@pytest.mark.parametrize("params, param_list, success, msg", [
+    # Range with both boundaries
+    ({"a": 10}, [{"name": "a", "min": "5", "max": "15"}], True, ""),
+    ({"a": 1}, [{"name": "a", "min": "5", "max": "15"}], False, "Value 1 is out of range [5, 15]"),
+    ({"a": 17}, [{"name": "a", "min": "5", "max": "15"}], False, "Value 17 is out of range [5, 15]"),
+    ({"a": 10.7}, [{"name": "a", "min": "5.5", "max": "14.3"}], True, ""),
+    ({"a": 1.2}, [{"name": "a", "min": "5.5", "max": "14.3"}], False, "Value 1.2 is out of range [5.5, 14.3]"),
+    ({"a": 16.34}, [{"name": "a", "min": "5.5", "max": "14.3"}], False, "Value 16.34 is out of range [5.5, 14.3]"),
+    ({"a": [10, 11, 12]}, [{"name": "a", "min": "5", "max": "15"}], True, ""),
+    ({"a": [0, 11, 12]}, [{"name": "a", "min": "5", "max": "15"}], False, "Value 0 is out of range [5, 15]"),
+    ({"a": [5, 11, 19]}, [{"name": "a", "min": "5", "max": "15"}], False, "Value 19 is out of range [5, 15]"),
+    ({"a": [0, 11, 19]}, [{"name": "a", "min": "5", "max": "15"}], False, "Value 0 is out of range [5, 15]"),
+    ({"a": {"v1": 10, "v2": 11}}, [{"name": "a", "min": "5", "max": "15"}], True, ""),
+    ({"a": {"v1": 1, "v2": 11}}, [{"name": "a", "min": "5", "max": "15"}], False,
+     "Value 1 is out of range [5, 15]"),
+    ({"a": {"v1": 10, "v2": 19}}, [{"name": "a", "min": "5", "max": "15"}], False,
+     "Value 19 is out of range [5, 15]"),
+    ({"a": [10, "90", [50, 4]]}, [{"name": "a", "min": "5", "max": "15"}], False,
+     "Value 50 is out of range [5, 15]"),
+    ({"a": [10, "90", {"v": 50}]}, [{"name": "a", "min": "5", "max": "15"}], False,
+     "Value 50 is out of range [5, 15]"),
+    ({"a": {"v1": "abc", "v2": ["ab", 10, 19]}}, [{"name": "a", "min": "5", "max": "15"}],
+     False, "Value 19 is out of range [5, 15]"),
+
+    # Multiple parameters
+    ({"a": 10, "b": 100}, [{"name": "a", "min": "5", "max": "15"}, {"name": "b", "min": "95.0", "max": "120.3"}],
+     True, ""),
+    ({"a": 3, "b": 150}, [{"name": "a", "min": "5", "max": "15"}, {"name": "b", "min": "95.0", "max": "120.3"}],
+     False, "Parameter value is out of range: key='a', value='3': Value 3 is out of range [5, 15]\n"
+            "Parameter value is out of range: key='b', value='150': Value 150 is out of range [95, 120.3]"),
+
+    # Single-sided range
+    ({"a": 10}, [{"name": "a", "min": "5"}], True, ""),
+    ({"a": 1}, [{"name": "a", "min": "5"}], False, "Value 1 is out of range [5, inf]"),
+    ({"a": 10}, [{"name": "a", "max": "15"}], True, ""),
+    ({"a": 16}, [{"name": "a", "max": "15"}], False, "Value 16 is out of range [-inf, 15]"),
+
+    # No range is specified
+    ({"a": 10}, [{"name": "a"}], True, ""),
+])
+# fmt: on
+def test_check_ranges(params, param_list, success, msg):
+    """
+    Basic test for ``_check_ranges`` function.
+    """
+    success_out, msg_out = _check_ranges(params, param_list)
+    assert success_out == success, msg_out
+    if success:
+        assert msg == ""
+    else:
+        assert msg in msg_out
+
+
 def _f1(a, b, c):
     pass
 
@@ -3224,7 +3321,44 @@ def test_validate_plan_3(plan_func, plan, allowed_devices, success, errmsg):
         assert errmsg in errmsg_out
 
 
-# def test_validate_plan_4(plan, allowed_devices, success, errmsg):
+@parameter_annotation_decorator(
+    {
+        "parameters": {
+            "num_int": {"min": "5", "max": "15"},
+            "v_float": {"min": "19.4"},
+            "v_list": {"max": "96.54"},
+        },
+    }
+)
+def _vp4a(num_int: int, v_float: float, v_list: typing.List[typing.Any]):
+    yield from [num_int, v_float, v_list]
+
+
+# fmt: off
+@pytest.mark.parametrize("plan_func, plan, success, errmsg", [
+    (_vp4a, {"args": [10, 50.4, [20, 34.5]], "kwargs": {}}, True, ""),
+    (_vp4a, {"args": [4, 50.4, [20, 34.5]], "kwargs": {}}, False, "Value 4 is out of range [5, 15]"),
+    (_vp4a, {"args": [10, 4, [20, 34.5]], "kwargs": {}}, False, "Value 4 is out of range [19.4, inf]"),
+    (_vp4a, {"args": [10, 50.4, [20, 104]], "kwargs": {}}, False, "Value 104 is out of range [-inf, 96.54]"),
+    (_vp4a, {"args": [4, 50.4, [20, 104]], "kwargs": {}}, False, "Value 104 is out of range [-inf, 96.54]"),
+])
+# fmt: on
+def test_validate_plan_4(plan_func, plan, success, errmsg):
+    """
+    Validation of ranges for numeric parameters
+    """
+    plan["name"] = plan_func.__name__
+    allowed_plans = {
+        "_vp4a": _process_plan(_vp4a, existing_devices={}),
+    }
+
+    success_out, errmsg_out = validate_plan(plan, allowed_plans=allowed_plans, allowed_devices={})
+
+    assert success_out == success, f"errmsg: {errmsg_out}"
+    if success:
+        assert errmsg_out == errmsg
+    else:
+        assert errmsg in errmsg_out, pprint.pformat(errmsg_out)
 
 
 # fmt: off

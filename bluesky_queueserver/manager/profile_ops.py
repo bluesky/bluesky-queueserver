@@ -18,6 +18,7 @@ import enum
 import random
 import argparse
 import importlib
+import numbers
 from numpydoc.docscrape import NumpyDocString
 
 import logging
@@ -647,6 +648,24 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
 #   Validation of plan parameters
 
 
+def _convert_str_to_number(value_in):
+    """
+    Interpret a string ``value_in`` as ``int`` or ``float`` (whichever is sufficient).
+    Raise the exception if conversion fails.
+    """
+    try:
+        # Try to convert string value to float
+        if isinstance(value_in, str):
+            value_out = float(value_in)
+        else:
+            raise ValueError(f"Value '{value_in}' is not a string (type: {type(value_in)})")
+        if int(value_out) == value_out:
+            value_out = int(value_out)
+    except Exception as ex:
+        raise ValueError(f"Failed to interpret the value {value_in!r} as integer or float number: {ex}")
+    return value_out
+
+
 def _compare_types(object_in, object_out):
     """
     Compares types of parameters. If both parameters are iterables (list or tuple),
@@ -699,6 +718,60 @@ def _compare_in_out(kwargs_in, kwargs_out):
                     f"interpreted as '{v}' ({type(v)})"
                 )
                 match = False
+    return match, msg
+
+
+def _check_ranges(kwargs_in, param_list):
+    """
+    Check if each parameter in ``kwargs_in`` is within the range limited by
+    the minimum and maximum values if the range is specified in plan parameter
+    descriptions.
+    """
+
+    def process_argument(v, v_min, v_max):
+        # Recursively process lists (iterables) and dictionaries.
+        # Raises the exception if any found number is out of range.
+        if isinstance(v, numbers.Number):
+            out_of_range = False
+            if (v_min is not None) and (v < v_min):
+                out_of_range = True
+            if (v_max is not None) and (v > v_max):
+                out_of_range = True
+            if out_of_range:
+                s_v_min = f"{v_min}" if v_min is not None else "-inf"
+                s_v_max = f"{v_max}" if v_max is not None else "inf"
+                raise ValueError(f"Value {v} is out of range [{s_v_min}, {s_v_max}]")
+        elif isinstance(v, dict):
+            for key, value in v.items():
+                process_argument(value, v_min, v_max)
+        elif isinstance(v, Iterable) and not isinstance(v, str):
+            for item in v:
+                process_argument(item, v_min, v_max)
+
+    match, msg = True, ""
+    for p in param_list:
+        k = p["name"]
+        v_min = p.get("min", None)
+        v_max = p.get("max", None)
+
+        # Perform check only if the parameter value is passed to the plan and
+        #   v_max or v_min is specified.
+        if (k in kwargs_in) and (v_min is not None or v_max is not None):
+            v = kwargs_in[k]
+
+            if v_min is not None:
+                v_min = _convert_str_to_number(v_min)
+            if v_max is not None:
+                v_max = _convert_str_to_number(v_max)
+
+            try:
+                process_argument(v, v_min, v_max)
+
+            except Exception as ex:
+                msg = f"{msg}\n" if msg else msg
+                msg += f"Parameter value is out of range: key='{k}', " f"value='{kwargs_in[k]}': {ex}"
+                match = False
+
     return match, msg
 
 
@@ -1024,12 +1097,17 @@ def _validate_plan_parameters(param_list, call_args, call_kwargs):
         pydantic_model_class = pydantic_construct_model_class(parameters)
         m = pydantic_validate_model(bound_args.arguments, pydantic_model_class)
 
-        # The final step: match types of the output value of the pydantic model with input
+        # The next step: match types of the output value of the pydantic model with input
         #   types. 'Pydantic' is converting types whenever possible, but we need precise
         #   type checking with a fiew exceptions
         success, msg = _compare_in_out(bound_args.arguments, m.dict())
         if not success:
             raise ValueError(f"Error in argument types: {msg}")
+
+        # Finally check the ranges of parameters that have min. and max. are defined
+        success, msg = _check_ranges(bound_args.arguments, param_list)
+        if not success:
+            raise ValueError(f"Argument values are out of range: {msg}")
 
     except Exception:
         raise
@@ -1364,6 +1442,9 @@ def _process_plan(plan, *, existing_devices):
                      "default": <string representation of the default value>
                      "default_defined_in_decorator": boolean  # True if the default value is defined
                                                               # in decorator, otherwise False/not set
+                     "min": <string representing int or float>
+                     "max": <string representing int or float>
+                     "step": <string representing int or float>
                 }
                 <parameter_name_2>: ...
                 <parameter_name_3>: ...
@@ -1524,6 +1605,7 @@ def _process_plan(plan, *, existing_devices):
 
             # Parameter description (attempt to get it from the decorator, then from docstring)
             desc, annotation, default = None, None, None
+            min, max, step = None, None, None
             default_defined_in_decorator = False
             if use_custom and (p.name in param_annotation["parameters"]):
                 desc = param_annotation["parameters"][p.name].get("description", None)
@@ -1533,6 +1615,9 @@ def _process_plan(plan, *, existing_devices):
                 default = param_annotation["parameters"][p.name].get("default", None)
                 if default:
                     default_defined_in_decorator = True
+                min = param_annotation["parameters"][p.name].get("min", None)
+                max = param_annotation["parameters"][p.name].get("max", None)
+                step = param_annotation["parameters"][p.name].get("step", None)
             if not desc and use_docstring and (p.name in doc_annotation["parameters"]):
                 desc = doc_annotation["parameters"][p.name].get("description", None)
             if not annotation and p.annotation is not inspect.Parameter.empty:
@@ -1554,6 +1639,7 @@ def _process_plan(plan, *, existing_devices):
                     default = convert_default_to_string(p.default)  # May raise an exception
                 except Exception as ex:
                     raise ValueError(f"Parameter '{p.name}': {ex}")
+
             if desc:
                 working_dict["description"] = desc
 
@@ -1568,6 +1654,27 @@ def _process_plan(plan, *, existing_devices):
                 working_dict["default"] = default
                 if default_defined_in_decorator:
                     working_dict["default_defined_in_decorator"] = True
+
+            # 'min', 'max' and 'step' (may exist only in decorator)
+            if min is not None:
+                try:
+                    # Attempt to convert to number (use the same function as during validation)
+                    min = _convert_str_to_number(min)
+                    working_dict["min"] = f"{min}"  # Save as a string
+                except Exception as ex:
+                    raise ValueError(f"Failed to process min. value: {ex}")
+            if max is not None:
+                try:
+                    max = _convert_str_to_number(max)
+                    working_dict["max"] = f"{max}"
+                except Exception as ex:
+                    raise ValueError(f"Failed to process max. value: {ex}")
+            if step is not None:
+                try:
+                    step = _convert_str_to_number(step)
+                    working_dict["step"] = f"{step}"
+                except Exception as ex:
+                    raise ValueError(f"Failed to process step value: {ex}")
 
     except Exception as ex:
         raise ValueError(f"Failed to create description of plan '{plan.__name__}': {ex}")

@@ -674,7 +674,10 @@ existing_plans:
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
+      max: '10'
+      min: '-10'
       name: positions
+      step: '0.01'
     properties:
       is_generator: true
   ramp_plan:

@@ -106,6 +106,19 @@ _simple_annotation_with_default = {
     },
 }
 
+_simple_annotation_with_min_max_step = {
+    "description": "Simple function with type annotations",
+    "parameters": {
+        "val_arg": {
+            "description": "Parameter 'val_arg'",
+            "default": "10",
+            "min": "1",
+            "max": "100",
+            "step": "0.1",
+        },
+    },
+}
+
 
 _simple_annotation_long_descriptions = {
     "description": "Simple function with type annotations and long description. " * 10,
@@ -129,6 +142,7 @@ _simple_annotation_long_descriptions = {
     _simple_annotation_list_devices_and_plans,
     _simple_annotation_enums,
     _simple_annotation_with_default,
+    _simple_annotation_with_min_max_step,
     _simple_annotation_long_descriptions,
 ])
 # fmt: on

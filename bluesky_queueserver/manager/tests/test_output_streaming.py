@@ -86,6 +86,8 @@ def test_setup_console_output_redirection_1(sys_stdout_stderr_restore):
     (True, True, 0.55, 500, 3),
 ])
 # fmt: on
+# TODO: this test may need to be changed to run more reliably on CI
+@pytest.mark.xfail(reason="Test often fails when run on CI, but expected to pass locally")
 def test_ReceiveConsoleOutput_1(capfd, console_output_on, zmq_publish_on, period, timeout, n_timeouts):
     """
     Tests for ``ReceiveConsoleOutput`` and ``PublishConsoleOutput``.

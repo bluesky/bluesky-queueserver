@@ -3,19 +3,23 @@ import numpy as np
 import pandas as pd
 import re
 import os
+import ast
 
 import logging
+
+from .profile_ops import _convert_str_to_number
 
 logger = logging.getLogger(__name__)
 
 
-def filter_plan_descriptions(plans_source):
+def simplify_plan_descriptions(plans_source):
     """
-    Convert descriptions of the allowed plans to satisfy requirements of the web client.
-    The conversion accurately supports only simple data types: ``int``, ``float``, ``str``,
-    lists of ints, floats or strings (expressed as ``List[int]`` or ``typing.List[int]``),
-    enums and lists of enums. Enum can be specified in custom description of plan
-    parameter with enum values which are string or names of plans or devices.
+    Simplify plan representations in the list of allowed plans. Simplified representations
+    may be more convenient for the web client applications. The conversion accurately supports
+    only simple data types: ``int``, ``float``, ``str``, lists of ints, floats or strings
+    (expressed as ``List[int]`` or ``typing.List[int]``), enums and lists of enums. Enum
+    can be specified in custom description of plan parameter with enum values which are string
+    or names of plans or devices.
 
     The limitation on processed types is based on potential capabilities of the web client.
     Complex type hints may also be processed correctly if the result could be expressed
@@ -121,19 +125,32 @@ def filter_plan_descriptions(plans_source):
                             p["is_list"] = False
 
                 # Set the default value (optional) and decide if the parameter is optional
+
                 if "default" in param:
-                    p["default"] = param["default"]
-                    p["is_optional"] = True
-                else:
-                    p["is_optional"] = False
+                    try:
+                        default = ast.literal_eval(param["default"])
+                        p["default"] = default
+                        p["is_optional"] = True
+                    except Exception:
+                        logger.error(f"Failed to reconstruct the default value {param['default']} from string")
+                p["is_optional"] = "default" in p
 
                 # Copy 'min', 'max' and 'step' values if any
                 if "min" in param:
-                    p["min"] = param["min"]
+                    try:
+                        p["min"] = _convert_str_to_number(param["min"])
+                    except Exception as ex:
+                        logger.error(f"Failed to reconstruct 'min' value from string: {ex}")
                 if "max" in param:
-                    p["max"] = param["max"]
+                    try:
+                        p["max"] = _convert_str_to_number(param["max"])
+                    except Exception as ex:
+                        logger.error(f"Failed to reconstruct 'max' value from string: {ex}")
                 if "step" in param:
-                    p["step"] = param["step"]
+                    try:
+                        p["step"] = _convert_str_to_number(param["step"])
+                    except Exception as ex:
+                        logger.error(f"Failed to reconstruct 'step' value from string: {ex}")
 
                 plan["parameters"].append(p)
 

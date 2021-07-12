@@ -50,6 +50,7 @@ from bluesky_queueserver.manager.profile_ops import (
     _process_default_value,
     construct_parameters,
     _check_ranges,
+    format_text_descriptions,
 )
 
 # User name and user group name used throughout most of the tests.
@@ -3417,3 +3418,132 @@ def test_bind_plan_arguments_1(func, plan_args, plan_kwargs, plan_bound_params, 
             bind_plan_arguments(
                 plan_args=plan_args, plan_kwargs=plan_kwargs, plan_parameters=allowed_plans["existing"]
             )
+
+
+def _plan_ftd1a(pa, pb):
+    yield from [pa, pb]
+
+
+_desc_ftd1a_plain = {
+    "description": "Name: _plan_ftd1a",
+    "parameters": {"pa": "Name: pa\nType: -\nDefault: -", "pb": "Name: pb\nType: -\nDefault: -"},
+}
+
+_desc_ftd1a_html = {
+    "description": "<i>Name:</i> <b>_plan_ftd1a</b>",
+    "parameters": {
+        "pa": "<i>Name:</i> <b>pa</b><br><i>Type:</i> <b>-</b><br><i>Default:</i> <b>-</b>",
+        "pb": "<i>Name:</i> <b>pb</b><br><i>Type:</i> <b>-</b><br><i>Default:</i> <b>-</b>",
+    },
+}
+
+
+def _plan_ftd1b(pa: str = "abc", pb: int = 50):
+    yield from [pa, pb]
+
+
+_desc_ftd1b_plain = {
+    "description": "Name: _plan_ftd1b",
+    "parameters": {"pa": "Name: pa\nType: str\nDefault: 'abc'", "pb": "Name: pb\nType: int\nDefault: 50"},
+}
+
+_desc_ftd1b_html = {
+    "description": "<i>Name:</i> <b>_plan_ftd1b</b>",
+    "parameters": {
+        "pa": "<i>Name:</i> <b>pa</b><br><i>Type:</i> <b>str</b><br><i>Default:</i> <b>'abc'</b>",
+        "pb": "<i>Name:</i> <b>pb</b><br><i>Type:</i> <b>int</b><br><i>Default:</i> <b>50</b>",
+    },
+}
+
+
+def _plan_ftd1c(pa: str = "abc", pb: int = 50):
+    """
+    This is plan description.
+    Multiline string.
+
+    Parameters
+    ----------
+    pa
+        Description of the parameter pa
+    pb : int
+        Description
+        of the parameter pb
+    """
+    yield from [pa, pb]
+
+
+_desc_ftd1c_plain = {
+    "description": "Name: _plan_ftd1c\nThis is plan description.\nMultiline string.",
+    "parameters": {
+        "pa": "Name: pa\nType: str\nDefault: 'abc'\nDescription of the parameter pa",
+        "pb": "Name: pb\nType: int\nDefault: 50\nDescription\nof the parameter pb",
+    },
+}
+
+_desc_ftd1c_html = {
+    "description": "<i>Name:</i> <b>_plan_ftd1c</b><br>This is plan description.<br>Multiline string.",
+    "parameters": {
+        "pa": "<i>Name:</i> <b>pa</b><br><i>Type:</i> <b>str</b><br><i>Default:</i> <b>'abc'</b><br>"
+        "Description of the parameter pa",
+        "pb": "<i>Name:</i> <b>pb</b><br><i>Type:</i> <b>int</b><br><i>Default:</i> <b>50</b><br>"
+        "Description<br>of the parameter pb",
+    },
+}
+
+
+@parameter_annotation_decorator(
+    {
+        "description": "This is plan description\ndefined in the decorator.",
+        "parameters": {
+            "pa": {
+                "description": "Multiline description\nof the parameter 'pa'",
+                "annotation": "str",
+                "default": "'default-value'",
+            },
+            "pb": {
+                "description": "Single line description of the parameter 'pb'",
+                "annotation": "float",
+                "default": "50.96",
+            },
+        },
+    }
+)
+def _plan_ftd1d(pa=None, pb=None):
+    yield from [pa, pb]
+
+
+_desc_ftd1d_plain = {
+    "description": "Name: _plan_ftd1d\nThis is plan description\ndefined in the decorator.",
+    "parameters": {
+        "pa": "Name: pa\nType: str\nDefault: 'default-value'\nMultiline description\nof the parameter 'pa'",
+        "pb": "Name: pb\nType: float\nDefault: 50.96\nSingle line description of the parameter 'pb'",
+    },
+}
+
+_desc_ftd1d_html = {
+    "description": "<i>Name:</i> <b>_plan_ftd1d</b><br>This is plan description<br>defined in the decorator.",
+    "parameters": {
+        "pa": "<i>Name:</i> <b>pa</b><br><i>Type:</i> <b>str</b><br><i>Default:</i> <b>'default-value'</b><br>"
+        "Multiline description<br>of the parameter 'pa'",
+        "pb": "<i>Name:</i> <b>pb</b><br><i>Type:</i> <b>float</b><br><i>Default:</i> <b>50.96</b><br>"
+        "Single line description of the parameter 'pb'",
+    },
+}
+
+
+# fmt: off
+@pytest.mark.parametrize("plan, desc_plain, desc_html", [
+    (_plan_ftd1a, _desc_ftd1a_plain, _desc_ftd1a_html),
+    (_plan_ftd1b, _desc_ftd1b_plain, _desc_ftd1b_html),
+    (_plan_ftd1c, _desc_ftd1c_plain, _desc_ftd1c_html),
+    (_plan_ftd1d, _desc_ftd1d_plain, _desc_ftd1d_html),
+])
+# fmt: on
+def test_format_text_descriptions_1(plan, desc_plain, desc_html):
+    plan_params = _process_plan(plan, existing_devices={})
+
+    desc = format_text_descriptions(plan_params, use_html=False)
+    assert desc == desc_plain
+
+    desc = format_text_descriptions(plan_params, use_html=True)
+    assert desc == desc_html

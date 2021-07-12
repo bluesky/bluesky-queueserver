@@ -1456,16 +1456,16 @@ def _process_plan(plan, *, existing_devices):
     ----------
     plan: callable
         Reference to the function implementing the plan
-
-    Returns
-    -------
-    dict
-        Dictionary with plan parameters.
     existing_devices : dict
         Prepared dictionary of existing devices (returned by the function ``_prepare_devices``.
         The dictionary is used to create lists of devices for built-in custom types
         ``AllDetectors``, ``AllMotors``, ``AllFlyers``. If it is known that built-in plans
         are not used, then empty dictionary can be passed instead of the list of existing devices.
+
+    Returns
+    -------
+    dict
+        Dictionary with plan parameters.
 
     Raises
     ------
@@ -2188,3 +2188,100 @@ def load_profile_collection_from_ipython(path=None):
         print(f"Executing '{f}' in TravisCI")
         ip.parent._exec_file(f)
     print("Profile collection was loaded successfully.")
+
+
+def format_text_descriptions(item_parameters, *, use_html=True):
+    """
+    Format parameter descriptions for a plan from the list of allowed plans.
+    Returns description of the plan and each parameter represented as formatted strings
+    containing plan name/description and parameter name/type/default/min/max/step/description.
+    The text is prepared for presentation in user interfaces. The descriptions are
+    represented as a dictionary:
+
+    .. code-block:: python
+
+        {
+            "description": "Multiline formatted text description of the plan",
+            "parameters": {
+                "param_name1": "Multiline formatted description",
+                "param_name2": "Multiline formatted description",
+                "param_name3": "Multiline formatted description",
+            }
+        }
+
+    Parameters
+    ----------
+    item_parameters : dict
+        Item parameters represented using the schema for entries used for the list of allowed plans.
+    use_html : boolean
+        Select if the formatted text should be returned as HTML (default) or plain text.
+
+    Returns
+    -------
+    dict
+        The dictionary that contains formatted descriptions for the plan and its parameters.
+
+    """
+
+    if not item_parameters:
+        return {}
+
+    start_bold = "<b>" if use_html else ""
+    stop_bold = "</b>" if use_html else ""
+    start_it = "<i>" if use_html else ""
+    stop_it = "</i>" if use_html else ""
+    new_line = "<br>" if use_html else "\n"
+
+    not_available = "Description is not available"
+
+    descriptions = {}
+
+    item_name = item_parameters.get("name", "")
+
+    item_description = str(item_parameters.get("description", ""))
+    item_description = item_description.replace("\n", new_line)
+    s = f"{start_it}Name:{stop_it} {start_bold}{item_name}{stop_bold}"
+    if item_description:
+        s += f"{new_line}{item_description}"
+
+    descriptions["description"] = s if s else not_available
+
+    descriptions["parameters"] = {}
+    for p in item_parameters.get("parameters", []):
+        p_name = p.get("name", None) or "-"
+
+        p_type = "-"
+        annotation = p.get("annotation", None)
+        if annotation:
+            p_type = str(annotation.get("type", "")) or "-"
+
+        p_default = p.get("default", None) or "-"
+
+        p_min = p.get("min", None)
+        p_max = p.get("max", None)
+        p_step = p.get("step", None)
+
+        p_description = p.get("description", "")
+        p_description = p_description.replace("\n", new_line)
+
+        desc = (
+            f"{start_it}Name:{stop_it} {start_bold}{p_name}{stop_bold}{new_line}"
+            f"{start_it}Type:{stop_it} {start_bold}{p_type}{stop_bold}{new_line}"
+            f"{start_it}Default:{stop_it} {start_bold}{p_default}{stop_bold}"
+        )
+
+        if (p_min is not None) or (p_max is not None) or (p_step is not None):
+            desc += f"{new_line}"
+            if p_min is not None:
+                desc += f"{start_it}Min:{stop_it} {start_bold}{p_min}{stop_bold} "
+            if p_max is not None:
+                desc += f"{start_it}Max:{stop_it} {start_bold}{p_max}{stop_bold} "
+            if p_step is not None:
+                desc += f"{start_it}Step:{stop_it} {start_bold}{p_step}{stop_bold} "
+
+        if p_description:
+            desc += f"{new_line}{p_description}"
+
+        descriptions["parameters"][p_name] = desc if desc else not_available
+
+    return descriptions

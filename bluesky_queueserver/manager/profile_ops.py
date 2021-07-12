@@ -2251,9 +2251,14 @@ def format_text_descriptions(item_parameters, *, use_html=False):
         p_name = p.get("name", None) or "-"
 
         p_type = "-"
+        p_custom_types = []
         annotation = p.get("annotation", None)
         if annotation:
             p_type = str(annotation.get("type", "")) or "-"
+            for t in ("devices", "plans", "enums"):
+                if t in annotation:
+                    for ct in annotation[t]:
+                        p_custom_types.append((ct, tuple(annotation[t][ct])))
 
         p_default = p.get("default", None) or "-"
 
@@ -2267,17 +2272,28 @@ def format_text_descriptions(item_parameters, *, use_html=False):
         desc = (
             f"{start_it}Name:{stop_it} {start_bold}{p_name}{stop_bold}{new_line}"
             f"{start_it}Type:{stop_it} {start_bold}{p_type}{stop_bold}{new_line}"
-            f"{start_it}Default:{stop_it} {start_bold}{p_default}{stop_bold}"
         )
+
+        for ct, ct_items in p_custom_types:
+            desc += f"{start_bold}{ct}:{stop_bold} {ct_items}{new_line}"
+
+        desc += f"{start_it}Default:{stop_it} {start_bold}{p_default}{stop_bold}"
 
         if (p_min is not None) or (p_max is not None) or (p_step is not None):
             desc += f"{new_line}"
+            insert_space = False
             if p_min is not None:
-                desc += f"{start_it}Min:{stop_it} {start_bold}{p_min}{stop_bold} "
+                desc += f"{start_it}Min:{stop_it} {start_bold}{p_min}{stop_bold}"
+                insert_space = True
             if p_max is not None:
-                desc += f"{start_it}Max:{stop_it} {start_bold}{p_max}{stop_bold} "
+                if insert_space:
+                    desc += " "
+                desc += f"{start_it}Max:{stop_it} {start_bold}{p_max}{stop_bold}"
+                insert_space = True
             if p_step is not None:
-                desc += f"{start_it}Step:{stop_it} {start_bold}{p_step}{stop_bold} "
+                if insert_space:
+                    desc += " "
+                desc += f"{start_it}Step:{stop_it} {start_bold}{p_step}{stop_bold}"
 
         if p_description:
             desc += f"{new_line}{p_description}"

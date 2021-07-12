@@ -3531,12 +3531,82 @@ _desc_ftd1d_html = {
 }
 
 
+@parameter_annotation_decorator(
+    {
+        "parameters": {
+            "pa": {
+                "annotation": "int",
+                "default": "50",
+                "min": "1",
+                "max": "100.5",
+                "step": "0.001",
+            },
+        },
+    }
+)
+def _plan_ftd1e(pa=None):
+    yield from [pa]
+
+
+_desc_ftd1e_plain = {
+    "description": "Name: _plan_ftd1e",
+    "parameters": {
+        "pa": "Name: pa\nType: int\nDefault: 50\nMin: 1 Max: 100.5 Step: 0.001",
+    },
+}
+
+_desc_ftd1e_html = {
+    "description": "<i>Name:</i> <b>_plan_ftd1e</b>",
+    "parameters": {
+        "pa": "<i>Name:</i> <b>pa</b><br><i>Type:</i> <b>int</b><br><i>Default:</i> <b>50</b><br>"
+        "<i>Min:</i> <b>1</b> <i>Max:</i> <b>100.5</b> <i>Step:</i> <b>0.001</b>",
+    },
+}
+
+
+@parameter_annotation_decorator(
+    {
+        "parameters": {
+            "pa": {
+                "annotation": "typing.List[typing.Union[DeviceType1, PlanType1, PlanType2]]",
+                "devices": {"DeviceType1": ("det1", "det2", "det3")},
+                "plans": {"PlanType1": ("plan1", "plan2"), "PlanType2": ("plan3",)},
+                "default": "'det1'",
+            },
+        },
+    }
+)
+def _plan_ftd1f(pa=None):
+    yield from [pa]
+
+
+_desc_ftd1f_plain = {
+    "description": "Name: _plan_ftd1f",
+    "parameters": {
+        "pa": "Name: pa\nType: typing.List[typing.Union[DeviceType1, PlanType1, PlanType2]]\n"
+        "DeviceType1: ('det1', 'det2', 'det3')\nPlanType1: ('plan1', 'plan2')\nPlanType2: ('plan3',)\n"
+        "Default: 'det1'",
+    },
+}
+
+_desc_ftd1f_html = {
+    "description": "<i>Name:</i> <b>_plan_ftd1f</b>",
+    "parameters": {
+        "pa": "<i>Name:</i> <b>pa</b><br><i>Type:</i> <b>typing.List[typing.Union[DeviceType1, PlanType1, "
+        "PlanType2]]</b><br><b>DeviceType1:</b> ('det1', 'det2', 'det3')<br><b>PlanType1:</b> ('plan1', "
+        "'plan2')<br><b>PlanType2:</b> ('plan3',)<br><i>Default:</i> <b>'det1'</b>",
+    },
+}
+
+
 # fmt: off
 @pytest.mark.parametrize("plan, desc_plain, desc_html", [
     (_plan_ftd1a, _desc_ftd1a_plain, _desc_ftd1a_html),
     (_plan_ftd1b, _desc_ftd1b_plain, _desc_ftd1b_html),
     (_plan_ftd1c, _desc_ftd1c_plain, _desc_ftd1c_html),
     (_plan_ftd1d, _desc_ftd1d_plain, _desc_ftd1d_html),
+    (_plan_ftd1e, _desc_ftd1e_plain, _desc_ftd1e_html),
+    (_plan_ftd1f, _desc_ftd1f_plain, _desc_ftd1f_html),
 ])
 # fmt: on
 def test_format_text_descriptions_1(plan, desc_plain, desc_html):

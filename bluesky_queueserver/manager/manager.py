@@ -426,12 +426,16 @@ class RunEngineManager(Process):
             )
 
             if plan_state == "completed":
+                # Check if the plan was running in the 'immediate_execution' mode.
+                item = await self._plan_queue.get_running_item_info()
+                immediate_execution = item.get("properties", {}).get("immediate_execution", False)
+
                 # Executed plan is removed from the queue only after it is successfully completed.
                 # If a plan was not completed or not successful (exception was raised), then
                 # execution of the queue is stopped. It can be restarted later (failed or
                 # interrupted plan will still be in the queue.
                 await self._plan_queue.set_processed_item_as_completed(exit_status=plan_state, run_uids=result)
-                await self._start_plan_task()
+                await self._start_plan_task(stop_queue=bool(immediate_execution))
             elif plan_state in ("stopped", "error"):
                 # Paused plan was stopped/aborted/halted
                 await self._plan_queue.set_processed_item_as_stopped(exit_status=plan_state, run_uids=result)
@@ -476,7 +480,7 @@ class RunEngineManager(Process):
             success, err_msg = True, ""
         return success, err_msg
 
-    async def _start_plan_task(self):
+    async def _start_plan_task(self, stop_queue=False):
         """
         Upload the plan to the worker process for execution.
         Plan in the queue is represented as a dictionary with the keys "name" (plan name),
@@ -494,7 +498,7 @@ class RunEngineManager(Process):
             success, err_msg = False, "Queue is empty."
             logger.info(err_msg)
 
-        elif self._queue_stop_pending:
+        elif self._queue_stop_pending or stop_queue:
             self._manager_state = MState.IDLE
             success, err_msg = False, "Queue is stopped."
             logger.info(err_msg)
@@ -556,8 +560,7 @@ class RunEngineManager(Process):
                 if next_item["name"] == "queue_stop":
                     await self._plan_queue.process_next_item()
                     self._manager_state = MState.EXECUTING_QUEUE
-                    self._queue_stop_pending = True
-                    asyncio.ensure_future(self._start_plan_task())
+                    asyncio.ensure_future(self._start_plan_task(stop_queue=True))
                     success, err_msg = True, ""
                 else:
                     success = False
@@ -1438,6 +1441,67 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg, "qsize": qsize, "items": items}
 
+    async def _queue_item_execute_handler(self, request):
+        """
+        Adds new item to the queue. Item may be a plan or an instruction. Request must
+        include the element with the key ``plan`` if the added item is a plan or ``instruction``
+        if it is an instruction. The element with the key is a dictionary of plan or instruction
+        parameters. The parameters may not include UID, because the function always overwrites
+        plan UID. If an item is already assigned UID, it is replaced with the new one.
+        The returned plan/instruction contains new UID even if the function failed to add
+        the plan to the queue.
+
+        Optional key ``pos`` may be a string (choices "front", "back") or integer (positive
+        or negative) that specifies the desired position in the queue. The default value
+        is "back" (element is pushed to the back of the queue). If ``pos`` is integer and
+        it is outside the range of available elements, then the new element pushed to
+        the front or the back of the queue depending on the value of the index.
+
+        It is recommended to use negative indices (counted from the back of the queue)
+        when modifying a running queue.
+        """
+        logger.info("Starting immediate executing a queue item ...")
+        logger.debug("Request: %s", pprint.pformat(request))
+
+        item_type, item, qsize, msg = None, None, None, ""
+
+        try:
+            item, item_type, _success, _msg = self._get_item_from_request(request=request)
+            if not _success:
+                raise Exception(_msg)
+
+            user, user_group = self._get_user_info_from_request(request=request)
+
+            # Always generate a new UID for the added plan!!!
+            item, _ = self._prepare_item(
+                item=item, item_type=item_type, user=user, user_group=user_group, generate_new_uid=True
+            )
+
+            # Execution of an item can not be immediately started if RE Manager is not idle
+            if self._manager_state != MState.IDLE:
+                raise RuntimeError(f"RE Manager is not idle. RE Manager state is '{self._manager_state.value}'")
+
+            # Adding plan to queue may raise an exception
+            item["properties"] = {"immediate_execution": True}
+            item, _ = await self._plan_queue.add_item_to_queue(item, pos="front")
+
+            # Start the queue
+            start_success, start_msg = await self._start_plan()
+            if not start_success:
+                raise RuntimeError(start_msg)
+
+            qsize = await self._plan_queue.get_queue_size()
+            success = True
+
+        except Exception as ex:
+            success = False
+            msg = f"Failed to start execution of the item: {str(ex)}"
+
+        logger.info(self._generate_item_log_msg("Item execution started", success, item_type, item, qsize))
+
+        rdict = {"success": success, "msg": msg, "qsize": qsize, "item": item}
+        return rdict
+
     async def _queue_clear_handler(self, request):
         """
         Remove all entries from the plan queue (does not affect currently executed run)
@@ -1669,6 +1733,7 @@ class RunEngineManager(Process):
             "queue_item_remove_batch": "_queue_item_remove_batch_handler",
             "queue_item_move": "_queue_item_move_handler",
             "queue_item_move_batch": "_queue_item_move_batch_handler",
+            "queue_item_execute": "_queue_item_execute_handler",
             "queue_clear": "_queue_clear_handler",
             "queue_start": "_queue_start_handler",
             "queue_stop": "_queue_stop_handler",

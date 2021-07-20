@@ -301,7 +301,7 @@ def set_re_worker_active():
     """
     Set the environment variable used to determine if the current process is RE Worker process.
     Subsequent calls to ``is_re_worker_active`` in the current process will return ``True``.
-    This function should not be used in the startup scripts.
+    THIS FUNCTION SHOULD NEVER BE CALLED IN STARTUP SCRIPTS.
     """
     os.environ[_env_re_worker_active] = "1"
 
@@ -310,7 +310,7 @@ def clear_re_worker_active():
     """
     Clear the environment variable used to determine if the current process is RE Worker process.
     Subsequent calls to ``is_re_worker_active`` in the current process will return ``False``.
-    This function should not be used in the startup scripts.
+    THIS FUNCTION SHOULD NEVER BE CALLED IN STARTUP SCRIPTS.
     """
     if _env_re_worker_active in os.environ:
         del os.environ[_env_re_worker_active]
@@ -324,7 +324,7 @@ def is_re_worker_active():
 
     .. code-block:: python
 
-        from bluesky_queueserver.manager.profile_tools import is_re_worker_active
+        from bluesky_queueserver import is_re_worker_active
 
         ...
 

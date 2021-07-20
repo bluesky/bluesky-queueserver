@@ -1594,6 +1594,22 @@ def test_process_next_item_2(pq, loop_mode):
     asyncio.run(testing())
 
 
+# fmt: off
+@pytest.mark.parametrize("item_in, item_out", [
+    ({"name": "count"}, {"name": "count"}),
+    ({"name": "count", "properties": {}}, {"name": "count"}),
+    ({"name": "count", "properties": {"nonexisting": 10}}, {"name": "count", "properties": {"nonexisting": 10}}),
+    ({"name": "count", "properties": {"immediate_execution": True}}, {"name": "count"}),
+])
+# fmt: on
+def test_clean_item_properties_1(pq, item_in, item_out):
+    """
+    Basic test for `_clean_item_properties` function.
+    """
+    item_cleaned = pq._clean_item_properties(item_in)
+    assert item_cleaned == item_out
+
+
 def test_set_processed_item_as_completed_1(pq):
     """
     Test for ``PlanQueueOperations.set_processed_item_as_completed()`` function.

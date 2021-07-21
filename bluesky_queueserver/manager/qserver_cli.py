@@ -67,6 +67,9 @@ qserver queue replace plan <uid> '<plan-params>'        #  Replace item with <ui
 qserver queue update instruction <uid> '<instruction>'  #  Update item with <uid> with an instruction
 qserver queue replace instruction <uid> '<instruction>' #  Replace item with <uid> with an instruction
 
+qserver queue execute plan '<plan-params>'              # Immediately execute the plan
+qserver queue execute instruction <instruction>         # Immediately execute an instruction
+
 Example of JSON specification of a plan:
     '{"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}'
 
@@ -366,6 +369,9 @@ def msg_queue_add_update(params, *, cmd_opt):
         elif params[0] in ("update", "replace"):
             update_uid = params[2]  # Next parameter is UID
             addr_param, p_item = {}, params[3:]
+        elif params[0] == "execute":
+            update_uid = None
+            addr_param, p_item = {}, params[2:]
         else:
             raise CommandParameterError(f"Option '{params[0]}' is not supported: '{command} {params[0]}'")
 
@@ -719,9 +725,9 @@ def create_msg(params):
     elif command == "queue":
         if len(params) < 1:
             raise CommandParameterError(f"Request '{command}' must include at least one parameter")
-        supported_params = ("add", "update", "replace", "get", "clear", "item", "start", "stop", "mode")
+        supported_params = ("add", "update", "replace", "execute", "get", "clear", "item", "start", "stop", "mode")
         if params[0] in supported_params:
-            if params[0] in ("add", "update", "replace"):
+            if params[0] in ("add", "update", "replace", "execute"):
                 method, prms = msg_queue_add_update(params, cmd_opt=params[0])
 
             elif params[0] in ("get", "clear", "start"):

@@ -98,6 +98,7 @@ Operations with the plan queue:
 - :ref:`method_queue_item_remove_batch`
 - :ref:`method_queue_item_move`
 - :ref:`method_queue_item_move_batch`
+- :ref:`method_queue_item_execute`
 - :ref:`method_queue_clear`
 
 Start and stop execution of the plan queue:
@@ -941,6 +942,67 @@ Returns       **success**: *boolean*
 
               **qsize**: *int* or *None*
                   the size of the queue or *None* if operation fails.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+
+.. _method_queue_item_execute:
+
+**'queue_item_execute'**
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'queue_item_execute'**
+------------  -----------------------------------------------------------------------------------------
+Description   Immediately start execution of the submitted item. The item may be a plan or an
+              instruction. The request fails if item execution can not be started immediately
+              (RE Manager is not in *IDLE* state, RE Worker environment does not exist, etc.).
+              If the request succeeds, the item is executed once. The item is not added to
+              the queue if it can not be immediately started and it is not pushed back into
+              the queue in case its execution fails/stops. If the queue is in the *LOOP* mode,
+              the executed item is not added to the back of the queue after completion.
+              The API request does not alter the sequence of enqueued plans.
+
+              The API is primarily intended for implementing of interactive workflows, in which
+              users are controlling the experiment using client GUI application and user actions
+              (such as mouse click on a plot) are converted into the requests to execute plans
+              in RE Worker environment. Interactive workflows may be used for calibration of
+              the instrument, while the queue may be used to run sequences of scheduled experiments.
+
+              Internally the API request adds the submitted item to the front of the queue
+              and immediately attempts to start its execution. The item is removed from the queue
+              almost immediately and never pushed back into the queue. If the item is a plan,
+              the results of execution are added to plan history as usual. The respective history
+              item could be accessed to check if the plan was executed successfully.
+------------  -----------------------------------------------------------------------------------------
+Parameters    **item**: *dict*
+                  the dictionary of plan or instruction parameters. Plans are distinguished from
+                  instructions based the value of the required parameter 'item_type'. Currently
+                  supported item types are 'plan' and 'instruction'.
+
+              **user_group**: *str*
+                  the name of the user group (e.g. 'admin').
+
+              **user**: *str*
+                  the name of the user (e.g. 'John Doe'). The name is included in the item metadata
+                  and may be used to identify the user who added the item to the queue. It is not
+                  passed to the Run Engine or included in run metadata.
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **qsize**: *int* or *None*
+                  the number of items in the plan queue after the plan was added if
+                  the operation was successful, *None* otherwise
+
+              **item**: *dict* or *None* (optional)
+                  the inserted item. The item contains the assigned item UID. In case of error
+                  the item may be returned without modification (with assigned UID). *None* will be
+                  returned if request does not contain item parameters.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================

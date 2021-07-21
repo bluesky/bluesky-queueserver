@@ -71,7 +71,19 @@ def wait_for_environment_to_be_created(timeout, polling_period=0.2):
     while ttime.time() < time_start + timeout:
         ttime.sleep(polling_period)
         resp = request_to_json("get", "/status")
-        if resp["worker_environment_exists"]:
+        if resp["worker_environment_exists"] and (resp["manager_state"] == "idle"):
+            return True
+
+    return False
+
+
+def wait_for_environment_to_be_closed(timeout, polling_period=0.2):
+    """Wait for environment to be closed with timeout."""
+    time_start = ttime.time()
+    while ttime.time() < time_start + timeout:
+        ttime.sleep(polling_period)
+        resp = request_to_json("get", "/status")
+        if (not resp["worker_environment_exists"]) and (resp["manager_state"] == "idle"):
             return True
 
     return False

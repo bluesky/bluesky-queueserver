@@ -1594,6 +1594,22 @@ def test_process_next_item_2(pq, loop_mode):
     asyncio.run(testing())
 
 
+# fmt: off
+@pytest.mark.parametrize("item_in, item_out", [
+    ({"name": "count"}, {"name": "count"}),
+    ({"name": "count", "properties": {}}, {"name": "count"}),
+    ({"name": "count", "properties": {"nonexisting": 10}}, {"name": "count", "properties": {"nonexisting": 10}}),
+    ({"name": "count", "properties": {"immediate_execution": True}}, {"name": "count"}),
+])
+# fmt: on
+def test_clean_item_properties_1(pq, item_in, item_out):
+    """
+    Basic test for `_clean_item_properties` function.
+    """
+    item_cleaned = pq._clean_item_properties(item_in)
+    assert item_cleaned == item_out
+
+
 def test_set_processed_item_as_completed_1(pq):
     """
     Test for ``PlanQueueOperations.set_processed_item_as_completed()`` function.
@@ -1810,5 +1826,53 @@ def test_set_processed_item_as_stopped(pq):
         # Also it should not contain UIDs of already executed plans.
         for plan in plan_history:
             assert plan["item_uid"] not in pq._uid_dict
+
+    asyncio.run(testing())
+
+
+@pytest.mark.parametrize("loop_mode", [False, True])
+@pytest.mark.parametrize("func", ["completed", "stopped"])
+def test_set_processed_item_as_stopped_2(pq, loop_mode, func):
+    """
+    Test for ``PlanQueueOperations.set_processed_item_as_completed()`` and
+    ``PlanQueueOperations.set_processed_item_as_stopped()`` function.
+    Make sure that ``item["properties"]["immediate_execution"] is removed before the plan
+    is added to history and the plan is not pushed back into the queue if the plan is
+    stopped. The behavior of both functions is identical for the plans executed
+    in 'immediate execution' mode.
+    """
+
+    plan = {"item_type": "plan", "item_uid": 1, "name": "a", "properties": {"immediate_execution": True}}
+
+    async def testing():
+        nonlocal plan
+        await pq.add_item_to_queue(plan)
+        await pq.set_plan_queue_mode({"loop": loop_mode})
+
+        assert await pq.get_queue_size() == 1
+        assert await pq.get_history_size() == 0
+
+        await pq.set_next_item_as_running()
+
+        assert await pq.get_queue_size() == 0
+        assert await pq.get_history_size() == 0
+
+        if func == "completed":
+            plan1 = await pq.set_processed_item_as_completed(exit_status="completed", run_uids=["abc"])
+        elif func == "stopped":
+            plan1 = await pq.set_processed_item_as_stopped(exit_status="stopped", run_uids=["abc"])
+        else:
+            raise Exception(f"Unsupported parameter value func={func!r}")
+
+        # assert False, plan1
+        assert plan1["name"] == plan["name"]
+        assert "properties" not in plan1
+
+        assert await pq.get_queue_size() == 0
+        assert await pq.get_history_size() == 1
+
+        history, _ = await pq.get_history()
+        assert history[0] == plan1
+        assert "properties" not in history[0]
 
     asyncio.run(testing())

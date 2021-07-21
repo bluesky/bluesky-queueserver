@@ -80,6 +80,7 @@ class PlanQueueOperations:
             "meta",
             "user",
             "user_group",
+            "properties",
         )
 
         # Plan queue UID is expected to change each time the contents of the queue is changed.
@@ -1440,6 +1441,21 @@ class PlanQueueOperations:
     # ----------------------------------------------------------------------
     #          Standard item operations during queue execution
 
+    def _clean_item_properties(self, item):
+        """
+        The function removes unneccessary item properties before adding the item to history or
+        returning it to queue.
+        """
+        item = copy.deepcopy(item)
+        if "properties" in item:
+            p = item["properties"]
+            # "immediate_execution" flag is set internally by the server and should not be exposed to users
+            if "immediate_execution" in p:
+                del p["immediate_execution"]
+            if not p:
+                del item["properties"]
+        return item
+
     async def _process_next_item(self):
         """
         See ``self.process_next_item()`` method.
@@ -1522,21 +1538,24 @@ class PlanQueueOperations:
         # Note: UID remains in the `self._uid_dict` after this operation
         if await self._is_item_running():
             item = await self._get_running_item_info()
-            if loop_mode:
-                item_to_add = item.copy()
+            immediate_execution = item.get("properties", {}).get("immediate_execution", False)
+            item_cleaned = self._clean_item_properties(item)
+
+            if loop_mode and not immediate_execution:
+                item_to_add = item_cleaned.copy()
                 item_to_add = self.set_new_item_uuid(item_to_add)
                 await self._r_pool.rpush(self._name_plan_queue, json.dumps(item_to_add))
                 self._uid_dict_add(item_to_add)
-            item.setdefault("result", {})
-            item["result"]["exit_status"] = exit_status
-            item["result"]["run_uids"] = run_uids
+            item_cleaned.setdefault("result", {})
+            item_cleaned["result"]["exit_status"] = exit_status
+            item_cleaned["result"]["run_uids"] = run_uids
             await self._clear_running_item_info()
             if not loop_mode:
                 self._uid_dict_remove(item["item_uid"])
-            await self._add_to_history(item)
+            await self._add_to_history(item_cleaned)
         else:
-            item = {}
-        return item
+            item_cleaned = {}
+        return item_cleaned
 
     async def set_processed_item_as_completed(self, exit_status, run_uids):
         """
@@ -1567,20 +1586,24 @@ class PlanQueueOperations:
         # Note: UID is removed from `self._uid_dict`.
         if await self._is_item_running():
             item = await self._get_running_item_info()
-            item.setdefault("result", {})
-            item["result"]["exit_status"] = exit_status
-            item["result"]["run_uids"] = run_uids
+            immediate_execution = item.get("properties", {}).get("immediate_execution", False)
+            item_cleaned = self._clean_item_properties(item)
 
-            await self._add_to_history(item)
+            item_cleaned.setdefault("result", {})
+            item_cleaned["result"]["exit_status"] = exit_status
+            item_cleaned["result"]["run_uids"] = run_uids
+
+            await self._add_to_history(item_cleaned)
             await self._clear_running_item_info()
 
             # Generate new UID for the item that is pushed back into the queue.
-            item_pushed_to_queue = self.set_new_item_uuid(item)
-            self._uid_dict_remove(item["item_uid"])
-            await self._add_item_to_queue(item_pushed_to_queue, pos="front", filter_parameters=False)
+            if not immediate_execution:
+                item_pushed_to_queue = self.set_new_item_uuid(item_cleaned)
+                self._uid_dict_remove(item["item_uid"])
+                await self._add_item_to_queue(item_pushed_to_queue, pos="front", filter_parameters=False)
         else:
-            item = {}
-        return item
+            item_cleaned = {}
+        return item_cleaned
 
     async def set_processed_item_as_stopped(self, exit_status, run_uids):
         """

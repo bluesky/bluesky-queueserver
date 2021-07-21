@@ -426,12 +426,16 @@ class RunEngineManager(Process):
             )
 
             if plan_state == "completed":
+                # Check if the plan was running in the 'immediate_execution' mode.
+                item = await self._plan_queue.get_running_item_info()
+                immediate_execution = item.get("properties", {}).get("immediate_execution", False)
+
                 # Executed plan is removed from the queue only after it is successfully completed.
                 # If a plan was not completed or not successful (exception was raised), then
                 # execution of the queue is stopped. It can be restarted later (failed or
                 # interrupted plan will still be in the queue.
                 await self._plan_queue.set_processed_item_as_completed(exit_status=plan_state, run_uids=result)
-                await self._start_plan_task()
+                await self._start_plan_task(stop_queue=bool(immediate_execution))
             elif plan_state in ("stopped", "error"):
                 # Paused plan was stopped/aborted/halted
                 await self._plan_queue.set_processed_item_as_stopped(exit_status=plan_state, run_uids=result)
@@ -476,7 +480,7 @@ class RunEngineManager(Process):
             success, err_msg = True, ""
         return success, err_msg
 
-    async def _start_plan_task(self):
+    async def _start_plan_task(self, stop_queue=False):
         """
         Upload the plan to the worker process for execution.
         Plan in the queue is represented as a dictionary with the keys "name" (plan name),
@@ -494,7 +498,7 @@ class RunEngineManager(Process):
             success, err_msg = False, "Queue is empty."
             logger.info(err_msg)
 
-        elif self._queue_stop_pending:
+        elif self._queue_stop_pending or stop_queue:
             self._manager_state = MState.IDLE
             success, err_msg = False, "Queue is stopped."
             logger.info(err_msg)
@@ -556,8 +560,7 @@ class RunEngineManager(Process):
                 if next_item["name"] == "queue_stop":
                     await self._plan_queue.process_next_item()
                     self._manager_state = MState.EXECUTING_QUEUE
-                    self._queue_stop_pending = True
-                    asyncio.ensure_future(self._start_plan_task())
+                    asyncio.ensure_future(self._start_plan_task(stop_queue=True))
                     success, err_msg = True, ""
                 else:
                     success = False
@@ -1438,6 +1441,85 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg, "qsize": qsize, "items": items}
 
+    async def _queue_item_execute_handler(self, request):
+        """
+        Immediately start execution of the submitted item. The item may be a plan or an
+        instruction. The request fails if item execution can not be started immediately
+        (RE Manager is not in IDLE state, RE Worker environment does not exist, etc.).
+        If the request succeeds, the item is executed once. The item is not added to
+        the queue if it can not be immediately started and it is not pushed back into
+        the queue in case its execution fails/stops. If the queue is in the *LOOP* mode,
+        the executed item is not added to the back of the queue after completion.
+        The API request does not alter the sequence of enqueued plans.
+
+        The API is primarily intended for implementing of interactive workflows, in which
+        users are controlling the experiment using client GUI application and user actions
+        (such as mouse click on a plot) are converted into the requests to execute plans
+        in RE Worker environment. Interactive workflows may be used for calibration of
+        the instrument, while the queue may be used to run sequences of scheduled experiments.
+
+        Internally the API request adds the submitted item to the front of the queue
+        and immediately attempts to start its execution. The item is removed from the queue
+        almost immediately and never pushed back into the queue. If the item is a plan,
+        the results of execution are added to plan history as usual. The respective history
+        item could be accessed to check if the plan was executed successfully.
+
+        The API DOES NOT START EXECUTION OF THE QUEUE. Once execution of the submitted
+        item is finished, RE Manager is switched to the IDLE state.
+        """
+        logger.info("Starting immediate executing a queue item ...")
+        logger.debug("Request: %s", pprint.pformat(request))
+
+        item_type, item, qsize, msg = None, None, None, ""
+        item_uid = None
+
+        try:
+            item, item_type, _success, _msg = self._get_item_from_request(request=request)
+            if not _success:
+                raise Exception(_msg)
+
+            user, user_group = self._get_user_info_from_request(request=request)
+
+            # Always generate a new UID for the added plan!!!
+            item, _ = self._prepare_item(
+                item=item, item_type=item_type, user=user, user_group=user_group, generate_new_uid=True
+            )
+
+            # Execution of an item can not be immediately started if RE Manager is not idle
+            if self._manager_state != MState.IDLE:
+                raise RuntimeError(f"RE Manager is not idle. RE Manager state is '{self._manager_state.value}'")
+
+            # Adding plan to queue may raise an exception
+            item["properties"] = {"immediate_execution": True}
+            item, qsize_with_new_item = await self._plan_queue.add_item_to_queue(item, pos="front")
+            item_uid = item.get("item_uid", None)  # The item WAS added to the queue
+
+            # Start the queue
+            start_success, start_msg = await self._start_plan()
+            if not start_success:
+                raise RuntimeError(start_msg)
+
+            # The returned queue size is not supposed to include the plan that was started.
+            qsize = max(qsize_with_new_item - 1, 0)
+            success = True
+
+        except Exception as ex:
+            # If execution of the plan fails to start, the plan remains in the queue and needs to be deleted.
+            #   We use UID to delete the plan. It guarantees that only recently added plan is deleted.
+            #   Exception may be raised if the plan is not in the queue and must be properly handled.
+            if item_uid is not None:
+                try:
+                    await self._plan_queue.pop_item_from_queue(uid=item_uid)
+                except Exception as ex:
+                    logger.exception("Failed to delete plan with UID '%s' from queue: %s", item_uid, str(ex))
+            success = False
+            msg = f"Failed to start execution of the item: {str(ex)}"
+
+        logger.info(self._generate_item_log_msg("Item execution started", success, item_type, item, qsize))
+
+        rdict = {"success": success, "msg": msg, "qsize": qsize, "item": item}
+        return rdict
+
     async def _queue_clear_handler(self, request):
         """
         Remove all entries from the plan queue (does not affect currently executed run)
@@ -1669,6 +1751,7 @@ class RunEngineManager(Process):
             "queue_item_remove_batch": "_queue_item_remove_batch_handler",
             "queue_item_move": "_queue_item_move_handler",
             "queue_item_move_batch": "_queue_item_move_batch_handler",
+            "queue_item_execute": "_queue_item_execute_handler",
             "queue_clear": "_queue_clear_handler",
             "queue_start": "_queue_start_handler",
             "queue_stop": "_queue_stop_handler",

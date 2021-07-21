@@ -1464,6 +1464,7 @@ class RunEngineManager(Process):
         logger.debug("Request: %s", pprint.pformat(request))
 
         item_type, item, qsize, msg = None, None, None, ""
+        item_uid = None
 
         try:
             item, item_type, _success, _msg = self._get_item_from_request(request=request)
@@ -1483,17 +1484,27 @@ class RunEngineManager(Process):
 
             # Adding plan to queue may raise an exception
             item["properties"] = {"immediate_execution": True}
-            item, _ = await self._plan_queue.add_item_to_queue(item, pos="front")
+            item, qsize_with_new_item = await self._plan_queue.add_item_to_queue(item, pos="front")
+            item_uid = item.get("item_uid", None)  # The item WAS added to the queue
 
             # Start the queue
             start_success, start_msg = await self._start_plan()
             if not start_success:
                 raise RuntimeError(start_msg)
 
-            qsize = await self._plan_queue.get_queue_size()
+            # The returned queue size is not supposed to include the plan that was started.
+            qsize = max(qsize_with_new_item - 1, 0)
             success = True
 
         except Exception as ex:
+            # If execution of the plan fails to start, the plan remains in the queue and needs to be deleted.
+            #   We use UID to delete the plan. It guarantees that only recently added plan is deleted.
+            #   Exception may be raised if the plan is not in the queue and must be properly handled.
+            if item_uid is not None:
+                try:
+                    await self._plan_queue.pop_item_from_queue(uid=item_uid)
+                except Exception as ex:
+                    logger.exception("Failed to delete plan with UID '%s' from queue: %s", item_uid, str(ex))
             success = False
             msg = f"Failed to start execution of the item: {str(ex)}"
 

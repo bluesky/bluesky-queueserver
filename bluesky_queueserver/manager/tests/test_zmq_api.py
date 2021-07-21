@@ -630,6 +630,221 @@ def test_zmq_api_queue_item_add_8_fail(re_manager):  # noqa F811
 
 
 # =======================================================================================
+#                          Method 'queue_item_execute'
+
+
+def test_zmq_api_queue_item_execute_1(re_manager):  # noqa: F811
+    """
+    Basic test for ``queue_item_execute`` API.
+    """
+    # Add plan to queue
+    params1a = {"item": _plan1, "user": _user, "user_group": _user_group}
+    resp1a, _ = zmq_single_request("queue_item_add", params1a)
+    assert resp1a["success"] is True, f"resp={resp1a}"
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    resp2a, _ = zmq_single_request("status")
+    assert resp2a["items_in_queue"] == 1
+    assert resp2a["items_in_history"] == 0
+
+    # Execute a plan
+    params3 = {"item": _plan3, "user": _user, "user_group": _user_group}
+    resp3, _ = zmq_single_request("queue_item_execute", params3)
+    assert resp3["success"] is True, f"resp={resp3}"
+    assert resp3["msg"] == ""
+    assert resp3["qsize"] == 1
+    assert resp3["item"]["name"] == _plan3["name"]
+
+    assert wait_for_condition(time=30, condition=condition_manager_idle)
+
+    # Execute an instruction (STOP instruction - nothing will be done)
+    params3a = {"item": _instruction_stop, "user": _user, "user_group": _user_group}
+    resp3a, _ = zmq_single_request("queue_item_execute", params3a)
+    assert resp3a["success"] is True, f"resp={resp3a}"
+    assert resp3a["msg"] == ""
+    assert resp3a["qsize"] == 1
+    assert resp3a["item"]["name"] == _instruction_stop["name"]
+
+    assert wait_for_condition(time=5, condition=condition_manager_idle)
+
+    resp3b, _ = zmq_single_request("status")
+    assert resp3b["items_in_queue"] == 1
+    assert resp3b["items_in_history"] == 1
+
+    resp4, _ = zmq_single_request("queue_start")
+    assert resp4["success"] is True
+
+    assert wait_for_condition(time=5, condition=condition_manager_idle)
+
+    resp4a, _ = zmq_single_request("status")
+    assert resp4a["items_in_queue"] == 0
+    assert resp4a["items_in_history"] == 2
+
+    history, _ = zmq_single_request("history_get")
+    h_items = history["items"]
+    assert len(h_items) == 2, pprint.pformat(h_items)
+    assert h_items[0]["name"] == _plan3["name"]
+    assert h_items[1]["name"] == _plan1["name"]
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_queue_item_execute_2(re_manager):  # noqa: F811
+    """
+    Test for ``queue_item_execute`` API: attempt to start execution of a plan and instruction
+    while the queue is running.
+    """
+    # Add plan to queue
+    params1a = {"item": _plan3, "user": _user, "user_group": _user_group}
+    resp1a, _ = zmq_single_request("queue_item_add", params1a)
+    assert resp1a["success"] is True, f"resp={resp1a}"
+
+    # The queue contains only a single instruction (stop the queue).
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    resp2a, _ = zmq_single_request("status")
+    assert resp2a["items_in_queue"] == 1
+    assert resp2a["items_in_history"] == 0
+
+    # Start the queue
+    resp3, _ = zmq_single_request("queue_start")
+    assert resp3["success"] is True
+
+    # While the queue is running, attempt to execute a plan
+    params3a = {"item": _plan1, "user": _user, "user_group": _user_group}
+    resp3a, _ = zmq_single_request("queue_item_execute", params3a)
+    assert resp3a["success"] is False, f"resp={resp3a}"
+    expected_error_msg = (
+        "Failed to start execution of the item: RE Manager is not idle. RE Manager state is 'executing_queue'"
+    )
+    assert resp3a["msg"] == expected_error_msg
+    assert resp3a["qsize"] is None
+    assert resp3a["item"]["name"] == _plan1["name"]
+
+    # While the queue is running, attempt to execute a plan
+    params3b = {"item": _instruction_stop, "user": _user, "user_group": _user_group}
+    resp3b, _ = zmq_single_request("queue_item_execute", params3b)
+    assert resp3b["success"] is False, f"resp={resp3b}"
+    assert resp3b["msg"] == expected_error_msg
+    assert resp3b["qsize"] is None
+    assert resp3b["item"]["name"] == _instruction_stop["name"]
+
+    # Wait for the completion of the running plan
+    assert wait_for_condition(time=30, condition=condition_manager_idle)
+
+    resp4a, _ = zmq_single_request("status")
+    assert resp4a["items_in_queue"] == 0
+    assert resp4a["items_in_history"] == 1
+
+    history, _ = zmq_single_request("history_get")
+    h_items = history["items"]
+    assert len(h_items) == 1, pprint.pformat(h_items)
+    assert h_items[0]["name"] == _plan3["name"]
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_queue_item_execute_3(re_manager):  # noqa: F811
+    """
+    Test for ``queue_item_execute`` API: attempt to start execution of a plan before
+    RE Worker environment is opened.
+    """
+    # Attempt to start execution of a plan before the environment is open
+    params1a = {"item": _plan1, "user": _user, "user_group": _user_group}
+    resp1a, _ = zmq_single_request("queue_item_execute", params1a)
+    assert resp1a["success"] is False, f"resp={resp1a}"
+    assert resp1a["msg"] == "Failed to start execution of the item: RE Worker environment does not exist."
+    assert resp1a["qsize"] is None
+    assert resp1a["item"]["name"] == _plan1["name"]
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    resp2a, _ = zmq_single_request("status")
+    assert resp2a["items_in_queue"] == 0
+    assert resp2a["items_in_history"] == 0
+
+    # Execute a plan
+    params3 = {"item": _plan3, "user": _user, "user_group": _user_group}
+    resp3, _ = zmq_single_request("queue_item_execute", params3)
+    assert resp3["success"] is True, f"resp={resp3}"
+    assert resp3["qsize"] == 0
+    assert resp3["item"]["name"] == _plan3["name"]
+
+    assert wait_for_condition(time=30, condition=condition_manager_idle)
+
+    resp4a, _ = zmq_single_request("status")
+    assert resp4a["items_in_queue"] == 0
+    assert resp4a["items_in_history"] == 1
+
+    history, _ = zmq_single_request("history_get")
+    h_items = history["items"]
+    assert len(h_items) == 1, pprint.pformat(h_items)
+    assert h_items[0]["name"] == _plan3["name"]
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_queue_item_execute_4_fail(re_manager):  # noqa: F811
+    """
+    Test for ``queue_item_execute`` API: failing cases (validation errors)
+    """
+    # Incorrect item type
+    plan = {"name": "count", "args": [["det1", "det2"]], "item_type": "unknown"}
+    params1a = {"item": plan, "user": _user, "user_group": _user_group}
+    resp1a, _ = zmq_single_request("queue_item_execute", params1a)
+    assert resp1a["success"] is False, f"resp={resp1a}"
+    assert "unsupported 'item_type' value 'unknown'" in resp1a["msg"]
+    assert resp1a["qsize"] is None
+    assert resp1a["item"]["name"] == plan["name"]
+
+    resp1b, _ = zmq_single_request("status")
+    assert resp1b["items_in_queue"] == 0
+    assert resp1b["items_in_history"] == 0
+
+    # Incorrect plan name
+    plan = {"name": "unknown", "args": [["det1", "det2"]], "item_type": "plan"}
+    params2a = {"item": plan, "user": _user, "user_group": _user_group}
+    resp2a, _ = zmq_single_request("queue_item_execute", params2a)
+    assert resp2a["success"] is False, f"resp={resp2a}"
+    assert "Plan 'unknown' is not in the list of allowed plans" in resp2a["msg"]
+    assert resp2a["qsize"] is None
+    assert resp2a["item"]["name"] == plan["name"]
+
+    resp2b, _ = zmq_single_request("status")
+    assert resp2b["items_in_queue"] == 0
+    assert resp2b["items_in_history"] == 0
+
+    # Incorrect user group
+    plan = {"name": "count", "args": [["det1", "det2"]], "item_type": "plan"}
+    params3a = {"item": plan, "user": _user, "user_group": "unknown"}
+    resp3a, _ = zmq_single_request("queue_item_execute", params3a)
+    assert resp3a["success"] is False, f"resp={resp3a}"
+    assert "Unknown user group: 'unknown'" in resp3a["msg"]
+    assert resp3a["qsize"] is None
+    assert resp3a["item"]["name"] == plan["name"]
+
+    resp3b, _ = zmq_single_request("status")
+    assert resp3b["items_in_queue"] == 0
+    assert resp3b["items_in_history"] == 0
+
+
+# =======================================================================================
 #                          Method 'queue_item_add_batch'
 
 # fmt: off

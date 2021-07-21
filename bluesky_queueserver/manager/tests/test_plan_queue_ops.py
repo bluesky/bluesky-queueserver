@@ -1742,8 +1742,6 @@ def test_set_processed_item_as_completed_2(pq):
     asyncio.run(testing())
 
 
-
-
 def test_set_processed_item_as_stopped(pq):
     """
     Test for ``PlanQueueOperations.set_processed_item_as_stopped()`` function.

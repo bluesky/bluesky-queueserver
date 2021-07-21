@@ -849,6 +849,57 @@ def test_queue_item_update_2_fail(re_manager, replace, item_type):  # noqa F811
 
 
 # fmt: off
+@pytest.mark.parametrize("item_type, env_exists", [
+    ("plan", True),
+    ("instruction", True),
+    ("plan", False),
+    ("instruction", False),
+])
+# fmt: on
+def test_qserver_item_execute_1(re_manager, item_type, env_exists):  # noqa: F811
+    """
+    Long test runs a series of CLI commands.
+    """
+    plan_1 = "{'name':'count', 'args':[['det1', 'det2']]}"
+
+    assert wait_for_condition(
+        time=3, condition=condition_manager_idle
+    ), "Timeout while waiting for manager to initialize."
+
+    if env_exists:
+        assert subprocess.call(["qserver", "environment", "open"]) == SUCCESS
+        assert wait_for_condition(
+            time=3, condition=condition_environment_created
+        ), "Timeout while waiting for environment to be created"
+
+    expected_result = SUCCESS if env_exists else REQ_FAILED
+    expected_n_history = 1 if env_exists and (item_type == "plan") else 0
+    if item_type == "plan":
+        item = ["plan", plan_1]
+    elif item_type == "instruction":
+        item = ["instruction", "queue-stop"]
+    else:
+        raise ValueError(f"Unknown item type '{item_type}'")
+
+    assert subprocess.call(["qserver", "queue", "execute", *item]) == expected_result
+
+    if env_exists:
+        assert wait_for_condition(
+            time=10, condition=condition_queue_processing_finished
+        ), "Timeout while waiting for process to finish"
+
+        assert subprocess.call(["qserver", "environment", "close"]) == SUCCESS
+        assert wait_for_condition(
+            time=5, condition=condition_environment_closed
+        ), "Timeout while waiting for environment to be closed"
+
+    n_plans, is_plan_running, n_history = get_reduced_state_info()
+    assert n_plans == 0
+    assert is_plan_running is False
+    assert n_history == expected_n_history
+
+
+# fmt: off
 @pytest.mark.parametrize("pos, uid_ind, pos_result, success", [
     (None, None, 2, True),
     ("back", None, 2, True),

@@ -20,6 +20,7 @@ from bluesky_queueserver.server.tests.conftest import (  # noqa F401
     fastapi_server,
     request_to_json,
     wait_for_environment_to_be_created,
+    wait_for_environment_to_be_closed,
     wait_for_queue_execution_to_complete,
     wait_for_manager_state_idle,
 )
@@ -921,6 +922,66 @@ def test_http_server_item_move_batch_1(
     state = request_to_json("get", "/status")
     assert state["items_in_queue"] == len(expected_seq)
     assert state["items_in_history"] == 0
+
+
+def test_http_server_queue_item_execute_1(re_manager, fastapi_server):  # noqa: F811
+    """
+    Basic test for ``/queue/item/execute`` API.
+    """
+    # Add plan to queue
+    resp1a = request_to_json("post", "/queue/item/add", json={"item": _plan1})
+    assert resp1a["success"] is True, f"resp={resp1a}"
+
+    resp2 = request_to_json("post", "/environment/open")
+    assert resp2 == {"success": True, "msg": ""}
+
+    assert wait_for_environment_to_be_created(10), "Timeout"
+
+    resp2a = request_to_json("get", "/status")
+    assert resp2a["items_in_queue"] == 1
+    assert resp2a["items_in_history"] == 0
+
+    # Execute a plan
+    resp3 = request_to_json("post", "/queue/item/execute", json={"item": _plan3})
+    assert resp3["success"] is True, f"resp={resp3}"
+    assert resp3["msg"] == ""
+    assert resp3["qsize"] == 1
+    assert resp3["item"]["name"] == _plan3["name"]
+
+    assert wait_for_manager_state_idle(30)
+
+    # Execute a plan
+    resp3a = request_to_json("post", "/queue/item/execute", json={"item": _instruction_stop})
+    assert resp3a["success"] is True, f"resp={resp3}"
+    assert resp3a["msg"] == ""
+    assert resp3a["qsize"] == 1
+    assert resp3a["item"]["name"] == _instruction_stop["name"]
+
+    assert wait_for_manager_state_idle(5)
+
+    resp3b = request_to_json("get", "/status")
+    assert resp3b["items_in_queue"] == 1
+    assert resp3b["items_in_history"] == 1
+
+    resp4 = request_to_json("post", "/queue/start")
+    assert resp4["success"] is True
+
+    assert wait_for_manager_state_idle(5)
+
+    resp4a = request_to_json("get", "/status")
+    assert resp4a["items_in_queue"] == 0
+    assert resp4a["items_in_history"] == 2
+
+    history = request_to_json("get", "/history/get")
+    h_items = history["items"]
+    assert len(h_items) == 2, pprint.pformat(h_items)
+    assert h_items[0]["name"] == _plan3["name"]
+    assert h_items[1]["name"] == _plan1["name"]
+
+    resp2 = request_to_json("post", "/environment/close")
+    assert resp2 == {"success": True, "msg": ""}
+
+    assert wait_for_environment_to_be_closed(10), "Timeout"
 
 
 def test_http_server_open_environment_handler(re_manager, fastapi_server):  # noqa F811

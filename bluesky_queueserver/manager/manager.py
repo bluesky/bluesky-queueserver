@@ -1443,22 +1443,29 @@ class RunEngineManager(Process):
 
     async def _queue_item_execute_handler(self, request):
         """
-        Adds new item to the queue. Item may be a plan or an instruction. Request must
-        include the element with the key ``plan`` if the added item is a plan or ``instruction``
-        if it is an instruction. The element with the key is a dictionary of plan or instruction
-        parameters. The parameters may not include UID, because the function always overwrites
-        plan UID. If an item is already assigned UID, it is replaced with the new one.
-        The returned plan/instruction contains new UID even if the function failed to add
-        the plan to the queue.
+        Immediately start execution of the submitted item. The item may be a plan or an
+        instruction. The request fails if item execution can not be started immediately
+        (RE Manager is not in IDLE state, RE Worker environment does not exist, etc.).
+        If the request succeeds, the item is executed once. The item is not added to
+        the queue if it can not be immediately started and it is not pushed back into
+        the queue in case its execution fails/stops. If the queue is in the *LOOP* mode,
+        the executed item is not added to the back of the queue after completion.
+        The API request does not alter the sequence of enqueued plans.
 
-        Optional key ``pos`` may be a string (choices "front", "back") or integer (positive
-        or negative) that specifies the desired position in the queue. The default value
-        is "back" (element is pushed to the back of the queue). If ``pos`` is integer and
-        it is outside the range of available elements, then the new element pushed to
-        the front or the back of the queue depending on the value of the index.
+        The API is primarily intended for implementing of interactive workflows, in which
+        users are controlling the experiment using client GUI application and user actions
+        (such as mouse click on a plot) are converted into the requests to execute plans
+        in RE Worker environment. Interactive workflows may be used for calibration of
+        the instrument, while the queue may be used to run sequences of scheduled experiments.
 
-        It is recommended to use negative indices (counted from the back of the queue)
-        when modifying a running queue.
+        Internally the API request adds the submitted item to the front of the queue
+        and immediately attempts to start its execution. The item is removed from the queue
+        almost immediately and never pushed back into the queue. If the item is a plan,
+        the results of execution are added to plan history as usual. The respective history
+        item could be accessed to check if the plan was executed successfully.
+
+        The API DOES NOT START EXECUTION OF THE QUEUE. Once execution of the submitted
+        item is finished, RE Manager is switched to the IDLE state.
         """
         logger.info("Starting immediate executing a queue item ...")
         logger.debug("Request: %s", pprint.pformat(request))

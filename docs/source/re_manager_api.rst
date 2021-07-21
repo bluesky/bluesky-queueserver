@@ -975,6 +975,9 @@ Description   Immediately start execution of the submitted item. The item may be
               almost immediately and never pushed back into the queue. If the item is a plan,
               the results of execution are added to plan history as usual. The respective history
               item could be accessed to check if the plan was executed successfully.
+
+              The API **does not start execution of the queue**. Once execution of the submitted
+              item is finished, RE Manager is switched to the IDLE state.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **item**: *dict*
                   the dictionary of plan or instruction parameters. Plans are distinguished from

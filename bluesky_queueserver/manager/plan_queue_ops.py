@@ -221,7 +221,17 @@ class PlanQueueOperations:
         if not self._r_pool:  # Initialize only once
             self._lock = asyncio.Lock()
             async with self._lock:
-                self._r_pool = await aioredis.create_redis_pool(f"redis://{self._redis_host}", encoding="utf8")
+                try:
+                    self._r_pool = await aioredis.create_redis_pool(f"redis://{self._redis_host}", encoding="utf8")
+                except OSError as ex:
+                    error_msg = (
+                        f"Failed to create the Redis pool: "
+                        f"Redis server may not be available at '{self._redis_host}'. "
+                        f"Exception: {ex}"
+                    )
+                    logger.error(error_msg)
+                    raise OSError(error_msg) from ex
+
                 await self._queue_clean()
                 await self._uid_dict_initialize()
                 await self._load_plan_queue_mode()

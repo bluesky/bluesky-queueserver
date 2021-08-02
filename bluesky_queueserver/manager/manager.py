@@ -801,6 +801,41 @@ class RunEngineManager(Process):
     # =========================================================================
     #                        ZMQ message handlers
 
+    @staticmethod
+    def _check_request_for_unsupported_params(*, request, param_names):
+        """
+        Check if the request contains any unsupported parameters. Unsupported parameters
+        in the request may indicate an error in API call, therefore API should not be executed
+        and the client must be informed of the error.
+
+        Parameters
+        ----------
+        request : dict
+            The dictionary of parameters. Keys are the parameter names.
+        param_names : list
+            The list of supported parameter names. Request is allowed to contain only the parameters
+            contained in this list.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        ValueError
+            Request contains unsupported parameters.
+        """
+        unsupported_params = []
+        for name in request:
+            if name not in param_names:
+                unsupported_params.append(name)
+
+        if unsupported_params:
+            names = f"{unsupported_params[0]!r}" if len(unsupported_params) == 1 else f"{unsupported_params}"
+            raise ValueError(
+                f"API request contains unsupported parameters: {names}. Supported parameters: {param_names}"
+            )
+
     async def _ping_handler(self, request):
         """
         May be called to get some response from the Manager. Returns status of the manager.

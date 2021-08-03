@@ -613,10 +613,11 @@ class RunEngineManager(Process):
         elif option not in available_options:
             # This function is called only within the class: allow exception to be raised.
             #   It should make the unit tests fail.
-            raise ValueError(f"Option '{option}' is not supported. " f"Available options: {available_options}")
+            raise ValueError(f"Option '{option}' is not supported. Available options: {available_options}")
 
         elif self._environment_exists:
             success, err_msg = await self._worker_command_continue_plan(option)
+            success = bool(success)  # Convert 'None' to False
             if success:
                 self._manager_state = MState.EXECUTING_QUEUE
             else:
@@ -628,7 +629,7 @@ class RunEngineManager(Process):
                 "Environment does not exist. Can not pause Run Engine.",
             )
 
-        return {"success": success, "msg": err_msg}
+        return success, err_msg
 
     def _load_allowed_plans_and_devices(self):
         """
@@ -801,6 +802,41 @@ class RunEngineManager(Process):
     # =========================================================================
     #                        ZMQ message handlers
 
+    @staticmethod
+    def _check_request_for_unsupported_params(*, request, param_names):
+        """
+        Check if the request contains any unsupported parameters. Unsupported parameters
+        in the request may indicate an error in API call, therefore API should not be executed
+        and the client must be informed of the error.
+
+        Parameters
+        ----------
+        request : dict
+            The dictionary of parameters. Keys are the parameter names.
+        param_names : list
+            The list of supported parameter names. Request is allowed to contain only the parameters
+            contained in this list.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        ValueError
+            Request contains unsupported parameters.
+        """
+        unsupported_params = []
+        for name in request:
+            if name not in param_names:
+                unsupported_params.append(name)
+
+        if unsupported_params:
+            names = f"{unsupported_params[0]!r}" if len(unsupported_params) == 1 else f"{unsupported_params}"
+            raise ValueError(
+                f"API request contains unsupported parameters: {names}. Supported parameters: {param_names}"
+            )
+
     async def _ping_handler(self, request):
         """
         May be called to get some response from the Manager. Returns status of the manager.
@@ -865,6 +901,9 @@ class RunEngineManager(Process):
         logger.info("Returning the list of allowed plans ...")
 
         try:
+            supported_param_names = ["user_group"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
             if "user_group" not in request:
                 raise Exception("Incorrect request format: user group is not specified")
 
@@ -893,6 +932,9 @@ class RunEngineManager(Process):
         logger.info("Returning the list of allowed devices ...")
 
         try:
+            supported_param_names = ["user_group"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
             if "user_group" not in request:
                 raise Exception("Incorrect request format: user group is not specified")
 
@@ -921,6 +963,9 @@ class RunEngineManager(Process):
         """
         logger.info("Reloading lists of allowed plans and devices ...")
         try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
             self._load_allowed_plans_and_devices()
             success, msg = True, ""
         except Exception as ex:
@@ -933,11 +978,22 @@ class RunEngineManager(Process):
         Returns the contents of the current queue.
         """
         logger.info("Returning current queue and running plan ...")
-        plan_queue, running_item, plan_queue_uid = await self._plan_queue.get_queue_full()
+
+        try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            plan_queue, running_item, plan_queue_uid = await self._plan_queue.get_queue_full()
+            success, msg = True, ""
+        except Exception as ex:
+            plan_queue = []
+            running_item = {}
+            plan_queue_uid = ""
+            success, msg = False, f"Error: {str(ex)}"
 
         return {
-            "success": True,
-            "msg": "",
+            "success": success,
+            "msg": msg,
             "items": plan_queue,
             "running_item": running_item,
             "plan_queue_uid": plan_queue_uid,
@@ -1099,6 +1155,9 @@ class RunEngineManager(Process):
 
         success, msg = True, ""
         try:
+            supported_param_names = ["mode"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
             if "mode" not in request:
                 raise Exception(f"Parameter 'mode' is not found in request {request}")
 
@@ -1137,6 +1196,9 @@ class RunEngineManager(Process):
         item_type, item, qsize, msg = None, None, None, ""
 
         try:
+            supported_param_names = ["user_group", "user", "item", "pos", "before_uid", "after_uid"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
             item, item_type, _success, _msg = self._get_item_from_request(request=request)
             if not _success:
                 raise Exception(_msg)
@@ -1197,6 +1259,9 @@ class RunEngineManager(Process):
         success, msg, item_list, results, qsize = True, "", [], [], None
 
         try:
+            supported_param_names = ["user_group", "user", "items", "pos", "before_uid", "after_uid"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
             # Prepare items
             if "items" not in request:
                 raise Exception("Invalid request format: the list of items is not found")
@@ -1282,6 +1347,8 @@ class RunEngineManager(Process):
         success, msg, qsize, item, item_type = True, "", 0, None, None
 
         try:
+            supported_param_names = ["user_group", "user", "item", "replace"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
             item, item_type, _success, _msg = self._get_item_from_request(request=request)
             if not _success:
@@ -1317,8 +1384,11 @@ class RunEngineManager(Process):
         from the set {``front``, ``back``}. The default option is ``back``
         """
         logger.info("Getting an item from the queue ...")
+        item, msg = {}, ""
         try:
-            item, msg = {}, ""
+            supported_param_names = ["pos", "uid"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
             pos = request.get("pos", None)
             uid = request.get("uid", None)
             item = await self._plan_queue.get_item(pos=pos, uid=uid)
@@ -1338,8 +1408,11 @@ class RunEngineManager(Process):
         the UID must exist in the queue, otherwise operation fails.
         """
         logger.info("Removing item from the queue ...")
+        item, qsize, msg = {}, None, ""
         try:
-            item, qsize, msg = {}, None, ""
+            supported_param_names = ["pos", "uid"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
             pos = request.get("pos", None)
             uid = request.get("uid", None)
             item, qsize = await self._plan_queue.pop_item_from_queue(pos=pos, uid=uid)
@@ -1360,8 +1433,11 @@ class RunEngineManager(Process):
         in the queue. If the method fails, then no items are removed from the queue.
         """
         logger.info("Removing a batch of items from the queue ...")
+        items, qsize, msg = [], None, ""
         try:
-            items, qsize, msg = [], None, ""
+            supported_param_names = ["uids", "ignore_missing"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
             uids = request.get("uids", None)
             ignore_missing = request.get("ignore_missing", True)
 
@@ -1387,8 +1463,11 @@ class RunEngineManager(Process):
         or after the 'destination' plan. Both source and destination must be specified.
         """
         logger.info("Moving a queue item ...")
+        item, qsize, msg = {}, None, ""
         try:
-            item, qsize, msg = {}, None, ""
+            supported_param_names = ["pos", "uid", "pos_dest", "before_uid", "after_uid"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
             pos = request.get("pos", None)
             uid = request.get("uid", None)
             pos_dest = request.get("pos_dest", None)
@@ -1420,8 +1499,11 @@ class RunEngineManager(Process):
         exclusive. The destionation MUST be specified, otherwise the operation fails.
         """
         logger.info("Moving a batch of queue items ...")
+        items, qsize, msg = [], None, ""
         try:
-            items, qsize, msg = [], None, ""
+            supported_param_names = ["uids", "pos_dest", "before_uid", "after_uid", "reorder"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
             uids = request.get("uids", None)
             pos_dest = request.get("pos_dest", None)
             before_uid = request.get("before_uid", None)
@@ -1474,6 +1556,9 @@ class RunEngineManager(Process):
         item_uid = None
 
         try:
+            supported_param_names = ["item", "user_group", "user"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
             item, item_type, _success, _msg = self._get_item_from_request(request=request)
             if not _success:
                 raise Exception(_msg)
@@ -1525,32 +1610,62 @@ class RunEngineManager(Process):
         Remove all entries from the plan queue (does not affect currently executed run)
         """
         logger.info("Clearing the queue ...")
-        await self._plan_queue.clear_queue()
-        return {"success": True, "msg": ""}
+        try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            await self._plan_queue.clear_queue()
+            success, msg = True, ""
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+        return {"success": success, "msg": msg}
 
     async def _history_get_handler(self, request):
         """
         Returns the contents of the plan history.
         """
         logger.info("Returning plan history ...")
-        plan_history, plan_history_uid = await self._plan_queue.get_history()
+        try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
-        return {"success": True, "msg": "", "items": plan_history, "plan_history_uid": plan_history_uid}
+            plan_history, plan_history_uid = await self._plan_queue.get_history()
+            success, msg = True, ""
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+            plan_history, plan_history_uid = [], ""
+
+        return {"success": success, "msg": msg, "items": plan_history, "plan_history_uid": plan_history_uid}
 
     async def _history_clear_handler(self, request):
         """
         Remove all entries from the plan history
         """
         logger.info("Clearing the plan execution history ...")
-        await self._plan_queue.clear_history()
-        return {"success": True, "msg": ""}
+        try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            await self._plan_queue.clear_history()
+            success, msg = True, ""
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg}
 
     async def _environment_open_handler(self, request):
         """
         Creates RE environment: creates RE Worker process, starts and configures Run Engine.
         """
         logger.info("Opening the new RE environment ...")
-        success, msg = await self._start_re_worker()
+        try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            success, msg = await self._start_re_worker()
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
         return {"success": success, "msg": msg}
 
     async def _environment_close_handler(self, request):
@@ -1559,8 +1674,15 @@ class RunEngineManager(Process):
         i.e. RE Manager is in the idle state. The command is rejected if a plan is running.
         """
         logger.info("Closing existing RE environment ...")
-        success, err_msg = await self._stop_re_worker()
-        return {"success": success, "msg": err_msg}
+        try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            success, msg = await self._stop_re_worker()
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg}
 
     async def _environment_destroy_handler(self, request):
         """
@@ -1568,8 +1690,15 @@ class RunEngineManager(Process):
         should be made available only to expert level users.
         """
         logger.info("Destroying current RE environment ...")
-        success, err_msg = await self._kill_re_worker()
-        return {"success": success, "msg": err_msg}
+        try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            success, msg = await self._kill_re_worker()
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg}
 
     async def _queue_start_handler(self, request):
         """
@@ -1577,7 +1706,14 @@ class RunEngineManager(Process):
         it is executed. If the queue is empty, then nothing will happen.
         """
         logger.info("Starting queue processing ...")
-        success, msg = await self._start_plan()
+        try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            success, msg = await self._start_plan()
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
         return {"success": success, "msg": msg}
 
     async def _queue_stop_handler(self, request):
@@ -1589,7 +1725,14 @@ class RunEngineManager(Process):
         The request will fail if the queue is not running.
         """
         logger.info("Activating 'stop queue' sequence ...")
-        success, msg = self._queue_stop_activate()
+        try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            success, msg = self._queue_stop_activate()
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
         return {"success": success, "msg": msg}
 
     async def _queue_stop_cancel_handler(self, request):
@@ -1599,7 +1742,14 @@ class RunEngineManager(Process):
         The request always succeeds.
         """
         logger.info("Deactivating 'stop queue' sequence ...")
-        success, msg = self._queue_stop_deactivate()
+        try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            success, msg = self._queue_stop_deactivate()
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
         return {"success": success, "msg": msg}
 
     async def _re_pause_handler(self, request):
@@ -1607,21 +1757,29 @@ class RunEngineManager(Process):
         Pause Run Engine
         """
         logger.info("Pausing the queue (currently running plan) ...")
-        option = request["option"] if "option" in request else None
-        available_options = ("deferred", "immediate")
-        if option in available_options:
-            if self._environment_exists:
-                success, msg = await self._pause_run_engine(option)
+
+        try:
+            supported_param_names = ["option"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            option = request["option"] if "option" in request else None
+            available_options = ("deferred", "immediate")
+            if option in available_options:
+                if self._environment_exists:
+                    success, msg = await self._pause_run_engine(option)
+                else:
+                    success, msg = (
+                        False,
+                        "Environment does not exist. Can not pause Run Engine.",
+                    )
             else:
                 success, msg = (
                     False,
-                    "Environment does not exist. Can not pause Run Engine.",
+                    f"Option '{option}' is not supported. Available options: {available_options}",
                 )
-        else:
-            success, msg = (
-                False,
-                f"Option '{option}' is not supported. Available options: {available_options}",
-            )
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
         return {"success": success, "msg": msg}
 
     async def _re_resume_handler(self, request):
@@ -1629,28 +1787,61 @@ class RunEngineManager(Process):
         Run Engine: resume execution of a paused plan
         """
         logger.info("Resuming paused plan ...")
-        return await self._continue_run_engine(option="resume")
+
+        try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            success, msg = await self._continue_run_engine(option="resume")
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg}
 
     async def _re_stop_handler(self, request):
         """
         Run Engine: stop execution of a paused plan
         """
         logger.info("Stopping paused plan ...")
-        return await self._continue_run_engine(option="stop")
+        try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            success, msg = await self._continue_run_engine(option="stop")
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg}
 
     async def _re_abort_handler(self, request):
         """
         Run Engine: abort execution of a paused plan
         """
         logger.info("Aborting paused plan ...")
-        return await self._continue_run_engine(option="abort")
+        try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            success, msg = await self._continue_run_engine(option="abort")
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg}
 
     async def _re_halt_handler(self, request):
         """
         Run Engine: halt execution of a paused plan
         """
         logger.info("Halting paused plan ...")
-        return await self._continue_run_engine(option="halt")
+        try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            success, msg = await self._continue_run_engine(option="halt")
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg}
 
     async def _re_runs_handler(self, request):
         """
@@ -1659,23 +1850,30 @@ class RunEngineManager(Process):
         """
         logger.info("Returning the list of runs for the running plan ...")
 
-        option = request["option"] if "option" in request else "active"
-        available_options = ("active", "open", "closed")
+        success, msg, run_list, run_list_uid = True, "", [], ""
+        try:
+            supported_param_names = ["option"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
-        if option in available_options:
-            if option == "open":
-                run_list = [_ for _ in self._re_run_list if _["is_open"]]
-            elif option == "closed":
-                run_list = [_ for _ in self._re_run_list if not _["is_open"]]
+            option = request["option"] if "option" in request else "active"
+            available_options = ("active", "open", "closed")
+
+            if option in available_options:
+                if option == "open":
+                    run_list = [_ for _ in self._re_run_list if _["is_open"]]
+                elif option == "closed":
+                    run_list = [_ for _ in self._re_run_list if not _["is_open"]]
+                else:
+                    run_list = self._re_run_list
+                success, msg = True, ""
             else:
-                run_list = self._re_run_list
-            success, msg = True, ""
-        else:
-            run_list = []
-            success = False
-            msg = f"Option '{option}' is not supported. Available options: {available_options}"
+                raise ValueError(f"Option '{option}' is not supported. Available options: {available_options}")
 
-        run_list_uid = self._re_run_list_uid
+            run_list_uid = self._re_run_list_uid
+
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
         return {"success": success, "msg": msg, "run_list": run_list, "run_list_uid": run_list_uid}
 
     async def _manager_stop_handler(self, request):
@@ -1692,29 +1890,34 @@ class RunEngineManager(Process):
         This command should not be exposed to the users, but it may be valuable for
         testing.
         """
+
         allowed_options = ("safe_off", "safe_on")
-        option = "safe_on"
-        success = True
+        success, msg = True, ""
 
-        if "option" in request:
-            r_option = request["option"]
+        try:
+            supported_param_names = ["option"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            # Default option
+            option = "safe_on"
+
+            # If option is specified in request, then use the value from the request
+            r_option = request.get("option", None)
             if r_option:
-                if r_option not in allowed_options:
-                    success = False
-                    msg = f"Option '{r_option}' is not allowed. Allowed options: {allowed_options}"
-                else:
+                if r_option in allowed_options:
                     option = r_option
+                else:
+                    raise ValueError(f"Option '{r_option}' is not allowed. Allowed options: {allowed_options}")
 
-        if success and (option == "safe_on") and (self._manager_state != MState.IDLE):
-            success = False
-            msg = (
-                f"Closing RE Manager with option '{option}' is allowed "
-                f"only in 'idle' state. Current state: '{self._manager_state.value}'"
-            )
+            if (option == "safe_on") and (self._manager_state != MState.IDLE):
+                raise RuntimeError(
+                    f"Closing RE Manager with option '{option}' is allowed "
+                    f"only in 'idle' state. Current state: '{self._manager_state.value}'"
+                )
 
-        if success:
-            msg = f"Initiating stopping of RE Manager with option '{option}'."
             self._manager_stopping = True
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
 
         return {"success": success, "msg": msg}
 
@@ -1723,9 +1926,19 @@ class RunEngineManager(Process):
         Testing API: blocks event loop of RE Manager process forever and
         causes Watchdog process to restart RE Manager.
         """
-        # This is expected to block the event loop forever.
-        while True:
-            ttime.sleep(10)
+        try:
+            # Verification of parameters are mostly for consistency with other API.
+            # This API is expected to be used exclusively for testing and debugging.
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            # Block the event loop forever. The manager process should be automatically restarted.
+            while True:
+                ttime.sleep(10)
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg}
 
     async def _zmq_execute(self, msg):
         method = msg["method"]

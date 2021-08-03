@@ -2391,6 +2391,50 @@ def test_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_restart):  # 
 
 
 # =======================================================================================
+#            Test if API requests with unsupported parameters are rejected
+def test_zmq_api_unsupported_parameters(re_manager):  # noqa: F811
+    api_names = (
+        "plans_allowed",
+        "devices_allowed",
+        "permissions_reload",
+        "queue_get",
+        "queue_mode_set",
+        "queue_item_add",
+        "queue_item_add_batch",
+        "queue_item_update",
+        "queue_item_get",
+        "queue_item_remove",
+        "queue_item_remove_batch",
+        "queue_item_move",
+        "queue_item_move_batch",
+        "queue_item_execute",
+        "queue_clear",
+        "history_get",
+        "history_clear",
+        "environment_open",
+        "environment_close",
+        "environment_destroy",
+        "queue_start",
+        "queue_stop",
+        "queue_stop_cancel",
+        "re_pause",
+        "re_resume",
+        "re_stop",
+        "re_abort",
+        "re_halt",
+        "re_runs",
+        "manager_stop",
+        "manager_kill",
+    )
+    unsupported_param = {"unsupported_param": 10}
+
+    for api_name in api_names:
+        resp, _ = zmq_single_request(api_name, params=unsupported_param)
+        assert resp["success"] is False, f"API name: {api_name}"
+        assert "unsupported parameters: 'unsupported_param'" in resp["msg"], f"API name: {api_name}"
+
+
+# =======================================================================================
 #                 Tests for different scenarios of queue execution
 
 

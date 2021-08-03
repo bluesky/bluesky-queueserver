@@ -607,7 +607,7 @@ def test_http_server_queue_item_get_remove_handler_4_failing(re_manager, fastapi
     Note: derived from ``test_zmq_api_queue_item_get_remove_4_failing()``
     """
     # Ambiguous parameters
-    resp1 = request_to_json("post", "/queue/item/get", json={"pos": 5, "uid": "some_uid", "item_uid": "plan"})
+    resp1 = request_to_json("post", "/queue/item/get", json={"pos": 5, "uid": "some_uid"})
     assert resp1["success"] is False
     assert "Ambiguous parameters" in resp1["msg"]
 

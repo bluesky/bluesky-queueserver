@@ -252,6 +252,13 @@ run the following command::
 
   http --form POST http://localhost:60610/queue/upload/spreadsheet spreadsheet@../sample_excel.xlsx
 
+Queue Server API allow to execute a single item (plan or instruction) submitted with the API call. Execution
+of an item starts immediately if possible (RE Manager is idle and RE Worker environment exists), otherwise
+API call fails and the item is not added to the queue. The following commands start execution of a single plan::
+
+  qserver queue execute plan '{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}}'
+  http POST http://localhost:60610/queue/item/execute item:='{"name":"count", "args":[["det1", "det2"]], "kwargs":{"num":10, "delay":1}, "item_type": "plan"}'
+
 Queue can be edited at any time. Changes to the running queue become effective the moment they are
 performed. As the currently running plan is finished, the new plan is popped from the top of the queue.
 

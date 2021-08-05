@@ -5,8 +5,8 @@ from bluesky_queueserver.manager.manager import RunEngineManager
 
 # fmt: off
 @pytest.mark.parametrize("request_dict, param_names, success, msg", [
-    ({"ab": 10, "cd": 50}, ["ab", "cd", "ef"], True,  ""),
-    ({}, [], True,  ""),
+    ({"ab": 10, "cd": 50}, ["ab", "cd", "ef"], True, ""),
+    ({}, [], True, ""),
     ({"ab": 10, "cd": 50}, [], False, r"unsupported parameters: \['ab', 'cd'\]. Supported parameters: \[\]"),
     ({"ab": 10}, [], False, r"unsupported parameters: 'ab'. Supported parameters: \[\]"),
     ({"ab": 10}, ["de"], False, r"unsupported parameters: 'ab'. Supported parameters: \['de'\]"),

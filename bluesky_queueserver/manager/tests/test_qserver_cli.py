@@ -913,7 +913,7 @@ def test_qserver_item_execute_1(re_manager, item_type, env_exists):  # noqa: F81
     (-1, None, 2, True),
     (-2, None, 1, True),
     (-3, None, 0, True),
-    (-4, None,  0, False),
+    (-4, None, 0, False),
     (-100, None, 0, False),
     (None, 0, 0, True),
     (None, 1, 1, True),

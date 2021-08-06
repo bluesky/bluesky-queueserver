@@ -3,7 +3,6 @@ bluesky
 bluesky-kafka
 databroker
 event-model
-fastapi
 json-rpc
 jsonschema
 matplotlib # Needed for BEC, should be factored out
@@ -19,4 +18,3 @@ pyyaml
 pyzmq
 requests
 typing-extensions;python_version<'3.8'
-uvicorn

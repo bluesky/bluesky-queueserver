@@ -29,7 +29,7 @@ from bluesky_queueserver.manager.conversions import (
                     {"name": "p1",
                      "kind": "POSITIONAL_OR_KEYWORD",
                      "annotation": {"type": "int"}}
-                 ]}},
+                ]}},
      {"plan1": {"name": "plan1",
                 "description": "Description of Plan 1.",
                 "parameters": [
@@ -38,7 +38,7 @@ from bluesky_queueserver.manager.conversions import (
                      "type": "int",
                      "is_list": False,
                      "is_optional": False}
-                 ]}},
+                ]}},
      ),
 
     # Check recognition of list of 'floats'

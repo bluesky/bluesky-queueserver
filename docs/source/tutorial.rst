@@ -38,7 +38,7 @@ In Terminal 1 start ``qserver-console-monitor``::
 
 In Terminal 2 start RE Manager with console output publishing available::
 
-  start-re-manager --zmq-publish ON
+  start-re-manager --zmq-publish-console ON
 
 Use Terminal 3 to run some commands using ``qserver`` tool. Terminals 1 and 2
 must display identical output. Multiple instances of ``qserver-console-monitor``
@@ -49,7 +49,7 @@ Notice that all published console output is lost while the monitor is closed.
 In Terminal 2, close RE Manager (Ctrl C) and restart it with the option that
 disables printing of the console output::
 
-  start-re-manager --zmq-publish ON --console-output OFF
+  start-re-manager --zmq-publish-console ON --console-output OFF
 
 Notice that no output is printed in Terminal2. External monitor (running in
 Terminal 1) is needed to visualize the output from RE Manager.

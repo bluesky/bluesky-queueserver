@@ -342,7 +342,7 @@ def start_manager():
 
     group_console_output.add_argument(
         "--zmq-publish-console-addr",
-        dest="zmq_publish_console_console_addr",
+        dest="zmq_publish_console_addr",
         type=str,
         default="tcp://*:60625",
         help="The address of ZMQ server (stdout and stderr publishing), e.g. 'tcp://*:60625' "
@@ -351,7 +351,7 @@ def start_manager():
 
     group_console_output.add_argument(
         "--zmq-publish-console",
-        dest="zmq_publish_console_console",
+        dest="zmq_publish_console",
         type=str,
         choices=["ON", "OFF"],
         default="OFF",
@@ -418,8 +418,8 @@ def start_manager():
     stream_publisher = PublishConsoleOutput(
         msg_queue=msg_queue,
         console_output_on=console_output_on,
-        zmq_publish_console_on=zmq_publish_console_on,
-        zmq_publish_console_addr=zmq_publish_console_addr,
+        zmq_publish_on=zmq_publish_console_on,
+        zmq_publish_addr=zmq_publish_console_addr,
     )
 
     if zmq_publish_console_on:

@@ -71,9 +71,9 @@ def test_start_re_manager_console_output_1(re_manager_cmd, console_print, consol
     elif console_print is False:
         params.extend(["--console-output", "OFF"])
     if console_zmq is True:
-        params.extend(["--zmq-publish", "ON"])
+        params.extend(["--zmq-publish-console", "ON"])
     elif console_zmq is False:
-        params.extend(["--zmq-publish", "OFF"])
+        params.extend(["--zmq-publish-console", "OFF"])
 
     # Default values (if parameters are not specified)
     if console_print is None:

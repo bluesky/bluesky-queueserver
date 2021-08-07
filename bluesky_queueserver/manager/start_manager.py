@@ -341,8 +341,8 @@ def start_manager():
     )
 
     group_console_output.add_argument(
-        "--zmq-publish-addr",
-        dest="zmq_publish_addr",
+        "--zmq-publish-console-addr",
+        dest="zmq_publish_console_addr",
         type=str,
         default="tcp://*:60625",
         help="The address of ZMQ server (stdout and stderr publishing), e.g. 'tcp://*:60625' "
@@ -350,8 +350,8 @@ def start_manager():
     )
 
     group_console_output.add_argument(
-        "--zmq-publish",
-        dest="zmq_publish",
+        "--zmq-publish-console",
+        dest="zmq_publish_console",
         type=str,
         choices=["ON", "OFF"],
         default="OFF",
@@ -406,8 +406,8 @@ def start_manager():
         log_level = logging.CRITICAL + 1
 
     console_output_on = args.console_output == "ON"
-    zmq_publish_on = args.zmq_publish == "ON"
-    zmq_publish_addr = args.zmq_publish_addr
+    zmq_publish_console_on = args.zmq_publish_console == "ON"
+    zmq_publish_console_addr = args.zmq_publish_console_addr
 
     msg_queue = Queue()
     setup_console_output_redirection(msg_queue)
@@ -418,11 +418,11 @@ def start_manager():
     stream_publisher = PublishConsoleOutput(
         msg_queue=msg_queue,
         console_output_on=console_output_on,
-        zmq_publish_on=zmq_publish_on,
-        zmq_publish_addr=zmq_publish_addr,
+        zmq_publish_on=zmq_publish_console_on,
+        zmq_publish_addr=zmq_publish_console_addr,
     )
 
-    if zmq_publish_on:
+    if zmq_publish_console_on:
         # Wait for a short period to allow monitoring applications to connect.
         ttime.sleep(1)
 

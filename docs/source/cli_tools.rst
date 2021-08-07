@@ -508,11 +508,11 @@ which can access the workstation running RE Manager over the network. If the add
 the 0MQ socket is different from default, it can be passed to the monitor application
 as a parameter (``--zmq-subscribe-addr``). RE Manager does not publishing the console output
 to 0MQ socket by default. Publishing can be enabled by starting RE Manager with the parameter
-``--zmq-publish``:
+``--zmq-publish-console``:
 
 .. code-block::
 
-    start-re-manager --zmq-publish ON
+    start-re-manager --zmq-publish-console ON
 
 (see :ref:`start_re_manager_console_output`).
 

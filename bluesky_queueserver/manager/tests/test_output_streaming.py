@@ -1,3 +1,4 @@
+import asyncio
 import multiprocessing
 import pytest
 import sys
@@ -9,6 +10,7 @@ from bluesky_queueserver.manager.output_streaming import (
     setup_console_output_redirection,
     PublishConsoleOutput,
     ReceiveConsoleOutput,
+    ReceiveConsoleOutputAsync,
 )
 
 
@@ -166,3 +168,81 @@ def test_ReceiveConsoleOutput_1(capfd, console_output_on, zmq_publish_on, period
 
     # There is one extra timeout needed to exit the loop
     assert rm.n_timeouts == n_timeouts + 1
+
+
+# fmt: off
+@pytest.mark.parametrize("period", [0.5, 1, 1.5])
+@pytest.mark.parametrize("cb_type", ["func", "coro"])
+# fmt: on
+def test_ReceiveConsoleOutputAsync_1(capfd, period, cb_type):
+    """
+    Basic test for ``ReceiveConsoleOutputAsync``: send and receive 3 messages over 0MQ.
+    Send messages with different period (to check if timeout is handled correctly) and
+    tests with callbacks in the form of plain function and coroutine.
+    """
+    timeout = 1000  # Timeout used for waiting for incoming messages
+
+    zmq_port = 61223  # Arbitrary port
+    zmq_topic = "testing_topic"
+
+    zmq_publish_addr = f"tcp://*:{zmq_port}"
+    zmq_subscribe_addr = f"tcp://localhost:{zmq_port}"
+
+    queue = multiprocessing.Queue()
+
+    pco = PublishConsoleOutput(
+        msg_queue=queue,
+        console_output_on=True,
+        zmq_publish_on=True,
+        zmq_publish_addr=zmq_publish_addr,
+        zmq_topic=zmq_topic,
+    )
+
+    pco.start()
+
+    msgs = ["message-one\n", "message-two\n", "message-three\n"]
+
+    async def testing():
+        nonlocal msgs
+        msgs_received = []
+
+        rm = ReceiveConsoleOutputAsync(zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic, timeout=timeout)
+
+        def cb_func(msg):
+            nonlocal msgs_received
+            msgs_received.append(msg)
+
+        async def cb_coro(msg):
+            nonlocal msgs_received
+            msgs_received.append(msg)
+
+        if cb_type == "func":
+            cb = cb_func
+        elif cb_type == "coro":
+            cb = cb_coro
+        else:
+            raise RuntimeError(f"Unknown callback type: {cb_type!r}")
+
+        rm.set_callback(cb=cb)
+
+        for n in range(2):
+            # ReceiveConsoleOutputAsync is expected to allow to start and stop acquisition multiple times.
+            msgs_received.clear()
+            rm.start()
+            rm.start()  # Repeated attempts to start should have no effect
+
+            for msg in msgs:
+                queue.put({"time": ttime.time(), "msg": msg})
+                await asyncio.sleep(1)
+
+            rm.stop()
+            await asyncio.sleep(1)  # Wait for all messages to be sent
+
+            assert len(msgs_received) == 3, f"Attempt #{n + 1}"
+            for msg_received, msg in zip(msgs_received, msgs):
+                assert isinstance(msg_received["time"], float)
+                assert msg_received["msg"] == msg
+
+    asyncio.run(testing())
+
+    pco.stop()

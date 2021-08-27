@@ -236,7 +236,13 @@ def test_ReceiveConsoleOutputAsync_1(period, cb_type):
                 await asyncio.sleep(1)
 
             rm.stop()
-            await asyncio.sleep(1)  # Wait for all messages to be sent
+
+            # Wait for all messages to be sent. It happens almost instantly when tests are run
+            #   locally, but there could be delays when running on CI.
+            for n in range(200):  # 20 seconds should be sufficient in the worst case
+                await asyncio.sleep(0.1)
+                if len(msgs_received) == 3:
+                    break
 
             assert len(msgs_received) == 3, f"Attempt #{n + 1}"
             for msg_received, msg in zip(msgs_received, msgs):

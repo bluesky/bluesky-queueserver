@@ -203,6 +203,7 @@ def test_ReceiveConsoleOutputAsync_1(period, cb_type):
     msgs = ["message-one\n", "message-two\n", "message-three\n"]
 
     rm = ReceiveConsoleOutputAsync(zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic, timeout=timeout)
+    ttime.sleep(1)
 
     async def testing():
         nonlocal msgs
@@ -239,8 +240,8 @@ def test_ReceiveConsoleOutputAsync_1(period, cb_type):
 
             # Wait for all messages to be sent. It happens almost instantly when tests are run
             #   locally, but there could be delays when running on CI.
-            for n in range(200):  # 20 seconds should be sufficient in the worst case
-                await asyncio.sleep(0.1)
+            for _ in range(10):  # 10 seconds should be sufficient in the worst case
+                await asyncio.sleep(1)
                 if len(msgs_received) == 3:
                     break
 

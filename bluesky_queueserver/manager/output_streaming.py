@@ -202,6 +202,8 @@ class ReceiveConsoleOutput:
 
         from bluesky_queueserver import ReceiveConsoleOutput
 
+        zmq_subscribe_addr = "tcp://localhost:60625"
+
         rco = ReceiveConsoleOutput(zmq_subscribe_addr=zmq_subscribe_addr)
         while True:
             try:
@@ -290,34 +292,73 @@ class ReceiveConsoleOutput:
 
 class ReceiveConsoleOutputAsync:
     """
-    The class allows to subscribe to published 0MQ messages and read the messages one by
-    one as they arrive. Subscription is performed using the remote 0MQ address and topic.
+    Async version of ``ReceiveConsoleOutput`` class. There are two ways to use the class:
+    explicitly awaiting for the ``recv`` function (same as in ``ReceiveConsoleOutput``)
+    or setting up a callback function (plain function or coroutine).
 
-    The class provides blocking (with timeout) ``recv`` method that waits for the next
-    published message. The following example contains the code illustrating using the class.
-    In real-world  application the loop will be running in a separate thread and generating
-    callbacks on each received message.
+    Explicitly awaiting ``recv`` function:
 
     .. code-block:: python
 
-        from bluesky_queueserver import ReceiveConsoleOutput
+        from bluesky_queueserver import ReceiveConsoleOutputAsync
 
-        rco = ReceiveConsoleOutput(zmq_subscribe_addr=zmq_subscribe_addr)
-        while True:
-            try:
-                payload = rco.recv()
-                time, msg = payload.get("time", None), payload.get("msg", None)
-                # In this example the messages are printed in the terminal.
-                sys.stdout.write(msg)
-                sys.stdout.flush()
-            except TimeoutError:
-                # Timeout does not mean communication error!!!
-                # Insert the code that needs to be executed on timeout (if any).
-                pass
-            # Place for the code that should be executed after receiving each
-            #   message or after timeout (e.g. check a condition and exit
-            #   the loop once the condition is satisfied).
+        zmq_subscribe_addr = "tcp://localhost:60625"
+        rco = ReceiveConsoleOutputAsync(zmq_subscribe_addr=zmq_subscribe_addr)
 
+        async def run_acquisition():
+            while True:
+                try:
+                    payload = await rco.recv()
+                    time, msg = payload.get("time", None), payload.get("msg", None)
+                    # In this example the messages are printed in the terminal.
+                    sys.stdout.write(msg)
+                    sys.stdout.flush()
+                except TimeoutError:
+                    # Timeout does not mean communication error!!!
+                    # Insert the code that needs to be executed on timeout (if any).
+                    pass
+                # Place for the code that should be executed after receiving each
+                #   message or after timeout (e.g. check a condition and exit
+                #   the loop once the condition is satisfied).
+
+        asyncio.run(run_acquisition())
+
+    Setting up callback function or coroutine (awaitable function):
+
+    .. code-block:: python
+
+        from bluesky_queueserver import ReceiveConsoleOutputAsync
+
+        zmq_subscribe_addr = "tcp://localhost:60625"
+        rco = ReceiveConsoleOutputAsync(zmq_subscribe_addr=zmq_subscribe_addr)
+
+        async def cb_coro(payload):
+            time, msg = payload.get("time", None), payload.get("msg", None)
+            # In this example the messages are printed in the terminal.
+            sys.stdout.write(msg)
+            sys.stdout.flush()
+
+        rco.set_callback(cb_coro)
+
+        async def run_acquisition():
+            rco.start()
+            # Do something useful here, e.g. sleep
+            asyncio.sleep(60)
+            rco.stop()
+
+            # Acquisition can be started and stopped multiple time if necessary
+            rco.start()
+            asyncio.sleep(60)
+            rco.stop()
+
+        asyncio.run(run_acquisition())
+
+    .. note::
+        If callback is a plain function, it is executed immediately after the message is received
+        and may potentially block the loop if it takes too long to complete (even occasionally).
+        If the callback is a coroutine, it is not awaited, but instead placed in the loop
+        (with ``ensure_future``), so acquisition of messages will continue. Typically the callback
+        will do a simple operation such as adding the received message to the queue.
 
     Parameters
     ----------
@@ -337,7 +378,6 @@ class ReceiveConsoleOutputAsync:
 
         zmq_subscribe_addr = zmq_subscribe_addr or "tcp://localhost:60625"
 
-        self._loop = asyncio.get_running_loop()
         self._callback = None  # Function that is awaited once a message is received from RE Manager
         self._exit = False
         self._is_running = False
@@ -352,19 +392,28 @@ class ReceiveConsoleOutputAsync:
             context = zmq.asyncio.Context()
             self._socket = context.socket(zmq.SUB)
             self._socket.connect(self._zmq_subscribe_addr)
-            self._socket.subscribe(self._zmq_topic)
 
     def set_callback(self, cb):
         """
-        Set callback function which is awaited once a message is received. Pass ``cb=None``
-        to clear the callback.
+        Set callback function which is called once for each received message. If ``cb`` is
+        a function, it is called immediately and execution of the loop is blocked until the
+        execution of the function is complete. If ``cb`` is coroutine, it is not awaited, but
+        instead placed in the loop using ``asyncio.ensure_future``. Only one callback function
+        can be set.
+
+        Parameters
+        ----------
+        cb : callable, coroutine or None
+            Reference to a callback function or coroutine. The function signature is expected
+            to receive a message as a parameter (message is a dictionary with keys ``time`` and ``msg``)
+            and return ``None``. The function is expected to handle exceptions that are raised
+            internally. Pass ``None`` to clear callback (messages will be received and discarded).
         """
         self._callback = cb
 
     async def recv(self, timeout=-1):
         """
-        Get the next published message. If timeout expires then
-        ``TimeoutError`` is raised.
+        Get the next published message. If timeout expires then ``TimeoutError`` is raised.
 
         Parameters
         ----------
@@ -413,20 +462,32 @@ class ReceiveConsoleOutputAsync:
         if not self._exit:
             asyncio.ensure_future(self._recv_next_message())
         else:
+            self._socket.unsubscribe(self._zmq_topic)
             self._is_running = False
 
     def start(self):
+        """
+        Start collection of messages published by RE Manager. Collection may be started and stopped
+        multiple times during a session. Repeated calls to the ``start`` method are ignored.
+        """
         self._exit = False
         if not self._is_running:
             self._is_running = True
+            self._socket.subscribe(self._zmq_topic)
             asyncio.ensure_future(self._recv_next_message())
 
     def stop(self):
+        """
+        Stop collection of messages published by RE Manager. Call to ``stop`` method unsubscribes
+        the client from 0MQ topic, therefore all the messages published until collection is started
+        are ignored.
+        """
         self._exit = True
 
     def __del__(self):
         self.stop()
-        self._socket.close()
+        if self._socket:
+            self._socket.close()
 
 
 def qserver_console_monitor_cli():

@@ -174,7 +174,7 @@ def test_ReceiveConsoleOutput_1(capfd, console_output_on, zmq_publish_on, period
 @pytest.mark.parametrize("period", [0.5, 1, 1.5])
 @pytest.mark.parametrize("cb_type", ["func", "coro"])
 # fmt: on
-def test_ReceiveConsoleOutputAsync_1(capfd, period, cb_type):
+def test_ReceiveConsoleOutputAsync_1(period, cb_type):
     """
     Basic test for ``ReceiveConsoleOutputAsync``: send and receive 3 messages over 0MQ.
     Send messages with different period (to check if timeout is handled correctly) and
@@ -202,11 +202,11 @@ def test_ReceiveConsoleOutputAsync_1(capfd, period, cb_type):
 
     msgs = ["message-one\n", "message-two\n", "message-three\n"]
 
+    rm = ReceiveConsoleOutputAsync(zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic, timeout=timeout)
+
     async def testing():
         nonlocal msgs
         msgs_received = []
-
-        rm = ReceiveConsoleOutputAsync(zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic, timeout=timeout)
 
         def cb_func(msg):
             nonlocal msgs_received
@@ -242,6 +242,10 @@ def test_ReceiveConsoleOutputAsync_1(capfd, period, cb_type):
             for msg_received, msg in zip(msgs_received, msgs):
                 assert isinstance(msg_received["time"], float)
                 assert msg_received["msg"] == msg
+
+            # Send an extra message. Acquisition is stopped at this point
+            queue.put({"time": ttime.time(), "msg": "Message is expected to be discarded"})
+            await asyncio.sleep(1)
 
     asyncio.run(testing())
 

@@ -203,7 +203,7 @@ def test_ReceiveConsoleOutputAsync_1(period, cb_type):
     msgs = ["message-one\n", "message-two\n", "message-three\n"]
 
     rm = ReceiveConsoleOutputAsync(zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic, timeout=timeout)
-    ttime.sleep(1)
+    ttime.sleep(1)  # Important when executed on CI
 
     async def testing():
         nonlocal msgs

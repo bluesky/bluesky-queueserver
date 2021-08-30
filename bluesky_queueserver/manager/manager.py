@@ -80,6 +80,9 @@ class RunEngineManager(Process):
         self._environment_exists = False  # True if RE Worker environment exists
         self._manager_state = MState.INITIALIZING
         self._queue_stop_pending = False  # Queue is in the process of being stopped
+        self._worker_pause_pending = False  # True when worker process has accepted our pause request but
+        # we (this manager process) have not yet seen it as 'paused', useful for the situations where the
+        # worker did accept a request to pause (deferred) but had already passed its last checkpoint
         self._worker_state_info = None  # Copy of the last downloaded state of RE Worker
 
         self._re_run_list = []
@@ -378,6 +381,8 @@ class RunEngineManager(Process):
                 ws, _ = await self._worker_request_state()
                 if ws is not None:
                     self._worker_state_info = ws
+                    if ws["re_state"] == "paused":
+                        self._worker_pause_pending = False
                     if self._manager_state == MState.CLOSING_ENVIRONMENT:
                         if ws["environment_state"] == "closing":
                             self._fut_manager_task_completed.set_result(None)
@@ -495,12 +500,21 @@ class RunEngineManager(Process):
 
         if not n_pending_plans:
             self._manager_state = MState.IDLE
+            self._worker_pause_pending = False
             success, err_msg = False, "Queue is empty."
             logger.info(err_msg)
 
         elif self._queue_stop_pending or stop_queue:
             self._manager_state = MState.IDLE
+            self._worker_pause_pending = False
             success, err_msg = False, "Queue is stopped."
+            logger.info(err_msg)
+
+        elif self._worker_pause_pending:
+            self._worker_pause_pending = False
+            self._manager_state = MState.IDLE
+            self._worker_pause_pending = False
+            success, err_msg = False, "Queue is stopped due to unresolved outstanding pause request."
             logger.info(err_msg)
 
         else:
@@ -1777,6 +1791,8 @@ class RunEngineManager(Process):
                     False,
                     f"Option '{option}' is not supported. Available options: {available_options}",
                 )
+            if success:
+                self._worker_pause_pending = True
         except Exception as ex:
             success, msg = False, f"Error: {ex}"
 

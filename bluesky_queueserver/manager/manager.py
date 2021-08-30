@@ -509,7 +509,6 @@ class RunEngineManager(Process):
             logger.info(err_msg)
 
         elif self._worker_pause_pending:
-            self._worker_pause_pending = False
             self._manager_state = MState.IDLE
             self._worker_pause_pending = False
             success, err_msg = False, "Queue is stopped due to unresolved outstanding pause request."

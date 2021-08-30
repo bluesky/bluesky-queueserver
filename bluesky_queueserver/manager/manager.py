@@ -471,9 +471,7 @@ class RunEngineManager(Process):
 
     async def _start_plan(self):
         """
-        Initiate creation of RE Worker environment. The function does not wait until
-        the environment is created. Returns True/False depending on whether
-        the command is accepted.
+        Initiate upload of next plan to the worker process for execution.
         """
         if not self._environment_exists:
             success, err_msg = False, "RE Worker environment does not exist."

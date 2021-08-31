@@ -203,8 +203,8 @@ class ReceiveConsoleOutput:
         from bluesky_queueserver import ReceiveConsoleOutput
 
         zmq_subscribe_addr = "tcp://localhost:60625"
-
         rco = ReceiveConsoleOutput(zmq_subscribe_addr=zmq_subscribe_addr)
+
         while True:
             try:
                 payload = rco.recv()
@@ -395,7 +395,7 @@ class ReceiveConsoleOutputAsync:
 
     def set_callback(self, cb):
         """
-        Set callback function which is called once for each received message. If ``cb`` is
+        Set callback function, which is called once for each received message. If ``cb`` is
         a function, it is called immediately and execution of the loop is blocked until the
         execution of the function is complete. If ``cb`` is coroutine, it is not awaited, but
         instead placed in the loop using ``asyncio.ensure_future``. Only one callback function
@@ -469,6 +469,7 @@ class ReceiveConsoleOutputAsync:
         """
         Start collection of messages published by RE Manager. Collection may be started and stopped
         multiple times during a session. Repeated calls to the ``start`` method are ignored.
+        The function MUST be called from the event loop.
         """
         self._exit = False
         if not self._is_running:
@@ -480,7 +481,7 @@ class ReceiveConsoleOutputAsync:
         """
         Stop collection of messages published by RE Manager. Call to ``stop`` method unsubscribes
         the client from 0MQ topic, therefore all the messages published until collection is started
-        are ignored.
+        are ignored. The function MUST be called from the event loop.
         """
         self._exit = True
 

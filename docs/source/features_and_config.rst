@@ -13,6 +13,6 @@ parameter of ``start-re-manager``. A simple monitoring application (``qserver-co
 allows to visualize the published output. See :ref:`remote_monitoring_tutorial` for a brief
 tutorial.
 
-``bluesky_queueserver`` package provides ``ReceiveConsoleOutput`` class, which can be helpful
-in implementing remote monitoring features of client applications. See
+``bluesky_queueserver`` package provides ``ReceiveConsoleOutput`` and ``ReceiveConsoleOutputAsync``
+class, which can be helpful in implementing remote monitoring features in client applications. See
 :ref:`subscribing_to_console_output` for more details.

@@ -40,6 +40,19 @@ class parameters and code example.
     ReceiveConsoleOutput
     ReceiveConsoleOutput.recv
 
+Asyncio-based applications (e.g. HTTP server) may use ``ReceiveConsoleOutputAsync`` API class to
+receive captured console output:
+
+.. autosummary::
+   :nosignatures:
+   :toctree: generated
+
+    ReceiveConsoleOutputAsync
+    ReceiveConsoleOutputAsync.set_callback
+    ReceiveConsoleOutputAsync.recv
+    ReceiveConsoleOutputAsync.start
+    ReceiveConsoleOutputAsync.stop
+
 
 Formatting Descriptions of Plans and Plan Parameters
 ----------------------------------------------------

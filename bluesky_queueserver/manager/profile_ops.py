@@ -1497,10 +1497,12 @@ def _process_plan(plan, *, existing_devices):
 
         return a_str
 
-    def convert_default_to_string(value):
+    def convert_expression_to_string(value, expression_role=None):
         """
         Raise 'ValueError' if the string representation of the value can not be evaluated
         """
+        role_str = f"{expression_role} " if expression_role else ""
+
         s_value = f"{value!r}"
         try:
             ast.literal_eval(s_value)
@@ -1508,8 +1510,8 @@ def _process_plan(plan, *, existing_devices):
             # If default value can not be accepted, then the plan is considered invalid.
             #    Processing should be interrupted.
             raise ValueError(
-                f"Default value ({s_value}) can not be evaluated with 'ast.literal_eval()': "
-                "unsupported default value type."
+                f"The expression ({s_value}) can not be evaluated with 'ast.literal_eval()': "
+                f"unsupported {role_str}type."
             )
         return s_value
 
@@ -1605,19 +1607,58 @@ def _process_plan(plan, *, existing_devices):
 
             # Parameter description (attempt to get it from the decorator, then from docstring)
             desc, annotation, default = None, None, None
-            min, max, step = None, None, None
+            vmin, vmax, step = None, None, None
             default_defined_in_decorator = False
             if use_custom and (p.name in param_annotation["parameters"]):
                 desc = param_annotation["parameters"][p.name].get("description", None)
                 annotation = assemble_custom_annotation(
                     param_annotation["parameters"][p.name], existing_devices=existing_devices
                 )
-                default = param_annotation["parameters"][p.name].get("default", None)
-                if default:
-                    default_defined_in_decorator = True
-                min = param_annotation["parameters"][p.name].get("min", None)
-                max = param_annotation["parameters"][p.name].get("max", None)
-                step = param_annotation["parameters"][p.name].get("step", None)
+                try:
+                    _ = param_annotation["parameters"][p.name].get("default", None)
+                    default = (
+                        _
+                        if _ is None
+                        else convert_expression_to_string(
+                            _,
+                            expression_role="default value in decorator",
+                        )
+                    )
+                    if default:
+                        default_defined_in_decorator = True
+
+                    _ = param_annotation["parameters"][p.name].get("min", None)
+                    vmin = (
+                        _
+                        if _ is None
+                        else convert_expression_to_string(
+                            _,
+                            expression_role="min value in decorator",
+                        )
+                    )
+
+                    _ = param_annotation["parameters"][p.name].get("max", None)
+                    vmax = (
+                        _
+                        if _ is None
+                        else convert_expression_to_string(
+                            _,
+                            expression_role="max value in decorator",
+                        )
+                    )
+
+                    _ = param_annotation["parameters"][p.name].get("step", None)
+                    step = (
+                        _
+                        if _ is None
+                        else convert_expression_to_string(
+                            _,
+                            expression_role="step value in decorator",
+                        )
+                    )
+                except Exception as ex:
+                    raise ValueError(f"Parameter '{p.name}': {ex}")
+
             if not desc and use_docstring and (p.name in doc_annotation["parameters"]):
                 desc = doc_annotation["parameters"][p.name].get("description", None)
             if not annotation and p.annotation is not inspect.Parameter.empty:
@@ -1636,7 +1677,7 @@ def _process_plan(plan, *, existing_devices):
                 )
             if not default and (p.default is not inspect.Parameter.empty):
                 try:
-                    default = convert_default_to_string(p.default)  # May raise an exception
+                    default = convert_expression_to_string(p.default, expression_role="default value")
                 except Exception as ex:
                     raise ValueError(f"Parameter '{p.name}': {ex}")
 
@@ -1656,17 +1697,17 @@ def _process_plan(plan, *, existing_devices):
                     working_dict["default_defined_in_decorator"] = True
 
             # 'min', 'max' and 'step' (may exist only in decorator)
-            if min is not None:
+            if vmin is not None:
                 try:
                     # Attempt to convert to number (use the same function as during validation)
-                    min = _convert_str_to_number(min)
-                    working_dict["min"] = f"{min}"  # Save as a string
+                    vmin = _convert_str_to_number(vmin)
+                    working_dict["min"] = f"{vmin}"  # Save as a string
                 except Exception as ex:
                     raise ValueError(f"Failed to process min. value: {ex}")
-            if max is not None:
+            if vmax is not None:
                 try:
-                    max = _convert_str_to_number(max)
-                    working_dict["max"] = f"{max}"
+                    vmax = _convert_str_to_number(vmax)
+                    working_dict["max"] = f"{vmax}"
                 except Exception as ex:
                     raise ValueError(f"Failed to process max. value: {ex}")
             if step is not None:

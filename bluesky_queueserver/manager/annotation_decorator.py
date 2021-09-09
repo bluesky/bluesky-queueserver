@@ -24,10 +24,10 @@ _parameter_annotation_schema = {
                     "enums": {
                         "$ref": "#/definitions/custom_types",
                     },
-                    "default": {"type": "string"},
-                    "min": {"type": "string"},
-                    "max": {"type": "string"},
-                    "step": {"type": "string"},
+                    "default": {},  # Expression of any time should be accepted
+                    "min": {"type": "number"},
+                    "max": {"type": "number"},
+                    "step": {"type": "number"},
                 },
             },
         },
@@ -89,7 +89,7 @@ def parameter_annotation_decorator(annotation):
     The decorator does not change the function and does not overwrite an existing docstring.
     The decorator does not generate function descriptions, instead the parameter dictionary
     passed to the decorator is saved as ``_custom_parameter_annotation_`` attribute of the function
-    and may be used by later for generation of plan descriptions.
+    and may be used later for generation of plan descriptions.
 
     The decorator verifies if the parameter dictionary matches JSON schema and if names of all
     the parameter names exist in the function signature. The exception is raised if there is
@@ -167,9 +167,9 @@ def parameter_annotation_decorator(annotation):
                     #   a parameter hint, but it can also be specified here. Putting
                     #   it in both places will also work.
                     "annotation": "float",
-                    "min": "0.1",  # A number must be represented as a string
-                    "max": "10.0",
-                    "step": "0.1",
+                    "min": 0.1,
+                    "max": 10.0,
+                    "step": 0.1,
                 }
 
                 "str_or_int_or_float": {

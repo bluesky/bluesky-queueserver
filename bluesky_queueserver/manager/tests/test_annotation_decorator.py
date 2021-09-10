@@ -93,7 +93,7 @@ _simple_annotation_with_default = {
         "val_arg": {
             "description": "Parameter 'val_arg'",
             "annotation": "int",
-            "default": "10",
+            "default": 10,
         },
         "val_kwarg": {
             "description": "Parameter 'val_kwarg'",
@@ -101,7 +101,7 @@ _simple_annotation_with_default = {
             "enums": {
                 "CustomEnum": ("p1", "p2", "p3"),
             },
-            "default": "'p1'",  # String value should be quoted
+            "default": "p1",  # String value should be quoted
         },
     },
 }
@@ -111,10 +111,10 @@ _simple_annotation_with_min_max_step = {
     "parameters": {
         "val_arg": {
             "description": "Parameter 'val_arg'",
-            "default": "10",
-            "min": "1",
-            "max": "100",
-            "step": "0.1",
+            "default": 10,
+            "min": 1,
+            "max": 100,
+            "step": 0.1,
         },
     },
 }
@@ -423,7 +423,7 @@ _trivial_annotation_error7 = {
             "devices": {
                 "Motor": ["abcde"],
             },
-            "default": 50,  # Must be a string ('50', not just 50)
+            "default": 50,  # Unacceptable type
         }
     },
 }
@@ -440,7 +440,7 @@ _trivial_annotation_error7 = {
      r"Additional properties are not allowed \('some_devices' was unexpected\)"),
     (_trivial_annotation_error5, jsonschema.ValidationError, "is not of type 'string'"),
     (_trivial_annotation_error6, jsonschema.ValidationError, "is not of type 'array'"),
-    (_trivial_annotation_error7, jsonschema.ValidationError, "50 is not of type 'string'"),
+    # (_trivial_annotation_error7, jsonschema.ValidationError, "50 is not of type 'string'"),
 ])
 # fmt: on
 def test_annotation_dectorator_8_fail(custom_annotation, ex_type, err_msg):

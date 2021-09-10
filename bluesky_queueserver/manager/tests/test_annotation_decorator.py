@@ -414,21 +414,6 @@ _trivial_annotation_error6 = {
 }
 
 
-_trivial_annotation_error7 = {
-    "description": "Example of annotation with varargs and varkwargs.",
-    "parameters": {
-        "existing_param": {
-            "description": "Required key is 'discription'. Schema validation should fail.",
-            "annotation": "Motor",
-            "devices": {
-                "Motor": ["abcde"],
-            },
-            "default": 50,  # Unacceptable type
-        }
-    },
-}
-
-
 # fmt: off
 @pytest.mark.parametrize("custom_annotation, ex_type, err_msg", [
     (_trivial_annotation_error1, jsonschema.ValidationError,
@@ -440,7 +425,6 @@ _trivial_annotation_error7 = {
      r"Additional properties are not allowed \('some_devices' was unexpected\)"),
     (_trivial_annotation_error5, jsonschema.ValidationError, "is not of type 'string'"),
     (_trivial_annotation_error6, jsonschema.ValidationError, "is not of type 'array'"),
-    # (_trivial_annotation_error7, jsonschema.ValidationError, "50 is not of type 'string'"),
 ])
 # fmt: on
 def test_annotation_dectorator_8_fail(custom_annotation, ex_type, err_msg):

@@ -1748,11 +1748,25 @@ def _pf4c(detector: Optional[ophyd.Device]):
     yield from [detector]
 
 
+def _pf4d_factory():
+    """Arbitrary classes are not supported"""
+
+    class SomeClass:
+        ...
+
+    @parameter_annotation_decorator({"parameters": {"val1": {"default": SomeClass()}}})
+    def f(val1):
+        yield from [val1]
+
+    return f
+
+
 # fmt: off
 @pytest.mark.parametrize("plan_func, err_msg", [
-    (_pf4a_factory(), "unsupported default value type"),
+    (_pf4a_factory(), "unsupported type of default value"),
     (_pf4b, "name 'Plans1' is not defined'"),
     (_pf4c, "Missing default value for the parameter 'detector' in the plan signature"),
+    (_pf4d_factory(), "unsupported type of default value in decorator"),
 ])
 # fmt: on
 def test_process_plan_4_fail(plan_func, err_msg):

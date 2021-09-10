@@ -1501,7 +1501,7 @@ def _process_plan(plan, *, existing_devices):
         """
         Raise 'ValueError' if the string representation of the value can not be evaluated
         """
-        role_str = f"{expression_role} " if expression_role else ""
+        role_str = f" of {expression_role}" if expression_role else ""
 
         s_value = f"{value!r}"
         try:
@@ -1511,7 +1511,7 @@ def _process_plan(plan, *, existing_devices):
             #    Processing should be interrupted.
             raise ValueError(
                 f"The expression ({s_value}) can not be evaluated with 'ast.literal_eval()': "
-                f"unsupported {role_str}type."
+                f"unsupported type{role_str}."
             )
         return s_value
 

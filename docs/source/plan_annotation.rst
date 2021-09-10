@@ -272,15 +272,15 @@ if the default value defined in the plan header or in the decorator has unsuppor
   annotations and default values defined in the plan header. If type or default value is defined
   in the decorator, the respective type and default value from the header are not analyzed.
   If it is necessary to define a plan parameter with unsupported type hint or default value
-  in the header, then the ``parameter_annotation_decorator`` must be used to override
-  the type or the default value in order for the plan processing to work.
+  in the header, use ``parameter_annotation_decorator`` to override the type or the default
+  value in order for the plan processing to work.
 
 **Supported types for type annotations.** Type annotations may be native Python types
 (such as ``int``, ``float``, ``str``, etc.), ``NoneType``, or generic types that are based
 on native Python types (such as ``typing.List[typing.Union[int, str]]``). Technically the type will
 be accepted if the operation of recreating the type object from its string representation
-using ``eval`` function with the namespace that contains imported ``typing`` module and
-``NoneType`` type is successful.
+using ``eval`` function is successful with the namespace that contains imported ``typing``
+module and ``NoneType`` type.
 
 **Supported types of default values.** The default values can be objects of native Python
 types and literal expressions with objects of native Python types. The default value should
@@ -367,8 +367,10 @@ specifying the default value of supported type in ``parameter_annotation_decorat
 .. note::
 
   If the default value is defined in the ``parameter_annotation_decorator``,
-  Queue Server ignores the default value defined in the header. A default value
-  in the header is **required** if the default value is defined in the decorator.
+  Queue Server ignores the default value defined in the header. Processing of the plan
+  fails if the default value for a parameter is defined in the decorator, but
+  missing in the function header. (A default value in the header is **required**
+  if the default value is defined in the decorator.)
 
 Parameter Descriptions in Docstring
 -----------------------------------
@@ -607,23 +609,23 @@ Default Values
 Using decorator to override default values defined in plan header with different values
 is possible, but generally not recommended unless absolutely necessary. Overriding the default
 value is justified when the type of the default value defined in the header is not supported,
-and there different default value of supported type can be defined in the decorator that
-will lead to identical default behavior of the plan when it is executed in Queue Server or
-in IPython.
+and a different default value of supported type can be defined in the decorator so that
+the plan will behave identically when it is executed in Queue Server or IPython environment.
 
 .. note::
 
-  The default value defined in the decorator must be represented as a string (as type
-  annotation). E.g. ``"10"`` represents integer value ``10``, ``"'det1'"`` represents
-  the string value ``'det1'`` and ``"['det1', 'det2']"`` represents an array of strings.
+  The default value defined in the decorator must be a Python expression resulting in
+  the value that satisfy requirements in :ref:`supported_types` (same requirements as
+  for the default values defined in plan header). For the custom enumerated types, the
+  default must be one of the valid strings values.
 
 The following example illustrates the use case which requires overriding the default value.
 In this example, the default value for the parameter ``detector`` is a reference to ``det1``,
-which has unsupported type. When submitting the plan to the queue, the default parameter
-value must be the string literal ``"det1"``, which is then substituted by reference to ``det1``.
-The decorator contains the definition of custom enum type based on the list of supported
-device names and sets the default value as a string representing the name of one of
-the supported devices.
+which has unsupported type (``ophyd.Device``). When submitting the plan to the queue,
+the default parameter value must be the string literal ``"det1"``, which is then substituted
+by reference to ``det1``. The decorator contains the definition of custom enum type based
+on the list of supported device names and sets the default value as a string representing
+the name of one of the supported devices.
 
 .. code-block:: python
 
@@ -635,7 +637,7 @@ the supported devices.
           "detector": {
               "annotation": "DetectorType1",
               "devices": {"DetectorType1": ["det1", "det2", "det3"]},
-              "default": "'det1'",
+              "default": "det1",
           }
       }
   })
@@ -670,19 +672,17 @@ then the range is not validated.
 
 .. note::
 
-  Minimum, maximum values and step size must be integer or floating point numbers
-  represented as string literals (similarly to the types and default values).
-  For example, value ``10`` must be entered as ``"10"``, ``90.9`` as ``"90.9"``.
+  Minimum, maximum values and step size must be integer or floating point numbers.
 
 .. code-block:: python
 
   @parameter_annotation_decorator({
       "parameters": {
           "v": {
-              "default": "50",
-              "min": "20",  # Numbers must be represented as string literals
-              "max": "99.9",
-              "step": "0.1",
+              "default": 50,
+              "min": 20,
+              "max": 99.9,
+              "step": 0.1,
           }
       }
   })
@@ -717,4 +717,3 @@ Plan Annotation API
     :toctree: generated
 
     parameter_annotation_decorator
-

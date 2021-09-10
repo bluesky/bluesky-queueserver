@@ -26,15 +26,15 @@ custom_test_flyer = ophyd.sim.MockFlyer("custom_test_flyer", ophyd.sim.det, ophy
                 "description": "Detectors to use for measurement.",
                 "annotation": "typing.List[Detectors]",
                 "devices": {"Detectors": ("det1", "det2", "det3")},
-                "default": "['det1', 'det2']",
+                "default": ["det1", "det2"],
             },
             "positions": {
                 "description": "Motor positions. The number of positions must be equal "
                 "to the number of the motors.",
                 "annotation": "typing.List[float]",
-                "min": "-10",
-                "max": "10",
-                "step": "0.01",
+                "min": -10,
+                "max": 10,
+                "step": 0.01,
             },
         },
     }

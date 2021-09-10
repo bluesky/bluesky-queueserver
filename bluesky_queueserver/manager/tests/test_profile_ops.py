@@ -845,7 +845,7 @@ def _pf1a2(val1, val2):
             Description of the parameter Value 1.
         val2 : list(str)
             Description of the parameter Value 2.
-    
+
         Returns
         -------
         v : int
@@ -1448,9 +1448,9 @@ _pf3d_processed = {
 @parameter_annotation_decorator(
     {
         "parameters": {
-            "val1": {"default": "1000"},
-            "val2": {"default": "'replacement_str'"},
-            "val3": {"default": "False"},
+            "val1": {"default": 1000},
+            "val2": {"default": "replacement_str"},
+            "val3": {"default": False},
         },
     }
 )
@@ -1492,7 +1492,7 @@ class _Pf3f_val1:
 @parameter_annotation_decorator(
     {
         "parameters": {
-            "val1": {"default": "'device_name'"},  # Replace unsupported value
+            "val1": {"default": "device_name"},  # Replace unsupported value
         },
     }
 )
@@ -1643,7 +1643,7 @@ _pf3k_processed = {
 
 @parameter_annotation_decorator(
     {
-        "parameters": {"val1": {"min": "0.1", "max": "100", "step": "0.02"}},
+        "parameters": {"val1": {"min": 0.1, "max": 100, "step": 0.02}},
     }
 )
 def _pf3l(val1):
@@ -1735,54 +1735,38 @@ def _pf4b(val1, val2: str = "some_str", val3: None = None):
 @parameter_annotation_decorator(
     {
         "parameters": {
-            "val2": {"default": "replacement_str"},  # String is not quoted
-        },
-    }
-)
-def _pf4c(val1, val2: str = "some_str", val3: typing.Any = None):
-    yield from [val1, val2, val3]
-
-
-@parameter_annotation_decorator(
-    {
-        "parameters": {
             "detector": {
                 "annotation": "Detectors1]",
                 "devices": {"Detectors1": ("d1", "d2", "d3")},
-                "default": "'d1'",
+                "default": "d1",
             },
         },
     }
 )
-def _pf4d(detector: Optional[ophyd.Device]):
+def _pf4c(detector: Optional[ophyd.Device]):
     # Expected to fail: the default value is in the decorator, but not in the header
     yield from [detector]
 
 
-@parameter_annotation_decorator({"parameters": {"val1": {"min": "a0.1"}}})
-def _pf4e1(val1):
-    yield from [val1]
+def _pf4d_factory():
+    """Arbitrary classes are not supported"""
 
+    class SomeClass:
+        ...
 
-@parameter_annotation_decorator({"parameters": {"val1": {"max": "0.1a"}}})
-def _pf4e2(val1):
-    yield from [val1]
+    @parameter_annotation_decorator({"parameters": {"val1": {"default": SomeClass()}}})
+    def f(val1):
+        yield from [val1]
 
-
-@parameter_annotation_decorator({"parameters": {"val1": {"step": "abc"}}})
-def _pf4e3(val1):
-    yield from [val1]
+    return f
 
 
 # fmt: off
 @pytest.mark.parametrize("plan_func, err_msg", [
-    (_pf4a_factory(), "unsupported default value type"),
+    (_pf4a_factory(), "unsupported type of default value"),
     (_pf4b, "name 'Plans1' is not defined'"),
-    (_pf4c, "Failed to decode the default value 'replacement_str'"),
-    (_pf4d, "Missing default value for the parameter 'detector' in the plan signature"),
-    (_pf4e1, "Failed to process min. value.* could not convert string to float"),
-    (_pf4e2, "Failed to process max. value.* could not convert string to float"),
-    (_pf4e3, "Failed to process step value.* could not convert string to float"),
+    (_pf4c, "Missing default value for the parameter 'detector' in the plan signature"),
+    (_pf4d_factory(), "unsupported type of default value in decorator"),
 ])
 # fmt: on
 def test_process_plan_4_fail(plan_func, err_msg):
@@ -2278,9 +2262,9 @@ def _gen_environment_pp2():
     @parameter_annotation_decorator(
         {
             "parameters": {
-                "a": {"annotation": "float", "default": "0.5"},
-                "b": {"annotation": "int", "default": "5"},
-                "s": {"annotation": "int", "default": "50"},
+                "a": {"annotation": "float", "default": 0.5},
+                "b": {"annotation": "int", "default": 5},
+                "s": {"annotation": "int", "default": 50},
             }
         }
     )
@@ -2295,7 +2279,7 @@ def _gen_environment_pp2():
                     "annotation": "typing.List[Detectors]",
                     "devices": {"Detectors": ["_pp_dev1", "_pp_dev2", "_pp_dev3"]},
                     # Default list of the detectors
-                    "default": "['_pp_dev2', '_pp_dev3']",
+                    "default": ["_pp_dev2", "_pp_dev3"],
                 }
             }
         }
@@ -2312,7 +2296,7 @@ def _gen_environment_pp2():
                     "annotation": "Plans",
                     "plans": {"Plans": ["_pp_p1", "_pp_p2", "_pp_p3"]},
                     # Default list of plans
-                    "default": "'_pp_p2'",
+                    "default": "_pp_p2",
                 }
             }
         }
@@ -2326,7 +2310,7 @@ def _gen_environment_pp2():
                 "strings": {
                     "annotation": "typing.Union[typing.List[Selection], typing.Tuple[Selection]]",
                     "enums": {"Selection": ["one", "two", "three"]},
-                    "default": "('one', 'three')",
+                    "default": ("one", "three"),
                 }
             }
         }
@@ -3325,9 +3309,9 @@ def test_validate_plan_3(plan_func, plan, allowed_devices, success, errmsg):
 @parameter_annotation_decorator(
     {
         "parameters": {
-            "num_int": {"min": "5", "max": "15"},
-            "v_float": {"min": "19.4"},
-            "v_list": {"max": "96.54"},
+            "num_int": {"min": 5, "max": 15},
+            "v_float": {"min": 19.4},
+            "v_list": {"max": 96.54},
         },
     }
 )
@@ -3498,12 +3482,12 @@ _desc_ftd1c_html = {
             "pa": {
                 "description": "Multiline description\nof the parameter 'pa'",
                 "annotation": "str",
-                "default": "'default-value'",
+                "default": "default-value",
             },
             "pb": {
                 "description": "Single line description of the parameter 'pb'",
                 "annotation": "float",
-                "default": "50.96",
+                "default": 50.96,
             },
         },
     }
@@ -3536,10 +3520,10 @@ _desc_ftd1d_html = {
         "parameters": {
             "pa": {
                 "annotation": "int",
-                "default": "50",
-                "min": "1",
-                "max": "100.5",
-                "step": "0.001",
+                "default": 50,
+                "min": 1,
+                "max": 100.5,
+                "step": 0.001,
             },
         },
     }
@@ -3571,7 +3555,7 @@ _desc_ftd1e_html = {
                 "annotation": "typing.List[typing.Union[DeviceType1, PlanType1, PlanType2]]",
                 "devices": {"DeviceType1": ("det1", "det2", "det3")},
                 "plans": {"PlanType1": ("plan1", "plan2"), "PlanType2": ("plan3",)},
-                "default": "'det1'",
+                "default": "det1",
             },
         },
     }

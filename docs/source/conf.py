@@ -204,9 +204,6 @@ intersphinx_mapping = {
 
 # Fix for RTD theme issue: enables wrapping of text in table cells.
 #   see https://rackerlabs.github.io/docs-rackspace/tools/rtd-tables.html
-html_context = {
-    'css_files': [
-        '_static/theme_overrides.css',  # override wide tables in RTD theme
-        ],
-     }
-
+html_css_files = [
+    'theme_overrides.css',  # override wide tables in RTD theme
+    ]

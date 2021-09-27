@@ -275,6 +275,11 @@ class RunEngineWorker(Process):
         item_uid = self._state["running_plan"]["item_uid"] if self._state["running_plan"] else None
         plan_completed = self._state["running_plan_completed"]
         re_state = str(self._RE._state) if self._RE else "null"
+        try:
+            re_deferred_pause_requested = self._RE.deferred_pause_requested
+        except Exception:
+            # TODO: delete this branch once Bluesky supporting RE.deferred_pause_pending is widely deployed.
+            re_deferred_pause_requested = self._RE._deferred_pause_requested
         env_state = self._state["environment_state"]
         re_report_available = self._re_report is not None
         run_list_updated = self._active_run_list.is_changed()  # True - updates are available

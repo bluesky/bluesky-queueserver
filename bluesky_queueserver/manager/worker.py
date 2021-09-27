@@ -274,11 +274,13 @@ class RunEngineWorker(Process):
         """
         item_uid = self._state["running_plan"]["item_uid"] if self._state["running_plan"] else None
         plan_completed = self._state["running_plan_completed"]
+        # TODO: replace RE._state with RE.state property in the worker code (improve code style).
         re_state = str(self._RE._state) if self._RE else "null"
         try:
             re_deferred_pause_requested = self._RE.deferred_pause_requested
-        except Exception:
-            # TODO: delete this branch once Bluesky supporting RE.deferred_pause_pending is widely deployed.
+        except AttributeError:
+            # TODO: delete this branch once Bluesky supporting
+            #   ``RunEngine.deferred_pause_pending``` is widely deployed.
             re_deferred_pause_requested = self._RE._deferred_pause_requested
         env_state = self._state["environment_state"]
         re_report_available = self._re_report is not None
@@ -288,6 +290,7 @@ class RunEngineWorker(Process):
             "running_plan_completed": plan_completed,
             "re_report_available": re_report_available,
             "re_state": re_state,
+            "re_deferred_pause_requested": re_deferred_pause_requested,
             "environment_state": env_state,
             "run_list_updated": run_list_updated,
         }

@@ -2059,7 +2059,10 @@ class RunEngineManager(Process):
             if self._worker_state_info:
                 item_uid_running = self._worker_state_info["running_item_uid"]
                 re_state = self._worker_state_info["re_state"]
+                re_deferred_pause_requested = self._worker_state_info["re_deferred_pause_requested"]
                 if item_uid_running:
+                    # Rare case when the manager was restarted while the deferred pause was pending.
+                    self._re_pause_pending = re_deferred_pause_requested
                     # Plan is running. Check if it is the same plan as in redis.
                     plan_stored = await self._plan_queue.get_running_item_info()
                     if "item_uid" in plan_stored:

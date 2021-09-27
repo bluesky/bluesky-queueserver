@@ -277,11 +277,11 @@ class RunEngineWorker(Process):
         # TODO: replace RE._state with RE.state property in the worker code (improve code style).
         re_state = str(self._RE._state) if self._RE else "null"
         try:
-            re_deferred_pause_requested = self._RE.deferred_pause_requested
+            re_deferred_pause_requested = self._RE.deferred_pause_requested if self._RE else False
         except AttributeError:
             # TODO: delete this branch once Bluesky supporting
             #   ``RunEngine.deferred_pause_pending``` is widely deployed.
-            re_deferred_pause_requested = self._RE._deferred_pause_requested
+            re_deferred_pause_requested = self._RE._deferred_pause_requested if self._RE else False
         env_state = self._state["environment_state"]
         re_report_available = self._re_report is not None
         run_list_updated = self._active_run_list.is_changed()  # True - updates are available

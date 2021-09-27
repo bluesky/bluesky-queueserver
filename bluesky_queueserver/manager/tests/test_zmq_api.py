@@ -2433,6 +2433,40 @@ def test_zmq_api_unsupported_parameters(re_manager):  # noqa: F811
         assert resp["success"] is False, f"API name: {api_name}"
         assert "unsupported parameters: 'unsupported_param'" in resp["msg"], f"API name: {api_name}"
 
+# ======================================================================================
+#                 Tests for scenarios with deferred pausing of the plan
+
+_plan_2steps = {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 2, "delay": 2}, "item_type": "plan"}
+
+def test_zmq_api_deferred_pause_1(re_manager):  # noqa: F811
+
+    params1a = {"item": _plan_2steps, "user": _user, "user_group": _user_group}
+    resp1a, _ = zmq_single_request("queue_item_add", params1a)
+    assert resp1a["success"] is True, f"resp={resp1a}"
+
+   # The queue contains only a single instruction (stop the queue).
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    resp2a, _ = zmq_single_request("status")
+    assert resp2a["items_in_queue"] == 1
+    assert resp2a["items_in_history"] == 0
+
+    resp3, _ = zmq_single_request("queue_start")
+    assert resp3["success"] is True
+
+    assert wait_for_condition(time=20, condition=condition_manager_idle)
+
+    resp3a, _ = zmq_single_request("status")
+    assert resp3a["items_in_queue"] == 0
+    assert resp3a["items_in_history"] == 1
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
 
 # =======================================================================================
 #                 Tests for different scenarios of queue execution

@@ -220,6 +220,7 @@ class RunEngineManager(Process):
             success = await self._fut_manager_task_completed  # TODO: timeout may be needed here
             if success:
                 self._environment_exists = True
+                self._re_pause_pending = False
                 logger.info("Worker started successfully.")
                 success, err_msg = True, ""
             else:
@@ -227,6 +228,7 @@ class RunEngineManager(Process):
                 await self._confirm_re_worker_exit()
                 self._environment_exists = False
                 self._worker_state_info = None
+                self._re_pause_pending = False
 
                 logger.error("Error occurred while opening RE Worker environment.")
                 success, err_msg = False, "Error occurred while opening RE Worker environment."
@@ -416,6 +418,7 @@ class RunEngineManager(Process):
             logger.error("Failed to download plan report: %s. Stopping queue processing.", err_msg)
             await self._plan_queue.set_processed_item_as_stopped(exit_status="manager_error", run_uids=[])
             self._manager_state = MState.IDLE
+            self._re_pause_pending = False
         else:
             plan_state = plan_report["plan_state"]
             success = plan_report["success"]
@@ -445,9 +448,11 @@ class RunEngineManager(Process):
                 # Paused plan was stopped/aborted/halted
                 await self._plan_queue.set_processed_item_as_stopped(exit_status=plan_state, run_uids=result)
                 self._manager_state = MState.IDLE
+                self._re_pause_pending = False
             elif plan_state == "paused":
                 # The plan was paused (nothing should be done).
                 self._manager_state = MState.PAUSED
+                self._re_pause_pending = False
             else:
                 logger.error("Unknown plan state %s was returned by RE Worker.", plan_state)
 
@@ -516,6 +521,8 @@ class RunEngineManager(Process):
 
         else:
             next_item = await self._plan_queue.get_item(pos="front")
+
+            self._re_pause_pending = False
 
             # The next items is PLAN
             if next_item["item_type"] == "plan":
@@ -874,6 +881,7 @@ class RunEngineManager(Process):
         queue_stop_pending = self._queue_stop_pending
         worker_environment_exists = self._environment_exists
         re_state = self._worker_state_info["re_state"] if self._worker_state_info else None
+        deferred_pause_pending = self._re_pause_pending
         run_list_uid = self._re_run_list_uid
         plan_queue_uid = self._plan_queue.plan_queue_uid
         plan_history_uid = self._plan_queue.plan_history_uid
@@ -893,6 +901,7 @@ class RunEngineManager(Process):
             "queue_stop_pending": queue_stop_pending,
             "worker_environment_exists": worker_environment_exists,
             "re_state": re_state,  # State of Run Engine
+            "pause_pending": deferred_pause_pending,  # True/False - Cleared once pause processed
             # If Run List UID change, download the list of runs for the current plan.
             # Run List UID is updated when the list is cleared as well.
             "run_list_uid": run_list_uid,
@@ -2088,9 +2097,8 @@ class RunEngineManager(Process):
         else:
             self._worker_state_info = None
 
-        if not self._manager_state == MState.EXECUTING_QUEUE:
-            # TODO: there is no 'unknown' status. This is here temporarily. Different logic
-            #   has to be applied here.
+        if self._manager_state not in (MState.EXECUTING_QUEUE, MState.PAUSED):
+            # TODO: logic may need to be revised
             await self._plan_queue.set_processed_item_as_completed(exit_status="unknown", run_uids=[])
 
         logger.info("Starting ZeroMQ server ...")

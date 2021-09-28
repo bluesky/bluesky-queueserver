@@ -2187,6 +2187,133 @@ def test_permission_reload_1(re_manager, tmp_path):  # noqa: F811
     assert devices_allowed_uid2 != devices_allowed_uid
 
 
+# ======================================================================================
+#                           Method 're_pause'
+
+
+_plan_2steps = {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 2, "delay": 2}, "item_type": "plan"}
+
+
+# fmt: off
+@pytest.mark.parametrize("pause_deferred", [True, False])
+# fmt: on
+def test_zmq_api_re_pause_1(re_manager, pause_deferred):  # noqa: F811
+    """
+    Test the simple case when deferred pause is requested before the last checkpoint so that
+    the plan could be paused correctly using deferred and immediate options. Verify that
+    ``pause_pending`` flag is correctly set.
+    """
+
+    def _check_status(n_queue, n_hist, m_state, re_state, pause_pend):
+        resp, _ = zmq_single_request("status")
+        assert resp["items_in_queue"] == n_queue
+        assert resp["items_in_history"] == n_hist
+        assert resp["manager_state"] == m_state
+        if isinstance(re_state, list):
+            assert resp["re_state"] in re_state, str(resp["re_state"])
+        else:
+            assert resp["re_state"] == re_state
+        assert resp["pause_pending"] == pause_pend
+
+    params1a = {"item": _plan_2steps, "user": _user, "user_group": _user_group}
+    resp1a, _ = zmq_single_request("queue_item_add", params1a)
+    assert resp1a["success"] is True, f"resp={resp1a}"
+
+    # The queue contains only a single instruction (stop the queue).
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    _check_status(1, 0, "idle", "idle", False)
+
+    resp3, _ = zmq_single_request("queue_start")
+    assert resp3["success"] is True
+
+    ttime.sleep(1)
+
+    resp3, _ = zmq_single_request("re_pause", params={"option": ("deferred" if pause_deferred else "immediate")})
+    assert resp3["success"] is True, f"resp={resp3}"
+
+    _check_status(0, 0, "executing_queue", "running", True)
+
+    assert wait_for_condition(time=20, condition=condition_manager_paused)
+
+    _check_status(0, 0, "paused", "paused", False)
+
+    # Execute the remaining plans (if any plans left)
+    resp4, _ = zmq_single_request("re_resume")
+    assert resp4["success"] is True
+
+    assert wait_for_condition(time=20, condition=condition_manager_idle)
+
+    _check_status(0, 1, "idle", "idle", False)
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+# fmt: off
+@pytest.mark.parametrize("n_plans", [1, 2])
+# fmt: on
+def test_zmq_api_re_pause_2(re_manager, n_plans):  # noqa: F811
+    """
+    Test the case when deferred pause is requested after the plan passes the last checkpoint.
+    The plan is expected to run to completion and the queue is expected to be stopped.
+    ``pause_pending`` status flag is expected to return True while the pause is
+    pending, but switch to False once pause is processed (by pausing the plan or stopping
+    the queue).
+    """
+
+    def _check_status(n_queue, n_hist, m_state, re_state, pause_pend):
+        resp, _ = zmq_single_request("status")
+        assert resp["items_in_queue"] == n_queue
+        assert resp["items_in_history"] == n_hist
+        assert resp["manager_state"] == m_state
+        assert resp["re_state"] == re_state
+        assert resp["pause_pending"] == pause_pend
+
+    for _ in range(n_plans):
+        params1a = {"item": _plan_2steps, "user": _user, "user_group": _user_group}
+        resp1a, _ = zmq_single_request("queue_item_add", params1a)
+        assert resp1a["success"] is True, f"resp={resp1a}"
+
+    # The queue contains only a single instruction (stop the queue).
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    _check_status(n_plans, 0, "idle", "idle", False)
+
+    resp3, _ = zmq_single_request("queue_start")
+    assert resp3["success"] is True
+
+    ttime.sleep(3)
+
+    resp3, _ = zmq_single_request("re_pause", params={"option": "deferred"})
+    assert resp3["success"] is True
+
+    _check_status(n_plans - 1, 0, "executing_queue", "running", True)
+
+    assert wait_for_condition(time=20, condition=condition_manager_idle)
+
+    _check_status(n_plans - 1, 1, "idle", "idle", False)
+
+    # Execute the remaining plans (if any plans left)
+    resp4, _ = zmq_single_request("queue_start")
+    assert resp4["success"] is True
+
+    assert wait_for_condition(time=20, condition=condition_manager_idle)
+
+    _check_status(0, n_plans, "idle", "idle", False)
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
 # =======================================================================================
 #                              Method 're_runs'
 
@@ -2433,132 +2560,6 @@ def test_zmq_api_unsupported_parameters(re_manager):  # noqa: F811
         resp, _ = zmq_single_request(api_name, params=unsupported_param)
         assert resp["success"] is False, f"API name: {api_name}"
         assert "unsupported parameters: 'unsupported_param'" in resp["msg"], f"API name: {api_name}"
-
-
-# ======================================================================================
-#                 Tests for scenarios with deferred pausing of the plan
-
-_plan_2steps = {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 2, "delay": 2}, "item_type": "plan"}
-
-
-# fmt: off
-@pytest.mark.parametrize("pause_deferred", [True, False])
-# fmt: on
-def test_zmq_api_re_pause_1(re_manager, pause_deferred):  # noqa: F811
-    """
-    Test the simple case when deferred pause is requested before the last checkpoint so that
-    the plan could be paused correctly using deferred and immediate options. Verify that
-    ``pause_pending`` flag is correctly set.
-    """
-
-    def _check_status(n_queue, n_hist, m_state, re_state, pause_pend):
-        resp, _ = zmq_single_request("status")
-        assert resp["items_in_queue"] == n_queue
-        assert resp["items_in_history"] == n_hist
-        assert resp["manager_state"] == m_state
-        if isinstance(re_state, list):
-            assert resp["re_state"] in re_state, str(resp["re_state"])
-        else:
-            assert resp["re_state"] == re_state
-        assert resp["pause_pending"] == pause_pend
-
-    params1a = {"item": _plan_2steps, "user": _user, "user_group": _user_group}
-    resp1a, _ = zmq_single_request("queue_item_add", params1a)
-    assert resp1a["success"] is True, f"resp={resp1a}"
-
-    # The queue contains only a single instruction (stop the queue).
-    resp2, _ = zmq_single_request("environment_open")
-    assert resp2["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
-
-    _check_status(1, 0, "idle", "idle", False)
-
-    resp3, _ = zmq_single_request("queue_start")
-    assert resp3["success"] is True
-
-    ttime.sleep(1)
-
-    resp3, _ = zmq_single_request("re_pause", params={"option": ("deferred" if pause_deferred else "immediate")})
-    assert resp3["success"] is True, f"resp={resp3}"
-
-    _check_status(0, 0, "executing_queue", "running", True)
-
-    assert wait_for_condition(time=20, condition=condition_manager_paused)
-
-    _check_status(0, 0, "paused", "paused", False)
-
-    # Execute the remaining plans (if any plans left)
-    resp4, _ = zmq_single_request("re_resume")
-    assert resp4["success"] is True
-
-    assert wait_for_condition(time=20, condition=condition_manager_idle)
-
-    _check_status(0, 1, "idle", "idle", False)
-
-    # Close the environment
-    resp6, _ = zmq_single_request("environment_close")
-    assert resp6["success"] is True, f"resp={resp6}"
-    assert wait_for_condition(time=5, condition=condition_environment_closed)
-
-
-# fmt: off
-@pytest.mark.parametrize("n_plans", [1, 2])
-# fmt: on
-def test_zmq_api_re_pause_2(re_manager, n_plans):  # noqa: F811
-    """
-    Test the case when deferred pause is requested after the plan passes the last checkpoint.
-    The plan is expected to run to completion and the queue is expected to be stopped.
-    ``pause_pending`` status flag is expected to return True while the pause is
-    pending, but switch to False once pause is processed (by pausing the plan or stopping
-    the queue).
-    """
-
-    def _check_status(n_queue, n_hist, m_state, re_state, pause_pend):
-        resp, _ = zmq_single_request("status")
-        assert resp["items_in_queue"] == n_queue
-        assert resp["items_in_history"] == n_hist
-        assert resp["manager_state"] == m_state
-        assert resp["re_state"] == re_state
-        assert resp["pause_pending"] == pause_pend
-
-    for _ in range(n_plans):
-        params1a = {"item": _plan_2steps, "user": _user, "user_group": _user_group}
-        resp1a, _ = zmq_single_request("queue_item_add", params1a)
-        assert resp1a["success"] is True, f"resp={resp1a}"
-
-    # The queue contains only a single instruction (stop the queue).
-    resp2, _ = zmq_single_request("environment_open")
-    assert resp2["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
-
-    _check_status(n_plans, 0, "idle", "idle", False)
-
-    resp3, _ = zmq_single_request("queue_start")
-    assert resp3["success"] is True
-
-    ttime.sleep(3)
-
-    resp3, _ = zmq_single_request("re_pause", params={"option": "deferred"})
-    assert resp3["success"] is True
-
-    _check_status(n_plans - 1, 0, "executing_queue", "running", True)
-
-    assert wait_for_condition(time=20, condition=condition_manager_idle)
-
-    _check_status(n_plans - 1, 1, "idle", "idle", False)
-
-    # Execute the remaining plans (if any plans left)
-    resp4, _ = zmq_single_request("queue_start")
-    assert resp4["success"] is True
-
-    assert wait_for_condition(time=20, condition=condition_manager_idle)
-
-    _check_status(0, n_plans, "idle", "idle", False)
-
-    # Close the environment
-    resp6, _ = zmq_single_request("environment_close")
-    assert resp6["success"] is True, f"resp={resp6}"
-    assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
 # =======================================================================================

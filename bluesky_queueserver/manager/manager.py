@@ -385,6 +385,7 @@ class RunEngineManager(Process):
                     self._worker_state_info = ws
                     if ws["re_state"] == "paused":
                         self._re_pause_pending = False
+
                     if self._manager_state == MState.CLOSING_ENVIRONMENT:
                         if ws["environment_state"] == "closing":
                             self._fut_manager_task_completed.set_result(None)
@@ -397,7 +398,7 @@ class RunEngineManager(Process):
                         if ws["environment_state"] == "closing":
                             self._fut_manager_task_completed.set_result(False)
 
-                    elif self._manager_state == MState.EXECUTING_QUEUE:
+                    elif self._manager_state in (MState.EXECUTING_QUEUE, MState.PAUSED):
                         if ws["re_report_available"]:
                             self._loop.create_task(self._process_plan_report())
 
@@ -2068,9 +2069,12 @@ class RunEngineManager(Process):
             if self._worker_state_info:
                 item_uid_running = self._worker_state_info["running_item_uid"]
                 re_state = self._worker_state_info["re_state"]
+                re_report_available = self._worker_state_info["re_report_available"]
                 re_deferred_pause_requested = self._worker_state_info["re_deferred_pause_requested"]
-                if item_uid_running:
-                    # Rare case when the manager was restarted while the deferred pause was pending.
+                if item_uid_running and (re_report_available or (re_state != "idle")):
+                    # If 're_state' is 'idle', then consider the queue as running only if
+                    #   there is unprocessed report. If report was processed, then assume that
+                    #   the queue is not running.
                     self._re_pause_pending = re_deferred_pause_requested
                     # Plan is running. Check if it is the same plan as in redis.
                     plan_stored = await self._plan_queue.get_running_item_info()

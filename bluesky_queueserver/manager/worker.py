@@ -304,8 +304,9 @@ class RunEngineWorker(Process):
         it is read.
         """
         # TODO: may be report should be cleared only after the reset? Check the logic.
-        msg_out = self._re_report
-        self._re_report = None
+        with self._re_report_lock:
+            msg_out = self._re_report
+            self._re_report = None
         return msg_out
 
     def _request_run_list_handler(self):
@@ -484,8 +485,8 @@ class RunEngineWorker(Process):
         """
         # This function blocks the main thread
         while True:
-            # Polling once per second. This is fast enough for slowly executed plans.
-            ttime.sleep(1)
+            # Polling 10 times per second. This is fast enough for slowly executed plans.
+            ttime.sleep(0.1)
             # Exit the thread if the Event is set (necessary to gracefully close the process)
             if self._exit_event.is_set():
                 break

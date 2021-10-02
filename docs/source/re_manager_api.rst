@@ -229,6 +229,11 @@ Returns       **msg**: *str*
                   indicates if the request to stop the queue after completion of the current plan is
                   pending.
 
+              **pause_pending**: *boolean*
+                  indicates if the request to pause the currently running plan was send to Run Engine
+                  (see **re_pause** method), but the plan is not stopped yet. It may take considerable
+                  time for deferred pause to be processed.
+
               **worker_environment_exists**: *boolean*
                   indicates if RE Worker environment was created and plans could be executed.
 ------------  -----------------------------------------------------------------------------------------
@@ -1127,6 +1132,17 @@ Method        **'re_pause'**
 Description   Request Run Engine to pause currently running plan. The request will fail if RE Worker
               environment does not exist or no plan is currently running. The request only initates
               the sequence of pausing the plan.
+
+              If *deferred* pause is requested past the last checkpoint of the plan, the plan is run
+              to completion and the queue is stopped. The stopped queue can not be resumed using
+              **re_resume** method, instead **queue_start** method should be used to restart the queue.
+              Check **manager_state** status flag to determine if the queue is stopped (*'idle'* state)
+              or Run Engine is paused (*'paused'* state).
+
+              The **pause_pending** status flag is set if pause request is successfully passed to Run
+              Engine. It may take significant time for deferred pause to be processed. The flag
+              is cleared once the pending pause request is processed (the plan is paused or plan
+              is completed and the queue is stopped).
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **option**: *'immediate'* or *'deferred'*
                   pause the plan immediately (roll back to the previous checkpoint) or continue

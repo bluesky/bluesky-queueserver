@@ -33,7 +33,15 @@ Installation Steps
 
 * **Install Queue Server**
 
-  Currently Queue Server can only be installed from source. ::
+  Install from PyPI::
+
+    $ pip install bluesky-queueserver
+
+  Install from conda-forge::
+
+    $ conda install bluesky-queueserver -c conda-forge
+
+  Install from from source (GitHub repository)::
 
     $ cd <directory-with-git-repositories>
     $ git clone https://github.com/bluesky/bluesky-queueserver.git
@@ -42,11 +50,3 @@ Installation Steps
 
   After the installation is completed, users should be able to run ``start-re-manager``, ``qserver``,
   ``qserver-list-plans-devices`` and ``qserver-zmq-keys`` tools from command line.
-
-* **Install httpie (optional)**
-
-  For testing or evaluation of HTTP server API install **httpie**, which provides CLI interface for sending
-  REST API requests. Examples of REST API requests assume that **httpie** is installed. **httpie** is not
-  needed for normal operation of the Queue Server.
-
-  See https://httpie.org/docs#installation for installation instructions.

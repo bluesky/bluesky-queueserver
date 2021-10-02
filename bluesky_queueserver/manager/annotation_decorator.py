@@ -38,7 +38,7 @@ _parameter_annotation_schema = {
             "type": "object",
             "additionalProperties": {
                 "type": "array",
-                "items": [{"type": "string"}],
+                "items": {"type": "string"},
             },
         },
     },
@@ -208,9 +208,16 @@ def parameter_annotation_decorator(annotation):
         nonlocal annotation
         annotation = copy.deepcopy(annotation)
 
-        jsonschema.validate(
-            instance=annotation, schema=_parameter_annotation_schema, types={"array": (list, tuple)}
-        )
+        # Create custom validator which recognizes lists and tuples as jsonschema 'arrays'
+        def is_array(checker, instance):
+            return isinstance(instance, (list, tuple))
+
+        type_checker = jsonschema.Draft3Validator.TYPE_CHECKER.redefine("array", is_array)
+        ValidatorCustom = jsonschema.validators.extend(jsonschema.Draft3Validator, type_checker=type_checker)
+        validator = ValidatorCustom(schema=_parameter_annotation_schema)
+
+        # Validate annotation
+        validator.validate(annotation)
 
         sig = inspect.signature(func)
         parameters = sig.parameters

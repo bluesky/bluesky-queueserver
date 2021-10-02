@@ -391,7 +391,7 @@ class RunEngineManager(Process):
                             self._fut_manager_task_completed.set_result(None)
 
                     elif self._manager_state == MState.CREATING_ENVIRONMENT:
-                        # If RE Worker environment fails to open, then it switches to 'closing' status.
+                        # If RE Worker environment fails to open, then it switches to 'closing' state.
                         #   Closing must be confirmed by Manager before it is closed.
                         if ws["environment_state"] in "ready":
                             self._fut_manager_task_completed.set_result(True)

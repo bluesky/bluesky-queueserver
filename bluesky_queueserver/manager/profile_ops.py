@@ -1998,23 +1998,19 @@ _user_group_permission_schema = {
                 "properties": {
                     "allowed_plans": {
                         "type": "array",
-                        "additionalItems": {"type": "string"},
-                        "items": [{"type": ["string", "null"]}],
+                        "items": {"type": ["string", "null"]},
                     },
                     "forbidden_plans": {
                         "type": "array",
-                        "additionalItems": {"type": "string"},
-                        "items": [{"type": ["string", "null"]}],
+                        "items": {"type": ["string", "null"]},
                     },
                     "allowed_devices": {
                         "type": "array",
-                        "additionalItems": {"type": "string"},
-                        "items": [{"type": ["string", "null"]}],
+                        "items": {"type": ["string", "null"]},
                     },
                     "forbidden_devices": {
                         "type": "array",
-                        "additionalItems": {"type": "string"},
-                        "items": [{"type": ["string", "null"]}],
+                        "items": {"type": ["string", "null"]},
                     },
                 },
             },

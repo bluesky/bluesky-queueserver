@@ -22,7 +22,7 @@ Added
 * A new boolean flag (``pause_pending``) added to dictionary returned by ``status`` API.
   The flag is ``True`` when request to pause a plan (``re_pause`` API) was accepted by the Queue Server,
   but not processed by the Run Engine. The flag is set in case of immediate and deferred pause request.
-  The flag is cleared automatically (set ``False``) when the request is processed and the plan is paused
+  The flag is cleared automatically (set to ``False``) when the request is processed and the plan is paused
   or the queue is stopped (if deferred pause is requested after the last checkpoint of the plan).
 
 

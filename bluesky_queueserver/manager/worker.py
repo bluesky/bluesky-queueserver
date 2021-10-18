@@ -319,6 +319,9 @@ class RunEngineWorker(Process):
         msg_out = {"run_list": self._active_run_list.get_run_list(clear_state=True)}
         return msg_out
 
+    def _request_device_configuration_handler(self, *, device):
+        return self._devices_in_nspace[device].read_configuration()
+
     def _command_close_env_handler(self):
         """
         Close RE Worker environment in orderly way.
@@ -523,6 +526,7 @@ class RunEngineWorker(Process):
         self._comm_to_manager.add_method(self._request_state_handler, "request_state")
         self._comm_to_manager.add_method(self._request_plan_report_handler, "request_plan_report")
         self._comm_to_manager.add_method(self._request_run_list_handler, "request_run_list")
+        self._comm_to_manager.add_method(self._request_device_configuration_handler, "request_device_configuration")
         self._comm_to_manager.add_method(self._command_close_env_handler, "command_close_env")
         self._comm_to_manager.add_method(self._command_confirm_exit_handler, "command_confirm_exit")
         self._comm_to_manager.add_method(self._command_run_plan_handler, "command_run_plan")

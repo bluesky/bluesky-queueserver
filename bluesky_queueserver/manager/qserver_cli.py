@@ -49,6 +49,8 @@ qserver allowed plans          # Request the list of allowed plans
 qserver allowed devices        # Request the list of allowed devices
 qserver permissions reload     # Reload the list of allowed plans and devices and user permissions from disk
 
+qserver device configuration <device>  # request the configuration for a device, environment must be open
+
 qserver queue add plan '<plan-params>'                 # Add plan to the back of the queue
 qserver queue add instruction <instruction>            # Add instruction to the back of the queue
 qserver queue add plan front '<plan-params>'           # Add plan to the front of the queue
@@ -709,6 +711,16 @@ def create_msg(params):
         if params[0] in supported_params:
             method = f"{params[0]}_{command}"
             prms["user_group"] = default_user_group
+        else:
+            raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
+
+    # ----------- permissions ------------
+    elif command == "device":
+        if len(params) != 2:
+            raise CommandParameterError(f"Request '{command}' must include exactly two parameters")
+        if params[0] == "configuration":
+            method = f"{command}_{params[0]}"
+            prms["device"] = params[1]
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
 

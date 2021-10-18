@@ -977,6 +977,29 @@ class RunEngineManager(Process):
             "devices_allowed_uid": self._allowed_devices_uid,
         }
 
+    async def _device_configuration_handler(self, request):
+        """
+        Returns the list of allowed devices.
+        """
+        logger.info("Returning the device configuration ...")
+
+        try:
+            supported_param_names = ["device"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            device_configuration = await self._comm_to_worker.send_msg("request_device_configuration", {"device": request["device"]})
+            success, msg = True, ""
+        except Exception as ex:
+            device_configuration = {}
+            success, msg = False, str(ex)
+
+        return {
+            "success": success,
+            "msg": msg,
+            "device_configuration": device_configuration,
+        }
+
+
     async def _permissions_reload_handler(self, request):
         """
         Reloads the list of allowed plans and devices and user group permission from the default location
@@ -1972,6 +1995,7 @@ class RunEngineManager(Process):
             "queue_get": "_queue_get_handler",
             "plans_allowed": "_plans_allowed_handler",
             "devices_allowed": "_devices_allowed_handler",
+            "device_configuration": "_device_configuration_handler",
             "permissions_reload": "_permissions_reload_handler",
             "history_get": "_history_get_handler",
             "history_clear": "_history_clear_handler",

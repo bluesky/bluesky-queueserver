@@ -521,13 +521,22 @@ def start_manager():
             existing_pd_path = os.path.join(existing_pd_path, default_existing_pd_fln)
     else:
         existing_pd_path = os.path.join(startup_dir, default_existing_pd_fln)
-    if not os.path.isfile(existing_pd_path):
+    # The file may not exist, but the directory MUST exist
+    pd_dir = os.path.dirname(existing_pd_path) or "."
+    if not os.path.isdir(os.path.dirname(existing_pd_path)):
         logger.error(
-            "The list of allowed plans and devices was not found at "
-            "'%s'. Proceed without the list: all plans and devices will be accepted by RE Manager.",
+            "The directory for list of plans and devices ('%s')does not exist. "
+            "Create the directory manually and restart RE Manager.",
+            pd_dir,
+        )
+        return 1
+    if not os.path.isfile(existing_pd_path):
+        logger.warning(
+            "The file with the list of allowed plans and devices ('%s') does not exist. "
+            "The manager will be started with empty list. The list will be populated after "
+            "RE worker environment is opened the first time.",
             existing_pd_path,
         )
-        existing_pd_path = None
 
     default_user_group_pd_fln = "user_group_permissions.yaml"
     if args.user_group_permissions_path:
@@ -541,7 +550,8 @@ def start_manager():
     if not os.path.isfile(user_group_pd_path):
         logger.error(
             "The file with user permissions was not found at "
-            "'%s'. User groups are not defined. USERS WILL NOT BE ABLE TO SUBMIT PLANS.",
+            "'%s'. User groups are not defined. USERS WILL NOT BE ABLE TO SUBMIT PLANS OR "
+            "EXECUTE ANY OTHER OPERATIONS THAT REQUIRE PERMISSIONS.",
             user_group_pd_path,
         )
         user_group_pd_path = None

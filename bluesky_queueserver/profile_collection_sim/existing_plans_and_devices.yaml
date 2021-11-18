@@ -621,14 +621,14 @@ existing_plans:
         value: 1
       name: num
     - annotation:
-        type: typing.Union[float, NoneType]
+        type: typing.Optional[float]
       default: None
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
       name: delay
     - annotation:
-        type: typing.Union[typing.Dict[str, typing.Any], NoneType]
+        type: typing.Optional[typing.Dict[str, typing.Any]]
       default: None
       kind:
         name: POSITIONAL_OR_KEYWORD

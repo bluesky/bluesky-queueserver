@@ -56,6 +56,8 @@ from bluesky_queueserver.manager.profile_ops import (
 # User name and user group name used throughout most of the tests.
 _user, _user_group = "Testing Script", "admin"
 
+python_version = sys.version_info  # Can be compare to tuples (such as 'python_version >= (3, 9)')
+
 
 def test_get_default_startup_dir():
     """
@@ -1205,7 +1207,9 @@ _pf2g_processed = {
             "name": "val5",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "default": "None",
-            "annotation": {"type": "typing.Union[float, NoneType]"},
+            "annotation": {
+                "type": "typing.Optional[float]" if python_version >= (3, 9) else "typing.Union[float, NoneType]"
+            },
         },
     ],
     "properties": {"is_generator": True},
@@ -2610,6 +2614,15 @@ def test_verify_default_profile_collection():
     #   If there is a mismatch, the printed difference is too large to be useful.
     assert len(plans) == len(existing_plans)
     for key in plans.keys():
+        if python_version < (3, 9) and key == "marked_up_count":
+            # The test will fail for Python 3.8 and earlier because of difference in representation
+            #   of 'typing.Union[float, NoneType]' and 'typing.Optional[float]'. Python 3.8 and
+            #   earlier converts 'typing.Optional[float]' to 'typing.Union[float, NoneType]' and
+            #   Python 3.9 is using 'typing.Optional[float]'. The condition may be removed
+            #   once there is no need to support Python 3.8 and earlier.
+            # NOTE: this limitation only affects this test, not functionality.
+            # TODO: remove this condition once Python 3.8 is not supported.
+            continue
         assert plans[key] == existing_plans[key]
 
     assert devices == existing_devices

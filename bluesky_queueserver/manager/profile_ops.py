@@ -1951,7 +1951,7 @@ def gen_list_of_plans_and_devices_cli():
 def load_existing_plans_and_devices(path_to_file=None):
     """
     Load the lists of allowed plans and devices from YAML file. Returns empty lists
-    if `path_to_file` is None or "".
+    if `path_to_file` is None or "" or the file does not exist.
 
     Parameters
     ----------
@@ -1962,18 +1962,9 @@ def load_existing_plans_and_devices(path_to_file=None):
     -------
     (dict, dict)
         List of allowed plans and list of allowed devices.
-
-    Raises
-    ------
-    IOError in case the file does not exist or no startup files were found.
     """
-    if not path_to_file:
+    if not path_to_file or not os.path.isfile(path_to_file):
         return {}, {}
-
-    if not os.path.isfile(path_to_file):
-        raise IOError(
-            f"Failed to load the list of allowed plans and devices: file '{path_to_file}' does not exist."
-        )
 
     with open(path_to_file, "r") as stream:
         existing_plans_and_devices = yaml.load(stream, Loader=yaml.FullLoader)
@@ -2119,7 +2110,8 @@ def load_allowed_plans_and_devices(path_existing_plans_and_devices=None, path_us
     Generate dictionaries of allowed plans and devices for each user group. If there are no user
     groups defined (path is None), then output dictionaries will have one user group 'root'
     with all existing plans and devices allowed. If the plans and dictionaries do not exist
-    (path_existing_plans_and_devices is None), then empty dictionaries are returned.
+    (path_existing_plans_and_devices is None or points to non-existing file), then empty
+    dictionaries are returned.
 
     Parameters
     ----------

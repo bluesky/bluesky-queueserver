@@ -1963,21 +1963,24 @@ def load_existing_plans_and_devices(path_to_file=None):
     (dict, dict)
         List of allowed plans and list of allowed devices.
     """
-    if not path_to_file or not os.path.isfile(path_to_file):
+    msg = "List of plans and devices is not loaded."
+    if not path_to_file:
+        logger.warning("%s File path is not specified.", msg)
+        return {}, {}
+
+    if not os.path.isfile(path_to_file):
+        logger.warning("%s File '%s' does not exist.", msg, path_to_file)
         return {}, {}
 
     with open(path_to_file, "r") as stream:
         try:
             existing_plans_and_devices = yaml.load(stream, Loader=yaml.FullLoader)
         except Exception as ex:
-            logger.error(
-                "Failed to load the list of plans and devices from file '%s' due to invalid YAML: %s",
-                path_to_file,
-                str(ex),
-            )
+            logger.error("%s File '%s' has invalid YAML: %s", msg, path_to_file, str(ex))
             existing_plans_and_devices = {}
 
     if not isinstance(existing_plans_and_devices, dict):
+        logger.warning("%s The file '%s' has invalid format or empty.", msg, path_to_file)
         return {}, {}
 
     existing_plans = existing_plans_and_devices.get("existing_plans", {})

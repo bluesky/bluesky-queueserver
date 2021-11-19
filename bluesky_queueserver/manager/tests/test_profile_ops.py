@@ -10,6 +10,7 @@ import sys
 import enum
 import inspect
 from collections.abc import Callable
+import shutil
 
 try:
     from bluesky import protocols
@@ -2566,7 +2567,7 @@ def test_gen_list_of_plans_and_devices_cli(tmp_path, monkeypatch, test, exit_cod
         assert not os.path.isfile(os.path.join(pc_path, fln_yaml))
 
 
-def test_load_existing_plans_and_devices():
+def test_load_existing_plans_and_devices_1():
     """
     Loads the list of allowed plans and devices from simulated profile collection.
     """
@@ -2583,6 +2584,36 @@ def test_load_existing_plans_and_devices():
     existing_plans, existing_devices = load_existing_plans_and_devices(None)
     assert existing_plans == {}
     assert existing_devices == {}
+
+
+# fmt: off
+@pytest.mark.parametrize("option", ["normal", "no_file", "empty_file", "corrupt_file"])
+# fmt: on
+def test_load_existing_plans_and_devices_2(tmp_path, option):
+
+    path_to_file = os.path.join(tmp_path, "some_dir")
+    os.makedirs(path_to_file, exist_ok=True)
+    path_to_file = os.path.join(path_to_file, "p_and_d.yaml")
+
+    if option == "normal":
+        pc_path = get_default_startup_dir()
+        original_file_path = os.path.join(pc_path, "existing_plans_and_devices.yaml")
+        shutil.copy(original_file_path, path_to_file)
+    elif option == "empty_file":
+        with open(path_to_file, "w") as f:
+            pass
+    elif option == "corrupt_file":
+        with open(path_to_file, "w") as f:
+            f.writelines(["This string is not expected in YAML file", "Reading the file is expected to fail"])
+
+    existing_plans, existing_devices = load_existing_plans_and_devices(path_to_file)
+
+    if option == "normal":
+        assert existing_plans != {}
+        assert existing_devices != {}
+    else:
+        assert existing_plans == {}
+        assert existing_devices == {}
 
 
 def test_verify_default_profile_collection():

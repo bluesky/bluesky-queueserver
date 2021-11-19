@@ -1951,7 +1951,7 @@ def gen_list_of_plans_and_devices_cli():
 def load_existing_plans_and_devices(path_to_file=None):
     """
     Load the lists of allowed plans and devices from YAML file. Returns empty lists
-    if `path_to_file` is None or "" or the file does not exist.
+    if `path_to_file` is None or "" or the file does not exist or corrupt.
 
     Parameters
     ----------
@@ -1969,8 +1969,11 @@ def load_existing_plans_and_devices(path_to_file=None):
     with open(path_to_file, "r") as stream:
         existing_plans_and_devices = yaml.load(stream, Loader=yaml.FullLoader)
 
-    existing_plans = existing_plans_and_devices["existing_plans"]
-    existing_devices = existing_plans_and_devices["existing_devices"]
+    if not isinstance(existing_plans_and_devices, dict):
+        return {}, {}
+
+    existing_plans = existing_plans_and_devices.get("existing_plans", {})
+    existing_devices = existing_plans_and_devices.get("existing_devices", {})
 
     return existing_plans, existing_devices
 

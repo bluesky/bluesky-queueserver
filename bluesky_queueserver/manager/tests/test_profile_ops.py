@@ -2587,7 +2587,7 @@ def test_load_existing_plans_and_devices_1():
 
 
 # fmt: off
-@pytest.mark.parametrize("option", ["normal", "no_file", "empty_file", "corrupt_file"])
+@pytest.mark.parametrize("option", ["normal", "no_file", "empty_file", "corrupt_file1", "corrupt_file2"])
 # fmt: on
 def test_load_existing_plans_and_devices_2(tmp_path, option):
 
@@ -2602,9 +2602,18 @@ def test_load_existing_plans_and_devices_2(tmp_path, option):
     elif option == "empty_file":
         with open(path_to_file, "w") as f:
             pass
-    elif option == "corrupt_file":
+    elif option == "corrupt_file1":
+        # Not YAML
         with open(path_to_file, "w") as f:
             f.writelines(["This string is not expected in YAML file", "Reading the file is expected to fail"])
+    elif option == "corrupt_file2":
+        # Invalid YAML
+        with open(path_to_file, "w") as f:
+            f.writelines(["- Item 1\n- Item 2\nItem3"])
+    elif option == "no_file":
+        pass
+    else:
+        assert False, f"Unknown testing option '{option}'"
 
     existing_plans, existing_devices = load_existing_plans_and_devices(path_to_file)
 

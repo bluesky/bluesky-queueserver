@@ -1967,7 +1967,15 @@ def load_existing_plans_and_devices(path_to_file=None):
         return {}, {}
 
     with open(path_to_file, "r") as stream:
-        existing_plans_and_devices = yaml.load(stream, Loader=yaml.FullLoader)
+        try:
+            existing_plans_and_devices = yaml.load(stream, Loader=yaml.FullLoader)
+        except Exception as ex:
+            logger.error(
+                "Failed to load the list of plans and devices from file '%s' due to invalid YAML: %s",
+                path_to_file,
+                str(ex),
+            )
+            existing_plans_and_devices = {}
 
     if not isinstance(existing_plans_and_devices, dict):
         return {}, {}

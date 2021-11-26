@@ -2214,7 +2214,9 @@ def test_prepare_plan_1(plan, exp_args, exp_kwargs, success, err_msg):
 
     path_allowed_plans = os.path.join(pc_path, "existing_plans_and_devices.yaml")
     path_permissions = os.path.join(pc_path, "user_group_permissions.yaml")
-    allowed_plans, allowed_devices = load_allowed_plans_and_devices(path_allowed_plans, path_permissions)
+    allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+        path_existing_plans_and_devices=path_allowed_plans, path_user_group_permissions=path_permissions
+    )
 
     if success:
         plan_parsed = prepare_plan(

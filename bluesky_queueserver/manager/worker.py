@@ -573,7 +573,7 @@ class RunEngineWorker(Process):
                 existing_devices,
                 plans_in_nspace,
                 devices_in_nspace,
-            ) = existing_plans_and_devices_from_nspace(self._re_namespace)
+            ) = existing_plans_and_devices_from_nspace(nspace=self._re_namespace)
             # Descriptions of existing plans and devices
             self._existing_plans = existing_plans
             self._existing_devices = existing_devices
@@ -590,27 +590,31 @@ class RunEngineWorker(Process):
             )
             success = False
 
-        # Load lists of allowed plans and devices
-        logger.info("Loading the lists of allowed plans and devices ...")
-        path_pd = self._config_dict["existing_plans_and_devices_path"]
-        path_ug = self._config_dict["user_group_permissions_path"]
-        try:
-            update_existing_plans_and_devices(
-                path_to_file=path_pd, existing_plans=self._existing_plans, existing_devices=self._existing_devices
-            )
+        if success:
+            logger.info("Loading the lists of allowed plans and devices ...")
 
-            self._allowed_plans, self._allowed_devices = load_allowed_plans_and_devices(
-                path_user_group_permissions=path_ug,
-                existing_plans=self._existing_plans,
-                existing_devices=self._existing_devices,
-            )
-        except Exception as ex:
-            logger.exception(
-                "Error occurred while generating lists of allowed plans and devices. ('%s', '%s'): %s",
-                path_pd,
-                path_ug,
-                str(ex),
-            )
+            path_pd = self._config_dict["existing_plans_and_devices_path"]
+            path_ug = self._config_dict["user_group_permissions_path"]
+
+            try:
+                update_existing_plans_and_devices(
+                    path_to_file=path_pd,
+                    existing_plans=self._existing_plans,
+                    existing_devices=self._existing_devices,
+                )
+
+                self._allowed_plans, self._allowed_devices = load_allowed_plans_and_devices(
+                    path_user_group_permissions=path_ug,
+                    existing_plans=self._existing_plans,
+                    existing_devices=self._existing_devices,
+                )
+            except Exception as ex:
+                logger.exception(
+                    "Error occurred while generating lists of allowed plans and devices. ('%s', '%s'): %s",
+                    path_pd,
+                    path_ug,
+                    str(ex),
+                )
 
         if success:
             logger.info("Instantiating and configuring Run Engine ...")

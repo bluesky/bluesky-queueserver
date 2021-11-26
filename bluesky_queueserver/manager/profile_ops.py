@@ -2124,13 +2124,14 @@ def update_existing_plans_and_devices(
         default_startup_dir = normalize_path(get_default_startup_dir())
         file_path = normalize_path(path_to_file)
         try:
-            path_is_default = os.path.commonpath(default_startup_dir, file_path) == default_startup_dir
+            path_is_default = os.path.commonpath([default_startup_dir, file_path]) == default_startup_dir
         except Exception:
             path_is_default = False
 
         if path_is_default:
             logger.warning(
-                "The file %s was not updated, since it is located in built-in startup directory", path_to_file
+                "The file '%s' is located in the directory, which is part of the package and can not be updated",
+                path_to_file,
             )
         else:
             # Saving the updated plans and devices is not critical for real-time operation of the queue server.

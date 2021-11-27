@@ -3087,6 +3087,99 @@ def test_load_allowed_plans_and_devices_2(tmp_path, permissions_str, items_are_r
 
 
 # fmt: off
+@pytest.mark.parametrize("option, empty_plan_dicts, empty_device_dicts", [
+    ("full_lists", False, False),
+    ("path_none", False, False),
+    ("path_invalid", False, False),
+    ("empty_device_list", False, True),
+    ("empty_plan_list", True, False),
+    ("empty_lists", True, True),
+])
+# fmt: on
+def test_load_allowed_plans_and_devices_3(tmp_path, option, empty_plan_dicts, empty_device_dicts):
+    """
+    Basic test for ``load_allowed_plans_and_devices``.
+    """
+
+    fln_existing_items, fln_user_groups = "existing_plans_and_devices.yaml", "user_group_permissions.yaml"
+
+    # Load the list of allowed plans and devices from standard location
+    pc_path = get_default_startup_dir()
+
+    fln_existing_items = None if (fln_existing_items is None) else os.path.join(pc_path, fln_existing_items)
+    fln_user_groups = None if (fln_user_groups is None) else os.path.join(pc_path, fln_user_groups)
+
+    allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+        path_existing_plans_and_devices=fln_existing_items, path_user_group_permissions=fln_user_groups
+    )
+
+    # Load the list of existing plans and devices from standard location
+    existing_plans, existing_devices = load_existing_plans_and_devices(fln_existing_items)
+
+    # The following tests make sure that 'load_allowed_plans_and_devices' works with all possible
+    #   values of parameter 'path_existing_plans_and_devices', which is ignored if both
+    #   'existing_plans' and 'existing_devices' are not None.
+    if option == "full_lists":
+        fln_existing_items2 = fln_existing_items
+        existing_plans2, existing_devices2 = existing_plans, existing_devices
+    elif option == "path_none":
+        fln_existing_items2 = None
+        existing_plans2, existing_devices2 = existing_plans, existing_devices
+    elif option == "path_invalid":
+        fln_existing_items2 = tmp_path
+        existing_plans2, existing_devices2 = existing_plans, existing_devices
+    # The following tests verify that if 'path_existing_plans_and_devices',
+    #   'existing_plans' and 'existing_devices' are specified, the lists of
+    #   existing plans and devices that are passed as parameter are used
+    elif option == "empty_device_list":
+        fln_existing_items2 = fln_existing_items
+        existing_plans2, existing_devices2 = existing_plans, {}
+    elif option == "empty_plan_list":
+        fln_existing_items2 = fln_existing_items
+        existing_plans2, existing_devices2 = {}, existing_devices
+    elif option == "empty_lists":
+        fln_existing_items2 = fln_existing_items
+        existing_plans2, existing_devices2 = {}, {}
+    else:
+        assert False, f"Unknown option '{option}'"
+
+    allowed_plans2, allowed_devices2 = load_allowed_plans_and_devices(
+        path_existing_plans_and_devices=fln_existing_items2,
+        path_user_group_permissions=fln_user_groups,
+        existing_plans=existing_plans2,
+        existing_devices=existing_devices2,
+    )
+
+    def check_dict(d, is_empty):
+        if is_empty:
+            assert d == {}
+        else:
+            assert isinstance(d, dict)
+            assert d
+
+    def check_all_user_dicts(allowed, is_empty):
+        assert "admin" in allowed
+        check_dict(allowed["admin"], is_empty)
+        assert "test_user" in allowed
+        check_dict(allowed["test_user"], is_empty)
+
+    if option in ("full_lists", "path_none", "path_invalid"):
+        assert allowed_plans2 == allowed_plans
+        assert allowed_devices2 == allowed_devices
+    elif option == "empty_device_list":
+        check_all_user_dicts(allowed_plans2, is_empty=False)
+        check_all_user_dicts(allowed_devices2, is_empty=True)
+    elif option == "empty_plan_list":
+        check_all_user_dicts(allowed_plans2, is_empty=True)
+        check_all_user_dicts(allowed_devices2, is_empty=False)
+    elif option == "empty_lists":
+        check_all_user_dicts(allowed_plans2, is_empty=True)
+        check_all_user_dicts(allowed_devices2, is_empty=True)
+    else:
+        assert False, f"Unknown option '{option}'"
+
+
+# fmt: off
 @pytest.mark.parametrize("params, param_list, success, msg", [
     # Range with both boundaries
     ({"a": 10}, [{"name": "a", "min": "5", "max": "15"}], True, ""),

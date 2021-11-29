@@ -568,12 +568,9 @@ class RunEngineWorker(Process):
                     "Run Engine is not created in the startup code and 'keep_re' option is activated."
                 )
 
-            (
-                existing_plans,
-                existing_devices,
-                plans_in_nspace,
-                devices_in_nspace,
-            ) = existing_plans_and_devices_from_nspace(nspace=self._re_namespace)
+            epd = existing_plans_and_devices_from_nspace(nspace=self._re_namespace)
+            existing_plans, existing_devices, plans_in_nspace, devices_in_nspace = epd
+
             # Descriptions of existing plans and devices
             self._existing_plans = existing_plans
             self._existing_devices = existing_devices

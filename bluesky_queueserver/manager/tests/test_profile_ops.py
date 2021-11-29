@@ -2665,7 +2665,7 @@ def test_update_existing_plans_and_devices_1(tmp_path, load_ref_from_file):
         t1 = os.path.getctime(fp_existing_plans_and_devices)
         ttime.sleep(0.005)
 
-        update_existing_plans_and_devices(
+        changes_detected = update_existing_plans_and_devices(
             path_to_file=fp_existing_plans_and_devices,
             existing_plans=existing_plans,
             existing_devices=existing_devices,
@@ -2679,7 +2679,7 @@ def test_update_existing_plans_and_devices_1(tmp_path, load_ref_from_file):
         t1 = os.path.getctime(fp_existing_plans_and_devices)
         ttime.sleep(0.005)
 
-        update_existing_plans_and_devices(
+        changes_detected = update_existing_plans_and_devices(
             path_to_file=fp_existing_plans_and_devices,
             existing_plans=existing_plans,
             existing_devices=existing_devices,
@@ -2690,6 +2690,7 @@ def test_update_existing_plans_and_devices_1(tmp_path, load_ref_from_file):
     t2 = os.path.getctime(fp_existing_plans_and_devices)
     assert t1 == t2, "The file was modified"
 
+    assert changes_detected is False
 
 # fmt: off
 @pytest.mark.parametrize("load_ref_from_file", [True, False])
@@ -2715,13 +2716,13 @@ def test_update_existing_plans_and_devices_2(tmp_path, load_ref_from_file, modif
         assert False, f"Unknown option '{modified}'"
 
     if load_ref_from_file:
-        update_existing_plans_and_devices(
+        changes_detected = update_existing_plans_and_devices(
             path_to_file=fp_existing_plans_and_devices,
             existing_plans=existing_plans_modified,
             existing_devices=existing_devices_modified,
         )
     else:
-        update_existing_plans_and_devices(
+        changes_detected = update_existing_plans_and_devices(
             path_to_file=fp_existing_plans_and_devices,
             existing_plans=existing_plans_modified,
             existing_devices=existing_devices_modified,
@@ -2736,6 +2737,7 @@ def test_update_existing_plans_and_devices_2(tmp_path, load_ref_from_file, modif
     assert existing_plans2 == existing_plans_modified
     assert existing_devices2 == existing_devices_modified
 
+    assert changes_detected is True
 
 # fmt: off
 @pytest.mark.parametrize("file_state", ["removed", "empty", "corrupt"])
@@ -2761,7 +2763,7 @@ def test_update_existing_plans_and_devices_3(tmp_path, file_state):
     else:
         assert False, f"Unknown option '{file_state}'"
 
-    update_existing_plans_and_devices(
+    changes_detected = update_existing_plans_and_devices(
         path_to_file=fp_existing_plans_and_devices,
         existing_plans=existing_plans,
         existing_devices=existing_devices,
@@ -2770,6 +2772,8 @@ def test_update_existing_plans_and_devices_3(tmp_path, file_state):
     existing_plans2, existing_devices2 = load_existing_plans_and_devices(fp_existing_plans_and_devices)
     assert existing_plans2 == existing_plans
     assert existing_devices2 == existing_devices
+
+    assert changes_detected is True
 
 
 # fmt: off
@@ -2792,13 +2796,13 @@ def test_update_existing_plans_and_devices_4(load_ref_from_file):
     del existing_devices_modified["det"]
 
     if load_ref_from_file:
-        update_existing_plans_and_devices(
+        changes_detected = update_existing_plans_and_devices(
             path_to_file=fp_existing_plans_and_devices,
             existing_plans=existing_plans_modified,
             existing_devices=existing_devices_modified,
         )
     else:
-        update_existing_plans_and_devices(
+        changes_detected = update_existing_plans_and_devices(
             path_to_file=fp_existing_plans_and_devices,
             existing_plans=existing_plans_modified,
             existing_devices=existing_devices_modified,
@@ -2812,6 +2816,8 @@ def test_update_existing_plans_and_devices_4(load_ref_from_file):
     existing_plans2, existing_devices2 = load_existing_plans_and_devices(fp_existing_plans_and_devices)
     assert existing_plans2 == existing_plans
     assert existing_devices2 == existing_devices
+
+    assert changes_detected is True
 
 
 def test_verify_default_profile_collection():

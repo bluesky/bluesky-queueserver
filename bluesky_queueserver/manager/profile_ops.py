@@ -1779,18 +1779,18 @@ def existing_plans_and_devices_from_nspace(*, nspace):
         Dictionary of descriptions of existing plans
     existing_devices : dict
         Dictionary of descriptions of existing devices
-    nspace_plans : dict
-        Dictionary of plans from namespace
-    nspace_devices : dict
-        Dictionary of devices from namespace
+    plans_in_nspace : dict
+        Dictionary of plans in namespace
+    devices_in_nspace : dict
+        Dictionary of devices in namespace
     """
-    nspace_plans = plans_from_nspace(nspace)
-    nspace_devices = devices_from_nspace(nspace)
+    plans_in_nspace = plans_from_nspace(nspace)
+    devices_in_nspace = devices_from_nspace(nspace)
 
-    existing_devices = _prepare_devices(nspace_devices)
-    existing_plans = _prepare_plans(nspace_plans, existing_devices=existing_devices)
+    existing_devices = _prepare_devices(devices_in_nspace)
+    existing_plans = _prepare_plans(plans_in_nspace, existing_devices=existing_devices)
 
-    return existing_plans, existing_devices, nspace_plans, nspace_devices
+    return existing_plans, existing_devices, plans_in_nspace, devices_in_nspace
 
 
 def save_existing_plans_and_devices(
@@ -2093,6 +2093,12 @@ def update_existing_plans_and_devices(
     always_save : boolean
         If ``False`` then save lists of plans and devices only if it is different
         from reference lists. Always save the lists to disk if ``True``.
+
+    Returns
+    -------
+    boolean
+        ``True`` if the lists of existing plans and devices is different from the reference
+        lists or if ``always_save`` is ``True``.
     """
     if not always_save:
         if (existing_plans_ref is None) or (existing_devices_ref is None):
@@ -2150,6 +2156,7 @@ def update_existing_plans_and_devices(
                     "Failed to save lists of existing plans and device to file '%s': %s", path_to_file, str(ex)
                 )
 
+    return changes_exist
 
 _user_group_permission_schema = {
     "type": "object",

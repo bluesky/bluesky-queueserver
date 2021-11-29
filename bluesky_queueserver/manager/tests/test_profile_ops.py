@@ -11,6 +11,8 @@ import enum
 import inspect
 from collections.abc import Callable
 import shutil
+import time as ttime
+
 
 try:
     from bluesky import protocols
@@ -37,6 +39,7 @@ from bluesky_queueserver.manager.profile_ops import (
     prepare_plan,
     gen_list_of_plans_and_devices,
     load_existing_plans_and_devices,
+    update_existing_plans_and_devices,
     load_user_group_permissions,
     _process_plan,
     validate_plan,
@@ -2625,6 +2628,190 @@ def test_load_existing_plans_and_devices_2(tmp_path, option):
     else:
         assert existing_plans == {}
         assert existing_devices == {}
+
+
+def _copy_built_in_yaml_files(tmp_path):
+    """
+    Creates a copy of built-in startup files in temporary directory. Returns full paths
+    to the copies of ``existing_plans_and_devices.yaml`` and ``user_group_permissions.yaml`` files.
+    """
+    pc_path1 = get_default_startup_dir()
+    file_path_existing_plans_and_devices1 = os.path.join(pc_path1, "existing_plans_and_devices.yaml")
+    file_path_user_group_permissions1 = os.path.join(pc_path1, "user_group_permissions.yaml")
+
+    pc_path2 = os.path.join(tmp_path, "startup")
+    file_path_existing_plans_and_devices2 = os.path.join(pc_path2, "existing_plans_and_devices.yaml")
+    file_path_user_group_permissions2 = os.path.join(pc_path2, "user_group_permissions.yaml")
+
+    os.makedirs(pc_path2, exist_ok=True)
+    shutil.copy(file_path_existing_plans_and_devices1, file_path_existing_plans_and_devices2)
+    shutil.copy(file_path_user_group_permissions1, file_path_user_group_permissions2)
+
+    return file_path_existing_plans_and_devices2, file_path_user_group_permissions2
+
+
+# fmt: off
+@pytest.mark.parametrize("load_ref_from_file", [True, False])
+# fmt: on
+def test_update_existing_plans_and_devices_1(tmp_path, load_ref_from_file):
+    """
+    Test that the file on disk IS NOT modified if the lists of existing plans and devices are not changed.
+    """
+    fp_existing_plans_and_devices, _ = _copy_built_in_yaml_files(tmp_path)
+
+    existing_plans, existing_devices = load_existing_plans_and_devices(fp_existing_plans_and_devices)
+
+    if load_ref_from_file:
+        t1 = os.path.getctime(fp_existing_plans_and_devices)
+        ttime.sleep(0.005)
+
+        update_existing_plans_and_devices(
+            path_to_file=fp_existing_plans_and_devices,
+            existing_plans=existing_plans,
+            existing_devices=existing_devices,
+        )
+    else:
+        # Remove the contents of the file. The file should not be updated, since we are using
+        # references passed as parameters
+        with open(fp_existing_plans_and_devices, "w"):
+            pass
+
+        t1 = os.path.getctime(fp_existing_plans_and_devices)
+        ttime.sleep(0.005)
+
+        update_existing_plans_and_devices(
+            path_to_file=fp_existing_plans_and_devices,
+            existing_plans=existing_plans,
+            existing_devices=existing_devices,
+            existing_devices_ref=copy.deepcopy(existing_devices),
+            existing_plans_ref=copy.deepcopy(existing_plans),
+        )
+
+    t2 = os.path.getctime(fp_existing_plans_and_devices)
+    assert t1 == t2, "The file was modified"
+
+
+# fmt: off
+@pytest.mark.parametrize("load_ref_from_file", [True, False])
+@pytest.mark.parametrize("modified", ["plans", "devices"])
+# fmt: on
+def test_update_existing_plans_and_devices_2(tmp_path, load_ref_from_file, modified):
+    """
+    Test that the file on disk IS modified if the lists of existing plans and devices are not changed.
+    """
+    fp_existing_plans_and_devices, _ = _copy_built_in_yaml_files(tmp_path)
+    t1 = os.path.getctime(fp_existing_plans_and_devices)
+    ttime.sleep(0.005)
+
+    existing_plans, existing_devices = load_existing_plans_and_devices(fp_existing_plans_and_devices)
+    existing_plans_modified = copy.deepcopy(existing_plans)
+    existing_devices_modified = copy.deepcopy(existing_devices)
+
+    if modified == "plans":
+        del existing_plans_modified["count"]
+    elif modified == "devices":
+        del existing_devices_modified["det"]
+    else:
+        assert False, f"Unknown option '{modified}'"
+
+    if load_ref_from_file:
+        update_existing_plans_and_devices(
+            path_to_file=fp_existing_plans_and_devices,
+            existing_plans=existing_plans_modified,
+            existing_devices=existing_devices_modified,
+        )
+    else:
+        update_existing_plans_and_devices(
+            path_to_file=fp_existing_plans_and_devices,
+            existing_plans=existing_plans_modified,
+            existing_devices=existing_devices_modified,
+            existing_devices_ref=copy.deepcopy(existing_devices),
+            existing_plans_ref=copy.deepcopy(existing_plans),
+        )
+
+    t2 = os.path.getctime(fp_existing_plans_and_devices)
+    assert t1 != t2, "The file was not modified"
+
+    existing_plans2, existing_devices2 = load_existing_plans_and_devices(fp_existing_plans_and_devices)
+    assert existing_plans2 == existing_plans_modified
+    assert existing_devices2 == existing_devices_modified
+
+
+# fmt: off
+@pytest.mark.parametrize("file_state", ["removed", "empty", "corrupt"])
+# fmt: on
+def test_update_existing_plans_and_devices_3(tmp_path, file_state):
+    """
+    Test that the file is correctly updated if it does not exist or empty.
+    """
+    fp_existing_plans_and_devices, _ = _copy_built_in_yaml_files(tmp_path)
+
+    existing_plans, existing_devices = load_existing_plans_and_devices(fp_existing_plans_and_devices)
+    if file_state == "removed":
+        os.remove(fp_existing_plans_and_devices)
+        assert not os.path.isfile(fp_existing_plans_and_devices)
+    elif file_state == "empty":
+        with open(fp_existing_plans_and_devices, "w"):
+            pass
+        assert os.path.getsize(fp_existing_plans_and_devices) == 0
+    elif file_state == "corrupt":
+        # Invalid YAML
+        with open(fp_existing_plans_and_devices, "w") as f:
+            f.writelines(["- Item 1\n- Item 2\nItem3"])
+    else:
+        assert False, f"Unknown option '{file_state}'"
+
+    update_existing_plans_and_devices(
+        path_to_file=fp_existing_plans_and_devices,
+        existing_plans=existing_plans,
+        existing_devices=existing_devices,
+    )
+
+    existing_plans2, existing_devices2 = load_existing_plans_and_devices(fp_existing_plans_and_devices)
+    assert existing_plans2 == existing_plans
+    assert existing_devices2 == existing_devices
+
+
+# fmt: off
+@pytest.mark.parametrize("load_ref_from_file", [True, False])
+# fmt: on
+def test_update_existing_plans_and_devices_4(load_ref_from_file):
+    """
+    Test that the files in the built-in profile collection directory (which is part of the repository and
+    the distributed package) are never modified.
+    """
+    pc_path = get_default_startup_dir()
+    fp_existing_plans_and_devices = os.path.join(pc_path, "existing_plans_and_devices.yaml")
+    t1 = os.path.getctime(fp_existing_plans_and_devices)
+    ttime.sleep(0.005)
+
+    existing_plans, existing_devices = load_existing_plans_and_devices(fp_existing_plans_and_devices)
+    existing_plans_modified = copy.deepcopy(existing_plans)
+    existing_devices_modified = copy.deepcopy(existing_devices)
+    del existing_plans_modified["count"]
+    del existing_devices_modified["det"]
+
+    if load_ref_from_file:
+        update_existing_plans_and_devices(
+            path_to_file=fp_existing_plans_and_devices,
+            existing_plans=existing_plans_modified,
+            existing_devices=existing_devices_modified,
+        )
+    else:
+        update_existing_plans_and_devices(
+            path_to_file=fp_existing_plans_and_devices,
+            existing_plans=existing_plans_modified,
+            existing_devices=existing_devices_modified,
+            existing_devices_ref=copy.deepcopy(existing_devices),
+            existing_plans_ref=copy.deepcopy(existing_plans),
+        )
+
+    t2 = os.path.getctime(fp_existing_plans_and_devices)
+    assert t1 == t2, "The file was modified"
+
+    existing_plans2, existing_devices2 = load_existing_plans_and_devices(fp_existing_plans_and_devices)
+    assert existing_plans2 == existing_plans
+    assert existing_devices2 == existing_devices
 
 
 def test_verify_default_profile_collection():

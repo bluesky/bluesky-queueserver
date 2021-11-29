@@ -2097,9 +2097,9 @@ def update_existing_plans_and_devices(
     if not always_save:
         if (existing_plans_ref is None) or (existing_devices_ref is None):
             ep, ed = load_existing_plans_and_devices(path_to_file)
-        if existing_plans_ref is None:
+        if existing_plans_ref is not None:
             ep = existing_plans_ref
-        if existing_devices_ref is None:
+        if existing_devices_ref is not None:
             ed = existing_devices_ref
 
         try:

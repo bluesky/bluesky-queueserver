@@ -8,7 +8,7 @@ import enum
 import uuid
 
 from .comms import PipeJsonRpcSendAsync, CommTimeoutError, validate_zmq_key
-from .profile_ops import load_allowed_plans_and_devices, validate_plan
+from .profile_ops import load_allowed_plans_and_devices, load_existing_plans_and_devices, validate_plan
 from .plan_queue_ops import PlanQueueOperations
 from .output_streaming import setup_console_output_redirection
 
@@ -131,6 +131,7 @@ class RunEngineManager(Process):
         # Note: 'self._config' is a private attribute of 'multiprocessing.Process'. Overriding
         #   this variable may lead to unpredictable and hard to debug issues.
         self._config_dict = config or {}
+        self._existing_plans, self._existing_devices = {}, {}
         self._allowed_plans, self._allowed_devices = {}, {}
         self._allowed_plans_uid = _generate_uid()
         self._allowed_devices_uid = _generate_uid()
@@ -657,8 +658,11 @@ class RunEngineManager(Process):
         try:
             path_pd = self._config_dict["existing_plans_and_devices_path"]
             path_ug = self._config_dict["user_group_permissions_path"]
+            self._existing_plans, self._existing_devices = load_existing_plans_and_devices(path_pd)
             self._allowed_plans, self._allowed_devices = load_allowed_plans_and_devices(
-                path_existing_plans_and_devices=path_pd, path_user_group_permissions=path_ug
+                path_user_group_permissions=path_ug,
+                existing_plans=self._existing_plans,
+                existing_devices=self._existing_devices,
             )
             self._allowed_plans_uid = _generate_uid()
             self._allowed_devices_uid = _generate_uid()

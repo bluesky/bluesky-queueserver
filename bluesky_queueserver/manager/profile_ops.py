@@ -2158,6 +2158,7 @@ def update_existing_plans_and_devices(
 
     return changes_exist
 
+
 _user_group_permission_schema = {
     "type": "object",
     "additionalProperties": False,

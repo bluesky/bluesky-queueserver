@@ -2692,6 +2692,7 @@ def test_update_existing_plans_and_devices_1(tmp_path, load_ref_from_file):
 
     assert changes_detected is False
 
+
 # fmt: off
 @pytest.mark.parametrize("load_ref_from_file", [True, False])
 @pytest.mark.parametrize("modified", ["plans", "devices"])
@@ -2738,6 +2739,7 @@ def test_update_existing_plans_and_devices_2(tmp_path, load_ref_from_file, modif
     assert existing_devices2 == existing_devices_modified
 
     assert changes_detected is True
+
 
 # fmt: off
 @pytest.mark.parametrize("file_state", ["removed", "empty", "corrupt"])

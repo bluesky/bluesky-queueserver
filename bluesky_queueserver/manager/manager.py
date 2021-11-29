@@ -387,6 +387,9 @@ class RunEngineManager(Process):
                     if ws["re_state"] == "paused":
                         self._re_pause_pending = False
 
+                    if ws["plans_and_devices_list_updated"]:
+                        self._loop.create_task(self._download_plans_and_devices_list())
+
                     if self._manager_state == MState.CLOSING_ENVIRONMENT:
                         if ws["environment_state"] == "closing":
                             self._fut_manager_task_completed.set_result(None)
@@ -475,6 +478,26 @@ class RunEngineManager(Process):
         else:
             self._re_run_list = run_list["run_list"]
             self._re_run_list_uid = _generate_uid()
+
+    async def _download_plans_and_devices_list(self):
+        """
+        Download the updated list of existing plans and devices from the worker environment.
+        """
+        logger.info("Downloading the lists of existing plans and devices from the worker environment")
+        plan_and_devices_list, err_msg = await self._worker_request_plans_and_devices_list()
+        if plan_and_devices_list is None:
+            # TODO: this would typically mean a bug (communication error). Probably more
+            #       complicated processing is needed
+            logger.error(
+                f"Failed to download the list of existing plans and devices from the worker process: {err_msg}."
+            )
+        else:
+            self._existing_plans = plan_and_devices_list["existing_plans"]
+            self._existing_devices = plan_and_devices_list["existing_devices"]
+            try:
+                self._compute_allowed_plans_and_devices()
+            except Exception as ex:
+                logger.exception("Failed to compute the list of allowed plans and devices: %s", str(ex))
 
     async def _start_plan(self):
         """
@@ -651,21 +674,39 @@ class RunEngineManager(Process):
 
         return success, err_msg
 
+    def _compute_allowed_plans_and_devices(self):
+        """
+        Compute lists of allowed plans and devices based on lists ``self._existing_plans``,
+        ``self._existing_devices`` and permissions. The function reloads externally stored
+        user group permissions.
+        """
+        path_ug = self._config_dict["user_group_permissions_path"]
+        allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+            path_user_group_permissions=path_ug,
+            existing_plans=self._existing_plans,
+            existing_devices=self._existing_devices,
+        )
+
+        try:
+            changes = (allowed_plans != self._allowed_plans) or (allowed_devices != self._allowed_devices)
+        except Exception as ex:
+            logger.error("Error occurred while comparing lists of allowed plans and devices: %s", str(ex))
+            changes = True
+
+        if changes:
+            self._allowed_plans = allowed_plans
+            self._allowed_devices = allowed_devices
+            self._allowed_plans_uid = _generate_uid()
+            self._allowed_devices_uid = _generate_uid()
+
     def _load_allowed_plans_and_devices(self):
         """
         Load the list of allowed plans and devices
         """
         try:
             path_pd = self._config_dict["existing_plans_and_devices_path"]
-            path_ug = self._config_dict["user_group_permissions_path"]
             self._existing_plans, self._existing_devices = load_existing_plans_and_devices(path_pd)
-            self._allowed_plans, self._allowed_devices = load_allowed_plans_and_devices(
-                path_user_group_permissions=path_ug,
-                existing_plans=self._existing_plans,
-                existing_devices=self._existing_devices,
-            )
-            self._allowed_plans_uid = _generate_uid()
-            self._allowed_devices_uid = _generate_uid()
+            self._compute_allowed_plans_and_devices()
         except Exception as ex:
             raise Exception(
                 f"Error occurred while loading lists of allowed plans and devices from '{path_pd}': {str(ex)}"
@@ -701,6 +742,16 @@ class RunEngineManager(Process):
         except CommTimeoutError:
             run_list, err_msg = None, "Timeout occurred"
         return run_list, err_msg
+
+    async def _worker_request_plans_and_devices_list(self):
+        try:
+            plans_and_devices_list = await self._comm_to_worker.send_msg("request_plans_and_devices_list")
+            err_msg = ""
+            if plans_and_devices_list is None:
+                err_msg = "Failed to obtain the run list from the worker"
+        except CommTimeoutError:
+            plans_and_devices_list, err_msg = None, "Timeout occurred"
+        return plans_and_devices_list, err_msg
 
     async def _worker_command_close_env(self):
         try:
@@ -2052,18 +2103,17 @@ class RunEngineManager(Process):
         # Delete Redis entries (for testing and debugging)
         # self._plan_queue.delete_pool_entries()
 
-        # Load lists of allowed plans and devices
-        logger.info("Loading the lists of allowed plans and devices ...")
-        try:
-            self._load_allowed_plans_and_devices()
-        except Exception as ex:
-            logger.exception("Exception: %s", ex)
-
         # Set the environment state based on whether the worker process is alive (request Watchdog)
         self._environment_exists = await self._is_worker_alive()
 
         # Now check if the plan is still being executed (if it was executed)
         if self._environment_exists:
+
+            # The environment is expected to contain the most recent version of the list of plans and devices
+            #   If the request to download plans and devices fails, then the lists of existing and allowed
+            #   devices and plans are going to be empty ({}).
+            await self._download_plans_and_devices_list()
+
             # Attempt to load the list of active runs.
             re_run_list, _ = await self._worker_request_run_list()
             self._re_run_list = re_run_list["run_list"] if re_run_list else []
@@ -2103,6 +2153,13 @@ class RunEngineManager(Process):
             else:
                 logger.error("Error while reading RE Worker status: %s", err_msg)
         else:
+            # Load lists of allowed plans and devices
+            logger.info("Loading the lists of allowed plans and devices ...")
+            try:
+                self._load_allowed_plans_and_devices()
+            except Exception as ex:
+                logger.exception("Exception: %s", ex)
+
             self._worker_state_info = None
 
         if self._manager_state not in (MState.EXECUTING_QUEUE, MState.PAUSED):

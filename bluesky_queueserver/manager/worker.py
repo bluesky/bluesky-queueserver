@@ -82,6 +82,7 @@ class RunEngineWorker(Process):
         # Note: 'self._config' is a private attribute of 'multiprocessing.Process'. Overriding
         #   this variable may lead to unpredictable and hard to debug issues.
         self._config_dict = config or {}
+        self._existing_plans_and_devices_changed = False
         self._existing_plans, self._existing_devices = {}, {}
         self._allowed_plans, self._allowed_devices = {}, {}
 
@@ -286,6 +287,7 @@ class RunEngineWorker(Process):
         env_state = self._state["environment_state"]
         re_report_available = self._re_report is not None
         run_list_updated = self._active_run_list.is_changed()  # True - updates are available
+        plans_and_devices_list_updated = self._existing_plans_and_devices_changed
         msg_out = {
             "running_item_uid": item_uid,
             "running_plan_completed": plan_completed,
@@ -294,6 +296,7 @@ class RunEngineWorker(Process):
             "re_deferred_pause_requested": re_deferred_pause_requested,
             "environment_state": env_state,
             "run_list_updated": run_list_updated,
+            "plans_and_devices_list_updated": plans_and_devices_list_updated,
         }
         return msg_out
 
@@ -318,6 +321,11 @@ class RunEngineWorker(Process):
         and update is loaded only if updates exist (`run_list_updated` is True).
         """
         msg_out = {"run_list": self._active_run_list.get_run_list(clear_state=True)}
+        return msg_out
+
+    def _request_plans_and_devices_list_handler(self):
+        msg_out = {"existing_plans": self._existing_plans, "existing_devices": self._existing_devices}
+        self._existing_plans_and_devices_changed = False
         return msg_out
 
     def _command_close_env_handler(self):
@@ -524,6 +532,9 @@ class RunEngineWorker(Process):
         self._comm_to_manager.add_method(self._request_state_handler, "request_state")
         self._comm_to_manager.add_method(self._request_plan_report_handler, "request_plan_report")
         self._comm_to_manager.add_method(self._request_run_list_handler, "request_run_list")
+        self._comm_to_manager.add_method(
+            self._request_plans_and_devices_list_handler, "request_plans_and_devices_list"
+        )
         self._comm_to_manager.add_method(self._command_close_env_handler, "command_close_env")
         self._comm_to_manager.add_method(self._command_confirm_exit_handler, "command_confirm_exit")
         self._comm_to_manager.add_method(self._command_run_plan_handler, "command_run_plan")
@@ -594,6 +605,9 @@ class RunEngineWorker(Process):
             path_ug = self._config_dict["user_group_permissions_path"]
 
             try:
+                # Always download the list of existing plans and devices once the environment is created
+                self._existing_plans_and_devices_changed = True
+
                 update_existing_plans_and_devices(
                     path_to_file=path_pd,
                     existing_plans=self._existing_plans,

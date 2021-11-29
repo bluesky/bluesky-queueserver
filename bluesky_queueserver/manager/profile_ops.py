@@ -2053,6 +2053,44 @@ def load_existing_plans_and_devices(path_to_file=None):
     return existing_plans, existing_devices
 
 
+def compare_existing_plans_and_devices(
+    *,
+    existing_plans,
+    existing_devices,
+    existing_plans_ref,
+    existing_devices_ref,
+):
+    """
+    Compares the lists of existing plans and devices with the reference lists. Returns ``False``
+    if the exception is raised while comparing the lists. (Consistent exception handling is
+    the only reason we need this function.)
+
+    Parameters
+    ----------
+    existing_plans : dict
+        The updated list (dictionary) of descriptions of the existing plans.
+    existing_devices : dict
+        The updated list (dictionary) of descriptions of the existing devices.
+    existing_plans_ref : dict or None
+        The reference list (dictionary) of descriptions of the existing plans.
+    existing_devices_ref : dict or None
+        The reference list (dictionary) of descriptions of the existing devices.
+
+    Returns
+    -------
+    boolean
+        ``True`` - the lists are equal, ``False`` otherwise.
+    """
+    try:
+        lists_equal = (existing_plans != existing_plans_ref) or (existing_devices != existing_devices_ref)
+    except Exception as ex:
+        # If the lists (dictionaries) of plans and devices can not be compared, then save the new lists.
+        #   This issue should be investigated if it is repeated regularly.
+        logger.warning("Failed to compare existing plans or existing devices: %s", str(ex))
+        lists_equal = False
+    return lists_equal
+
+
 def update_existing_plans_and_devices(
     *,
     path_to_file,
@@ -2108,13 +2146,13 @@ def update_existing_plans_and_devices(
         if existing_devices_ref is not None:
             ed = existing_devices_ref
 
-        try:
-            changes_exist = (ep != existing_plans) or (ed != existing_devices)
-        except Exception as ex:
-            # If the lists (dictionaries) of plans and devices can not be compared, then save the new lists.
-            #   This issue should be investigated if it is repeated regularly.
-            logger.warning("Failed to compare existing plans or existing devices: %s", str(ex))
-            changes_exist = True
+        changes_exist = not compare_existing_plans_and_devices(
+            existing_plans=existing_plans,
+            existing_devices=existing_devices,
+            existing_plans_ref=ep,
+            existing_devices_ref=ed,
+        )
+
     else:
         changes_exist = True
 

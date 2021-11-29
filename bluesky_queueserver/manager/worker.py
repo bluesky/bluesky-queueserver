@@ -582,12 +582,22 @@ class RunEngineWorker(Process):
             epd = existing_plans_and_devices_from_nspace(nspace=self._re_namespace)
             existing_plans, existing_devices, plans_in_nspace, devices_in_nspace = epd
 
+            # self._existing_plans_and_devices_changed = not compare_existing_plans_and_devices(
+            #     existing_plans = existing_plans,
+            #     existing_devices = existing_devices,
+            #     existing_plans_ref = self._existing_plans,
+            #     existing_devices_ref = self._existing_devices,
+            # )
+
             # Descriptions of existing plans and devices
             self._existing_plans = existing_plans
             self._existing_devices = existing_devices
             # Dictionaries of references to plans and devices from the namespace
             self._plans_in_nspace = plans_in_nspace
             self._devices_in_nspace = devices_in_nspace
+
+            # Always download existing plans and devices when loading the new environment
+            self._existing_plans_and_devices_changed = True
 
             logger.info("Startup code loading was completed")
 
@@ -605,9 +615,6 @@ class RunEngineWorker(Process):
             path_ug = self._config_dict["user_group_permissions_path"]
 
             try:
-                # Always download the list of existing plans and devices once the environment is created
-                self._existing_plans_and_devices_changed = True
-
                 update_existing_plans_and_devices(
                     path_to_file=path_pd,
                     existing_plans=self._existing_plans,

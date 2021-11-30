@@ -674,11 +674,14 @@ class RunEngineManager(Process):
 
         return success, err_msg
 
-    def _compute_allowed_plans_and_devices(self):
+    def _compute_allowed_plans_and_devices(self, *, always_update_uids=False):
         """
         Compute lists of allowed plans and devices based on lists ``self._existing_plans``,
         ``self._existing_devices`` and permissions. The function reloads externally stored
         user group permissions.
+
+        The UIDS of the lists of allowed plans and devices are updated only if the computed
+        lists are different from the existing ones or if ``always_update_uids`` is ``True``.
         """
         path_ug = self._config_dict["user_group_permissions_path"]
         allowed_plans, allowed_devices = load_allowed_plans_and_devices(
@@ -688,25 +691,28 @@ class RunEngineManager(Process):
         )
 
         try:
-            changes = (allowed_plans != self._allowed_plans) or (allowed_devices != self._allowed_devices)
+            if always_update_uids or (allowed_plans != self._allowed_plans):
+                self._allowed_plans = allowed_plans
+                self._allowed_plans_uid = _generate_uid()
         except Exception as ex:
-            logger.error("Error occurred while comparing lists of allowed plans and devices: %s", str(ex))
-            changes = True
+            logger.error("Error occurred while comparing lists of allowed plans: %s", str(ex))
 
-        if changes:
-            self._allowed_plans = allowed_plans
-            self._allowed_devices = allowed_devices
-            self._allowed_plans_uid = _generate_uid()
-            self._allowed_devices_uid = _generate_uid()
+        try:
+            if always_update_uids or (allowed_devices != self._allowed_devices):
+                self._allowed_devices = allowed_devices
+                self._allowed_devices_uid = _generate_uid()
+        except Exception as ex:
+            logger.error("Error occurred while comparing lists of allowed devices: %s", str(ex))
 
     def _load_allowed_plans_and_devices(self):
         """
-        Load the list of allowed plans and devices
+        Load the list of allowed plans and devices. UIDs for the lists of allowed plans and device
+        are ALWAYS updated when this function is called.
         """
         try:
             path_pd = self._config_dict["existing_plans_and_devices_path"]
             self._existing_plans, self._existing_devices = load_existing_plans_and_devices(path_pd)
-            self._compute_allowed_plans_and_devices()
+            self._compute_allowed_plans_and_devices(always_update_uids=True)
         except Exception as ex:
             raise Exception(
                 f"Error occurred while loading lists of allowed plans and devices from '{path_pd}': {str(ex)}"
@@ -1035,7 +1041,8 @@ class RunEngineManager(Process):
     async def _permissions_reload_handler(self, request):
         """
         Reloads the list of allowed plans and devices and user group permission from the default location
-        or location set using command line parameters.
+        or location set using command line parameters. UIDs of the lists of allowed plans and devices are
+        always changed by this handler even if the lists remain unchanged.
         """
         logger.info("Reloading lists of allowed plans and devices ...")
         try:

@@ -2082,7 +2082,7 @@ def compare_existing_plans_and_devices(
         ``True`` - the lists are equal, ``False`` otherwise.
     """
     try:
-        lists_equal = (existing_plans != existing_plans_ref) or (existing_devices != existing_devices_ref)
+        lists_equal = (existing_plans == existing_plans_ref) and (existing_devices == existing_devices_ref)
     except Exception as ex:
         # If the lists (dictionaries) of plans and devices can not be compared, then save the new lists.
         #   This issue should be investigated if it is repeated regularly.

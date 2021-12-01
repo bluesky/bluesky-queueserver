@@ -86,6 +86,17 @@ class RunEngineWorker(Process):
         self._existing_plans, self._existing_devices = {}, {}
         self._allowed_plans, self._allowed_devices = {}, {}
 
+        # Indicates when to update the existing plans and devices
+        update_pd = self._config_dict["update_existing_plans_devices"]
+        if update_pd not in ("NEVER", "ENVIRONMENT_OPEN", "ALWAYS"):
+            logger.error(
+                "Unknown option for updating lists of existing plans and devices: '%s'. "
+                "The lists stored on disk are not going to be updated.",
+                update_pd,
+            )
+            update_pd = "NEVER"
+        self._update_existing_plans_devices_on_disk = update_pd
+
         # The list of runs that were opened as part of execution of the currently running plan.
         # Initialized with 'RunList()' in 'run()' method.
         self._active_run_list = None
@@ -615,11 +626,12 @@ class RunEngineWorker(Process):
             path_ug = self._config_dict["user_group_permissions_path"]
 
             try:
-                update_existing_plans_and_devices(
-                    path_to_file=path_pd,
-                    existing_plans=self._existing_plans,
-                    existing_devices=self._existing_devices,
-                )
+                if self._update_existing_plans_devices_on_disk in ("ENVIRONMENT_OPEN", "ALWAYS"):
+                    update_existing_plans_and_devices(
+                        path_to_file=path_pd,
+                        existing_plans=self._existing_plans,
+                        existing_devices=self._existing_devices,
+                    )
 
                 self._allowed_plans, self._allowed_devices = load_allowed_plans_and_devices(
                     path_user_group_permissions=path_ug,

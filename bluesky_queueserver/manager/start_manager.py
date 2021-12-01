@@ -268,6 +268,20 @@ def start_manager():
         "If the path is directory, then the default file name "
         "'existing_plans_and_devices.yaml' is used.",
     )
+
+    parser.add_argument(
+        "--update-existing-plans-devices",
+        dest="update_existing_plans_devices",
+        type=str,
+        choices=["NEVER", "ENVIRONMENT_OPEN", "ALWAYS"],
+        default="ENVIRONMENT_OPEN",
+        help="Select when the list of existing plans and devices stored on disk should be "
+        "updated. The available choices are not to update the stored lists (NEVER), update "
+        "the lists when the environment is opened (ENVIRONMENT_OPEN) or update the lists each "
+        "the lists are changed (ALWAYS) "
+        "(default: %(default)s)",
+    )
+
     parser.add_argument(
         "--user-group-permissions",
         dest="user_group_permissions_path",
@@ -560,6 +574,8 @@ def start_manager():
     config_manager["existing_plans_and_devices_path"] = existing_pd_path
     config_worker["user_group_permissions_path"] = user_group_pd_path
     config_manager["user_group_permissions_path"] = user_group_pd_path
+
+    config_worker["update_existing_plans_devices"] = args.update_existing_plans_devices
 
     # Read private key from the environment variable, then check if the CLI parameter exists
     zmq_private_key = os.environ.get("QSERVER_ZMQ_PRIVATE_KEY", None)

@@ -704,14 +704,16 @@ class RunEngineManager(Process):
         except Exception as ex:
             logger.error("Error occurred while comparing lists of allowed devices: %s", str(ex))
 
-    def _load_allowed_plans_and_devices(self):
+    def _load_allowed_plans_and_devices(self, reload_plans_devices=False):
         """
         Load the list of allowed plans and devices. UIDs for the lists of allowed plans and device
-        are ALWAYS updated when this function is called.
+        are ALWAYS updated when this function is called. If ``reload_plans_devices`` is ``True``,
+        then the list of existing plans and devices is reloaded from disk.
         """
         try:
             path_pd = self._config_dict["existing_plans_and_devices_path"]
-            self._existing_plans, self._existing_devices = load_existing_plans_and_devices(path_pd)
+            if reload_plans_devices:
+                self._existing_plans, self._existing_devices = load_existing_plans_and_devices(path_pd)
             self._compute_allowed_plans_and_devices(always_update_uids=True)
         except Exception as ex:
             raise Exception(
@@ -1040,16 +1042,22 @@ class RunEngineManager(Process):
 
     async def _permissions_reload_handler(self, request):
         """
-        Reloads the list of allowed plans and devices and user group permission from the default location
-        or location set using command line parameters. UIDs of the lists of allowed plans and devices are
-        always changed by this handler even if the lists remain unchanged.
+        Reloads user group permissions from the default location or the location set using command line
+        parameters. UIDs of the lists of allowed plans and devices are always changed if the operation is
+        successful even if the contents of the lists remain the same. By default, the function is using
+        the current lists of existing plans and devices, which may or may not match the contents of
+        the file on disk. If optional parameter ``reload_plans_devices`` is ``True``, then the list
+        of existing plans and devices are loaded from disk file.
         """
         logger.info("Reloading lists of allowed plans and devices ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["reload_plans_devices"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
-            self._load_allowed_plans_and_devices()
+            # Do not reload the lists of existing plans and devices from disk file by default
+            reload_plans_devices = request.get("reload_plans_devices", False)
+
+            self._load_allowed_plans_and_devices(reload_plans_devices=reload_plans_devices)
             success, msg = True, ""
         except Exception as ex:
             success = False
@@ -2163,7 +2171,7 @@ class RunEngineManager(Process):
             # Load lists of allowed plans and devices
             logger.info("Loading the lists of allowed plans and devices ...")
             try:
-                self._load_allowed_plans_and_devices()
+                self._load_allowed_plans_and_devices(reload_plans_devices=True)
             except Exception as ex:
                 logger.exception("Exception: %s", ex)
 

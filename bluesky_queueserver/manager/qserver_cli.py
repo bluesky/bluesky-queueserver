@@ -41,13 +41,14 @@ qserver monitor  # Start 'qserver' in monitoring mode
 qserver ping     # Send 'ping' request to RE Manager via ZMQ
 qserver status   # Request status of RE Manager
 
-qserver environment open       # Open RE environment
-qserver environment close      # Close RE environment
-qserver environment destroy    # Destroy RE environment (kill RE worker process)
+qserver environment open         # Open RE environment
+qserver environment close        # Close RE environment
+qserver environment destroy      # Destroy RE environment (kill RE worker process)
 
-qserver allowed plans          # Request the list of allowed plans
-qserver allowed devices        # Request the list of allowed devices
-qserver permissions reload     # Reload the list of allowed plans and devices and user permissions from disk
+qserver allowed plans            # Request the list of allowed plans
+qserver allowed devices          # Request the list of allowed devices
+qserver permissions reload       # Reload user permissions and generate lists of allowed plans and devices.
+qserver permissions reload lists # Same, but reload lists of existing plans and devices from disk.
 
 qserver queue add plan '<plan-params>'                 # Add plan to the back of the queue
 qserver queue add instruction <instruction>            # Add instruction to the back of the queue
@@ -714,10 +715,15 @@ def create_msg(params):
 
     # ----------- permissions ------------
     elif command == "permissions":
-        if len(params) != 1:
-            raise CommandParameterError(f"Request '{command}' must include only one parameter")
+        if len(params) not in (1, 2):
+            raise CommandParameterError(f"Request '{command}' must include only one or two parameters")
         if params[0] == "reload":
             method = f"{command}_{params[0]}"
+            if len(params) == 2:
+                if params[1] == "lists":
+                    prms["reload_plans_devices"] = True
+                else:
+                    CommandParameterError(f"Request '{command} {params[0]} {params[1]}' is not supported")
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
 

@@ -278,6 +278,18 @@ class RunEngineWorker(Process):
         is_resuming = option == "resume"
         self._execution_queue.put((plan, is_resuming))
 
+    def _load_permissions(self):
+        """
+        Load permissions and generate lists of allowed plans and devices based on lists of
+        the existing plans and devices.
+        """
+        path_ug = self._config_dict["user_group_permissions_path"]
+        self._allowed_plans, self._allowed_devices = load_allowed_plans_and_devices(
+            path_user_group_permissions=path_ug,
+            existing_plans=self._existing_plans,
+            existing_devices=self._existing_devices,
+        )
+
     # =============================================================================
     #               Handlers for messages from RE Manager
 
@@ -633,11 +645,8 @@ class RunEngineWorker(Process):
                         existing_devices=self._existing_devices,
                     )
 
-                self._allowed_plans, self._allowed_devices = load_allowed_plans_and_devices(
-                    path_user_group_permissions=path_ug,
-                    existing_plans=self._existing_plans,
-                    existing_devices=self._existing_devices,
-                )
+                self._load_permissions()
+
             except Exception as ex:
                 logger.exception(
                     "Error occurred while generating lists of allowed plans and devices. ('%s', '%s'): %s",

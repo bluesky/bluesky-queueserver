@@ -815,6 +815,15 @@ class RunEngineManager(Process):
             success, err_msg = None, "Timeout occurred"
         return success, err_msg
 
+    async def _worker_command_permissions_reload(self):
+        try:
+            response = await self._comm_to_worker.send_msg("command_permissions_reload")
+            success = response["status"] == "accepted"
+            err_msg = response["err_msg"]
+        except CommTimeoutError:
+            success, err_msg = None, "Timeout occurred"
+        return success, err_msg
+
     # ===============================================================================
     #         Functions that send commands/request data from Watchdog process
 
@@ -1058,6 +1067,13 @@ class RunEngineManager(Process):
             reload_plans_devices = request.get("reload_plans_devices", False)
 
             self._load_allowed_plans_and_devices(reload_plans_devices=reload_plans_devices)
+
+            # If environment exists, then tell the worker to reload permissions. This is optional.
+            if self._environment_exists:
+                success_opt, msg_opt = await self._worker_command_permissions_reload()
+                if not success_opt:
+                    logger.warning("Permissions failed to reload by RE Worker process: %s", msg_opt)
+
             success, msg = True, ""
         except Exception as ex:
             success = False

@@ -284,11 +284,13 @@ class RunEngineWorker(Process):
         the existing plans and devices.
         """
         path_ug = self._config_dict["user_group_permissions_path"]
+        logger.info("Loading permissions from file '%s'", path_ug)
         self._allowed_plans, self._allowed_devices = load_allowed_plans_and_devices(
             path_user_group_permissions=path_ug,
             existing_plans=self._existing_plans,
             existing_devices=self._existing_devices,
         )
+        logger.info("List of allowed plans and devices was generated based on reloaded permissions")
 
     # =============================================================================
     #               Handlers for messages from RE Manager
@@ -507,6 +509,19 @@ class RunEngineWorker(Process):
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
 
+    def _command_permissions_reload_handler(self):
+        """
+        Initiate reloading of permissions and computing new lists of existing plans and devices.
+        Computations are performed in a separate thread. The function is not waiting for computations
+        to complete. Status ('accepted' or 'rejected') and error message is returned. 'accepted' status
+        does not mean that the operation was successful.
+        """
+        status, err_msg = self._execute_in_separate_thread(
+            name="RE_Worker_reload_permissions", target=self._load_permissions
+        )
+        msg_out = {"status": status, "err_msg": err_msg}
+        return msg_out
+
     # ------------------------------------------------------------
 
     def _execute_in_main_thread(self):
@@ -527,6 +542,36 @@ class RunEngineWorker(Process):
                 self._execute_plan(plan, is_resuming)
             except queue.Empty:
                 pass
+
+    def _execute_in_separate_thread(self, *, name, target, args=None, kwargs=None):
+        """
+        Execute ``target`` (callable) in a separate daemon thread. The callable is passed arguments ``args``
+        and ``kwargs`` and ``name`` is used to generate thread name and in error messages.
+        """
+        args, kwargs = args or [], kwargs or {}
+        status, msg = "accepted", ""
+
+        try:
+            # Commands should not be executed when the environment is not ready
+            environment_state = self._state["environment_state"]
+            if environment_state != "ready":
+                raise RuntimeError(f"Environment is not ready. Current environment state: {environment_state}")
+
+            def thread_func_factory():
+                def thread_func():
+                    try:
+                        target(*args, **kwargs)
+                    except Exception as ex:
+                        logger.exception("Error occurred while executing the function ('%s'): %s", name, str(ex))
+
+                return thread_func
+
+            th = threading.Thread(target=thread_func_factory(), name=f"{name}", daemon=True)
+            th.start()
+
+        except Exception as ex:
+            status, msg = "rejected", f"Failed to execute command '{name}': {ex}"
+        return status, msg
 
     # ------------------------------------------------------------
 
@@ -564,6 +609,8 @@ class RunEngineWorker(Process):
         self._comm_to_manager.add_method(self._command_pause_plan_handler, "command_pause_plan")
         self._comm_to_manager.add_method(self._command_continue_plan_handler, "command_continue_plan")
         self._comm_to_manager.add_method(self._command_reset_worker_handler, "command_reset_worker")
+        self._comm_to_manager.add_method(self._command_permissions_reload_handler, "command_permissions_reload")
+
         self._comm_to_manager.start()
 
         self._exit_event = threading.Event()

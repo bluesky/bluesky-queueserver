@@ -665,7 +665,7 @@ class RunEngineWorker(Process):
                 if self._config_dict["keep_re"]:
                     # Copy references from the namespace
                     self._RE = self._re_namespace["RE"]
-                    self._db = self._re_namespace.get("RE", None)
+                    self._db = self._re_namespace.get("db", None)
                 else:
                     # Instantiate a new Run Engine and Data Broker (if needed)
                     md = {}

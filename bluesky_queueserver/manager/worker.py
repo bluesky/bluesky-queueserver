@@ -284,7 +284,7 @@ class RunEngineWorker(Process):
         the existing plans and devices.
         """
         path_ug = self._config_dict["user_group_permissions_path"]
-        logger.info("Loading permissions from file '%s'", path_ug)
+        logger.info("Loading user permissions from file '%s'", path_ug)
         self._allowed_plans, self._allowed_devices = load_allowed_plans_and_devices(
             path_user_group_permissions=path_ug,
             existing_plans=self._existing_plans,

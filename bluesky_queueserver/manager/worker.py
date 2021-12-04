@@ -6,6 +6,7 @@ import os
 import asyncio
 from functools import partial
 import logging
+import uuid
 
 from .comms import PipeJsonRpcReceive
 from .output_streaming import setup_console_output_redirection
@@ -532,9 +533,7 @@ class RunEngineWorker(Process):
         to complete. Status ('accepted' or 'rejected') and error message is returned. 'accepted' status
         does not mean that the operation was successful.
         """
-        status, err_msg = self._execute_in_separate_thread(
-            name="RE_Worker_reload_permissions", target=self._load_permissions
-        )
+        status, err_msg = self._run_in_separate_thread(name="Reload Permissions", target=self._load_permissions)
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
 
@@ -559,12 +558,16 @@ class RunEngineWorker(Process):
             except queue.Empty:
                 pass
 
-    def _execute_in_separate_thread(self, *, name, target, args=None, kwargs=None):
+    def _run_in_separate_thread(self, *, name, target, args=None, kwargs=None):
         """
-        Execute ``target`` (callable) in a separate daemon thread. The callable is passed arguments ``args``
-        and ``kwargs`` and ``name`` is used to generate thread name and in error messages.
+        Run ``target`` (any callable) in a separate daemon thread. The callable is passed arguments ``args``
+        and ``kwargs`` and ``name`` is used to generate thread name and in error messages. The function
+        returns once the thead is started without waiting for the result.
 
-        TODO: this function will be extended in future PRs since it will be used for multiple purposes.
+        TODO: this function will be extended in future PRs since it will be used for multiple purposes that
+        involve running background tasks. Consider this to be a primitive implementation sufficient for
+        current needs. Improvements will include means for monitoring of executed tasks and propagating
+        the results of execution. Additional parameters will be added.
         """
         args, kwargs = args or [], kwargs or {}
         status, msg = "accepted", ""
@@ -575,8 +578,15 @@ class RunEngineWorker(Process):
             if environment_state != "ready":
                 raise RuntimeError(f"Environment is not ready. Current environment state: {environment_state}")
 
-            def thread_func_factory():
+            task_uuid = str(uuid.uuid4())
+            task_uuid_short = task_uuid.split("-")[-1]
+            thread_name = f"BS QServer - {name} {task_uuid_short} "
+
+            def thread_func_wrapper():
                 def thread_func():
+                    """
+                    This is the function executed in the separate thread
+                    """
                     try:
                         target(*args, **kwargs)
                     except Exception as ex:
@@ -584,7 +594,7 @@ class RunEngineWorker(Process):
 
                 return thread_func
 
-            th = threading.Thread(target=thread_func_factory(), name=f"{name}", daemon=True)
+            th = threading.Thread(target=thread_func_wrapper(), name=thread_name, daemon=True)
             th.start()
 
         except Exception as ex:

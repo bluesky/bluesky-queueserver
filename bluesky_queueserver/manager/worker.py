@@ -86,6 +86,9 @@ class RunEngineWorker(Process):
         self._existing_plans, self._existing_devices = {}, {}
         self._allowed_plans, self._allowed_devices = {}, {}
 
+        self._allowed_items_lock = threading.Rlock()
+        self._existing_items_lock = threading.Rlock()
+
         # Indicates when to update the existing plans and devices
         update_pd = self._config_dict["update_existing_plans_devices"]
         if update_pd not in ("NEVER", "ENVIRONMENT_OPEN", "ALWAYS"):
@@ -193,12 +196,15 @@ class RunEngineWorker(Process):
         logger.info("Starting a plan '%s'.", plan_info["name"])
 
         try:
+            with self._allowed_items_lock:
+                allowed_plans, allowed_devices = self._allowed_plans, self._allowed_devices
+
             plan_parsed = prepare_plan(
                 plan_info,
                 plans_in_nspace=self._plans_in_nspace,
                 devices_in_nspace=self._devices_in_nspace,
-                allowed_plans=self._allowed_plans,
-                allowed_devices=self._allowed_devices,
+                allowed_plans=allowed_plans,
+                allowed_devices=allowed_devices,
             )
 
             plan_func = plan_parsed["callable"]
@@ -285,11 +291,19 @@ class RunEngineWorker(Process):
         """
         path_ug = self._config_dict["user_group_permissions_path"]
         logger.info("Loading user permissions from file '%s'", path_ug)
-        self._allowed_plans, self._allowed_devices = load_allowed_plans_and_devices(
+
+        with self._existing_items_lock:
+            existing_plans, existing_devices = self._existing_plans, self._existing_devices
+
+        allowed_plans, allowed_devices = load_allowed_plans_and_devices(
             path_user_group_permissions=path_ug,
-            existing_plans=self._existing_plans,
-            existing_devices=self._existing_devices,
+            existing_plans=existing_plans,
+            existing_devices=existing_devices,
         )
+
+        with self._allowed_items_lock:
+            self._allowed_plans, self._allowed_devices = allowed_plans, allowed_devices
+
         logger.info("List of allowed plans and devices was generated based on reloaded permissions")
 
     # =============================================================================
@@ -349,7 +363,9 @@ class RunEngineWorker(Process):
         return msg_out
 
     def _request_plans_and_devices_list_handler(self):
-        msg_out = {"existing_plans": self._existing_plans, "existing_devices": self._existing_devices}
+        with self._existing_items_lock:
+            existing_plans, existing_devices = self._existing_plans, self._existing_devices
+        msg_out = {"existing_plans": existing_plans, "existing_devices": existing_devices}
         self._existing_plans_and_devices_changed = False
         return msg_out
 
@@ -547,6 +563,8 @@ class RunEngineWorker(Process):
         """
         Execute ``target`` (callable) in a separate daemon thread. The callable is passed arguments ``args``
         and ``kwargs`` and ``name`` is used to generate thread name and in error messages.
+
+        TODO: this function will be extended in future PRs since it will be used for multiple purposes.
         """
         args, kwargs = args or [], kwargs or {}
         status, msg = "accepted", ""
@@ -660,8 +678,9 @@ class RunEngineWorker(Process):
             # )
 
             # Descriptions of existing plans and devices
-            self._existing_plans = existing_plans
-            self._existing_devices = existing_devices
+            with self._existing_items_lock:
+                self._existing_plans, self._existing_devices = existing_plans, existing_devices
+
             # Dictionaries of references to plans and devices from the namespace
             self._plans_in_nspace = plans_in_nspace
             self._devices_in_nspace = devices_in_nspace
@@ -686,10 +705,12 @@ class RunEngineWorker(Process):
 
             try:
                 if self._update_existing_plans_devices_on_disk in ("ENVIRONMENT_OPEN", "ALWAYS"):
+                    with self._existing_items_lock:
+                        existing_plans, existing_devices = self._existing_plans, self._existing_devices
                     update_existing_plans_and_devices(
                         path_to_file=path_pd,
-                        existing_plans=self._existing_plans,
-                        existing_devices=self._existing_devices,
+                        existing_plans=existing_plans,
+                        existing_devices=existing_devices,
                     )
 
                 self._load_permissions()

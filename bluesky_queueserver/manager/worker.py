@@ -535,13 +535,14 @@ class RunEngineWorker(Process):
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
 
-    def _command_permissions_reload_handler(self):
+    def _command_permissions_reload_handler(self, user_group_permissions):
         """
         Initiate reloading of permissions and computing new lists of existing plans and devices.
         Computations are performed in a separate thread. The function is not waiting for computations
         to complete. Status ('accepted' or 'rejected') and error message is returned. 'accepted' status
         does not mean that the operation was successful.
         """
+        self._user_group_permissions = user_group_permissions
         status, err_msg = self._run_in_separate_thread(
             name="Reload Permissions", target=self._generate_lists_of_allowed_plans_and_devices
         )

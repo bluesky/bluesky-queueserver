@@ -71,7 +71,7 @@ class WatchdogProcess:
     # ======================================================================
     #             Handlers for messages from RE Manager
 
-    def _start_re_worker_handler(self):
+    def _start_re_worker_handler(self, user_group_permissions):
         """
         Creates worker process. This is a quick operation, because it starts RE Worker
         process without waiting for initialization.
@@ -84,6 +84,7 @@ class WatchdogProcess:
                 config=self._config_worker,
                 msg_queue=self._msg_queue,
                 log_level=self._log_level,
+                user_group_permissions=user_group_permissions,
             )
             self._re_worker.start()
             success, err_msg = True, ""
@@ -572,7 +573,6 @@ def start_manager():
 
     config_worker["existing_plans_and_devices_path"] = existing_pd_path
     config_manager["existing_plans_and_devices_path"] = existing_pd_path
-    config_worker["user_group_permissions_path"] = user_group_pd_path
     config_manager["user_group_permissions_path"] = user_group_pd_path
 
     config_worker["update_existing_plans_devices"] = args.update_existing_plans_devices

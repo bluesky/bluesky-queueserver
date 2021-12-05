@@ -3046,6 +3046,7 @@ def test_select_allowed_items(item_dict, allow_patterns, disallow_patterns, resu
 
 
 # fmt: off
+@pytest.mark.parametrize("pass_data_as_parameters", [False, True])
 @pytest.mark.parametrize("fln_existing_items, fln_user_groups, empty_dicts, all_users", [
     ("existing_plans_and_devices.yaml", "user_group_permissions.yaml", False, True),
     ("existing_plans_and_devices.yaml", None, False, False),
@@ -3053,7 +3054,9 @@ def test_select_allowed_items(item_dict, allow_patterns, disallow_patterns, resu
     (None, None, True, False),
 ])
 # fmt: on
-def test_load_allowed_plans_and_devices_1(fln_existing_items, fln_user_groups, empty_dicts, all_users):
+def test_load_allowed_plans_and_devices_1(
+    fln_existing_items, fln_user_groups, empty_dicts, all_users, pass_data_as_parameters
+):
     """
     Basic test for ``load_allowed_plans_and_devices``.
     """
@@ -3062,9 +3065,19 @@ def test_load_allowed_plans_and_devices_1(fln_existing_items, fln_user_groups, e
     fln_existing_items = None if (fln_existing_items is None) else os.path.join(pc_path, fln_existing_items)
     fln_user_groups = None if (fln_user_groups is None) else os.path.join(pc_path, fln_user_groups)
 
-    allowed_plans, allowed_devices = load_allowed_plans_and_devices(
-        path_existing_plans_and_devices=fln_existing_items, path_user_group_permissions=fln_user_groups
-    )
+    if pass_data_as_parameters:
+        existing_plans, existing_devices = load_existing_plans_and_devices(fln_existing_items)
+        user_group_permissions = load_user_group_permissions(fln_user_groups)
+
+        allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+            existing_plans=existing_plans,
+            existing_devices=existing_devices,
+            user_group_permissions=user_group_permissions,
+        )
+    else:
+        allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+            path_existing_plans_and_devices=fln_existing_items, path_user_group_permissions=fln_user_groups
+        )
 
     def check_dict(d):
         if empty_dicts:
@@ -3215,6 +3228,7 @@ _user_permissions_excluding_junk3 = """user_groups:
 
 
 # fmt: off
+@pytest.mark.parametrize("pass_permissions_as_parameter", [False, True])
 @pytest.mark.parametrize("permissions_str, items_are_removed, only_admin", [
     (_user_permissions_clear, False, False),
     (_user_permissions_excluding_junk1, True, False),
@@ -3222,7 +3236,9 @@ _user_permissions_excluding_junk3 = """user_groups:
     (_user_permissions_excluding_junk3, True, True),
 ])
 # fmt: on
-def test_load_allowed_plans_and_devices_2(tmp_path, permissions_str, items_are_removed, only_admin):
+def test_load_allowed_plans_and_devices_2(
+    tmp_path, permissions_str, items_are_removed, only_admin, pass_permissions_as_parameter
+):
     """
     Tests if filtering settings for the "root" group are also applied to other groups.
     The purpose of the "root" group is to filter junk from the list of existing devices and
@@ -3244,10 +3260,17 @@ def test_load_allowed_plans_and_devices_2(tmp_path, permissions_str, items_are_r
 
     plans_and_devices_fln = os.path.join(pc_path, "existing_plans_and_devices.yaml")
 
-    allowed_plans, allowed_devices = load_allowed_plans_and_devices(
-        path_existing_plans_and_devices=plans_and_devices_fln,
-        path_user_group_permissions=permissions_fln,
-    )
+    if pass_permissions_as_parameter:
+        user_group_permissions = load_user_group_permissions(permissions_fln)
+        allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+            path_existing_plans_and_devices=plans_and_devices_fln,
+            user_group_permissions=user_group_permissions,
+        )
+    else:
+        allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+            path_existing_plans_and_devices=plans_and_devices_fln,
+            path_user_group_permissions=permissions_fln,
+        )
 
     if items_are_removed:
         if only_admin:
@@ -3282,16 +3305,16 @@ def test_load_allowed_plans_and_devices_2(tmp_path, permissions_str, items_are_r
 
 
 # fmt: off
-@pytest.mark.parametrize("option, empty_plan_dicts, empty_device_dicts", [
-    ("full_lists", False, False),
-    ("path_none", False, False),
-    ("path_invalid", False, False),
-    ("empty_device_list", False, True),
-    ("empty_plan_list", True, False),
-    ("empty_lists", True, True),
+@pytest.mark.parametrize("option", [
+    "full_lists",
+    "path_none",
+    "path_invalid",
+    "empty_device_list",
+    "empty_plan_list",
+    "empty_lists",
 ])
 # fmt: on
-def test_load_allowed_plans_and_devices_3(tmp_path, option, empty_plan_dicts, empty_device_dicts):
+def test_load_allowed_plans_and_devices_3(tmp_path, option):
     """
     Basic test for ``load_allowed_plans_and_devices``.
     """

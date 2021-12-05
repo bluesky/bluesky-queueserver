@@ -39,7 +39,16 @@ class RunEngineWorker(Process):
         `args` and `kwargs` of the `multiprocessing.Process`
     """
 
-    def __init__(self, *args, conn, config=None, msg_queue=None, log_level=logging.DEBUG, **kwargs):
+    def __init__(
+        self,
+        *args,
+        conn,
+        config=None,
+        msg_queue=None,
+        log_level=logging.DEBUG,
+        user_group_permissions=None,
+        **kwargs,
+    ):
 
         if not conn:
             raise RuntimeError("Invalid value of parameter 'conn': %S.", str(conn))
@@ -48,6 +57,8 @@ class RunEngineWorker(Process):
 
         self._log_level = log_level
         self._msg_queue = msg_queue
+
+        self._user_group_permissions = user_group_permissions or {}
 
         # The end of bidirectional Pipe assigned to the worker (for communication with Manager process)
         self._conn = conn
@@ -285,27 +296,25 @@ class RunEngineWorker(Process):
         is_resuming = option == "resume"
         self._execution_queue.put((plan, is_resuming))
 
-    def _load_permissions(self):
+    def _generate_lists_of_allowed_plans_and_devices(self):
         """
-        Load permissions and generate lists of allowed plans and devices based on lists of
-        the existing plans and devices.
+        Generate lists of allowed plans and devices based on the existing plans and devices and user permissions.
         """
-        path_ug = self._config_dict["user_group_permissions_path"]
-        logger.info("Loading user permissions from file '%s'", path_ug)
+        logger.info("Generating lists of allowed plans and devices")
 
         with self._existing_items_lock:
             existing_plans, existing_devices = self._existing_plans, self._existing_devices
 
         allowed_plans, allowed_devices = load_allowed_plans_and_devices(
-            path_user_group_permissions=path_ug,
             existing_plans=existing_plans,
             existing_devices=existing_devices,
+            user_group_permissions=self._user_group_permissions,
         )
 
         with self._allowed_items_lock:
             self._allowed_plans, self._allowed_devices = allowed_plans, allowed_devices
 
-        logger.info("List of allowed plans and devices was generated based on reloaded permissions")
+        logger.info("List of allowed plans and devices was successfully generated")
 
     # =============================================================================
     #               Handlers for messages from RE Manager
@@ -533,7 +542,9 @@ class RunEngineWorker(Process):
         to complete. Status ('accepted' or 'rejected') and error message is returned. 'accepted' status
         does not mean that the operation was successful.
         """
-        status, err_msg = self._run_in_separate_thread(name="Reload Permissions", target=self._load_permissions)
+        status, err_msg = self._run_in_separate_thread(
+            name="Reload Permissions", target=self._generate_lists_of_allowed_plans_and_devices
+        )
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
 
@@ -709,29 +720,19 @@ class RunEngineWorker(Process):
             success = False
 
         if success:
-            logger.info("Loading the lists of allowed plans and devices ...")
+            self._generate_lists_of_allowed_plans_and_devices()
 
+            # This file name is used only to update the lists of existing plans and devices
+            #   stored on disk, not to load the lists.
             path_pd = self._config_dict["existing_plans_and_devices_path"]
-            path_ug = self._config_dict["user_group_permissions_path"]
 
-            try:
-                if self._update_existing_plans_devices_on_disk in ("ENVIRONMENT_OPEN", "ALWAYS"):
-                    with self._existing_items_lock:
-                        existing_plans, existing_devices = self._existing_plans, self._existing_devices
-                    update_existing_plans_and_devices(
-                        path_to_file=path_pd,
-                        existing_plans=existing_plans,
-                        existing_devices=existing_devices,
-                    )
-
-                self._load_permissions()
-
-            except Exception as ex:
-                logger.exception(
-                    "Error occurred while generating lists of allowed plans and devices. ('%s', '%s'): %s",
-                    path_pd,
-                    path_ug,
-                    str(ex),
+            if self._update_existing_plans_devices_on_disk in ("ENVIRONMENT_OPEN", "ALWAYS"):
+                with self._existing_items_lock:
+                    existing_plans, existing_devices = self._existing_plans, self._existing_devices
+                update_existing_plans_and_devices(
+                    path_to_file=path_pd,
+                    existing_plans=existing_plans,
+                    existing_devices=existing_devices,
                 )
 
         if success:

@@ -2333,6 +2333,7 @@ def load_allowed_plans_and_devices(
     path_user_group_permissions=None,
     existing_plans=None,
     existing_devices=None,
+    user_group_permissions=None,
 ):
     """
     Generate dictionaries of allowed plans and devices for each user group. If there are no user
@@ -2345,22 +2346,29 @@ def load_allowed_plans_and_devices(
 
     Parameters
     ----------
-    path_existing_plans_and_devices : str or None
+    path_existing_plans_and_devices: str or None
         Full path to YAML file, which contains dictionaries of existing plans and devices.
         Raises an exception if the file does not exist. If ``None`` or the file contains
         no plans and/or devices, then empty dictionaries of the allowed plans and devices
         are returned for all groups.
-    path_user_group_permissions : str or None
+    path_user_group_permissions: str or None
         Full path to YAML file, which contains information on user group permissions.
-        Exception is raised if the file does not exist. If None, then the output
-        dictionaries will contain one group 'root' with all existing devices and plans
+        Exception is raised if the file does not exist. The path is ignored if
+        ``user_group_permissions`` is set. If both ``path_user_group_permissions`` is ``None``
+        and ``user_group_permissions`` is ``None`` or ``{}``, then dictionaries of allowed
+        plans and devices will contain one group 'root' with all existing devices and plans
         set as allowed.
-    existing_plans : dict or None
+    existing_plans: dict or None
         List (dict) of the existing plans. If ``None``, then the list is loaded from
         the file ``path_existing_plans_and_devices``.
-    existing_devices : dict or None
+    existing_devices: dict or None
         List (dict) of the existing devices. If ``None``, then the list is loaded from
         the file ``path_existing_plans_and_devices``.
+    user_group_permissions: str or None
+        Dictionary with user group permissions. If ``None``, then permissionas are loaded
+        from the file ``path_user_group_permissions``. If ``{}``, then dictionaries of allowed
+        plans and devices will contain one group 'root' with all existing devices and plans
+        set as allowed.
 
     Returns
     -------
@@ -2370,24 +2378,31 @@ def load_allowed_plans_and_devices(
         Dictionaries contain one group (``root``) if no user perission data is provided.
 
     """
-    user_group_permissions = load_user_group_permissions(path_user_group_permissions)
-
-    # Data from the file is loaded only if ``existing_plans`` or ``existing_devices`` is ``None``.
-    if (existing_plans is None) or (existing_devices is None):
-        ep, ed = load_existing_plans_and_devices(path_existing_plans_and_devices)
-    if existing_plans is None:
-        existing_plans = ep
-    if existing_devices is None:
-        existing_devices = ed
-
     allowed_plans, allowed_devices = {}, {}
 
-    if path_user_group_permissions is not None:
+    try:
+        if user_group_permissions is None:
+            user_group_permissions = load_user_group_permissions(path_user_group_permissions)
 
-        # If the file was loaded, but it contains no valid user groups, then the exception
-        #   should be raised. Incorrect file path could be specified.
+        # Data from the file is loaded only if ``existing_plans`` or ``existing_devices`` is ``None``.
+        if (existing_plans is None) or (existing_devices is None):
+            ep, ed = load_existing_plans_and_devices(path_existing_plans_and_devices)
+        if existing_plans is None:
+            existing_plans = ep
+        if existing_devices is None:
+            existing_devices = ed
+
+        # Detect some possible errors
         if not user_group_permissions:
-            raise RuntimeError(f"The file '{path_user_group_permissions}' contains no user group information")
+            raise RuntimeError("No user permissions are specified")
+
+        if not isinstance(user_group_permissions, dict):
+            raise RuntimeError(
+                f"'user_group_permissions' has type {type(user_group_permissions)} instead of 'dict'"
+            )
+
+        if "user_groups" not in user_group_permissions:
+            raise RuntimeError("No user groups are defined: 'user_groups' keys is not in 'user_group_permissions'")
 
         user_groups = list(user_group_permissions["user_groups"].keys())
 
@@ -2435,9 +2450,10 @@ def load_allowed_plans_and_devices(
             allowed_devices[group] = selected_devices
             allowed_plans[group] = selected_plans
 
-    else:
+    except Exception as ex:
+        logger.exception("Error occurred while generating the list of allowed plans and devices: %s", str(ex))
 
-        # No user groups are specified
+        # The 'default' lists in case error occurred while generating lists
         allowed_plans["root"] = existing_plans
         allowed_devices["root"] = existing_devices
 

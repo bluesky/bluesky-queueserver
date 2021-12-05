@@ -87,8 +87,8 @@ class RunEngineWorker(Process):
         self._existing_plans, self._existing_devices = {}, {}
         self._allowed_plans, self._allowed_devices = {}, {}
 
-        self._allowed_items_lock = threading.Rlock()
-        self._existing_items_lock = threading.Rlock()
+        self._allowed_items_lock = None  # threading.Lock()
+        self._existing_items_lock = None  # threading.Lock()
 
         # Indicates when to update the existing plans and devices
         update_pd = self._config_dict["update_existing_plans_devices"]
@@ -584,9 +584,7 @@ class RunEngineWorker(Process):
 
             def thread_func_wrapper():
                 def thread_func():
-                    """
-                    This is the function executed in the separate thread
-                    """
+                    # This is the function executed in a separate thread
                     try:
                         target(*args, **kwargs)
                     except Exception as ex:
@@ -644,6 +642,9 @@ class RunEngineWorker(Process):
         self._exit_event = threading.Event()
         self._exit_confirmed_event = threading.Event()
         self._re_report_lock = threading.Lock()
+
+        self._allowed_items_lock = threading.Lock()
+        self._existing_items_lock = threading.Lock()
 
         from bluesky import RunEngine
         from bluesky.run_engine import get_bluesky_event_loop

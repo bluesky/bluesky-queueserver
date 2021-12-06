@@ -2142,6 +2142,126 @@ def test_permissions_reload_1(re_manager_pc_copy, tmp_path, reload_plans_devices
         assert "det50" not in devices_allowed2
 
 
+permissions_allow_count = """
+user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - null  # Allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - null  # Allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - "^count$"  # 'count plan'
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - null  # A different way to allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+"""
+
+
+permissions_not_allow_count = """
+user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - null  # Allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - null  # Allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - null  # A different way to allow all
+    forbidden_plans:
+      - "^count$"  # 'count' plan
+    allowed_devices:
+      - null  # A different way to allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("allow_count_plan", [True, False])
+# fmt: on
+def test_permissions_reload_2(re_manager_pc_copy, allow_count_plan):  # noqa: F811
+    """
+    Test if permissions are correctly loaded from disk by the Manager process and propagated to the
+    worker process if the environment is open. The test includes the following steps:
+    - Start RE Manager with the copy of startup and config files in temporary location (files could be modified).
+    - Open RE Worker environment (loads startup files and updates the list of existing plans and devices).
+    - Add one ``count`` plan to the queue (should always work).
+    - Replace ``user_group_permissions.yaml`` to modify permissions.
+    - Test if the plan can still be added to the queue (shows if permissions were correctly loaded by
+      the manager process).
+    - Try to execute the queue (shows if reloaded permissions correctly propagated to the worker process).
+    """
+    _, pc_path = re_manager_pc_copy
+
+    resp1a, _ = zmq_single_request("environment_open")
+    assert resp1a["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    # Add the first 'count' plan
+    resp1b, _ = zmq_single_request("queue_item_add", {"item": _plan1, "user": _user, "user_group": _user_group})
+    assert resp1b["success"] is True
+
+    # Now create a new list of user permissions, which may allow/disallow the 'count' plan
+    up_text = permissions_allow_count if allow_count_plan else permissions_not_allow_count
+    with open(os.path.join(pc_path, "user_group_permissions.yaml"), "w") as f:
+        f.writelines(up_text)
+
+    # Now reload permissions. The new lists of allowed plans and devices must be generated
+    resp2, _ = zmq_single_request("permissions_reload")
+    assert resp2["success"] is True, f"resp={resp2}"
+
+    resp3, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
+    assert resp3["success"] is True, f"resp={resp3}"
+    plans_allowed = resp3["plans_allowed"]
+
+    # Attempt to add the second plan
+    resp4, _ = zmq_single_request("queue_item_add", {"item": _plan1, "user": _user, "user_group": _user_group})
+    status = get_queue_state()
+
+    # The following checks verify that the permissions are properly reloaded by the manager process
+    if allow_count_plan:
+        assert "count" in plans_allowed
+        assert resp4["success"] is True
+        assert status["items_in_queue"] == 2
+    else:
+        assert "count" not in plans_allowed
+        assert resp4["success"] is False
+        assert status["items_in_queue"] == 1
+
+    # Now verify that permissions are reloaded by the worker process. The way to do it is to is to start
+    #   the queue and see if 'count' plans are executed.
+    resp5, _ = zmq_single_request("queue_start")
+    assert resp5["success"] is True, f"resp={resp5}"
+
+    assert wait_for_condition(time=30, condition=condition_manager_idle)
+
+    status = get_queue_state()
+
+    if allow_count_plan:
+        assert status["items_in_queue"] == 0
+        assert status["items_in_history"] == 2
+    else:
+        assert status["items_in_queue"] == 1  # The plan is pushed back in the queue
+        assert status["items_in_history"] == 1  # The plan failed, but it is still added to history
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
 # =======================================================================================
 #                              Method `environment_destroy`
 

@@ -682,7 +682,7 @@ class RunEngineManager(Process):
 
     def _generate_lists_of_allowed_plans_and_devices(self, *, always_update_uids=False):
         """
-        Compute lists of allowed plans and devices based on lists ``self._existing_plans``,
+        Compute lists of allowed plans and devices based on the lists ``self._existing_plans``,
         ``self._existing_devices`` and user group permissions ``self._user_group_permissions``.
 
         The UIDS of the lists of allowed plans and devices are updated only if the computed
@@ -724,8 +724,8 @@ class RunEngineManager(Process):
         are ALWAYS updated when this function is called. If ``reload_plans_devices`` is ``True``,
         then the list of existing plans and devices is reloaded from disk.
         """
+        path_pd = self._config_dict["existing_plans_and_devices_path"]
         try:
-            path_pd = self._config_dict["existing_plans_and_devices_path"]
             if reload_plans_devices:
                 self._existing_plans, self._existing_devices = load_existing_plans_and_devices(path_pd)
             self._generate_lists_of_allowed_plans_and_devices(always_update_uids=True)

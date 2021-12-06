@@ -37,7 +37,16 @@ Validation of Plans
 
 Validation of plan parameters is more sophysticated and based on plan representations
 stored in the file ``existing_plans_and_devices.yaml``, which is created by analysing
-of the startup script(s) or the module with ``qserver-list-plans-devices`` tool.
+of the startup script(s) or the module with :ref:`qserver_list_plans_devices_cli` CLI tool.
+Alternatively, RE Manager may be configured to create/update the list of
+existing plans and devices stored on disk each time RE Worker environment is opened or
+plans and devices in RE namespace are changed. See :ref:`update_existing_plans_devices`
+for available options. The lists of existing plans and device used by RE Manager
+(stored in memory) are always updated during runtime to reflect changes in loaded
+RE namespace. When RE Manager is started, the lists are reloaded from file and are used
+until RE Worker environment is opened the first time and startup scripts are successfully
+loaded, so it is important to keep the stored lists up-date.
+
 Each user is assigned to a user group and each user group is assigned permissions
 to use a subset of names of existing plans and devices in API requests. The permissions
 are defined in the file ``user_group_permissions.yaml``. The lists of allowed plans and
@@ -84,4 +93,3 @@ API for Plan Validation
    :toctree: generated
 
     validate_plan
-

@@ -5,7 +5,7 @@ Installation
 System Requirements
 -------------------
 
-Supported Python versions: 3.7, 3.8.
+Supported Python versions: 3.7, 3.8, 3.9.
 
 Installation Steps
 ------------------
@@ -26,10 +26,13 @@ Installation Steps
 
   It is recommended to install the Queue Server in Conda environment. A new environment can be created
   or already existing environment can be activated. The following example illustrates how to create
-  a new Conda environment with the name *queue_server* and Python 3.7 installed::
+  a new Conda environment with the name *queue_server* and Python 3.9 installed::
 
-    $ conda create -n queue_server python=3.7
+    $ conda create -n queue_server python=3.9
     $ activate queue_server
+
+  The Queue Server currently works with Python 3.7-3.9, but it is recommended that Python 3.9 is used
+  for development.
 
 * **Install Queue Server**
 

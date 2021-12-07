@@ -8,7 +8,12 @@ import enum
 import uuid
 
 from .comms import PipeJsonRpcSendAsync, CommTimeoutError, validate_zmq_key
-from .profile_ops import load_allowed_plans_and_devices, validate_plan
+from .profile_ops import (
+    load_allowed_plans_and_devices,
+    load_existing_plans_and_devices,
+    validate_plan,
+    load_user_group_permissions,
+)
 from .plan_queue_ops import PlanQueueOperations
 from .output_streaming import setup_console_output_redirection
 
@@ -131,6 +136,8 @@ class RunEngineManager(Process):
         # Note: 'self._config' is a private attribute of 'multiprocessing.Process'. Overriding
         #   this variable may lead to unpredictable and hard to debug issues.
         self._config_dict = config or {}
+        self._user_group_permissions = {}
+        self._existing_plans, self._existing_devices = {}, {}
         self._allowed_plans, self._allowed_devices = {}, {}
         self._allowed_plans_uid = _generate_uid()
         self._allowed_devices_uid = _generate_uid()
@@ -386,6 +393,9 @@ class RunEngineManager(Process):
                     if ws["re_state"] == "paused":
                         self._re_pause_pending = False
 
+                    if ws["plans_and_devices_list_updated"]:
+                        self._loop.create_task(self._load_existing_plans_and_devices_from_worker())
+
                     if self._manager_state == MState.CLOSING_ENVIRONMENT:
                         if ws["environment_state"] == "closing":
                             self._fut_manager_task_completed.set_result(None)
@@ -474,6 +484,30 @@ class RunEngineManager(Process):
         else:
             self._re_run_list = run_list["run_list"]
             self._re_run_list_uid = _generate_uid()
+
+    async def _load_existing_plans_and_devices_from_worker(self, update_user_group_permissions=False):
+        """
+        Download the updated list of existing plans and devices from the worker environment.
+        User group permissions are also downloaded from the worker and could be updated if needed.
+        """
+        logger.info("Downloading the lists of existing plans and devices from the worker environment")
+        plan_and_devices_list, err_msg = await self._worker_request_plans_and_devices_list()
+        if plan_and_devices_list is None:
+            # TODO: this would typically mean a bug (communication error). Probably more
+            #       complicated processing is needed
+            logger.error(
+                f"Failed to download the list of existing plans and devices from the worker process: {err_msg}."
+            )
+        else:
+            self._existing_plans = plan_and_devices_list["existing_plans"]
+            self._existing_devices = plan_and_devices_list["existing_devices"]
+            if update_user_group_permissions:
+                self._user_group_permissions = plan_and_devices_list["user_group_permissions"]
+
+            try:
+                self._generate_lists_of_allowed_plans_and_devices()
+            except Exception as ex:
+                logger.exception("Failed to compute the list of allowed plans and devices: %s", str(ex))
 
     async def _start_plan(self):
         """
@@ -650,18 +684,55 @@ class RunEngineManager(Process):
 
         return success, err_msg
 
-    def _load_allowed_plans_and_devices(self):
+    def _generate_lists_of_allowed_plans_and_devices(self, *, always_update_uids=False):
         """
-        Load the list of allowed plans and devices
+        Compute lists of allowed plans and devices based on the lists ``self._existing_plans``,
+        ``self._existing_devices`` and user group permissions ``self._user_group_permissions``.
+
+        The UIDS of the lists of allowed plans and devices are updated only if the computed
+        lists are different from the existing ones or if ``always_update_uids`` is ``True``.
+        """
+        allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+            existing_plans=self._existing_plans,
+            existing_devices=self._existing_devices,
+            user_group_permissions=self._user_group_permissions,
+        )
+
+        try:
+            if always_update_uids or (allowed_plans != self._allowed_plans):
+                self._allowed_plans = allowed_plans
+                self._allowed_plans_uid = _generate_uid()
+        except Exception as ex:
+            logger.error("Error occurred while comparing lists of allowed plans: %s", str(ex))
+
+        try:
+            if always_update_uids or (allowed_devices != self._allowed_devices):
+                self._allowed_devices = allowed_devices
+                self._allowed_devices_uid = _generate_uid()
+        except Exception as ex:
+            logger.error("Error occurred while comparing lists of allowed devices: %s", str(ex))
+
+    def _load_permissions(self):
+        """
+        Load permissions from disk.
         """
         try:
-            path_pd = self._config_dict["existing_plans_and_devices_path"]
             path_ug = self._config_dict["user_group_permissions_path"]
-            self._allowed_plans, self._allowed_devices = load_allowed_plans_and_devices(
-                path_existing_plans_and_devices=path_pd, path_user_group_permissions=path_ug
-            )
-            self._allowed_plans_uid = _generate_uid()
-            self._allowed_devices_uid = _generate_uid()
+            self._user_group_permissions = load_user_group_permissions(path_ug)
+        except Exception as ex:
+            logger.exception("Error occurred while loading user permissions from file '%s': %s", path_ug, str(ex))
+
+    def _update_allowed_plans_and_devices(self, reload_plans_devices=False):
+        """
+        Update the lists of allowed plans and devices. UIDs for the lists of allowed plans and device
+        are ALWAYS updated when this function is called. If ``reload_plans_devices`` is ``True``,
+        then the list of existing plans and devices is reloaded from disk.
+        """
+        path_pd = self._config_dict["existing_plans_and_devices_path"]
+        try:
+            if reload_plans_devices:
+                self._existing_plans, self._existing_devices = load_existing_plans_and_devices(path_pd)
+            self._generate_lists_of_allowed_plans_and_devices(always_update_uids=True)
         except Exception as ex:
             raise Exception(
                 f"Error occurred while loading lists of allowed plans and devices from '{path_pd}': {str(ex)}"
@@ -697,6 +768,16 @@ class RunEngineManager(Process):
         except CommTimeoutError:
             run_list, err_msg = None, "Timeout occurred"
         return run_list, err_msg
+
+    async def _worker_request_plans_and_devices_list(self):
+        try:
+            plans_and_devices_list = await self._comm_to_worker.send_msg("request_plans_and_devices_list")
+            err_msg = ""
+            if plans_and_devices_list is None:
+                err_msg = "Failed to obtain the run list from the worker"
+        except CommTimeoutError:
+            plans_and_devices_list, err_msg = None, "Timeout occurred"
+        return plans_and_devices_list, err_msg
 
     async def _worker_command_close_env(self):
         try:
@@ -752,6 +833,17 @@ class RunEngineManager(Process):
             success, err_msg = None, "Timeout occurred"
         return success, err_msg
 
+    async def _worker_command_permissions_reload(self):
+        try:
+            response = await self._comm_to_worker.send_msg(
+                "command_permissions_reload", params={"user_group_permissions": self._user_group_permissions}
+            )
+            success = response["status"] == "accepted"
+            err_msg = response["err_msg"]
+        except CommTimeoutError:
+            success, err_msg = None, "Timeout occurred"
+        return success, err_msg
+
     # ===============================================================================
     #         Functions that send commands/request data from Watchdog process
 
@@ -761,7 +853,9 @@ class RunEngineManager(Process):
         was created successfully and RE environment initialization is started.
         """
         try:
-            response = await self._comm_to_watchdog.send_msg("start_re_worker")
+            response = await self._comm_to_watchdog.send_msg(
+                "start_re_worker", params={"user_group_permissions": self._user_group_permissions}
+            )
             success = response["success"]
         except CommTimeoutError:
             success = False
@@ -979,15 +1073,30 @@ class RunEngineManager(Process):
 
     async def _permissions_reload_handler(self, request):
         """
-        Reloads the list of allowed plans and devices and user group permission from the default location
-        or location set using command line parameters.
+        Reloads user group permissions from the default location or the location set using command line
+        parameters. UIDs of the lists of allowed plans and devices are always changed if the operation is
+        successful even if the contents of the lists remain the same. By default, the function is using
+        the current lists of existing plans and devices, which may or may not match the contents of
+        the file on disk. If optional parameter ``reload_plans_devices`` is ``True``, then the list
+        of existing plans and devices are loaded from disk file.
         """
         logger.info("Reloading lists of allowed plans and devices ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["reload_plans_devices"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
-            self._load_allowed_plans_and_devices()
+            # Do not reload the lists of existing plans and devices from disk file by default
+            reload_plans_devices = request.get("reload_plans_devices", False)
+
+            self._load_permissions()
+            self._update_allowed_plans_and_devices(reload_plans_devices=reload_plans_devices)
+
+            # If environment exists, then tell the worker to reload permissions. This is optional.
+            if self._environment_exists:
+                success_opt, msg_opt = await self._worker_command_permissions_reload()
+                if not success_opt:
+                    logger.warning("Permissions failed to reload by RE Worker process: %s", msg_opt)
+
             success, msg = True, ""
         except Exception as ex:
             success = False
@@ -2048,18 +2157,22 @@ class RunEngineManager(Process):
         # Delete Redis entries (for testing and debugging)
         # self._plan_queue.delete_pool_entries()
 
-        # Load lists of allowed plans and devices
-        logger.info("Loading the lists of allowed plans and devices ...")
-        try:
-            self._load_allowed_plans_and_devices()
-        except Exception as ex:
-            logger.exception("Exception: %s", ex)
-
         # Set the environment state based on whether the worker process is alive (request Watchdog)
         self._environment_exists = await self._is_worker_alive()
 
         # Now check if the plan is still being executed (if it was executed)
         if self._environment_exists:
+
+            # The environment is expected to contain the most recent version of the list of plans and devices
+            #   and a copy of user group permissions, so they could be downloaded from the worker.
+            #   If the request to download plans and devices fails, then the lists of existing and allowed
+            #   devices and plans and the dictionary of user group permissions are going to be empty ({}).
+            await self._load_existing_plans_and_devices_from_worker(update_user_group_permissions=True)
+            try:
+                self._update_allowed_plans_and_devices(reload_plans_devices=False)
+            except Exception as ex:
+                logger.exception("Exception: %s", ex)
+
             # Attempt to load the list of active runs.
             re_run_list, _ = await self._worker_request_run_list()
             self._re_run_list = re_run_list["run_list"] if re_run_list else []
@@ -2099,6 +2212,16 @@ class RunEngineManager(Process):
             else:
                 logger.error("Error while reading RE Worker status: %s", err_msg)
         else:
+            # Load lists of allowed plans and devices
+            logger.info("Loading the lists of allowed plans and devices ...")
+            # Load user group permissions and existing plans and devices from files
+            #   if RE environment does not exist
+            self._load_permissions()
+            try:
+                self._update_allowed_plans_and_devices(reload_plans_devices=True)
+            except Exception as ex:
+                logger.exception("Exception: %s", ex)
+
             self._worker_state_info = None
 
         if self._manager_state not in (MState.EXECUTING_QUEUE, MState.PAUSED):

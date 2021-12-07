@@ -533,7 +533,7 @@ def test_is_re_worker_active_2(re_manager_cmd, tmp_path, monkeypatch, option):  
         assert False, f"Unknown option '{option}'"
 
     # Open environment and execute plan 'sim_plan_1'
-    resp1, _ = zmq_single_request("permissions_reload")
+    resp1, _ = zmq_single_request("permissions_reload", {"reload_plans_devices": True})
     assert resp1["success"] is True, f"resp={resp1}"
 
     # Add plan to the queue

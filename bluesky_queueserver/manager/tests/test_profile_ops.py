@@ -10,6 +10,9 @@ import sys
 import enum
 import inspect
 from collections.abc import Callable
+import shutil
+import time as ttime
+
 
 try:
     from bluesky import protocols
@@ -36,6 +39,7 @@ from bluesky_queueserver.manager.profile_ops import (
     prepare_plan,
     gen_list_of_plans_and_devices,
     load_existing_plans_and_devices,
+    update_existing_plans_and_devices,
     load_user_group_permissions,
     _process_plan,
     validate_plan,
@@ -55,6 +59,8 @@ from bluesky_queueserver.manager.profile_ops import (
 
 # User name and user group name used throughout most of the tests.
 _user, _user_group = "Testing Script", "admin"
+
+python_version = sys.version_info  # Can be compare to tuples (such as 'python_version >= (3, 9)')
 
 
 def test_get_default_startup_dir():
@@ -1205,7 +1211,9 @@ _pf2g_processed = {
             "name": "val5",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "default": "None",
-            "annotation": {"type": "typing.Union[float, NoneType]"},
+            "annotation": {
+                "type": "typing.Optional[float]" if python_version >= (3, 9) else "typing.Union[float, NoneType]"
+            },
         },
     ],
     "properties": {"is_generator": True},
@@ -2209,7 +2217,9 @@ def test_prepare_plan_1(plan, exp_args, exp_kwargs, success, err_msg):
 
     path_allowed_plans = os.path.join(pc_path, "existing_plans_and_devices.yaml")
     path_permissions = os.path.join(pc_path, "user_group_permissions.yaml")
-    allowed_plans, allowed_devices = load_allowed_plans_and_devices(path_allowed_plans, path_permissions)
+    allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+        path_existing_plans_and_devices=path_allowed_plans, path_user_group_permissions=path_permissions
+    )
 
     if success:
         plan_parsed = prepare_plan(
@@ -2562,7 +2572,7 @@ def test_gen_list_of_plans_and_devices_cli(tmp_path, monkeypatch, test, exit_cod
         assert not os.path.isfile(os.path.join(pc_path, fln_yaml))
 
 
-def test_load_existing_plans_and_devices():
+def test_load_existing_plans_and_devices_1():
     """
     Loads the list of allowed plans and devices from simulated profile collection.
     """
@@ -2579,6 +2589,237 @@ def test_load_existing_plans_and_devices():
     existing_plans, existing_devices = load_existing_plans_and_devices(None)
     assert existing_plans == {}
     assert existing_devices == {}
+
+
+# fmt: off
+@pytest.mark.parametrize("option", ["normal", "no_file", "empty_file", "corrupt_file1", "corrupt_file2"])
+# fmt: on
+def test_load_existing_plans_and_devices_2(tmp_path, option):
+
+    path_to_file = os.path.join(tmp_path, "some_dir")
+    os.makedirs(path_to_file, exist_ok=True)
+    path_to_file = os.path.join(path_to_file, "p_and_d.yaml")
+
+    if option == "normal":
+        pc_path = get_default_startup_dir()
+        original_file_path = os.path.join(pc_path, "existing_plans_and_devices.yaml")
+        shutil.copy(original_file_path, path_to_file)
+    elif option == "empty_file":
+        with open(path_to_file, "w") as f:
+            pass
+    elif option == "corrupt_file1":
+        # Not YAML
+        with open(path_to_file, "w") as f:
+            f.writelines(["This string is not expected in YAML file", "Reading the file is expected to fail"])
+    elif option == "corrupt_file2":
+        # Invalid YAML
+        with open(path_to_file, "w") as f:
+            f.writelines(["- Item 1\n- Item 2\nItem3"])
+    elif option == "no_file":
+        pass
+    else:
+        assert False, f"Unknown testing option '{option}'"
+
+    existing_plans, existing_devices = load_existing_plans_and_devices(path_to_file)
+
+    if option == "normal":
+        assert existing_plans != {}
+        assert existing_devices != {}
+    else:
+        assert existing_plans == {}
+        assert existing_devices == {}
+
+
+def _copy_built_in_yaml_files(tmp_path):
+    """
+    Creates a copy of built-in startup files in temporary directory. Returns full paths
+    to the copies of ``existing_plans_and_devices.yaml`` and ``user_group_permissions.yaml`` files.
+    """
+    pc_path1 = get_default_startup_dir()
+    file_path_existing_plans_and_devices1 = os.path.join(pc_path1, "existing_plans_and_devices.yaml")
+    file_path_user_group_permissions1 = os.path.join(pc_path1, "user_group_permissions.yaml")
+
+    pc_path2 = os.path.join(tmp_path, "startup")
+    file_path_existing_plans_and_devices2 = os.path.join(pc_path2, "existing_plans_and_devices.yaml")
+    file_path_user_group_permissions2 = os.path.join(pc_path2, "user_group_permissions.yaml")
+
+    os.makedirs(pc_path2, exist_ok=True)
+    shutil.copy(file_path_existing_plans_and_devices1, file_path_existing_plans_and_devices2)
+    shutil.copy(file_path_user_group_permissions1, file_path_user_group_permissions2)
+
+    return file_path_existing_plans_and_devices2, file_path_user_group_permissions2
+
+
+# fmt: off
+@pytest.mark.parametrize("load_ref_from_file", [True, False])
+# fmt: on
+def test_update_existing_plans_and_devices_1(tmp_path, load_ref_from_file):
+    """
+    Test that the file on disk IS NOT modified if the lists of existing plans and devices are not changed.
+    """
+    fp_existing_plans_and_devices, _ = _copy_built_in_yaml_files(tmp_path)
+
+    existing_plans, existing_devices = load_existing_plans_and_devices(fp_existing_plans_and_devices)
+
+    if load_ref_from_file:
+        t1 = os.path.getctime(fp_existing_plans_and_devices)
+        ttime.sleep(0.005)
+
+        changes_detected = update_existing_plans_and_devices(
+            path_to_file=fp_existing_plans_and_devices,
+            existing_plans=existing_plans,
+            existing_devices=existing_devices,
+        )
+    else:
+        # Remove the contents of the file. The file should not be updated, since we are using
+        # references passed as parameters
+        with open(fp_existing_plans_and_devices, "w"):
+            pass
+
+        t1 = os.path.getctime(fp_existing_plans_and_devices)
+        ttime.sleep(0.005)
+
+        changes_detected = update_existing_plans_and_devices(
+            path_to_file=fp_existing_plans_and_devices,
+            existing_plans=existing_plans,
+            existing_devices=existing_devices,
+            existing_devices_ref=copy.deepcopy(existing_devices),
+            existing_plans_ref=copy.deepcopy(existing_plans),
+        )
+
+    t2 = os.path.getctime(fp_existing_plans_and_devices)
+    assert t1 == t2, "The file was modified"
+
+    assert changes_detected is False
+
+
+# fmt: off
+@pytest.mark.parametrize("load_ref_from_file", [True, False])
+@pytest.mark.parametrize("modified", ["plans", "devices"])
+# fmt: on
+def test_update_existing_plans_and_devices_2(tmp_path, load_ref_from_file, modified):
+    """
+    Test that the file on disk IS modified if the lists of existing plans and devices are not changed.
+    """
+    fp_existing_plans_and_devices, _ = _copy_built_in_yaml_files(tmp_path)
+    t1 = os.path.getctime(fp_existing_plans_and_devices)
+    ttime.sleep(0.005)
+
+    existing_plans, existing_devices = load_existing_plans_and_devices(fp_existing_plans_and_devices)
+    existing_plans_modified = copy.deepcopy(existing_plans)
+    existing_devices_modified = copy.deepcopy(existing_devices)
+
+    if modified == "plans":
+        del existing_plans_modified["count"]
+    elif modified == "devices":
+        del existing_devices_modified["det"]
+    else:
+        assert False, f"Unknown option '{modified}'"
+
+    if load_ref_from_file:
+        changes_detected = update_existing_plans_and_devices(
+            path_to_file=fp_existing_plans_and_devices,
+            existing_plans=existing_plans_modified,
+            existing_devices=existing_devices_modified,
+        )
+    else:
+        changes_detected = update_existing_plans_and_devices(
+            path_to_file=fp_existing_plans_and_devices,
+            existing_plans=existing_plans_modified,
+            existing_devices=existing_devices_modified,
+            existing_devices_ref=copy.deepcopy(existing_devices),
+            existing_plans_ref=copy.deepcopy(existing_plans),
+        )
+
+    t2 = os.path.getctime(fp_existing_plans_and_devices)
+    assert t1 != t2, "The file was not modified"
+
+    existing_plans2, existing_devices2 = load_existing_plans_and_devices(fp_existing_plans_and_devices)
+    assert existing_plans2 == existing_plans_modified
+    assert existing_devices2 == existing_devices_modified
+
+    assert changes_detected is True
+
+
+# fmt: off
+@pytest.mark.parametrize("file_state", ["removed", "empty", "corrupt"])
+# fmt: on
+def test_update_existing_plans_and_devices_3(tmp_path, file_state):
+    """
+    Test that the file is correctly updated if it does not exist or empty.
+    """
+    fp_existing_plans_and_devices, _ = _copy_built_in_yaml_files(tmp_path)
+
+    existing_plans, existing_devices = load_existing_plans_and_devices(fp_existing_plans_and_devices)
+    if file_state == "removed":
+        os.remove(fp_existing_plans_and_devices)
+        assert not os.path.isfile(fp_existing_plans_and_devices)
+    elif file_state == "empty":
+        with open(fp_existing_plans_and_devices, "w"):
+            pass
+        assert os.path.getsize(fp_existing_plans_and_devices) == 0
+    elif file_state == "corrupt":
+        # Invalid YAML
+        with open(fp_existing_plans_and_devices, "w") as f:
+            f.writelines(["- Item 1\n- Item 2\nItem3"])
+    else:
+        assert False, f"Unknown option '{file_state}'"
+
+    changes_detected = update_existing_plans_and_devices(
+        path_to_file=fp_existing_plans_and_devices,
+        existing_plans=existing_plans,
+        existing_devices=existing_devices,
+    )
+
+    existing_plans2, existing_devices2 = load_existing_plans_and_devices(fp_existing_plans_and_devices)
+    assert existing_plans2 == existing_plans
+    assert existing_devices2 == existing_devices
+
+    assert changes_detected is True
+
+
+# fmt: off
+@pytest.mark.parametrize("load_ref_from_file", [True, False])
+# fmt: on
+def test_update_existing_plans_and_devices_4(load_ref_from_file):
+    """
+    Test that the files in the built-in profile collection directory (which is part of the repository and
+    the distributed package) are never modified.
+    """
+    pc_path = get_default_startup_dir()
+    fp_existing_plans_and_devices = os.path.join(pc_path, "existing_plans_and_devices.yaml")
+    t1 = os.path.getctime(fp_existing_plans_and_devices)
+    ttime.sleep(0.005)
+
+    existing_plans, existing_devices = load_existing_plans_and_devices(fp_existing_plans_and_devices)
+    existing_plans_modified = copy.deepcopy(existing_plans)
+    existing_devices_modified = copy.deepcopy(existing_devices)
+    del existing_plans_modified["count"]
+    del existing_devices_modified["det"]
+
+    if load_ref_from_file:
+        changes_detected = update_existing_plans_and_devices(
+            path_to_file=fp_existing_plans_and_devices,
+            existing_plans=existing_plans_modified,
+            existing_devices=existing_devices_modified,
+        )
+    else:
+        changes_detected = update_existing_plans_and_devices(
+            path_to_file=fp_existing_plans_and_devices,
+            existing_plans=existing_plans_modified,
+            existing_devices=existing_devices_modified,
+            existing_devices_ref=copy.deepcopy(existing_devices),
+            existing_plans_ref=copy.deepcopy(existing_plans),
+        )
+
+    t2 = os.path.getctime(fp_existing_plans_and_devices)
+    assert t1 == t2, "The file was modified"
+
+    existing_plans2, existing_devices2 = load_existing_plans_and_devices(fp_existing_plans_and_devices)
+    assert existing_plans2 == existing_plans
+    assert existing_devices2 == existing_devices
+
+    assert changes_detected is True
 
 
 def test_verify_default_profile_collection():
@@ -2610,6 +2851,15 @@ def test_verify_default_profile_collection():
     #   If there is a mismatch, the printed difference is too large to be useful.
     assert len(plans) == len(existing_plans)
     for key in plans.keys():
+        if python_version < (3, 9) and key == "marked_up_count":
+            # The test will fail for Python 3.8 and earlier because of difference in representation
+            #   of 'typing.Union[float, NoneType]' and 'typing.Optional[float]'. Python 3.8 and
+            #   earlier converts 'typing.Optional[float]' to 'typing.Union[float, NoneType]' and
+            #   Python 3.9 is using 'typing.Optional[float]'. The condition may be removed
+            #   once there is no need to support Python 3.8 and earlier.
+            # NOTE: this limitation only affects this test, not functionality.
+            # TODO: remove this condition once Python 3.8 is not supported.
+            continue
         assert plans[key] == existing_plans[key]
 
     assert devices == existing_devices
@@ -2796,6 +3046,7 @@ def test_select_allowed_items(item_dict, allow_patterns, disallow_patterns, resu
 
 
 # fmt: off
+@pytest.mark.parametrize("pass_data_as_parameters", [False, True])
 @pytest.mark.parametrize("fln_existing_items, fln_user_groups, empty_dicts, all_users", [
     ("existing_plans_and_devices.yaml", "user_group_permissions.yaml", False, True),
     ("existing_plans_and_devices.yaml", None, False, False),
@@ -2803,7 +3054,9 @@ def test_select_allowed_items(item_dict, allow_patterns, disallow_patterns, resu
     (None, None, True, False),
 ])
 # fmt: on
-def test_load_allowed_plans_and_devices_1(fln_existing_items, fln_user_groups, empty_dicts, all_users):
+def test_load_allowed_plans_and_devices_1(
+    fln_existing_items, fln_user_groups, empty_dicts, all_users, pass_data_as_parameters
+):
     """
     Basic test for ``load_allowed_plans_and_devices``.
     """
@@ -2812,9 +3065,19 @@ def test_load_allowed_plans_and_devices_1(fln_existing_items, fln_user_groups, e
     fln_existing_items = None if (fln_existing_items is None) else os.path.join(pc_path, fln_existing_items)
     fln_user_groups = None if (fln_user_groups is None) else os.path.join(pc_path, fln_user_groups)
 
-    allowed_plans, allowed_devices = load_allowed_plans_and_devices(
-        path_existing_plans_and_devices=fln_existing_items, path_user_group_permissions=fln_user_groups
-    )
+    if pass_data_as_parameters:
+        existing_plans, existing_devices = load_existing_plans_and_devices(fln_existing_items)
+        user_group_permissions = load_user_group_permissions(fln_user_groups)
+
+        allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+            existing_plans=existing_plans,
+            existing_devices=existing_devices,
+            user_group_permissions=user_group_permissions,
+        )
+    else:
+        allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+            path_existing_plans_and_devices=fln_existing_items, path_user_group_permissions=fln_user_groups
+        )
 
     def check_dict(d):
         if empty_dicts:
@@ -2965,6 +3228,7 @@ _user_permissions_excluding_junk3 = """user_groups:
 
 
 # fmt: off
+@pytest.mark.parametrize("pass_permissions_as_parameter", [False, True])
 @pytest.mark.parametrize("permissions_str, items_are_removed, only_admin", [
     (_user_permissions_clear, False, False),
     (_user_permissions_excluding_junk1, True, False),
@@ -2972,7 +3236,9 @@ _user_permissions_excluding_junk3 = """user_groups:
     (_user_permissions_excluding_junk3, True, True),
 ])
 # fmt: on
-def test_load_allowed_plans_and_devices_2(tmp_path, permissions_str, items_are_removed, only_admin):
+def test_load_allowed_plans_and_devices_2(
+    tmp_path, permissions_str, items_are_removed, only_admin, pass_permissions_as_parameter
+):
     """
     Tests if filtering settings for the "root" group are also applied to other groups.
     The purpose of the "root" group is to filter junk from the list of existing devices and
@@ -2994,10 +3260,17 @@ def test_load_allowed_plans_and_devices_2(tmp_path, permissions_str, items_are_r
 
     plans_and_devices_fln = os.path.join(pc_path, "existing_plans_and_devices.yaml")
 
-    allowed_plans, allowed_devices = load_allowed_plans_and_devices(
-        path_existing_plans_and_devices=plans_and_devices_fln,
-        path_user_group_permissions=permissions_fln,
-    )
+    if pass_permissions_as_parameter:
+        user_group_permissions = load_user_group_permissions(permissions_fln)
+        allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+            path_existing_plans_and_devices=plans_and_devices_fln,
+            user_group_permissions=user_group_permissions,
+        )
+    else:
+        allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+            path_existing_plans_and_devices=plans_and_devices_fln,
+            path_user_group_permissions=permissions_fln,
+        )
 
     if items_are_removed:
         if only_admin:
@@ -3029,6 +3302,99 @@ def test_load_allowed_plans_and_devices_2(tmp_path, permissions_str, items_are_r
         else:
             assert devs == ("det1", "det2", "junk_device"), test_case
             assert plans == ("count", "scan", "junk_plan"), test_case
+
+
+# fmt: off
+@pytest.mark.parametrize("option", [
+    "full_lists",
+    "path_none",
+    "path_invalid",
+    "empty_device_list",
+    "empty_plan_list",
+    "empty_lists",
+])
+# fmt: on
+def test_load_allowed_plans_and_devices_3(tmp_path, option):
+    """
+    Basic test for ``load_allowed_plans_and_devices``.
+    """
+
+    fln_existing_items, fln_user_groups = "existing_plans_and_devices.yaml", "user_group_permissions.yaml"
+
+    # Load the list of allowed plans and devices from standard location
+    pc_path = get_default_startup_dir()
+
+    fln_existing_items = None if (fln_existing_items is None) else os.path.join(pc_path, fln_existing_items)
+    fln_user_groups = None if (fln_user_groups is None) else os.path.join(pc_path, fln_user_groups)
+
+    allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+        path_existing_plans_and_devices=fln_existing_items, path_user_group_permissions=fln_user_groups
+    )
+
+    # Load the list of existing plans and devices from standard location
+    existing_plans, existing_devices = load_existing_plans_and_devices(fln_existing_items)
+
+    # The following tests make sure that 'load_allowed_plans_and_devices' works with all possible
+    #   values of parameter 'path_existing_plans_and_devices', which is ignored if both
+    #   'existing_plans' and 'existing_devices' are not None.
+    if option == "full_lists":
+        fln_existing_items2 = fln_existing_items
+        existing_plans2, existing_devices2 = existing_plans, existing_devices
+    elif option == "path_none":
+        fln_existing_items2 = None
+        existing_plans2, existing_devices2 = existing_plans, existing_devices
+    elif option == "path_invalid":
+        fln_existing_items2 = tmp_path
+        existing_plans2, existing_devices2 = existing_plans, existing_devices
+    # The following tests verify that if 'path_existing_plans_and_devices',
+    #   'existing_plans' and 'existing_devices' are specified, the lists of
+    #   existing plans and devices that are passed as parameter are used
+    elif option == "empty_device_list":
+        fln_existing_items2 = fln_existing_items
+        existing_plans2, existing_devices2 = existing_plans, {}
+    elif option == "empty_plan_list":
+        fln_existing_items2 = fln_existing_items
+        existing_plans2, existing_devices2 = {}, existing_devices
+    elif option == "empty_lists":
+        fln_existing_items2 = fln_existing_items
+        existing_plans2, existing_devices2 = {}, {}
+    else:
+        assert False, f"Unknown option '{option}'"
+
+    allowed_plans2, allowed_devices2 = load_allowed_plans_and_devices(
+        path_existing_plans_and_devices=fln_existing_items2,
+        path_user_group_permissions=fln_user_groups,
+        existing_plans=existing_plans2,
+        existing_devices=existing_devices2,
+    )
+
+    def check_dict(d, is_empty):
+        if is_empty:
+            assert d == {}
+        else:
+            assert isinstance(d, dict)
+            assert d
+
+    def check_all_user_dicts(allowed, is_empty):
+        assert "admin" in allowed
+        check_dict(allowed["admin"], is_empty)
+        assert "test_user" in allowed
+        check_dict(allowed["test_user"], is_empty)
+
+    if option in ("full_lists", "path_none", "path_invalid"):
+        assert allowed_plans2 == allowed_plans
+        assert allowed_devices2 == allowed_devices
+    elif option == "empty_device_list":
+        check_all_user_dicts(allowed_plans2, is_empty=False)
+        check_all_user_dicts(allowed_devices2, is_empty=True)
+    elif option == "empty_plan_list":
+        check_all_user_dicts(allowed_plans2, is_empty=True)
+        check_all_user_dicts(allowed_devices2, is_empty=False)
+    elif option == "empty_lists":
+        check_all_user_dicts(allowed_plans2, is_empty=True)
+        check_all_user_dicts(allowed_devices2, is_empty=True)
+    else:
+        assert False, f"Unknown option '{option}'"
 
 
 # fmt: off

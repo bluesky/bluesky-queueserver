@@ -313,11 +313,17 @@ Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 Method        **'permissions_reload'**
 ------------  -----------------------------------------------------------------------------------------
-Description   Reloads the list of allowed plans and devices and user group permission from
-              the default location or the location set using command line parameters. Use this
-              method to reload permissions if the files were changed on disk.
+Description   Reload user group permissions from the default location or the location set using
+              command line parameters and generate lists of allowed plans and devices based on
+              the lists of existing plans and devices. By default, the method will use current lists
+              of existing plans and devices stored in memory. Optionally the method can reload the
+              lists from the disk file (see *reload_plans_devices* parameter). The method always
+              updates UIDs of the lists of allowed plans and devices even if the contents remain
+              the same.
 ------------  -----------------------------------------------------------------------------------------
-Parameters    ---
+Parameters    **reload_plans_devices**: *boolean* (optional)
+                  reload the lists of existing plans and devices from disk if *True*, otherwise
+                  use current lists stored in memory. Default: *False*.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.

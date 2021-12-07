@@ -5,6 +5,7 @@ import asyncio
 import copy
 import pprint
 import re
+import glob
 
 from bluesky_queueserver.manager.profile_ops import (
     get_default_startup_dir,
@@ -31,7 +32,6 @@ from .common import (
     get_queue_state,
     condition_environment_closed,
     condition_manager_idle,
-    copy_default_profile_collection,
     append_code_to_last_startup_file,
     set_qserver_zmq_public_key,
     # clear_redis_pool,
@@ -2060,6 +2060,210 @@ def test_zmq_api_queue_mode_set_3_loop_mode(re_manager):  # noqa: F811
 
 
 # =======================================================================================
+#                              Method 'permissions_reload'
+
+# fmt: off
+@pytest.mark.parametrize("reload_plans_devices", [False, True])
+# fmt: on
+def test_permissions_reload_1(re_manager_pc_copy, tmp_path, reload_plans_devices):  # noqa: F811
+    """
+    Comprehensive test for ``permission_reload`` API: create a copy of startup files,
+    generate the lists of existing plans and devices, start RE Manager (loads the list
+    of existing plans and devices from disk), add a device and a plan to startup scripts,
+    generate the new lists of existing plans and devices, call ``permissions_reload``,
+    check if the new device and the new plan was added to the lists of allowed plans
+    and devices (if ``reload_plans_devices`` is ``True``, then the device and the plan
+    are expected to be in the list).
+    """
+
+    _, pc_path = re_manager_pc_copy
+    # Generate the list of existing devices
+    gen_list_of_plans_and_devices(
+        startup_dir=pc_path, file_dir=pc_path, file_name="existing_plans_and_devices.yaml", overwrite=True
+    )
+
+    # Add a plan ('count50') and a device ('det50'). Generate the new disk file
+    with open(os.path.join(pc_path, "zz.py"), "w") as f:
+        f.writelines(["det50 = det\n", "count50 = count\n"])
+    gen_list_of_plans_and_devices(
+        startup_dir=pc_path, file_dir=pc_path, file_name="existing_plans_and_devices.yaml", overwrite=True
+    )
+
+    # 'allowed_plans_uid' and 'allowed_devices_uid'
+    status, _ = zmq_single_request("status")
+    plans_allowed_uid = status["plans_allowed_uid"]
+    devices_allowed_uid = status["devices_allowed_uid"]
+    assert plans_allowed_uid != devices_allowed_uid
+
+    resp1a, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
+    assert resp1a["success"] is True, f"resp={resp1a}"
+    assert resp1a["plans_allowed_uid"] == plans_allowed_uid
+    plans_allowed = resp1a["plans_allowed"]
+
+    resp1b, _ = zmq_single_request("devices_allowed", params={"user_group": _user_group})
+    assert resp1b["success"] is True, f"resp={resp1b}"
+    assert resp1b["devices_allowed_uid"] == devices_allowed_uid
+    devices_allowed = resp1b["devices_allowed"]
+
+    assert isinstance(plans_allowed_uid, str)
+    assert isinstance(devices_allowed_uid, str)
+    assert "count50" not in plans_allowed
+    assert "det50" not in devices_allowed
+
+    resp2, _ = zmq_single_request("permissions_reload", {"reload_plans_devices": reload_plans_devices})
+    assert resp2["success"] is True, f"resp={resp2}"
+
+    # Check that 'plans_allowed_uid' and 'devices_allowed_uid' changed while permissions were reloaded
+    status, _ = zmq_single_request("status")
+    plans_allowed_uid2 = status["plans_allowed_uid"]
+    devices_allowed_uid2 = status["devices_allowed_uid"]
+    assert plans_allowed_uid2 != devices_allowed_uid2
+
+    resp3a, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
+    assert resp3a["success"] is True, f"resp={resp3a}"
+    assert resp3a["plans_allowed_uid"] == plans_allowed_uid2
+    plans_allowed2 = resp3a["plans_allowed"]
+
+    resp3b, _ = zmq_single_request("devices_allowed", params={"user_group": _user_group})
+    assert resp3b["success"] is True, f"resp={resp3b}"
+    assert resp3b["devices_allowed_uid"] == devices_allowed_uid2
+    devices_allowed2 = resp3b["devices_allowed"]
+
+    assert isinstance(plans_allowed_uid2, str)
+    assert isinstance(devices_allowed_uid2, str)
+
+    assert plans_allowed_uid2 != plans_allowed_uid
+    assert devices_allowed_uid2 != devices_allowed_uid
+
+    if reload_plans_devices:
+        assert "count50" in plans_allowed2
+        assert "det50" in devices_allowed2
+    else:
+        assert "count50" not in plans_allowed2
+        assert "det50" not in devices_allowed2
+
+
+permissions_allow_count = """
+user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - null  # Allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - null  # Allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - "^count$"  # 'count plan'
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - null  # A different way to allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+"""
+
+
+permissions_not_allow_count = """
+user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - null  # Allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - null  # Allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - null  # A different way to allow all
+    forbidden_plans:
+      - "^count$"  # 'count' plan
+    allowed_devices:
+      - null  # A different way to allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("allow_count_plan", [True, False])
+# fmt: on
+def test_permissions_reload_2(re_manager_pc_copy, allow_count_plan):  # noqa: F811
+    """
+    Test if permissions are correctly loaded from disk by the Manager process and propagated to the
+    worker process if the environment is open. The test includes the following steps:
+    - Start RE Manager with the copy of startup and config files in temporary location (files could be modified).
+    - Open RE Worker environment (loads startup files and updates the list of existing plans and devices).
+    - Add one ``count`` plan to the queue (should always work).
+    - Replace ``user_group_permissions.yaml`` to modify permissions.
+    - Test if the plan can still be added to the queue (shows if permissions were correctly loaded by
+      the manager process).
+    - Try to execute the queue (shows if reloaded permissions correctly propagated to the worker process).
+    """
+    _, pc_path = re_manager_pc_copy
+
+    resp1a, _ = zmq_single_request("environment_open")
+    assert resp1a["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    # Add the first 'count' plan
+    resp1b, _ = zmq_single_request("queue_item_add", {"item": _plan1, "user": _user, "user_group": _user_group})
+    assert resp1b["success"] is True
+
+    # Now create a new list of user permissions, which may allow/disallow the 'count' plan
+    up_text = permissions_allow_count if allow_count_plan else permissions_not_allow_count
+    with open(os.path.join(pc_path, "user_group_permissions.yaml"), "w") as f:
+        f.writelines(up_text)
+
+    # Now reload permissions. The new lists of allowed plans and devices must be generated
+    resp2, _ = zmq_single_request("permissions_reload")
+    assert resp2["success"] is True, f"resp={resp2}"
+
+    resp3, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
+    assert resp3["success"] is True, f"resp={resp3}"
+    plans_allowed = resp3["plans_allowed"]
+
+    # Attempt to add the second plan
+    resp4, _ = zmq_single_request("queue_item_add", {"item": _plan1, "user": _user, "user_group": _user_group})
+    status = get_queue_state()
+
+    # The following checks verify that the permissions are properly reloaded by the manager process
+    if allow_count_plan:
+        assert "count" in plans_allowed
+        assert resp4["success"] is True
+        assert status["items_in_queue"] == 2
+    else:
+        assert "count" not in plans_allowed
+        assert resp4["success"] is False
+        assert status["items_in_queue"] == 1
+
+    # Now verify that permissions are reloaded by the worker process. The way to do it is to is to start
+    #   the queue and see if 'count' plans are executed.
+    resp5, _ = zmq_single_request("queue_start")
+    assert resp5["success"] is True, f"resp={resp5}"
+
+    assert wait_for_condition(time=30, condition=condition_manager_idle)
+
+    status = get_queue_state()
+
+    if allow_count_plan:
+        assert status["items_in_queue"] == 0
+        assert status["items_in_history"] == 2
+    else:
+        assert status["items_in_queue"] == 1  # The plan is pushed back in the queue
+        assert status["items_in_history"] == 1  # The plan failed, but it is still added to history
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+# =======================================================================================
 #                              Method `environment_destroy`
 
 
@@ -2135,58 +2339,6 @@ def test_zmq_api_environment_destroy(re_manager):  # noqa: F811
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)
-
-
-# =======================================================================================
-#                              Method 'permissions_reload'
-
-
-def test_permission_reload_1(re_manager, tmp_path):  # noqa: F811
-    """
-    Check that calling the 'permissions_reload' method changes the values of
-    ``plans_allowed_uid`` and ``devices_allowed_uid``. The test doesn't check
-    that the new lists are loaded. This is checked elsewhere.
-    """
-
-    # 'allowed_plans_uid' and 'allowed_devices_uid'
-    status, _ = zmq_single_request("status")
-    plans_allowed_uid = status["plans_allowed_uid"]
-    devices_allowed_uid = status["devices_allowed_uid"]
-    assert plans_allowed_uid != devices_allowed_uid
-
-    resp1a, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
-    assert resp1a["success"] is True, f"resp={resp1a}"
-    assert resp1a["plans_allowed_uid"] == plans_allowed_uid
-
-    resp1b, _ = zmq_single_request("devices_allowed", params={"user_group": _user_group})
-    assert resp1b["success"] is True, f"resp={resp1b}"
-    assert resp1b["devices_allowed_uid"] == devices_allowed_uid
-
-    assert isinstance(plans_allowed_uid, str)
-    assert isinstance(devices_allowed_uid, str)
-
-    resp2, _ = zmq_single_request("permissions_reload")
-    assert resp2["success"] is True, f"resp={resp2}"
-
-    # Check that 'plans_allowed_uid' and 'devices_allowed_uid' changed while permissions were reloaded
-    status, _ = zmq_single_request("status")
-    plans_allowed_uid2 = status["plans_allowed_uid"]
-    devices_allowed_uid2 = status["devices_allowed_uid"]
-    assert plans_allowed_uid2 != devices_allowed_uid2
-
-    resp3a, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
-    assert resp3a["success"] is True, f"resp={resp3a}"
-    assert resp3a["plans_allowed_uid"] == plans_allowed_uid2
-
-    resp3b, _ = zmq_single_request("devices_allowed", params={"user_group": _user_group})
-    assert resp3b["success"] is True, f"resp={resp3b}"
-    assert resp3b["devices_allowed_uid"] == devices_allowed_uid2
-
-    assert isinstance(plans_allowed_uid2, str)
-    assert isinstance(devices_allowed_uid2, str)
-
-    assert plans_allowed_uid2 != plans_allowed_uid
-    assert devices_allowed_uid2 != devices_allowed_uid
 
 
 # ======================================================================================
@@ -2391,7 +2543,7 @@ def test_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_restart):  # 
     is run with and without manager restart (API ``manager_kill``). Additionally
     the ``permissions_reload`` API was tested.
     """
-    pc_path = copy_default_profile_collection(tmp_path)
+    _, pc_path = re_manager_pc_copy
     append_code_to_last_startup_file(pc_path, additional_code=_sample_multirun_plan1)
 
     # Generate the new list of allowed plans and devices and reload them
@@ -2402,7 +2554,7 @@ def test_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_restart):  # 
     plans_allowed_uid = status["plans_allowed_uid"]
     devices_allowed_uid = status["devices_allowed_uid"]
 
-    resp1, _ = zmq_single_request("permissions_reload")
+    resp1, _ = zmq_single_request("permissions_reload", {"reload_plans_devices": True})
     assert resp1["success"] is True, f"resp={resp1}"
 
     # Check that 'plans_allowed_uid' and 'devices_allowed_uid' changed while permissions were reloaded
@@ -2537,6 +2689,63 @@ def test_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_restart):  # 
     assert len(history_run_uids) == 3, str(resp5b)
     # Make sure that the list of UID in history matches the list of UIDs in the run list
     assert history_run_uids == full_uid_list
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+# =======================================================================================
+#            Tests that involve restarting the manager process
+
+
+def test_manager_kill_1(re_manager_pc_copy):  # noqa: F811
+    """
+    Test if the lists of existing plans and devices and user group permissions are
+    downloading from RE worker when the manager process is restarted. The test
+    includes the following steps:
+    - Copy profile collection to a temporary location and start RE Manager.
+    - Delete .yaml files (RE manager should not attempt to load them during the test).
+    - Add 'count' plan to the queue (trivial part of the test).
+    - Restart (kill) the manager and wait until it is back online.
+    - Add 'count' plan to the queue and make sure it is successfully added. If the queue
+      has the right size, then RE Manager has correct set of permissions that were
+      loaded from RE Worker (the disk files were deleted at the beginning of the test).
+    """
+    _, pc_path = re_manager_pc_copy
+
+    # Delete all .yaml files ('existing_plans_and_devices.yaml' and 'user_group_permissions.yaml')
+    #   Queue Server is not expected to attempt to load those files during this test.
+    files = glob.glob(os.path.join(pc_path, "*.yaml"))
+    for f in files:
+        os.remove(f)
+
+    # Open the environment
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    # Add 'count' plan
+    params2 = {"item": _plan1, "user": _user, "user_group": _user_group}
+    resp2, _ = zmq_single_request("queue_item_add", params2)
+    assert resp2["success"] is True, f"resp={resp2}"
+
+    # Now restart the manager process
+    zmq_single_request("manager_kill")
+    ttime.sleep(1)
+    # Verify that the manager is not responsive
+    with pytest.raises(TimeoutError):
+        get_queue_state()
+    ttime.sleep(7)  # Wait until the manager is back online
+
+    # Attempt to add 'count' plan. RE Manager is expected to use user group permissions and
+    #   the lists of existing plans and devices download from the running environment.
+    resp3, _ = zmq_single_request("queue_item_add", params2)
+    assert resp3["success"] is True, f"resp={resp3}"
+
+    status = get_queue_state()
+    assert status["items_in_queue"] == 2
 
     # Close the environment
     resp6, _ = zmq_single_request("environment_close")

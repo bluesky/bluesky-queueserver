@@ -6,6 +6,7 @@ import os
 import asyncio
 from functools import partial
 import logging
+import uuid
 
 from .comms import PipeJsonRpcReceive
 from .output_streaming import setup_console_output_redirection
@@ -17,10 +18,10 @@ import msgpack_numpy as mpn
 
 from .profile_ops import (
     load_worker_startup_code,
-    plans_from_nspace,
-    devices_from_nspace,
     load_allowed_plans_and_devices,
+    update_existing_plans_and_devices,
     prepare_plan,
+    existing_plans_and_devices_from_nspace,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,16 @@ class RunEngineWorker(Process):
         `args` and `kwargs` of the `multiprocessing.Process`
     """
 
-    def __init__(self, *args, conn, config=None, msg_queue=None, log_level=logging.DEBUG, **kwargs):
+    def __init__(
+        self,
+        *args,
+        conn,
+        config=None,
+        msg_queue=None,
+        log_level=logging.DEBUG,
+        user_group_permissions=None,
+        **kwargs,
+    ):
 
         if not conn:
             raise RuntimeError("Invalid value of parameter 'conn': %S.", str(conn))
@@ -47,6 +57,8 @@ class RunEngineWorker(Process):
 
         self._log_level = log_level
         self._msg_queue = msg_queue
+
+        self._user_group_permissions = user_group_permissions or {}
 
         # The end of bidirectional Pipe assigned to the worker (for communication with Manager process)
         self._conn = conn
@@ -82,7 +94,23 @@ class RunEngineWorker(Process):
         # Note: 'self._config' is a private attribute of 'multiprocessing.Process'. Overriding
         #   this variable may lead to unpredictable and hard to debug issues.
         self._config_dict = config or {}
+        self._existing_plans_and_devices_changed = False
+        self._existing_plans, self._existing_devices = {}, {}
         self._allowed_plans, self._allowed_devices = {}, {}
+
+        self._allowed_items_lock = None  # threading.Lock()
+        self._existing_items_lock = None  # threading.Lock()
+
+        # Indicates when to update the existing plans and devices
+        update_pd = self._config_dict["update_existing_plans_devices"]
+        if update_pd not in ("NEVER", "ENVIRONMENT_OPEN", "ALWAYS"):
+            logger.error(
+                "Unknown option for updating lists of existing plans and devices: '%s'. "
+                "The lists stored on disk are not going to be updated.",
+                update_pd,
+            )
+            update_pd = "NEVER"
+        self._update_existing_plans_devices_on_disk = update_pd
 
         # The list of runs that were opened as part of execution of the currently running plan.
         # Initialized with 'RunList()' in 'run()' method.
@@ -180,12 +208,15 @@ class RunEngineWorker(Process):
         logger.info("Starting a plan '%s'.", plan_info["name"])
 
         try:
+            with self._allowed_items_lock:
+                allowed_plans, allowed_devices = self._allowed_plans, self._allowed_devices
+
             plan_parsed = prepare_plan(
                 plan_info,
                 plans_in_nspace=self._plans_in_nspace,
                 devices_in_nspace=self._devices_in_nspace,
-                allowed_plans=self._allowed_plans,
-                allowed_devices=self._allowed_devices,
+                allowed_plans=allowed_plans,
+                allowed_devices=allowed_devices,
             )
 
             plan_func = plan_parsed["callable"]
@@ -265,6 +296,26 @@ class RunEngineWorker(Process):
         is_resuming = option == "resume"
         self._execution_queue.put((plan, is_resuming))
 
+    def _generate_lists_of_allowed_plans_and_devices(self):
+        """
+        Generate lists of allowed plans and devices based on the existing plans and devices and user permissions.
+        """
+        logger.info("Generating lists of allowed plans and devices")
+
+        with self._existing_items_lock:
+            existing_plans, existing_devices = self._existing_plans, self._existing_devices
+
+        allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+            existing_plans=existing_plans,
+            existing_devices=existing_devices,
+            user_group_permissions=self._user_group_permissions,
+        )
+
+        with self._allowed_items_lock:
+            self._allowed_plans, self._allowed_devices = allowed_plans, allowed_devices
+
+        logger.info("List of allowed plans and devices was successfully generated")
+
     # =============================================================================
     #               Handlers for messages from RE Manager
 
@@ -285,6 +336,7 @@ class RunEngineWorker(Process):
         env_state = self._state["environment_state"]
         re_report_available = self._re_report is not None
         run_list_updated = self._active_run_list.is_changed()  # True - updates are available
+        plans_and_devices_list_updated = self._existing_plans_and_devices_changed
         msg_out = {
             "running_item_uid": item_uid,
             "running_plan_completed": plan_completed,
@@ -293,6 +345,7 @@ class RunEngineWorker(Process):
             "re_deferred_pause_requested": re_deferred_pause_requested,
             "environment_state": env_state,
             "run_list_updated": run_list_updated,
+            "plans_and_devices_list_updated": plans_and_devices_list_updated,
         }
         return msg_out
 
@@ -317,6 +370,24 @@ class RunEngineWorker(Process):
         and update is loaded only if updates exist (`run_list_updated` is True).
         """
         msg_out = {"run_list": self._active_run_list.get_run_list(clear_state=True)}
+        return msg_out
+
+    def _request_plans_and_devices_list_handler(self):
+        """
+        Returns currents lists of existing plans and devices. Also returns the current
+        dictionary of user group permissions. It is assumed that the dictionary of user group
+        permissions is relatively small and passing it with the lists of existing plans
+        and devices should not affect the performance. If performance becomes an issue, then
+        create a separate API for passing user group permissions.
+        """
+        with self._existing_items_lock:
+            existing_plans, existing_devices = self._existing_plans, self._existing_devices
+        msg_out = {
+            "existing_plans": existing_plans,
+            "existing_devices": existing_devices,
+            "user_group_permissions": self._user_group_permissions,
+        }
+        self._existing_plans_and_devices_changed = False
         return msg_out
 
     def _command_close_env_handler(self):
@@ -475,6 +546,20 @@ class RunEngineWorker(Process):
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
 
+    def _command_permissions_reload_handler(self, user_group_permissions):
+        """
+        Initiate reloading of permissions and computing new lists of existing plans and devices.
+        Computations are performed in a separate thread. The function is not waiting for computations
+        to complete. Status ('accepted' or 'rejected') and error message is returned. 'accepted' status
+        does not mean that the operation was successful.
+        """
+        self._user_group_permissions = user_group_permissions
+        status, err_msg = self._run_in_separate_thread(
+            name="Reload Permissions", target=self._generate_lists_of_allowed_plans_and_devices
+        )
+        msg_out = {"status": status, "err_msg": err_msg}
+        return msg_out
+
     # ------------------------------------------------------------
 
     def _execute_in_main_thread(self):
@@ -495,6 +580,47 @@ class RunEngineWorker(Process):
                 self._execute_plan(plan, is_resuming)
             except queue.Empty:
                 pass
+
+    def _run_in_separate_thread(self, *, name, target, args=None, kwargs=None):
+        """
+        Run ``target`` (any callable) in a separate daemon thread. The callable is passed arguments ``args``
+        and ``kwargs`` and ``name`` is used to generate thread name and in error messages. The function
+        returns once the thead is started without waiting for the result.
+
+        TODO: this function will be extended in future PRs since it will be used for multiple purposes that
+        involve running background tasks. Consider this to be a primitive implementation sufficient for
+        current needs. Improvements will include means for monitoring of executed tasks and propagating
+        the results of execution. Additional parameters will be added.
+        """
+        args, kwargs = args or [], kwargs or {}
+        status, msg = "accepted", ""
+
+        try:
+            # Commands should not be executed when the environment is not ready
+            environment_state = self._state["environment_state"]
+            if environment_state != "ready":
+                raise RuntimeError(f"Environment is not ready. Current environment state: {environment_state}")
+
+            task_uuid = str(uuid.uuid4())
+            task_uuid_short = task_uuid.split("-")[-1]
+            thread_name = f"BS QServer - {name} {task_uuid_short} "
+
+            def thread_func_wrapper():
+                def thread_func():
+                    # This is the function executed in a separate thread
+                    try:
+                        target(*args, **kwargs)
+                    except Exception as ex:
+                        logger.exception("Error occurred while executing the function ('%s'): %s", name, str(ex))
+
+                return thread_func
+
+            th = threading.Thread(target=thread_func_wrapper(), name=thread_name, daemon=True)
+            th.start()
+
+        except Exception as ex:
+            status, msg = "rejected", f"Failed to execute command '{name}': {ex}"
+        return status, msg
 
     # ------------------------------------------------------------
 
@@ -523,17 +649,25 @@ class RunEngineWorker(Process):
         self._comm_to_manager.add_method(self._request_state_handler, "request_state")
         self._comm_to_manager.add_method(self._request_plan_report_handler, "request_plan_report")
         self._comm_to_manager.add_method(self._request_run_list_handler, "request_run_list")
+        self._comm_to_manager.add_method(
+            self._request_plans_and_devices_list_handler, "request_plans_and_devices_list"
+        )
         self._comm_to_manager.add_method(self._command_close_env_handler, "command_close_env")
         self._comm_to_manager.add_method(self._command_confirm_exit_handler, "command_confirm_exit")
         self._comm_to_manager.add_method(self._command_run_plan_handler, "command_run_plan")
         self._comm_to_manager.add_method(self._command_pause_plan_handler, "command_pause_plan")
         self._comm_to_manager.add_method(self._command_continue_plan_handler, "command_continue_plan")
         self._comm_to_manager.add_method(self._command_reset_worker_handler, "command_reset_worker")
+        self._comm_to_manager.add_method(self._command_permissions_reload_handler, "command_permissions_reload")
+
         self._comm_to_manager.start()
 
         self._exit_event = threading.Event()
         self._exit_confirmed_event = threading.Event()
         self._re_report_lock = threading.Lock()
+
+        self._allowed_items_lock = threading.Lock()
+        self._existing_items_lock = threading.Lock()
 
         from bluesky import RunEngine
         from bluesky.run_engine import get_bluesky_event_loop
@@ -566,8 +700,28 @@ class RunEngineWorker(Process):
                 raise RuntimeError(
                     "Run Engine is not created in the startup code and 'keep_re' option is activated."
                 )
-            self._plans_in_nspace = plans_from_nspace(self._re_namespace)
-            self._devices_in_nspace = devices_from_nspace(self._re_namespace)
+
+            epd = existing_plans_and_devices_from_nspace(nspace=self._re_namespace)
+            existing_plans, existing_devices, plans_in_nspace, devices_in_nspace = epd
+
+            # self._existing_plans_and_devices_changed = not compare_existing_plans_and_devices(
+            #     existing_plans = existing_plans,
+            #     existing_devices = existing_devices,
+            #     existing_plans_ref = self._existing_plans,
+            #     existing_devices_ref = self._existing_devices,
+            # )
+
+            # Descriptions of existing plans and devices
+            with self._existing_items_lock:
+                self._existing_plans, self._existing_devices = existing_plans, existing_devices
+
+            # Dictionaries of references to plans and devices from the namespace
+            self._plans_in_nspace = plans_in_nspace
+            self._devices_in_nspace = devices_in_nspace
+
+            # Always download existing plans and devices when loading the new environment
+            self._existing_plans_and_devices_changed = True
+
             logger.info("Startup code loading was completed")
 
         except Exception as ex:
@@ -577,18 +731,21 @@ class RunEngineWorker(Process):
             )
             success = False
 
-        # Load lists of allowed plans and devices
-        logger.info("Loading the lists of allowed plans and devices ...")
-        path_pd = self._config_dict["existing_plans_and_devices_path"]
-        path_ug = self._config_dict["user_group_permissions_path"]
-        try:
-            self._allowed_plans, self._allowed_devices = load_allowed_plans_and_devices(
-                path_existing_plans_and_devices=path_pd, path_user_group_permissions=path_ug
-            )
-        except Exception as ex:
-            logger.exception(
-                "Error occurred while loading lists of allowed plans and devices from '%s': %s", path_pd, str(ex)
-            )
+        if success:
+            self._generate_lists_of_allowed_plans_and_devices()
+
+            # This file name is used only to update the lists of existing plans and devices
+            #   stored on disk, not to load the lists.
+            path_pd = self._config_dict["existing_plans_and_devices_path"]
+
+            if self._update_existing_plans_devices_on_disk in ("ENVIRONMENT_OPEN", "ALWAYS"):
+                with self._existing_items_lock:
+                    existing_plans, existing_devices = self._existing_plans, self._existing_devices
+                update_existing_plans_and_devices(
+                    path_to_file=path_pd,
+                    existing_plans=existing_plans,
+                    existing_devices=existing_devices,
+                )
 
         if success:
             logger.info("Instantiating and configuring Run Engine ...")
@@ -600,7 +757,7 @@ class RunEngineWorker(Process):
                 if self._config_dict["keep_re"]:
                     # Copy references from the namespace
                     self._RE = self._re_namespace["RE"]
-                    self._db = self._re_namespace.get("RE", None)
+                    self._db = self._re_namespace.get("db", None)
                 else:
                     # Instantiate a new Run Engine and Data Broker (if needed)
                     md = {}

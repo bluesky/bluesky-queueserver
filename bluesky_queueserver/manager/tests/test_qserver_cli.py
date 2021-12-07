@@ -17,7 +17,6 @@ from .common import (
     get_reduced_state_info,
     get_queue_state,
     get_queue,
-    copy_default_profile_collection,
     append_code_to_last_startup_file,
     set_qserver_zmq_public_key,
 )
@@ -1117,11 +1116,15 @@ def trivial_plan_for_unit_test():
 """
 
 
-def test_qserver_reload_permissions(re_manager_pc_copy, tmp_path):  # noqa F811
+# fmt: off
+@pytest.mark.parametrize("reload_plans_devices", [True, False])
+# fmt: on
+def test_qserver_reload_permissions_1(re_manager_pc_copy, tmp_path, reload_plans_devices):  # noqa F811
     """
-    Tests for ``/permissions/reload`` API.
+    Tests for ``qserver permissions reload [lists]`` API.
     """
-    pc_path = copy_default_profile_collection(tmp_path)
+    # pc_path = copy_default_profile_collection(tmp_path)
+    _, pc_path = re_manager_pc_copy
     append_code_to_last_startup_file(pc_path, additional_code=_sample_trivial_plan1)
 
     # Generate the new list of allowed plans and devices and reload them
@@ -1134,10 +1137,14 @@ def test_qserver_reload_permissions(re_manager_pc_copy, tmp_path):  # noqa F811
     assert subprocess.call(["qserver", "queue", "add", "plan", plan]) == REQ_FAILED
 
     # Reload profile collection
-    assert subprocess.call(["qserver", "permissions", "reload"]) == SUCCESS
+    params = ["permissions", "reload"]
+    if reload_plans_devices:
+        params.append("lists")
+    assert subprocess.call(["qserver", *params]) == SUCCESS
 
     # Attempt to add the plan to the queue. It should be successful now.
-    assert subprocess.call(["qserver", "queue", "add", "plan", plan]) == SUCCESS
+    res_expected = SUCCESS if reload_plans_devices else REQ_FAILED
+    assert subprocess.call(["qserver", "queue", "add", "plan", plan]) == res_expected
 
 
 # fmt: off

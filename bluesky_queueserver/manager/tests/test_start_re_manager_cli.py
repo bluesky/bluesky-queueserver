@@ -1,3 +1,4 @@
+import os
 import pytest
 import subprocess
 
@@ -9,7 +10,11 @@ from .common import (
     condition_environment_created,
     condition_environment_closed,
     condition_queue_processing_finished,
+    copy_default_profile_collection,
 )
+
+from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
+
 
 # Plans used in most of the tests: '_plan1' and '_plan2' are quickly executed '_plan3' runs for 5 seconds.
 _plan1 = {"name": "count", "args": [["det1", "det2"]], "item_type": "plan"}
@@ -139,3 +144,99 @@ def test_start_re_manager_console_output_1(re_manager_cmd, console_print, consol
         check_output_contents(streamed_stdout)
     else:
         assert streamed_stdout == ""
+
+
+# fmt: off
+@pytest.mark.parametrize("option", ["unchanged", "add_plan", "add_device", "add_plan_device"])
+@pytest.mark.parametrize("update_existing_plans_devices", ["NEVER", "ENVIRONMENT_OPEN", "ALWAYS"])
+# fmt: on
+def test_cli_update_existing_plans_devices_01(
+    re_manager_cmd, tmp_path, update_existing_plans_devices, option  # noqa: F811
+):
+    """
+    Testing the modes defined by ``--update-existing-plans-devices`` parameter: create a copy of
+    profile collection, generate the list of existing plans and devices from startup files, add
+    a plan and/or a device to startup files, start RE Manager, open and close the environment
+    (it is expected to generate the updated lists of existing plans and devices and possibly
+    save them to disk), verify that the new plan and/or device is in the lists of allowed plans
+    and devices, reload permissions and existing plans and devices from disk and verify that
+    the new plan and/or devices is in the list of allowed plans (in case the new list of existing
+    devices is saved to file).
+    """
+    # Copy the default profile collection and generate the list of existing devices
+    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=True)
+    gen_list_of_plans_and_devices(
+        startup_dir=pc_path, file_dir=pc_path, file_name="existing_plans_and_devices.yaml", overwrite=True
+    )
+
+    # Start the manager
+    params = ["--startup-dir", pc_path, "--update-existing-plans-devices", update_existing_plans_devices]
+    re_manager_cmd(params, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    resp1, _ = zmq_single_request("status")
+    devices_allowed_uid1 = resp1["devices_allowed_uid"]
+    plans_allowed_uid1 = resp1["plans_allowed_uid"]
+
+    # Add a plan ('count50') and a device ('det50') if needed
+    with open(os.path.join(pc_path, "zz.py"), "w") as f:
+        if option in ("add_device", "add_plan_device"):
+            f.writelines("det50 = det\n")
+        if option in ("add_plan", "add_plan_device"):
+            f.writelines("count50 = count\n")
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_created)
+
+    resp3, _ = zmq_single_request("environment_close")
+    assert resp3["success"] is True
+    assert resp3["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+    resp4, _ = zmq_single_request("status")
+    devices_allowed_uid2 = resp4["devices_allowed_uid"]
+    plans_allowed_uid2 = resp4["plans_allowed_uid"]
+
+    def verify_allowed_lists(*, new_plan_added, new_device_added):
+        resp5a, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
+        assert resp5a["success"] is True, f"resp={resp5a}"
+        plans_allowed = resp5a["plans_allowed"]
+        resp5b, _ = zmq_single_request("devices_allowed", params={"user_group": _user_group})
+        assert resp5b["success"] is True, f"resp={resp5b}"
+        devices_allowed = resp5b["devices_allowed"]
+
+        if new_device_added:
+            assert "det50" in devices_allowed
+        else:
+            assert "det50" not in devices_allowed
+        if new_plan_added:
+            assert "count50" in plans_allowed
+        else:
+            assert "count50" not in plans_allowed
+
+    new_plan_added = option in ("add_plan", "add_plan_device")
+    new_device_added = option in ("add_device", "add_plan_device")
+
+    verify_allowed_lists(new_plan_added=new_plan_added, new_device_added=new_device_added)
+
+    if new_device_added:
+        assert devices_allowed_uid2 != devices_allowed_uid1
+    else:
+        assert devices_allowed_uid2 == devices_allowed_uid1
+    if new_plan_added:
+        assert plans_allowed_uid2 != plans_allowed_uid1
+    else:
+        assert plans_allowed_uid2 == plans_allowed_uid1
+
+    # Reload the list of existing plans and devices from disk and make sure the new device/plan
+    #   is loaded/not loaded depending on the update mode.
+    resp6, _ = zmq_single_request("permissions_reload", params={"reload_plans_devices": True})
+    assert resp6["success"] is True
+
+    new_plan_added = new_plan_added and update_existing_plans_devices != "NEVER"
+    new_device_added = new_device_added and update_existing_plans_devices != "NEVER"
+
+    verify_allowed_lists(new_plan_added=new_plan_added, new_device_added=new_device_added)

@@ -71,7 +71,7 @@ class WatchdogProcess:
     # ======================================================================
     #             Handlers for messages from RE Manager
 
-    def _start_re_worker_handler(self):
+    def _start_re_worker_handler(self, user_group_permissions):
         """
         Creates worker process. This is a quick operation, because it starts RE Worker
         process without waiting for initialization.
@@ -84,6 +84,7 @@ class WatchdogProcess:
                 config=self._config_worker,
                 msg_queue=self._msg_queue,
                 log_level=self._log_level,
+                user_group_permissions=user_group_permissions,
             )
             self._re_worker.start()
             success, err_msg = True, ""
@@ -268,6 +269,20 @@ def start_manager():
         "If the path is directory, then the default file name "
         "'existing_plans_and_devices.yaml' is used.",
     )
+
+    parser.add_argument(
+        "--update-existing-plans-devices",
+        dest="update_existing_plans_devices",
+        type=str,
+        choices=["NEVER", "ENVIRONMENT_OPEN", "ALWAYS"],
+        default="ENVIRONMENT_OPEN",
+        help="Select when the list of existing plans and devices stored on disk should be "
+        "updated. The available choices are not to update the stored lists (NEVER), update "
+        "the lists when the environment is opened (ENVIRONMENT_OPEN) or update the lists each "
+        "the lists are changed (ALWAYS) "
+        "(default: %(default)s)",
+    )
+
     parser.add_argument(
         "--user-group-permissions",
         dest="user_group_permissions_path",
@@ -521,13 +536,22 @@ def start_manager():
             existing_pd_path = os.path.join(existing_pd_path, default_existing_pd_fln)
     else:
         existing_pd_path = os.path.join(startup_dir, default_existing_pd_fln)
-    if not os.path.isfile(existing_pd_path):
+    # The file may not exist, but the directory MUST exist
+    pd_dir = os.path.dirname(existing_pd_path) or "."
+    if not os.path.isdir(os.path.dirname(existing_pd_path)):
         logger.error(
-            "The list of allowed plans and devices was not found at "
-            "'%s'. Proceed without the list: all plans and devices will be accepted by RE Manager.",
+            "The directory for list of plans and devices ('%s')does not exist. "
+            "Create the directory manually and restart RE Manager.",
+            pd_dir,
+        )
+        return 1
+    if not os.path.isfile(existing_pd_path):
+        logger.warning(
+            "The file with the list of allowed plans and devices ('%s') does not exist. "
+            "The manager will be started with empty list. The list will be populated after "
+            "RE worker environment is opened the first time.",
             existing_pd_path,
         )
-        existing_pd_path = None
 
     default_user_group_pd_fln = "user_group_permissions.yaml"
     if args.user_group_permissions_path:
@@ -541,15 +565,17 @@ def start_manager():
     if not os.path.isfile(user_group_pd_path):
         logger.error(
             "The file with user permissions was not found at "
-            "'%s'. User groups are not defined. USERS WILL NOT BE ABLE TO SUBMIT PLANS.",
+            "'%s'. User groups are not defined. USERS WILL NOT BE ABLE TO SUBMIT PLANS OR "
+            "EXECUTE ANY OTHER OPERATIONS THAT REQUIRE PERMISSIONS.",
             user_group_pd_path,
         )
         user_group_pd_path = None
 
     config_worker["existing_plans_and_devices_path"] = existing_pd_path
     config_manager["existing_plans_and_devices_path"] = existing_pd_path
-    config_worker["user_group_permissions_path"] = user_group_pd_path
     config_manager["user_group_permissions_path"] = user_group_pd_path
+
+    config_worker["update_existing_plans_devices"] = args.update_existing_plans_devices
 
     # Read private key from the environment variable, then check if the CLI parameter exists
     zmq_private_key = os.environ.get("QSERVER_ZMQ_PRIVATE_KEY", None)

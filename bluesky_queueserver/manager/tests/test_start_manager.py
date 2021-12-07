@@ -100,7 +100,16 @@ class ReManagerEmulation(threading.Thread):
 
 
 class ReWorkerEmulation(threading.Thread):
-    def __init__(self, *args, conn, config=None, msg_queue=None, log_level=logging.DEBUG, **kwargs):
+    def __init__(
+        self,
+        *args,
+        conn,
+        config=None,
+        msg_queue=None,
+        log_level=logging.DEBUG,
+        user_group_permissions=None,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self._config_dict = config or {}
         self._exit = False
@@ -193,18 +202,18 @@ def test_WatchdogProcess_4():
     wp_th.start()
     ttime.sleep(0.01)
 
-    response = wp._re_manager.send_msg_to_watchdog("start_re_worker")
-    assert response["success"] is True, "Unexpected response from RE Manager"
+    response = wp._re_manager.send_msg_to_watchdog("start_re_worker", params={"user_group_permissions": {}})
+    assert response["success"] is True, f"Unexpected response from RE Manager: {response}"
 
     # Worker is expected to be alive
     response = wp._re_manager.send_msg_to_watchdog("is_worker_alive")
-    assert response["worker_alive"] is True, "Unexpected response from RE Manager"
+    assert response["worker_alive"] is True, f"Unexpected response from RE Manager: {response}"
 
     # Join running process (thread). Expected to timeout.
     # Note: here timeout should be set to be smaller than timeout for the message
     #   in 'send_msg_to_watchdog method.
     response = wp._re_manager.send_msg_to_watchdog("join_re_worker", {"timeout": 0.1})
-    assert response["success"] is False, "Unexpected response from RE Manager"
+    assert response["success"] is False, f"Unexpected response from RE Manager: {response}"
 
     # Worker is expected to be alive
     response = wp._re_manager.send_msg_to_watchdog("is_worker_alive")
@@ -234,7 +243,7 @@ def test_WatchdogProcess_5():
     wp_th.start()
     ttime.sleep(0.01)
 
-    response = wp._re_manager.send_msg_to_watchdog("start_re_worker")
+    response = wp._re_manager.send_msg_to_watchdog("start_re_worker", params={"user_group_permissions": {}})
     assert response["success"] is True, "Unexpected response from RE Manager"
 
     # Worker is expected to be alive
@@ -273,7 +282,7 @@ def test_WatchdogProcess_6():
     wp_th.start()
     ttime.sleep(0.01)
 
-    response = wp._re_manager.send_msg_to_watchdog("start_re_worker")
+    response = wp._re_manager.send_msg_to_watchdog("start_re_worker", params={"user_group_permissions": {}})
     assert response["success"] is True, "Unexpected response from RE Manager"
 
     # Check if configuration was set correctly in RE Worker and RE manager
@@ -311,7 +320,7 @@ def test_WatchdogProcess_7():
     wp_th.start()
     ttime.sleep(0.01)
 
-    response = wp._re_manager.send_msg_to_watchdog("start_re_worker")
+    response = wp._re_manager.send_msg_to_watchdog("start_re_worker", params={"user_group_permissions": {}})
     assert response["success"] is True, "Unexpected response from RE Manager"
 
     # Check if configuration was set correctly in RE Worker and RE manager

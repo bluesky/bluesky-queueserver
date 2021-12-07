@@ -12,7 +12,7 @@
 <!--- Skip this section if this is a maintenace PR (CI, unit tests etc.) -->
 <!--- PRs with feature changes should not be merged without this section. -->
 
-<!--- The changes should be listed in the following sections: -->
+<!--- List the changes in the following sections: -->
 
 ### Fixed
 

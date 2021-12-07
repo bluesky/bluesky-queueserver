@@ -5,6 +5,7 @@ import asyncio
 import copy
 import pprint
 import re
+import glob
 
 from bluesky_queueserver.manager.profile_ops import (
     get_default_startup_dir,
@@ -2688,6 +2689,63 @@ def test_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_restart):  # 
     assert len(history_run_uids) == 3, str(resp5b)
     # Make sure that the list of UID in history matches the list of UIDs in the run list
     assert history_run_uids == full_uid_list
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+# =======================================================================================
+#            Tests that involve restarting the manager process
+
+
+def test_manager_kill_1(re_manager_pc_copy):  # noqa: F811
+    """
+    Test if the lists of existing plans and devices and user group permissions are
+    downloading from RE worker when the manager process is restarted. The test
+    includes the following steps:
+    - Copy profile collection to a temporary location and start RE Manager.
+    - Delete .yaml files (RE manager should not attempt to load them during the test).
+    - Add 'count' plan to the queue (trivial part of the test).
+    - Restart (kill) the manager and wait until it is back online.
+    - Add 'count' plan to the queue and make sure it is successfully added. If the queue
+      has the right size, then RE Manager has correct set of permissions that were
+      loaded from RE Worker (the disk files were deleted at the beginning of the test).
+    """
+    _, pc_path = re_manager_pc_copy
+
+    # Delete all .yaml files ('existing_plans_and_devices.yaml' and 'user_group_permissions.yaml')
+    #   Queue Server is not expected to attempt to load those files during this test.
+    files = glob.glob(os.path.join(pc_path, "*.yaml"))
+    for f in files:
+        os.remove(f)
+
+    # Open the environment
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    # Add 'count' plan
+    params2 = {"item": _plan1, "user": _user, "user_group": _user_group}
+    resp2, _ = zmq_single_request("queue_item_add", params2)
+    assert resp2["success"] is True, f"resp={resp2}"
+
+    # Now restart the manager process
+    zmq_single_request("manager_kill")
+    ttime.sleep(1)
+    # Verify that the manager is not responsive
+    with pytest.raises(TimeoutError):
+        get_queue_state()
+    ttime.sleep(7)  # Wait until the manager is back online
+
+    # Attempt to add 'count' plan. RE Manager is expected to use user group permissions and
+    #   the lists of existing plans and devices download from the running environment.
+    resp3, _ = zmq_single_request("queue_item_add", params2)
+    assert resp3["success"] is True, f"resp={resp3}"
+
+    status = get_queue_state()
+    assert status["items_in_queue"] == 2
 
     # Close the environment
     resp6, _ = zmq_single_request("environment_close")

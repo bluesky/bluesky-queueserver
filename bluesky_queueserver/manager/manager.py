@@ -485,9 +485,10 @@ class RunEngineManager(Process):
             self._re_run_list = run_list["run_list"]
             self._re_run_list_uid = _generate_uid()
 
-    async def _load_existing_plans_and_devices_from_worker(self):
+    async def _load_existing_plans_and_devices_from_worker(self, update_user_group_permissions=False):
         """
         Download the updated list of existing plans and devices from the worker environment.
+        User group permissions are also downloaded from the worker and could be updated if needed.
         """
         logger.info("Downloading the lists of existing plans and devices from the worker environment")
         plan_and_devices_list, err_msg = await self._worker_request_plans_and_devices_list()
@@ -500,6 +501,9 @@ class RunEngineManager(Process):
         else:
             self._existing_plans = plan_and_devices_list["existing_plans"]
             self._existing_devices = plan_and_devices_list["existing_devices"]
+            if update_user_group_permissions:
+                self._user_group_permissions = plan_and_devices_list["user_group_permissions"]
+
             try:
                 self._generate_lists_of_allowed_plans_and_devices()
             except Exception as ex:
@@ -2156,16 +2160,18 @@ class RunEngineManager(Process):
         # Set the environment state based on whether the worker process is alive (request Watchdog)
         self._environment_exists = await self._is_worker_alive()
 
-        # Always load user group permissions from file when starting RE Manager process
-        self._load_permissions()
-
         # Now check if the plan is still being executed (if it was executed)
         if self._environment_exists:
 
             # The environment is expected to contain the most recent version of the list of plans and devices
+            #   and a copy of user group permissions, so they could be downloaded from the worker.
             #   If the request to download plans and devices fails, then the lists of existing and allowed
-            #   devices and plans are going to be empty ({}).
-            await self._load_existing_plans_and_devices_from_worker()
+            #   devices and plans and the dictionary of user group permissions are going to be empty ({}).
+            await self._load_existing_plans_and_devices_from_worker(update_user_group_permissions=True)
+            try:
+                self._update_allowed_plans_and_devices(reload_plans_devices=False)
+            except Exception as ex:
+                logger.exception("Exception: %s", ex)
 
             # Attempt to load the list of active runs.
             re_run_list, _ = await self._worker_request_run_list()
@@ -2208,6 +2214,9 @@ class RunEngineManager(Process):
         else:
             # Load lists of allowed plans and devices
             logger.info("Loading the lists of allowed plans and devices ...")
+            # Load user group permissions and existing plans and devices from files
+            #   if RE environment does not exist
+            self._load_permissions()
             try:
                 self._update_allowed_plans_and_devices(reload_plans_devices=True)
             except Exception as ex:

@@ -373,9 +373,20 @@ class RunEngineWorker(Process):
         return msg_out
 
     def _request_plans_and_devices_list_handler(self):
+        """
+        Returns currents lists of existing plans and devices. Also returns the current
+        dictionary of user group permissions. It is assumed that the dictionary of user group
+        permissions is relatively small and passing it with the lists of existing plans
+        and devices should not affect the performance. If performance becomes an issue, then
+        create a separate API for passing user group permissions.
+        """
         with self._existing_items_lock:
             existing_plans, existing_devices = self._existing_plans, self._existing_devices
-        msg_out = {"existing_plans": existing_plans, "existing_devices": existing_devices}
+        msg_out = {
+            "existing_plans": existing_plans,
+            "existing_devices": existing_devices,
+            "user_group_permissions": self._user_group_permissions,
+        }
         self._existing_plans_and_devices_changed = False
         return msg_out
 

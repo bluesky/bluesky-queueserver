@@ -393,8 +393,6 @@ class ReManager:
 
         Parameters
         ----------
-        p: subprocess.Popen
-            Subprocess in which the manager is running
         timeout: float
             Timeout in seconds.
         """
@@ -402,30 +400,62 @@ class ReManager:
             try:
                 # If the process is already terminated, then don't attempt to communicate with it.
                 if self._p.poll() is None:
-                    # Try to stop the manager in a nice way first by sending the command
-                    resp, err_msg = zmq_secure_request(method="manager_stop", params=None)
-                    assert resp, str(err_msg)
-                    assert resp["success"] is True, f"Request to stop the manager failed: {resp['msg']}."
+                    success, msg = False, ""
 
-                    self._p.wait(timeout)
+                    # Try to stop the manager in a nice way first by sending the command
+                    resp1, err_msg1 = zmq_secure_request(method="manager_stop", params=None)
+                    assert resp1, str(err_msg1)
+                    success = resp1["success"]
+                    if not success:
+                        # If the command was rejected, try 'safe_off' mode that kills the RE worker environment
+                        msg += f"Request to stop the manager in with the 'safe_on' option failed: {resp1['msg']}."
+                        resp2, err_msg2 = zmq_secure_request(method="manager_stop", params={"option": "safe_off"})
+                        assert resp2, str(err_msg2)
+                        success = resp2["success"]
+                        if not success:
+                            msg += (
+                                " Request to stop the manager in with the 'safe_off' "
+                                f"option failed: {resp2['msg']}."
+                            )
+
+                    # If both requests failed, then there is nothing to wait
+                    if not success:
+                        raise RuntimeError(msg)
+
+                    # If only the first request failed, then there is a chance that the manager stops
+                    try:
+                        self._p.wait(timeout)
+                    except subprocess.TimeoutExpired:
+                        raise RuntimeError(f"Timeout occured while waiting for the manager to stop: {msg}")
+
+                    # If at least one of the requests failed and there is an error message, then fail the test
+                    if msg:
+                        raise RuntimeError(msg)
 
                 clear_redis_pool()
 
             except Exception as ex:
                 # The manager is not responsive, so just kill the process.
                 self._p.kill()
+                self._p.wait(timeout)
                 clear_redis_pool()
                 assert False, f"RE Manager failed to stop: {str(ex)}"
 
             self._p = None
 
-    def kill_manager(self):
+    def kill_manager(self, timeout=10):
         """
         Kill the subprocess running RE Manager. Use only to stop RE Manager that failed to start correctly.
         The operation will always succeed.
+
+        Parameters
+        ----------
+        timeout: float
+            Timeout in seconds.
         """
         if self._p:
             self._p.kill()
+            self._p.wait(timeout)
             clear_redis_pool()
 
 

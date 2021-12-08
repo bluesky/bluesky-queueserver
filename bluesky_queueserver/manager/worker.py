@@ -74,7 +74,7 @@ class RunEngineWorker(Process):
             "running_plan": None,
             # Boolean value that indicates if the current plan is completed (finished or stopped)
             "running_plan_completed": False,
-            # Status of the RE environment: "initializing", "read", "closing"
+            # Status of the RE environment: "initializing", "idle", "executing_plan", "executing_task:, "closing"
             "environment_state": "initializing",
         }
 
@@ -596,9 +596,12 @@ class RunEngineWorker(Process):
         status, msg = "accepted", ""
 
         try:
-            # Commands should not be executed when the environment is not ready
             environment_state = self._state["environment_state"]
-            if environment_state != "ready":
+            # Verify that the environment is ready
+            if environment_state not in ("idle", "executing_plan", "executing_task"):
+                raise RuntimeError(f"Environment is not ready. Current environment state: {environment_state}")
+            # Verify that the environment is idle (no plans or tasks are executed)
+            if environment_state != "idle":
                 raise RuntimeError(f"Environment is not ready. Current environment state: {environment_state}")
 
             task_uuid = str(uuid.uuid4())
@@ -823,7 +826,7 @@ class RunEngineWorker(Process):
 
                 self._execution_queue = queue.Queue()
 
-                self._state["environment_state"] = "ready"
+                self._state["environment_state"] = "idle"
 
             except BaseException as ex:
                 success = False

@@ -406,6 +406,7 @@ class ReManager:
                     resp1, err_msg1 = zmq_secure_request(method="manager_stop", params=None)
                     assert resp1, str(err_msg1)
                     success = resp1["success"]
+
                     if not success:
                         # If the command was rejected, try 'safe_off' mode that kills the RE worker environment
                         msg += f"Request to stop the manager in with the 'safe_on' option failed: {resp1['msg']}."
@@ -417,6 +418,8 @@ class ReManager:
                                 " Request to stop the manager in with the 'safe_off' "
                                 f"option failed: {resp2['msg']}."
                             )
+                        else:
+                            msg += " Attempting to stop the manager using 'safe_off' option"
 
                     # If both requests failed, then there is nothing to wait
                     if not success:
@@ -425,6 +428,7 @@ class ReManager:
                     # If only the first request failed, then there is a chance that the manager stops
                     try:
                         self._p.wait(timeout)
+                        self._p = None
                     except subprocess.TimeoutExpired:
                         raise RuntimeError(f"Timeout occured while waiting for the manager to stop: {msg}")
 
@@ -432,16 +436,16 @@ class ReManager:
                     if msg:
                         raise RuntimeError(msg)
 
-                clear_redis_pool()
-
             except Exception as ex:
                 # The manager is not responsive, so just kill the process.
-                self._p.kill()
-                self._p.wait(timeout)
-                clear_redis_pool()
+                if self._p:
+                    self._p.kill()
+                    self._p.wait(timeout)
                 assert False, f"RE Manager failed to stop: {str(ex)}"
 
-            self._p = None
+            finally:
+                clear_redis_pool()
+                self._p = None
 
     def kill_manager(self, timeout=10):
         """

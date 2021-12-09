@@ -27,6 +27,10 @@ from .profile_ops import (
 logger = logging.getLogger(__name__)
 
 
+class RejectedError(RuntimeError):
+    ...
+
+
 class RunEngineWorker(Process):
     """
     The class implementing Run Engine Worker thread.
@@ -132,7 +136,7 @@ class RunEngineWorker(Process):
             'plan' starts a new plan or resumes paused plan. It is False if paused plan is
             aborted, stopped or halted.
         """
-        logger.debug("Starting execution of a task")
+        logger.debug("Starting execution of a plan")
         try:
             result = plan()
             with self._re_report_lock:
@@ -184,7 +188,8 @@ class RunEngineWorker(Process):
                 # Include RE state
                 self._re_report["re_state"] = str(self._RE._state)
 
-        logger.debug("Finished execution of the task")
+        self._state["environment_state"] = "idle"
+        logger.debug("Finished execution of the plan")
 
     def _load_new_plan(self, plan_info):
         """
@@ -201,9 +206,16 @@ class RunEngineWorker(Process):
         plan_kwargs: dict
             plan kwargs
         """
+        env_state = self._state["environment_state"]
+        if env_state != "idle":
+            raise RejectedError(
+                f"Attempted to start a plan in '{env_state}' environment state. Accepted state: 'idle'"
+            )
+
         # Save reference to the currently executed plan
         self._state["running_plan"] = plan_info
         self._state["running_plan_completed"] = False
+        self._state["environment_state"] = "executing_plan"
 
         logger.info("Starting a plan '%s'.", plan_info["name"])
 
@@ -266,6 +278,12 @@ class RunEngineWorker(Process):
             Option on how to proceed with previously paused plan. The values are
             "resume", "abort", "stop", "halt".
         """
+        env_state = self._state["environment_state"]
+        if env_state != "idle":
+            raise RejectedError(
+                f"Attempted to start a plan in '{env_state}' environment state. Accepted state: 'idle'"
+            )
+
         logger.info("Continue plan execution with the option '%s'", option)
 
         available_options = ("resume", "abort", "stop", "halt")
@@ -456,6 +474,9 @@ class RunEngineWorker(Process):
                 # Value is a dictionary with plan parameters
                 self._load_new_plan(plan_info=plan_info)
                 status = "accepted"
+            except RejectedError as ex:
+                status = "rejected"
+                err_msg = str(ex)
             except Exception as ex:
                 status = "error"
                 err_msg = str(ex)
@@ -518,6 +539,9 @@ class RunEngineWorker(Process):
                 logger.info("Run Engine: %s", option)
                 self._continue_plan(option)
                 status = "accepted"
+            except RejectedError as ex:
+                status = "rejected"
+                err_msg = str(ex)
             except Exception as ex:
                 status = "error"
                 err_msg = str(ex)
@@ -581,7 +605,7 @@ class RunEngineWorker(Process):
             except queue.Empty:
                 pass
 
-    def _run_in_separate_thread(self, *, name, target, args=None, kwargs=None):
+    def _run_in_separate_thread(self, *, name, target, parallel=True, args=None, kwargs=None):
         """
         Run ``target`` (any callable) in a separate daemon thread. The callable is passed arguments ``args``
         and ``kwargs`` and ``name`` is used to generate thread name and in error messages. The function
@@ -598,11 +622,16 @@ class RunEngineWorker(Process):
         try:
             environment_state = self._state["environment_state"]
             # Verify that the environment is ready
-            if environment_state not in ("idle", "executing_plan", "executing_task"):
-                raise RuntimeError(f"Environment is not ready. Current environment state: {environment_state}")
+            acceptable_states = ("idle", "executing_plan", "executing_task")
+            if environment_state not in acceptable_states:
+                raise RejectedError(
+                    f"Incorrect environment state: '{environment_state}'. Acceptable states: {acceptable_states}"
+                )
             # Verify that the environment is idle (no plans or tasks are executed)
-            if environment_state != "idle":
-                raise RuntimeError(f"Environment is not ready. Current environment state: {environment_state}")
+            if not parallel and (environment_state != "idle"):
+                raise RejectedError(
+                    f"Incorrect environment state: '{environment_state}'. Acceptable state: 'idle'"
+                )
 
             task_uuid = str(uuid.uuid4())
             task_uuid_short = task_uuid.split("-")[-1]
@@ -615,14 +644,23 @@ class RunEngineWorker(Process):
                         target(*args, **kwargs)
                     except Exception as ex:
                         logger.exception("Error occurred while executing the function ('%s'): %s", name, str(ex))
+                    finally:
+                        if not parallel:
+                            self._state["environment_state"] = "idle"
 
                 return thread_func
 
             th = threading.Thread(target=thread_func_wrapper(), name=thread_name, daemon=True)
+
+            if not parallel:
+                self._state["environment_state"] = "executing_task"
             th.start()
 
+        except RejectedError as ex:
+            status, msg = "rejected", f"Task '{name}' was rejected by RE Worker process: {ex}"
         except Exception as ex:
-            status, msg = "rejected", f"Failed to execute command '{name}': {ex}"
+            status, msg = "error", f"Error occurred while to starting the task '{name}': {ex}"
+
         return status, msg
 
     # ------------------------------------------------------------

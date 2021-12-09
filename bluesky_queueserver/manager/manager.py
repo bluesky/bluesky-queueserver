@@ -6,6 +6,7 @@ import time as ttime
 import pprint
 import enum
 import uuid
+import copy
 
 from .comms import PipeJsonRpcSendAsync, CommTimeoutError, validate_zmq_key
 from .profile_ops import (
@@ -2249,8 +2250,23 @@ class RunEngineManager(Process):
 
             msg_out = await self._zmq_execute(msg_in)
 
+            def gen_log_msg(msg_out):
+                """
+                Avoid printing large dictionaries (allowed devices or allowed plans) in the log.
+                Replace values with "..." for better visualization.
+                """
+                log_msg_out = copy.deepcopy(msg_out)
+                # Do not print large dicts in the log: replace values with "..."
+                large_dicts = ("plans_allowed", "devices_allowed")
+                for dict_name in large_dicts:
+                    if dict_name in log_msg_out:
+                        d = log_msg_out[dict_name]
+                        for k in d.keys():
+                            d[k] = "..."
+                return log_msg_out
+
             #  Send reply back to client
-            logger.debug("ZeroMQ server sending response: %s", pprint.pformat(msg_out))
+            logger.debug("ZeroMQ server sending response: %s", pprint.pformat(gen_log_msg(msg_out)))
             await self._zmq_send(msg_out)
 
             if self._manager_stopping:
@@ -2287,8 +2303,7 @@ class RunEngineManager(Process):
         setup_console_output_redirection(msg_queue=self._msg_queue)
 
         logging.basicConfig(level=max(logging.WARNING, self._log_level))
-        setup_loggers(name=__name__, log_level=self._log_level)
-        # logging.getLogger(__name__).setLevel(self._log_level)
+        setup_loggers(log_level=self._log_level)
 
         logger.info("Starting RE Manager process")
         try:

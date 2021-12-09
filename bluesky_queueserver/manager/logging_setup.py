@@ -2,7 +2,7 @@ import logging
 import sys
 
 
-def setup_loggers(*, name, log_level):
+def setup_loggers(*, log_level, name="bluesky_queueserver"):
     """
     Configure loggers used by Bluesky Queue Server.
 

@@ -368,9 +368,10 @@ class ReManager:
         params = params or []
 
         # Set logging level for RE Manager unless it is already set in parameters
-        logging_levels = ("--verbose", "--quiet", "--silent")
-        if not any([_ in params for _ in logging_levels]):
-            params.append("--verbose")
+        #   Leads to excessive output and some tests may fail at tearup. Enable only when needed.
+        # logging_levels = ("--verbose", "--quiet", "--silent")
+        # if not any([_ in params for _ in logging_levels]):
+        #     params.append("--verbose")
 
         if not self._p:
             clear_redis_pool()

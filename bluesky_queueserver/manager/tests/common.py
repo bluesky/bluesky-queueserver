@@ -342,7 +342,8 @@ sources:
 
 
 class ReManager:
-    def __init__(self, params=None, *, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL):
+    def __init__(self, params=None, *, stdout=sys.__stdout__, stderr=sys.__stdout__):
+    # def __init__(self, params=None, *, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL):
         self._p = None
         self._start_manager(params, stdout=stdout, stderr=stderr)
 

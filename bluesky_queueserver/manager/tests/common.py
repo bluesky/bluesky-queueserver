@@ -365,6 +365,13 @@ class ReManager:
         subprocess.Popen
             Subprocess in which the manager is running. It needs to be stopped at certain point.
         """
+        params = params or []
+
+        # Set logging level for RE Manager unless it is already set in parameters
+        logging_levels = ("--verbose", "--quiet", "--silent")
+        if not any([_ in params for _ in logging_levels]):
+            params.append("--verbose")
+
         if not self._p:
             clear_redis_pool()
 

@@ -2390,12 +2390,15 @@ def test_zmq_api_re_pause_1(re_manager, pause_deferred, kill_manager, pause_befo
     resp3, _ = zmq_single_request("queue_start")
     assert resp3["success"] is True
 
-    ttime.sleep(1)  # ~50% of the first measurement in the plan
+    ttime.sleep(0.9)  # ~50% of the first measurement in the plan
+    _check_status(0, 0, "executing_queue", "running", False)
 
     resp3, _ = zmq_single_request("re_pause", params={"option": ("deferred" if pause_deferred else "immediate")})
     assert resp3["success"] is True, f"resp={resp3}"
 
-    _check_status(0, 0, "executing_queue", "running", True)
+    if pause_deferred:
+        # In case of immediate pause, the state will depend on how fast the request is processed
+        _check_status(0, 0, "executing_queue", "running", True)
 
     if kill_manager:
         if pause_before_kill:

@@ -16,6 +16,7 @@ from .profile_ops import (
 )
 from .plan_queue_ops import PlanQueueOperations
 from .output_streaming import setup_console_output_redirection
+from .logging_setup import setup_loggers
 
 
 import logging
@@ -2286,7 +2287,8 @@ class RunEngineManager(Process):
         setup_console_output_redirection(msg_queue=self._msg_queue)
 
         logging.basicConfig(level=max(logging.WARNING, self._log_level))
-        logging.getLogger(__name__).setLevel(self._log_level)
+        setup_loggers(name=__name__, log_level=self._log_level)
+        # logging.getLogger(__name__).setLevel(self._log_level)
 
         logger.info("Starting RE Manager process")
         try:

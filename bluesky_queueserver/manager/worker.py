@@ -10,6 +10,7 @@ import uuid
 
 from .comms import PipeJsonRpcReceive
 from .output_streaming import setup_console_output_redirection
+from .logging_setup import setup_loggers
 
 from event_model import RunRouter
 
@@ -189,7 +190,7 @@ class RunEngineWorker(Process):
                 self._re_report["re_state"] = str(self._RE._state)
 
         self._state["environment_state"] = "idle"
-        logger.debug("Finished execution of the plan")
+        logger.debug("Plan execution is completed or interrupted")
 
     def _load_new_plan(self, plan_info):
         """
@@ -673,7 +674,8 @@ class RunEngineWorker(Process):
         setup_console_output_redirection(msg_queue=self._msg_queue)
 
         logging.basicConfig(level=max(logging.WARNING, self._log_level))
-        logging.getLogger(__name__).setLevel(self._log_level)
+        setup_loggers(name=__name__, log_level=self._log_level)
+        # logging.getLogger(__name__).setLevel(self._log_level)
 
         success = True
 

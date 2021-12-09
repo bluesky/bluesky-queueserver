@@ -496,6 +496,7 @@ def qserver_console_monitor_cli():
     CLI tool for remote monitoring of console output from RE Manager. The function is also
     expected to be used as an example of using  ``ReceiveConsoleOutput`` class.
     """
+
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger("bluesky_queueserver").setLevel("INFO")
 

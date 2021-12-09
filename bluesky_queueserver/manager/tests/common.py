@@ -342,12 +342,11 @@ sources:
 
 
 class ReManager:
-    def __init__(self, params=None, *, stdout=sys.__stdout__, stderr=sys.__stdout__):
-        # def __init__(self, params=None, *, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL):
+    def __init__(self, params=None, *, stdout=sys.stdout, stderr=sys.stdout):
         self._p = None
         self._start_manager(params, stdout=stdout, stderr=stderr)
 
-    def _start_manager(self, params=None, *, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL):
+    def _start_manager(self, params=None, *, stdout, stderr):
         """
         Start RE manager.
 
@@ -369,9 +368,9 @@ class ReManager:
 
         # Set logging level for RE Manager unless it is already set in parameters
         #   Leads to excessive output and some tests may fail at tearup. Enable only when needed.
-        # logging_levels = ("--verbose", "--quiet", "--silent")
-        # if not any([_ in params for _ in logging_levels]):
-        #     params.append("--verbose")
+        logging_levels = ("--verbose", "--quiet", "--silent")
+        if not any([_ in params for _ in logging_levels]):
+            params.append("--verbose")
 
         if not self._p:
             clear_redis_pool()
@@ -436,7 +435,7 @@ class ReManager:
 
                     # If only the first request failed, then there is a chance that the manager stops
                     try:
-                        self._p.wait(timeout)
+                        self._p.communicate(timeout=timeout)
                         self._p = None
                     except subprocess.TimeoutExpired:
                         raise RuntimeError(f"Timeout occured while waiting for the manager to stop: {msg}")
@@ -492,7 +491,7 @@ def re_manager_cmd():
     re = {"re": None}
     failed_to_start = False
 
-    def _create(params, *, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL):
+    def _create(params, *, stdout, stderr):
         """
         Create RE Manager. ``start-re-manager`` is called with command line parameters from
           the list ``params``.
@@ -518,7 +517,7 @@ def re_manager_cmd():
             else:
                 re["re"].kill_manager()
 
-    def create_re_manager(params=None, *, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL):
+    def create_re_manager(params=None, *, stdout=sys.stdout, stderr=sys.stdout):
         params = params or []
         _close()
         _create(params, stdout=stdout, stderr=stderr)

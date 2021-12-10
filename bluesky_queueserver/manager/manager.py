@@ -243,45 +243,40 @@ class RunEngineManager(Process):
         Creates worker process.
         """
         # Repeat the checks, since it is important for the manager to be in the correct state.
+        if self._environment_exists:
+            return False, "Rejected: RE Worker environment already exists"
+
+        if self._manager_state not in [MState.IDLE, MState.CREATING_ENVIRONMENT]:
+            return False, f"Manager state is {self._manager_state.value}"
+
+        self._fut_manager_task_completed = self._loop.create_future()
+
         try:
-            if self._environment_exists:
-                return False, "Rejected: RE Worker environment already exists"
+            success = await self._watchdog_start_re_worker()
+            if not success:
+                raise RuntimeError("Failed to create Worker process")
+            logger.info("Waiting for RE worker to start ...")
+            success = await self._fut_manager_task_completed  # TODO: timeout may be needed here
+            if success:
+                self._environment_exists = True
+                self._re_pause_pending = False
+                logger.info("Worker started successfully.")
+                success, err_msg = True, ""
+            else:
+                self._environment_exists = True
+                await self._confirm_re_worker_exit()
+                self._environment_exists = False
+                self._worker_state_info = None
+                self._re_pause_pending = False
 
-            if self._manager_state not in [MState.IDLE, MState.CREATING_ENVIRONMENT]:
-                return False, f"Manager state is {self._manager_state.value}"
+                logger.error("Error occurred while opening RE Worker environment.")
+                success, err_msg = False, "Error occurred while opening RE Worker environment."
 
-            self._fut_manager_task_completed = self._loop.create_future()
+        except Exception as ex:
+            logger.exception("Failed to start_Worker: %s", str(ex))
+            success, err_msg = False, f"Failed to start_Worker {str(ex)}"
 
-            try:
-                success = await self._watchdog_start_re_worker()
-                if not success:
-                    raise RuntimeError("Failed to create Worker process")
-                logger.info("Waiting for RE worker to start ...")
-                success = await self._fut_manager_task_completed  # TODO: timeout may be needed here
-                if success:
-                    self._environment_exists = True
-                    self._re_pause_pending = False
-                    logger.info("Worker started successfully.")
-                    success, err_msg = True, ""
-                else:
-                    self._environment_exists = True
-                    await self._confirm_re_worker_exit()
-                    self._environment_exists = False
-                    self._worker_state_info = None
-                    self._re_pause_pending = False
-
-                    logger.error("Error occurred while opening RE Worker environment.")
-                    success, err_msg = False, "Error occurred while opening RE Worker environment."
-
-            except Exception as ex:
-                logger.exception("Failed to start_Worker: %s", str(ex))
-                success, err_msg = False, f"Failed to start_Worker {str(ex)}"
-
-            self._manager_state = MState.IDLE
-
-        finally:
-            pass
-
+        self._manager_state = MState.IDLE
         return success, err_msg
 
     async def _stop_re_worker(self):
@@ -317,34 +312,29 @@ class RunEngineManager(Process):
         """
         Closing of the RE Worker.
         """
-        try:
-            # Repeat the checks, since it is important for the manager to be in the correct state.
-            if not self._environment_exists:
-                self._manager_state = MState.IDLE
-                return False, "Environment does not exist"
-
-            if self._manager_state not in [MState.IDLE, MState.CLOSING_ENVIRONMENT]:
-                return False, f"Manager state was {self._manager_state.value}"
-
-            self._fut_manager_task_completed = self._loop.create_future()
-
-            success, err_msg = await self._worker_command_close_env()
-            if success:
-                # Wait for RE Worker to be prepared to close
-                self._event_worker_closed = asyncio.Event()
-
-                self._manager_state = MState.CLOSING_ENVIRONMENT
-                await self._fut_manager_task_completed  # TODO: timeout may be needed here
-
-                if not await self._confirm_re_worker_exit():
-                    success = False
-                    err_msg = "Failed to confirm closing of RE Worker thread"
-
+        # Repeat the checks, since it is important for the manager to be in the correct state.
+        if not self._environment_exists:
             self._manager_state = MState.IDLE
+            return False, "Environment does not exist"
 
-        finally:
-            pass
+        if self._manager_state not in [MState.IDLE, MState.CLOSING_ENVIRONMENT]:
+            return False, f"Manager state was {self._manager_state.value}"
 
+        self._fut_manager_task_completed = self._loop.create_future()
+
+        success, err_msg = await self._worker_command_close_env()
+        if success:
+            # Wait for RE Worker to be prepared to close
+            self._event_worker_closed = asyncio.Event()
+
+            self._manager_state = MState.CLOSING_ENVIRONMENT
+            await self._fut_manager_task_completed  # TODO: timeout may be needed here
+
+            if not await self._confirm_re_worker_exit():
+                success = False
+                err_msg = "Failed to confirm closing of RE Worker thread"
+
+        self._manager_state = MState.IDLE
         return success, err_msg
 
     async def _kill_re_worker(self):

@@ -97,6 +97,10 @@ class RunEngineManager(Process):
 
         self._loop = None
 
+        # Lock that protect operations with the environment:
+        #     'queue_start', 'environment_open', 'environment_close'
+        self._lock_env_ops = None  # asyncio.Lock()
+
         # Communication with the server using ZMQ
         self._ctx = None
         self._zmq_socket = None
@@ -156,6 +160,21 @@ class RunEngineManager(Process):
     # ======================================================================
     #          Functions that implement functionality of the server
 
+    async def _lock_env_ops_acquire(self):
+        """
+        Acquire 'self._lock_env_ops' and print the warning
+        """
+        if self._lock_env_ops.locked():
+            logger.warning("Waiting for the lock to be released before operation may be continued ...")
+        await self._lock_env_ops.acquire()
+
+    def _lock_env_ops_release(self):
+        """
+        Safely release the lock
+        """
+        if self._lock_env_ops.locked():
+            self._lock_env_ops.release()
+
     async def _execute_background_task(self, bckg_fut):
         """
         Monitors execution of a task in the background. Catches unhandled exceptions and
@@ -205,6 +224,8 @@ class RunEngineManager(Process):
         else:
             accepted, msg = True, ""
             self._manager_state = MState.CREATING_ENVIRONMENT
+
+            await self._lock_env_ops_acquire()
             asyncio.ensure_future(self._execute_background_task(self._start_re_worker_task()))
         return accepted, msg
 
@@ -213,40 +234,45 @@ class RunEngineManager(Process):
         Creates worker process.
         """
         # Repeat the checks, since it is important for the manager to be in the correct state.
-        if self._environment_exists:
-            return False, "Rejected: RE Worker environment already exists"
-
-        if self._manager_state not in [MState.IDLE, MState.CREATING_ENVIRONMENT]:
-            return False, f"Manager state is {self._manager_state.value}"
-
-        self._fut_manager_task_completed = self._loop.create_future()
-
         try:
-            success = await self._watchdog_start_re_worker()
-            if not success:
-                raise RuntimeError("Failed to create Worker process")
-            logger.info("Waiting for RE worker to start ...")
-            success = await self._fut_manager_task_completed  # TODO: timeout may be needed here
-            if success:
-                self._environment_exists = True
-                self._re_pause_pending = False
-                logger.info("Worker started successfully.")
-                success, err_msg = True, ""
-            else:
-                self._environment_exists = True
-                await self._confirm_re_worker_exit()
-                self._environment_exists = False
-                self._worker_state_info = None
-                self._re_pause_pending = False
+            if self._environment_exists:
+                return False, "Rejected: RE Worker environment already exists"
 
-                logger.error("Error occurred while opening RE Worker environment.")
-                success, err_msg = False, "Error occurred while opening RE Worker environment."
+            if self._manager_state not in [MState.IDLE, MState.CREATING_ENVIRONMENT]:
+                return False, f"Manager state is {self._manager_state.value}"
 
-        except Exception as ex:
-            logger.exception("Failed to start_Worker: %s", str(ex))
-            success, err_msg = False, f"Failed to start_Worker {str(ex)}"
+            self._fut_manager_task_completed = self._loop.create_future()
 
-        self._manager_state = MState.IDLE
+            try:
+                success = await self._watchdog_start_re_worker()
+                if not success:
+                    raise RuntimeError("Failed to create Worker process")
+                logger.info("Waiting for RE worker to start ...")
+                success = await self._fut_manager_task_completed  # TODO: timeout may be needed here
+                if success:
+                    self._environment_exists = True
+                    self._re_pause_pending = False
+                    logger.info("Worker started successfully.")
+                    success, err_msg = True, ""
+                else:
+                    self._environment_exists = True
+                    await self._confirm_re_worker_exit()
+                    self._environment_exists = False
+                    self._worker_state_info = None
+                    self._re_pause_pending = False
+
+                    logger.error("Error occurred while opening RE Worker environment.")
+                    success, err_msg = False, "Error occurred while opening RE Worker environment."
+
+            except Exception as ex:
+                logger.exception("Failed to start_Worker: %s", str(ex))
+                success, err_msg = False, f"Failed to start_Worker {str(ex)}"
+
+            self._manager_state = MState.IDLE
+
+        finally:
+            self._lock_env_ops_release()
+
         return success, err_msg
 
     async def _stop_re_worker(self):
@@ -269,6 +295,8 @@ class RunEngineManager(Process):
             accepted = True
             self._manager_state = MState.CLOSING_ENVIRONMENT
             err_msg = ""
+
+            await self._lock_env_ops_acquire()
             asyncio.ensure_future(self._execute_background_task(self._stop_re_worker_task()))
         return accepted, err_msg
 
@@ -276,29 +304,34 @@ class RunEngineManager(Process):
         """
         Closing of the RE Worker.
         """
-        # Repeat the checks, since it is important for the manager to be in the correct state.
-        if not self._environment_exists:
+        try:
+            # Repeat the checks, since it is important for the manager to be in the correct state.
+            if not self._environment_exists:
+                self._manager_state = MState.IDLE
+                return False, "Environment does not exist"
+
+            if self._manager_state not in [MState.IDLE, MState.CLOSING_ENVIRONMENT]:
+                return False, f"Manager state was {self._manager_state.value}"
+
+            self._fut_manager_task_completed = self._loop.create_future()
+
+            success, err_msg = await self._worker_command_close_env()
+            if success:
+                # Wait for RE Worker to be prepared to close
+                self._event_worker_closed = asyncio.Event()
+
+                self._manager_state = MState.CLOSING_ENVIRONMENT
+                await self._fut_manager_task_completed  # TODO: timeout may be needed here
+
+                if not await self._confirm_re_worker_exit():
+                    success = False
+                    err_msg = "Failed to confirm closing of RE Worker thread"
+
             self._manager_state = MState.IDLE
-            return False, "Environment does not exist"
 
-        if self._manager_state not in [MState.IDLE, MState.CLOSING_ENVIRONMENT]:
-            return False, f"Manager state was {self._manager_state.value}"
+        finally:
+            self._lock_env_ops_release()
 
-        self._fut_manager_task_completed = self._loop.create_future()
-
-        success, err_msg = await self._worker_command_close_env()
-        if success:
-            # Wait for RE Worker to be prepared to close
-            self._event_worker_closed = asyncio.Event()
-
-            self._manager_state = MState.CLOSING_ENVIRONMENT
-            await self._fut_manager_task_completed  # TODO: timeout may be needed here
-
-            if not await self._confirm_re_worker_exit():
-                success = False
-                err_msg = "Failed to confirm closing of RE Worker thread"
-
-        self._manager_state = MState.IDLE
         return success, err_msg
 
     async def _kill_re_worker(self):
@@ -521,113 +554,120 @@ class RunEngineManager(Process):
             success, err_msg = False, "RE Manager is busy."
         else:
             self._queue_stop_deactivate()  # Just in case
-            asyncio.ensure_future(self._execute_background_task(self._start_plan_task()))
+
+            await self._lock_env_ops_acquire()
+            asyncio.ensure_future(self._execute_background_task(self._start_plan_task(starting_queue=True)))
             success, err_msg = True, ""
         return success, err_msg
 
-    async def _start_plan_task(self, stop_queue=False):
+    async def _start_plan_task(self, stop_queue=False, starting_queue=False):
         """
         Upload the plan to the worker process for execution.
         Plan in the queue is represented as a dictionary with the keys "name" (plan name),
         "args" (list of args), "kwargs" (list of kwargs). Only the plan name is mandatory.
         Names of plans and devices are strings.
         """
-        n_pending_plans = await self._plan_queue.get_queue_size()
-        if n_pending_plans:
-            logger.info("Processing the next queue item: %d plans are left in the queue.", n_pending_plans)
-        else:
-            logger.info("No items are left in the queue.")
+        try:
+            n_pending_plans = await self._plan_queue.get_queue_size()
+            if n_pending_plans:
+                logger.info("Processing the next queue item: %d plans are left in the queue.", n_pending_plans)
+            else:
+                logger.info("No items are left in the queue.")
 
-        if not n_pending_plans:
-            self._manager_state = MState.IDLE
-            self._re_pause_pending = False
-            success, err_msg = False, "Queue is empty."
-            logger.info(err_msg)
+            if not n_pending_plans:
+                self._manager_state = MState.IDLE
+                self._re_pause_pending = False
+                success, err_msg = False, "Queue is empty."
+                logger.info(err_msg)
 
-        elif self._queue_stop_pending or stop_queue:
-            self._manager_state = MState.IDLE
-            self._re_pause_pending = False
-            success, err_msg = False, "Queue is stopped."
-            logger.info(err_msg)
+            elif self._queue_stop_pending or stop_queue:
+                self._manager_state = MState.IDLE
+                self._re_pause_pending = False
+                success, err_msg = False, "Queue is stopped."
+                logger.info(err_msg)
 
-        elif self._re_pause_pending:
-            self._manager_state = MState.IDLE
-            self._re_pause_pending = False
-            success, err_msg = False, "Queue is stopped due to unresolved outstanding RE pause request."
-            logger.info(err_msg)
-
-        else:
-            next_item = await self._plan_queue.get_item(pos="front")
-
-            self._re_pause_pending = False
-
-            # The next items is PLAN
-            if next_item["item_type"] == "plan":
-
-                # Reset RE environment (worker)
-                success, err_msg = await self._worker_command_reset_worker()
-                if not success:
-                    self._manager_state = MState.IDLE
-                    err_msg = f"Failed to reset RE Worker: {err_msg}"
-                    logger.error(err_msg)
-                    return success, err_msg
-
-                self._manager_state = MState.EXECUTING_QUEUE
-
-                new_plan = await self._plan_queue.process_next_item()
-
-                plan_name = new_plan["name"]
-                args = new_plan["args"] if "args" in new_plan else []
-                kwargs = new_plan["kwargs"] if "kwargs" in new_plan else {}
-                user_name = new_plan["user"]
-                user_group = new_plan["user_group"]
-                meta = new_plan["meta"] if "meta" in new_plan else {}
-                item_uid = new_plan["item_uid"]
-
-                plan_info = {
-                    "name": plan_name,
-                    "args": args,
-                    "kwargs": kwargs,
-                    "user": user_name,
-                    "user_group": user_group,
-                    "meta": meta,
-                    "item_uid": item_uid,
-                }
-
-                # TODO: Decide if we really want to have metadata in the log
-                logger.info("Starting the plan:\n%s.", pprint.pformat(plan_info))
-
-                success, err_msg = await self._worker_command_run_plan(plan_info)
-                if not success:
-                    await self._plan_queue.set_processed_item_as_stopped(exit_status="error", run_uids=[])
-                    self._manager_state = MState.IDLE
-                    logger.error(
-                        "Failed to start the plan %s.\nError: %s",
-                        pprint.pformat(plan_info),
-                        err_msg,
-                    )
-                    err_msg = f"Failed to start the plan: {err_msg}"
-
-            # The next items is INSTRUCTION
-            elif next_item["item_type"] == "instruction":
-                logger.info("Executing instruction:\n%s.", pprint.pformat(next_item))
-
-                if next_item["name"] == "queue_stop":
-                    await self._plan_queue.process_next_item()
-                    self._manager_state = MState.EXECUTING_QUEUE
-                    asyncio.ensure_future(self._start_plan_task(stop_queue=True))
-                    success, err_msg = True, ""
-                else:
-                    success = False
-                    err_msg = f"Unsupported action: '{next_item['name']}' (item {next_item})"
+            elif self._re_pause_pending:
+                self._manager_state = MState.IDLE
+                self._re_pause_pending = False
+                success, err_msg = False, "Queue is stopped due to unresolved outstanding RE pause request."
+                logger.info(err_msg)
 
             else:
-                success = False
-                err_msg = f"Unrecognized item type: '{next_item['item_type']}' (item {next_item})"
+                next_item = await self._plan_queue.get_item(pos="front")
 
-        if self._manager_state == MState.IDLE:
-            # No plans are running: deactivate the stop sequence.
-            self._queue_stop_deactivate()
+                self._re_pause_pending = False
+
+                # The next items is PLAN
+                if next_item["item_type"] == "plan":
+
+                    # Reset RE environment (worker)
+                    success, err_msg = await self._worker_command_reset_worker()
+                    if not success:
+                        self._manager_state = MState.IDLE
+                        err_msg = f"Failed to reset RE Worker: {err_msg}"
+                        logger.error(err_msg)
+                        return success, err_msg
+
+                    self._manager_state = MState.EXECUTING_QUEUE
+
+                    new_plan = await self._plan_queue.process_next_item()
+
+                    plan_name = new_plan["name"]
+                    args = new_plan["args"] if "args" in new_plan else []
+                    kwargs = new_plan["kwargs"] if "kwargs" in new_plan else {}
+                    user_name = new_plan["user"]
+                    user_group = new_plan["user_group"]
+                    meta = new_plan["meta"] if "meta" in new_plan else {}
+                    item_uid = new_plan["item_uid"]
+
+                    plan_info = {
+                        "name": plan_name,
+                        "args": args,
+                        "kwargs": kwargs,
+                        "user": user_name,
+                        "user_group": user_group,
+                        "meta": meta,
+                        "item_uid": item_uid,
+                    }
+
+                    # TODO: Decide if we really want to have metadata in the log
+                    logger.info("Starting the plan:\n%s.", pprint.pformat(plan_info))
+
+                    success, err_msg = await self._worker_command_run_plan(plan_info)
+                    if not success:
+                        await self._plan_queue.set_processed_item_as_stopped(exit_status="error", run_uids=[])
+                        self._manager_state = MState.IDLE
+                        logger.error(
+                            "Failed to start the plan %s.\nError: %s",
+                            pprint.pformat(plan_info),
+                            err_msg,
+                        )
+                        err_msg = f"Failed to start the plan: {err_msg}"
+
+                # The next items is INSTRUCTION
+                elif next_item["item_type"] == "instruction":
+                    logger.info("Executing instruction:\n%s.", pprint.pformat(next_item))
+
+                    if next_item["name"] == "queue_stop":
+                        await self._plan_queue.process_next_item()
+                        self._manager_state = MState.EXECUTING_QUEUE
+                        asyncio.ensure_future(self._start_plan_task(stop_queue=True))
+                        success, err_msg = True, ""
+                    else:
+                        success = False
+                        err_msg = f"Unsupported action: '{next_item['name']}' (item {next_item})"
+
+                else:
+                    success = False
+                    err_msg = f"Unrecognized item type: '{next_item['item_type']}' (item {next_item})"
+
+            if self._manager_state == MState.IDLE:
+                # No plans are running: deactivate the stop sequence.
+                self._queue_stop_deactivate()
+
+        finally:
+            if starting_queue:
+                self._lock_env_ops_release()
 
         return success, err_msg
 
@@ -1727,8 +1767,8 @@ class RunEngineManager(Process):
             if item_uid is not None:
                 try:
                     await self._plan_queue.pop_item_from_queue(uid=item_uid)
-                except Exception as ex:
-                    logger.exception("Failed to delete plan with UID '%s' from queue: %s", item_uid, str(ex))
+                except Exception as ex2:
+                    logger.exception("Failed to delete plan with UID '%s' from queue: %s", item_uid, str(ex2))
             success = False
             msg = f"Failed to start execution of the item: {str(ex)}"
 
@@ -2143,6 +2183,7 @@ class RunEngineManager(Process):
         self._ctx = zmq.asyncio.Context()
 
         self._loop = asyncio.get_running_loop()
+        self._lock_env_ops = asyncio.Lock()
 
         self._comm_to_watchdog = PipeJsonRpcSendAsync(conn=self._watchdog_conn, name="RE Manager-Watchdog Comm")
         self._comm_to_worker = PipeJsonRpcSendAsync(conn=self._worker_conn, name="RE Manager-Worker Comm")

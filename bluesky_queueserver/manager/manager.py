@@ -231,8 +231,10 @@ class RunEngineManager(Process):
                 asyncio.ensure_future(self._execute_background_task(self._start_re_worker_task()))
 
         except Exception as ex:
-            self._lock_env_ops_release()
             accepted, msg = False, str(ex)
+
+        finally:
+            self._lock_env_ops_release()
 
         return accepted, msg
 
@@ -278,7 +280,7 @@ class RunEngineManager(Process):
             self._manager_state = MState.IDLE
 
         finally:
-            self._lock_env_ops_release()
+            pass
 
         return success, err_msg
 
@@ -304,8 +306,10 @@ class RunEngineManager(Process):
                 asyncio.ensure_future(self._execute_background_task(self._stop_re_worker_task()))
 
         except Exception as ex:
-            self._lock_env_ops_release()
             accepted, err_msg = False, str(ex)
+
+        finally:
+            self._lock_env_ops_release()
 
         return accepted, err_msg
 
@@ -339,7 +343,7 @@ class RunEngineManager(Process):
             self._manager_state = MState.IDLE
 
         finally:
-            self._lock_env_ops_release()
+            pass
 
         return success, err_msg
 

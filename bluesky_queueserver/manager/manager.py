@@ -215,18 +215,25 @@ class RunEngineManager(Process):
         the environment is created. Returns True/False depending on whether
         the command is accepted.
         """
-        if self._environment_exists:
-            accepted, msg = False, "RE Worker environment already exists."
-        elif self._manager_state is MState.CREATING_ENVIRONMENT:
-            accepted, msg = False, "Manager is already in the process of creating the RE Worker environment."
-        elif self._manager_state is not MState.IDLE:
-            accepted, msg = False, f"Manager state is not idle. Current state: {self._manager_state.value}"
-        else:
-            accepted, msg = True, ""
-            self._manager_state = MState.CREATING_ENVIRONMENT
-
+        try:
             await self._lock_env_ops_acquire()
-            asyncio.ensure_future(self._execute_background_task(self._start_re_worker_task()))
+
+            if self._environment_exists:
+                raise RuntimeError("RE Worker environment already exists.")
+            elif self._manager_state is MState.CREATING_ENVIRONMENT:
+                raise RuntimeError("Manager is already in the process of creating the RE Worker environment.")
+            elif self._manager_state is not MState.IDLE:
+                raise RuntimeError(f"Manager state is not idle. Current state: {self._manager_state.value}")
+            else:
+                accepted, msg = True, ""
+                self._manager_state = MState.CREATING_ENVIRONMENT
+
+                asyncio.ensure_future(self._execute_background_task(self._start_re_worker_task()))
+
+        except Exception as ex:
+            self._lock_env_ops_release()
+            accepted, msg = False, str(ex)
+
         return accepted, msg
 
     async def _start_re_worker_task(self):
@@ -279,25 +286,27 @@ class RunEngineManager(Process):
         """
         Initiate closing of RE Worker environment.
         """
-        if not self._environment_exists:
-            accepted = False
-            err_msg = "RE Worker environment does not exist."
-        elif self._manager_state is MState.CLOSING_ENVIRONMENT:
-            accepted = False
-            err_msg = "Manager is already in the process of closing the RE Worker environment."
-        elif self._manager_state is MState.EXECUTING_QUEUE:
-            accepted = False
-            err_msg = "Queue execution is in progress."
-        elif self._manager_state != MState.IDLE:
-            accepted = False
-            err_msg = f"Manager state is not idle. Current state: {self._manager_state.value}"
-        else:
-            accepted = True
-            self._manager_state = MState.CLOSING_ENVIRONMENT
-            err_msg = ""
-
+        try:
             await self._lock_env_ops_acquire()
-            asyncio.ensure_future(self._execute_background_task(self._stop_re_worker_task()))
+
+            if not self._environment_exists:
+                raise RuntimeError("RE Worker environment does not exist.")
+            elif self._manager_state is MState.CLOSING_ENVIRONMENT:
+                raise RuntimeError("Manager is already in the process of closing the RE Worker environment.")
+            elif self._manager_state is MState.EXECUTING_QUEUE:
+                raise RuntimeError("Queue execution is in progress.")
+            elif self._manager_state != MState.IDLE:
+                raise RuntimeError(f"Manager state is not idle. Current state: {self._manager_state.value}")
+            else:
+                accepted, err_msg = True, ""
+                self._manager_state = MState.CLOSING_ENVIRONMENT
+
+                asyncio.ensure_future(self._execute_background_task(self._stop_re_worker_task()))
+
+        except Exception as ex:
+            self._lock_env_ops_release()
+            accepted, err_msg = False, str(ex)
+
         return accepted, err_msg
 
     async def _stop_re_worker_task(self):
@@ -548,16 +557,23 @@ class RunEngineManager(Process):
         """
         Initiate upload of next plan to the worker process for execution.
         """
-        if not self._environment_exists:
-            success, err_msg = False, "RE Worker environment does not exist."
-        elif not self._manager_state == MState.IDLE:
-            success, err_msg = False, "RE Manager is busy."
-        else:
-            self._queue_stop_deactivate()  # Just in case
-
+        try:
             await self._lock_env_ops_acquire()
-            asyncio.ensure_future(self._execute_background_task(self._start_plan_task(starting_queue=True)))
-            success, err_msg = True, ""
+
+            if not self._environment_exists:
+                raise RuntimeError("RE Worker environment does not exist.")
+            elif not self._manager_state == MState.IDLE:
+                raise RuntimeError("RE Manager is busy.")
+            else:
+                self._queue_stop_deactivate()  # Just in case
+
+                asyncio.ensure_future(self._execute_background_task(self._start_plan_task(starting_queue=True)))
+                success, err_msg = True, ""
+
+        except Exception as ex:
+            self._lock_env_ops_release()
+            success, err_msg = False, str(ex)
+
         return success, err_msg
 
     async def _start_plan_task(self, stop_queue=False, starting_queue=False):

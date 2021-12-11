@@ -725,9 +725,7 @@ def test_zmq_api_queue_item_execute_2(re_manager):  # noqa: F811
     params3a = {"item": _plan1, "user": _user, "user_group": _user_group}
     resp3a, _ = zmq_single_request("queue_item_execute", params3a)
     assert resp3a["success"] is False, f"resp={resp3a}"
-    expected_error_msg = (
-        "Failed to start execution of the item: RE Manager is not idle. RE Manager state is 'executing_queue'"
-    )
+    expected_error_msg = "Failed to start execution of the item: RE Manager is busy."
     assert resp3a["msg"] == expected_error_msg
     assert resp3a["qsize"] is None
     assert resp3a["item"]["name"] == _plan1["name"]

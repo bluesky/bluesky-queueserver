@@ -43,6 +43,7 @@ class MState(enum.Enum):
     IDLE = "idle"
     PAUSED = "paused"  # Paused plan
     CREATING_ENVIRONMENT = "creating_environment"
+    STARTING_QUEUE = "starting_queue"  # Starting the first plan of the queue
     EXECUTING_QUEUE = "executing_queue"
     CLOSING_ENVIRONMENT = "closing_environment"
     DESTROYING_ENVIRONMENT = "destroying_environment"
@@ -556,19 +557,65 @@ class RunEngineManager(Process):
 
             if not self._environment_exists:
                 raise RuntimeError("RE Worker environment does not exist.")
-            elif not self._manager_state == MState.IDLE:
+            elif self._manager_state != MState.IDLE:
                 raise RuntimeError("RE Manager is busy.")
             else:
                 self._queue_stop_deactivate()  # Just in case
-
+                self._manager_state = MState.STARTING_QUEUE
                 asyncio.ensure_future(self._execute_background_task(self._start_plan_task(starting_queue=True)))
                 success, err_msg = True, ""
 
         except Exception as ex:
-            self._lock_env_ops_release()
             success, err_msg = False, str(ex)
+        finally:
+            self._lock_env_ops_release()
 
         return success, err_msg
+
+    async def _start_single_plan(self, *, item):
+        """
+        Initiate upload of next plan to the worker process for execution.
+        """
+        qsize, item_uid = None, None
+
+        try:
+            await self._lock_env_ops_acquire()
+
+            if not self._environment_exists:
+                raise RuntimeError("RE Worker environment does not exist.")
+            elif self._manager_state != MState.IDLE:
+                raise RuntimeError("RE Manager is busy.")
+            else:
+                self._queue_stop_deactivate()  # Just in case
+                self._manager_state = MState.STARTING_QUEUE
+
+                item = copy.deepcopy(item)
+
+                # Adding plan to queue may raise an exception
+                item["properties"] = {"immediate_execution": True}
+                item, qsize_with_new_item = await self._plan_queue.add_item_to_queue(item, pos="front")
+                item_uid = item.get("item_uid", None)  # The item WAS added to the queue
+                qsize = max(qsize_with_new_item - 1, 0)
+
+                asyncio.ensure_future(self._execute_background_task(self._start_plan_task(starting_queue=True)))
+
+                success, err_msg = True, ""
+
+        except Exception as ex:
+            # If execution of the plan fails to start, the plan remains in the queue and needs to be deleted.
+            #   We use UID to delete the plan. It guarantees that only recently added plan is deleted.
+            #   Exception may be raised if the plan is not in the queue and must be properly handled.
+            if item_uid is not None:
+                try:
+                    await self._plan_queue.pop_item_from_queue(uid=item_uid)
+                except Exception as ex2:
+                    logger.exception("Failed to delete plan with UID '%s' from queue: %s", item_uid, str(ex2))
+            success, err_msg = False, str(ex)
+
+        finally:
+            self._lock_env_ops_release()
+
+        return success, err_msg, item, qsize
 
     async def _start_plan_task(self, stop_queue=False, starting_queue=False):
         """
@@ -577,107 +624,102 @@ class RunEngineManager(Process):
         "args" (list of args), "kwargs" (list of kwargs). Only the plan name is mandatory.
         Names of plans and devices are strings.
         """
-        try:
-            n_pending_plans = await self._plan_queue.get_queue_size()
-            if n_pending_plans:
-                logger.info("Processing the next queue item: %d plans are left in the queue.", n_pending_plans)
-            else:
-                logger.info("No items are left in the queue.")
+        n_pending_plans = await self._plan_queue.get_queue_size()
+        if n_pending_plans:
+            logger.info("Processing the next queue item: %d plans are left in the queue.", n_pending_plans)
+        else:
+            logger.info("No items are left in the queue.")
 
-            if not n_pending_plans:
-                self._manager_state = MState.IDLE
-                self._re_pause_pending = False
-                success, err_msg = False, "Queue is empty."
-                logger.info(err_msg)
+        if not n_pending_plans:
+            self._manager_state = MState.IDLE
+            self._re_pause_pending = False
+            success, err_msg = False, "Queue is empty."
+            logger.info(err_msg)
 
-            elif self._queue_stop_pending or stop_queue:
-                self._manager_state = MState.IDLE
-                self._re_pause_pending = False
-                success, err_msg = False, "Queue is stopped."
-                logger.info(err_msg)
+        elif self._queue_stop_pending or stop_queue:
+            self._manager_state = MState.IDLE
+            self._re_pause_pending = False
+            success, err_msg = False, "Queue is stopped."
+            logger.info(err_msg)
 
-            elif self._re_pause_pending:
-                self._manager_state = MState.IDLE
-                self._re_pause_pending = False
-                success, err_msg = False, "Queue is stopped due to unresolved outstanding RE pause request."
-                logger.info(err_msg)
+        elif self._re_pause_pending:
+            self._manager_state = MState.IDLE
+            self._re_pause_pending = False
+            success, err_msg = False, "Queue is stopped due to unresolved outstanding RE pause request."
+            logger.info(err_msg)
 
-            else:
-                next_item = await self._plan_queue.get_item(pos="front")
+        else:
+            next_item = await self._plan_queue.get_item(pos="front")
 
-                self._re_pause_pending = False
+            self._re_pause_pending = False
 
-                # The next items is PLAN
-                if next_item["item_type"] == "plan":
+            # The next items is PLAN
+            if next_item["item_type"] == "plan":
 
-                    # Reset RE environment (worker)
-                    success, err_msg = await self._worker_command_reset_worker()
-                    if not success:
-                        self._manager_state = MState.IDLE
-                        err_msg = f"Failed to reset RE Worker: {err_msg}"
-                        logger.error(err_msg)
-                        return success, err_msg
+                # Reset RE environment (worker)
+                success, err_msg = await self._worker_command_reset_worker()
+                if not success:
+                    self._manager_state = MState.IDLE
+                    err_msg = f"Failed to reset RE Worker: {err_msg}"
+                    logger.error(err_msg)
+                    return success, err_msg
 
+                self._manager_state = MState.EXECUTING_QUEUE
+
+                new_plan = await self._plan_queue.process_next_item()
+
+                plan_name = new_plan["name"]
+                args = new_plan["args"] if "args" in new_plan else []
+                kwargs = new_plan["kwargs"] if "kwargs" in new_plan else {}
+                user_name = new_plan["user"]
+                user_group = new_plan["user_group"]
+                meta = new_plan["meta"] if "meta" in new_plan else {}
+                item_uid = new_plan["item_uid"]
+
+                plan_info = {
+                    "name": plan_name,
+                    "args": args,
+                    "kwargs": kwargs,
+                    "user": user_name,
+                    "user_group": user_group,
+                    "meta": meta,
+                    "item_uid": item_uid,
+                }
+
+                # TODO: Decide if we really want to have metadata in the log
+                logger.info("Starting the plan:\n%s.", pprint.pformat(plan_info))
+
+                success, err_msg = await self._worker_command_run_plan(plan_info)
+                if not success:
+                    await self._plan_queue.set_processed_item_as_stopped(exit_status="error", run_uids=[])
+                    self._manager_state = MState.IDLE
+                    logger.error(
+                        "Failed to start the plan %s.\nError: %s",
+                        pprint.pformat(plan_info),
+                        err_msg,
+                    )
+                    err_msg = f"Failed to start the plan: {err_msg}"
+
+            # The next items is INSTRUCTION
+            elif next_item["item_type"] == "instruction":
+                logger.info("Executing instruction:\n%s.", pprint.pformat(next_item))
+
+                if next_item["name"] == "queue_stop":
+                    await self._plan_queue.process_next_item()
                     self._manager_state = MState.EXECUTING_QUEUE
-
-                    new_plan = await self._plan_queue.process_next_item()
-
-                    plan_name = new_plan["name"]
-                    args = new_plan["args"] if "args" in new_plan else []
-                    kwargs = new_plan["kwargs"] if "kwargs" in new_plan else {}
-                    user_name = new_plan["user"]
-                    user_group = new_plan["user_group"]
-                    meta = new_plan["meta"] if "meta" in new_plan else {}
-                    item_uid = new_plan["item_uid"]
-
-                    plan_info = {
-                        "name": plan_name,
-                        "args": args,
-                        "kwargs": kwargs,
-                        "user": user_name,
-                        "user_group": user_group,
-                        "meta": meta,
-                        "item_uid": item_uid,
-                    }
-
-                    # TODO: Decide if we really want to have metadata in the log
-                    logger.info("Starting the plan:\n%s.", pprint.pformat(plan_info))
-
-                    success, err_msg = await self._worker_command_run_plan(plan_info)
-                    if not success:
-                        await self._plan_queue.set_processed_item_as_stopped(exit_status="error", run_uids=[])
-                        self._manager_state = MState.IDLE
-                        logger.error(
-                            "Failed to start the plan %s.\nError: %s",
-                            pprint.pformat(plan_info),
-                            err_msg,
-                        )
-                        err_msg = f"Failed to start the plan: {err_msg}"
-
-                # The next items is INSTRUCTION
-                elif next_item["item_type"] == "instruction":
-                    logger.info("Executing instruction:\n%s.", pprint.pformat(next_item))
-
-                    if next_item["name"] == "queue_stop":
-                        await self._plan_queue.process_next_item()
-                        self._manager_state = MState.EXECUTING_QUEUE
-                        asyncio.ensure_future(self._start_plan_task(stop_queue=True))
-                        success, err_msg = True, ""
-                    else:
-                        success = False
-                        err_msg = f"Unsupported action: '{next_item['name']}' (item {next_item})"
-
+                    asyncio.ensure_future(self._start_plan_task(stop_queue=True))
+                    success, err_msg = True, ""
                 else:
                     success = False
-                    err_msg = f"Unrecognized item type: '{next_item['item_type']}' (item {next_item})"
+                    err_msg = f"Unsupported action: '{next_item['name']}' (item {next_item})"
 
-            if self._manager_state == MState.IDLE:
-                # No plans are running: deactivate the stop sequence.
-                self._queue_stop_deactivate()
+            else:
+                success = False
+                err_msg = f"Unrecognized item type: '{next_item['item_type']}' (item {next_item})"
 
-        finally:
-            if starting_queue:
-                self._lock_env_ops_release()
+        if self._manager_state == MState.IDLE:
+            # No plans are running: deactivate the stop sequence.
+            self._queue_stop_deactivate()
 
         return success, err_msg
 
@@ -1735,7 +1777,6 @@ class RunEngineManager(Process):
         logger.debug("Request: %s", pprint.pformat(request))
 
         item_type, item, qsize, msg = None, None, None, ""
-        item_uid = None
 
         try:
             supported_param_names = ["item", "user_group", "user"]
@@ -1752,35 +1793,12 @@ class RunEngineManager(Process):
                 item=item, item_type=item_type, user=user, user_group=user_group, generate_new_uid=True
             )
 
-            # Execution of an item can not be immediately started if RE Manager is not idle
-            if self._manager_state != MState.IDLE:
-                raise RuntimeError(f"RE Manager is not idle. RE Manager state is '{self._manager_state.value}'")
-
-            # Adding plan to queue may raise an exception
-            item["properties"] = {"immediate_execution": True}
-            item, qsize_with_new_item = await self._plan_queue.add_item_to_queue(item, pos="front")
-            item_uid = item.get("item_uid", None)  # The item WAS added to the queue
-
-            # Start the queue
-            start_success, start_msg = await self._start_plan()
-            if not start_success:
-                raise RuntimeError(start_msg)
-
-            # The returned queue size is not supposed to include the plan that was started.
-            qsize = max(qsize_with_new_item - 1, 0)
-            success = True
+            success, msg, item, qsize = await self._start_single_plan(item=item)
+            if not success:
+                raise RuntimeError(msg)
 
         except Exception as ex:
-            # If execution of the plan fails to start, the plan remains in the queue and needs to be deleted.
-            #   We use UID to delete the plan. It guarantees that only recently added plan is deleted.
-            #   Exception may be raised if the plan is not in the queue and must be properly handled.
-            if item_uid is not None:
-                try:
-                    await self._plan_queue.pop_item_from_queue(uid=item_uid)
-                except Exception as ex2:
-                    logger.exception("Failed to delete plan with UID '%s' from queue: %s", item_uid, str(ex2))
-            success = False
-            msg = f"Failed to start execution of the item: {str(ex)}"
+            success, msg = False, f"Failed to start execution of the item: {str(ex)}"
 
         logger.info(self._generate_item_log_msg("Item execution started", success, item_type, item, qsize))
 

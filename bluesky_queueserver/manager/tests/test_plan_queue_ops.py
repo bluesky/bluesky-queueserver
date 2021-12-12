@@ -1498,9 +1498,10 @@ def test_add_to_history_functions(pq):
     asyncio.run(testing())
 
 
+@pytest.mark.parametrize("immediate_execution", [False, True])
 @pytest.mark.parametrize("func", ["process_next_item", "set_next_item_as_running"])
 @pytest.mark.parametrize("loop_mode", [False, True])
-def test_process_next_item_1(pq, func, loop_mode):
+def test_process_next_item_1(pq, func, loop_mode, immediate_execution):
     """
     Test for ``PlanQueueOperations.process_next_item()`` and
     ``PlanQueueOperations.set_next_item_as_running()`` functions.
@@ -1524,6 +1525,9 @@ def test_process_next_item_1(pq, func, loop_mode):
         p2, _ = await pq.add_item_to_queue({"item_type": "plan", "name": "b"})
         p3, _ = await pq.add_item_to_queue({"item_type": "plan", "name": "c"})
 
+        # Plan used for immediate execution
+        plan4 = {"item_type": "plan", "name": "d"}
+
         if func == "process_next_item":
             f = pq.process_next_item
         elif func == "set_next_item_as_running":
@@ -1531,26 +1535,45 @@ def test_process_next_item_1(pq, func, loop_mode):
         else:
             assert False, f"Unknown test case: '{func}'"
 
-        # Set one of 3 plans as running (removes it from the queue)
         pq_uid = pq.plan_queue_uid
-        assert await f() != {}
+        queue_1 = await pq.get_queue()
 
-        assert pq.plan_queue_uid != pq_uid
-        assert await pq.get_queue_size() == 2
-        assert len(pq._uid_dict) == 3
+        # If the next plan is set as running, it is removed from the queue and
+        #   the queue UID is changed. If a plan is set for immediate execution,
+        #   then the queue and the queue UID remain unchanged.
+        params = {"item": plan4} if immediate_execution else {}
+        running_plan = await f(**params)
+        queue_2 = await pq.get_queue()
+
+        assert running_plan != {}
+
+        if immediate_execution:
+            assert running_plan["name"] == "d"
+            assert "properties" in running_plan
+            assert running_plan["properties"]["immediate_execution"] is True
+            assert pq.plan_queue_uid == pq_uid
+            assert await pq.get_queue_size() == 3
+            assert len(pq._uid_dict) == 3
+            assert queue_1 == queue_2
+        else:
+            assert running_plan["name"] == "a"
+            assert pq.plan_queue_uid != pq_uid
+            assert await pq.get_queue_size() == 2
+            assert len(pq._uid_dict) == 3
 
         # Apply if a plan is already running
         pq_uid = pq.plan_queue_uid
         assert await f() == {}
         assert pq.plan_queue_uid == pq_uid
-        assert await pq.get_queue_size() == 2
+        assert await pq.get_queue_size() == (3 if immediate_execution else 2)
         assert len(pq._uid_dict) == 3
 
     asyncio.run(testing())
 
 
+@pytest.mark.parametrize("immediate_execution", [False, True])
 @pytest.mark.parametrize("loop_mode", [False, True])
-def test_process_next_item_2(pq, loop_mode):
+def test_process_next_item_2(pq, loop_mode, immediate_execution):
     """
     Test for ``PlanQueueOperations.process_next_item()`` and
     ``PlanQueueOperations.set_next_item_as_running()`` functions.
@@ -1576,20 +1599,106 @@ def test_process_next_item_2(pq, loop_mode):
         p1, _ = await pq.add_item_to_queue({"item_type": "plan", "name": "b"})
         p2, _ = await pq.add_item_to_queue({"item_type": "plan", "name": "c"})
 
-        # Set one of 3 plans as running (removes it from the queue)
+        item4 = {"item_type": "instruction", "name": "d"}
+
         pq_uid = pq.plan_queue_uid
-        assert await pq.process_next_item() == p0
+        queue_1 = await pq.get_queue()
 
-        assert pq.plan_queue_uid != pq_uid
-        assert await pq.get_queue_size() == 3 if loop_mode else 2
-        assert len(pq._uid_dict) == 3 if loop_mode else 2
+        params = {"item": item4} if immediate_execution else {}
+        running_item = await pq.process_next_item(**params)
+        queue_2 = await pq.get_queue()
 
-        queue, _ = await pq.get_queue()
-        assert queue[0] == p1
-        assert queue[1] == p2
-        if loop_mode:
-            assert queue[2]["name"] == p0["name"]
-            assert queue[2]["item_uid"] != p0["name"]
+        if immediate_execution:
+            assert {_: running_item[_] for _ in ("name", "item_type")} == item4
+            assert pq.plan_queue_uid == pq_uid
+            assert await pq.get_queue_size() == 3
+            assert len(pq._uid_dict) == 3
+            assert queue_2 == queue_1
+        else:
+            assert running_item == p0
+            assert pq.plan_queue_uid != pq_uid
+            assert await pq.get_queue_size() == 3 if loop_mode else 2
+            assert len(pq._uid_dict) == 3 if loop_mode else 2
+
+            queue, _ = await pq.get_queue()
+            assert queue[0] == p1
+            assert queue[1] == p2
+            if loop_mode:
+                assert queue[2]["name"] == p0["name"]
+                assert queue[2]["item_uid"] != p0["name"]
+
+    asyncio.run(testing())
+
+
+# fmt: off
+@pytest.mark.parametrize("has_uid", [False, True])
+@pytest.mark.parametrize("item_type", ["plan", "instruction"])
+# fmt: on
+def test_process_next_item_3(pq, item_type, has_uid):
+    """
+    Verify if the function ``process_next_item`` is assigning new UID to plans, but not instructions.
+    """
+
+    async def testing():
+
+        # Apply to a queue with several plans
+        await pq.add_item_to_queue({"item_type": "instruction", "name": "a"})
+        await pq.add_item_to_queue({"item_type": "plan", "name": "b"})
+        await pq.add_item_to_queue({"item_type": "plan", "name": "c"})
+
+        item4 = {"item_type": item_type, "name": "d"}
+        if has_uid:
+            item4 = pq.set_new_item_uuid(item4)
+
+        running_item = await pq.process_next_item(item=item4)
+
+        if has_uid:
+            if item_type == "plan":
+                assert running_item["item_uid"] != item4["item_uid"]
+            else:
+                assert running_item["item_uid"] == item4["item_uid"]
+        else:
+            if item_type == "plan":
+                assert "item_uid" in running_item
+                assert isinstance(running_item["item_uid"], str)
+            else:
+                assert "item_uid" not in running_item
+
+    asyncio.run(testing())
+
+
+# fmt: off
+@pytest.mark.parametrize("immediate_execution", [False, True])
+# fmt: on
+def test_process_next_item_4_fail(pq, immediate_execution):
+    """
+    Try using 'set_next_item_as_running' with an instruction. Exception should be raised.
+    The queue should remain unchanged.
+    """
+
+    async def testing():
+
+        # Apply to a queue with several plans
+        await pq.add_item_to_queue({"item_type": "instruction", "name": "a"})
+        await pq.add_item_to_queue({"item_type": "plan", "name": "b"})
+        await pq.add_item_to_queue({"item_type": "plan", "name": "c"})
+
+        item4 = {"item_type": "instruction", "name": "d"}
+
+        pq_uid = pq.plan_queue_uid
+        queue_1, _ = await pq.get_queue()
+
+        params = {"item": item4} if immediate_execution else {}
+
+        with pytest.raises(RuntimeError, match="was called for an item other than plan"):
+            await pq.set_next_item_as_running(**params)
+
+        queue_2, _ = await pq.get_queue()  # The queue should remain untouched
+
+        assert pq.plan_queue_uid == pq_uid
+        assert await pq.get_queue_size() == 3
+        assert len(pq._uid_dict) == 3
+        assert queue_2 == queue_1
 
     asyncio.run(testing())
 
@@ -1742,7 +1851,7 @@ def test_set_processed_item_as_completed_2(pq):
     asyncio.run(testing())
 
 
-def test_set_processed_item_as_stopped(pq):
+def test_set_processed_item_as_stopped_1(pq):
     """
     Test for ``PlanQueueOperations.set_processed_item_as_stopped()`` function.
     The function pushes running plan back to the queue and saves it in history as well.
@@ -1830,9 +1939,72 @@ def test_set_processed_item_as_stopped(pq):
     asyncio.run(testing())
 
 
+# fmt: off
+@pytest.mark.parametrize("func", ["completed", "stopped"])
+@pytest.mark.parametrize("loop_mode", ["False", "True"])
+# fmt: on
+def test_set_processed_item_as_stopped_2(pq, loop_mode, func):
+    """
+    ``set_processed_item_as_completed`` and ``set_processed_item_as_completed`` processing of an item set
+    for immediate execution: basic functionality.
+    """
+    plans = [
+        {"item_type": "plan", "item_uid": 1, "name": "a"},
+        {"item_type": "plan", "item_uid": 2, "name": "b"},
+        {"item_type": "plan", "item_uid": 3, "name": "c"},
+    ]
+    plan4 = {"item_type": "plan", "item_uid": 3, "name": "d"}
+    plan4_run_uids = ["abc2", "abc3"]
+
+    async def testing():
+        for plan in plans:
+            await pq.add_item_to_queue(plan)
+
+        # Enable LOOP mode: the completed item will be pushed to the back of the queue
+        await pq.set_plan_queue_mode({"loop": True})
+
+        pq_uid = pq.plan_queue_uid
+        ph_uid = pq.plan_history_uid
+        queue_1, _ = await pq.get_queue()
+
+        await pq.process_next_item(item=plan4)
+
+        assert pq.plan_queue_uid == pq_uid
+        assert pq.plan_history_uid == ph_uid
+
+        if func == "completed":
+            plan = await pq.set_processed_item_as_completed(exit_status=func, run_uids=plan4_run_uids)
+        elif func == "stopped":
+            plan = await pq.set_processed_item_as_stopped(exit_status=func, run_uids=plan4_run_uids)
+        else:
+            assert False, f"Unknown value of parameter 'func': '{func}'"
+
+        queue_2, _ = await pq.get_queue()
+
+        assert queue_1 == queue_2
+        assert await pq.get_queue_size() == 3
+        assert await pq.get_history_size() == 1
+        assert pq.plan_queue_uid == pq_uid
+        assert pq.plan_history_uid != ph_uid
+
+        def check_plan(p):
+            assert p["name"] == plan4["name"]
+            assert p["result"]["exit_status"] == func
+            assert p["result"]["run_uids"] == plan4_run_uids
+
+        check_plan(plan)
+
+        history, _ = await pq.get_history()
+        check_plan(history[0])
+
+        assert history[0]["item_uid"] == plan["item_uid"]
+
+    asyncio.run(testing())
+
+
 @pytest.mark.parametrize("loop_mode", [False, True])
 @pytest.mark.parametrize("func", ["completed", "stopped"])
-def test_set_processed_item_as_stopped_2(pq, loop_mode, func):
+def test_set_processed_item_as_stopped_3(pq, loop_mode, func):
     """
     Test for ``PlanQueueOperations.set_processed_item_as_completed()`` and
     ``PlanQueueOperations.set_processed_item_as_stopped()`` function.

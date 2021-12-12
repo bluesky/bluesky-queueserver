@@ -1556,7 +1556,7 @@ class PlanQueueOperations:
 
         except RuntimeError:
             raise
-        except Exception as ex:
+        except Exception:
             plan = {}
 
         return plan

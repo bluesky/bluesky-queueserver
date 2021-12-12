@@ -1475,7 +1475,11 @@ class PlanQueueOperations:
         # Read the item from the front of the queue
 
         immediate_execution = bool(item)
-        item = item or await self._get_item(pos="front")
+        if immediate_execution:
+            # Generate UID if it does not exist or creates a deep copy
+            item = copy.deepcopy(item) if "item_uid" in item else self.set_new_item_uuid(item)
+        else:
+            item = await self._get_item(pos="front")
 
         item_to_return = item
         if item:
@@ -1503,6 +1507,9 @@ class PlanQueueOperations:
         If ``item`` is a plan, then the plan is set for immediate execution. If ``item`` is
         an instruction, then the function does nothing.
 
+        If an item submitted for 'immediate' execution has no UID, a new UID is created.
+        The returned plan is in the exact form, which is set for execution.
+
         For more details on processing of queue plans, see the description for
         ``self.set_next_item_as_running`` method.
         """
@@ -1515,7 +1522,8 @@ class PlanQueueOperations:
         """
         immediate_execution = bool(item)
         if immediate_execution:
-            item = self.set_new_item_uuid(item)  # Creates deep copy
+            # Generate UID if it does not exist or creates a deep copy
+            item = copy.deepcopy(item) if "item_uid" in item else self.set_new_item_uuid(item)
             item.setdefault("properties", {})["immediate_execution"] = True
 
         # UID remains in the `self._uid_dict` after this operation.
@@ -1564,8 +1572,8 @@ class PlanQueueOperations:
         This function can only be applied to the plans. Use ``process_next_item`` that
         works correctly for any item (it calls this function if an item is a plan).
 
-        All plans submitted for 'immediate' execution are assigned new item UIDs to avoid
-        duplicate history entries if copies of plans from the queue are submitted.
+        If a plan submitted for 'immediate' execution has no UID, a new UID is created.
+        The returned plan is in the exact form, which is set for execution.
 
         Parameters
         ----------

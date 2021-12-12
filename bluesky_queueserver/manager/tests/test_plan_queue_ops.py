@@ -1653,16 +1653,10 @@ def test_process_next_item_3(pq, item_type, has_uid):
         running_item = await pq.process_next_item(item=item4)
 
         if has_uid:
-            if item_type == "plan":
-                assert running_item["item_uid"] != item4["item_uid"]
-            else:
-                assert running_item["item_uid"] == item4["item_uid"]
+            assert running_item["item_uid"] == item4["item_uid"]
         else:
-            if item_type == "plan":
-                assert "item_uid" in running_item
-                assert isinstance(running_item["item_uid"], str)
-            else:
-                assert "item_uid" not in running_item
+            assert "item_uid" in running_item
+            assert isinstance(running_item["item_uid"], str)
 
     asyncio.run(testing())
 

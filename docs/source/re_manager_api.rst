@@ -220,6 +220,12 @@ Returns       **msg**: *str*
                   current state of Bluesky Run Engine (see Blue Sky documentation) or *None* if
                   RE Worker environment does not exist (or closed).
 
+              **worker_environment_state**: *str*
+                  current state of the worker environment. Supported states: *'initializing'*,
+                  *'idle'*, *'executing_plan'*, *'executing_task'*, *'closing'* and *'closed'*.
+                  The *'executing_task'* state is not used to indicate that background tasks are
+                  executed.
+
               **plan_queue_mode**: *dict*
                   the dictionary of parameters that determine queue execution mode. The key/value pairs
                   in the dictionary represent parameter names and values. Supported parameters:

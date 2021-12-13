@@ -1034,6 +1034,7 @@ class RunEngineManager(Process):
         queue_stop_pending = self._queue_stop_pending
         worker_environment_exists = self._environment_exists
         re_state = self._worker_state_info["re_state"] if self._worker_state_info else None
+        env_state = self._worker_state_info["environment_state"] if self._worker_state_info else "closed"
         deferred_pause_pending = self._re_pause_pending
         run_list_uid = self._re_run_list_uid
         plan_queue_uid = self._plan_queue.plan_queue_uid
@@ -1053,6 +1054,7 @@ class RunEngineManager(Process):
             "manager_state": manager_state,
             "queue_stop_pending": queue_stop_pending,
             "worker_environment_exists": worker_environment_exists,
+            "worker_environment_state": env_state,  # State of the worker environment
             "re_state": re_state,  # State of Run Engine
             "pause_pending": deferred_pause_pending,  # True/False - Cleared once pause processed
             # If Run List UID change, download the list of runs for the current plan.

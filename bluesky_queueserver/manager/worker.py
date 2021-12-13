@@ -290,6 +290,8 @@ class RunEngineWorker(Process):
                 f"Accepted state: '{EState.IDLE.value}'"
             )
 
+        self._env_state = EState.EXECUTING_PLAN
+
         logger.info("Continue plan execution with the option '%s'", option)
 
         available_options = ("resume", "abort", "stop", "halt")

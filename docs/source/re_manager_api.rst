@@ -223,8 +223,8 @@ Returns       **msg**: *str*
               **worker_environment_state**: *str*
                   current state of the worker environment. Supported states: *'initializing'*,
                   *'idle'*, *'executing_plan'*, *'executing_task'*, *'closing'* and *'closed'*.
-                  The *'executing_task'* state is not used to indicate that background tasks are
-                  executed.
+                  Running background tasks does not influence the state (*'executing_task'* is
+                  not set).
 
               **plan_queue_mode**: *dict*
                   the dictionary of parameters that determine queue execution mode. The key/value pairs

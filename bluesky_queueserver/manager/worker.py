@@ -7,6 +7,7 @@ import asyncio
 from functools import partial
 import logging
 import uuid
+import enum
 
 from .comms import PipeJsonRpcReceive
 from .output_streaming import setup_console_output_redirection
@@ -26,6 +27,16 @@ from .profile_ops import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# State of the worker environment
+class EState(enum.Enum):
+    INITIALIZING = "initializing"
+    IDLE = "idle"
+    EXECUTING_PLAN = "executing_plan"
+    EXECUTING_TASK = "executing_task"
+    CLOSING = "closing"
+    CLOSED = "closed"  # For completeness
 
 
 class RejectedError(RuntimeError):
@@ -73,18 +84,13 @@ class RunEngineWorker(Process):
 
         self._execution_queue = None
 
-        # Dictionary that holds current RE Worker state
-        self._state = {
-            # The dictionary of the currently running plan or the plan that was executed last
-            "running_plan": None,
-            # Boolean value that indicates if the current plan is completed (finished or stopped)
-            "running_plan_completed": False,
-            # Status of the RE environment: "initializing", "idle", "executing_plan", "executing_task:, "closing"
-            "environment_state": "initializing",
-        }
-
         # Reference to Bluesky Run Engine
         self._RE = None
+
+        # The following variable determine the state of RE Worker
+        self._env_state = EState.CLOSED
+        self._running_plan_info = None
+        self._running_plan_completed = False
 
         # Report (dict) generated after execution of a command. The report can be downloaded
         #   by RE Manager.
@@ -149,11 +155,11 @@ class RunEngineWorker(Process):
                 }
                 if is_resuming:
                     self._re_report["plan_state"] = "completed"
-                    self._state["running_plan_completed"] = True
+                    self._running_plan_completed = True
                 else:
                     # Here we don't distinguish between stop/abort/halt
                     self._re_report["plan_state"] = "stopped"
-                    self._state["running_plan_completed"] = True
+                    self._running_plan_completed = True
 
                 # Include RE state
                 self._re_report["re_state"] = str(self._RE._state)
@@ -181,7 +187,7 @@ class RunEngineWorker(Process):
                     #       may be required
                     self._re_report["plan_state"] = "error"
                     self._re_report["success"] = False
-                    self._state["running_plan_completed"] = True
+                    self._running_plan_completed = True
 
                     # Clear the list of active runs (don't clean the list for the paused plan).
                     self._active_run_list.clear()
@@ -189,7 +195,7 @@ class RunEngineWorker(Process):
                 # Include RE state
                 self._re_report["re_state"] = str(self._RE._state)
 
-        self._state["environment_state"] = "idle"
+        self._env_state = EState.IDLE
         logger.debug("Plan execution is completed or interrupted")
 
     def _load_new_plan(self, plan_info):
@@ -207,16 +213,15 @@ class RunEngineWorker(Process):
         plan_kwargs: dict
             plan kwargs
         """
-        env_state = self._state["environment_state"]
-        if env_state != "idle":
+        if self._env_state != EState.IDLE:
             raise RejectedError(
-                f"Attempted to start a plan in '{env_state}' environment state. Accepted state: 'idle'"
+                f"Attempted to start a plan in '{self._env_state.value}' environment state. Accepted state: 'idle'"
             )
 
         # Save reference to the currently executed plan
-        self._state["running_plan"] = plan_info
-        self._state["running_plan_completed"] = False
-        self._state["environment_state"] = "executing_plan"
+        self._running_plan_info = plan_info
+        self._running_plan_completed = False
+        self._env_state = EState.EXECUTING_PLAN
 
         logger.info("Starting a plan '%s'.", plan_info["name"])
 
@@ -279,10 +284,10 @@ class RunEngineWorker(Process):
             Option on how to proceed with previously paused plan. The values are
             "resume", "abort", "stop", "halt".
         """
-        env_state = self._state["environment_state"]
-        if env_state != "idle":
+        if self._env_state != EState.IDLE:
             raise RejectedError(
-                f"Attempted to start a plan in '{env_state}' environment state. Accepted state: 'idle'"
+                f"Attempted to start a plan in '{self._env_state.value}' environment state. "
+                f"Accepted state: '{EState.IDLE.value}'"
             )
 
         logger.info("Continue plan execution with the option '%s'", option)
@@ -342,8 +347,8 @@ class RunEngineWorker(Process):
         """
         Returns the state information of RE Worker environment.
         """
-        item_uid = self._state["running_plan"]["item_uid"] if self._state["running_plan"] else None
-        plan_completed = self._state["running_plan_completed"]
+        item_uid = self._running_plan_info["item_uid"] if self._running_plan_info else None
+        plan_completed = self._running_plan_completed
         # TODO: replace RE._state with RE.state property in the worker code (improve code style).
         re_state = str(self._RE._state) if self._RE else "null"
         try:
@@ -352,7 +357,7 @@ class RunEngineWorker(Process):
             # TODO: delete this branch once Bluesky supporting
             #   ``RunEngine.deferred_pause_pending``` is widely deployed.
             re_deferred_pause_requested = self._RE._deferred_pause_requested if self._RE else False
-        env_state = self._state["environment_state"]
+        env_state_str = self._env_state.value
         re_report_available = self._re_report is not None
         run_list_updated = self._active_run_list.is_changed()  # True - updates are available
         plans_and_devices_list_updated = self._existing_plans_and_devices_changed
@@ -362,7 +367,7 @@ class RunEngineWorker(Process):
             "re_report_available": re_report_available,
             "re_state": re_state,
             "re_deferred_pause_requested": re_deferred_pause_requested,
-            "environment_state": env_state,
+            "environment_state": env_state_str,
             "run_list_updated": run_list_updated,
             "plans_and_devices_list_updated": plans_and_devices_list_updated,
         }
@@ -450,7 +455,7 @@ class RunEngineWorker(Process):
             err_msg = (
                 "Environment closing was not initiated. Use command 'command_close_env' "
                 "to initiate closing and wait for RE Worker state: "
-                "self._state['environment_state']=='closing'"
+                f"environment state is '{self._env_state.value}'"
             )
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
@@ -466,7 +471,7 @@ class RunEngineWorker(Process):
             invalid_state = 1
         elif self._RE._state == "running":
             invalid_state = 2
-        elif self._state["running_plan"] or self._state["running_plan_completed"]:
+        elif self._running_plan_info or self._running_plan_completed:
             invalid_state = 3
 
         err_msg = ""
@@ -559,8 +564,8 @@ class RunEngineWorker(Process):
         """
         err_msg = ""
         if self._RE._state == "idle":
-            self._state["running_plan"] = None
-            self._state["running_plan_completed"] = False
+            self._running_plan_info = None
+            self._running_plan_completed = False
             with self._re_report_lock:
                 self._re_report = None
             status = "accepted"
@@ -580,7 +585,9 @@ class RunEngineWorker(Process):
         """
         self._user_group_permissions = user_group_permissions
         status, err_msg = self._run_in_separate_thread(
-            name="Reload Permissions", target=self._generate_lists_of_allowed_plans_and_devices
+            name="Reload Permissions",
+            target=self._generate_lists_of_allowed_plans_and_devices,
+            run_in_background=True,
         )
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
@@ -606,7 +613,7 @@ class RunEngineWorker(Process):
             except queue.Empty:
                 pass
 
-    def _run_in_separate_thread(self, *, name, target, parallel=True, args=None, kwargs=None):
+    def _run_in_separate_thread(self, *, name, target, run_in_background=True, args=None, kwargs=None):
         """
         Run ``target`` (any callable) in a separate daemon thread. The callable is passed arguments ``args``
         and ``kwargs`` and ``name`` is used to generate thread name and in error messages. The function
@@ -621,17 +628,17 @@ class RunEngineWorker(Process):
         status, msg = "accepted", ""
 
         try:
-            environment_state = self._state["environment_state"]
             # Verify that the environment is ready
-            acceptable_states = ("idle", "executing_plan", "executing_task")
-            if environment_state not in acceptable_states:
+            acceptable_states = (EState.IDLE, EState.EXECUTING_PLAN, EState.EXECUTING_TASK)
+            if self._env_state not in acceptable_states:
                 raise RejectedError(
-                    f"Incorrect environment state: '{environment_state}'. Acceptable states: {acceptable_states}"
+                    f"Incorrect environment state: '{self._env_state.value}'. "
+                    f"Acceptable states: {[_.value for _ in acceptable_states]}"
                 )
             # Verify that the environment is idle (no plans or tasks are executed)
-            if not parallel and (environment_state != "idle"):
+            if not run_in_background and (self._env_state != EState.IDLE):
                 raise RejectedError(
-                    f"Incorrect environment state: '{environment_state}'. Acceptable state: 'idle'"
+                    f"Incorrect environment state: '{self._env_state.value}'. Acceptable state: 'idle'"
                 )
 
             task_uuid = str(uuid.uuid4())
@@ -646,15 +653,16 @@ class RunEngineWorker(Process):
                     except Exception as ex:
                         logger.exception("Error occurred while executing the function ('%s'): %s", name, str(ex))
                     finally:
-                        if not parallel:
-                            self._state["environment_state"] = "idle"
+                        if not run_in_background:
+                            self._env_state = EState.IDLE
 
                 return thread_func
 
             th = threading.Thread(target=thread_func_wrapper(), name=thread_name, daemon=True)
 
-            if not parallel:
-                self._state["environment_state"] = "executing_task"
+            if not run_in_background:
+                self._env_state = EState.EXECUTING_TASK
+
             th.start()
 
         except RejectedError as ex:
@@ -679,6 +687,8 @@ class RunEngineWorker(Process):
         success = True
 
         from .profile_tools import set_re_worker_active, clear_re_worker_active
+
+        self._env_state = EState.INITIALIZING
 
         # Set the environment variable indicating that RE Worker is active. Status may be
         #   checked using 'is_re_worker_active()' in startup scripts or modules.
@@ -865,7 +875,7 @@ class RunEngineWorker(Process):
 
                 self._execution_queue = queue.Queue()
 
-                self._state["environment_state"] = "idle"
+                self._env_state = EState.IDLE
 
             except BaseException as ex:
                 success = False
@@ -878,7 +888,7 @@ class RunEngineWorker(Process):
             self._exit_event.set()
 
         logger.info("Environment is waiting to be closed ...")
-        self._state["environment_state"] = "closing"
+        self._env_state = EState.CLOSING
 
         # Wait until confirmation is received from RE Manager
         while not self._exit_confirmed_event.is_set():

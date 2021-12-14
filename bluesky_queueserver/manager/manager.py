@@ -1718,11 +1718,11 @@ class RunEngineManager(Process):
         Immediately start execution of the submitted item. The item may be a plan or an
         instruction. The request fails if item execution can not be started immediately
         (RE Manager is not in IDLE state, RE Worker environment does not exist, etc.).
-        If the request succeeds, the item is executed once. The item is not added to
-        the queue if it can not be immediately started and it is not pushed back into
-        the queue in case its execution fails/stops. If the queue is in the *LOOP* mode,
-        the executed item is not added to the back of the queue after completion.
-        The API request does not alter the sequence of enqueued plans.
+        If the request succeeds, the item is executed once. The item is never added to
+        the queue and it is not pushed back into the queue in case its execution fails/stops.
+        If the queue is in the *LOOP* mode, the executed item is not added to the back of
+        the queue after completion. The API request does not alter the sequence of enqueued plans
+        or change plan queue UID.
 
         The API is primarily intended for implementing of interactive workflows, in which
         users are controlling the experiment using client GUI application and user actions
@@ -1730,11 +1730,9 @@ class RunEngineManager(Process):
         in RE Worker environment. Interactive workflows may be used for calibration of
         the instrument, while the queue may be used to run sequences of scheduled experiments.
 
-        Internally the API request adds the submitted item to the front of the queue
-        and immediately attempts to start its execution. The item is removed from the queue
-        almost immediately and never pushed back into the queue. If the item is a plan,
-        the results of execution are added to plan history as usual. The respective history
-        item could be accessed to check if the plan was executed successfully.
+        If the item is a plan, the results of execution are added to plan history as usual.
+        The respective history item could be accessed to check if the plan was executed
+        successfully.
 
         The API DOES NOT START EXECUTION OF THE QUEUE. Once execution of the submitted
         item is finished, RE Manager is switched to the IDLE state.

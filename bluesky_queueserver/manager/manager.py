@@ -1864,6 +1864,11 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg}
 
+    async def _script_upload_handler(self, request):
+        logger.info("Uploading script to RE environment ...")
+        success, msg = True, ""
+        return {"success": success, "msg": msg}
+
     async def _queue_start_handler(self, request):
         """
         Start execution of the loaded queue. Additional runs can be added to the queue while
@@ -2121,6 +2126,7 @@ class RunEngineManager(Process):
             "environment_open": "_environment_open_handler",
             "environment_close": "_environment_close_handler",
             "environment_destroy": "_environment_destroy_handler",
+            "script_upload": "_script_upload_handler",
             "queue_mode_set": "_queue_mode_set_handler",
             "queue_item_add": "_queue_item_add_handler",
             "queue_item_add_batch": "_queue_item_add_batch_handler",

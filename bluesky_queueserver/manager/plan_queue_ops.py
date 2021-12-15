@@ -654,8 +654,8 @@ class PlanQueueOperations:
 
         Parameters
         ----------
-        plan: dict
-            Dictionary of plan parameters. Must be identical to the plan that is
+        item: dict
+            Dictionary of item parameters. Must be identical to the item that is
             expected to be deleted.
         single: boolean
             True - RuntimeError exception is raised if no or more than one matching
@@ -1466,77 +1466,136 @@ class PlanQueueOperations:
                 del item["properties"]
         return item
 
-    async def _process_next_item(self):
+    async def _process_next_item(self, *, item=None):
         """
         See ``self.process_next_item()`` method.
         """
         loop_mode = self._plan_queue_mode["loop"]
 
         # Read the item from the front of the queue
-        item = await self._get_item(pos="front")
+
+        immediate_execution = bool(item)
+        if immediate_execution:
+            # Generate UID if it does not exist or creates a deep copy
+            item = copy.deepcopy(item) if "item_uid" in item else self.set_new_item_uuid(item)
+        else:
+            item = await self._get_item(pos="front")
+
         item_to_return = item
         if item:
             item_type = item["item_type"]
             if item_type == "plan":
-                item_to_return = await self._set_next_item_as_running()
-            else:
+                kwargs = {"item": item} if immediate_execution else {}
+                item_to_return = await self._set_next_item_as_running(**kwargs)
+
+            elif not immediate_execution:
                 # Items other than plans should be pushed to the back of the queue.
                 await self._pop_item_from_queue(pos="front")
                 if loop_mode:
                     item_to_add = self.set_new_item_uuid(item)
                     await self._add_item_to_queue(item_to_add)
+
         return item_to_return
 
-    async def process_next_item(self):
+    async def process_next_item(self, *, item=None):
         """
         Process the next item in the queue. If the item is a plan, it is set as currently
         running (``self.set_next_item_as_running``), otherwise it is popped from the queue.
         If the queue is LOOP mode, then it the item other than plan is pushed to the back
         of the queue. (Plans are pushed to the back of the queue upon successful completion.)
+
+        If ``item`` is a plan, then the plan is set for immediate execution. If ``item`` is
+        an instruction, then the function does nothing.
+
+        If an item submitted for 'immediate' execution has no UID, a new UID is created.
+        The returned plan is in the exact form, which is set for execution.
+
+        For more details on processing of queue plans, see the description for
+        ``self.set_next_item_as_running`` method.
         """
         async with self._lock:
-            return await self._process_next_item()
+            return await self._process_next_item(item=item)
 
-    async def _set_next_item_as_running(self):
+    async def _set_next_item_as_running(self, *, item=None):
         """
         See ``self.set_next_item_as_running()`` method.
         """
+        immediate_execution = bool(item)
+        if immediate_execution:
+            # Generate UID if it does not exist or creates a deep copy
+            item = copy.deepcopy(item) if "item_uid" in item else self.set_new_item_uuid(item)
+            item.setdefault("properties", {})["immediate_execution"] = True
+
         # UID remains in the `self._uid_dict` after this operation.
-        if not await self._is_item_running():
-            plan_json = await self._r_pool.lpop(self._name_plan_queue)
-            if plan_json:
-                plan = json.loads(plan_json)
-                if plan["item_type"] != "plan":
-                    raise RuntimeError(
-                        "Function 'PlanQueueOperations.set_next_item_as_running' was called for "
-                        f"an item other than plan: {plan}"
-                    )
-                self._plan_queue_uid = self.new_item_uid()
-                await self._set_running_item_info(plan)
+        try:
+            if await self._is_item_running():
+                raise Exception()
+
+            if immediate_execution:
+                plan = item
             else:
-                plan = {}
-        else:
+                plan = await self._get_item(pos="front")
+                if not plan:
+                    raise Exception()
+
+            if "item_type" not in plan:
+                raise Exception()
+
+            if plan["item_type"] != "plan":
+                raise RuntimeError(
+                    "Function 'PlanQueueOperations.set_next_item_as_running' was called for "
+                    f"an item other than plan: {plan}"
+                )
+
+            if not immediate_execution:
+                # Pop plan from the front of the queue (it is the same plan as currently loaded)
+                await self._r_pool.lpop(self._name_plan_queue)
+                self._plan_queue_uid = self.new_item_uid()
+
+            await self._set_running_item_info(plan)
+
+        except RuntimeError:
+            raise
+        except Exception:
             plan = {}
+
         return plan
 
-    async def set_next_item_as_running(self):
+    async def set_next_item_as_running(self, *, item=None):
         """
         Sets the next item from the queue as 'running'. The item MUST be a plan
         (e.g. not an instruction), otherwise an exception will be raised. The item is removed
         from the queue. UID remains in ``self._uid_dict``, i.e. item with the same UID
-        may not be added to the queue while it is being executed.
+        may not be added to the queue while it is being executed. If ``item`` parameter
+        represents a plan, then the plan is set for immediate execution.
 
         This function can only be applied to the plans. Use ``process_next_item`` that
         works correctly for any item (it calls this function if an item is a plan).
+
+        If a plan submitted for 'immediate' execution has no UID, a new UID is created.
+        The returned plan is in the exact form, which is set for execution.
+
+        Parameters
+        ----------
+        item: dict or None
+            The dictionary that represents a plan submitted for immediate execution.
+            If ``item`` is a plan, then the queue remains intact and the plan is
+            set for immediate execution. If ``item=None``, then the top queue item
+            is removed from the queue and set for execution.
 
         Returns
         -------
         dict
             The item that was set as currently running. If another item is currently
             set as 'running' or the queue is empty, then ``{}`` is returned.
+
+        Raises
+        ------
+        RuntimeError
+            The function is called for an item other than plan.
         """
         async with self._lock:
-            return await self._set_next_item_as_running()
+            return await self._set_next_item_as_running(item=item)
 
     async def _set_processed_item_as_completed(self, exit_status, run_uids):
         """
@@ -1560,7 +1619,7 @@ class PlanQueueOperations:
             item_cleaned["result"]["exit_status"] = exit_status
             item_cleaned["result"]["run_uids"] = run_uids
             await self._clear_running_item_info()
-            if not loop_mode:
+            if not loop_mode and not immediate_execution:
                 self._uid_dict_remove(item["item_uid"])
             await self._add_to_history(item_cleaned)
         else:

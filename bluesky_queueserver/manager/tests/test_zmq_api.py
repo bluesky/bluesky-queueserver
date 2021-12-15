@@ -162,6 +162,9 @@ def test_zmq_api_ping_status(re_manager, api_name):  # noqa F811
     assert resp["re_state"] is None
     assert resp["pause_pending"] is False
 
+    # Worker environment is initially 'closed'
+    assert resp["worker_environment_state"] == "closed"
+
     assert isinstance(resp["plan_queue_mode"], dict)
     assert resp["plan_queue_mode"]["loop"] is False
 
@@ -176,6 +179,7 @@ def test_zmq_api_environment_open_close_1(re_manager):  # noqa F811
     """
     state = get_queue_state()
     assert state["re_state"] is None
+    assert state["worker_environment_state"] == "closed"
 
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
@@ -185,6 +189,7 @@ def test_zmq_api_environment_open_close_1(re_manager):  # noqa F811
 
     state = get_queue_state()
     assert state["re_state"] == "idle"
+    assert state["worker_environment_state"] == "idle"
 
     resp2, _ = zmq_single_request("environment_close")
     assert resp2["success"] is True
@@ -194,6 +199,7 @@ def test_zmq_api_environment_open_close_1(re_manager):  # noqa F811
 
     state = get_queue_state()
     assert state["re_state"] is None
+    assert state["worker_environment_state"] == "closed"
 
 
 def test_zmq_api_environment_open_close_2(re_manager):  # noqa F811
@@ -652,6 +658,7 @@ def test_zmq_api_queue_item_execute_1(re_manager):  # noqa: F811
     resp2a, _ = zmq_single_request("status")
     assert resp2a["items_in_queue"] == 1
     assert resp2a["items_in_history"] == 0
+    assert resp2a["worker_environment_state"] == "idle"
 
     # Execute a plan
     params3 = {"item": _plan3, "user": _user, "user_group": _user_group}
@@ -660,6 +667,12 @@ def test_zmq_api_queue_item_execute_1(re_manager):  # noqa: F811
     assert resp3["msg"] == ""
     assert resp3["qsize"] == 1
     assert resp3["item"]["name"] == _plan3["name"]
+
+    ttime.sleep(1)
+    status, _ = zmq_single_request("status")
+    assert status["items_in_queue"] == 1
+    assert status["items_in_history"] == 0
+    assert status["worker_environment_state"] == "executing_plan"
 
     assert wait_for_condition(time=30, condition=condition_manager_idle)
 
@@ -676,6 +689,7 @@ def test_zmq_api_queue_item_execute_1(re_manager):  # noqa: F811
     resp3b, _ = zmq_single_request("status")
     assert resp3b["items_in_queue"] == 1
     assert resp3b["items_in_history"] == 1
+    assert resp3b["worker_environment_state"] == "idle"
 
     resp4, _ = zmq_single_request("queue_start")
     assert resp4["success"] is True
@@ -725,9 +739,7 @@ def test_zmq_api_queue_item_execute_2(re_manager):  # noqa: F811
     params3a = {"item": _plan1, "user": _user, "user_group": _user_group}
     resp3a, _ = zmq_single_request("queue_item_execute", params3a)
     assert resp3a["success"] is False, f"resp={resp3a}"
-    expected_error_msg = (
-        "Failed to start execution of the item: RE Manager is not idle. RE Manager state is 'executing_queue'"
-    )
+    expected_error_msg = "Failed to start execution of the item: RE Manager is busy."
     assert resp3a["msg"] == expected_error_msg
     assert resp3a["qsize"] is None
     assert resp3a["item"]["name"] == _plan1["name"]
@@ -2345,7 +2357,7 @@ def test_zmq_api_environment_destroy(re_manager):  # noqa: F811
 #                           Method 're_pause'
 
 
-_plan_2steps = {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 2, "delay": 2}, "item_type": "plan"}
+_plan_3steps = {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 3, "delay": 2}, "item_type": "plan"}
 
 
 # fmt: off
@@ -2365,7 +2377,7 @@ def test_zmq_api_re_pause_1(re_manager, pause_deferred, kill_manager, pause_befo
     ``pause_pending`` flag is correctly set.
     """
 
-    def _check_status(n_queue, n_hist, m_state, re_state, pause_pend):
+    def _check_status(n_queue, n_hist, m_state, re_state, env_state, pause_pend):
         resp, _ = zmq_single_request("status")
         assert resp["items_in_queue"] == n_queue
         assert resp["items_in_history"] == n_hist
@@ -2374,9 +2386,10 @@ def test_zmq_api_re_pause_1(re_manager, pause_deferred, kill_manager, pause_befo
             assert resp["re_state"] in re_state, str(resp["re_state"])
         else:
             assert resp["re_state"] == re_state
+        assert resp["worker_environment_state"] == env_state
         assert resp["pause_pending"] == pause_pend
 
-    params1a = {"item": _plan_2steps, "user": _user, "user_group": _user_group}
+    params1a = {"item": _plan_3steps, "user": _user, "user_group": _user_group}
     resp1a, _ = zmq_single_request("queue_item_add", params1a)
     assert resp1a["success"] is True, f"resp={resp1a}"
 
@@ -2385,17 +2398,20 @@ def test_zmq_api_re_pause_1(re_manager, pause_deferred, kill_manager, pause_befo
     assert resp2["success"] is True
     assert wait_for_condition(time=10, condition=condition_environment_created)
 
-    _check_status(1, 0, "idle", "idle", False)
+    _check_status(1, 0, "idle", "idle", "idle", False)
 
     resp3, _ = zmq_single_request("queue_start")
     assert resp3["success"] is True
 
-    ttime.sleep(1)  # ~50% of the first measurement in the plan
+    ttime.sleep(0.9)  # ~50% of the first measurement in the plan
+    _check_status(0, 0, "executing_queue", "running", "executing_plan", False)
 
     resp3, _ = zmq_single_request("re_pause", params={"option": ("deferred" if pause_deferred else "immediate")})
     assert resp3["success"] is True, f"resp={resp3}"
 
-    _check_status(0, 0, "executing_queue", "running", True)
+    if pause_deferred:
+        # In case of immediate pause, the state will depend on how fast the request is processed
+        _check_status(0, 0, "executing_queue", "running", "executing_plan", True)
 
     if kill_manager:
         if pause_before_kill:
@@ -2405,15 +2421,18 @@ def test_zmq_api_re_pause_1(re_manager, pause_deferred, kill_manager, pause_befo
 
     assert wait_for_condition(time=20, condition=condition_manager_paused)
 
-    _check_status(0, 0, "paused", "paused", False)
+    _check_status(0, 0, "paused", "paused", "idle", False)
 
     # Execute the remaining plans (if any plans left)
     resp4, _ = zmq_single_request("re_resume")
     assert resp4["success"] is True
 
+    ttime.sleep(1)
+    _check_status(0, 0, "executing_queue", "running", "executing_plan", False)
+
     assert wait_for_condition(time=20, condition=condition_manager_idle)
 
-    _check_status(0, 1, "idle", "idle", False)
+    _check_status(0, 1, "idle", "idle", "idle", False)
 
     # Close the environment
     resp6, _ = zmq_single_request("environment_close")
@@ -2447,7 +2466,7 @@ def test_zmq_api_re_pause_2(re_manager, n_plans, kill_manager, pause_before_kill
         assert resp["pause_pending"] == pause_pend
 
     for _ in range(n_plans):
-        params1a = {"item": _plan_2steps, "user": _user, "user_group": _user_group}
+        params1a = {"item": _plan_3steps, "user": _user, "user_group": _user_group}
         resp1a, _ = zmq_single_request("queue_item_add", params1a)
         assert resp1a["success"] is True, f"resp={resp1a}"
 
@@ -2461,7 +2480,7 @@ def test_zmq_api_re_pause_2(re_manager, n_plans, kill_manager, pause_before_kill
     resp3, _ = zmq_single_request("queue_start")
     assert resp3["success"] is True
 
-    ttime.sleep(3)  # ~50% of the second (last) measurement of the 1st plan
+    ttime.sleep(5)  # ~50% of the third (last) measurement of the 1st plan
 
     resp3, _ = zmq_single_request("re_pause", params={"option": "deferred"})
     assert resp3["success"] is True

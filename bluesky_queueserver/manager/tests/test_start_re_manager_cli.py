@@ -124,16 +124,17 @@ def test_start_re_manager_console_output_1(re_manager_cmd, console_print, consol
         assert collected_stdout != ""
         # Verify that output from all sources is present in the output
         # Logging from manager
-        assert "INFO:bluesky_queueserver.manager.manager:" in collected_stdout
-        assert "INFO:bluesky_queueserver.manager.profile_ops:" in collected_stdout
+        assert "bluesky_queueserver.manager.manager manager:" in collected_stdout
+        assert "bluesky_queueserver.manager.profile_ops profile_ops:" in collected_stdout
         # Logging from Worker
-        assert "INFO:bluesky_queueserver.manager.worker:RE Environment is ready" in collected_stdout
+        assert "bluesky_queueserver.manager.worker worker:" in collected_stdout
+        assert "RE Environment is ready" in collected_stdout
         # Printing from live table
         assert "generator count" in collected_stdout
         assert "Run was closed:" in collected_stdout
 
     assert re_manager_stderr == ""
-    assert "INFO:bluesky_queueserver.manager.output_streaming:" in streamed_stderr
+    assert "bluesky_queueserver.manager.output_streaming" in streamed_stderr
 
     if console_print:
         check_output_contents(re_manager_stdout)
@@ -171,7 +172,7 @@ def test_cli_update_existing_plans_devices_01(
 
     # Start the manager
     params = ["--startup-dir", pc_path, "--update-existing-plans-devices", update_existing_plans_devices]
-    re_manager_cmd(params, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    re_manager_cmd(params)
 
     resp1, _ = zmq_single_request("status")
     devices_allowed_uid1 = resp1["devices_allowed_uid"]

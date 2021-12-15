@@ -32,6 +32,8 @@ REQ_FAILED = QServerExitCodes.REQUEST_FAILED.value
 COM_ERROR = QServerExitCodes.COMMUNICATION_ERROR.value
 EXCEPTION_OCCURRED = QServerExitCodes.EXCEPTION_OCCURRED.value
 
+timeout_env_open = 10
+
 
 def test_qserver_cli_and_manager(re_manager):  # noqa: F811
     """
@@ -67,15 +69,11 @@ def test_qserver_cli_and_manager(re_manager):  # noqa: F811
     assert n_plans == 2, "Incorrect number of plans in the queue"
 
     assert subprocess.call(["qserver", "environment", "open"]) == SUCCESS
-    assert wait_for_condition(
-        time=3, condition=condition_environment_created
-    ), "Timeout while waiting for environment to be created"
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     assert subprocess.call(["qserver", "queue", "start"]) == SUCCESS
 
-    assert wait_for_condition(
-        time=60, condition=condition_queue_processing_finished
-    ), "Timeout while waiting for process to finish"
+    assert wait_for_condition(time=60, condition=condition_queue_processing_finished)
 
     # Smoke test for 'history_get' and 'history_clear'
     assert subprocess.call(["qserver", "history", "get"]) == SUCCESS
@@ -161,9 +159,7 @@ def test_qserver_environment_close(re_manager):  # noqa: F811
     assert is_plan_running is False
 
     assert subprocess.call(["qserver", "environment", "open"]) == SUCCESS
-    assert wait_for_condition(
-        time=3, condition=condition_environment_created
-    ), "Timeout while waiting for environment to be opened"
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     assert subprocess.call(["qserver", "queue", "start"]) == SUCCESS
     ttime.sleep(2)
@@ -209,9 +205,7 @@ def test_qserver_environment_destroy(re_manager):  # noqa: F811
     assert is_plan_running is False
 
     assert subprocess.call(["qserver", "environment", "open"]) == SUCCESS
-    assert wait_for_condition(
-        time=3, condition=condition_environment_created
-    ), "Timeout while waiting for environment to be opened"
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     assert subprocess.call(["qserver", "queue", "start"]) == SUCCESS
     ttime.sleep(2)
@@ -229,9 +223,7 @@ def test_qserver_environment_destroy(re_manager):  # noqa: F811
     assert is_plan_running is False
 
     assert subprocess.call(["qserver", "environment", "open"]) == SUCCESS
-    assert wait_for_condition(
-        time=3, condition=condition_environment_created
-    ), "Timeout while waiting for environment to be opened"
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     assert subprocess.call(["qserver", "queue", "start"]) == SUCCESS
     ttime.sleep(2)
@@ -286,10 +278,8 @@ def test_qserver_re_pause_continue(re_manager, option_pause, option_continue):  
     assert n_plans == 2, "Incorrect number of plans in the queue"
     assert is_plan_running is False
 
-    assert subprocess.call(["qserver", "environment", "open"]) == 0
-    assert wait_for_condition(
-        time=3, condition=condition_environment_created
-    ), "Timeout while waiting for environment to be opened"
+    assert subprocess.call(["qserver", "environment", "open"]) == SUCCESS
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     assert subprocess.call(["qserver", "queue", "start"]) == SUCCESS
     ttime.sleep(2)
@@ -382,9 +372,7 @@ def test_qserver_manager_kill(re_manager, time_kill):  # noqa: F811
     assert subprocess.call(["qserver", "queue", "add", "plan", plan]) == SUCCESS
 
     assert subprocess.call(["qserver", "environment", "open"]) == SUCCESS
-    assert wait_for_condition(
-        time=3, condition=condition_environment_created
-    ), "Timeout while waiting for environment to be opened"
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     if time_kill == "before":
         # The command that kills manager always times out
@@ -465,7 +453,7 @@ def test_qserver_env_open_various_cases(re_manager_pc_copy, additional_code, suc
     # Wait until RE Manager is started
     assert wait_for_condition(time=10, condition=condition_manager_idle)
 
-    # Attempt to create the environment
+    # Attempt to create the environment. Long timeout.
     assert subprocess.call(["qserver", "environment", "open"]) == SUCCESS
     assert wait_for_condition(time=30, condition=condition_manager_idle)
 
@@ -476,7 +464,7 @@ def test_qserver_env_open_various_cases(re_manager_pc_copy, additional_code, suc
         # Remove the offending patch and try to start the environment again. It should work
         patch_first_startup_file_undo(pc_path)
         assert subprocess.call(["qserver", "environment", "open"]) == SUCCESS
-        assert wait_for_condition(time=3, condition=condition_environment_created)
+        assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     # Run a plan to make sure RE Manager is functional after the startup.
     plan = "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num': 10, 'delay': 1}}"
@@ -510,7 +498,7 @@ def test_qserver_manager_stop_1(re_manager, option):  # noqa: F811
 
     # Attempt to create the environment
     assert subprocess.call(["qserver", "environment", "open"]) == SUCCESS
-    assert wait_for_condition(time=30, condition=condition_manager_idle)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_manager_idle)
 
     cmd = ["qserver", "manager", "stop"]
     if option:
@@ -534,7 +522,7 @@ def test_qserver_manager_stop_2(re_manager, option):  # noqa: F811
 
     # Attempt to create the environment
     assert subprocess.call(["qserver", "environment", "open"]) == SUCCESS
-    assert wait_for_condition(time=30, condition=condition_manager_idle)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_manager_idle)
 
     plan = "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num': 10, 'delay': 1}}"
     assert subprocess.call(["qserver", "queue", "add", "plan", plan]) == SUCCESS
@@ -867,9 +855,7 @@ def test_qserver_item_execute_1(re_manager, item_type, env_exists):  # noqa: F81
 
     if env_exists:
         assert subprocess.call(["qserver", "environment", "open"]) == SUCCESS
-        assert wait_for_condition(
-            time=3, condition=condition_environment_created
-        ), "Timeout while waiting for environment to be created"
+        assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     expected_result = SUCCESS if env_exists else REQ_FAILED
     expected_n_history = 1 if env_exists and (item_type == "plan") else 0
@@ -1040,7 +1026,7 @@ def test_qserver_queue_stop(re_manager, deactivate):  # noqa: F811
 
     # Attempt to create the environment
     assert subprocess.call(["qserver", "environment", "open"]) == 0
-    assert wait_for_condition(time=10, condition=condition_manager_idle)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_manager_idle)
 
     plan = "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num': 10, 'delay': 1}}"
     assert subprocess.call(["qserver", "queue", "add", "plan", plan]) == 0
@@ -1184,9 +1170,7 @@ def test_qserver_secure_1(monkeypatch, re_manager_cmd, test_mode):  # noqa: F811
     assert subprocess.call(["qserver", "allowed", "devices"], stdout=subprocess.DEVNULL) == SUCCESS
 
     assert subprocess.call(["qserver", "environment", "open"]) == SUCCESS
-    assert wait_for_condition(
-        time=3, condition=condition_environment_created
-    ), "Timeout while waiting for environment to be created"
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     state = get_queue_state()
     assert state["items_in_queue"] == 2
@@ -1223,4 +1207,5 @@ def test_qserver_zmq_keys():
 
     # Generated public key based on private key - success
     _, private_key = generate_new_zmq_key_pair()
+    print(f"Private key used for the test: '{private_key}'")
     assert subprocess.call(["qserver-zmq-keys", "--zmq-private-key", private_key]) == SUCCESS

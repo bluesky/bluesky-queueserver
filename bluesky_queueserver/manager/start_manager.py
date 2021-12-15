@@ -10,6 +10,7 @@ from .manager import RunEngineManager
 from .comms import PipeJsonRpcReceive, validate_zmq_key
 from .profile_ops import get_default_startup_dir
 from .output_streaming import PublishConsoleOutput, setup_console_output_redirection
+from .logging_setup import setup_loggers
 
 from .. import __version__
 
@@ -157,7 +158,7 @@ class WatchdogProcess:
     def run(self):
 
         logging.basicConfig(level=max(logging.WARNING, self._log_level))
-        logging.getLogger(__name__).setLevel(self._log_level)
+        setup_loggers(log_level=self._log_level)
 
         # Requests
         self._comm_to_manager.add_method(self._start_re_worker_handler, "start_re_worker")
@@ -428,7 +429,7 @@ def start_manager():
     setup_console_output_redirection(msg_queue)
 
     logging.basicConfig(level=max(logging.WARNING, log_level))
-    logging.getLogger("bluesky_queueserver").setLevel(log_level)
+    setup_loggers(log_level=log_level)
 
     stream_publisher = PublishConsoleOutput(
         msg_queue=msg_queue,

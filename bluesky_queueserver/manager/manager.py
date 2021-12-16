@@ -406,6 +406,9 @@ class RunEngineManager(Process):
                     if ws["plans_and_devices_list_updated"]:
                         self._loop.create_task(self._load_existing_plans_and_devices_from_worker())
 
+                    if ws["completed_tasks_available"]:
+                        self._loop.create_task(self._load_task_results_from_worker())
+
                     if self._manager_state == MState.CLOSING_ENVIRONMENT:
                         if ws["environment_state"] == "closing":
                             self._fut_manager_task_completed.set_result(None)
@@ -518,6 +521,20 @@ class RunEngineManager(Process):
                 self._generate_lists_of_allowed_plans_and_devices()
             except Exception as ex:
                 logger.exception("Failed to compute the list of allowed plans and devices: %s", str(ex))
+
+    async def _load_task_results_from_worker(self):
+        """
+        Download results of the completed tasks from worker process.
+        """
+        logger.debug("Downloading the results of completed tasks from the worker environment.")
+        task_results, err_msg = await self._worker_request_task_results()
+        if task_results is None:
+            # TODO: this would typically mean a bug (communication error). Probably more
+            #       complicated processing is needed
+            logger.error(f"Failed to download the results of completed tasks from the worker process: {err_msg}.")
+        else:
+            # PROCESSING WILL BE IMPLEMENTED SHORTLY. JUST PRINT THE MESSAGE FOR NOW.
+            print(f"The results of {len(task_results)} were loaded: {pprint.pformat(task_results)}")
 
     async def _start_plan(self):
         """
@@ -742,6 +759,27 @@ class RunEngineManager(Process):
 
         return success, err_msg
 
+    async def _environment_upload_script(self, *, script, update_re, run_in_background):
+        """
+        Upload Python script to RE Worker environment. The script is then executed into
+        the worker namespace. The API call only inititiates the process of loading the
+        script and return success if the request is accepted and the task can be started.
+        Success does not mean that the script is successfully loaded.
+        """
+        if not self._environment_exists:
+            success, err_msg = False, "RE Worker environment is not opened"
+        elif not run_in_background and (self._manager_state != MState.IDLE):
+            success, err_msg = (
+                False,
+                "Failed to start the task: RE Manager must be in idle state. "
+                f"Current state: '{self._manager_state.value}'",
+            )
+        else:
+            success, err_msg, task_uid = await self._worker_command_load_script(
+                script=script, update_re=update_re, run_in_background=run_in_background
+            )
+        return success, err_msg, task_uid
+
     def _generate_lists_of_allowed_plans_and_devices(self, *, always_update_uids=False):
         """
         Compute lists of allowed plans and devices based on the lists ``self._existing_plans``,
@@ -837,6 +875,16 @@ class RunEngineManager(Process):
             plans_and_devices_list, err_msg = None, "Timeout occurred"
         return plans_and_devices_list, err_msg
 
+    async def _worker_request_task_results(self):
+        try:
+            task_results = await self._comm_to_worker.send_msg("request_task_results")
+            err_msg = ""
+            if task_results is None:
+                err_msg = "Failed to obtain the results of completed tasks from the worker"
+        except CommTimeoutError:
+            task_results, err_msg = None, "Timeout occurred"
+        return task_results, err_msg
+
     async def _worker_command_close_env(self):
         try:
             response = await self._comm_to_worker.send_msg("command_close_env")
@@ -901,6 +949,19 @@ class RunEngineManager(Process):
         except CommTimeoutError:
             success, err_msg = None, "Timeout occurred"
         return success, err_msg
+
+    async def _worker_command_load_script(self, *, script, update_re, run_in_background):
+        try:
+            response = await self._comm_to_worker.send_msg(
+                "command_load_script",
+                params={"script": script, "update_re": update_re, "run_in_background": run_in_background},
+            )
+            success = response["status"] == "accepted"
+            err_msg = response["err_msg"]
+            task_uid = response["task_uid"]
+        except CommTimeoutError:
+            success, err_msg, task_uid = None, "Timeout occurred", None
+        return success, err_msg, task_uid
 
     # ===============================================================================
     #         Functions that send commands/request data from Watchdog process
@@ -1865,9 +1926,38 @@ class RunEngineManager(Process):
         return {"success": success, "msg": msg}
 
     async def _script_upload_handler(self, request):
+        """
+        Upload script to RE worker environment. If ``update_re==False`` (default), the Run Engine (``RE``)
+        and Data Broker (``db``) objects are not updated in RE worker namespace even if they are
+        defined (or redefined) in the uploaded script. If ``run_in_background==False`` (default), then
+        the request is rejected unless RE Manager and RE Worker environment are in IDLE state, otherwise
+        the script will be loaded in a separate thread (not recommended in most practical cases).
+
+        The API call only inititiates the process of loading the script and return success if the request
+        is accepted and the task can be started. Success does not mean that the script is successfully loaded.
+        """
         logger.info("Uploading script to RE environment ...")
-        success, msg = True, ""
-        return {"success": success, "msg": msg}
+        try:
+            supported_param_names = ["script", "update_re", "run_in_background"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            script = request.get("script", None)
+            if script is None:
+                raise ValueError("Required 'script' parameter is is missing in API call.")
+            if not isinstance(script, str):
+                raise TypeError("Type of the 'script' parameter in API call is incorrect.")
+
+            update_re = request.get("update_re", False)
+            run_in_background = request.get("run_in_background", False)
+
+            success, msg, task_uid = await self._environment_upload_script(
+                script=script, update_re=update_re, run_in_background=run_in_background
+            )
+
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg, "task_uid": task_uid}
 
     async def _queue_start_handler(self, request):
         """

@@ -8,6 +8,8 @@ from functools import partial
 import logging
 import uuid
 import enum
+import traceback
+import copy
 
 from .comms import PipeJsonRpcReceive
 from .output_streaming import setup_console_output_redirection
@@ -24,6 +26,8 @@ from .profile_ops import (
     update_existing_plans_and_devices,
     prepare_plan,
     existing_plans_and_devices_from_nspace,
+    extract_script_root_path,
+    load_script_into_existing_nspace,
 )
 
 logger = logging.getLogger(__name__)
@@ -111,6 +115,9 @@ class RunEngineWorker(Process):
 
         self._allowed_items_lock = None  # threading.Lock()
         self._existing_items_lock = None  # threading.Lock()
+
+        self._task_results = []
+        self._task_results_lock = None  # threading.Lock()
 
         # Indicates when to update the existing plans and devices
         update_pd = self._config_dict["update_existing_plans_devices"]
@@ -342,6 +349,31 @@ class RunEngineWorker(Process):
 
         logger.info("List of allowed plans and devices was successfully generated")
 
+    def _load_script_into_environment(self, *, script, update_re):
+
+        startup_dir = self._config_dict.get("startup_dir", None)
+        startup_module_name = self._config_dict.get("startup_module_name", None)
+        startup_script_path = self._config_dict.get("startup_script_path", None)
+
+        script_root_path = extract_script_root_path(
+            startup_dir=startup_dir,
+            startup_module_name=startup_module_name,
+            startup_script_path=startup_script_path,
+        )
+
+        load_script_into_existing_nspace(
+            script=script,
+            nspace=self._re_namespace,
+            script_root_path=script_root_path,
+            update_re=update_re,
+        )
+
+        if update_re:
+            self._RE = self._re_namespace.get("RE", self._RE)
+            self._db = self._re_namespace.get("db", self._db)
+
+        logger.info("The script was successfully loaded into RE environment")
+
     # =============================================================================
     #               Handlers for messages from RE Manager
 
@@ -363,6 +395,7 @@ class RunEngineWorker(Process):
         re_report_available = self._re_report is not None
         run_list_updated = self._active_run_list.is_changed()  # True - updates are available
         plans_and_devices_list_updated = self._existing_plans_and_devices_changed
+        completed_tasks_available = bool(self._task_results)
         msg_out = {
             "running_item_uid": item_uid,
             "running_plan_completed": plan_completed,
@@ -372,6 +405,7 @@ class RunEngineWorker(Process):
             "environment_state": env_state_str,
             "run_list_updated": run_list_updated,
             "plans_and_devices_list_updated": plans_and_devices_list_updated,
+            "completed_tasks_available": completed_tasks_available,
         }
         return msg_out
 
@@ -396,6 +430,15 @@ class RunEngineWorker(Process):
         and update is loaded only if updates exist (`run_list_updated` is True).
         """
         msg_out = {"run_list": self._active_run_list.get_run_list(clear_state=True)}
+        return msg_out
+
+    def _request_task_results_handler(self):
+        """
+        Returns the list of results of completed tasks and clears the list.
+        """
+        with self._task_results_lock:
+            msg_out = {"task_results": copy.copy(self._task_results)}
+            self._task_results.clear()
         return msg_out
 
     def _request_plans_and_devices_list_handler(self):
@@ -586,12 +629,27 @@ class RunEngineWorker(Process):
         does not mean that the operation was successful.
         """
         self._user_group_permissions = user_group_permissions
-        status, err_msg = self._run_in_separate_thread(
+        status, err_msg, _ = self._run_in_separate_thread(
             name="Reload Permissions",
             target=self._generate_lists_of_allowed_plans_and_devices,
             run_in_background=True,
         )
         msg_out = {"status": status, "err_msg": err_msg}
+        return msg_out
+
+    def _command_load_script(self, script, update_re, run_in_background):
+        """
+        Load the script passed as a string variable into the existing RE environment.
+        The task could be started in the background (when a plan or another foreground task
+        is running), but it is not recommended.
+        """
+        status, err_msg, task_uid = self._run_in_separate_thread(
+            name="Load script",
+            target=self._load_script_into_environment,
+            kwargs={"script": script, "update_re": update_re},
+            run_in_background=run_in_background,
+        )
+        msg_out = {"status": status, "err_msg": err_msg, "task_uid": task_uid}
         return msg_out
 
     # ------------------------------------------------------------
@@ -629,6 +687,9 @@ class RunEngineWorker(Process):
         args, kwargs = args or [], kwargs or {}
         status, msg = "accepted", ""
 
+        task_uid = str(uuid.uuid4())
+        logger.debug(f"Starting task {name!r}. Task UID: {task_uid!r}.")
+
         try:
             # Verify that the environment is ready
             acceptable_states = (EState.IDLE, EState.EXECUTING_PLAN, EState.EXECUTING_TASK)
@@ -643,24 +704,36 @@ class RunEngineWorker(Process):
                     f"Incorrect environment state: '{self._env_state.value}'. Acceptable state: 'idle'"
                 )
 
-            task_uuid = str(uuid.uuid4())
-            task_uuid_short = task_uuid.split("-")[-1]
-            thread_name = f"BS QServer - {name} {task_uuid_short} "
+            task_uid_short = task_uid.split("-")[-1]
+            thread_name = f"BS QServer - {name} {task_uid_short} "
 
-            def thread_func_wrapper():
+            def thread_func_wrapper(*, task_uid):
                 def thread_func():
                     # This is the function executed in a separate thread
                     try:
-                        target(*args, **kwargs)
+                        result = target(*args, **kwargs)
+                        success, msg = True, ""
                     except Exception as ex:
                         logger.exception("Error occurred while executing the function ('%s'): %s", name, str(ex))
+                        result = traceback.format_exc()
+                        success, msg = False, f"Exception: {str(ex)}"
                     finally:
                         if not run_in_background:
                             self._env_state = EState.IDLE
 
+                    with self._task_results_lock:
+                        task_res = {
+                            "task_uid": task_uid,
+                            "success": success,
+                            "msg": msg,
+                            "result": result,
+                            "time": ttime.time(),
+                        }
+                        self._task_results.append(task_res)
+
                 return thread_func
 
-            th = threading.Thread(target=thread_func_wrapper(), name=thread_name, daemon=True)
+            th = threading.Thread(target=thread_func_wrapper(task_uid=task_uid), name=thread_name, daemon=True)
 
             if not run_in_background:
                 self._env_state = EState.EXECUTING_TASK
@@ -668,11 +741,15 @@ class RunEngineWorker(Process):
             th.start()
 
         except RejectedError as ex:
-            status, msg = "rejected", f"Task '{name}' was rejected by RE Worker process: {ex}"
+            status, msg = "rejected", f"Task {name!r} was rejected by RE Worker process: {ex}"
         except Exception as ex:
-            status, msg = "error", f"Error occurred while to starting the task '{name}': {ex}"
+            status, msg = "error", f"Error occurred while to starting the task {name!r}: {ex}"
 
-        return status, msg
+        logger.debug(
+            f"Completing the request to start the task {name!r} ({task_uid!r}): status={status!r} msg={msg!r}."
+        )
+
+        return status, msg, task_uid
 
     # ------------------------------------------------------------
 
@@ -696,6 +773,8 @@ class RunEngineWorker(Process):
         #   checked using 'is_re_worker_active()' in startup scripts or modules.
         set_re_worker_active()
 
+        self._task_results_lock = threading.Lock()
+
         from .plan_monitoring import RunList, CallbackRegisterRun
 
         self._active_run_list = RunList()  # Initialization should be done before communication is enabled.
@@ -706,6 +785,7 @@ class RunEngineWorker(Process):
         self._comm_to_manager.add_method(
             self._request_plans_and_devices_list_handler, "request_plans_and_devices_list"
         )
+        self._comm_to_manager.add_method(self._request_task_results_handler, "request_task_results")
         self._comm_to_manager.add_method(self._command_close_env_handler, "command_close_env")
         self._comm_to_manager.add_method(self._command_confirm_exit_handler, "command_confirm_exit")
         self._comm_to_manager.add_method(self._command_run_plan_handler, "command_run_plan")
@@ -713,6 +793,8 @@ class RunEngineWorker(Process):
         self._comm_to_manager.add_method(self._command_continue_plan_handler, "command_continue_plan")
         self._comm_to_manager.add_method(self._command_reset_worker_handler, "command_reset_worker")
         self._comm_to_manager.add_method(self._command_permissions_reload_handler, "command_permissions_reload")
+
+        self._comm_to_manager.add_method(self._command_load_script, "command_load_script")
 
         self._comm_to_manager.start()
 

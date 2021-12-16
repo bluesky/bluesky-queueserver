@@ -1365,6 +1365,91 @@ def test_zmq_api_queue_item_update_4_fail(re_manager):  # noqa F811
 
 
 # =======================================================================================
+#                              Method 'script_upload'
+
+
+def test_zmq_api_script_upload_1(re_manager):  # noqa: F811
+    """
+    Basic test for ``script_upload`` API.
+    """
+    # Add plan to queue
+    # params1a = {"item": _plan1, "user": _user, "user_group": _user_group}
+    # resp1a, _ = zmq_single_request("queue_item_add", params1a)
+    # assert resp1a["success"] is True, f"resp={resp1a}"
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    script = "a = 10\nb=20\n"
+
+    resp3, _ = zmq_single_request("script_upload", params={"script": script})
+    assert resp3["success"] is True
+    assert resp3["msg"] == ""
+    assert resp3["task_uid"]
+    assert isinstance(resp3["task_uid"], str)
+    ttime.sleep(1)
+
+    # resp2a, _ = zmq_single_request("status")
+    # assert resp2a["items_in_queue"] == 1
+    # assert resp2a["items_in_history"] == 0
+    # assert resp2a["worker_environment_state"] == "idle"
+
+    # # Execute a plan
+    # params3 = {"item": _plan3, "user": _user, "user_group": _user_group}
+    # resp3, _ = zmq_single_request("queue_item_execute", params3)
+    # assert resp3["success"] is True, f"resp={resp3}"
+    # assert resp3["msg"] == ""
+    # assert resp3["qsize"] == 1
+    # assert resp3["item"]["name"] == _plan3["name"]
+
+    # ttime.sleep(1)
+    # status, _ = zmq_single_request("status")
+    # assert status["items_in_queue"] == 1
+    # assert status["items_in_history"] == 0
+    # assert status["worker_environment_state"] == "executing_plan"
+
+    # assert wait_for_condition(time=30, condition=condition_manager_idle)
+
+    # # Execute an instruction (STOP instruction - nothing will be done)
+    # params3a = {"item": _instruction_stop, "user": _user, "user_group": _user_group}
+    # resp3a, _ = zmq_single_request("queue_item_execute", params3a)
+    # assert resp3a["success"] is True, f"resp={resp3a}"
+    # assert resp3a["msg"] == ""
+    # assert resp3a["qsize"] == 1
+    # assert resp3a["item"]["name"] == _instruction_stop["name"]
+
+    # assert wait_for_condition(time=5, condition=condition_manager_idle)
+
+    # resp3b, _ = zmq_single_request("status")
+    # assert resp3b["items_in_queue"] == 1
+    # assert resp3b["items_in_history"] == 1
+    # assert resp3b["worker_environment_state"] == "idle"
+
+    # resp4, _ = zmq_single_request("queue_start")
+    # assert resp4["success"] is True
+
+    # assert wait_for_condition(time=5, condition=condition_manager_idle)
+
+    # resp4a, _ = zmq_single_request("status")
+    # assert resp4a["items_in_queue"] == 0
+    # assert resp4a["items_in_history"] == 2
+
+    # history, _ = zmq_single_request("history_get")
+    # h_items = history["items"]
+    # assert len(h_items) == 2, pprint.pformat(h_items)
+    # assert h_items[0]["name"] == _plan3["name"]
+    # assert h_items[1]["name"] == _plan1["name"]
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+    # assert False
+
+
+# =======================================================================================
 #                      Method 'plans_allowed', 'devices_allowed'
 
 

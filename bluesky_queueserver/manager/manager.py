@@ -18,7 +18,7 @@ from .profile_ops import (
 from .plan_queue_ops import PlanQueueOperations
 from .output_streaming import setup_console_output_redirection
 from .logging_setup import setup_loggers
-
+from .task_results import TaskResults
 
 import logging
 
@@ -144,6 +144,8 @@ class RunEngineManager(Process):
         self._allowed_plans, self._allowed_devices = {}, {}
         self._allowed_plans_uid = _generate_uid()
         self._allowed_devices_uid = _generate_uid()
+
+        self._task_results = TaskResults(retention_time=120)
 
     async def _heartbeat_generator(self):
         """
@@ -527,14 +529,23 @@ class RunEngineManager(Process):
         Download results of the completed tasks from worker process.
         """
         logger.debug("Downloading the results of completed tasks from the worker environment.")
-        task_results, err_msg = await self._worker_request_task_results()
-        if task_results is None:
+        results, err_msg = await self._worker_request_task_results()
+        if results is None:
             # TODO: this would typically mean a bug (communication error). Probably more
             #       complicated processing is needed
-            logger.error(f"Failed to download the results of completed tasks from the worker process: {err_msg}.")
+            logger.error(
+                "Failed to download the results of completed tasks from the worker process: %s.", str(err_msg)
+            )
         else:
-            # PROCESSING WILL BE IMPLEMENTED SHORTLY. JUST PRINT THE MESSAGE FOR NOW.
-            print(f"The results of {len(task_results)} were loaded: {pprint.pformat(task_results)}")
+            task_results = results["task_results"]
+            for task_res in task_results:
+                if "task_uid" not in task_res:
+                    logger.error("Missing 'task_uid' data in task results: %s", pprint.pformat(task_res))
+                    continue
+
+                task_uid = task_res["task_uid"]
+                self._task_results.add_completed_task(task_uid=task_uid, payload=task_res)
+                logger.debug("Loaded the results for task '%s': %s", task_uid, pprint.pformat(task_results))
 
     async def _start_plan(self):
         """
@@ -877,13 +888,13 @@ class RunEngineManager(Process):
 
     async def _worker_request_task_results(self):
         try:
-            task_results = await self._comm_to_worker.send_msg("request_task_results")
+            results = await self._comm_to_worker.send_msg("request_task_results")
             err_msg = ""
-            if task_results is None:
+            if results is None:
                 err_msg = "Failed to obtain the results of completed tasks from the worker"
         except CommTimeoutError:
-            task_results, err_msg = None, "Timeout occurred"
-        return task_results, err_msg
+            results, err_msg = None, "Timeout occurred"
+        return results, err_msg
 
     async def _worker_command_close_env(self):
         try:
@@ -946,6 +957,10 @@ class RunEngineManager(Process):
             )
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
+            task_uid = response["task_uid"]
+            payload = response["payload"]
+            if success:
+                self._task_results.add_running_task(task_uid=task_uid, payload=payload)
         except CommTimeoutError:
             success, err_msg = None, "Timeout occurred"
         return success, err_msg
@@ -959,6 +974,9 @@ class RunEngineManager(Process):
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
             task_uid = response["task_uid"]
+            payload = response["payload"]
+            if success:
+                self._task_results.add_running_task(task_uid=task_uid, payload=payload)
         except CommTimeoutError:
             success, err_msg, task_uid = None, "Timeout occurred", None
         return success, err_msg, task_uid
@@ -1103,6 +1121,7 @@ class RunEngineManager(Process):
         devices_allowed_uid = self._allowed_devices_uid
         plans_allowed_uid = self._allowed_plans_uid
         plan_queue_mode = self._plan_queue.plan_queue_mode
+        task_results_uid = self._task_results.task_results_uid
         # worker_state_info = self._worker_state_info
 
         # TODO: consider different levels of verbosity for ping or other command to
@@ -1126,6 +1145,7 @@ class RunEngineManager(Process):
             "devices_allowed_uid": devices_allowed_uid,
             "plans_allowed_uid": plans_allowed_uid,
             "plan_queue_mode": plan_queue_mode,
+            "task_results_uid": task_results_uid,
             # "worker_state_info": worker_state_info
         }
         return msg
@@ -1955,9 +1975,38 @@ class RunEngineManager(Process):
             )
 
         except Exception as ex:
-            success, msg = False, f"Error: {ex}"
+            success, msg, task_uid = False, f"Error: {ex}", None
 
         return {"success": success, "msg": msg, "task_uid": task_uid}
+
+    async def _task_load_result_handler(self, request):
+        """
+        Load result of a task executed by the worker process. The request must contain valid ``task_uid``.
+        Task UIDs are returned by the API used to start tasks. Returned parameters: ``success`` and
+        ``msg`` indicate success of the API call and error message in case of API call failure;
+        ``status`` is the status of the task (``running``, ``completed``, ``not_found``), ``result``
+        is a dictionary with information about the task. The information is be different for
+        the completed and running tasks. If ``status=='not_found'``, then is ``result`` is ``{}``.
+        """
+        logger.debug("Load result of the task executed by RE worker ...")
+
+        task_uid = None
+
+        try:
+            supported_param_names = ["task_uid"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            task_uid = request.get("task_uid", None)
+            if task_uid is None:
+                raise ValueError("Required 'task_uid' parameter is missing in the API call.")
+
+            status, result = self._task_results.get_task_info(task_uid=task_uid)
+            success, msg = True, ""
+
+        except Exception as ex:
+            success, msg, status, result = False, f"Error: {ex}", None, None
+
+        return {"success": success, "msg": msg, "task_uid": task_uid, "status": status, "result": result}
 
     async def _queue_start_handler(self, request):
         """
@@ -2217,6 +2266,7 @@ class RunEngineManager(Process):
             "environment_close": "_environment_close_handler",
             "environment_destroy": "_environment_destroy_handler",
             "script_upload": "_script_upload_handler",
+            "task_load_result": "_task_load_result_handler",
             "queue_mode_set": "_queue_mode_set_handler",
             "queue_item_add": "_queue_item_add_handler",
             "queue_item_add_batch": "_queue_item_add_batch_handler",

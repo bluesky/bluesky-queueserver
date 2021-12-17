@@ -10,6 +10,7 @@ import uuid
 import enum
 import traceback
 import copy
+import json
 
 from .comms import PipeJsonRpcReceive
 from .output_streaming import setup_console_output_redirection
@@ -116,8 +117,8 @@ class RunEngineWorker(Process):
         self._allowed_items_lock = None  # threading.Lock()
         self._existing_items_lock = None  # threading.Lock()
 
-        self._task_results = []
-        self._task_results_lock = None  # threading.Lock()
+        self._completed_tasks = []
+        self._completed_tasks_lock = None  # threading.Lock()
 
         # Indicates when to update the existing plans and devices
         update_pd = self._config_dict["update_existing_plans_devices"]
@@ -395,7 +396,7 @@ class RunEngineWorker(Process):
         re_report_available = self._re_report is not None
         run_list_updated = self._active_run_list.is_changed()  # True - updates are available
         plans_and_devices_list_updated = self._existing_plans_and_devices_changed
-        completed_tasks_available = bool(self._task_results)
+        completed_tasks_available = bool(self._completed_tasks)
         msg_out = {
             "running_item_uid": item_uid,
             "running_plan_completed": plan_completed,
@@ -436,9 +437,9 @@ class RunEngineWorker(Process):
         """
         Returns the list of results of completed tasks and clears the list.
         """
-        with self._task_results_lock:
-            msg_out = {"task_results": copy.copy(self._task_results)}
-            self._task_results.clear()
+        with self._completed_tasks_lock:
+            msg_out = {"task_results": copy.copy(self._completed_tasks)}
+            self._completed_tasks.clear()
         return msg_out
 
     def _request_plans_and_devices_list_handler(self):
@@ -629,12 +630,12 @@ class RunEngineWorker(Process):
         does not mean that the operation was successful.
         """
         self._user_group_permissions = user_group_permissions
-        status, err_msg, _ = self._run_in_separate_thread(
+        status, err_msg, task_uid, payload = self._run_in_separate_thread(
             name="Reload Permissions",
             target=self._generate_lists_of_allowed_plans_and_devices,
             run_in_background=True,
         )
-        msg_out = {"status": status, "err_msg": err_msg}
+        msg_out = {"status": status, "err_msg": err_msg, "task_uid": task_uid, "payload": payload}
         return msg_out
 
     def _command_load_script(self, script, update_re, run_in_background):
@@ -643,13 +644,13 @@ class RunEngineWorker(Process):
         The task could be started in the background (when a plan or another foreground task
         is running), but it is not recommended.
         """
-        status, err_msg, task_uid = self._run_in_separate_thread(
+        status, err_msg, task_uid, payload = self._run_in_separate_thread(
             name="Load script",
             target=self._load_script_into_environment,
             kwargs={"script": script, "update_re": update_re},
             run_in_background=run_in_background,
         )
-        msg_out = {"status": status, "err_msg": err_msg, "task_uid": task_uid}
+        msg_out = {"status": status, "err_msg": err_msg, "task_uid": task_uid, "payload": payload}
         return msg_out
 
     # ------------------------------------------------------------
@@ -688,6 +689,7 @@ class RunEngineWorker(Process):
         status, msg = "accepted", ""
 
         task_uid = str(uuid.uuid4())
+        time_start = ttime.time()
         logger.debug(f"Starting task {name!r}. Task UID: {task_uid!r}.")
 
         try:
@@ -707,33 +709,45 @@ class RunEngineWorker(Process):
             task_uid_short = task_uid.split("-")[-1]
             thread_name = f"BS QServer - {name} {task_uid_short} "
 
-            def thread_func_wrapper(*, task_uid):
+            def thread_func_wrapper(*, task_uid, time_start):
                 def thread_func():
                     # This is the function executed in a separate thread
                     try:
-                        result = target(*args, **kwargs)
+                        return_value = target(*args, **kwargs)
+
+                        # Attempt to serialize the result to JSON. The result can not be sent to the client
+                        #   if it can not be serialized, so it is better for the function to fail here so that
+                        #   proper error message could be sent to the client.
+                        try:
+                            json.dumps(return_value)  # The result of the conversion is intentionally discarded
+                        except Exception as ex_json:
+                            raise ValueError(f"Task result can not be serialized as JSON: {ex_json}") from ex_json
+
                         success, msg = True, ""
                     except Exception as ex:
                         logger.exception("Error occurred while executing the function ('%s'): %s", name, str(ex))
-                        result = traceback.format_exc()
+                        return_value = traceback.format_exc()
                         success, msg = False, f"Exception: {str(ex)}"
                     finally:
                         if not run_in_background:
                             self._env_state = EState.IDLE
 
-                    with self._task_results_lock:
+                    with self._completed_tasks_lock:
                         task_res = {
                             "task_uid": task_uid,
                             "success": success,
                             "msg": msg,
-                            "result": result,
-                            "time": ttime.time(),
+                            "return_value": return_value,
+                            "time_start": time_start,
+                            "time_stop": ttime.time(),
                         }
-                        self._task_results.append(task_res)
+                        self._completed_tasks.append(task_res)
 
                 return thread_func
 
-            th = threading.Thread(target=thread_func_wrapper(task_uid=task_uid), name=thread_name, daemon=True)
+            th = threading.Thread(
+                target=thread_func_wrapper(task_uid=task_uid, time_start=time_start), name=thread_name, daemon=True
+            )
 
             if not run_in_background:
                 self._env_state = EState.EXECUTING_TASK
@@ -749,7 +763,10 @@ class RunEngineWorker(Process):
             f"Completing the request to start the task {name!r} ({task_uid!r}): status={status!r} msg={msg!r}."
         )
 
-        return status, msg, task_uid
+        # Payload contains information that may be useful for tracking the execution of the task.
+        payload = {"task_uid": task_uid, "time_start": time_start, "run_in_background": run_in_background}
+
+        return status, msg, task_uid, payload
 
     # ------------------------------------------------------------
 
@@ -773,7 +790,7 @@ class RunEngineWorker(Process):
         #   checked using 'is_re_worker_active()' in startup scripts or modules.
         set_re_worker_active()
 
-        self._task_results_lock = threading.Lock()
+        self._completed_tasks_lock = threading.Lock()
 
         from .plan_monitoring import RunList, CallbackRegisterRun
 

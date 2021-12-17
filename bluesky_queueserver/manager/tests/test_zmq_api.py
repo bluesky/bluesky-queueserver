@@ -1381,14 +1381,29 @@ def test_zmq_api_script_upload_1(re_manager):  # noqa: F811
     assert resp2["success"] is True
     assert wait_for_condition(time=10, condition=condition_environment_created)
 
+    status, _ = zmq_single_request("status")
+    task_results_uid = status["task_results_uid"]
+    assert isinstance(task_results_uid, str)
+
     script = "a = 10\nb=20\n"
 
     resp3, _ = zmq_single_request("script_upload", params={"script": script})
-    assert resp3["success"] is True
+    assert resp3["success"] is True, pprint.pformat(resp3)
     assert resp3["msg"] == ""
     assert resp3["task_uid"]
-    assert isinstance(resp3["task_uid"], str)
+    task_uid = resp3["task_uid"]
+    assert isinstance(task_uid, str)
     ttime.sleep(1)
+
+    resp4, _ = zmq_single_request("task_load_result", params={"task_uid": task_uid})
+    assert resp4["success"] is True
+    assert resp4["msg"] == ""
+    assert resp4["task_uid"] == task_uid
+    assert resp4["status"] == "completed"
+    assert isinstance(resp4["result"], dict)
+
+    status, _ = zmq_single_request("status")
+    assert status["task_results_uid"] != task_results_uid
 
     # resp2a, _ = zmq_single_request("status")
     # assert resp2a["items_in_queue"] == 1

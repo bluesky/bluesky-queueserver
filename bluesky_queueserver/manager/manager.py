@@ -145,7 +145,7 @@ class RunEngineManager(Process):
         self._allowed_plans_uid = _generate_uid()
         self._allowed_devices_uid = _generate_uid()
 
-        self._task_results = TaskResults(retention_time=120)
+        self._task_results = None  # TaskResults(), uses threading.Lock
 
     async def _heartbeat_generator(self):
         """
@@ -2326,6 +2326,8 @@ class RunEngineManager(Process):
         self._comm_to_worker = PipeJsonRpcSendAsync(conn=self._worker_conn, name="RE Manager-Worker Comm")
         self._comm_to_watchdog.start()
         self._comm_to_worker.start()
+
+        self._task_results = TaskResults(retention_time=120)
 
         # Start heartbeat generator
         self._heartbeat_generator_task = asyncio.ensure_future(self._heartbeat_generator(), loop=self._loop)

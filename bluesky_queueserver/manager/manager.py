@@ -307,6 +307,8 @@ class RunEngineManager(Process):
             if not await self._confirm_re_worker_exit():
                 success = False
                 err_msg = "Failed to confirm closing of RE Worker thread"
+            else:
+                await self._task_results.clear_running_tasks()
 
         self._manager_state = MState.IDLE
         return success, err_msg
@@ -351,8 +353,10 @@ class RunEngineManager(Process):
         err_msg = "" if success else "Failed to properly destroy RE Worker environment."
         logger.info("RE Worker environment is destroyed")
         if not success:
-
             logger.error(err_msg)
+        else:
+            await self._task_results.clear_running_tasks()
+
         return success, err_msg
 
     async def _confirm_re_worker_exit(self):
@@ -544,7 +548,7 @@ class RunEngineManager(Process):
                     continue
 
                 task_uid = task_res["task_uid"]
-                self._task_results.add_completed_task(task_uid=task_uid, payload=task_res)
+                await self._task_results.add_completed_task(task_uid=task_uid, payload=task_res)
                 logger.debug("Loaded the results for task '%s': %s", task_uid, pprint.pformat(task_results))
 
     async def _start_plan(self):
@@ -960,7 +964,7 @@ class RunEngineManager(Process):
             task_uid = response["task_uid"]
             payload = response["payload"]
             if success:
-                self._task_results.add_running_task(task_uid=task_uid, payload=payload)
+                await self._task_results.add_running_task(task_uid=task_uid, payload=payload)
         except CommTimeoutError:
             success, err_msg = None, "Timeout occurred"
         return success, err_msg
@@ -976,7 +980,7 @@ class RunEngineManager(Process):
             task_uid = response["task_uid"]
             payload = response["payload"]
             if success:
-                self._task_results.add_running_task(task_uid=task_uid, payload=payload)
+                await self._task_results.add_running_task(task_uid=task_uid, payload=payload)
         except CommTimeoutError:
             success, err_msg, task_uid = None, "Timeout occurred", None
         return success, err_msg, task_uid
@@ -2000,7 +2004,7 @@ class RunEngineManager(Process):
             if task_uid is None:
                 raise ValueError("Required 'task_uid' parameter is missing in the API call.")
 
-            status, result = self._task_results.get_task_info(task_uid=task_uid)
+            status, result = await self._task_results.get_task_info(task_uid=task_uid)
             success, msg = True, ""
 
         except Exception as ex:

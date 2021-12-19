@@ -8,11 +8,16 @@ def test_TaskResults_update_uid():
     """
     TaskResults: Test that task result UID is updated.
     """
-    tr = TaskResults()
-    uid = tr.task_results_uid
-    assert isinstance(uid, str)
-    tr._update_task_results_uid()
-    assert tr.task_results_uid != tr
+
+    async def testing():
+        tr = TaskResults()
+
+        uid = tr.task_results_uid
+        assert isinstance(uid, str)
+        tr._update_task_results_uid()
+        assert tr.task_results_uid != uid
+
+    asyncio.run(testing())
 
 
 def test_TaskResults_add_running_task():

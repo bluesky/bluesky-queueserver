@@ -63,7 +63,8 @@ class TaskResults:
 
     async def add_running_task(self, *, task_uid, payload=None):
         """
-        Add a task to the list of running tasks.
+        Add a task to the list of running tasks. For teach task UID, the payload
+        passed as a parameter and time of insertion is saved.
 
         Parameters
         ----------
@@ -159,8 +160,8 @@ class TaskResults:
         while ctt and (ctt[0]["time"] < time_threshold):
             task_uid = ctt[0]["task_uid"]
             ctt.pop(0)
-            if task_uid in self._completed_tasks_info:
-                del self._completed_tasks_info[task_uid]
+            if task_uid in self._completed_tasks_data:
+                del self._completed_tasks_data[task_uid]
 
     async def clean_completed_tasks(self):
         """

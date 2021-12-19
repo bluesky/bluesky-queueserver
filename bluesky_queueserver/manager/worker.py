@@ -29,6 +29,7 @@ from .profile_ops import (
     existing_plans_and_devices_from_nspace,
     extract_script_root_path,
     load_script_into_existing_nspace,
+    compare_existing_plans_and_devices,
 )
 
 logger = logging.getLogger(__name__)
@@ -350,8 +351,30 @@ class RunEngineWorker(Process):
 
         logger.info("List of allowed plans and devices was successfully generated")
 
-    def _load_script_into_environment(self, *, script, update_re):
+    def _update_existing_pd_file(self, *, options):
+        """
+        Update existing plans and devices on disk. ``options`` parameter is a list (or tuple)
+        of options which are compared to ``self._update_existing_plans_devices_on_disk`` to
+        determine if the lists should be saved.
+        """
 
+        path_pd = self._config_dict["existing_plans_and_devices_path"]
+
+        if self._update_existing_plans_devices_on_disk in options:
+            with self._existing_items_lock:
+                existing_plans, existing_devices = self._existing_plans, self._existing_devices
+            update_existing_plans_and_devices(
+                path_to_file=path_pd,
+                existing_plans=existing_plans,
+                existing_devices=existing_devices,
+            )
+
+    def _load_script_into_environment(self, *, script, update_re):
+        """
+        Load script passed as a string variable (``script``) into RE environment namespace.
+        Boolean variable ``update_re`` controls whether ``RE`` and ``db`` are updated if
+        the new values are defined in the script.
+        """
         startup_dir = self._config_dict.get("startup_dir", None)
         startup_module_name = self._config_dict.get("startup_module_name", None)
         startup_script_path = self._config_dict.get("startup_script_path", None)
@@ -372,6 +395,28 @@ class RunEngineWorker(Process):
         if update_re:
             self._RE = self._re_namespace.get("RE", self._RE)
             self._db = self._re_namespace.get("db", self._db)
+
+        epd = existing_plans_and_devices_from_nspace(nspace=self._re_namespace)
+        existing_plans, existing_devices, plans_in_nspace, devices_in_nspace = epd
+
+        self._existing_plans_and_devices_changed = not compare_existing_plans_and_devices(
+            existing_plans=existing_plans,
+            existing_devices=existing_devices,
+            existing_plans_ref=self._existing_plans,
+            existing_devices_ref=self._existing_devices,
+        )
+
+        # Dictionaries of references to plans and devices from the namespace (may change even
+        #   if the list of existing plans and devices was not changed)
+        self._plans_in_nspace = plans_in_nspace
+        self._devices_in_nspace = devices_in_nspace
+
+        if self._existing_plans_and_devices_changed:
+            # Descriptions of existing plans and devices
+            with self._existing_items_lock:
+                self._existing_plans, self._existing_devices = existing_plans, existing_devices
+            self._generate_lists_of_allowed_plans_and_devices()
+            self._update_existing_pd_file(options=("ALWAYS",))
 
         logger.info("The script was successfully loaded into RE environment")
 
@@ -886,21 +931,8 @@ class RunEngineWorker(Process):
 
         if success:
             self._generate_lists_of_allowed_plans_and_devices()
+            self._update_existing_pd_file(options=("ENVIRONMENT_OPEN", "ALWAYS"))
 
-            # This file name is used only to update the lists of existing plans and devices
-            #   stored on disk, not to load the lists.
-            path_pd = self._config_dict["existing_plans_and_devices_path"]
-
-            if self._update_existing_plans_devices_on_disk in ("ENVIRONMENT_OPEN", "ALWAYS"):
-                with self._existing_items_lock:
-                    existing_plans, existing_devices = self._existing_plans, self._existing_devices
-                update_existing_plans_and_devices(
-                    path_to_file=path_pd,
-                    existing_plans=existing_plans,
-                    existing_devices=existing_devices,
-                )
-
-        if success:
             logger.info("Instantiating and configuring Run Engine ...")
 
             try:

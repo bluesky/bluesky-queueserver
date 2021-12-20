@@ -68,10 +68,12 @@ Get status information from RE Manager:
 - :ref:`method_ping`
 - :ref:`method_status`
 
-Allowed plans and devices:
+Existing and allowed plans and devices:
 
 - :ref:`method_plans_allowed`
 - :ref:`method_devices_allowed`
+- :ref:`method_plans_existing`
+- :ref:`method_devices_existing`
 - :ref:`method_permissions_reload`
 
 History of executed plans:
@@ -115,6 +117,11 @@ Send commands to Bluesky Run Engine:
 Monitor the list of active runs:
 
 - :ref:`method_re_runs`
+
+Run tasks in RE Worker namespace:
+
+- :ref:`method_script_upload`
+- :ref:`method_task_load_result`
 
 Stopping RE Manager (mostly used in testing):
 
@@ -181,6 +188,11 @@ Returns       **msg**: *str*
                  plan history UID, which is updated each time the contents of the history is changed.
                  Monitor this parameter to determine when the history data should be downloaded.
 
+              **task_results_uid**: *str*
+                 UID of the dictionary of task results. UID is updated each time results of a new
+                 completed tasks are added to the dictionary. Check the status of the pending tasks
+                 (see *task_load_result* API) once UID is changed.
+
               **plans_allowed_uid**: *str*
                  UID for the list of allowed plans. UID is updated each time the contents of
                  the list is changed. Monitor the UID to detect changes in the list of allowed
@@ -188,6 +200,14 @@ Returns       **msg**: *str*
 
               **devices_allowed_uid**: *str*
                  UID for the list of allowed devices. Similar to **plans_allowed_uid**.
+
+              **plans_existing_uid**: *str*
+                 UID for the list of existing plans in RE Worker namespace. Similar to
+                 **plans_allowed_uid**.
+
+              **devices_existing_uid**: *str*
+                 UID for the list of existing devices in RE Worker namespace. Similar to
+                 **plans_allowed_uid**.
 
               **manager_state**: *str*
                   state of RE Manager. Supported states:
@@ -273,8 +293,8 @@ Returns       **success**: *boolean*
                   the dictionary that contains information on the allowed plans.
                   Dictionary keys are plan names.
 
-              **plans_allowed_uid**: *str*
-                  UID of the list of allowed plans
+              **plans_allowed_uid**: *str* or *None*
+                  UID of the list of allowed plans, *None* if the request fails.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
@@ -305,8 +325,70 @@ Returns       **success**: *boolean*
                   the dictionary that contains information on the allowed devices.
                   Dictionary keys are device names.
 
-              **devices_allowed_uid**: *str*
-                  UID of the list of allowed devices
+              **devices_allowed_uid**: *str* or *None*
+                  UID of the list of allowed devices, *None* if the request fails.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+
+.. _method_plans_existing:
+
+**'plans_existing'**
+^^^^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'plans_existing'**
+------------  -----------------------------------------------------------------------------------------
+Description   Returns a dictionary that contains information on existing plans in the RE Worker
+              namespace. Monitor *'plans_existing_uid'* status field and download the list from the
+              server only when the UID is changed.
+------------  -----------------------------------------------------------------------------------------
+Parameters    ---
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **plans_existing**: *dict*
+                  the dictionary that contains information on the existing plans.
+                  Dictionary keys are plan names.
+
+              **plans_allowed_uid**: *str* or *None*
+                  UID of the list of allowed plans, *None* if the request fails.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+
+.. _method_devices_existing:
+
+**'devices_existing'**
+^^^^^^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'devices_existing'**
+------------  -----------------------------------------------------------------------------------------
+Description   Returns a dictionary that contains information on the existing devices in RE Worker
+              namespace. Monitor *'devices_existing_uid'* status field and download the list from the
+              server only when the UID is changed.
+------------  -----------------------------------------------------------------------------------------
+Parameters    ---
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **devices_allowed**: *dict*
+                  the dictionary that contains information on the existing devices.
+                  Dictionary keys are device names.
+
+              **devices_allowed_uid**: *str* or *None*
+                  UID of the list of allowed devices, *None* if the request fails
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
@@ -1231,6 +1313,101 @@ Returns       **success**: *boolean*
               **run_list_uid**: str
                   UID of the returned run list, identical to the RE Manager status field with
                   the same name.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+
+.. _method_script_upload:
+
+**'script_upload'**
+^^^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'script_upload'**
+------------  -----------------------------------------------------------------------------------------
+Description   Upload and execute script in RE Worker namespace. The script may add, change or replace
+              objects defined in the namespace, including plans and devices. Dynamic modification
+              of the worker namespace may be used to implement more flexible workflows. The API call
+              updates the lists of existing and allowed plans and devices if necessary. Changes in
+              the lists will be indicated by changed list UIDs. Use *'task_load_result'* API to check
+              if the script was loaded correctly. Note, that if the task fails, the script is
+              still executed to the point where the exception is raised, changing the environment.
+------------  -----------------------------------------------------------------------------------------
+Parameters    **script**: *str*
+                  The string that contains the Python script. The rules for the script are the same
+                  as for Bluesky startup scripts. The script can use objects already existing in
+                  the RE Worker namespace.
+
+              **update_re**: *boolean* (optional, default *False*)
+                  The uploaded scripts may replace Run Engine (*'RE'*) and Data Broker (*'db'*)
+                  instances in the namespace. In most cases this operation should not be allowed,
+                  therefore it is disabled by default (*update_re* is *False*), i.e. if the script
+                  creates new *RE* and *db* objects, those objects are discarded. Set this parameter
+                  *True* to allow the server to replace *RE* and *db* objects. This parameter has
+                  no effect if the script is not creating new instances of *RE* and/or *db*.
+
+              **run_in_background**: *boolean* (optional, default *False*)
+                  Set this parameter *True* to upload and execute the script in the background
+                  (while a plan or another foreground task is running). Generally, it is not
+                  recommended to update RE Worker namespace in the background. Background tasks
+                  are executed in separate threads and only thread-safe scripts should be uploaded
+                  in the background.
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **task_uid**: *str* or *None*
+                  Task UID can be used to check status of the task and download results once the task
+                  is completed (see *task_load_results* API).
+------------  -----------------------------------------------------------------------------------------
+Execution     The method initiates the operation. Monitor *task_results_uid* status field and call
+              *task_load_results* API to check for success.
+============  =========================================================================================
+
+
+.. _method_task_load_result:
+
+**'task_load_results'**
+^^^^^^^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'task_load_results'**
+------------  -----------------------------------------------------------------------------------------
+Description   Load the status and results of task execution.
+------------  -----------------------------------------------------------------------------------------
+Parameters    **task_uid**: *str*
+                  Task UID.
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **task_uid**: *str* or *None*
+                  Task UID (expected to be the same as the input parameter) or *None* if
+                  the request failed.
+
+              **status**: *'running'*, *'completed'*, *'not_found'* or *None*
+                  Status of the task or *None* if the request (not task) failed.
+
+              **result**: *dict* or *None*
+                  Dictionary containing the information on a running task, results of the completed
+                  task or *None* if the request failed. The contents of the dictionary depends on the returned
+                  *'status'*:
+
+                  - **'running'** - Keys: *'task_uid'*, *'start_time'* and *'run_in_background'*.
+
+                  - **'completed'** - Keys: *'task_uid'*, *'success'* (*True*/*False*),
+                    *'msg'* (error message), *'return_value'* (value returned by the function
+                    or a string with full traceback if the task failed), *'time_start'* and
+                    *'time_stop'*.
+
+                  - **'not_found'** - Empty dictionary.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================

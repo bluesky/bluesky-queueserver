@@ -1368,100 +1368,122 @@ def test_zmq_api_queue_item_update_4_fail(re_manager):  # noqa F811
 #                              Method 'script_upload'
 
 
-def test_zmq_api_script_upload_1(re_manager):  # noqa: F811
+_script_to_upload_1 = r"""
+# Another device
+from ophyd import Device
+
+dev_test = Device(name="dev_test")
+
+# Trivial plan
+def sleep_for_a_few_sec(tt=1):
+    yield from bps.sleep(tt)
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("run_in_background", [None, False, True])
+# fmt: on
+def test_zmq_api_script_upload_1(re_manager, run_in_background):  # noqa: F811
     """
     Basic test for ``script_upload`` API.
     """
-    # Add plan to queue
-    # params1a = {"item": _plan1, "user": _user, "user_group": _user_group}
-    # resp1a, _ = zmq_single_request("queue_item_add", params1a)
-    # assert resp1a["success"] is True, f"resp={resp1a}"
-
-    resp2, _ = zmq_single_request("environment_open")
-    assert resp2["success"] is True
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
     assert wait_for_condition(time=10, condition=condition_environment_created)
 
     status, _ = zmq_single_request("status")
     task_results_uid = status["task_results_uid"]
+    plans_allowed_uid = status["plans_allowed_uid"]
+    devices_allowed_uid = status["devices_allowed_uid"]
     assert isinstance(task_results_uid, str)
 
-    script = "a = 10\nb=20\n"
+    # Make the plan sleep for 1 second (emulates a script that takes 1s to load)
+    script = "import time as ttime\nttime.sleep(1)\n" + _script_to_upload_1
 
-    resp3, _ = zmq_single_request("script_upload", params={"script": script})
-    assert resp3["success"] is True, pprint.pformat(resp3)
-    assert resp3["msg"] == ""
-    assert resp3["task_uid"]
-    task_uid = resp3["task_uid"]
+    params = {"script": script}
+    if run_in_background is not None:
+        params.update({"run_in_background": run_in_background})
+    else:
+        run_in_background = False
+    print(f"Parameters for 'script_upload': {params}")
+
+    resp2, _ = zmq_single_request("script_upload", params=params)
+    assert resp2["success"] is True, pprint.pformat(resp2)
+    assert resp2["msg"] == ""
+    assert resp2["task_uid"]
+    task_uid = resp2["task_uid"]
     assert isinstance(task_uid, str)
-    ttime.sleep(1)
+
+    status, _ = zmq_single_request("status")
+    assert status["task_results_uid"] == task_results_uid
+    assert status["plans_allowed_uid"] == plans_allowed_uid
+    assert status["devices_allowed_uid"] == devices_allowed_uid
+    assert status["manager_state"] == "idle" if run_in_background else "executing_task"
+
+    resp3, _ = zmq_single_request("task_load_result", params={"task_uid": task_uid})
+    assert resp3["success"] is True
+    assert resp3["msg"] == ""
+    assert resp3["task_uid"] == task_uid
+    assert resp3["status"] == "running"
+    result = resp3["result"]
+    assert isinstance(result, dict)
+    assert isinstance(result["time_start"], float)
+    assert result["task_uid"] == task_uid
+    assert result["run_in_background"] is run_in_background
+
+    ttime.sleep(2)
+
+    status, _ = zmq_single_request("status")
+    assert status["task_results_uid"] != task_results_uid
+    assert status["plans_allowed_uid"] != plans_allowed_uid
+    assert status["devices_allowed_uid"] != devices_allowed_uid
+    assert status["manager_state"] == "idle"
+    assert status["worker_environment_state"] == "idle"
+    assert status["items_in_queue"] == 0
+    assert status["items_in_history"] == 0
 
     resp4, _ = zmq_single_request("task_load_result", params={"task_uid": task_uid})
     assert resp4["success"] is True
     assert resp4["msg"] == ""
     assert resp4["task_uid"] == task_uid
     assert resp4["status"] == "completed"
-    assert isinstance(resp4["result"], dict)
+    result = resp4["result"]
+    assert isinstance(result, dict)
+    assert isinstance(result["time_start"], float)
+    assert isinstance(result["time_stop"], float)
+    assert result["task_uid"] == task_uid
+    assert result["success"] is True
+    assert result["msg"] == ""
+    assert result["return_value"] is None
+
+    # Check that the new plan and the new device are in the new list of available plans and devices
+    resp5a, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
+    assert resp5a["success"] is True, resp5a
+    assert "sleep_for_a_few_sec" in resp5a["plans_allowed"]
+
+    resp5b, _ = zmq_single_request("devices_allowed", params={"user_group": _user_group})
+    assert resp5b["success"] is True, resp5b
+    assert "dev_test" in resp5b["devices_allowed"]
+
+    # Add plan to queue
+    _p6 = {"name": "sleep_for_a_few_sec", "kwargs": {"tt": 1.5}, "item_type": "plan"}
+    params6 = {"item": _p6, "user": _user, "user_group": _user_group}
+    resp6, _ = zmq_single_request("queue_item_add", params6)
+    assert resp6["success"] is True, f"resp={resp6}"
+
+    resp7, _ = zmq_single_request("queue_start")
+    assert resp7["success"] is True
+
+    assert wait_for_condition(time=5, condition=condition_manager_idle)
 
     status, _ = zmq_single_request("status")
-    assert status["task_results_uid"] != task_results_uid
-
-    # resp2a, _ = zmq_single_request("status")
-    # assert resp2a["items_in_queue"] == 1
-    # assert resp2a["items_in_history"] == 0
-    # assert resp2a["worker_environment_state"] == "idle"
-
-    # # Execute a plan
-    # params3 = {"item": _plan3, "user": _user, "user_group": _user_group}
-    # resp3, _ = zmq_single_request("queue_item_execute", params3)
-    # assert resp3["success"] is True, f"resp={resp3}"
-    # assert resp3["msg"] == ""
-    # assert resp3["qsize"] == 1
-    # assert resp3["item"]["name"] == _plan3["name"]
-
-    # ttime.sleep(1)
-    # status, _ = zmq_single_request("status")
-    # assert status["items_in_queue"] == 1
-    # assert status["items_in_history"] == 0
-    # assert status["worker_environment_state"] == "executing_plan"
-
-    # assert wait_for_condition(time=30, condition=condition_manager_idle)
-
-    # # Execute an instruction (STOP instruction - nothing will be done)
-    # params3a = {"item": _instruction_stop, "user": _user, "user_group": _user_group}
-    # resp3a, _ = zmq_single_request("queue_item_execute", params3a)
-    # assert resp3a["success"] is True, f"resp={resp3a}"
-    # assert resp3a["msg"] == ""
-    # assert resp3a["qsize"] == 1
-    # assert resp3a["item"]["name"] == _instruction_stop["name"]
-
-    # assert wait_for_condition(time=5, condition=condition_manager_idle)
-
-    # resp3b, _ = zmq_single_request("status")
-    # assert resp3b["items_in_queue"] == 1
-    # assert resp3b["items_in_history"] == 1
-    # assert resp3b["worker_environment_state"] == "idle"
-
-    # resp4, _ = zmq_single_request("queue_start")
-    # assert resp4["success"] is True
-
-    # assert wait_for_condition(time=5, condition=condition_manager_idle)
-
-    # resp4a, _ = zmq_single_request("status")
-    # assert resp4a["items_in_queue"] == 0
-    # assert resp4a["items_in_history"] == 2
-
-    # history, _ = zmq_single_request("history_get")
-    # h_items = history["items"]
-    # assert len(h_items) == 2, pprint.pformat(h_items)
-    # assert h_items[0]["name"] == _plan3["name"]
-    # assert h_items[1]["name"] == _plan1["name"]
+    assert status["items_in_queue"] == 0
+    assert status["items_in_history"] == 1
 
     # Close the environment
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)
-
-    # assert False
 
 
 # =======================================================================================

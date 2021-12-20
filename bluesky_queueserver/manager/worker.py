@@ -97,6 +97,7 @@ class RunEngineWorker(Process):
         self._env_state = EState.CLOSED
         self._running_plan_info = None
         self._running_plan_completed = False
+        self._running_task_uid = None  # UID of the running foreground task (if running a task)
 
         # Report (dict) generated after execution of a command. The report can be downloaded
         #   by RE Manager.
@@ -428,6 +429,7 @@ class RunEngineWorker(Process):
         Returns the state information of RE Worker environment.
         """
         item_uid = self._running_plan_info["item_uid"] if self._running_plan_info else None
+        task_uid = self._running_task_uid
         plan_completed = self._running_plan_completed
         # TODO: replace RE._state with RE.state property in the worker code (improve code style).
         re_state = str(self._RE._state) if self._RE else "null"
@@ -451,6 +453,7 @@ class RunEngineWorker(Process):
             "environment_state": env_state_str,
             "run_list_updated": run_list_updated,
             "plans_and_devices_list_updated": plans_and_devices_list_updated,
+            "running_task_uid": task_uid,
             "completed_tasks_available": completed_tasks_available,
         }
         return msg_out
@@ -776,6 +779,7 @@ class RunEngineWorker(Process):
                     finally:
                         if not run_in_background:
                             self._env_state = EState.IDLE
+                            self._running_task_uid = None
 
                     with self._completed_tasks_lock:
                         task_res = {
@@ -796,6 +800,7 @@ class RunEngineWorker(Process):
 
             if not run_in_background:
                 self._env_state = EState.EXECUTING_TASK
+                self._running_task_uid = task_uid
 
             th.start()
 

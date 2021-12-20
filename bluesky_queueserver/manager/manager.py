@@ -45,6 +45,7 @@ class MState(enum.Enum):
     CREATING_ENVIRONMENT = "creating_environment"
     STARTING_QUEUE = "starting_queue"  # Starting the first plan of the queue
     EXECUTING_QUEUE = "executing_queue"
+    EXECUTING_TASK = "executing_task"
     CLOSING_ENVIRONMENT = "closing_environment"
     DESTROYING_ENVIRONMENT = "destroying_environment"
 
@@ -145,6 +146,7 @@ class RunEngineManager(Process):
         self._allowed_plans_uid = _generate_uid()
         self._allowed_devices_uid = _generate_uid()
 
+        self._running_task_uid = None  # UID of currently running foreground task (if any)
         self._task_results = None  # TaskResults(), uses threading.Lock
 
     async def _heartbeat_generator(self):
@@ -269,6 +271,8 @@ class RunEngineManager(Process):
                 raise RuntimeError("Manager is already in the process of closing the RE Worker environment.")
             elif self._manager_state in (MState.EXECUTING_QUEUE, MState.STARTING_QUEUE):
                 raise RuntimeError("Queue execution is in progress.")
+            elif self._manager_state is MState.EXECUTING_TASK:
+                raise RuntimeError("Foreground task execution is in progress.")
             elif self._manager_state != MState.IDLE:
                 raise RuntimeError(f"Manager state is not idle. Current state: {self._manager_state.value}")
             else:
@@ -311,6 +315,8 @@ class RunEngineManager(Process):
                 await self._task_results.clear_running_tasks()
 
         self._manager_state = MState.IDLE
+        self._running_task_uid = None
+
         return success, err_msg
 
     async def _kill_re_worker(self):
@@ -356,6 +362,8 @@ class RunEngineManager(Process):
             logger.error(err_msg)
         else:
             await self._task_results.clear_running_tasks()
+
+        self._running_task_uid = None
 
         return success, err_msg
 
@@ -549,6 +557,11 @@ class RunEngineManager(Process):
 
                 task_uid = task_res["task_uid"]
                 await self._task_results.add_completed_task(task_uid=task_uid, payload=task_res)
+
+                if (self._manager_state == MState.EXECUTING_TASK) and (task_uid == self._running_task_uid):
+                    self._manager_state = MState.IDLE
+                    self._running_task_uid = None
+
                 logger.debug("Loaded the results for task '%s': %s", task_uid, pprint.pformat(task_results))
 
     async def _start_plan(self):
@@ -790,9 +803,21 @@ class RunEngineManager(Process):
                 f"Current state: '{self._manager_state.value}'",
             )
         else:
-            success, err_msg, task_uid = await self._worker_command_load_script(
-                script=script, update_re=update_re, run_in_background=run_in_background
-            )
+            try:
+                if not run_in_background:
+                    self._manager_state = MState.EXECUTING_TASK
+                success, err_msg, task_uid = await self._worker_command_load_script(
+                    script=script, update_re=update_re, run_in_background=run_in_background
+                )
+                if not run_in_background:
+                    self._running_task_uid = task_uid
+            except Exception:
+                success = False
+                raise
+            finally:
+                if not success and not run_in_background:
+                    self._manager_state = MState.IDLE
+
         return success, err_msg, task_uid
 
     def _generate_lists_of_allowed_plans_and_devices(self, *, always_update_uids=False):
@@ -2367,10 +2392,14 @@ class RunEngineManager(Process):
             self._worker_state_info, err_msg = await self._worker_request_state()
             if self._worker_state_info:
                 item_uid_running = self._worker_state_info["running_item_uid"]
+                running_task_uid = self._worker_state_info["running_task_uid"]
                 re_state = self._worker_state_info["re_state"]
                 re_report_available = self._worker_state_info["re_report_available"]
                 re_deferred_pause_requested = self._worker_state_info["re_deferred_pause_requested"]
-                if item_uid_running and (re_report_available or (re_state != "idle")):
+                if (re_state == "executing_task") and running_task_uid:
+                    self._manager_state = MState.EXECUTING_TASK
+                    self._running_task_uid = running_task_uid
+                elif item_uid_running and (re_report_available or (re_state != "idle")):
                     # If 're_state' is 'idle', then consider the queue as running only if
                     #   there is unprocessed report. If report was processed, then assume that
                     #   the queue is not running.

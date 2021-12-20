@@ -276,6 +276,32 @@ def wait_for_condition(time, condition):
     return False
 
 
+def wait_for_task_result(time, task_uid):
+    """
+    Wait for the results of the task defined by ``task_uid``. Raises ``TimeoutError`` if
+    timeout ``time`` is exceeded while waiting for the task result. Returns the task result
+    of the task only if it was completed.
+    """
+    dt = 0.5  # Period for checking if the task is available
+    time_stop = ttime.time() + time
+    while ttime.time() < time_stop:
+        ttime.sleep(dt / 2)
+        try:
+            resp, _ = zmq_secure_request("task_load_result", params={"task_uid": task_uid})
+
+            assert resp["success"] is True, f"Request for task result failed: {resp['msg']}"
+            assert resp["task_uid"] == task_uid
+
+            if resp["status"] == "completed":
+                return resp["result"]
+
+        except TimeoutError:
+            pass
+        ttime.sleep(dt / 2)
+
+    raise TimeoutError(f"Timeout occurred while waiting for results of the task {task_uid!r}")
+
+
 def clear_redis_pool():
     # Remove all Redis entries.
     pq = PlanQueueOperations()

@@ -1593,6 +1593,78 @@ def test_zmq_api_script_upload_2(re_manager, scripts, updated_devs, updated_plan
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
+_script_to_upload_3a = """
+import time as tt
+def sleep_for_a_few_sec_1(tt=1):
+    yield from bps.sleep(tt)
+
+tt.sleep(2)  # Emulate a script that runs for 2 seconds
+
+def sleep_for_a_few_sec_2(tt=1):
+    yield from bps.sleep(tt)
+"""
+
+_script_to_upload_3b = """
+# Trivial plan
+def sleep_for_a_few_sec_3(tt=1):
+    yield from bps.sleep(tt)
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("use_bg_task", [False, True])
+# fmt: on
+def test_zmq_api_script_upload_3(re_manager, use_bg_task):  # noqa: F811
+    """
+    'script_upload' API: Load two scripts in parallel. Script #1 takes 2 seconds to
+    load is foreground or background task. Script #2 is loaded as a background task
+    while Script #1 is being loaded. No race conditions are expected while two
+    scripts are running. Check that all loaded plans are in the list of allowed plans.
+    """
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    # Task 1
+    resp2a, _ = zmq_single_request(
+        "script_upload",
+        params={"script": _script_to_upload_3a, "run_in_background": use_bg_task},
+    )
+    assert resp2a["success"] is True, pprint.pformat(resp2a)
+    task_uid_1 = resp2a["task_uid"]
+
+    ttime.sleep(1)
+
+    # Task 2
+    resp2b, _ = zmq_single_request(
+        "script_upload",
+        params={"script": _script_to_upload_3b, "run_in_background": True},
+    )
+    assert resp2b["success"] is True, pprint.pformat(resp2a)
+    task_uid_2 = resp2b["task_uid"]
+
+    # Wait for each task to complete
+    result_1 = wait_for_task_result(10, task_uid_1)
+    result_2 = wait_for_task_result(10, task_uid_2)
+
+    # Make sure that execution of Task 2 is completed while Task1 is running
+    assert result_1["time_start"] < result_2["time_start"]
+    assert result_1["time_stop"] > result_2["time_stop"]
+
+    resp5a, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
+    assert resp5a["success"] is True, resp5a
+    plans_allowed = resp5a["plans_allowed"]
+
+    # Check that all plans are imported
+    plan_names = ["sleep_for_a_few_sec_1", "sleep_for_a_few_sec_2", "sleep_for_a_few_sec_3"]
+    for plan_name in plan_names:
+        assert plan_name in plans_allowed
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
 # =======================================================================================
 #                      Method 'plans_allowed', 'devices_allowed'
 

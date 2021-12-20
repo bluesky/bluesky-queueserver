@@ -394,8 +394,19 @@ class RunEngineWorker(Process):
         )
 
         if update_re:
-            self._RE = self._re_namespace.get("RE", self._RE)
-            self._db = self._re_namespace.get("db", self._db)
+            if ("RE" in self._re_namespace) and (self._RE != self._re_namespace["RE"]):
+                self._RE = self._re_namespace["RE"]
+
+                from .plan_monitoring import CallbackRegisterRun
+
+                run_reg_cb = CallbackRegisterRun(run_list=self._active_run_list)
+                self._RE.subscribe(run_reg_cb)
+
+                logger.info("Run Engine instance ('RE') was replaced while executing the uploaded script.")
+
+            if ("db" in self._re_namespace) and (self._db != self._re_namespace["db"]):
+                self._db = self._re_namespace["db"]
+                logger.info("Data Broker instance ('db') was replaced while executing the uploaded script.")
 
         epd = existing_plans_and_devices_from_nspace(nspace=self._re_namespace)
         existing_plans, existing_devices, plans_in_nspace, devices_in_nspace = epd

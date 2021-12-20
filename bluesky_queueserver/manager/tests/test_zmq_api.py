@@ -1385,7 +1385,7 @@ def sleep_for_a_few_sec(tt=1):
 # fmt: on
 def test_zmq_api_script_upload_1(re_manager, run_in_background):  # noqa: F811
     """
-    Basic test for ``script_upload`` API.
+    Basic test for ``script_upload`` API: detailed checks of all flag at each transition.
     """
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True

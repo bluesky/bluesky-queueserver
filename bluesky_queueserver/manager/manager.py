@@ -823,12 +823,13 @@ class RunEngineManager(Process):
         Success does not mean that the script is successfully loaded.
         """
         if not self._environment_exists:
-            success, err_msg = False, "RE Worker environment is not opened"
+            success, err_msg, task_uid = False, "RE Worker environment is not opened", None
         elif not run_in_background and (self._manager_state != MState.IDLE):
-            success, err_msg = (
+            success, err_msg, task_uid = (
                 False,
                 "Failed to start the task: RE Manager must be in idle state. "
                 f"Current state: '{self._manager_state.value}'",
+                None,
             )
         else:
             try:

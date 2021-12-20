@@ -29,6 +29,7 @@ from .common import (
     condition_environment_created,
     condition_queue_processing_finished,
     condition_manager_paused,
+    wait_for_task_result,
     get_queue_state,
     condition_environment_closed,
     condition_manager_idle,
@@ -1368,7 +1369,7 @@ def test_zmq_api_queue_item_update_4_fail(re_manager):  # noqa F811
 #                              Method 'script_upload'
 
 
-_script_to_upload_1 = r"""
+_script_to_upload_1 = """
 # Another device
 from ophyd import Device
 
@@ -1495,6 +1496,98 @@ def test_zmq_api_script_upload_1(re_manager, run_in_background):  # noqa: F811
     assert status["items_in_history"] == 1
 
     # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+_script_to_upload_2a = """
+# Device
+from ophyd import Device
+dev_test = Device(name="dev_test")
+"""
+
+_script_to_upload_2b = """
+# Trivial plan
+def sleep_for_a_few_sec(tt=1):
+    yield from bps.sleep(tt)
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("scripts, updated_devs, updated_plans", [
+    ([_script_to_upload_2a], ["dev_test"], []),
+    ([_script_to_upload_2b], [], ["sleep_for_a_few_sec"]),
+    ([_script_to_upload_2a, _script_to_upload_2b], ["dev_test"], ["sleep_for_a_few_sec"]),
+])
+# fmt: on
+def test_zmq_api_script_upload_2(re_manager, scripts, updated_devs, updated_plans):  # noqa: F811
+    """
+    'script_upload' API: load scripts that contain only devices and only plans separately
+    or both. Make sure that the plan and the device are included in the lists of existing
+    and allowed plans and devices when necessary. Check that list UIDs are properly updated.
+    """
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    status, _ = zmq_single_request("status")
+    task_results_uid = status["task_results_uid"]
+    plans_allowed_uid = status["plans_allowed_uid"]
+    devices_allowed_uid = status["devices_allowed_uid"]
+    plans_existing_uid = status["plans_existing_uid"]
+    devices_existing_uid = status["devices_existing_uid"]
+
+    for script in scripts:
+        resp2, _ = zmq_single_request("script_upload", params={"script": script})
+        assert resp2["success"] is True, pprint.pformat(resp2)
+        assert resp2["msg"] == ""
+        task_uid = resp2["task_uid"]
+
+        result = wait_for_task_result(10, task_uid)
+        assert result["return_value"] is None
+
+    status, _ = zmq_single_request("status")
+    assert status["task_results_uid"] != task_results_uid
+
+    if updated_plans:
+        assert status["plans_allowed_uid"] != plans_allowed_uid
+        assert status["plans_existing_uid"] != plans_existing_uid
+    else:
+        assert status["plans_allowed_uid"] == plans_allowed_uid
+        assert status["plans_existing_uid"] == plans_existing_uid
+
+    if updated_devs:
+        assert status["devices_allowed_uid"] != devices_allowed_uid
+        assert status["devices_existing_uid"] != devices_existing_uid
+    else:
+        assert status["devices_allowed_uid"] == devices_allowed_uid
+        assert status["devices_existing_uid"] == devices_existing_uid
+
+    resp5a, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
+    assert resp5a["success"] is True, resp5a
+    plans_allowed = resp5a["plans_allowed"]
+
+    resp5b, _ = zmq_single_request("devices_allowed", params={"user_group": _user_group})
+    assert resp5b["success"] is True, resp5b
+    devices_allowed = resp5b["devices_allowed"]
+
+    resp5c, _ = zmq_single_request("plans_existing")
+    assert resp5c["success"] is True, resp5c
+    plans_existing = resp5c["plans_existing"]
+
+    resp5d, _ = zmq_single_request("devices_existing")
+    assert resp5d["success"] is True, resp5d
+    devices_existing = resp5d["devices_existing"]
+
+    for plan_name in updated_plans:
+        assert plan_name in plans_existing
+        assert plan_name in plans_allowed
+
+    for dev_name in updated_devs:
+        assert dev_name in devices_existing
+        assert dev_name in devices_allowed
+
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)

@@ -282,7 +282,7 @@ def wait_for_task_result(time, task_uid):
     timeout ``time`` is exceeded while waiting for the task result. Returns the task result
     of the task only if it was completed.
     """
-    dt = 0.5  # Period for checking if the task is available
+    dt = 0.2  # Period for checking if the task is available
     time_stop = ttime.time() + time
     while ttime.time() < time_stop:
         ttime.sleep(dt / 2)

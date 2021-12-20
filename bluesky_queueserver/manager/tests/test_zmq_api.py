@@ -1514,11 +1514,13 @@ def test_zmq_api_plans_allowed_and_devices_allowed_1(re_manager):  # noqa F811
     assert resp1["msg"] == ""
     assert isinstance(resp1["plans_allowed"], dict)
     assert len(resp1["plans_allowed"]) > 0
+    assert isinstance(resp1["plans_allowed_uid"], str)
     resp2, _ = zmq_single_request("devices_allowed", params)
     assert resp2["success"] is True
     assert resp2["msg"] == ""
     assert isinstance(resp2["devices_allowed"], dict)
     assert len(resp2["devices_allowed"]) > 0
+    assert isinstance(resp2["devices_allowed_uid"], str)
 
 
 def test_zmq_api_plans_allowed_and_devices_allowed_2(re_manager):  # noqa F811
@@ -1569,11 +1571,54 @@ def test_zmq_api_plans_allowed_and_devices_allowed_3_fail(re_manager, params, me
     assert message in resp1["msg"]
     assert isinstance(resp1["plans_allowed"], dict)
     assert len(resp1["plans_allowed"]) == 0
+    assert resp1["plans_allowed_uid"] is None
     resp2, _ = zmq_single_request("devices_allowed", params)
     assert resp1["success"] is False
     assert message in resp1["msg"]
     assert isinstance(resp2["devices_allowed"], dict)
     assert len(resp2["devices_allowed"]) == 0
+    assert resp2["devices_allowed_uid"] is None
+
+
+# =======================================================================================
+#                      Method 'plans_existing', 'devices_existing'
+
+
+def test_zmq_api_plans_existing_and_devices_existing_1(re_manager):  # noqa F811
+    """
+    Basic calls to 'plans_existing', 'devices_existing' methods.
+    """
+    resp1, _ = zmq_single_request("plans_existing")
+    assert resp1["success"] is True
+    assert resp1["msg"] == ""
+    assert isinstance(resp1["plans_existing"], dict)
+    assert len(resp1["plans_existing"]) > 0
+    assert isinstance(resp1["plans_existing_uid"], str)
+    resp2, _ = zmq_single_request("devices_existing")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+    assert isinstance(resp2["devices_existing"], dict)
+    assert len(resp2["devices_existing"]) > 0
+    assert isinstance(resp2["devices_existing_uid"], str)
+
+
+def test_zmq_api_plans_existing_and_devices_existing_2_fail(re_manager):  # noqa F811
+    """
+    Test that 'plans_existing', 'devices_existing' methods fail if extra parameters are passed.
+    """
+    params = {"user_group": _user_group}  # 'user_group' is not supported by the methods
+
+    resp1, _ = zmq_single_request("plans_existing", params=params)
+    assert resp1["success"] is False
+    assert "API request contains unsupported parameters: 'user_group'." in resp1["msg"]
+    assert resp1["plans_existing"] == {}
+    assert resp1["plans_existing_uid"] is None
+
+    resp2, _ = zmq_single_request("devices_existing", params=params)
+    assert resp2["success"] is False
+    assert "API request contains unsupported parameters: 'user_group'." in resp2["msg"]
+    assert resp2["devices_existing"] == {}
+    assert resp2["devices_existing_uid"] is None
 
 
 # =======================================================================================

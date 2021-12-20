@@ -1234,17 +1234,17 @@ class RunEngineManager(Process):
             if user_group not in self._allowed_plans:
                 raise Exception(f"Unknown user group: '{user_group}'")
 
-            plans_allowed = self._allowed_plans[user_group]
+            plans_allowed, plans_allowed_uid = self._allowed_plans[user_group], self._allowed_plans_uid
             success, msg = True, ""
         except Exception as ex:
-            plans_allowed = {}
+            plans_allowed, plans_allowed_uid = {}, None
             success, msg = False, str(ex)
 
         return {
             "success": success,
             "msg": msg,
             "plans_allowed": plans_allowed,
-            "plans_allowed_uid": self._allowed_plans_uid,
+            "plans_allowed_uid": plans_allowed_uid,
         }
 
     async def _plans_existing_handler(self, request):
@@ -1257,17 +1257,17 @@ class RunEngineManager(Process):
             supported_param_names = []
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
-            plans_existing = self._existing_plans
+            plans_existing, plans_existing_uid = self._existing_plans, self._existing_plans_uid
             success, msg = True, ""
         except Exception as ex:
-            plans_existing = {}
+            plans_existing, plans_existing_uid = {}, None
             success, msg = False, str(ex)
 
         return {
             "success": success,
             "msg": msg,
             "plans_existing": plans_existing,
-            "plans_existing_uid": self._existing_plans_uid,
+            "plans_existing_uid": plans_existing_uid,
         }
 
     async def _devices_allowed_handler(self, request):
@@ -1288,17 +1288,17 @@ class RunEngineManager(Process):
             if user_group not in self._allowed_devices:
                 raise Exception(f"Unknown user group: '{user_group}'")
 
-            devices_allowed = self._allowed_devices[user_group]
+            devices_allowed, devices_allowed_uid = self._allowed_devices[user_group], self._allowed_devices_uid
             success, msg = True, ""
         except Exception as ex:
-            devices_allowed = {}
+            devices_allowed, devices_allowed_uid = {}, None
             success, msg = False, str(ex)
 
         return {
             "success": success,
             "msg": msg,
             "devices_allowed": devices_allowed,
-            "devices_allowed_uid": self._allowed_devices_uid,
+            "devices_allowed_uid": devices_allowed_uid,
         }
 
     async def _devices_existing_handler(self, request):
@@ -1312,16 +1312,17 @@ class RunEngineManager(Process):
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
             devices_existing = self._existing_devices
+            devices_existing_uid = self._existing_devices_uid
             success, msg = True, ""
         except Exception as ex:
-            devices_existing = {}
+            devices_existing, devices_existing_uid = {}, None
             success, msg = False, str(ex)
 
         return {
             "success": success,
             "msg": msg,
             "devices_existing": devices_existing,
-            "devices_existing_uid": self._existing_devices_uid,
+            "devices_existing_uid": devices_existing_uid,
         }
 
     async def _permissions_reload_handler(self, request):

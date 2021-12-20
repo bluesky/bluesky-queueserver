@@ -142,6 +142,8 @@ class RunEngineManager(Process):
         self._config_dict = config or {}
         self._user_group_permissions = {}
         self._existing_plans, self._existing_devices = {}, {}
+        self._existing_plans_uid = _generate_uid()
+        self._existing_devices_uid = _generate_uid()
         self._allowed_plans, self._allowed_devices = {}, {}
         self._allowed_plans_uid = _generate_uid()
         self._allowed_devices_uid = _generate_uid()
@@ -512,6 +514,29 @@ class RunEngineManager(Process):
             self._re_run_list = run_list["run_list"]
             self._re_run_list_uid = _generate_uid()
 
+    def _set_existing_plans_and_devices(self, *, existing_plans, existing_devices, always_update_uids=False):
+        """
+        Sets the lists of existing plans and devices and updates UIDs if necessary.
+        """
+        # First update UIDs if necessary.
+        try:
+            if always_update_uids or (existing_plans != self._existing_plans):
+                self._existing_plans_uid = _generate_uid()
+        except Exception as ex:
+            logger.warning("Failed to compare lists of existing plans: %s", str(ex))
+            self._existing_plans_uid = _generate_uid()
+
+        try:
+            if always_update_uids or (existing_devices != self._existing_devices):
+                self._existing_devices_uid = _generate_uid()
+        except Exception as ex:
+            logger.warning("Failed to compare lists of existing devices: %s", str(ex))
+            self._existing_devices_uid = _generate_uid()
+
+        # Now update the references
+        self._existing_plans = existing_plans
+        self._existing_devices = existing_devices
+
     async def _load_existing_plans_and_devices_from_worker(self, update_user_group_permissions=False):
         """
         Download the updated list of existing plans and devices from the worker environment.
@@ -526,8 +551,11 @@ class RunEngineManager(Process):
                 f"Failed to download the list of existing plans and devices from the worker process: {err_msg}."
             )
         else:
-            self._existing_plans = plan_and_devices_list["existing_plans"]
-            self._existing_devices = plan_and_devices_list["existing_devices"]
+            self._set_existing_plans_and_devices(
+                existing_plans=plan_and_devices_list["existing_plans"],
+                existing_devices=plan_and_devices_list["existing_devices"],
+            )
+
             if update_user_group_permissions:
                 self._user_group_permissions = plan_and_devices_list["user_group_permissions"]
 
@@ -867,7 +895,12 @@ class RunEngineManager(Process):
         path_pd = self._config_dict["existing_plans_and_devices_path"]
         try:
             if reload_plans_devices:
-                self._existing_plans, self._existing_devices = load_existing_plans_and_devices(path_pd)
+                existing_plans, existing_devices = load_existing_plans_and_devices(path_pd)
+                self._set_existing_plans_and_devices(
+                    existing_plans=existing_plans,
+                    existing_devices=existing_devices,
+                    always_update_uids=True,
+                )
             self._generate_lists_of_allowed_plans_and_devices(always_update_uids=True)
         except Exception as ex:
             raise Exception(
@@ -1147,6 +1180,8 @@ class RunEngineManager(Process):
         run_list_uid = self._re_run_list_uid
         plan_queue_uid = self._plan_queue.plan_queue_uid
         plan_history_uid = self._plan_queue.plan_history_uid
+        devices_existing_uid = self._existing_devices_uid
+        plans_existing_uid = self._existing_plans_uid
         devices_allowed_uid = self._allowed_devices_uid
         plans_allowed_uid = self._allowed_plans_uid
         plan_queue_mode = self._plan_queue.plan_queue_mode
@@ -1171,6 +1206,8 @@ class RunEngineManager(Process):
             "run_list_uid": run_list_uid,
             "plan_queue_uid": plan_queue_uid,
             "plan_history_uid": plan_history_uid,
+            "devices_existing_uid": devices_existing_uid,
+            "plans_existing_uid": plans_existing_uid,
             "devices_allowed_uid": devices_allowed_uid,
             "plans_allowed_uid": plans_allowed_uid,
             "plan_queue_mode": plan_queue_mode,
@@ -1210,6 +1247,29 @@ class RunEngineManager(Process):
             "plans_allowed_uid": self._allowed_plans_uid,
         }
 
+    async def _plans_existing_handler(self, request):
+        """
+        Returns the list of existing plans.
+        """
+        logger.info("Returning the list of existing plans ...")
+
+        try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            plans_existing = self._existing_plans
+            success, msg = True, ""
+        except Exception as ex:
+            plans_existing = {}
+            success, msg = False, str(ex)
+
+        return {
+            "success": success,
+            "msg": msg,
+            "plans_existing": plans_existing,
+            "plans_existing_uid": self._existing_plans_uid,
+        }
+
     async def _devices_allowed_handler(self, request):
         """
         Returns the list of allowed devices.
@@ -1239,6 +1299,29 @@ class RunEngineManager(Process):
             "msg": msg,
             "devices_allowed": devices_allowed,
             "devices_allowed_uid": self._allowed_devices_uid,
+        }
+
+    async def _devices_existing_handler(self, request):
+        """
+        Returns the list of existing devices.
+        """
+        logger.info("Returning the list of existing devices ...")
+
+        try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            devices_existing = self._existing_devices
+            success, msg = True, ""
+        except Exception as ex:
+            devices_existing = {}
+            success, msg = False, str(ex)
+
+        return {
+            "success": success,
+            "msg": msg,
+            "devices_existing": devices_existing,
+            "devices_existing_uid": self._existing_devices_uid,
         }
 
     async def _permissions_reload_handler(self, request):
@@ -2287,7 +2370,9 @@ class RunEngineManager(Process):
             "status": "_status_handler",
             "queue_get": "_queue_get_handler",
             "plans_allowed": "_plans_allowed_handler",
+            "plans_existing": "_plans_existing_handler",
             "devices_allowed": "_devices_allowed_handler",
+            "devices_existing": "_devices_existing_handler",
             "permissions_reload": "_permissions_reload_handler",
             "history_get": "_history_get_handler",
             "history_clear": "_history_clear_handler",
@@ -2470,7 +2555,7 @@ class RunEngineManager(Process):
                 """
                 log_msg_out = copy.deepcopy(msg_out)
                 # Do not print large dicts in the log: replace values with "..."
-                large_dicts = ("plans_allowed", "devices_allowed")
+                large_dicts = ("plans_allowed", "plans_existing", "devices_allowed", "devices_existing")
                 for dict_name in large_dicts:
                     if dict_name in log_msg_out:
                         d = log_msg_out[dict_name]

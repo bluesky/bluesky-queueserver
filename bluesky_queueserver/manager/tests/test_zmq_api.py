@@ -1395,6 +1395,8 @@ def test_zmq_api_script_upload_1(re_manager, run_in_background):  # noqa: F811
     task_results_uid = status["task_results_uid"]
     plans_allowed_uid = status["plans_allowed_uid"]
     devices_allowed_uid = status["devices_allowed_uid"]
+    plans_existing_uid = status["plans_existing_uid"]
+    devices_existing_uid = status["devices_existing_uid"]
     assert isinstance(task_results_uid, str)
 
     # Make the plan sleep for 1 second (emulates a script that takes 1s to load)
@@ -1418,6 +1420,8 @@ def test_zmq_api_script_upload_1(re_manager, run_in_background):  # noqa: F811
     assert status["task_results_uid"] == task_results_uid
     assert status["plans_allowed_uid"] == plans_allowed_uid
     assert status["devices_allowed_uid"] == devices_allowed_uid
+    assert status["plans_existing_uid"] == plans_existing_uid
+    assert status["devices_existing_uid"] == devices_existing_uid
     assert status["manager_state"] == "idle" if run_in_background else "executing_task"
 
     resp3, _ = zmq_single_request("task_load_result", params={"task_uid": task_uid})
@@ -1437,6 +1441,8 @@ def test_zmq_api_script_upload_1(re_manager, run_in_background):  # noqa: F811
     assert status["task_results_uid"] != task_results_uid
     assert status["plans_allowed_uid"] != plans_allowed_uid
     assert status["devices_allowed_uid"] != devices_allowed_uid
+    assert status["plans_existing_uid"] != plans_existing_uid
+    assert status["devices_existing_uid"] != devices_existing_uid
     assert status["manager_state"] == "idle"
     assert status["worker_environment_state"] == "idle"
     assert status["items_in_queue"] == 0
@@ -1464,6 +1470,14 @@ def test_zmq_api_script_upload_1(re_manager, run_in_background):  # noqa: F811
     resp5b, _ = zmq_single_request("devices_allowed", params={"user_group": _user_group})
     assert resp5b["success"] is True, resp5b
     assert "dev_test" in resp5b["devices_allowed"]
+
+    resp5c, _ = zmq_single_request("plans_existing")
+    assert resp5c["success"] is True, resp5c
+    assert "sleep_for_a_few_sec" in resp5c["plans_existing"]
+
+    resp5d, _ = zmq_single_request("devices_existing")
+    assert resp5d["success"] is True, resp5d
+    assert "dev_test" in resp5d["devices_existing"]
 
     # Add plan to queue
     _p6 = {"name": "sleep_for_a_few_sec", "kwargs": {"tt": 1.5}, "item_type": "plan"}

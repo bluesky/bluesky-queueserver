@@ -1283,7 +1283,7 @@ existing_plans:
         value: 1
       name: detectors
     - description: "For one dimension, ``motor, start, stop``.\nIn general:\n\n..\
-        \ code-block:: python\n\n    motor1, start1, stop1,\n    motor2, start2, start2,\n\
+        \ code-block:: python\n\n    motor1, start1, stop1,\n    motor2, start2, stop2,\n\
         \    ...,\n    motorN, startN, stopN\n\nMotors can be any 'settable' object\
         \ (motor, temp controller, etc.)"
       kind:

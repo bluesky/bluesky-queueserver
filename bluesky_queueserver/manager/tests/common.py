@@ -20,7 +20,7 @@ import logging
 logger = logging.Logger(__name__)
 
 
-def copy_default_profile_collection(tmp_path, *, copy_yaml=True):
+def copy_default_profile_collection(tmp_path, *, copy_py=True, copy_yaml=True):
     """
     Copy default profile collections (only .py files) to temporary directory.
     Returns the new temporary directory.
@@ -33,7 +33,9 @@ def copy_default_profile_collection(tmp_path, *, copy_yaml=True):
     os.makedirs(new_pc_path, exist_ok=True)
 
     # Copy simulated profile collection (only .py files)
-    patterns = ["*.py", "*.ipy"]
+    patterns = []
+    if copy_py:
+        patterns.extend(["*.py", "*.ipy"])
     if copy_yaml:
         patterns.append("*.yaml")
     for pattern in patterns:

@@ -1674,21 +1674,14 @@ def test_zmq_api_script_upload_3(re_manager, use_bg_task):  # noqa: F811
 
 def test_zmq_api_script_upload_4(tmp_path, re_manager_cmd):  # noqa: F811
     """
-    'script_upload' API:
+    'script_upload' API: Open the environent with 'empty' startup file and then
+    load full collection of built-in startup files using the API. Compare the lists
+    of existing plans and devices with the lists obtained from built-in profile
+    collection. Start a simple 'count' plan and make sure it completes correctly.
     """
-    pc_path = copy_default_profile_collection(tmp_path=tmp_path)
-
-    # Delete all files in the temporary directory except 'user_group_permissions.yaml'
-    files = glob.glob(os.path.join(pc_path, "*"))
-    files_filt = [_ for _ in files if not _.endswith("user_group_permissions.yaml")]
-
-    # Safety check to make sure we are in the right directory. One file should
-    #   be removed from the list.
-    assert len(files_filt) == len(files) - 1
-
-    # Remove the files
-    for fn in files_filt:
-        os.remove(fn)
+    pc_path = copy_default_profile_collection(tmp_path=tmp_path, copy_py=False)
+    os.remove(os.path.join(pc_path, "existing_plans_and_devices.yaml"))
+    # Only 'user_group_permissions.yaml' is left in the directory
 
     # Create an empty startup script
     with open(os.path.join(pc_path, "00-startup.py"), "w"):
@@ -1750,6 +1743,114 @@ def test_zmq_api_script_upload_4(tmp_path, re_manager_cmd):  # noqa: F811
     status, _ = zmq_single_request("status")
     assert status["items_in_queue"] == 0
     assert status["items_in_history"] == 1
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_script_upload_5(tmp_path, re_manager_cmd):  # noqa: F811
+    """
+    'script_upload' API: Check that local imports work.
+    """
+    pc_path = copy_default_profile_collection(tmp_path=tmp_path, copy_py=False)
+    os.remove(os.path.join(pc_path, "existing_plans_and_devices.yaml"))
+    # Only 'user_group_permissions.yaml' is left in the directory
+
+    mod_dir = os.path.join(pc_path, "mod")
+    os.makedirs(os.path.join(pc_path, "mod"))
+
+    # Create an empty startup script
+    with open(os.path.join(pc_path, "00-startup.py"), "w"):
+        pass
+
+    # Create a module
+    mod_fln = os.path.join(mod_dir, "mod_file.py")
+    with open(os.path.join(mod_fln), "w") as f:
+        f.writelines(_script_to_upload_1)
+
+    re_manager_cmd(["--startup-dir", pc_path])
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    # Upload the module that uses local imports
+    script = "from mod.mod_file import *\n"
+    resp2, _ = zmq_single_request("script_upload", params={"script": script})
+    result = wait_for_task_result(10, resp2["task_uid"])
+    assert result["success"] is True, pprint.pformat(result)
+    assert result["msg"] == "", pprint.pformat(result)
+
+    # Check that the plan and the device was imported from the module
+    resp4a, _ = zmq_single_request("plans_existing")
+    assert resp4a["success"] is True, pprint.pformat(resp4a)
+    assert "sleep_for_a_few_sec" in resp4a["plans_existing"]
+    resp4b, _ = zmq_single_request("devices_existing")
+    assert resp4b["success"] is True, pprint.pformat(resp4a)
+    assert "dev_test" in resp4b["devices_existing"]
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+_script_save_instances_re_db = """
+RE_backup = RE
+db_backup = db
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("update_re_param", [False, True])
+@pytest.mark.parametrize("replace_re", [False, True])
+@pytest.mark.parametrize("replace_db", [False, True])
+# fmt: on
+def test_zmq_api_script_upload_6(re_manager_cmd, update_re_param, replace_re, replace_db):  # noqa: F811
+    """
+    'script_upload' API: Test that instances 'RE' and 'db' could be replaced in
+    the RE Worker namespace.
+    """
+
+    # Make sure that the environment contains databroker instance
+    re_manager_cmd(["--databroker-config", "temp"])
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    # Upload script that saves instances of 'RE' and 'db' in the namespace
+    resp2, _ = zmq_single_request("script_upload", params={"script": _script_save_instances_re_db})
+    result = wait_for_task_result(10, resp2["task_uid"])
+    assert result["success"] is True, pprint.pformat(result)
+
+    script_replace_re_and_db = ""
+    if replace_re:
+        script_replace_re_and_db += "from bluesky import RunEngine\nRE = RunEngine()\n"
+    if replace_db:
+        script_replace_re_and_db += 'from databroker import Broker\ndb = Broker.named("temp")\n'
+
+    resp3, _ = zmq_single_request(
+        "script_upload", params={"script": script_replace_re_and_db, "update_re": update_re_param}
+    )
+    result = wait_for_task_result(10, resp3["task_uid"])
+    assert result["success"] is True, pprint.pformat(result)
+
+    # Upload the script the verifies that the environment has new instances of RE and db.
+    #     The script fails to load if the RE or db is not updated properly when required.
+    script_verify_re_and_db = ""
+    if replace_re and update_re_param:
+        script_verify_re_and_db += "assert RE != RE_backup\n"
+    else:
+        script_verify_re_and_db += "assert RE == RE_backup\n"
+    if replace_db and update_re_param:
+        script_verify_re_and_db += "assert db != db_backup\n"
+    else:
+        script_verify_re_and_db += "assert db == db_backup\n"
+
+    resp4, _ = zmq_single_request("script_upload", params={"script": script_verify_re_and_db})
+    result = wait_for_task_result(10, resp4["task_uid"])
+    assert result["success"] is True, pprint.pformat(result)
 
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"

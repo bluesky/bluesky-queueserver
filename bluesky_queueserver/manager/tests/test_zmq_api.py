@@ -6,11 +6,17 @@ import copy
 import pprint
 import re
 import glob
+import json
 
 from bluesky_queueserver.manager.profile_ops import (
     get_default_startup_dir,
     load_allowed_plans_and_devices,
     gen_list_of_plans_and_devices,
+    load_profile_collection,
+    _prepare_devices,
+    _prepare_plans,
+    devices_from_nspace,
+    plans_from_nspace,
 )
 
 from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
@@ -35,6 +41,7 @@ from .common import (
     condition_manager_idle,
     append_code_to_last_startup_file,
     set_qserver_zmq_public_key,
+    copy_default_profile_collection,
     # clear_redis_pool,
 )
 from .common import re_manager, re_manager_pc_copy, re_manager_cmd, db_catalog  # noqa: F401
@@ -1659,6 +1666,90 @@ def test_zmq_api_script_upload_3(re_manager, use_bg_task):  # noqa: F811
     plan_names = ["sleep_for_a_few_sec_1", "sleep_for_a_few_sec_2", "sleep_for_a_few_sec_3"]
     for plan_name in plan_names:
         assert plan_name in plans_allowed
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_script_upload_4(tmp_path, re_manager_cmd):  # noqa: F811
+    """
+    'script_upload' API:
+    """
+    pc_path = copy_default_profile_collection(tmp_path=tmp_path)
+
+    # Delete all files in the temporary directory except 'user_group_permissions.yaml'
+    files = glob.glob(os.path.join(pc_path, "*"))
+    files_filt = [_ for _ in files if not _.endswith("user_group_permissions.yaml")]
+
+    # Safety check to make sure we are in the right directory. One file should
+    #   be removed from the list.
+    assert len(files_filt) == len(files) - 1
+
+    # Remove the files
+    for fn in files_filt:
+        os.remove(fn)
+
+    # Create an empty startup script
+    with open(os.path.join(pc_path, "00-startup.py"), "w"):
+        pass
+
+    re_manager_cmd(["--startup-dir", pc_path])
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    # At this point the lists of allowed plans and devices are expected to be empty.
+    resp2a, _ = zmq_single_request("plans_existing")
+    assert resp2a["success"] is True, pprint.pformat(resp2a)
+    assert resp2a["plans_existing"] == {}
+    resp2b, _ = zmq_single_request("devices_existing")
+    assert resp2b["success"] is True, pprint.pformat(resp2a)
+    assert resp2b["devices_existing"] == {}
+
+    # Now send built-in startup script files one by one over 0MQ
+    default_pc_path = get_default_startup_dir()
+    default_files = glob.glob(os.path.join(default_pc_path, "*.py"))
+    default_files.sort()
+    for fn in default_files:
+        with open(fn, "r") as f:
+            script = f.read()
+            resp3, _ = zmq_single_request("script_upload", params={"script": script})
+            wait_for_task_result(10, resp3["task_uid"])
+
+    # At this point the list of existing plans and devices must be identical to the default
+    nspace = load_profile_collection(default_pc_path)
+    default_devices = _prepare_devices(devices_from_nspace(nspace))
+    default_plans = _prepare_plans(plans_from_nspace(nspace), existing_devices=default_devices)
+    # Converting to JSON and back gets the same representation as we get by downloading the list
+    default_devices = json.loads(json.dumps(default_devices))
+    default_plans = json.loads(json.dumps(default_plans))
+
+    resp4a, _ = zmq_single_request("plans_existing")
+    assert resp4a["success"] is True, pprint.pformat(resp4a)
+    # Keys are easier to compare, so first compare keys
+    assert set(resp4a["plans_existing"].keys()) == set(default_plans.keys())
+    # Now compare the plan descriptions one by one (easier to read error messages)
+    for k in default_plans.keys():
+        assert resp4a["plans_existing"][k] == default_plans[k]
+
+    resp4b, _ = zmq_single_request("devices_existing")
+    assert resp4b["success"] is True, pprint.pformat(resp4a)
+    assert resp4b["devices_existing"] == default_devices
+
+    # Now try to run a simple plan and make sure it works
+    resp5a, _ = zmq_single_request("queue_item_add", {"item": _plan1, "user": _user, "user_group": _user_group})
+    assert resp5a["success"] is True
+
+    resp5b, _ = zmq_single_request("queue_start")
+    assert resp5b["success"] is True
+
+    assert wait_for_condition(20, condition_queue_processing_finished)
+
+    status, _ = zmq_single_request("status")
+    assert status["items_in_queue"] == 0
+    assert status["items_in_history"] == 1
 
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"

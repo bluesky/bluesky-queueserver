@@ -1809,7 +1809,8 @@ db_backup = db
 def test_zmq_api_script_upload_6(re_manager_cmd, update_re_param, replace_re, replace_db):  # noqa: F811
     """
     'script_upload' API: Test that instances 'RE' and 'db' could be replaced in
-    the RE Worker namespace.
+    the RE Worker namespace. The test does not check if references kept internally by RE Worker
+    are updated, but the update happens in the same branches where the namespace is updated.
     """
 
     # Make sure that the environment contains databroker instance
@@ -1854,6 +1855,46 @@ def test_zmq_api_script_upload_6(re_manager_cmd, update_re_param, replace_re, re
 
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_script_upload_7(re_manager):  # noqa: F811
+    """
+    'script_upload' API: Test that instances 'RE' and 'db' could be replaced in
+    the RE Worker namespace. The test does not check if references kept internally by RE Worker
+    are updated, but the update happens in the same branches where the namespace is updated.
+    """
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    # Run the script in foreground
+    long_script = "import time as tt\ntt.sleep(20)\n"
+    resp2, _ = zmq_single_request("script_upload", params={"script": long_script})
+    assert resp2["success"] == True
+
+    # Attempt to close the environment
+    resp3, _ = zmq_single_request("environment_close")
+    assert resp3["success"] is False, f"resp={resp3}"
+
+    ttime.sleep(1)  # Make sure the script is already running
+
+    # Attempt to close the environment
+    resp4, _ = zmq_single_request("environment_close")
+    assert resp4["success"] is False, f"resp={resp4}"
+
+    # Destroy the environment
+    resp5, _ = zmq_single_request("environment_destroy")
+    assert resp5["success"] is True, f"resp={resp5}"
+    assert wait_for_condition(time=10, condition=condition_environment_closed)
+
+    # Open and close the environment to make sure everything works
+    resp6a, _ = zmq_single_request("environment_open")
+    assert resp6a["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    resp6b, _ = zmq_single_request("environment_close")
+    assert resp6b["success"] is True, f"resp={resp6b}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 

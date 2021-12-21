@@ -1860,9 +1860,9 @@ def test_zmq_api_script_upload_6(re_manager_cmd, update_re_param, replace_re, re
 
 def test_zmq_api_script_upload_7(re_manager):  # noqa: F811
     """
-    'script_upload' API: Test that instances 'RE' and 'db' could be replaced in
-    the RE Worker namespace. The test does not check if references kept internally by RE Worker
-    are updated, but the update happens in the same branches where the namespace is updated.
+    'script_upload' API: Check that the environment can be destroyed while a script is
+    being loaded. It could be necessary to destroy the environment to terminate execution
+    of a script (e.g. a script with infinite loop).
     """
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
@@ -1895,6 +1895,60 @@ def test_zmq_api_script_upload_7(re_manager):  # noqa: F811
 
     resp6b, _ = zmq_single_request("environment_close")
     assert resp6b["success"] is True, f"resp={resp6b}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_script_upload_8_fail(re_manager):  # noqa: F811
+    """
+    'script_upload' API: Check if call fails if the environment is not open.
+    """
+    resp2, _ = zmq_single_request("script_upload", params={"script": _script_to_upload_1})
+    assert resp2["success"] == False
+    assert "RE Worker environment is not opened" in resp2["msg"]
+
+
+# fmt: off
+@pytest.mark.parametrize("test_with_plan", [True, False])
+# fmt: on
+def test_zmq_api_script_upload_9_fail(re_manager, test_with_plan):  # noqa: F811
+    """
+    'script_upload' API: Check if script upload request fails if another script or
+    a plan is running.
+    """
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    if test_with_plan:
+        # Now try to run a simple plan and make sure it works
+        resp2a, _ = zmq_single_request("queue_item_add", {"item": _plan3, "user": _user, "user_group": _user_group})
+        assert resp2a["success"] is True
+        resp2b, _ = zmq_single_request("queue_start")
+        assert resp2b["success"] is True
+    else:
+        script = "import time as tt\ntt.sleep(3)\n"
+        resp3, _ = zmq_single_request("script_upload", params={"script": script})
+        assert resp3["success"] == True
+
+    resp4a, _ = zmq_single_request("script_upload", params={"script": _script_to_upload_1})
+    assert resp4a["success"] == False
+    assert "RE Manager must be in idle state" in resp4a["msg"], resp4a["msg"]
+
+    ttime.sleep(1)
+
+    resp4b, _ = zmq_single_request("script_upload", params={"script": _script_to_upload_1})
+    assert resp4b["success"] == False
+    assert "RE Manager must be in idle state" in resp4b["msg"], resp4b["msg"]
+
+    assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+    # Now try again, it should work
+    resp5, _ = zmq_single_request("script_upload", params={"script": _script_to_upload_1})
+    assert resp5["success"] == True
+    wait_for_task_result(time=10, task_uid=resp5["task_uid"])
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 

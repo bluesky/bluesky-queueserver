@@ -1362,7 +1362,7 @@ Returns       **success**: *boolean*
 
               **task_uid**: *str* or *None*
                   Task UID can be used to check status of the task and download results once the task
-                  is completed (see *task_load_results* API).
+                  is completed (see *task_load_result* API).
 ------------  -----------------------------------------------------------------------------------------
 Execution     The method initiates the operation. Monitor *task_results_uid* status field and call
               *task_load_results* API to check for success.
@@ -1371,13 +1371,16 @@ Execution     The method initiates the operation. Monitor *task_results_uid* sta
 
 .. _method_task_load_result:
 
-**'task_load_results'**
-^^^^^^^^^^^^^^^^^^^^^^^
+**'task_load_result'**
+^^^^^^^^^^^^^^^^^^^^^^
 
 ============  =========================================================================================
-Method        **'task_load_results'**
+Method        **'task_load_result'**
 ------------  -----------------------------------------------------------------------------------------
-Description   Load the status and results of task execution.
+Description   Load the status and results of task execution. The completed tasks are stored at
+              the server at least for the period determined by retention time (currently 120 seconds
+              after completion of the task). The expired results could be automatically deleted
+              at any time and the method will return the task status as *'not_found'*.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **task_uid**: *str*
                   Task UID.

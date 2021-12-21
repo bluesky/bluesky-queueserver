@@ -1871,7 +1871,7 @@ def test_zmq_api_script_upload_7(re_manager):  # noqa: F811
     # Run the script in foreground
     long_script = "import time as tt\ntt.sleep(20)\n"
     resp2, _ = zmq_single_request("script_upload", params={"script": long_script})
-    assert resp2["success"] == True
+    assert resp2["success"] is True
 
     # Attempt to close the environment
     resp3, _ = zmq_single_request("environment_close")
@@ -1903,7 +1903,7 @@ def test_zmq_api_script_upload_8_fail(re_manager):  # noqa: F811
     'script_upload' API: Check if call fails if the environment is not open.
     """
     resp2, _ = zmq_single_request("script_upload", params={"script": _script_to_upload_1})
-    assert resp2["success"] == False
+    assert resp2["success"] is False
     assert "RE Worker environment is not opened" in resp2["msg"]
 
 
@@ -1921,30 +1921,32 @@ def test_zmq_api_script_upload_9_fail(re_manager, test_with_plan):  # noqa: F811
 
     if test_with_plan:
         # Now try to run a simple plan and make sure it works
-        resp2a, _ = zmq_single_request("queue_item_add", {"item": _plan3, "user": _user, "user_group": _user_group})
+        resp2a, _ = zmq_single_request(
+            "queue_item_add", {"item": _plan3, "user": _user, "user_group": _user_group}
+        )
         assert resp2a["success"] is True
         resp2b, _ = zmq_single_request("queue_start")
         assert resp2b["success"] is True
     else:
         script = "import time as tt\ntt.sleep(3)\n"
         resp3, _ = zmq_single_request("script_upload", params={"script": script})
-        assert resp3["success"] == True
+        assert resp3["success"] is True
 
     resp4a, _ = zmq_single_request("script_upload", params={"script": _script_to_upload_1})
-    assert resp4a["success"] == False
+    assert resp4a["success"] is False
     assert "RE Manager must be in idle state" in resp4a["msg"], resp4a["msg"]
 
     ttime.sleep(1)
 
     resp4b, _ = zmq_single_request("script_upload", params={"script": _script_to_upload_1})
-    assert resp4b["success"] == False
+    assert resp4b["success"] is False
     assert "RE Manager must be in idle state" in resp4b["msg"], resp4b["msg"]
 
     assert wait_for_condition(time=10, condition=condition_manager_idle)
 
     # Now try again, it should work
     resp5, _ = zmq_single_request("script_upload", params={"script": _script_to_upload_1})
-    assert resp5["success"] == True
+    assert resp5["success"] is True
     wait_for_task_result(time=10, task_uid=resp5["task_uid"])
 
     resp6, _ = zmq_single_request("environment_close")

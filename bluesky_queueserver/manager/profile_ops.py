@@ -294,6 +294,10 @@ class StartupLoadingError(Exception):
     ...
 
 
+class ScriptLoadingError(Exception):
+    ...
+
+
 def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True):
     """
     Populate namespace by import a module.
@@ -403,6 +407,115 @@ def load_worker_startup_code(
         nspace = {}
 
     return nspace
+
+
+def extract_script_root_path(*, startup_dir=None, startup_module_name=None, startup_script_path=None):
+    """
+    The function returns path to the root directory for local imports based on the source of
+    startup files. The function returns ``None`` if root directory does not exist (e.g. when
+    startup scripts are imported from the module). The root directory is a parameter of
+    ``load_script_into_existing_nspace`` function. The startup code locations are checked
+    in the same order as in ``load_worker_startup_code`` function.
+
+    Parameters
+    ----------
+    startup_dir : str
+        Name of the directory that contains startup files.
+    startup_module_name : str
+        Name of the startup module.
+    startup_script_path : str
+        Path to startup script.
+
+    Returns
+    -------
+    str or None
+        Path to the root directory of startup files.
+    """
+    if startup_dir is not None:
+        return startup_dir
+    elif startup_module_name is not None:
+        return None
+    elif startup_script_path is not None:
+        return os.path.split(startup_script_path)[0]
+    else:
+        return None
+
+
+def load_script_into_existing_nspace(
+    *, script, nspace, enable_local_imports=True, script_root_path=None, update_re=False
+):
+    """
+    Execute the script into the existing namespace ``nspace``. The script is expected to be executable
+    in the current namespace. An exception is raised if execution of the script fails. The code
+    calling this function is responsible for capturing exceptions and displaying or storing the error
+    messages in the convenient form.
+
+    Parameters
+    ----------
+    script: str
+        Valid Python script, which is executable in the existing namespace.
+    nspace: dict
+        The existing namespace.
+    enable_local_imports: boolean
+        Enable/disable local imports when loading the script (``True/False``).
+    script_root_path: str or None
+        Root path (hypothetic location of the script) to use for local imports. The root directory
+        is returned by the ``extract_script_root_path`` function.
+    update_re: boolean
+        Update the ``RE`` and ``db`` in ``nspace`` if they are changed in the script if ``True``,
+        discard those objects otherwise.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    Exceptions may be raised by the ``exec`` function.
+    """
+
+    importlib.invalidate_caches()
+
+    root_path_exists = script_root_path and os.path.isdir(script_root_path)
+    if enable_local_imports and not root_path_exists:
+        logger.error(f"The path {script_root_path!r} does not exist. Local imports will not work.")
+
+    use_local_imports = enable_local_imports and root_path_exists
+
+    if use_local_imports:
+        sys.path.insert(0, script_root_path)  # Needed to make local imports work.
+        # Save the list of available modules
+        sm_keys = list(sys.modules.keys())
+
+    nspace_local = {}
+    try:
+        exec(script, nspace, nspace_local)
+    except Exception as ex:
+        raise ScriptLoadingError(f"Failed to load stript: {ex}") from ex
+    finally:
+        if not update_re:
+            # Discard 'RE' and 'db'
+            if "RE" in nspace_local:
+                del nspace_local["RE"]
+            if "db" in nspace_local:
+                del nspace_local["db"]
+
+        # A script may be partially loaded into the environment in case it fails.
+        #   This is 'realistic' behavior, similar to what happens in IPython.
+        #   So make sure that all components that were loaded successfully are properly
+        #   added to the environment.
+        nspace.update(nspace_local)
+
+        if use_local_imports:
+            # Delete data on all modules that were loaded by the script.
+            # We don't need them anymore. Modules will be reloaded from disk if
+            #   the script is executed again.
+            for key in list(sys.modules.keys()):
+                if key not in sm_keys:
+                    print(f"Deleting the key '{key}'")
+                    del sys.modules[key]
+
+            sys.path.remove(script_root_path)
 
 
 def plans_from_nspace(nspace):

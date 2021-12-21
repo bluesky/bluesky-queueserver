@@ -6,11 +6,17 @@ import copy
 import pprint
 import re
 import glob
+import json
 
 from bluesky_queueserver.manager.profile_ops import (
     get_default_startup_dir,
     load_allowed_plans_and_devices,
     gen_list_of_plans_and_devices,
+    load_profile_collection,
+    _prepare_devices,
+    _prepare_plans,
+    devices_from_nspace,
+    plans_from_nspace,
 )
 
 from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
@@ -29,11 +35,13 @@ from .common import (
     condition_environment_created,
     condition_queue_processing_finished,
     condition_manager_paused,
+    wait_for_task_result,
     get_queue_state,
     condition_environment_closed,
     condition_manager_idle,
     append_code_to_last_startup_file,
     set_qserver_zmq_public_key,
+    copy_default_profile_collection,
     # clear_redis_pool,
 )
 from .common import re_manager, re_manager_pc_copy, re_manager_cmd, db_catalog  # noqa: F401
@@ -1365,6 +1373,588 @@ def test_zmq_api_queue_item_update_4_fail(re_manager):  # noqa F811
 
 
 # =======================================================================================
+#                              Method 'script_upload'
+
+
+_script_to_upload_1 = """
+# Another device
+from ophyd import Device
+
+dev_test = Device(name="dev_test")
+
+# Trivial plan
+def sleep_for_a_few_sec(tt=1):
+    yield from bps.sleep(tt)
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("run_in_background", [None, False, True])
+# fmt: on
+def test_zmq_api_script_upload_1(re_manager, run_in_background):  # noqa: F811
+    """
+    Basic test for ``script_upload`` API: detailed checks of all flag at each transition.
+    """
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    status, _ = zmq_single_request("status")
+    task_results_uid = status["task_results_uid"]
+    plans_allowed_uid = status["plans_allowed_uid"]
+    devices_allowed_uid = status["devices_allowed_uid"]
+    plans_existing_uid = status["plans_existing_uid"]
+    devices_existing_uid = status["devices_existing_uid"]
+    assert isinstance(task_results_uid, str)
+
+    # Make the plan sleep for 1 second (emulates a script that takes 1s to load)
+    script = "import time as ttime\nttime.sleep(1)\n" + _script_to_upload_1
+
+    params = {"script": script}
+    if run_in_background is not None:
+        params.update({"run_in_background": run_in_background})
+    else:
+        run_in_background = False
+    print(f"Parameters for 'script_upload': {params}")
+
+    resp2, _ = zmq_single_request("script_upload", params=params)
+    assert resp2["success"] is True, pprint.pformat(resp2)
+    assert resp2["msg"] == ""
+    assert resp2["task_uid"]
+    task_uid = resp2["task_uid"]
+    assert isinstance(task_uid, str)
+
+    status, _ = zmq_single_request("status")
+    assert status["task_results_uid"] == task_results_uid
+    assert status["plans_allowed_uid"] == plans_allowed_uid
+    assert status["devices_allowed_uid"] == devices_allowed_uid
+    assert status["plans_existing_uid"] == plans_existing_uid
+    assert status["devices_existing_uid"] == devices_existing_uid
+    assert status["manager_state"] == "idle" if run_in_background else "executing_task"
+
+    resp3, _ = zmq_single_request("task_load_result", params={"task_uid": task_uid})
+    assert resp3["success"] is True
+    assert resp3["msg"] == ""
+    assert resp3["task_uid"] == task_uid
+    assert resp3["status"] == "running"
+    result = resp3["result"]
+    assert isinstance(result, dict)
+    assert isinstance(result["time_start"], float)
+    assert result["task_uid"] == task_uid
+    assert result["run_in_background"] is run_in_background
+
+    ttime.sleep(2)
+
+    status, _ = zmq_single_request("status")
+    assert status["task_results_uid"] != task_results_uid
+    assert status["plans_allowed_uid"] != plans_allowed_uid
+    assert status["devices_allowed_uid"] != devices_allowed_uid
+    assert status["plans_existing_uid"] != plans_existing_uid
+    assert status["devices_existing_uid"] != devices_existing_uid
+    assert status["manager_state"] == "idle"
+    assert status["worker_environment_state"] == "idle"
+    assert status["items_in_queue"] == 0
+    assert status["items_in_history"] == 0
+
+    resp4, _ = zmq_single_request("task_load_result", params={"task_uid": task_uid})
+    assert resp4["success"] is True
+    assert resp4["msg"] == ""
+    assert resp4["task_uid"] == task_uid
+    assert resp4["status"] == "completed"
+    result = resp4["result"]
+    assert isinstance(result, dict)
+    assert isinstance(result["time_start"], float)
+    assert isinstance(result["time_stop"], float)
+    assert result["task_uid"] == task_uid
+    assert result["success"] is True
+    assert result["msg"] == ""
+    assert result["return_value"] is None
+
+    # Check that the new plan and the new device are in the new list of available plans and devices
+    resp5a, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
+    assert resp5a["success"] is True, resp5a
+    assert "sleep_for_a_few_sec" in resp5a["plans_allowed"]
+
+    resp5b, _ = zmq_single_request("devices_allowed", params={"user_group": _user_group})
+    assert resp5b["success"] is True, resp5b
+    assert "dev_test" in resp5b["devices_allowed"]
+
+    resp5c, _ = zmq_single_request("plans_existing")
+    assert resp5c["success"] is True, resp5c
+    assert "sleep_for_a_few_sec" in resp5c["plans_existing"]
+
+    resp5d, _ = zmq_single_request("devices_existing")
+    assert resp5d["success"] is True, resp5d
+    assert "dev_test" in resp5d["devices_existing"]
+
+    # Add plan to queue
+    _p6 = {"name": "sleep_for_a_few_sec", "kwargs": {"tt": 1.5}, "item_type": "plan"}
+    params6 = {"item": _p6, "user": _user, "user_group": _user_group}
+    resp6, _ = zmq_single_request("queue_item_add", params6)
+    assert resp6["success"] is True, f"resp={resp6}"
+
+    resp7, _ = zmq_single_request("queue_start")
+    assert resp7["success"] is True
+
+    assert wait_for_condition(time=5, condition=condition_manager_idle)
+
+    status, _ = zmq_single_request("status")
+    assert status["items_in_queue"] == 0
+    assert status["items_in_history"] == 1
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+_script_to_upload_2a = """
+# Device
+from ophyd import Device
+dev_test = Device(name="dev_test")
+"""
+
+_script_to_upload_2b = """
+# Trivial plan
+def sleep_for_a_few_sec(tt=1):
+    yield from bps.sleep(tt)
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("scripts, updated_devs, updated_plans", [
+    ([_script_to_upload_2a], ["dev_test"], []),
+    ([_script_to_upload_2b], [], ["sleep_for_a_few_sec"]),
+    ([_script_to_upload_2a, _script_to_upload_2b], ["dev_test"], ["sleep_for_a_few_sec"]),
+])
+# fmt: on
+def test_zmq_api_script_upload_2(re_manager, scripts, updated_devs, updated_plans):  # noqa: F811
+    """
+    'script_upload' API: load scripts that contain only devices and only plans separately
+    or both. Make sure that the plan and the device are included in the lists of existing
+    and allowed plans and devices when necessary. Check that list UIDs are properly updated.
+    """
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    status, _ = zmq_single_request("status")
+    task_results_uid = status["task_results_uid"]
+    plans_allowed_uid = status["plans_allowed_uid"]
+    devices_allowed_uid = status["devices_allowed_uid"]
+    plans_existing_uid = status["plans_existing_uid"]
+    devices_existing_uid = status["devices_existing_uid"]
+
+    for script in scripts:
+        resp2, _ = zmq_single_request("script_upload", params={"script": script})
+        assert resp2["success"] is True, pprint.pformat(resp2)
+        assert resp2["msg"] == ""
+        task_uid = resp2["task_uid"]
+
+        result = wait_for_task_result(10, task_uid)
+        assert result["return_value"] is None
+
+    status, _ = zmq_single_request("status")
+    assert status["task_results_uid"] != task_results_uid
+
+    if updated_plans:
+        assert status["plans_allowed_uid"] != plans_allowed_uid
+        assert status["plans_existing_uid"] != plans_existing_uid
+    else:
+        assert status["plans_allowed_uid"] == plans_allowed_uid
+        assert status["plans_existing_uid"] == plans_existing_uid
+
+    if updated_devs:
+        assert status["devices_allowed_uid"] != devices_allowed_uid
+        assert status["devices_existing_uid"] != devices_existing_uid
+    else:
+        assert status["devices_allowed_uid"] == devices_allowed_uid
+        assert status["devices_existing_uid"] == devices_existing_uid
+
+    resp5a, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
+    assert resp5a["success"] is True, resp5a
+    plans_allowed = resp5a["plans_allowed"]
+
+    resp5b, _ = zmq_single_request("devices_allowed", params={"user_group": _user_group})
+    assert resp5b["success"] is True, resp5b
+    devices_allowed = resp5b["devices_allowed"]
+
+    resp5c, _ = zmq_single_request("plans_existing")
+    assert resp5c["success"] is True, resp5c
+    plans_existing = resp5c["plans_existing"]
+
+    resp5d, _ = zmq_single_request("devices_existing")
+    assert resp5d["success"] is True, resp5d
+    devices_existing = resp5d["devices_existing"]
+
+    for plan_name in updated_plans:
+        assert plan_name in plans_existing
+        assert plan_name in plans_allowed
+
+    for dev_name in updated_devs:
+        assert dev_name in devices_existing
+        assert dev_name in devices_allowed
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+_script_to_upload_3a = """
+import time as tt
+def sleep_for_a_few_sec_1(tt=1):
+    yield from bps.sleep(tt)
+
+tt.sleep(2)  # Emulate a script that runs for 2 seconds
+
+def sleep_for_a_few_sec_2(tt=1):
+    yield from bps.sleep(tt)
+"""
+
+_script_to_upload_3b = """
+# Trivial plan
+def sleep_for_a_few_sec_3(tt=1):
+    yield from bps.sleep(tt)
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("use_bg_task", [False, True])
+# fmt: on
+def test_zmq_api_script_upload_3(re_manager, use_bg_task):  # noqa: F811
+    """
+    'script_upload' API: Load two scripts in parallel. Script #1 takes 2 seconds to
+    load is foreground or background task. Script #2 is loaded as a background task
+    while Script #1 is being loaded. No race conditions are expected while two
+    scripts are running. Check that all loaded plans are in the list of allowed plans.
+    """
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    # Task 1
+    resp2a, _ = zmq_single_request(
+        "script_upload",
+        params={"script": _script_to_upload_3a, "run_in_background": use_bg_task},
+    )
+    assert resp2a["success"] is True, pprint.pformat(resp2a)
+    task_uid_1 = resp2a["task_uid"]
+
+    ttime.sleep(1)
+
+    # Task 2
+    resp2b, _ = zmq_single_request(
+        "script_upload",
+        params={"script": _script_to_upload_3b, "run_in_background": True},
+    )
+    assert resp2b["success"] is True, pprint.pformat(resp2a)
+    task_uid_2 = resp2b["task_uid"]
+
+    # Wait for each task to complete
+    result_1 = wait_for_task_result(10, task_uid_1)
+    result_2 = wait_for_task_result(10, task_uid_2)
+
+    # Make sure that execution of Task 2 is completed while Task1 is running
+    assert result_1["time_start"] < result_2["time_start"]
+    assert result_1["time_stop"] > result_2["time_stop"]
+
+    resp5a, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
+    assert resp5a["success"] is True, resp5a
+    plans_allowed = resp5a["plans_allowed"]
+
+    # Check that all plans are imported
+    plan_names = ["sleep_for_a_few_sec_1", "sleep_for_a_few_sec_2", "sleep_for_a_few_sec_3"]
+    for plan_name in plan_names:
+        assert plan_name in plans_allowed
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_script_upload_4(tmp_path, re_manager_cmd):  # noqa: F811
+    """
+    'script_upload' API: Open the environent with 'empty' startup file and then
+    load full collection of built-in startup files using the API. Compare the lists
+    of existing plans and devices with the lists obtained from built-in profile
+    collection. Start a simple 'count' plan and make sure it completes correctly.
+    """
+    pc_path = copy_default_profile_collection(tmp_path=tmp_path, copy_py=False)
+    os.remove(os.path.join(pc_path, "existing_plans_and_devices.yaml"))
+    # Only 'user_group_permissions.yaml' is left in the directory
+
+    # Create an empty startup script
+    with open(os.path.join(pc_path, "00-startup.py"), "w"):
+        pass
+
+    re_manager_cmd(["--startup-dir", pc_path])
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    # At this point the lists of allowed plans and devices are expected to be empty.
+    resp2a, _ = zmq_single_request("plans_existing")
+    assert resp2a["success"] is True, pprint.pformat(resp2a)
+    assert resp2a["plans_existing"] == {}
+    resp2b, _ = zmq_single_request("devices_existing")
+    assert resp2b["success"] is True, pprint.pformat(resp2a)
+    assert resp2b["devices_existing"] == {}
+
+    # Now send built-in startup script files one by one over 0MQ
+    default_pc_path = get_default_startup_dir()
+    default_files = glob.glob(os.path.join(default_pc_path, "*.py"))
+    default_files.sort()
+    for fn in default_files:
+        with open(fn, "r") as f:
+            script = f.read()
+            resp3, _ = zmq_single_request("script_upload", params={"script": script})
+            wait_for_task_result(10, resp3["task_uid"])
+
+    # At this point the list of existing plans and devices must be identical to the default
+    nspace = load_profile_collection(default_pc_path)
+    default_devices = _prepare_devices(devices_from_nspace(nspace))
+    default_plans = _prepare_plans(plans_from_nspace(nspace), existing_devices=default_devices)
+    # Converting to JSON and back gets the same representation as we get by downloading the list
+    default_devices = json.loads(json.dumps(default_devices))
+    default_plans = json.loads(json.dumps(default_plans))
+
+    resp4a, _ = zmq_single_request("plans_existing")
+    assert resp4a["success"] is True, pprint.pformat(resp4a)
+    # Keys are easier to compare, so first compare keys
+    assert set(resp4a["plans_existing"].keys()) == set(default_plans.keys())
+    # Now compare the plan descriptions one by one (easier to read error messages)
+    for k in default_plans.keys():
+        assert resp4a["plans_existing"][k] == default_plans[k]
+
+    resp4b, _ = zmq_single_request("devices_existing")
+    assert resp4b["success"] is True, pprint.pformat(resp4a)
+    assert resp4b["devices_existing"] == default_devices
+
+    # Now try to run a simple plan and make sure it works
+    resp5a, _ = zmq_single_request("queue_item_add", {"item": _plan1, "user": _user, "user_group": _user_group})
+    assert resp5a["success"] is True
+
+    resp5b, _ = zmq_single_request("queue_start")
+    assert resp5b["success"] is True
+
+    assert wait_for_condition(20, condition_queue_processing_finished)
+
+    status, _ = zmq_single_request("status")
+    assert status["items_in_queue"] == 0
+    assert status["items_in_history"] == 1
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_script_upload_5(tmp_path, re_manager_cmd):  # noqa: F811
+    """
+    'script_upload' API: Check that local imports work.
+    """
+    pc_path = copy_default_profile_collection(tmp_path=tmp_path, copy_py=False)
+    os.remove(os.path.join(pc_path, "existing_plans_and_devices.yaml"))
+    # Only 'user_group_permissions.yaml' is left in the directory
+
+    mod_dir = os.path.join(pc_path, "mod")
+    os.makedirs(os.path.join(pc_path, "mod"))
+
+    # Create an empty startup script
+    with open(os.path.join(pc_path, "00-startup.py"), "w"):
+        pass
+
+    # Create a module
+    mod_fln = os.path.join(mod_dir, "mod_file.py")
+    with open(os.path.join(mod_fln), "w") as f:
+        f.writelines(_script_to_upload_1)
+
+    re_manager_cmd(["--startup-dir", pc_path])
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    # Upload the module that uses local imports
+    script = "from mod.mod_file import *\n"
+    resp2, _ = zmq_single_request("script_upload", params={"script": script})
+    result = wait_for_task_result(10, resp2["task_uid"])
+    assert result["success"] is True, pprint.pformat(result)
+    assert result["msg"] == "", pprint.pformat(result)
+
+    # Check that the plan and the device was imported from the module
+    resp4a, _ = zmq_single_request("plans_existing")
+    assert resp4a["success"] is True, pprint.pformat(resp4a)
+    assert "sleep_for_a_few_sec" in resp4a["plans_existing"]
+    resp4b, _ = zmq_single_request("devices_existing")
+    assert resp4b["success"] is True, pprint.pformat(resp4a)
+    assert "dev_test" in resp4b["devices_existing"]
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+_script_save_instances_re_db = """
+RE_backup = RE
+db_backup = db
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("update_re_param", [False, True])
+@pytest.mark.parametrize("replace_re", [False, True])
+@pytest.mark.parametrize("replace_db", [False, True])
+# fmt: on
+def test_zmq_api_script_upload_6(re_manager_cmd, update_re_param, replace_re, replace_db):  # noqa: F811
+    """
+    'script_upload' API: Test that instances 'RE' and 'db' could be replaced in
+    the RE Worker namespace. The test does not check if references kept internally by RE Worker
+    are updated, but the update happens in the same branches where the namespace is updated.
+    """
+
+    # Make sure that the environment contains databroker instance
+    re_manager_cmd(["--databroker-config", "temp"])
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    # Upload script that saves instances of 'RE' and 'db' in the namespace
+    resp2, _ = zmq_single_request("script_upload", params={"script": _script_save_instances_re_db})
+    result = wait_for_task_result(10, resp2["task_uid"])
+    assert result["success"] is True, pprint.pformat(result)
+
+    script_replace_re_and_db = ""
+    if replace_re:
+        script_replace_re_and_db += "from bluesky import RunEngine\nRE = RunEngine()\n"
+    if replace_db:
+        script_replace_re_and_db += 'from databroker import Broker\ndb = Broker.named("temp")\n'
+
+    resp3, _ = zmq_single_request(
+        "script_upload", params={"script": script_replace_re_and_db, "update_re": update_re_param}
+    )
+    result = wait_for_task_result(10, resp3["task_uid"])
+    assert result["success"] is True, pprint.pformat(result)
+
+    # Upload the script the verifies that the environment has new instances of RE and db.
+    #     The script fails to load if the RE or db is not updated properly when required.
+    script_verify_re_and_db = ""
+    if replace_re and update_re_param:
+        script_verify_re_and_db += "assert RE != RE_backup\n"
+    else:
+        script_verify_re_and_db += "assert RE == RE_backup\n"
+    if replace_db and update_re_param:
+        script_verify_re_and_db += "assert db != db_backup\n"
+    else:
+        script_verify_re_and_db += "assert db == db_backup\n"
+
+    resp4, _ = zmq_single_request("script_upload", params={"script": script_verify_re_and_db})
+    result = wait_for_task_result(10, resp4["task_uid"])
+    assert result["success"] is True, pprint.pformat(result)
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_script_upload_7(re_manager):  # noqa: F811
+    """
+    'script_upload' API: Check that the environment can be destroyed while a script is
+    being loaded. It could be necessary to destroy the environment to terminate execution
+    of a script (e.g. a script with infinite loop).
+    """
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    # Run the script in foreground
+    long_script = "import time as tt\ntt.sleep(20)\n"
+    resp2, _ = zmq_single_request("script_upload", params={"script": long_script})
+    assert resp2["success"] is True
+
+    # Attempt to close the environment
+    resp3, _ = zmq_single_request("environment_close")
+    assert resp3["success"] is False, f"resp={resp3}"
+
+    ttime.sleep(1)  # Make sure the script is already running
+
+    # Attempt to close the environment
+    resp4, _ = zmq_single_request("environment_close")
+    assert resp4["success"] is False, f"resp={resp4}"
+
+    # Destroy the environment
+    resp5, _ = zmq_single_request("environment_destroy")
+    assert resp5["success"] is True, f"resp={resp5}"
+    assert wait_for_condition(time=10, condition=condition_environment_closed)
+
+    # Open and close the environment to make sure everything works
+    resp6a, _ = zmq_single_request("environment_open")
+    assert resp6a["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    resp6b, _ = zmq_single_request("environment_close")
+    assert resp6b["success"] is True, f"resp={resp6b}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_script_upload_8_fail(re_manager):  # noqa: F811
+    """
+    'script_upload' API: Check if call fails if the environment is not open.
+    """
+    resp2, _ = zmq_single_request("script_upload", params={"script": _script_to_upload_1})
+    assert resp2["success"] is False
+    assert "RE Worker environment is not opened" in resp2["msg"]
+
+
+# fmt: off
+@pytest.mark.parametrize("test_with_plan", [True, False])
+# fmt: on
+def test_zmq_api_script_upload_9_fail(re_manager, test_with_plan):  # noqa: F811
+    """
+    'script_upload' API: Check if script upload request fails if another script or
+    a plan is running.
+    """
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    if test_with_plan:
+        # Now try to run a simple plan and make sure it works
+        resp2a, _ = zmq_single_request(
+            "queue_item_add", {"item": _plan3, "user": _user, "user_group": _user_group}
+        )
+        assert resp2a["success"] is True
+        resp2b, _ = zmq_single_request("queue_start")
+        assert resp2b["success"] is True
+    else:
+        script = "import time as tt\ntt.sleep(3)\n"
+        resp3, _ = zmq_single_request("script_upload", params={"script": script})
+        assert resp3["success"] is True
+
+    resp4a, _ = zmq_single_request("script_upload", params={"script": _script_to_upload_1})
+    assert resp4a["success"] is False
+    assert "RE Manager must be in idle state" in resp4a["msg"], resp4a["msg"]
+
+    ttime.sleep(1)
+
+    resp4b, _ = zmq_single_request("script_upload", params={"script": _script_to_upload_1})
+    assert resp4b["success"] is False
+    assert "RE Manager must be in idle state" in resp4b["msg"], resp4b["msg"]
+
+    assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+    # Now try again, it should work
+    resp5, _ = zmq_single_request("script_upload", params={"script": _script_to_upload_1})
+    assert resp5["success"] is True
+    wait_for_task_result(time=10, task_uid=resp5["task_uid"])
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+# =======================================================================================
 #                      Method 'plans_allowed', 'devices_allowed'
 
 
@@ -1378,11 +1968,13 @@ def test_zmq_api_plans_allowed_and_devices_allowed_1(re_manager):  # noqa F811
     assert resp1["msg"] == ""
     assert isinstance(resp1["plans_allowed"], dict)
     assert len(resp1["plans_allowed"]) > 0
+    assert isinstance(resp1["plans_allowed_uid"], str)
     resp2, _ = zmq_single_request("devices_allowed", params)
     assert resp2["success"] is True
     assert resp2["msg"] == ""
     assert isinstance(resp2["devices_allowed"], dict)
     assert len(resp2["devices_allowed"]) > 0
+    assert isinstance(resp2["devices_allowed_uid"], str)
 
 
 def test_zmq_api_plans_allowed_and_devices_allowed_2(re_manager):  # noqa F811
@@ -1433,11 +2025,54 @@ def test_zmq_api_plans_allowed_and_devices_allowed_3_fail(re_manager, params, me
     assert message in resp1["msg"]
     assert isinstance(resp1["plans_allowed"], dict)
     assert len(resp1["plans_allowed"]) == 0
+    assert resp1["plans_allowed_uid"] is None
     resp2, _ = zmq_single_request("devices_allowed", params)
     assert resp1["success"] is False
     assert message in resp1["msg"]
     assert isinstance(resp2["devices_allowed"], dict)
     assert len(resp2["devices_allowed"]) == 0
+    assert resp2["devices_allowed_uid"] is None
+
+
+# =======================================================================================
+#                      Method 'plans_existing', 'devices_existing'
+
+
+def test_zmq_api_plans_existing_and_devices_existing_1(re_manager):  # noqa F811
+    """
+    Basic calls to 'plans_existing', 'devices_existing' methods.
+    """
+    resp1, _ = zmq_single_request("plans_existing")
+    assert resp1["success"] is True
+    assert resp1["msg"] == ""
+    assert isinstance(resp1["plans_existing"], dict)
+    assert len(resp1["plans_existing"]) > 0
+    assert isinstance(resp1["plans_existing_uid"], str)
+    resp2, _ = zmq_single_request("devices_existing")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+    assert isinstance(resp2["devices_existing"], dict)
+    assert len(resp2["devices_existing"]) > 0
+    assert isinstance(resp2["devices_existing_uid"], str)
+
+
+def test_zmq_api_plans_existing_and_devices_existing_2_fail(re_manager):  # noqa F811
+    """
+    Test that 'plans_existing', 'devices_existing' methods fail if extra parameters are passed.
+    """
+    params = {"user_group": _user_group}  # 'user_group' is not supported by the methods
+
+    resp1, _ = zmq_single_request("plans_existing", params=params)
+    assert resp1["success"] is False
+    assert "API request contains unsupported parameters: 'user_group'." in resp1["msg"]
+    assert resp1["plans_existing"] == {}
+    assert resp1["plans_existing_uid"] is None
+
+    resp2, _ = zmq_single_request("devices_existing", params=params)
+    assert resp2["success"] is False
+    assert "API request contains unsupported parameters: 'user_group'." in resp2["msg"]
+    assert resp2["devices_existing"] == {}
+    assert resp2["devices_existing_uid"] is None
 
 
 # =======================================================================================

@@ -8,6 +8,9 @@ from functools import partial
 import logging
 import uuid
 import enum
+import traceback
+import copy
+import json
 
 from .comms import PipeJsonRpcReceive
 from .output_streaming import setup_console_output_redirection
@@ -24,6 +27,9 @@ from .profile_ops import (
     update_existing_plans_and_devices,
     prepare_plan,
     existing_plans_and_devices_from_nspace,
+    extract_script_root_path,
+    load_script_into_existing_nspace,
+    compare_existing_plans_and_devices,
 )
 
 logger = logging.getLogger(__name__)
@@ -91,6 +97,7 @@ class RunEngineWorker(Process):
         self._env_state = EState.CLOSED
         self._running_plan_info = None
         self._running_plan_completed = False
+        self._running_task_uid = None  # UID of the running foreground task (if running a task)
 
         # Report (dict) generated after execution of a command. The report can be downloaded
         #   by RE Manager.
@@ -111,6 +118,9 @@ class RunEngineWorker(Process):
 
         self._allowed_items_lock = None  # threading.Lock()
         self._existing_items_lock = None  # threading.Lock()
+
+        self._completed_tasks = []
+        self._completed_tasks_lock = None  # threading.Lock()
 
         # Indicates when to update the existing plans and devices
         update_pd = self._config_dict["update_existing_plans_devices"]
@@ -342,6 +352,86 @@ class RunEngineWorker(Process):
 
         logger.info("List of allowed plans and devices was successfully generated")
 
+    def _update_existing_pd_file(self, *, options):
+        """
+        Update existing plans and devices on disk. ``options`` parameter is a list (or tuple)
+        of options which are compared to ``self._update_existing_plans_devices_on_disk`` to
+        determine if the lists should be saved.
+        """
+
+        path_pd = self._config_dict["existing_plans_and_devices_path"]
+
+        if self._update_existing_plans_devices_on_disk in options:
+            with self._existing_items_lock:
+                existing_plans, existing_devices = self._existing_plans, self._existing_devices
+            update_existing_plans_and_devices(
+                path_to_file=path_pd,
+                existing_plans=existing_plans,
+                existing_devices=existing_devices,
+            )
+
+    def _load_script_into_environment(self, *, script, update_re):
+        """
+        Load script passed as a string variable (``script``) into RE environment namespace.
+        Boolean variable ``update_re`` controls whether ``RE`` and ``db`` are updated if
+        the new values are defined in the script.
+        """
+        startup_dir = self._config_dict.get("startup_dir", None)
+        startup_module_name = self._config_dict.get("startup_module_name", None)
+        startup_script_path = self._config_dict.get("startup_script_path", None)
+
+        script_root_path = extract_script_root_path(
+            startup_dir=startup_dir,
+            startup_module_name=startup_module_name,
+            startup_script_path=startup_script_path,
+        )
+
+        load_script_into_existing_nspace(
+            script=script,
+            nspace=self._re_namespace,
+            script_root_path=script_root_path,
+            update_re=update_re,
+        )
+
+        if update_re:
+            if ("RE" in self._re_namespace) and (self._RE != self._re_namespace["RE"]):
+                self._RE = self._re_namespace["RE"]
+
+                from .plan_monitoring import CallbackRegisterRun
+
+                run_reg_cb = CallbackRegisterRun(run_list=self._active_run_list)
+                self._RE.subscribe(run_reg_cb)
+
+                logger.info("Run Engine instance ('RE') was replaced while executing the uploaded script.")
+
+            if ("db" in self._re_namespace) and (self._db != self._re_namespace["db"]):
+                self._db = self._re_namespace["db"]
+                logger.info("Data Broker instance ('db') was replaced while executing the uploaded script.")
+
+        epd = existing_plans_and_devices_from_nspace(nspace=self._re_namespace)
+        existing_plans, existing_devices, plans_in_nspace, devices_in_nspace = epd
+
+        self._existing_plans_and_devices_changed = not compare_existing_plans_and_devices(
+            existing_plans=existing_plans,
+            existing_devices=existing_devices,
+            existing_plans_ref=self._existing_plans,
+            existing_devices_ref=self._existing_devices,
+        )
+
+        # Dictionaries of references to plans and devices from the namespace (may change even
+        #   if the list of existing plans and devices was not changed)
+        self._plans_in_nspace = plans_in_nspace
+        self._devices_in_nspace = devices_in_nspace
+
+        if self._existing_plans_and_devices_changed:
+            # Descriptions of existing plans and devices
+            with self._existing_items_lock:
+                self._existing_plans, self._existing_devices = existing_plans, existing_devices
+            self._generate_lists_of_allowed_plans_and_devices()
+            self._update_existing_pd_file(options=("ALWAYS",))
+
+        logger.info("The script was successfully loaded into RE environment")
+
     # =============================================================================
     #               Handlers for messages from RE Manager
 
@@ -350,6 +440,7 @@ class RunEngineWorker(Process):
         Returns the state information of RE Worker environment.
         """
         item_uid = self._running_plan_info["item_uid"] if self._running_plan_info else None
+        task_uid = self._running_task_uid
         plan_completed = self._running_plan_completed
         # TODO: replace RE._state with RE.state property in the worker code (improve code style).
         re_state = str(self._RE._state) if self._RE else "null"
@@ -363,6 +454,7 @@ class RunEngineWorker(Process):
         re_report_available = self._re_report is not None
         run_list_updated = self._active_run_list.is_changed()  # True - updates are available
         plans_and_devices_list_updated = self._existing_plans_and_devices_changed
+        completed_tasks_available = bool(self._completed_tasks)
         msg_out = {
             "running_item_uid": item_uid,
             "running_plan_completed": plan_completed,
@@ -372,6 +464,8 @@ class RunEngineWorker(Process):
             "environment_state": env_state_str,
             "run_list_updated": run_list_updated,
             "plans_and_devices_list_updated": plans_and_devices_list_updated,
+            "running_task_uid": task_uid,
+            "completed_tasks_available": completed_tasks_available,
         }
         return msg_out
 
@@ -396,6 +490,15 @@ class RunEngineWorker(Process):
         and update is loaded only if updates exist (`run_list_updated` is True).
         """
         msg_out = {"run_list": self._active_run_list.get_run_list(clear_state=True)}
+        return msg_out
+
+    def _request_task_results_handler(self):
+        """
+        Returns the list of results of completed tasks and clears the list.
+        """
+        with self._completed_tasks_lock:
+            msg_out = {"task_results": copy.copy(self._completed_tasks)}
+            self._completed_tasks.clear()
         return msg_out
 
     def _request_plans_and_devices_list_handler(self):
@@ -586,12 +689,27 @@ class RunEngineWorker(Process):
         does not mean that the operation was successful.
         """
         self._user_group_permissions = user_group_permissions
-        status, err_msg = self._run_in_separate_thread(
+        status, err_msg, task_uid, payload = self._run_in_separate_thread(
             name="Reload Permissions",
             target=self._generate_lists_of_allowed_plans_and_devices,
             run_in_background=True,
         )
-        msg_out = {"status": status, "err_msg": err_msg}
+        msg_out = {"status": status, "err_msg": err_msg, "task_uid": task_uid, "payload": payload}
+        return msg_out
+
+    def _command_load_script(self, script, update_re, run_in_background):
+        """
+        Load the script passed as a string variable into the existing RE environment.
+        The task could be started in the background (when a plan or another foreground task
+        is running), but it is not recommended.
+        """
+        status, err_msg, task_uid, payload = self._run_in_separate_thread(
+            name="Load script",
+            target=self._load_script_into_environment,
+            kwargs={"script": script, "update_re": update_re},
+            run_in_background=run_in_background,
+        )
+        msg_out = {"status": status, "err_msg": err_msg, "task_uid": task_uid, "payload": payload}
         return msg_out
 
     # ------------------------------------------------------------
@@ -629,6 +747,10 @@ class RunEngineWorker(Process):
         args, kwargs = args or [], kwargs or {}
         status, msg = "accepted", ""
 
+        task_uid = str(uuid.uuid4())
+        time_start = ttime.time()
+        logger.debug(f"Starting task {name!r}. Task UID: {task_uid!r}.")
+
         try:
             # Verify that the environment is ready
             acceptable_states = (EState.IDLE, EState.EXECUTING_PLAN, EState.EXECUTING_TASK)
@@ -643,36 +765,69 @@ class RunEngineWorker(Process):
                     f"Incorrect environment state: '{self._env_state.value}'. Acceptable state: 'idle'"
                 )
 
-            task_uuid = str(uuid.uuid4())
-            task_uuid_short = task_uuid.split("-")[-1]
-            thread_name = f"BS QServer - {name} {task_uuid_short} "
+            task_uid_short = task_uid.split("-")[-1]
+            thread_name = f"BS QServer - {name} {task_uid_short} "
 
-            def thread_func_wrapper():
+            def thread_func_wrapper(*, task_uid, time_start):
                 def thread_func():
                     # This is the function executed in a separate thread
                     try:
-                        target(*args, **kwargs)
+                        return_value = target(*args, **kwargs)
+
+                        # Attempt to serialize the result to JSON. The result can not be sent to the client
+                        #   if it can not be serialized, so it is better for the function to fail here so that
+                        #   proper error message could be sent to the client.
+                        try:
+                            json.dumps(return_value)  # The result of the conversion is intentionally discarded
+                        except Exception as ex_json:
+                            raise ValueError(f"Task result can not be serialized as JSON: {ex_json}") from ex_json
+
+                        success, msg = True, ""
                     except Exception as ex:
                         logger.exception("Error occurred while executing the function ('%s'): %s", name, str(ex))
+                        return_value = traceback.format_exc()
+                        success, msg = False, f"Exception: {str(ex)}"
                     finally:
                         if not run_in_background:
                             self._env_state = EState.IDLE
+                            self._running_task_uid = None
+
+                    with self._completed_tasks_lock:
+                        task_res = {
+                            "task_uid": task_uid,
+                            "success": success,
+                            "msg": msg,
+                            "return_value": return_value,
+                            "time_start": time_start,
+                            "time_stop": ttime.time(),
+                        }
+                        self._completed_tasks.append(task_res)
 
                 return thread_func
 
-            th = threading.Thread(target=thread_func_wrapper(), name=thread_name, daemon=True)
+            th = threading.Thread(
+                target=thread_func_wrapper(task_uid=task_uid, time_start=time_start), name=thread_name, daemon=True
+            )
 
             if not run_in_background:
                 self._env_state = EState.EXECUTING_TASK
+                self._running_task_uid = task_uid
 
             th.start()
 
         except RejectedError as ex:
-            status, msg = "rejected", f"Task '{name}' was rejected by RE Worker process: {ex}"
+            status, msg = "rejected", f"Task {name!r} was rejected by RE Worker process: {ex}"
         except Exception as ex:
-            status, msg = "error", f"Error occurred while to starting the task '{name}': {ex}"
+            status, msg = "error", f"Error occurred while to starting the task {name!r}: {ex}"
 
-        return status, msg
+        logger.debug(
+            f"Completing the request to start the task {name!r} ({task_uid!r}): status={status!r} msg={msg!r}."
+        )
+
+        # Payload contains information that may be useful for tracking the execution of the task.
+        payload = {"task_uid": task_uid, "time_start": time_start, "run_in_background": run_in_background}
+
+        return status, msg, task_uid, payload
 
     # ------------------------------------------------------------
 
@@ -696,6 +851,8 @@ class RunEngineWorker(Process):
         #   checked using 'is_re_worker_active()' in startup scripts or modules.
         set_re_worker_active()
 
+        self._completed_tasks_lock = threading.Lock()
+
         from .plan_monitoring import RunList, CallbackRegisterRun
 
         self._active_run_list = RunList()  # Initialization should be done before communication is enabled.
@@ -706,6 +863,7 @@ class RunEngineWorker(Process):
         self._comm_to_manager.add_method(
             self._request_plans_and_devices_list_handler, "request_plans_and_devices_list"
         )
+        self._comm_to_manager.add_method(self._request_task_results_handler, "request_task_results")
         self._comm_to_manager.add_method(self._command_close_env_handler, "command_close_env")
         self._comm_to_manager.add_method(self._command_confirm_exit_handler, "command_confirm_exit")
         self._comm_to_manager.add_method(self._command_run_plan_handler, "command_run_plan")
@@ -713,6 +871,8 @@ class RunEngineWorker(Process):
         self._comm_to_manager.add_method(self._command_continue_plan_handler, "command_continue_plan")
         self._comm_to_manager.add_method(self._command_reset_worker_handler, "command_reset_worker")
         self._comm_to_manager.add_method(self._command_permissions_reload_handler, "command_permissions_reload")
+
+        self._comm_to_manager.add_method(self._command_load_script, "command_load_script")
 
         self._comm_to_manager.start()
 
@@ -787,21 +947,8 @@ class RunEngineWorker(Process):
 
         if success:
             self._generate_lists_of_allowed_plans_and_devices()
+            self._update_existing_pd_file(options=("ENVIRONMENT_OPEN", "ALWAYS"))
 
-            # This file name is used only to update the lists of existing plans and devices
-            #   stored on disk, not to load the lists.
-            path_pd = self._config_dict["existing_plans_and_devices_path"]
-
-            if self._update_existing_plans_devices_on_disk in ("ENVIRONMENT_OPEN", "ALWAYS"):
-                with self._existing_items_lock:
-                    existing_plans, existing_devices = self._existing_plans, self._existing_devices
-                update_existing_plans_and_devices(
-                    path_to_file=path_pd,
-                    existing_plans=existing_plans,
-                    existing_devices=existing_devices,
-                )
-
-        if success:
             logger.info("Instantiating and configuring Run Engine ...")
 
             try:

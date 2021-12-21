@@ -18,7 +18,7 @@ from .profile_ops import (
 from .plan_queue_ops import PlanQueueOperations
 from .output_streaming import setup_console_output_redirection
 from .logging_setup import setup_loggers
-
+from .task_results import TaskResults
 
 import logging
 
@@ -45,6 +45,7 @@ class MState(enum.Enum):
     CREATING_ENVIRONMENT = "creating_environment"
     STARTING_QUEUE = "starting_queue"  # Starting the first plan of the queue
     EXECUTING_QUEUE = "executing_queue"
+    EXECUTING_TASK = "executing_task"
     CLOSING_ENVIRONMENT = "closing_environment"
     DESTROYING_ENVIRONMENT = "destroying_environment"
 
@@ -141,9 +142,14 @@ class RunEngineManager(Process):
         self._config_dict = config or {}
         self._user_group_permissions = {}
         self._existing_plans, self._existing_devices = {}, {}
+        self._existing_plans_uid = _generate_uid()
+        self._existing_devices_uid = _generate_uid()
         self._allowed_plans, self._allowed_devices = {}, {}
         self._allowed_plans_uid = _generate_uid()
         self._allowed_devices_uid = _generate_uid()
+
+        self._running_task_uid = None  # UID of currently running foreground task (if any)
+        self._task_results = None  # TaskResults(), uses threading.Lock
 
     async def _heartbeat_generator(self):
         """
@@ -267,6 +273,8 @@ class RunEngineManager(Process):
                 raise RuntimeError("Manager is already in the process of closing the RE Worker environment.")
             elif self._manager_state in (MState.EXECUTING_QUEUE, MState.STARTING_QUEUE):
                 raise RuntimeError("Queue execution is in progress.")
+            elif self._manager_state is MState.EXECUTING_TASK:
+                raise RuntimeError("Foreground task execution is in progress.")
             elif self._manager_state != MState.IDLE:
                 raise RuntimeError(f"Manager state is not idle. Current state: {self._manager_state.value}")
             else:
@@ -305,8 +313,12 @@ class RunEngineManager(Process):
             if not await self._confirm_re_worker_exit():
                 success = False
                 err_msg = "Failed to confirm closing of RE Worker thread"
+            else:
+                await self._task_results.clear_running_tasks()
 
         self._manager_state = MState.IDLE
+        self._running_task_uid = None
+
         return success, err_msg
 
     async def _kill_re_worker(self):
@@ -349,8 +361,12 @@ class RunEngineManager(Process):
         err_msg = "" if success else "Failed to properly destroy RE Worker environment."
         logger.info("RE Worker environment is destroyed")
         if not success:
-
             logger.error(err_msg)
+        else:
+            await self._task_results.clear_running_tasks()
+
+        self._running_task_uid = None
+
         return success, err_msg
 
     async def _confirm_re_worker_exit(self):
@@ -405,6 +421,9 @@ class RunEngineManager(Process):
 
                     if ws["plans_and_devices_list_updated"]:
                         self._loop.create_task(self._load_existing_plans_and_devices_from_worker())
+
+                    if ws["completed_tasks_available"]:
+                        self._loop.create_task(self._load_task_results_from_worker())
 
                     if self._manager_state == MState.CLOSING_ENVIRONMENT:
                         if ws["environment_state"] == "closing":
@@ -495,6 +514,29 @@ class RunEngineManager(Process):
             self._re_run_list = run_list["run_list"]
             self._re_run_list_uid = _generate_uid()
 
+    def _set_existing_plans_and_devices(self, *, existing_plans, existing_devices, always_update_uids=False):
+        """
+        Sets the lists of existing plans and devices and updates UIDs if necessary.
+        """
+        # First update UIDs if necessary.
+        try:
+            if always_update_uids or (existing_plans != self._existing_plans):
+                self._existing_plans_uid = _generate_uid()
+        except Exception as ex:
+            logger.warning("Failed to compare lists of existing plans: %s", str(ex))
+            self._existing_plans_uid = _generate_uid()
+
+        try:
+            if always_update_uids or (existing_devices != self._existing_devices):
+                self._existing_devices_uid = _generate_uid()
+        except Exception as ex:
+            logger.warning("Failed to compare lists of existing devices: %s", str(ex))
+            self._existing_devices_uid = _generate_uid()
+
+        # Now update the references
+        self._existing_plans = existing_plans
+        self._existing_devices = existing_devices
+
     async def _load_existing_plans_and_devices_from_worker(self, update_user_group_permissions=False):
         """
         Download the updated list of existing plans and devices from the worker environment.
@@ -509,8 +551,11 @@ class RunEngineManager(Process):
                 f"Failed to download the list of existing plans and devices from the worker process: {err_msg}."
             )
         else:
-            self._existing_plans = plan_and_devices_list["existing_plans"]
-            self._existing_devices = plan_and_devices_list["existing_devices"]
+            self._set_existing_plans_and_devices(
+                existing_plans=plan_and_devices_list["existing_plans"],
+                existing_devices=plan_and_devices_list["existing_devices"],
+            )
+
             if update_user_group_permissions:
                 self._user_group_permissions = plan_and_devices_list["user_group_permissions"]
 
@@ -518,6 +563,34 @@ class RunEngineManager(Process):
                 self._generate_lists_of_allowed_plans_and_devices()
             except Exception as ex:
                 logger.exception("Failed to compute the list of allowed plans and devices: %s", str(ex))
+
+    async def _load_task_results_from_worker(self):
+        """
+        Download results of the completed tasks from worker process.
+        """
+        logger.debug("Downloading the results of completed tasks from the worker environment.")
+        results, err_msg = await self._worker_request_task_results()
+        if results is None:
+            # TODO: this would typically mean a bug (communication error). Probably more
+            #       complicated processing is needed
+            logger.error(
+                "Failed to download the results of completed tasks from the worker process: %s.", str(err_msg)
+            )
+        else:
+            task_results = results["task_results"]
+            for task_res in task_results:
+                if "task_uid" not in task_res:
+                    logger.error("Missing 'task_uid' data in task results: %s", pprint.pformat(task_res))
+                    continue
+
+                task_uid = task_res["task_uid"]
+                await self._task_results.add_completed_task(task_uid=task_uid, payload=task_res)
+
+                if (self._manager_state == MState.EXECUTING_TASK) and (task_uid == self._running_task_uid):
+                    self._manager_state = MState.IDLE
+                    self._running_task_uid = None
+
+                logger.debug("Loaded the results for task '%s': %s", task_uid, pprint.pformat(task_results))
 
     async def _start_plan(self):
         """
@@ -742,6 +815,40 @@ class RunEngineManager(Process):
 
         return success, err_msg
 
+    async def _environment_upload_script(self, *, script, update_re, run_in_background):
+        """
+        Upload Python script to RE Worker environment. The script is then executed into
+        the worker namespace. The API call only inititiates the process of loading the
+        script and return success if the request is accepted and the task can be started.
+        Success does not mean that the script is successfully loaded.
+        """
+        if not self._environment_exists:
+            success, err_msg, task_uid = False, "RE Worker environment is not opened", None
+        elif not run_in_background and (self._manager_state != MState.IDLE):
+            success, err_msg, task_uid = (
+                False,
+                "Failed to start the task: RE Manager must be in idle state. "
+                f"Current state: '{self._manager_state.value}'",
+                None,
+            )
+        else:
+            try:
+                if not run_in_background:
+                    self._manager_state = MState.EXECUTING_TASK
+                success, err_msg, task_uid = await self._worker_command_load_script(
+                    script=script, update_re=update_re, run_in_background=run_in_background
+                )
+                if not run_in_background:
+                    self._running_task_uid = task_uid
+            except Exception:
+                success = False
+                raise
+            finally:
+                if not success and not run_in_background:
+                    self._manager_state = MState.IDLE
+
+        return success, err_msg, task_uid
+
     def _generate_lists_of_allowed_plans_and_devices(self, *, always_update_uids=False):
         """
         Compute lists of allowed plans and devices based on the lists ``self._existing_plans``,
@@ -789,7 +896,12 @@ class RunEngineManager(Process):
         path_pd = self._config_dict["existing_plans_and_devices_path"]
         try:
             if reload_plans_devices:
-                self._existing_plans, self._existing_devices = load_existing_plans_and_devices(path_pd)
+                existing_plans, existing_devices = load_existing_plans_and_devices(path_pd)
+                self._set_existing_plans_and_devices(
+                    existing_plans=existing_plans,
+                    existing_devices=existing_devices,
+                    always_update_uids=True,
+                )
             self._generate_lists_of_allowed_plans_and_devices(always_update_uids=True)
         except Exception as ex:
             raise Exception(
@@ -836,6 +948,16 @@ class RunEngineManager(Process):
         except CommTimeoutError:
             plans_and_devices_list, err_msg = None, "Timeout occurred"
         return plans_and_devices_list, err_msg
+
+    async def _worker_request_task_results(self):
+        try:
+            results = await self._comm_to_worker.send_msg("request_task_results")
+            err_msg = ""
+            if results is None:
+                err_msg = "Failed to obtain the results of completed tasks from the worker"
+        except CommTimeoutError:
+            results, err_msg = None, "Timeout occurred"
+        return results, err_msg
 
     async def _worker_command_close_env(self):
         try:
@@ -898,9 +1020,29 @@ class RunEngineManager(Process):
             )
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
+            task_uid = response["task_uid"]
+            payload = response["payload"]
+            if success:
+                await self._task_results.add_running_task(task_uid=task_uid, payload=payload)
         except CommTimeoutError:
             success, err_msg = None, "Timeout occurred"
         return success, err_msg
+
+    async def _worker_command_load_script(self, *, script, update_re, run_in_background):
+        try:
+            response = await self._comm_to_worker.send_msg(
+                "command_load_script",
+                params={"script": script, "update_re": update_re, "run_in_background": run_in_background},
+            )
+            success = response["status"] == "accepted"
+            err_msg = response["err_msg"]
+            task_uid = response["task_uid"]
+            payload = response["payload"]
+            if success:
+                await self._task_results.add_running_task(task_uid=task_uid, payload=payload)
+        except CommTimeoutError:
+            success, err_msg, task_uid = None, "Timeout occurred", None
+        return success, err_msg, task_uid
 
     # ===============================================================================
     #         Functions that send commands/request data from Watchdog process
@@ -1039,9 +1181,12 @@ class RunEngineManager(Process):
         run_list_uid = self._re_run_list_uid
         plan_queue_uid = self._plan_queue.plan_queue_uid
         plan_history_uid = self._plan_queue.plan_history_uid
+        devices_existing_uid = self._existing_devices_uid
+        plans_existing_uid = self._existing_plans_uid
         devices_allowed_uid = self._allowed_devices_uid
         plans_allowed_uid = self._allowed_plans_uid
         plan_queue_mode = self._plan_queue.plan_queue_mode
+        task_results_uid = self._task_results.task_results_uid
         # worker_state_info = self._worker_state_info
 
         # TODO: consider different levels of verbosity for ping or other command to
@@ -1062,9 +1207,12 @@ class RunEngineManager(Process):
             "run_list_uid": run_list_uid,
             "plan_queue_uid": plan_queue_uid,
             "plan_history_uid": plan_history_uid,
+            "devices_existing_uid": devices_existing_uid,
+            "plans_existing_uid": plans_existing_uid,
             "devices_allowed_uid": devices_allowed_uid,
             "plans_allowed_uid": plans_allowed_uid,
             "plan_queue_mode": plan_queue_mode,
+            "task_results_uid": task_results_uid,
             # "worker_state_info": worker_state_info
         }
         return msg
@@ -1087,17 +1235,40 @@ class RunEngineManager(Process):
             if user_group not in self._allowed_plans:
                 raise Exception(f"Unknown user group: '{user_group}'")
 
-            plans_allowed = self._allowed_plans[user_group]
+            plans_allowed, plans_allowed_uid = self._allowed_plans[user_group], self._allowed_plans_uid
             success, msg = True, ""
         except Exception as ex:
-            plans_allowed = {}
+            plans_allowed, plans_allowed_uid = {}, None
             success, msg = False, str(ex)
 
         return {
             "success": success,
             "msg": msg,
             "plans_allowed": plans_allowed,
-            "plans_allowed_uid": self._allowed_plans_uid,
+            "plans_allowed_uid": plans_allowed_uid,
+        }
+
+    async def _plans_existing_handler(self, request):
+        """
+        Returns the list of existing plans.
+        """
+        logger.info("Returning the list of existing plans ...")
+
+        try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            plans_existing, plans_existing_uid = self._existing_plans, self._existing_plans_uid
+            success, msg = True, ""
+        except Exception as ex:
+            plans_existing, plans_existing_uid = {}, None
+            success, msg = False, str(ex)
+
+        return {
+            "success": success,
+            "msg": msg,
+            "plans_existing": plans_existing,
+            "plans_existing_uid": plans_existing_uid,
         }
 
     async def _devices_allowed_handler(self, request):
@@ -1118,17 +1289,41 @@ class RunEngineManager(Process):
             if user_group not in self._allowed_devices:
                 raise Exception(f"Unknown user group: '{user_group}'")
 
-            devices_allowed = self._allowed_devices[user_group]
+            devices_allowed, devices_allowed_uid = self._allowed_devices[user_group], self._allowed_devices_uid
             success, msg = True, ""
         except Exception as ex:
-            devices_allowed = {}
+            devices_allowed, devices_allowed_uid = {}, None
             success, msg = False, str(ex)
 
         return {
             "success": success,
             "msg": msg,
             "devices_allowed": devices_allowed,
-            "devices_allowed_uid": self._allowed_devices_uid,
+            "devices_allowed_uid": devices_allowed_uid,
+        }
+
+    async def _devices_existing_handler(self, request):
+        """
+        Returns the list of existing devices.
+        """
+        logger.info("Returning the list of existing devices ...")
+
+        try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            devices_existing = self._existing_devices
+            devices_existing_uid = self._existing_devices_uid
+            success, msg = True, ""
+        except Exception as ex:
+            devices_existing, devices_existing_uid = {}, None
+            success, msg = False, str(ex)
+
+        return {
+            "success": success,
+            "msg": msg,
+            "devices_existing": devices_existing,
+            "devices_existing_uid": devices_existing_uid,
         }
 
     async def _permissions_reload_handler(self, request):
@@ -1864,6 +2059,69 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg}
 
+    async def _script_upload_handler(self, request):
+        """
+        Upload script to RE worker environment. If ``update_re==False`` (default), the Run Engine (``RE``)
+        and Data Broker (``db``) objects are not updated in RE worker namespace even if they are
+        defined (or redefined) in the uploaded script. If ``run_in_background==False`` (default), then
+        the request is rejected unless RE Manager and RE Worker environment are in IDLE state, otherwise
+        the script will be loaded in a separate thread (not recommended in most practical cases).
+
+        The API call only inititiates the process of loading the script and return success if the request
+        is accepted and the task can be started. Success does not mean that the script is successfully loaded.
+        """
+        logger.info("Uploading script to RE environment ...")
+        try:
+            supported_param_names = ["script", "update_re", "run_in_background"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            script = request.get("script", None)
+            if script is None:
+                raise ValueError("Required 'script' parameter is is missing in API call.")
+            if not isinstance(script, str):
+                raise TypeError("Type of the 'script' parameter in API call is incorrect.")
+
+            update_re = request.get("update_re", False)
+            run_in_background = request.get("run_in_background", False)
+
+            success, msg, task_uid = await self._environment_upload_script(
+                script=script, update_re=update_re, run_in_background=run_in_background
+            )
+
+        except Exception as ex:
+            success, msg, task_uid = False, f"Error: {ex}", None
+
+        return {"success": success, "msg": msg, "task_uid": task_uid}
+
+    async def _task_load_result_handler(self, request):
+        """
+        Load result of a task executed by the worker process. The request must contain valid ``task_uid``.
+        Task UIDs are returned by the API used to start tasks. Returned parameters: ``success`` and
+        ``msg`` indicate success of the API call and error message in case of API call failure;
+        ``status`` is the status of the task (``running``, ``completed``, ``not_found``), ``result``
+        is a dictionary with information about the task. The information is be different for
+        the completed and running tasks. If ``status=='not_found'``, then is ``result`` is ``{}``.
+        """
+        logger.debug("Load result of the task executed by RE worker ...")
+
+        task_uid = None
+
+        try:
+            supported_param_names = ["task_uid"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            task_uid = request.get("task_uid", None)
+            if task_uid is None:
+                raise ValueError("Required 'task_uid' parameter is missing in the API call.")
+
+            status, result = await self._task_results.get_task_info(task_uid=task_uid)
+            success, msg = True, ""
+
+        except Exception as ex:
+            success, msg, status, result = False, f"Error: {ex}", None, None
+
+        return {"success": success, "msg": msg, "task_uid": task_uid, "status": status, "result": result}
+
     async def _queue_start_handler(self, request):
         """
         Start execution of the loaded queue. Additional runs can be added to the queue while
@@ -2114,13 +2372,17 @@ class RunEngineManager(Process):
             "status": "_status_handler",
             "queue_get": "_queue_get_handler",
             "plans_allowed": "_plans_allowed_handler",
+            "plans_existing": "_plans_existing_handler",
             "devices_allowed": "_devices_allowed_handler",
+            "devices_existing": "_devices_existing_handler",
             "permissions_reload": "_permissions_reload_handler",
             "history_get": "_history_get_handler",
             "history_clear": "_history_clear_handler",
             "environment_open": "_environment_open_handler",
             "environment_close": "_environment_close_handler",
             "environment_destroy": "_environment_destroy_handler",
+            "script_upload": "_script_upload_handler",
+            "task_load_result": "_task_load_result_handler",
             "queue_mode_set": "_queue_mode_set_handler",
             "queue_item_add": "_queue_item_add_handler",
             "queue_item_add_batch": "_queue_item_add_batch_handler",
@@ -2181,6 +2443,8 @@ class RunEngineManager(Process):
         self._comm_to_watchdog.start()
         self._comm_to_worker.start()
 
+        self._task_results = TaskResults(retention_time=120)
+
         # Start heartbeat generator
         self._heartbeat_generator_task = asyncio.ensure_future(self._heartbeat_generator(), loop=self._loop)
         self._worker_status_task = asyncio.ensure_future(self._periodic_worker_state_request(), loop=self._loop)
@@ -2215,10 +2479,14 @@ class RunEngineManager(Process):
             self._worker_state_info, err_msg = await self._worker_request_state()
             if self._worker_state_info:
                 item_uid_running = self._worker_state_info["running_item_uid"]
+                running_task_uid = self._worker_state_info["running_task_uid"]
                 re_state = self._worker_state_info["re_state"]
                 re_report_available = self._worker_state_info["re_report_available"]
                 re_deferred_pause_requested = self._worker_state_info["re_deferred_pause_requested"]
-                if item_uid_running and (re_report_available or (re_state != "idle")):
+                if (re_state == "executing_task") and running_task_uid:
+                    self._manager_state = MState.EXECUTING_TASK
+                    self._running_task_uid = running_task_uid
+                elif item_uid_running and (re_report_available or (re_state != "idle")):
                     # If 're_state' is 'idle', then consider the queue as running only if
                     #   there is unprocessed report. If report was processed, then assume that
                     #   the queue is not running.
@@ -2289,7 +2557,7 @@ class RunEngineManager(Process):
                 """
                 log_msg_out = copy.deepcopy(msg_out)
                 # Do not print large dicts in the log: replace values with "..."
-                large_dicts = ("plans_allowed", "devices_allowed")
+                large_dicts = ("plans_allowed", "plans_existing", "devices_allowed", "devices_existing")
                 for dict_name in large_dicts:
                     if dict_name in log_msg_out:
                         d = log_msg_out[dict_name]

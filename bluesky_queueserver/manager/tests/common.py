@@ -20,7 +20,7 @@ import logging
 logger = logging.Logger(__name__)
 
 
-def copy_default_profile_collection(tmp_path, *, copy_yaml=True):
+def copy_default_profile_collection(tmp_path, *, copy_py=True, copy_yaml=True):
     """
     Copy default profile collections (only .py files) to temporary directory.
     Returns the new temporary directory.
@@ -33,7 +33,9 @@ def copy_default_profile_collection(tmp_path, *, copy_yaml=True):
     os.makedirs(new_pc_path, exist_ok=True)
 
     # Copy simulated profile collection (only .py files)
-    patterns = ["*.py", "*.ipy"]
+    patterns = []
+    if copy_py:
+        patterns.extend(["*.py", "*.ipy"])
     if copy_yaml:
         patterns.append("*.yaml")
     for pattern in patterns:
@@ -274,6 +276,32 @@ def wait_for_condition(time, condition):
             pass
         ttime.sleep(dt / 2)
     return False
+
+
+def wait_for_task_result(time, task_uid):
+    """
+    Wait for the results of the task defined by ``task_uid``. Raises ``TimeoutError`` if
+    timeout ``time`` is exceeded while waiting for the task result. Returns the task result
+    of the task only if it was completed.
+    """
+    dt = 0.2  # Period for checking if the task is available
+    time_stop = ttime.time() + time
+    while ttime.time() < time_stop:
+        ttime.sleep(dt / 2)
+        try:
+            resp, _ = zmq_secure_request("task_load_result", params={"task_uid": task_uid})
+
+            assert resp["success"] is True, f"Request for task result failed: {resp['msg']}"
+            assert resp["task_uid"] == task_uid
+
+            if resp["status"] == "completed":
+                return resp["result"]
+
+        except TimeoutError:
+            pass
+        ttime.sleep(dt / 2)
+
+    raise TimeoutError(f"Timeout occurred while waiting for results of the task {task_uid!r}")
 
 
 def clear_redis_pool():

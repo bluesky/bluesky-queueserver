@@ -757,6 +757,71 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
     return plan_prepared
 
 
+def prepare_function(*, func_info, nspace, user_group_permissions=None):
+    """
+    Prepare function for execution in the worker namespace. Returned dictionary
+    contains reference to the callable object in the namespace, list of args and
+    dictionary of kwargs. The function may check if the user is allowed to
+    execute the function if ``user_group_permissions`` is provided (not ``None``).
+
+    Parameters
+    ----------
+    func_info: dict
+        Dictionary which contains keys: ``name``, ``user_group``, ``args`` (optional)
+        and ``kwargs`` (optional).
+    nspace: dict
+        Reference to the RE Worker namespace.
+    user_group_permissions: dict or None
+        Dictionary that contains user group permissions. User permissions are not checked
+        if ``None``.
+
+    Returns
+    -------
+    dict
+        Function data: ``callable`` is a reference to a callable object in RE Worker namespace,
+        ``args`` is list of args and ``kwargs`` is a dictionary of kwargs.
+
+    Raises
+    ------
+    RuntimeError
+        Error while preparing the function.
+    """
+
+    if "name" not in func_info:
+        raise RuntimeError(f"No function name is specified: {func_info!r}")
+
+    if "user_group" not in func_info:
+        raise RuntimeError(f"No user group is specified in parameters for the function: {func_info!r}")
+
+    func_name = func_info["name"]
+    user_group = func_info["user_group"]
+    if user_group_permissions is not None:
+        check_if_function_allowed(func_name, group_name=user_group, user_group_permissions=user_group_permissions)
+
+    func_args = func_info.get("args", [])
+    func_kwargs = func_info.get("kwargs", {})
+
+    if func_name not in nspace:
+        raise RuntimeError(f"Function {func_name!r} is not found in the worker namespace")
+
+    func_callable = nspace["func_name"]
+
+    # Following are basic checks to avoid most common errors. The list of check can be expanded.
+    if not callable(func_callable):
+        raise RuntimeError(f"Object {func_name!r} defined in worker namespace is not callable")
+    # Generator functions defined in the worker namespace are plans, which return generators
+    #   when called. There is no point in calling those functions directly.
+    if inspect.isgeneratorfunction(func_callable):
+        raise RuntimeError(f"Object {func_name!r} defined in worker namespace is a generator function")
+
+    func_prepared = {
+        "callable": func_callable,
+        "args": func_args,
+        "kwargs": func_kwargs,
+    }
+    return func_prepared
+
+
 # ===============================================================================
 #   Validation of plan parameters
 

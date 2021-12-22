@@ -1,4 +1,5 @@
 # flake8: noqa
+import time as ttime
 import typing
 import ophyd
 import bluesky
@@ -99,3 +100,23 @@ def sim_multirun_plan_nested(npts: int, delay: float = 1.0):
         yield from bps.mov(motor, j * 0.2)
         yield from bps.trigger_and_read([motor, det])
         yield from bps.sleep(delay)
+
+
+def function_sleep(time):
+    """
+    The function used for testing of 'function_execute' API.
+    """
+    print("******** Starting execution of the function 'function_sleep' **************")
+    print(f"*******************   Waiting for {time} seconds **************************")
+    ttime.sleep(time)
+    print("******** Finished execution of the function 'function_sleep' **************")
+
+    return {"success": True, "time": time}
+
+
+def function_test():
+    """
+    The function used for testing of 'function_execute' API.
+    """
+    print("******** Executing the function 'function_test' **************")
+    return "Function 'function_test' is completed"

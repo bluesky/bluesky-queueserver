@@ -58,6 +58,8 @@ from bluesky_queueserver.manager.profile_ops import (
     construct_parameters,
     _check_ranges,
     format_text_descriptions,
+    check_if_function_allowed,
+    validate_user_group_permissions_schema,
 )
 
 # User name and user group name used throughout most of the tests.
@@ -3654,6 +3656,165 @@ def test_load_allowed_plans_and_devices_2(
             assert plans == ("count", "scan", "junk_plan"), test_case
 
 
+_user_permissions_incomplete_1 = """user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - null  # Allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - null  # Allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - ".*"  # A different way to allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - ".*"  # A different way to allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+"""
+
+_user_permissions_incomplete_2 = """user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - null  # Allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - null  # Allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - ".*"  # A different way to allow all
+    allowed_devices:
+      - ".*"  # A different way to allow all
+"""
+
+_user_permissions_incomplete_3 = """user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - null  # Allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - null  # Allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    forbidden_devices:
+      - null  # Nothing is forbidden
+"""
+
+_user_permissions_incomplete_4 = """user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - null  # Allow all
+    allowed_devices:
+      - null  # Allow all
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - ".*"  # A different way to allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - ".*"  # A different way to allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+"""
+
+_user_permissions_incomplete_5 = """user_groups:
+  root:  # The group includes all available plan and devices
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    forbidden_devices:
+      - null  # Nothing is forbidden
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - ".*"  # A different way to allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - ".*"  # A different way to allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("pass_permissions_as_parameter", [False, True])
+@pytest.mark.parametrize("permissions_str, root_empty, admin_empty", [
+    (_user_permissions_incomplete_1, False, False),
+    (_user_permissions_incomplete_2, False, False),
+    (_user_permissions_incomplete_3, False, True),
+    (_user_permissions_incomplete_4, False, False),
+    (_user_permissions_incomplete_5, True, True),
+])
+# fmt: on
+def test_load_allowed_plans_and_devices_3(
+    tmp_path, permissions_str, root_empty, admin_empty, pass_permissions_as_parameter
+):
+    """
+    Tests if filtering settings for the "root" group are also applied to other groups.
+    The purpose of the "root" group is to filter junk from the list of existing devices and
+    plans. Additionally check if the plans and devices were removed from the parameter
+    descriptions.
+
+    Parameter 'only_admin' - permissions are applied only to the 'admin' user
+    """
+    pc_path = copy_default_profile_collection(tmp_path)
+    create_local_imports_dirs(pc_path)
+    patch_first_startup_file(pc_path, _patch_junk_plan_and_device)
+
+    # Generate list of plans and devices for the patched profile collection
+    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, overwrite=True)
+
+    permissions_fln = os.path.join(pc_path, "user_group_permissions.yaml")
+    with open(permissions_fln, "w") as f:
+        f.write(permissions_str)
+
+    plans_and_devices_fln = os.path.join(pc_path, "existing_plans_and_devices.yaml")
+
+    if pass_permissions_as_parameter:
+        user_group_permissions = load_user_group_permissions(permissions_fln)
+        allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+            path_existing_plans_and_devices=plans_and_devices_fln,
+            user_group_permissions=user_group_permissions,
+        )
+    else:
+        allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+            path_existing_plans_and_devices=plans_and_devices_fln,
+            path_user_group_permissions=permissions_fln,
+        )
+
+    assert len(allowed_plans) == 2
+    assert len(allowed_devices) == 2
+
+    assert isinstance(allowed_plans["root"], dict)
+    assert isinstance(allowed_devices["root"], dict)
+    assert isinstance(allowed_plans["admin"], dict)
+    assert isinstance(allowed_devices["admin"], dict)
+
+    if root_empty:
+        assert len(allowed_plans["root"]) == 0
+        assert len(allowed_devices["root"]) == 0
+    else:
+        assert len(allowed_plans["root"]) > 0
+        assert len(allowed_devices["root"]) > 0
+
+    if admin_empty:
+        assert len(allowed_plans["admin"]) == 0
+        assert len(allowed_devices["admin"]) == 0
+    else:
+        assert len(allowed_plans["admin"]) > 0
+        assert len(allowed_devices["admin"]) > 0
+
+
 # fmt: off
 @pytest.mark.parametrize("option", [
     "full_lists",
@@ -3664,7 +3825,7 @@ def test_load_allowed_plans_and_devices_2(
     "empty_lists",
 ])
 # fmt: on
-def test_load_allowed_plans_and_devices_3(tmp_path, option):
+def test_load_allowed_plans_and_devices_4(tmp_path, option):
     """
     Basic test for ``load_allowed_plans_and_devices``.
     """
@@ -3745,6 +3906,105 @@ def test_load_allowed_plans_and_devices_3(tmp_path, option):
         check_all_user_dicts(allowed_devices2, is_empty=True)
     else:
         assert False, f"Unknown option '{option}'"
+
+
+_func_permissions_dict_1 = {
+    "user_groups": {
+        "root": {"allowed_functions": [None], "forbidden_functions": [None]},
+        "admin": {"allowed_functions": [None], "forbidden_functions": [None]},
+    }
+}
+
+_func_permissions_dict_2 = {
+    "user_groups": {
+        "root": {"allowed_functions": [], "forbidden_functions": [None]},
+        "admin": {"allowed_functions": [None], "forbidden_functions": [None]},
+    }
+}
+
+_func_permissions_dict_3 = {
+    "user_groups": {
+        "root": {"allowed_functions": [None], "forbidden_functions": [None]},
+        "admin": {"allowed_functions": [], "forbidden_functions": []},
+    }
+}
+
+_func_permissions_dict_4 = {
+    "user_groups": {
+        "root": {"allowed_functions": [None], "forbidden_functions": [None]},
+        "admin": {},
+    }
+}
+
+_func_permissions_dict_5 = {
+    "user_groups": {
+        "root": {"allowed_functions": [None]},
+        "admin": {"allowed_functions": [None], "forbidden_functions": [".*"]},
+    }
+}
+
+_func_permissions_dict_6 = {
+    "user_groups": {
+        "root": {"allowed_functions": [None]},
+        "admin": {"allowed_functions": ["^tmp", "^test"], "forbidden_functions": ["end$"]},
+    }
+}
+
+_func_permissions_dict_7 = {
+    "user_groups": {
+        "root": {"allowed_functions": [None]},
+        "admin": {"allowed_functions": ["^tmp", "^test"], "forbidden_functions": ["^test"]},
+    }
+}
+
+
+# fmt: off
+@pytest.mark.parametrize("permissions_dict, func_name, group, accepted", [
+    (_func_permissions_dict_1, "test_func", "root", True),
+    (_func_permissions_dict_1, "test_func", "admin", True),
+    (_func_permissions_dict_2, "test_func", "root", False),
+    (_func_permissions_dict_2, "test_func", "admin", False),
+    (_func_permissions_dict_3, "test_func", "root", True),
+    (_func_permissions_dict_3, "test_func", "admin", False),
+    (_func_permissions_dict_4, "test_func", "admin", False),
+    (_func_permissions_dict_5, "test_func", "admin", False),
+    (_func_permissions_dict_6, "test_func", "admin", True),
+    (_func_permissions_dict_7, "test_func", "admin", False),
+])
+# fmt: on
+def test_check_if_function_allowed_1(permissions_dict, func_name, group, accepted):
+    validate_user_group_permissions_schema(permissions_dict)
+    is_accepted = check_if_function_allowed(func_name, group_name=group, user_group_permissions=permissions_dict)
+    assert is_accepted == accepted
+
+
+_func_permissions_dict_fail_1 = {
+    "root": {"allowed_functions": [None]},
+}
+
+_func_permissions_dict_fail_2 = {
+    "user_groups": {
+        "root": {"allowed_functions": [None]},
+    }
+}
+
+_func_permissions_dict_fail_3 = {
+    "user_groups": {
+        "admin": {"allowed_functions": [None]},
+    }
+}
+
+
+# fmt: off
+@pytest.mark.parametrize("permissions_dict, except_type, msg", [
+    (_func_permissions_dict_fail_1, KeyError, "does not contain 'user_groups' key"),
+    (_func_permissions_dict_fail_2, KeyError, "No permissions are defined for user group 'admin'"),
+    (_func_permissions_dict_fail_3, KeyError, "No permissions are defined for user group 'root'"),
+])
+# fmt: on
+def test_check_if_function_allowed_2(permissions_dict, except_type, msg):
+    with pytest.raises(except_type, match=msg):
+        check_if_function_allowed("some_name", group_name="admin", user_group_permissions=permissions_dict)
 
 
 # fmt: off

@@ -2319,7 +2319,6 @@ _user_group_permission_schema = {
             "type": "object",
             "additionalProperties": {
                 "type": "object",
-                "required": ["allowed_plans", "forbidden_plans", "allowed_devices", "forbidden_devices"],
                 "additionalProperties": False,
                 "properties": {
                     "allowed_plans": {
@@ -2338,6 +2337,14 @@ _user_group_permission_schema = {
                         "type": "array",
                         "items": {"type": ["string", "null"]},
                     },
+                    "allowed_functions": {
+                        "type": "array",
+                        "items": {"type": ["string", "null"]},
+                    },
+                    "forbidden_functions": {
+                        "type": "array",
+                        "items": {"type": ["string", "null"]},
+                    },
                 },
             },
         },
@@ -2347,7 +2354,8 @@ _user_group_permission_schema = {
 
 def load_user_group_permissions(path_to_file=None):
     """
-    Load the data on allowed plans and devices for user groups.
+    Load the data on allowed plans and devices for user groups. User group 'root'
+    is required. Exception is raised in user group 'root' is missing.
 
     Parameters
     ----------
@@ -2357,7 +2365,7 @@ def load_user_group_permissions(path_to_file=None):
     Returns
     -------
     dict
-        Data structure with user permissions. Returns ``{}`` if path is empty string
+        Data structure with user permissions. Returns ``{}`` if path is an empty string
         or None.
 
     Raises
@@ -2370,7 +2378,6 @@ def load_user_group_permissions(path_to_file=None):
         return {}
 
     try:
-
         if not os.path.isfile(path_to_file):
             raise IOError(f"File '{path_to_file}' does not exist.")
 
@@ -2383,8 +2390,6 @@ def load_user_group_permissions(path_to_file=None):
 
         if "root" not in user_group_permissions["user_groups"]:
             raise Exception("Missing required user group: 'root'")
-        if "admin" not in user_group_permissions["user_groups"]:
-            raise Exception("Missing required user group: 'admin'")
 
     except Exception as ex:
         msg = f"Error while loading user group permissions from file '{path_to_file}': {str(ex)}"
@@ -2409,8 +2414,9 @@ def _select_allowed_items(item_dict, allow_patterns, disallow_patterns):
         Selected item should match at least one of the re patterns. If the value is ``[None]``
         then all items are selected. If ``[]``, then no items are selected.
     disallow_patterns: list(str)
-        Selected item should not match any of the re patterns. If the value is ``[None]``
-        or ``[]`` then no items are deselected.
+        Items are deselected based on re patterns in the list: if an item matches at least one
+        of the patterns, it is deselected. If the value is ``[None]`` or ``[]`` then no items
+        are deselected.
 
     Returns
     -------

@@ -3199,6 +3199,10 @@ _user_groups_text = r"""user_groups:
       - null  # Allow all
     forbidden_devices:
       - null  # Nothing is forbidden
+    allowed_functions:
+      - null  # Allow all
+    forbidden_functions:
+      - null  # Nothing is forbidden
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
       - ".*"  # A different way to allow all
@@ -3207,6 +3211,10 @@ _user_groups_text = r"""user_groups:
     allowed_devices:
       - ".*"  # A different way to allow all
     forbidden_devices:
+      - null  # Nothing is forbidden
+    allowed_functions:
+      - ".*"  # A different way to allow all
+    forbidden_functions:
       - null  # Nothing is forbidden
   test_user:  # Users with limited access capabilities
     allowed_plans:
@@ -3221,6 +3229,15 @@ _user_groups_text = r"""user_groups:
     forbidden_devices:
       - "^det[3-5]$" # Use regular expression patterns
       - "^motor\\d+$"
+  test_user_1:
+    allowed_plans:
+      - "^count$"  # Use regular expression patterns
+      - "scan$"
+    allowed_devices:
+      - "^det"  # Use regular expression patterns
+      - "^motor"
+    allowed_functions:
+      - ".*"  # A different way to allow all
 """
 
 _user_groups_dict = {
@@ -3230,18 +3247,27 @@ _user_groups_dict = {
             "forbidden_plans": [None],
             "allowed_devices": [None],
             "forbidden_devices": [None],
+            "allowed_functions": [None],
+            "forbidden_functions": [None],
         },
         "admin": {
             "allowed_plans": [".*"],
             "forbidden_plans": [None],
             "allowed_devices": [".*"],
             "forbidden_devices": [None],
+            "allowed_functions": [".*"],
+            "forbidden_functions": [None],
         },
         "test_user": {
             "allowed_plans": ["^count$", "scan$"],
             "forbidden_plans": ["^adaptive_scan$", "^inner_product"],
             "allowed_devices": ["^det", "^motor"],
             "forbidden_devices": ["^det[3-5]$", r"^motor\d+$"],
+        },
+        "test_user_1": {
+            "allowed_plans": ["^count$", "scan$"],
+            "allowed_devices": ["^det", "^motor"],
+            "allowed_functions": [".*"],
         },
     }
 }
@@ -3309,7 +3335,7 @@ def test_load_user_group_permissions_4_fail(tmp_path):
         load_user_group_permissions(path_to_file)
 
 
-@pytest.mark.parametrize("group_to_delete", ["root", "admin"])
+@pytest.mark.parametrize("group_to_delete", ["root"])
 def test_load_user_group_permissions_5_fail(tmp_path, group_to_delete):
     """
     Function ``load_user_group_permissions``. Failed schema validation.

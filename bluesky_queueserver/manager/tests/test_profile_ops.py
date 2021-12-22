@@ -60,6 +60,7 @@ from bluesky_queueserver.manager.profile_ops import (
     format_text_descriptions,
     check_if_function_allowed,
     validate_user_group_permissions_schema,
+    prepare_function,
 )
 
 # User name and user group name used throughout most of the tests.
@@ -2790,6 +2791,105 @@ def test_prepare_plan_2(plan_name, plan, exp_args, exp_kwargs, exp_meta, success
                 allowed_plans=allowed_plans,
                 allowed_devices=allowed_devices,
             )
+
+
+_prep_func_script_1 = """
+def func1():
+    return 10
+
+def func2(p0=2, *, p1=10):
+    return 20 + p0 + p1
+
+class A:
+    def __call__(self):
+        return "A"
+    def f(self):
+        return "f"
+
+    @staticmethod
+    def fs():
+        return "fs"
+
+    @classmethod
+    def fc(cls):
+        return "fc"
+
+func3 = A()
+func4 = func3.f
+func5 = A.fs
+func6 = A.fc
+
+def gen1():
+    yield "This is a generator"
+
+def not_allowed_func():
+    pass
+
+some_object = "some string"
+"""
+
+_prep_func_permissions = {
+    "user_groups": {
+        "root": {"allowed_functions": [None], "forbidden_functions": [None]},
+        "admin": {
+            "allowed_functions": ["^func", "^gen", "^some_object$", "unknown"],
+            "forbidden_functions": [None],
+        },
+    }
+}
+
+
+# fmt: off
+@pytest.mark.parametrize("func_info, result", [
+    ({"name": "func1", "user_group": "admin"}, 10),
+    ({"name": "func2", "user_group": "admin"}, 32),
+    ({"name": "func2", "args": [5], "user_group": "admin"}, 35),
+    ({"name": "func2", "kwargs": {"p1": 50}, "user_group": "admin"}, 72),
+    ({"name": "func2", "args": [3], "kwargs": {"p1": 50}, "user_group": "admin"}, 73),
+    ({"name": "func2", "kwargs": {"p0": 4, "p1": 50}, "user_group": "admin"}, 74),
+    ({"name": "func3", "user_group": "admin"}, "A"),
+    ({"name": "func4", "user_group": "admin"}, "f"),
+    ({"name": "func5", "user_group": "admin"}, "fs"),
+    ({"name": "func6", "user_group": "admin"}, "fc"),
+    ({"name": "not_allowed_func", "user_group": "admin"}, None),  # No checks for permissions
+])
+# fmt: on
+def test_prepare_function_1(func_info, result):
+    """
+    Basic test for 'prepare_function'. Test with different types of callables.
+    """
+    nspace = {}
+    load_script_into_existing_nspace(script=_prep_func_script_1, nspace=nspace)
+
+    func_prepared = prepare_function(func_info=func_info, nspace=nspace)
+
+    def execute_func(fp):
+        return fp["callable"](*fp["args"], **fp["kwargs"])
+
+    assert execute_func(func_prepared) == result
+
+
+# fmt: off
+@pytest.mark.parametrize("func_info, except_type, msg", [
+    ({"user_group": "admin"}, RuntimeError, "No function name is specified"),
+    ({"name": "func1"}, RuntimeError, "No user group is specified"),
+    ({"name": "unknown", "user_group": "admin"}, RuntimeError, "Function 'unknown' is not found"),
+    ({"name": "some_object", "user_group": "admin"}, RuntimeError, "is not callable"),
+    ({"name": "gen1", "user_group": "admin"}, RuntimeError, "is a generator function"),
+    ({"name": "func1", "user_group": "unknown"},
+     KeyError, "No permissions are defined for user group 'unknown'"),
+    ({"name": "not_allowed_func", "user_group": "admin"},
+     RuntimeError, "Function 'not_allowed_func' is not allowed"),
+])
+# fmt: on
+def test_prepare_function_2(func_info, except_type, msg):
+
+    nspace = {}
+    load_script_into_existing_nspace(script=_prep_func_script_1, nspace=nspace)
+
+    validate_user_group_permissions_schema(_prep_func_permissions)
+    with pytest.raises(except_type, match=msg):
+        prepare_function(func_info=func_info, nspace=nspace, user_group_permissions=_prep_func_permissions)
 
 
 def test_gen_list_of_plans_and_devices_1(tmp_path):

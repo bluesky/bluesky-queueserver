@@ -796,15 +796,18 @@ def prepare_function(*, func_info, nspace, user_group_permissions=None):
     func_name = func_info["name"]
     user_group = func_info["user_group"]
     if user_group_permissions is not None:
-        check_if_function_allowed(func_name, group_name=user_group, user_group_permissions=user_group_permissions)
+        if not check_if_function_allowed(
+            func_name, group_name=user_group, user_group_permissions=user_group_permissions
+        ):
+            raise RuntimeError(f"Function {func_name!r} is not allowed for users from {user_group!r} user group")
 
-    func_args = func_info.get("args", [])
-    func_kwargs = func_info.get("kwargs", {})
+    func_args = list(func_info.get("args", []))
+    func_kwargs = dict(func_info.get("kwargs", {}))
 
     if func_name not in nspace:
         raise RuntimeError(f"Function {func_name!r} is not found in the worker namespace")
 
-    func_callable = nspace["func_name"]
+    func_callable = nspace[func_name]
 
     # Following are basic checks to avoid most common errors. The list of check can be expanded.
     if not callable(func_callable):

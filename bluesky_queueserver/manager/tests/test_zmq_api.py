@@ -1904,7 +1904,7 @@ def test_zmq_api_script_upload_8_fail(re_manager):  # noqa: F811
     """
     resp2, _ = zmq_single_request("script_upload", params={"script": _script_to_upload_1})
     assert resp2["success"] is False
-    assert "RE Worker environment is not opened" in resp2["msg"]
+    assert "RE Worker environment is not open" in resp2["msg"]
 
 
 # fmt: off

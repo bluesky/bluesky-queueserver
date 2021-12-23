@@ -30,6 +30,7 @@ from .profile_ops import (
     extract_script_root_path,
     load_script_into_existing_nspace,
     compare_existing_plans_and_devices,
+    prepare_function,
 )
 
 logger = logging.getLogger(__name__)
@@ -432,6 +433,27 @@ class RunEngineWorker(Process):
 
         logger.info("The script was successfully loaded into RE environment")
 
+    def _execute_function_in_environment(self, *, func_info):
+        """
+        Execute function in the worker environment.
+        """
+        func_parsed = prepare_function(
+            func_info=func_info,
+            nspace=self._re_namespace,
+            user_group_permissions=self._user_group_permissions,
+        )
+
+        func_callable = func_parsed["callable"]
+        func_args = func_parsed["args"]
+        func_kwargs = func_parsed["kwargs"]
+
+        return_value = func_callable(*func_args, **func_kwargs)
+
+        func_name = func_info.get("name", "--")
+        logger.debug(f"The execution of the function {func_name!r} was successfully completed.")
+
+        return return_value
+
     # =============================================================================
     #               Handlers for messages from RE Manager
 
@@ -712,6 +734,24 @@ class RunEngineWorker(Process):
         msg_out = {"status": status, "err_msg": err_msg, "task_uid": task_uid, "payload": payload}
         return msg_out
 
+    def _command_execute_function(self, func_info, run_in_background):
+        """
+        Start execution of a function in the worker namespace. The item type must be ``function``.
+        The function may be started in the background.
+        """
+        # Reuse item UID as task UID
+        task_uid = func_info.get("item_uid", None)
+
+        status, err_msg, task_uid, payload = self._run_in_separate_thread(
+            name="Execute function",
+            target=self._execute_function_in_environment,
+            kwargs={"func_info": func_info},
+            run_in_background=run_in_background,
+            task_uid=task_uid,
+        )
+        msg_out = {"status": status, "err_msg": err_msg, "task_uid": task_uid, "payload": payload}
+        return msg_out
+
     # ------------------------------------------------------------
 
     def _execute_in_main_thread(self):
@@ -733,21 +773,19 @@ class RunEngineWorker(Process):
             except queue.Empty:
                 pass
 
-    def _run_in_separate_thread(self, *, name, target, run_in_background=True, args=None, kwargs=None):
+    def _run_in_separate_thread(
+        self, *, name, target, run_in_background=True, args=None, kwargs=None, task_uid=None
+    ):
         """
         Run ``target`` (any callable) in a separate daemon thread. The callable is passed arguments ``args``
         and ``kwargs`` and ``name`` is used to generate thread name and in error messages. The function
-        returns once the thead is started without waiting for the result.
-
-        TODO: this function will be extended in future PRs since it will be used for multiple purposes that
-        involve running background tasks. Consider this to be a primitive implementation sufficient for
-        current needs. Improvements will include means for monitoring of executed tasks and propagating
-        the results of execution. Additional parameters will be added.
+        returns once the thead is started without waiting for the result. The function will generate
+        a new task UID if it is not passed as a parameter
         """
         args, kwargs = args or [], kwargs or {}
         status, msg = "accepted", ""
 
-        task_uid = str(uuid.uuid4())
+        task_uid = task_uid or str(uuid.uuid4())
         time_start = ttime.time()
         logger.debug(f"Starting task {name!r}. Task UID: {task_uid!r}.")
 
@@ -873,6 +911,7 @@ class RunEngineWorker(Process):
         self._comm_to_manager.add_method(self._command_permissions_reload_handler, "command_permissions_reload")
 
         self._comm_to_manager.add_method(self._command_load_script, "command_load_script")
+        self._comm_to_manager.add_method(self._command_execute_function, "command_execute_function")
 
         self._comm_to_manager.start()
 

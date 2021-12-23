@@ -2883,7 +2883,9 @@ def test_prepare_function_1(func_info, result):
 ])
 # fmt: on
 def test_prepare_function_2(func_info, except_type, msg):
-
+    """
+    Tests for 'prepare_function': failing cases
+    """
     nspace = {}
     load_script_into_existing_nspace(script=_prep_func_script_1, nspace=nspace)
 

@@ -1269,7 +1269,7 @@ class RunEngineManager(Process):
             "queue_stop_pending": queue_stop_pending,
             "worker_environment_exists": worker_environment_exists,
             "worker_environment_state": env_state,  # State of the worker environment
-            "worker_background_tasks": background_tasks,  # The number of background tasks (worker health)
+            "worker_background_tasks": background_tasks,  # The number of background tasks
             "re_state": re_state,  # State of Run Engine
             "pause_pending": deferred_pause_pending,  # True/False - Cleared once pause processed
             # If Run List UID change, download the list of runs for the current plan.

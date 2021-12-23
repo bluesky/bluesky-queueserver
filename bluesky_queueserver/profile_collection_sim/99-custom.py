@@ -102,9 +102,13 @@ def sim_multirun_plan_nested(npts: int, delay: float = 1.0):
         yield from bps.sleep(delay)
 
 
+# =====================================================================================
+#                Functions for testing 'function_execute' API.
+
+
 def function_sleep(time):
     """
-    The function used for testing of 'function_execute' API.
+    Sleep for a given number of seconds.
     """
     print("******** Starting execution of the function 'function_sleep' **************")
     print(f"*******************   Waiting for {time} seconds **************************")
@@ -114,9 +118,29 @@ def function_sleep(time):
     return {"success": True, "time": time}
 
 
-def function_test():
+_fifo_buffer = []
+
+
+def push_buffer_element(element):
+    """
+    Push an element to a FIFO buffer.
+    """
+    print("******** Executing the function 'push_buffer_element' **************")
+    _fifo_buffer.append(element)
+
+
+def pop_buffer_element():
+    """
+    Pop an element from FIFO buffer. Raises exception if the buffer is empty
+    (function call fails, traceback should be returned).
+    """
+    print("******** Executing the function 'pop_buffer_element' **************")
+    return _fifo_buffer.pop(0)
+
+
+def clear_buffer():
     """
     The function used for testing of 'function_execute' API.
     """
-    print("******** Executing the function 'function_test' **************")
-    return "Function 'function_test' is completed"
+    print("******** Executing the function 'clear_buffer' **************")
+    return _fifo_buffer.clear()

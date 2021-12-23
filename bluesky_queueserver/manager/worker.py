@@ -100,6 +100,8 @@ class RunEngineWorker(Process):
         self._running_plan_completed = False
         self._running_task_uid = None  # UID of the running foreground task (if running a task)
 
+        self._background_tasks_num = 0  # The number of background tasks
+
         # Report (dict) generated after execution of a command. The report can be downloaded
         #   by RE Manager.
         self._re_report = None
@@ -477,6 +479,8 @@ class RunEngineWorker(Process):
         run_list_updated = self._active_run_list.is_changed()  # True - updates are available
         plans_and_devices_list_updated = self._existing_plans_and_devices_changed
         completed_tasks_available = bool(self._completed_tasks)
+        background_tasks_num = self._background_tasks_num
+
         msg_out = {
             "running_item_uid": item_uid,
             "running_plan_completed": plan_completed,
@@ -488,6 +492,7 @@ class RunEngineWorker(Process):
             "plans_and_devices_list_updated": plans_and_devices_list_updated,
             "running_task_uid": task_uid,
             "completed_tasks_available": completed_tasks_available,
+            "background_tasks_num": background_tasks_num,
         }
         return msg_out
 
@@ -829,6 +834,8 @@ class RunEngineWorker(Process):
                         if not run_in_background:
                             self._env_state = EState.IDLE
                             self._running_task_uid = None
+                        else:
+                            self._background_tasks_num = max(self._background_tasks_num - 1, 0)
 
                     with self._completed_tasks_lock:
                         task_res = {
@@ -850,6 +857,8 @@ class RunEngineWorker(Process):
             if not run_in_background:
                 self._env_state = EState.EXECUTING_TASK
                 self._running_task_uid = task_uid
+            else:
+                self._background_tasks_num += 1
 
             th.start()
 

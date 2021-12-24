@@ -1967,6 +1967,10 @@ def test_zmq_api_script_upload_9_fail(re_manager, test_with_plan):  # noqa: F811
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
+# ===========================================================================================
+#                             'function_execute' API
+
+
 # fmt: off
 @pytest.mark.parametrize("run_in_background, wait_for_idle", [
     (False, False),
@@ -2347,6 +2351,37 @@ def test_zmq_api_function_execute_7_fail(re_manager, option, item_type, msg):  #
 
     status, _ = zmq_single_request("status")
     assert status["manager_state"] == "idle"
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_function_execute_8_fail(re_manager):  # noqa: F811
+    """
+    ``function_execute`` 0MQ API: execute a function that does not exist in the worker
+    namespace: 'function_execute' succeeds, but the returned task result is expected
+    to contain error message.
+    """
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    # The function name is in the list of permitted functions
+    non_existing_function_name = "non_existing_element"
+    func_info = {"name": non_existing_function_name, "item_type": "function"}
+    params = {"user": _user, "user_group": _test_user_group, "run_in_background": True}
+
+    resp4, _ = zmq_single_request("function_execute", params={"item": func_info, **params})
+    # The call still succeeds, but function execution fails
+    assert resp4["success"] is True
+
+    task_uid = resp4["task_uid"]
+    result = wait_for_task_result(10, task_uid)
+    assert result["success"] is False, pprint.pformat(result)
+    msg = "Function 'non_existing_element' is not found in the worker namespace"
+    assert msg in result["msg"]
+    assert "not found in the worker namespace" in result["return_value"]
 
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"

@@ -2050,7 +2050,6 @@ def test_zmq_api_function_execute_2(re_manager, run_in_background, option):  # n
     global objects in the namespace (use test functions from simulated 'profile collection').
     Perform the test while a plan or a function is running in foreground.
     """
-
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
     assert wait_for_condition(time=10, condition=condition_environment_created)
@@ -2101,6 +2100,98 @@ def test_zmq_api_function_execute_2(re_manager, run_in_background, option):  # n
     # Now wait for the function or the plan to complete
     if option in ("with_plan", "with_function"):
         assert wait_for_condition(time=20, condition=condition_manager_idle)
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+# fmt: off
+@pytest.mark.parametrize("start_fg_func", [False, True])
+# fmt: on
+def test_zmq_api_function_execute_3(re_manager, start_fg_func):  # noqa: F811
+    """
+    ``function_execute`` 0MQ API: test if multiple background functions can be
+    started at once and run in parallel.
+    """
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    if start_fg_func:
+        fg_func_info = {"name": "function_sleep", "args": [5], "item_type": "function"}
+        fg_params = {"user": _user, "user_group": _test_user_group, "run_in_background": False}
+        resp2, _ = zmq_single_request("function_execute", params={"item": fg_func_info, **fg_params})
+        assert resp2["success"] is True, pprint.pformat(resp2)
+        ttime.sleep(1)
+
+    bg_func_info = {"name": "function_sleep", "args": [2], "item_type": "function"}
+    bg_params = {"user": _user, "user_group": _test_user_group, "run_in_background": True}
+
+    # Start 5 background functions (identical)
+    task_uids = []
+    for _ in range(5):
+        resp3, _ = zmq_single_request("function_execute", params={"item": bg_func_info, **bg_params})
+        assert resp3["success"] is True, pprint.pformat(resp3)
+        task_uids.append(resp3["task_uid"])
+
+    ttime.sleep(1)
+    status, _ = zmq_single_request("status")
+    assert status["worker_background_tasks"] == 5
+
+    for task_uid in task_uids:
+        result = wait_for_task_result(10, task_uid)
+        assert result["success"] is True, pprint.pformat(result)
+
+    status, _ = zmq_single_request("status")
+    assert status["worker_background_tasks"] == 0
+
+    if start_fg_func:
+        assert wait_for_condition(time=20, condition=condition_manager_idle)
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+_script_func_1 = """
+def push_two_elements(element1, element2):
+    _fifo_buffer.append(element1)
+    _fifo_buffer.append(element2)
+"""
+
+
+def test_zmq_api_function_execute_4(re_manager):  # noqa: F811
+    """
+    ``function_execute`` 0MQ API: test if a function could be uploaded as part
+    of the script and used to manipulate global objects in the namespace.
+    """
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    resp2, _ = zmq_single_request("script_upload", params={"script": _script_func_1})
+    assert resp2["success"] is True
+    result = wait_for_task_result(time=10, task_uid=resp2["task_uid"])
+    assert result["success"] is True, pprint.pformat(result)
+
+    elements = [[10, 20, 30], {"element_name": "element2"}]
+    kwargs = {"element1": elements[0], "element2": elements[1]}
+    func_info = {"name": "push_two_elements", "kwargs": kwargs, "item_type": "function"}
+    params = {"user": _user, "user_group": _test_user_group, "run_in_background": True}
+    resp3, _ = zmq_single_request("function_execute", params={"item": func_info, **params})
+    assert resp3["success"] is True, pprint.pformat(resp3)
+    result = wait_for_task_result(10, resp3["task_uid"])
+    assert result["success"] is True, pprint.pformat(result)
+
+    for el in elements:
+        func_info = {"name": "pop_buffer_element", "item_type": "function"}
+        params = {"user": _user, "user_group": _test_user_group, "run_in_background": True}
+        resp4, _ = zmq_single_request("function_execute", params={"item": func_info, **params})
+        assert resp4["success"] is True, pprint.pformat(resp3)
+        result = wait_for_task_result(10, resp4["task_uid"])
+        assert result["success"] is True, pprint.pformat(result)
+        assert result["return_value"] == el
 
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"

@@ -36,6 +36,7 @@ user_groups:
       - "^motor\\d+$"
     allowed_functions:
       - "element$"
+      - "elements$"
       - "^function_sleep$"
       - "^clear_buffer$"
     forbidden_functions:

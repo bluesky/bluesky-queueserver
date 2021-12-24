@@ -104,6 +104,9 @@ def sim_multirun_plan_nested(npts: int, delay: float = 1.0):
 
 # =====================================================================================
 #                Functions for testing 'function_execute' API.
+#
+#        NOTE: those functions are used in unit tests. Changing the functions
+#                     may cause those tests to fail.
 
 
 def function_sleep(time):
@@ -144,3 +147,6 @@ def clear_buffer():
     """
     print("******** Executing the function 'clear_buffer' **************")
     return _fifo_buffer.clear()
+
+
+# ===========================================================================================

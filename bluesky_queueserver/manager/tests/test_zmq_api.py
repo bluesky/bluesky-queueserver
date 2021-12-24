@@ -54,7 +54,7 @@ _plan4 = {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "de
 _instruction_stop = {"name": "queue_stop", "item_type": "instruction"}
 
 # User name and user group name used throughout most of the tests.
-_user, _user_group = "Testing Script", "admin"
+_user, _user_group, _test_user_group = "Testing Script", "admin", "test_user"
 
 _existing_plans_and_devices_fln = "existing_plans_and_devices.yaml"
 _user_group_permissions_fln = "user_group_permissions.yaml"
@@ -1406,6 +1406,7 @@ def test_zmq_api_script_upload_1(re_manager, run_in_background):  # noqa: F811
     plans_existing_uid = status["plans_existing_uid"]
     devices_existing_uid = status["devices_existing_uid"]
     assert isinstance(task_results_uid, str)
+    assert status["worker_background_tasks"] == 0
 
     # Make the plan sleep for 1 second (emulates a script that takes 1s to load)
     script = "import time as ttime\nttime.sleep(1)\n" + _script_to_upload_1
@@ -1432,6 +1433,10 @@ def test_zmq_api_script_upload_1(re_manager, run_in_background):  # noqa: F811
     assert status["devices_existing_uid"] == devices_existing_uid
     assert status["manager_state"] == "idle" if run_in_background else "executing_task"
 
+    ttime.sleep(0.6)  # Wait until worker state is updated by RE Manager
+    status, _ = zmq_single_request("status")
+    assert status["worker_background_tasks"] == (1 if run_in_background else 0)
+
     resp3, _ = zmq_single_request("task_load_result", params={"task_uid": task_uid})
     assert resp3["success"] is True
     assert resp3["msg"] == ""
@@ -1443,7 +1448,7 @@ def test_zmq_api_script_upload_1(re_manager, run_in_background):  # noqa: F811
     assert result["task_uid"] == task_uid
     assert result["run_in_background"] is run_in_background
 
-    ttime.sleep(2)
+    ttime.sleep(1.5)
 
     status, _ = zmq_single_request("status")
     assert status["task_results_uid"] != task_results_uid
@@ -1455,6 +1460,7 @@ def test_zmq_api_script_upload_1(re_manager, run_in_background):  # noqa: F811
     assert status["worker_environment_state"] == "idle"
     assert status["items_in_queue"] == 0
     assert status["items_in_history"] == 0
+    assert status["worker_background_tasks"] == 0
 
     resp4, _ = zmq_single_request("task_load_result", params={"task_uid": task_uid})
     assert resp4["success"] is True
@@ -1506,6 +1512,9 @@ def test_zmq_api_script_upload_1(re_manager, run_in_background):  # noqa: F811
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+    status, _ = zmq_single_request("status")
+    assert status["worker_background_tasks"] == 0
 
 
 _script_to_upload_2a = """
@@ -1883,6 +1892,9 @@ def test_zmq_api_script_upload_7(re_manager):  # noqa: F811
     resp4, _ = zmq_single_request("environment_close")
     assert resp4["success"] is False, f"resp={resp4}"
 
+    status, _ = zmq_single_request("status")
+    assert status["worker_background_tasks"] == 0  # Not a background task
+
     # Destroy the environment
     resp5, _ = zmq_single_request("environment_destroy")
     assert resp5["success"] is True, f"resp={resp5}"
@@ -1948,6 +1960,147 @@ def test_zmq_api_script_upload_9_fail(re_manager, test_with_plan):  # noqa: F811
     resp5, _ = zmq_single_request("script_upload", params={"script": _script_to_upload_1})
     assert resp5["success"] is True
     wait_for_task_result(time=10, task_uid=resp5["task_uid"])
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+# fmt: off
+@pytest.mark.parametrize("run_in_background, wait_for_idle", [
+    (False, False),
+    (False, True),
+    (True, False),
+])
+@pytest.mark.parametrize("test_with_args", [True, False])
+# fmt: on
+def test_zmq_api_function_execute_1(re_manager, run_in_background, wait_for_idle, test_with_args):  # noqa: F811
+    """
+    ``function_execute`` 0MQ API: basic tests.
+    """
+    status, _ = zmq_single_request("status")
+    assert status["worker_background_tasks"] == 0
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    func_item = {"name": "function_sleep", "item_type": "function"}
+    if test_with_args:
+        func_item.update({"args": [1.0]})
+    else:
+        func_item.update({"kwargs": {"time": 1.0}})
+
+    params = {
+        "item": func_item,
+        "run_in_background": run_in_background,
+        "user": _user,
+        "user_group": _test_user_group,
+    }
+    resp1, _ = zmq_single_request("function_execute", params=params)
+    assert resp1["success"] is True
+    # Detailed check of the return values
+    assert resp1["msg"] == ""
+    task_uid = resp1["task_uid"]
+    assert isinstance(task_uid, str)
+    returned_item = resp1["item"]
+    assert returned_item["name"] == func_item["name"]
+    assert returned_item["user"] == params["user"]
+    assert returned_item["user_group"] == params["user_group"]
+    assert returned_item["item_uid"] == task_uid
+
+    ttime.sleep(0.5)
+    status, _ = zmq_single_request("status")
+    assert status["worker_background_tasks"] == (1 if run_in_background else 0)
+    assert status["worker_environment_state"] == ("idle" if run_in_background else "executing_task")
+    assert status["manager_state"] == ("idle" if run_in_background else "executing_task")
+
+    if wait_for_idle:
+        # Check that RE Manager state is managed correctly, i.e. we can wait for
+        #   manager state to switch to idle. This only makes sense when function is
+        #   executed on the foreground.
+        assert wait_for_condition(time=10, condition=condition_manager_idle)
+        resp2, _ = zmq_single_request("task_load_result", params={"task_uid": task_uid})
+        assert resp2["success"] is True, pprint.pformat(resp2)
+        assert resp2["result"]["success"] is True, pprint.pformat(resp2["result"])
+    else:
+        # Just wait for the result to be ready.
+        result = wait_for_task_result(10, task_uid)
+        assert result["success"] is True, pprint.pformat(result)
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+    status, _ = zmq_single_request("status")
+    assert status["worker_background_tasks"] == 0
+
+
+# fmt: off
+@pytest.mark.parametrize("run_in_background, option", [
+    (False, "standalone"),
+    (True, "standalone"),
+    (True, "with_plan"),
+    (True, "with_function"),
+])
+# fmt: on
+def test_zmq_api_function_execute_2(re_manager, run_in_background, option):  # noqa: F811
+    """
+    ``function_execute`` 0MQ API: test if the executed functions can successfully manipulate
+    global objects in the namespace (use test functions from simulated 'profile collection').
+    Perform the test while a plan or a function is running in foreground.
+    """
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    if option == "with_plan":
+        resp2a, _ = zmq_single_request(
+            "queue_item_add", {"item": _plan3, "user": _user, "user_group": _user_group}
+        )
+        assert resp2a["success"] is True
+        resp2b, _ = zmq_single_request("queue_start")
+        assert resp2b["success"] is True
+        ttime.sleep(1)
+    elif option == "with_function":
+        # Start a function in foreground
+        fg_func_info = {"name": "function_sleep", "args": [4], "item_type": "function"}
+        fg_params = {"user": _user, "user_group": _test_user_group, "run_in_background": False}
+        resp2c, _ = zmq_single_request("function_execute", params={"item": fg_func_info, **fg_params})
+        assert resp2c["success"] is True, pprint.pformat(resp2c)
+        ttime.sleep(1)
+    elif option == "standalone":
+        pass
+    else:
+        assert False, f"Unknown option: {option}"
+
+    # Push value to FIFO buffer
+    value = {"some_key": "some_value"}
+    func_info1 = {"name": "push_buffer_element", "args": [value], "item_type": "function"}
+    params = {"user": _user, "user_group": _test_user_group, "run_in_background": run_in_background}
+
+    resp3, _ = zmq_single_request("function_execute", params={"item": func_info1, **params})
+    assert resp3["success"] is True, pprint.pformat(resp3)
+    task_uid = resp3["task_uid"]
+
+    result = wait_for_task_result(10, task_uid)
+    assert result["success"] is True, pprint.pformat(result)
+
+    # Pop value from FIFO buffer
+    func_info2 = {"name": "pop_buffer_element", "item_type": "function"}
+
+    resp4, _ = zmq_single_request("function_execute", params={"item": func_info2, **params})
+    assert resp4["success"] is True, pprint.pformat(resp4)
+    task_uid = resp4["task_uid"]
+
+    result = wait_for_task_result(10, task_uid)
+    assert result["success"] is True, pprint.pformat(result)
+    assert result["return_value"] == value, pprint.pformat(result)
+
+    # Now wait for the function or the plan to complete
+    if option in ("with_plan", "with_function"):
+        assert wait_for_condition(time=20, condition=condition_manager_idle)
 
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"

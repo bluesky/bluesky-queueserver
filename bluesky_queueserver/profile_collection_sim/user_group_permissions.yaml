@@ -8,6 +8,10 @@ user_groups:
       - null  # Allow all
     forbidden_devices:
       - "^_"  # All devices with names starting with '_'
+    allowed_functions:
+      - null  # Allow all
+    forbidden_functions:
+      - "^_"  # All devices with names starting with '_'
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
       - ".*"  # A different way to allow all
@@ -30,4 +34,9 @@ user_groups:
     forbidden_devices:
       - "^det[3-5]$" # Use regular expression patterns
       - "^motor\\d+$"
-
+    allowed_functions:
+      - "element$"
+      - "^function_sleep$"
+      - "^clear_buffer$"
+    forbidden_functions:
+      - "^_"  # All devices with names starting with '_'

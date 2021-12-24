@@ -1567,12 +1567,18 @@ class RunEngineManager(Process):
                 success, msg = False, f"Function name is not specified: {item}"
             else:
                 func_name = item["name"]
+                success = False
+                if ("args" in item) and not isinstance(item["args"], (list, tuple)):
+                    msg = f"Parameter 'args' is not tuple or list: {type(item['args'])}"
+                if ("kwargs" in item) and not isinstance(item["kwargs"], dict):
+                    msg = f"Parameter 'kwargs' is not a dictionary: {type(item['kwargs'])}"
                 # Only check that file name is passed the checks based on the defined permissions
                 if not check_if_function_allowed(
                     func_name, group_name=user_group, user_group_permissions=self._user_group_permissions
                 ):
-                    success = False
                     msg = f"Function {func_name!r} is not allowed for users from {user_group!r} group."
+                else:
+                    success, msg = True, ""
         else:
             success, msg = False, f"Invalid item: {item}"
 
@@ -2206,7 +2212,7 @@ class RunEngineManager(Process):
                 raise Exception(_msg)
 
             user, user_group = self._get_user_info_from_request(request=request)
-            run_in_background = request.get("run_in_background", False)
+            run_in_background = bool(request.get("run_in_background", False))
 
             item, _ = self._prepare_item(
                 item=item, item_type=item_type, user=user, user_group=user_group, generate_new_uid=True

@@ -7,6 +7,7 @@ import pprint
 import re
 import glob
 import json
+import numpy as np
 
 from bluesky_queueserver.manager.profile_ops import (
     get_default_startup_dir,
@@ -2188,7 +2189,7 @@ def test_zmq_api_function_execute_4(re_manager):  # noqa: F811
         func_info = {"name": "pop_buffer_element", "item_type": "function"}
         params = {"user": _user, "user_group": _test_user_group, "run_in_background": True}
         resp4, _ = zmq_single_request("function_execute", params={"item": func_info, **params})
-        assert resp4["success"] is True, pprint.pformat(resp3)
+        assert resp4["success"] is True, pprint.pformat(resp4)
         result = wait_for_task_result(10, resp4["task_uid"])
         assert result["success"] is True, pprint.pformat(result)
         assert result["return_value"] == el
@@ -2196,6 +2197,68 @@ def test_zmq_api_function_execute_4(re_manager):  # noqa: F811
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+_script_func_2 = """
+def func_elements(val):
+    return val
+"""
+
+_script_func_3 = """
+import numpy as np
+
+def func_elements():
+    return np.array([1,2,3])
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("script, args, return_value, success_snd, success_rcv, msg", [
+    (_script_func_2, [10], 10, True, True, ""),
+    (_script_func_2, ["test"], "test", True, True, ""),
+    (_script_func_2, [[1, 2, 3]], [1, 2, 3], True, True, ""),
+    (_script_func_2, [(1, 2, 3)], [1, 2, 3], True, True, ""),
+    (_script_func_2, [{"key": 1.0}], {"key": 1.0}, True, True, ""),
+    (_script_func_2, [None], None, True, True, ""),
+    (_script_func_2, [np.array([1, 2, 3])], None, False, None, "Object of type ndarray is not JSON serializable"),
+    (_script_func_3, [], [1, 2, 3], True, False, "Object of type ndarray is not JSON serializable"),
+])
+# fmt: on
+def test_zmq_api_function_execute_5(
+    re_manager, script, args, return_value, success_snd, success_rcv, msg  # noqa: F811
+):
+    """
+    ``function_execute`` 0MQ API: test if data of different types could be passed to and
+    from a function. Check that error is reported if function parameter or return value is not serializable.
+    """
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    resp2, _ = zmq_single_request("script_upload", params={"script": script})
+    assert resp2["success"] is True
+
+    result = wait_for_task_result(time=10, task_uid=resp2["task_uid"])
+    assert result["success"] is True, pprint.pformat(result)
+
+    func_info = {"name": "func_elements", "args": args, "item_type": "function"}
+    params = {"user": _user, "user_group": _test_user_group, "run_in_background": True}
+    resp4, msg_err = zmq_single_request("function_execute", params={"item": func_info, **params})
+    if not success_snd:
+        # Communication error due to unserializable parameter type (not JSON serializable)
+        assert msg in msg_err
+    else:
+        assert resp4["success"] is True, pprint.pformat(resp4)
+        result = wait_for_task_result(10, resp4["task_uid"])
+        assert result["success"] == success_rcv, pprint.pformat(result)
+        if success_rcv:
+            assert result["return_value"] == return_value
+        else:
+            assert msg in result["return_value"]
+
+        resp6, _ = zmq_single_request("environment_close")
+        assert resp6["success"] is True, f"resp={resp6}"
+        assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
 # =======================================================================================

@@ -2211,6 +2211,11 @@ def func_elements():
     return np.array([1,2,3])
 """
 
+_script_func_4 = """
+def func_elements():
+    raise Exception(f"-- Exception was raised!!! --")
+"""
+
 
 # fmt: off
 @pytest.mark.parametrize("script, args, return_value, success_snd, success_rcv, msg", [
@@ -2221,7 +2226,8 @@ def func_elements():
     (_script_func_2, [{"key": 1.0}], {"key": 1.0}, True, True, ""),
     (_script_func_2, [None], None, True, True, ""),
     (_script_func_2, [np.array([1, 2, 3])], None, False, None, "Object of type ndarray is not JSON serializable"),
-    (_script_func_3, [], [1, 2, 3], True, False, "Object of type ndarray is not JSON serializable"),
+    (_script_func_3, [], None, True, False, "Object of type ndarray is not JSON serializable"),
+    (_script_func_4, [], None, True, False, "-- Exception was raised!!! --"),
 ])
 # fmt: on
 def test_zmq_api_function_execute_5(
@@ -2256,9 +2262,95 @@ def test_zmq_api_function_execute_5(
         else:
             assert msg in result["return_value"]
 
-        resp6, _ = zmq_single_request("environment_close")
-        assert resp6["success"] is True, f"resp={resp6}"
-        assert wait_for_condition(time=5, condition=condition_environment_closed)
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_function_execute_6(re_manager):  # noqa: F811
+    """
+    ``function_execute`` 0MQ API: test if 'item_uid' in function item is ignored (new 'item_uid'
+    is generated and this new 'item_uid' becomes 'task_uid').
+    """
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    func_info = {"name": "clear_buffer", "item_type": "function"}
+
+    # Add 'item_uid' to 'func_info'
+    item_uid = "abc"
+    func_info.update({"item_uid": "abc"})
+
+    params = {"user": _user, "user_group": _test_user_group, "run_in_background": True}
+    resp4, _ = zmq_single_request("function_execute", params={"item": func_info, **params})
+    assert resp4["success"] is True
+    task_uid = resp4["task_uid"]
+    assert task_uid != item_uid
+    assert resp4["item"]["item_uid"] != item_uid
+    assert resp4["item"]["item_uid"] == task_uid
+
+    result = wait_for_task_result(10, task_uid)
+    assert result["success"] is True, pprint.pformat(result)
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+# fmt: off
+@pytest.mark.parametrize("option, item_type, msg", [
+    ("missing_user", "function", "user name is not specified"),
+    ("missing_group", "function", "user group is not specified"),
+    ("unknown_group", "function", "Unknown user group: 'unknown_group'"),
+    ("missing_name", "function", "Function name is not specified"),
+    ("not_allowed_name", "function", "Function 'not_allowed' is not allowed"),
+    ("args_not_list", "function", "Parameter 'args' is not a tuple or a list"),
+    ("kwargs_not_dict", "function", "Parameter 'kwargs' is not a dictionary"),
+    ("unsupported_type", "plan", "unsupported 'item_type' value: 'plan'"),
+    ("unsupported_type", "instruction", "unsupported 'item_type' value: 'instruction'"),
+    ("unsupported_type", "unsupported", "unsupported 'item_type' value: 'unsupported'"),
+])
+# fmt: on
+def test_zmq_api_function_execute_7_fail(re_manager, option, item_type, msg):  # noqa: F811
+    """
+    ``function_execute`` 0MQ API: failing cases.
+    """
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_created)
+
+    func_info = {"name": "function_sleep", "args": [2], "item_type": item_type}
+    params = {"user": _user, "user_group": _test_user_group, "run_in_background": True}
+    if option == "missing_user":
+        del params["user"]
+    elif option == "missing_group":
+        del params["user_group"]
+    elif option == "unknown_group":
+        params["user_group"] = "unknown_group"
+    elif option == "missing_name":
+        del func_info["name"]
+    elif option == "not_allowed_name":
+        func_info["name"] = "not_allowed"
+    elif option == "args_not_list":
+        func_info["args"] = 50
+    elif option == "kwargs_not_dict":
+        func_info["kwargs"] = 50
+    elif option == "unsupported_type":
+        pass
+    else:
+        assert False, f"Unknown option: {option!r}"
+
+    resp4, _ = zmq_single_request("function_execute", params={"item": func_info, **params})
+    assert resp4["success"] is False
+    assert msg in resp4["msg"]
+
+    status, _ = zmq_single_request("status")
+    assert status["manager_state"] == "idle"
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
 # =======================================================================================

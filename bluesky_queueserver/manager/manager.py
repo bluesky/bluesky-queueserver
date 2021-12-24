@@ -1489,7 +1489,7 @@ class RunEngineManager(Process):
                 msg = f"{msg_prefix}'item_type' key is not found"
             elif item_type not in supported_item_types:
                 msg = (
-                    f"{msg_prefix}unsupported 'item_type' value '{item_type}', "
+                    f"{msg_prefix}unsupported 'item_type' value: '{item_type}', "
                     f"supported item types {supported_item_types}"
                 )
         else:
@@ -1569,11 +1569,11 @@ class RunEngineManager(Process):
                 func_name = item["name"]
                 success = False
                 if ("args" in item) and not isinstance(item["args"], (list, tuple)):
-                    msg = f"Parameter 'args' is not tuple or list: {type(item['args'])}"
-                if ("kwargs" in item) and not isinstance(item["kwargs"], dict):
+                    msg = f"Parameter 'args' is not a tuple or a list: {type(item['args'])}"
+                elif ("kwargs" in item) and not isinstance(item["kwargs"], dict):
                     msg = f"Parameter 'kwargs' is not a dictionary: {type(item['kwargs'])}"
                 # Only check that file name is passed the checks based on the defined permissions
-                if not check_if_function_allowed(
+                elif not check_if_function_allowed(
                     func_name, group_name=user_group, user_group_permissions=self._user_group_permissions
                 ):
                     msg = f"Function {func_name!r} is not allowed for users from {user_group!r} group."

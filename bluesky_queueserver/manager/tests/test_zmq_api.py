@@ -626,7 +626,7 @@ def test_zmq_api_queue_item_add_8_fail(re_manager):  # noqa F811
     resp7, _ = zmq_single_request("queue_item_add", params7)
     assert resp7["success"] is False
     assert resp7["item"] == plan7
-    assert "Incorrect request format: unsupported 'item_type' value 'unsupported'" in resp7["msg"]
+    assert "Incorrect request format: unsupported 'item_type' value: 'unsupported'" in resp7["msg"]
 
     # Valid plan
     plan8 = {"name": "count", "args": [["det1", "det2"]], "item_type": "plan"}
@@ -833,7 +833,7 @@ def test_zmq_api_queue_item_execute_4_fail(re_manager):  # noqa: F811
     params1a = {"item": plan, "user": _user, "user_group": _user_group}
     resp1a, _ = zmq_single_request("queue_item_execute", params1a)
     assert resp1a["success"] is False, f"resp={resp1a}"
-    assert "unsupported 'item_type' value 'unknown'" in resp1a["msg"]
+    assert "unsupported 'item_type' value: 'unknown'" in resp1a["msg"]
     assert resp1a["qsize"] is None
     assert resp1a["item"]["name"] == plan["name"]
 
@@ -1350,7 +1350,7 @@ def test_zmq_api_queue_item_update_4_fail(re_manager):  # noqa F811
     resp9, _ = zmq_single_request("queue_item_update", params9)
     assert resp9["success"] is False
     assert resp9["item"] == plan9
-    assert "Incorrect request format: unsupported 'item_type' value 'unsupported'" in resp9["msg"]
+    assert "Incorrect request format: unsupported 'item_type' value: 'unsupported'" in resp9["msg"]
 
     # Valid plan
     plan10 = plan_to_update.copy()

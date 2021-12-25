@@ -121,6 +121,7 @@ Monitor the list of active runs:
 Run tasks in RE Worker namespace:
 
 - :ref:`method_script_upload`
+- :ref:`method_function_execute`
 - :ref:`method_task_load_result`
 
 Stopping RE Manager (mostly used in testing):
@@ -246,6 +247,14 @@ Returns       **msg**: *str*
                   Running background tasks does not influence the state (*'executing_task'* is
                   not set). The environment state is different from Run Engine state (*re_state*),
                   e.g. the environment is considered *idle* when the current plan is paused.
+
+              **worker_background_tasks**: *int*
+                  the number of background tasks, which are currently running in the worker environment.
+                  Excessive or growing number of background task may indicated serious issue with
+                  the environment. The parameter represents the number of background tasks executed
+                  in separate threads, such as tasks started by API requests *script_upload* and
+                  *function_execute* with *run_in_background=True*. Foreground tasks that block
+                  execution of plans and other tasks are not counted.
 
               **plan_queue_mode**: *dict*
                   the dictionary of parameters that determine queue execution mode. The key/value pairs
@@ -1363,6 +1372,75 @@ Returns       **success**: *boolean*
               **task_uid**: *str* or *None*
                   Task UID can be used to check status of the task and download results once the task
                   is completed (see *task_load_result* API).
+------------  -----------------------------------------------------------------------------------------
+Execution     The method initiates the operation. Monitor *task_results_uid* status field and call
+              *task_load_results* API to check for success.
+============  =========================================================================================
+
+
+.. _method_function_execute:
+
+
+**'function_execute'**
+^^^^^^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'function_execute'**
+------------  -----------------------------------------------------------------------------------------
+Description   Start execution of a function in RE Worker namespace. The function must be defined in the
+              namespace (in startup code or a script uploaded using *script_upload* method. The function
+              may be executed as a foreground task (only if RE Manager and RE Worker environment are idle)
+              or as a background task. Background tasks are executed in separate threads and may
+              consume processing or memory resources and interfere with running plans or other tasks.
+              RE Manager does not guarantee thread safety of the user code running in the background.
+              Developers of startup code are fully responsible for preventing threading issues.
+
+              The method allows to pass parameters (*args* and *kwargs*) to the function. Once the task
+              is completed, the results of the function execution, including the return value, can be
+              loaded using *task_load_result* method. If the task fails, the return value is a string
+              with full traceback of the raised exception. The data types of parameters and return
+              values must be JSON serializable. The task fails if the return value can not be serialized.
+
+              The method only **initiates** execution of the function. If the request is successful
+              (*success=True*), the server starts the task, which attempts to execute the function
+              with given name and parameters. The function may still fail start (e.g. if the user is
+              permitted to execute function with the given name, but the function is not defined
+              in the namespace). Use *'task_load_result'* method with the returned *task_uid* to
+              check the status of the taks and load the result upon completion.
+------------  -----------------------------------------------------------------------------------------
+Parameters    **item**: *dict*
+                  the dictionary that contains function name and parameters. The structure of
+                  dictionary is identical to *item* representing a plan or an instruction,
+                  except that *item_type* is *'function'*.
+
+              **user_group**: *str*
+                  the name of the user group (e.g. 'admin').
+
+              **user**: *str*
+                  the name of the user (e.g. 'John Doe'). The name is included in the item metadata
+                  and may be used to identify the user who submitted the item.
+
+              **run_in_background**: *boolean* (optional, default *False*)
+                  Set this parameter *True* to start a background task. Background tasks can be
+                  started and executed while a plan or another foreground task is running.
+                  If workflow requires executing background tasks, user code should be analyzed
+                  for thread safety to ensure there are no potential threading issues.
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **item**: *dict* or *None* (optional)
+                  the item with information on the function. The item contains the assigned item UID.
+                  In case of error the item may be returned without modification. *None* will be
+                  returned if request does not contain item parameters. In current implementation
+                  the assigned *item_uid* is equal to *task_uid*, but it may change in the future.
+
+              **task_uid**: *str* or *None*
+                  Task UID can be used to check status of the task and download results once the task
+                  is completed (see *task_load_result* API). *None* is returned if the request fails.
 ------------  -----------------------------------------------------------------------------------------
 Execution     The method initiates the operation. Monitor *task_results_uid* status field and call
               *task_load_results* API to check for success.

@@ -757,6 +757,74 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
     return plan_prepared
 
 
+def prepare_function(*, func_info, nspace, user_group_permissions=None):
+    """
+    Prepare function for execution in the worker namespace. Returned dictionary
+    contains reference to the callable object in the namespace, list of args and
+    dictionary of kwargs. The function may check if the user is allowed to
+    execute the function if ``user_group_permissions`` is provided (not ``None``).
+
+    Parameters
+    ----------
+    func_info: dict
+        Dictionary which contains keys: ``name``, ``user_group``, ``args`` (optional)
+        and ``kwargs`` (optional).
+    nspace: dict
+        Reference to the RE Worker namespace.
+    user_group_permissions: dict or None
+        Dictionary that contains user group permissions. User permissions are not checked
+        if ``None``.
+
+    Returns
+    -------
+    dict
+        Function data: ``callable`` is a reference to a callable object in RE Worker namespace,
+        ``args`` is list of args and ``kwargs`` is a dictionary of kwargs.
+
+    Raises
+    ------
+    RuntimeError
+        Error while preparing the function.
+    """
+
+    if "name" not in func_info:
+        raise RuntimeError(f"No function name is specified: {func_info!r}")
+
+    if "user_group" not in func_info:
+        raise RuntimeError(f"No user group is specified in parameters for the function: {func_info!r}")
+
+    func_name = func_info["name"]
+    user_group = func_info["user_group"]
+    if user_group_permissions is not None:
+        if not check_if_function_allowed(
+            func_name, group_name=user_group, user_group_permissions=user_group_permissions
+        ):
+            raise RuntimeError(f"Function {func_name!r} is not allowed for users from {user_group!r} user group")
+
+    func_args = list(func_info.get("args", []))
+    func_kwargs = dict(func_info.get("kwargs", {}))
+
+    if func_name not in nspace:
+        raise RuntimeError(f"Function {func_name!r} is not found in the worker namespace")
+
+    func_callable = nspace[func_name]
+
+    # Following are basic checks to avoid most common errors. The list of check can be expanded.
+    if not callable(func_callable):
+        raise RuntimeError(f"Object {func_name!r} defined in worker namespace is not callable")
+    # Generator functions defined in the worker namespace are plans, which return generators
+    #   when called. There is no point in calling those functions directly.
+    if inspect.isgeneratorfunction(func_callable):
+        raise RuntimeError(f"Object {func_name!r} defined in worker namespace is a generator function")
+
+    func_prepared = {
+        "callable": func_callable,
+        "args": func_args,
+        "kwargs": func_kwargs,
+    }
+    return func_prepared
+
+
 # ===============================================================================
 #   Validation of plan parameters
 
@@ -2319,7 +2387,6 @@ _user_group_permission_schema = {
             "type": "object",
             "additionalProperties": {
                 "type": "object",
-                "required": ["allowed_plans", "forbidden_plans", "allowed_devices", "forbidden_devices"],
                 "additionalProperties": False,
                 "properties": {
                     "allowed_plans": {
@@ -2338,6 +2405,14 @@ _user_group_permission_schema = {
                         "type": "array",
                         "items": {"type": ["string", "null"]},
                     },
+                    "allowed_functions": {
+                        "type": "array",
+                        "items": {"type": ["string", "null"]},
+                    },
+                    "forbidden_functions": {
+                        "type": "array",
+                        "items": {"type": ["string", "null"]},
+                    },
                 },
             },
         },
@@ -2345,9 +2420,22 @@ _user_group_permission_schema = {
 }
 
 
+def validate_user_group_permissions_schema(user_group_permissions):
+    """
+    Validate user group permissions schema. Raises exception if validation fails.
+
+    Parameters
+    ----------
+    user_group_permissions: dict
+        A dictionary with user group permissions.
+    """
+    jsonschema.validate(instance=user_group_permissions, schema=_user_group_permission_schema)
+
+
 def load_user_group_permissions(path_to_file=None):
     """
-    Load the data on allowed plans and devices for user groups.
+    Load the data on allowed plans and devices for user groups. User group 'root'
+    is required. Exception is raised in user group 'root' is missing.
 
     Parameters
     ----------
@@ -2357,7 +2445,7 @@ def load_user_group_permissions(path_to_file=None):
     Returns
     -------
     dict
-        Data structure with user permissions. Returns ``{}`` if path is empty string
+        Data structure with user permissions. Returns ``{}`` if path is an empty string
         or None.
 
     Raises
@@ -2370,27 +2458,120 @@ def load_user_group_permissions(path_to_file=None):
         return {}
 
     try:
-
         if not os.path.isfile(path_to_file):
             raise IOError(f"File '{path_to_file}' does not exist.")
 
         with open(path_to_file, "r") as stream:
             user_group_permissions = yaml.safe_load(stream)
 
-        # if "user_groups" not in user_group_permissions:
-        #    raise IOError(f"Incorrect format of user group permissions: key 'user_groups' is missing.")
-        jsonschema.validate(instance=user_group_permissions, schema=_user_group_permission_schema)
+        validate_user_group_permissions_schema(user_group_permissions)
 
         if "root" not in user_group_permissions["user_groups"]:
             raise Exception("Missing required user group: 'root'")
-        if "admin" not in user_group_permissions["user_groups"]:
-            raise Exception("Missing required user group: 'admin'")
 
     except Exception as ex:
         msg = f"Error while loading user group permissions from file '{path_to_file}': {str(ex)}"
         raise IOError(msg)
 
     return user_group_permissions
+
+
+def _check_if_item_allowed(item_name, allow_patterns, disallow_patterns):
+    """
+    Check if an item with ``item_name`` is allowed based on ``allow_patterns``
+    and ``disallow_patterns``.
+
+    Parameters
+    ----------
+    item_name: str
+        Name of the item.
+    allow_patterns: list(str)
+        Selected item should match at least one of the re patterns. If the value is ``[None]``
+        then all items are selected. If ``[]``, then no items are selected.
+    disallow_patterns: list(str)
+        Items are deselected based on re patterns in the list: if an item matches at least one
+        of the patterns, it is deselected. If the value is ``[None]`` or ``[]`` then no items
+        are deselected.
+
+    Returns
+    -------
+    boolean
+        Indicates if the item is permitted based on ``allow_patterns`` and ``disallow_patterns``.
+    """
+    item_is_allowed = False
+
+    if allow_patterns:
+        if allow_patterns[0] is None:
+            item_is_allowed = True
+        else:
+            for pattern in allow_patterns:
+                if re.search(pattern, item_name):
+                    item_is_allowed = True
+                    break
+
+    if item_is_allowed:
+        if disallow_patterns and (disallow_patterns[0] is not None):
+            for pattern in disallow_patterns:
+                if re.search(pattern, item_name):
+                    item_is_allowed = False
+                    break
+
+    return item_is_allowed
+
+
+def check_if_function_allowed(function_name, *, group_name, user_group_permissions=None):
+    """
+    Check if the function with name ``function_name`` is allowed for users of ``group_name`` group.
+    The function first checks if the functio name passes root permissions and then permissions
+    for the specific group.
+
+    Parameters
+    ----------
+    function_name: str
+        Function name to check
+    group_name: str
+        User group name. Permissions must be defined for this group.
+    user_group_permissions: dict or None
+        Reference to a dictionary, which contains the defined user group permissions.
+
+    Returns
+    -------
+    boolean
+        Indicates if the user that belong to ``user_group`` are allowed to run the function.
+
+    Raises
+    ------
+    KeyError
+        ``user_group_permissions`` do not contain ``user_groups`` key or permissions for
+        ``group_name`` group are not defined.
+    """
+    if not user_group_permissions:
+        return False
+
+    if "user_groups" not in user_group_permissions:
+        raise KeyError("User group permissions dictionary does not contain 'user_groups' key")
+
+    user_groups = user_group_permissions["user_groups"]
+
+    if "root" not in user_groups:
+        raise KeyError("No permissions are defined for user group 'root'")
+    if group_name not in user_groups:
+        raise KeyError(f"No permissions are defined for user group {group_name!r}")
+
+    root_allow_patterns = user_groups["root"].get("allowed_functions", [])
+    root_disallow_patterns = user_groups["root"].get("forbidden_functions", [])
+    group_allow_patterns = user_groups[group_name].get("allowed_functions", [])
+    group_disallow_patterns = user_groups[group_name].get("forbidden_functions", [])
+
+    return _check_if_item_allowed(
+        function_name,
+        root_allow_patterns,
+        root_disallow_patterns,
+    ) and _check_if_item_allowed(
+        function_name,
+        group_allow_patterns,
+        group_disallow_patterns,
+    )
 
 
 def _select_allowed_items(item_dict, allow_patterns, disallow_patterns):
@@ -2409,8 +2590,9 @@ def _select_allowed_items(item_dict, allow_patterns, disallow_patterns):
         Selected item should match at least one of the re patterns. If the value is ``[None]``
         then all items are selected. If ``[]``, then no items are selected.
     disallow_patterns: list(str)
-        Selected item should not match any of the re patterns. If the value is ``[None]``
-        or ``[]`` then no items are deselected.
+        Items are deselected based on re patterns in the list: if an item matches at least one
+        of the patterns, it is deselected. If the value is ``[None]`` or ``[]`` then no items
+        are deselected.
 
     Returns
     -------
@@ -2418,24 +2600,9 @@ def _select_allowed_items(item_dict, allow_patterns, disallow_patterns):
         Dictionary of the selected items.
     """
     items_selected = {}
-    for item in item_dict:
-        select_item = False
-        if allow_patterns:
-            if allow_patterns[0] is None:
-                select_item = True
-            else:
-                for pattern in allow_patterns:
-                    if re.search(pattern, item):
-                        select_item = True
-                        break
-        if select_item:
-            if disallow_patterns and (disallow_patterns[0] is not None):
-                for pattern in disallow_patterns:
-                    if re.search(pattern, item):
-                        select_item = False
-                        break
-        if select_item:
-            items_selected[item] = copy.deepcopy(item_dict[item])
+    for item_name in item_dict:
+        if _check_if_item_allowed(item_name, allow_patterns, disallow_patterns):
+            items_selected[item_name] = copy.deepcopy(item_dict[item_name])
 
     return items_selected
 
@@ -2478,7 +2645,7 @@ def load_allowed_plans_and_devices(
         List (dict) of the existing devices. If ``None``, then the list is loaded from
         the file ``path_existing_plans_and_devices``.
     user_group_permissions: str or None
-        Dictionary with user group permissions. If ``None``, then permissionas are loaded
+        Dictionary with user group permissions. If ``None``, then permissions are loaded
         from the file ``path_user_group_permissions``. If ``{}``, then dictionaries of allowed
         plans and devices will contain one group 'root' with all existing devices and plans
         set as allowed.
@@ -2529,14 +2696,14 @@ def load_allowed_plans_and_devices(
             if existing_devices:
                 devices_root = _select_allowed_items(
                     existing_devices,
-                    group_permissions_root["allowed_devices"],
-                    group_permissions_root["forbidden_devices"],
+                    group_permissions_root.get("allowed_devices", []),
+                    group_permissions_root.get("forbidden_devices", []),
                 )
             if existing_plans:
                 plans_root = _select_allowed_items(
                     existing_plans,
-                    group_permissions_root["allowed_plans"],
-                    group_permissions_root["forbidden_plans"],
+                    group_permissions_root.get("allowed_plans", []),
+                    group_permissions_root.get("forbidden_plans", []),
                 )
 
         # Now create lists of allowed devices and plans based on the lists for the 'root' user group
@@ -2550,12 +2717,16 @@ def load_allowed_plans_and_devices(
 
                 if existing_devices:
                     selected_devices = _select_allowed_items(
-                        devices_root, group_permissions["allowed_devices"], group_permissions["forbidden_devices"]
+                        devices_root,
+                        group_permissions.get("allowed_devices", []),
+                        group_permissions.get("forbidden_devices", []),
                     )
 
                 if existing_plans:
                     selected_plans = _select_allowed_items(
-                        plans_root, group_permissions["allowed_plans"], group_permissions["forbidden_plans"]
+                        plans_root,
+                        group_permissions.get("allowed_plans", []),
+                        group_permissions.get("forbidden_plans", []),
                     )
 
             selected_plans = _filter_allowed_plans(allowed_plans=selected_plans, allowed_devices=selected_devices)

@@ -1,4 +1,5 @@
 # flake8: noqa
+import time as ttime
 import typing
 import ophyd
 import bluesky
@@ -99,3 +100,53 @@ def sim_multirun_plan_nested(npts: int, delay: float = 1.0):
         yield from bps.mov(motor, j * 0.2)
         yield from bps.trigger_and_read([motor, det])
         yield from bps.sleep(delay)
+
+
+# =====================================================================================
+#                Functions for testing 'function_execute' API.
+#
+#        NOTE: those functions are used in unit tests. Changing the functions
+#                     may cause those tests to fail.
+
+
+def function_sleep(time):
+    """
+    Sleep for a given number of seconds.
+    """
+    print("******** Starting execution of the function 'function_sleep' **************")
+    print(f"*******************   Waiting for {time} seconds **************************")
+    ttime.sleep(time)
+    print("******** Finished execution of the function 'function_sleep' **************")
+
+    return {"success": True, "time": time}
+
+
+_fifo_buffer = []
+
+
+def push_buffer_element(element):
+    """
+    Push an element to a FIFO buffer.
+    """
+    print("******** Executing the function 'push_buffer_element' **************")
+    _fifo_buffer.append(element)
+
+
+def pop_buffer_element():
+    """
+    Pop an element from FIFO buffer. Raises exception if the buffer is empty
+    (function call fails, traceback should be returned).
+    """
+    print("******** Executing the function 'pop_buffer_element' **************")
+    return _fifo_buffer.pop(0)
+
+
+def clear_buffer():
+    """
+    The function used for testing of 'function_execute' API.
+    """
+    print("******** Executing the function 'clear_buffer' **************")
+    return _fifo_buffer.clear()
+
+
+# ===========================================================================================

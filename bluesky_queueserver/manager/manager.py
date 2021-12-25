@@ -14,6 +14,7 @@ from .profile_ops import (
     load_existing_plans_and_devices,
     validate_plan,
     load_user_group_permissions,
+    check_if_function_allowed,
 )
 from .plan_queue_ops import PlanQueueOperations
 from .output_streaming import setup_console_output_redirection
@@ -823,7 +824,7 @@ class RunEngineManager(Process):
         Success does not mean that the script is successfully loaded.
         """
         if not self._environment_exists:
-            success, err_msg, task_uid = False, "RE Worker environment is not opened", None
+            success, err_msg, task_uid = False, "RE Worker environment is not open", None
         elif not run_in_background and (self._manager_state != MState.IDLE):
             success, err_msg, task_uid = (
                 False,
@@ -848,6 +849,57 @@ class RunEngineManager(Process):
                     self._manager_state = MState.IDLE
 
         return success, err_msg, task_uid
+
+    async def _environment_function_execute(self, *, item, run_in_background):
+        """
+        Upload Python script to RE Worker environment. The script is then executed into
+        the worker namespace. The API call only inititiates the process of loading the
+        script and return success if the request is accepted and the task can be started.
+        Success does not mean that the script is successfully loaded.
+        """
+        if not self._environment_exists:
+            success, err_msg, task_uid = False, "RE Worker environment is not open", None
+        elif not run_in_background and (self._manager_state != MState.IDLE):
+            success, err_msg, task_uid = (
+                False,
+                "Failed to start the task: RE Manager must be in idle state. "
+                f"Current state: '{self._manager_state.value}'",
+                None,
+            )
+        else:
+            try:
+                if not run_in_background:
+                    self._manager_state = MState.EXECUTING_TASK
+
+                func_name = item["name"]
+                args = item.get("args", [])
+                kwargs = item.get("kwargs", {})
+                user_name = item["user"]
+                user_group = item["user_group"]
+                item_uid = item["item_uid"]
+
+                func_info = {
+                    "name": func_name,
+                    "args": args,
+                    "kwargs": kwargs,
+                    "user": user_name,
+                    "user_group": user_group,
+                    "item_uid": item_uid,
+                }
+
+                success, err_msg, item, task_uid = await self._worker_command_execute_function(
+                    func_info=func_info, run_in_background=run_in_background
+                )
+                if not run_in_background:
+                    self._running_task_uid = task_uid
+            except Exception:
+                success = False
+                raise
+            finally:
+                if not success and not run_in_background:
+                    self._manager_state = MState.IDLE
+
+        return success, err_msg, item, task_uid
 
     def _generate_lists_of_allowed_plans_and_devices(self, *, always_update_uids=False):
         """
@@ -1044,6 +1096,22 @@ class RunEngineManager(Process):
             success, err_msg, task_uid = None, "Timeout occurred", None
         return success, err_msg, task_uid
 
+    async def _worker_command_execute_function(self, *, func_info, run_in_background):
+        try:
+            response = await self._comm_to_worker.send_msg(
+                "command_execute_function",
+                params={"func_info": func_info, "run_in_background": run_in_background},
+            )
+            success = response["status"] == "accepted"
+            err_msg = response["err_msg"]
+            task_uid = response["task_uid"]
+            payload = response["payload"]
+            if success:
+                await self._task_results.add_running_task(task_uid=task_uid, payload=payload)
+        except CommTimeoutError:
+            success, err_msg, task_uid = None, "Timeout occurred", None
+        return success, err_msg, func_info, task_uid
+
     # ===============================================================================
     #         Functions that send commands/request data from Watchdog process
 
@@ -1177,6 +1245,7 @@ class RunEngineManager(Process):
         worker_environment_exists = self._environment_exists
         re_state = self._worker_state_info["re_state"] if self._worker_state_info else None
         env_state = self._worker_state_info["environment_state"] if self._worker_state_info else "closed"
+        background_tasks = self._worker_state_info["background_tasks_num"] if self._worker_state_info else 0
         deferred_pause_pending = self._re_pause_pending
         run_list_uid = self._re_run_list_uid
         plan_queue_uid = self._plan_queue.plan_queue_uid
@@ -1200,6 +1269,7 @@ class RunEngineManager(Process):
             "queue_stop_pending": queue_stop_pending,
             "worker_environment_exists": worker_environment_exists,
             "worker_environment_state": env_state,  # State of the worker environment
+            "worker_background_tasks": background_tasks,  # The number of background tasks
             "re_state": re_state,  # State of Run Engine
             "pause_pending": deferred_pause_pending,  # True/False - Cleared once pause processed
             # If Run List UID change, download the list of runs for the current plan.
@@ -1384,12 +1454,12 @@ class RunEngineManager(Process):
             "plan_queue_uid": plan_queue_uid,
         }
 
-    def _get_item_from_request(self, *, request=None, item=None):
+    def _get_item_from_request(self, *, request=None, item=None, supported_item_types=None):
         """
         Extract ``item`` and ``item_type`` from the request, validate the values and report errors
         """
         msg_prefix = "Incorrect request format: "
-        supported_item_types = ("plan", "instruction")
+        supported_item_types = supported_item_types or ("plan", "instruction")
 
         # The following two error reports represent serious bug, which needs to be fixed
         n_request_or_item = sum([(request is None), (item is None)])
@@ -1419,7 +1489,7 @@ class RunEngineManager(Process):
                 msg = f"{msg_prefix}'item_type' key is not found"
             elif item_type not in supported_item_types:
                 msg = (
-                    f"{msg_prefix}unsupported 'item_type' value '{item_type}', "
+                    f"{msg_prefix}unsupported 'item_type' value: '{item_type}', "
                     f"supported item types {supported_item_types}"
                 )
         else:
@@ -1458,7 +1528,7 @@ class RunEngineManager(Process):
         item : dict
             original item passed to RE Manager
         item_type : str
-            item type (``plan`` or ``instruction``)
+            item type (``plan``, ``instruction`` or ``function``)
         user : str
             name of the user who submitted or modified the plan
         user_group : str
@@ -1492,6 +1562,23 @@ class RunEngineManager(Process):
                 success, msg = True, ""
             else:
                 success, msg = False, f"Unrecognized instruction: {item}"
+        elif item_type == "function":
+            if "name" not in item:
+                success, msg = False, f"Function name is not specified: {item}"
+            else:
+                func_name = item["name"]
+                success = False
+                if ("args" in item) and not isinstance(item["args"], (list, tuple)):
+                    msg = f"Parameter 'args' is not a tuple or a list: {type(item['args'])}"
+                elif ("kwargs" in item) and not isinstance(item["kwargs"], dict):
+                    msg = f"Parameter 'kwargs' is not a dictionary: {type(item['kwargs'])}"
+                # Only check that file name is passed the checks based on the defined permissions
+                elif not check_if_function_allowed(
+                    func_name, group_name=user_group, user_group_permissions=self._user_group_permissions
+                ):
+                    msg = f"Function {func_name!r} is not allowed for users from {user_group!r} group."
+                else:
+                    success, msg = True, ""
         else:
             success, msg = False, f"Invalid item: {item}"
 
@@ -2093,6 +2180,55 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg, "task_uid": task_uid}
 
+    async def _function_execute_handler(self, request):
+        """
+        Starts immediate execution of a function in RE Worker environment. The function must be defined
+        in startup script and exist in the worker namespace. The function may be started in the foreground
+        (default) or in the background(``run_in_background=True``). If RE Manager is busy executing
+        a plan or another foreground task, the request is rejected. The background tasks are executed
+        in separate threads, therefore thread safety must be taken into account in planning the workflow
+        that requires background tasks and in developing the background functions. The API implementation
+        does not guarantee thread safety of the code running in RE Worker namespace. It is strongly
+        recommended that the functions do not contain infinite loops or indefinite waits (always set
+        timeout). Since Python threads can not be destroyed, the function with infinite wait may require
+        closing the environment (function running in the background) or destroying environment (infinite
+        wait in forground task). Foreground tasks and plans can be started and executed when
+        background tasks are running.
+
+        The API call only inititiates the process of starting execution of the function and returns success
+        if the request is accepted. Success does not mean that the function was successfully started
+        or successfully run to completion. Use the returned ``task_uid`` to check for the status of
+        the task and load the result.
+        """
+        logger.debug("Starting execution of a function in RE Worker namespace ...")
+        try:
+            supported_param_names = ["item", "user_group", "user", "run_in_background"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            item, item_type, _success, _msg = self._get_item_from_request(
+                request=request, supported_item_types=("function",)
+            )
+            if not _success:
+                raise Exception(_msg)
+
+            user, user_group = self._get_user_info_from_request(request=request)
+            run_in_background = bool(request.get("run_in_background", False))
+
+            item, _ = self._prepare_item(
+                item=item, item_type=item_type, user=user, user_group=user_group, generate_new_uid=True
+            )
+
+            success, msg, item, task_uid = await self._environment_function_execute(
+                item=item, run_in_background=run_in_background
+            )
+            if not success:
+                raise RuntimeError(msg)
+
+        except Exception as ex:
+            success, msg, item, task_uid = False, f"Error: {ex}", item, None
+
+        return {"success": success, "msg": msg, "item": item, "task_uid": task_uid}
+
     async def _task_load_result_handler(self, request):
         """
         Load result of a task executed by the worker process. The request must contain valid ``task_uid``.
@@ -2382,6 +2518,7 @@ class RunEngineManager(Process):
             "environment_close": "_environment_close_handler",
             "environment_destroy": "_environment_destroy_handler",
             "script_upload": "_script_upload_handler",
+            "function_execute": "_function_execute_handler",
             "task_load_result": "_task_load_result_handler",
             "queue_mode_set": "_queue_mode_set_handler",
             "queue_item_add": "_queue_item_add_handler",

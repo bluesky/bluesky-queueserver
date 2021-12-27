@@ -128,6 +128,18 @@ qserver re runs closed     # Get the list of closed runs (subset of active runs)
 qserver history get        # Request plan history
 qserver history clear      # Clear plan history
 
+qserver function execute <function-params>             # Start execution of a function
+qserver function execute <function-params> background  # ... in the background thread
+
+Example of JSON specification of a function ("args" and "kwargs" are optional):
+    '{"name": "function_sleep", "args": [20], "kwargs": {}}'
+
+qserver script upload <path-to-file>              # Upload a script to RE Worker environment
+qserver script upload <path-to-file> background   # ... in the background
+qserver script upload <path-to-file> update-re    # ... allow 'RE' and 'db' to be updated
+
+qserver task load result <task-uid>  # Load status or result of a task with the given UID
+
 qserver manager stop           # Safely exit RE Manager application
 qserver manager stop safe on   # Safely exit RE Manager application
 qserver manager stop safe off  # Force RE Manager application to stop
@@ -827,7 +839,7 @@ def create_msg(params):
 
             run_in_background = False
             update_re = False
-            allowed_values = ("background", "update_re")
+            allowed_values = ("background", "update-re")
 
             for p in params[2:]:
                 if p not in allowed_values:
@@ -836,11 +848,11 @@ def create_msg(params):
                     )
                 if p == "background":
                     run_in_background = True
-                elif p == "update_re":
+                elif p == "update-re":
                     update_re = True
 
             method = f"{command}_{params[0]}"
-            prms = {"script": script, "run-in-background": run_in_background, "update_re": update_re}
+            prms = {"script": script, "run_in_background": run_in_background, "update_re": update_re}
 
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")

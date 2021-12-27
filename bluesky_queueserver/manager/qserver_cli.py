@@ -419,6 +419,76 @@ def msg_queue_add_update(params, *, cmd_opt):
     return method, prms
 
 
+def msg_function_execute(params, *, cmd_opt):
+    """
+    Generate outgoing message for `function_execute` command. See ``cli_examples`` for supported formats
+    for the command.
+
+    Parameters
+    ----------
+    params : list
+        List of parameters of the command. The first elements of the list is expected to be
+        ``["function", "execute"]``.
+    cmd_opt : str
+        Command option, must match ``param[0]``.
+
+    Returns
+    -------
+    str
+        Name of the method from RE Manager API
+    dict
+        Dictionary of the method parameters
+
+    Raises
+    ------
+    CommandParameterError
+    """
+    # Check if the function was called for the appropriate command
+    command = "function"
+    expected_p0 = cmd_opt
+    if params[0] != expected_p0:
+        raise ValueError(f"Incorrect parameter value '{params[0]}'. Expected value: '{expected_p0}'")
+
+    call_params = {}
+
+    try:
+        if params[0] == "execute":
+            if len(params) < 2:
+                raise CommandParameterError(f"Incorrect number of parameters: '{command} {params[0]}'")
+
+            item_str = params[1]
+            try:
+                # Convert quoted string to dictionary.
+                item = ast.literal_eval(item_str)
+            except Exception:
+                raise CommandParameterError(f"Error occurred while parsing the plan '{item_str}'")
+
+            item["item_type"] = "function"
+
+            run_in_background = False
+            allowed_params = ("background",)
+            for p in params[2:]:
+                if p not in allowed_params:
+                    CommandParameterError(f"Unsupported combination of parameters: '{command} {params}'")
+                if p == "background":
+                    run_in_background = True
+
+            call_params["item"] = item
+            call_params["run_in_background"] = run_in_background
+        else:
+            raise CommandParameterError(f"Option '{params[0]}' is not supported: '{command} {params[0]}'")
+
+    except IndexError:
+        raise CommandParameterError(f"The command '{params}' contains insufficient number of parameters")
+
+    method = f"{command}_{params[0]}"
+    prms = call_params
+    prms["user"] = default_user
+    prms["user_group"] = default_user_group
+
+    return method, prms
+
+
 def msg_queue_item(params):
     """
     Generate outgoing message for `queue item` command. The supported options are ``get``,
@@ -737,6 +807,61 @@ def create_msg(params):
                     prms["reload_plans_devices"] = True
                 else:
                     CommandParameterError(f"Request '{command} {params[0]} {params[1]}' is not supported")
+        else:
+            raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
+
+    # ----------- script ------------
+    elif command == "script":
+        if len(params) < 2:
+            raise CommandParameterError(f"Request '{command}' must include at least two parameters")
+        if params[0] == "upload":
+            # Parameter 1 (required) - file name, parameter 2 (optional) - 'background'
+            file_name = params[1]
+            try:
+                with open(file_name, "r") as f:
+                    script = f.read()
+            except Exception as ex:
+                raise CommandParameterError(
+                    f"Request '{command}': failed to read the script from file '{file_name}': {ex}"
+                )
+
+            run_in_background = False
+            update_re = False
+            allowed_values = ("background", "update_re")
+
+            for p in params[2:]:
+                if p not in allowed_values:
+                    raise CommandParameterError(
+                        f"Request '{command}': parameter combination {params} is not supported"
+                    )
+                if p == "background":
+                    run_in_background = True
+                elif p == "update_re":
+                    update_re = True
+
+            method = f"{command}_{params[0]}"
+            prms = {"script": script, "run-in-background": run_in_background, "update_re": update_re}
+
+        else:
+            raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
+
+    # ----------- task ------------
+    elif command == "task":
+        if len(params) != 3:
+            raise CommandParameterError(f"Request '{command}' must include at 3 parameters")
+        if (params[0] == "load") and (params[1] == "result"):
+            task_uid = str(params[2])
+            method = f"{command}_{params[0]}_{params[1]}"
+            prms = {"task_uid": task_uid}
+        else:
+            raise CommandParameterError(f"Request '{command} {params[0]} {params[1]}' is not supported")
+
+    # ----------- function ------------
+    elif command == "function":
+        if len(params) < 1:
+            raise CommandParameterError(f"Request '{command}' must include at least one parameter")
+        if params[0] == "execute":
+            method, prms = msg_function_execute(params, cmd_opt=params[0])
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
 

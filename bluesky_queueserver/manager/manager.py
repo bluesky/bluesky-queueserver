@@ -2699,7 +2699,7 @@ class RunEngineManager(Process):
                     if dict_name in log_msg_out:
                         d = log_msg_out[dict_name]
                         for k in d.keys():
-                            d[k] = "..."
+                            d[k] = "{...}"
                 return log_msg_out
 
             #  Send reply back to client

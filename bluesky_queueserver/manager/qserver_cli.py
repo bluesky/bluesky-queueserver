@@ -1,4 +1,5 @@
 import ast
+import copy
 import time as ttime
 from datetime import datetime
 import pprint
@@ -45,6 +46,8 @@ qserver environment open         # Open RE environment
 qserver environment close        # Close RE environment
 qserver environment destroy      # Destroy RE environment (kill RE worker process)
 
+qserver existing plans           # Request the list of existing plans
+qserver existing devices         # Request the list of existing devices
 qserver allowed plans            # Request the list of allowed plans
 qserver allowed devices          # Request the list of allowed devices
 qserver permissions reload       # Reload user permissions and generate lists of allowed plans and devices.
@@ -713,6 +716,16 @@ def create_msg(params):
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
 
+    # ----------- existing ------------
+    elif command == "existing":
+        if len(params) != 1:
+            raise CommandParameterError(f"Request '{command}' must include only one parameter")
+        supported_params = ("plans", "devices")
+        if params[0] in supported_params:
+            method = f"{params[0]}_{command}"
+        else:
+            raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
+
     # ----------- permissions ------------
     elif command == "permissions":
         if len(params) not in (1, 2):
@@ -815,6 +828,31 @@ def create_msg(params):
     return method, prms, monitoring_mode
 
 
+def prepare_qserver_output(msg):
+    """
+    Prepare received message for printing by 'qserver' CLI tool.
+
+    Parameters
+    ----------
+    msg: dict
+        Full message received from RE Manager.
+
+    Returns
+    -------
+    str
+        Formatted message, which is ready for printing.
+    """
+    msg = copy.deepcopy(msg)
+    # Do not print large dicts in the log: replace values with "..."
+    large_dicts = ("plans_allowed", "plans_existing", "devices_allowed", "devices_existing")
+    for dict_name in large_dicts:
+        if dict_name in msg:
+            d = msg[dict_name]
+            for k in d.keys():
+                d[k] = "{...}"
+    return pprint.pformat(msg)
+
+
 def qserver():
 
     logging.basicConfig(level=logging.WARNING)
@@ -883,7 +921,7 @@ def qserver():
             current_time = now.strftime("%H:%M:%S")
 
             if not msg_err:
-                print(f"{current_time} - MESSAGE: {pprint.pformat(msg)}")
+                print(f"{current_time} - MESSAGE: \n{prepare_qserver_output(msg)}")
                 if isinstance(msg, dict) and ("success" in msg) and (msg["success"] is False):
                     exit_code = QServerExitCodes.REQUEST_FAILED
                 else:

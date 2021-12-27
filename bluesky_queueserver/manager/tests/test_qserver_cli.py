@@ -50,6 +50,10 @@ def test_qserver_cli_and_manager(re_manager):  # noqa: F811
     assert subprocess.call(["qserver", "allowed", "plans"], stdout=subprocess.DEVNULL) == SUCCESS
     assert subprocess.call(["qserver", "allowed", "devices"], stdout=subprocess.DEVNULL) == SUCCESS
 
+    # Request the list of existing plans and devices (we don't check what is returned)
+    assert subprocess.call(["qserver", "existing", "plans"], stdout=subprocess.DEVNULL) == SUCCESS
+    assert subprocess.call(["qserver", "existing", "devices"], stdout=subprocess.DEVNULL) == SUCCESS
+
     # Add a number of plans
     plan_1 = "{'name':'count', 'args':[['det1', 'det2']]}"
     plan_2 = "{'name':'scan', 'args':[['det1', 'det2'], 'motor', -1, 1, 10]}"
@@ -1168,6 +1172,10 @@ def test_qserver_secure_1(monkeypatch, re_manager_cmd, test_mode):  # noqa: F811
     # Request the list of allowed plans and devices (we don't check what is returned)
     assert subprocess.call(["qserver", "allowed", "plans"], stdout=subprocess.DEVNULL) == SUCCESS
     assert subprocess.call(["qserver", "allowed", "devices"], stdout=subprocess.DEVNULL) == SUCCESS
+
+    # Request the list of existing plans and devices (we don't check what is returned)
+    assert subprocess.call(["qserver", "existing", "plans"], stdout=subprocess.DEVNULL) == SUCCESS
+    assert subprocess.call(["qserver", "existing", "devices"], stdout=subprocess.DEVNULL) == SUCCESS
 
     assert subprocess.call(["qserver", "environment", "open"]) == SUCCESS
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)

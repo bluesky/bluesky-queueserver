@@ -481,7 +481,7 @@ def msg_function_execute(params, *, cmd_opt):
             allowed_params = ("background",)
             for p in params[2:]:
                 if p not in allowed_params:
-                    CommandParameterError(f"Unsupported combination of parameters: '{command} {params}'")
+                    raise CommandParameterError(f"Unsupported combination of parameters: '{command} {params}'")
                 if p == "background":
                     run_in_background = True
 
@@ -1045,7 +1045,6 @@ def qserver():
                 raise CommandParameterError(f"ZMQ public key is improperly formatted: {ex}")
 
         method, params, monitoring_mode = create_msg(args.command)
-
         if monitoring_mode:
             print("Running QServer monitor. Press Ctrl-C to exit ...")
 

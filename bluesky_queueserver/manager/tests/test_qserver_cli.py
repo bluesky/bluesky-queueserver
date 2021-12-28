@@ -1107,10 +1107,12 @@ def count_modified(detectors, num=1, delay=None):
 
 # fmt: off
 @pytest.mark.parametrize("run_in_background", [False, True])
+@pytest.mark.parametrize("update_re", [False, True])
 # fmt: on
-def test_script_upload_1(re_manager, tmp_path, run_in_background):  # noqa: F811
+def test_script_upload_1(re_manager, tmp_path, run_in_background, update_re):  # noqa: F811
     """
-    Tests for 'qserver script upload'.
+    Tests for 'qserver script upload'. The uploaded script does not change RE, so the tests
+    simply checks if 'update-re' parameter is accepted.
     """
     # Create a file with the script
     script_fln = "script_to_upload.py"
@@ -1121,6 +1123,8 @@ def test_script_upload_1(re_manager, tmp_path, run_in_background):  # noqa: F811
     params = ["qserver", "script", "upload", script_path]
     if run_in_background:
         params.append("background")
+    if update_re:
+        params.append("update-re")
 
     # Call is expected to fail (environment is not open)
     assert subprocess.call(params) == REQ_FAILED
@@ -1132,6 +1136,12 @@ def test_script_upload_1(re_manager, tmp_path, run_in_background):  # noqa: F811
     resp1, _ = zmq_single_request("plans_existing")
     assert resp1["success"] is True
     assert "count_modified" not in resp1["plans_existing"]
+
+    if run_in_background:
+        # Start some foreground process (run a function)
+        item = r"{'name': 'function_sleep', 'kwargs': {'time': 2}}"
+        params_fg = ["qserver", "function", "execute", item]
+        assert subprocess.call(params_fg) == SUCCESS
 
     assert subprocess.call(params) == SUCCESS
     if run_in_background:
@@ -1160,6 +1170,50 @@ def test_script_upload_2_fail(re_manager, tmp_path):  # noqa: F811
 
     # Invalid parameter
     assert subprocess.call(["qserver", "script", "upload", script_path, "invalid_param"]) == PARAM_ERROR
+
+
+# fmt: off
+@pytest.mark.parametrize("run_in_background", [False, True])
+# fmt: on
+def test_function_execute_1(re_manager, run_in_background):  # noqa: F811
+    """
+    Tests for 'qserver function execute'.
+    """
+    item = r"{'name': 'function_sleep', 'kwargs': {'time': 2}}"
+    params = ["qserver", "function", "execute", item]
+    params_fg = params.copy()  # Parameters for foreground task
+    if run_in_background:
+        params.append("background")
+
+    # Call is expected to fail (environment is not open)
+    assert subprocess.call(params) == REQ_FAILED
+
+    assert subprocess.call(["qserver", "environment", "open"]) == SUCCESS
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    if run_in_background:
+        # Start a foreground task (the same function) to test if a function can be run in the background
+        assert subprocess.call(params_fg) == SUCCESS
+        # Attempt to start another foreground process
+        assert subprocess.call(params_fg) == REQ_FAILED
+
+    assert subprocess.call(params) == SUCCESS
+    if run_in_background:
+        ttime.sleep(3)  # Wait for the task to be completed
+    assert wait_for_condition(time=5, condition=condition_manager_idle)
+
+    assert subprocess.call(["qserver", "environment", "close"]) == SUCCESS
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_function_execute_2_fail(re_manager):  # noqa: F811
+    """
+    Tests for 'qserver function execute': failing cases.
+    """
+    item = r"{'name': 'function_sleep', 'kwargs': {'time': 2}}"
+
+    # Invalid parameter
+    assert subprocess.call(["qserver", "function", "execute", item, "invalid_param"]) == PARAM_ERROR
 
 
 _sample_trivial_plan1 = """

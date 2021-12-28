@@ -1,6 +1,7 @@
 import time as ttime
 import subprocess
 import pytest
+import os
 
 from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
 from bluesky_queueserver.manager.comms import generate_new_zmq_key_pair
@@ -19,6 +20,7 @@ from .common import (
     get_queue,
     append_code_to_last_startup_file,
     set_qserver_zmq_public_key,
+    zmq_single_request,
 )
 
 from .common import re_manager, re_manager_pc_copy, re_manager_cmd  # noqa: F401
@@ -1095,6 +1097,69 @@ def test_qserver_re_runs(re_manager, option, exit_code):  # noqa: F811
 
     params = [option] if option else []
     assert subprocess.call(["qserver", "re", "runs", *params]) == exit_code
+
+
+_script_to_upload_1 = """
+def count_modified(detectors, num=1, delay=None):
+    yield from count(detectors=detectors, num=num, delay=delay)
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("run_in_background", [False, True])
+# fmt: on
+def test_script_upload_1(re_manager, tmp_path, run_in_background):  # noqa: F811
+    """
+    Tests for 'qserver script upload'.
+    """
+    # Create a file with the script
+    script_fln = "script_to_upload.py"
+    script_path = os.path.join(tmp_path, script_fln)
+    with open(script_path, "w") as f:
+        f.writelines(_script_to_upload_1)
+
+    params = ["qserver", "script", "upload", script_path]
+    if run_in_background:
+        params.append("background")
+
+    # Call is expected to fail (environment is not open)
+    assert subprocess.call(params) == REQ_FAILED
+
+    assert subprocess.call(["qserver", "environment", "open"]) == SUCCESS
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    # Check that 'count_modified' plan does not exist before the script is uploaded
+    resp1, _ = zmq_single_request("plans_existing")
+    assert resp1["success"] is True
+    assert "count_modified" not in resp1["plans_existing"]
+
+    assert subprocess.call(params) == SUCCESS
+    if run_in_background:
+        ttime.sleep(2)  # Wait for the task to be completed
+    assert wait_for_condition(time=5, condition=condition_manager_idle)
+
+    # Check that 'count_modified' function was loaded into the environment
+    resp2, _ = zmq_single_request("plans_existing")
+    assert resp2["success"] is True
+    assert "count_modified" in resp2["plans_existing"]
+
+    assert subprocess.call(["qserver", "environment", "close"]) == SUCCESS
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_script_upload_2_fail(re_manager, tmp_path):  # noqa: F811
+    """
+    Tests for 'qserver script upload': failing cases.
+    """
+    script_path = os.path.join(tmp_path, "script.py")
+    with open(script_path, "w") as f:
+        f.writelines(_script_to_upload_1)
+
+    # File does not exist (IO error)
+    assert subprocess.call(["qserver", "script", "upload", os.path.join(tmp_path, "script2.py")]) == PARAM_ERROR
+
+    # Invalid parameter
+    assert subprocess.call(["qserver", "script", "upload", script_path, "invalid_param"]) == PARAM_ERROR
 
 
 _sample_trivial_plan1 = """

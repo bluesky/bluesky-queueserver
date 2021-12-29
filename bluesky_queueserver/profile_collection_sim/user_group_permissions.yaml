@@ -21,6 +21,8 @@ user_groups:
       - ".*"  # A different way to allow all
     forbidden_devices:
       - null  # Nothing is forbidden
+    allowed_functions:
+      - "^function_sleep$"
   test_user:  # Users with limited access capabilities
     allowed_plans:
       - "^count$"  # Use regular expression patterns

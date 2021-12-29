@@ -1,4 +1,5 @@
 import ast
+import copy
 import time as ttime
 from datetime import datetime
 import pprint
@@ -45,6 +46,8 @@ qserver environment open         # Open RE environment
 qserver environment close        # Close RE environment
 qserver environment destroy      # Destroy RE environment (kill RE worker process)
 
+qserver existing plans           # Request the list of existing plans
+qserver existing devices         # Request the list of existing devices
 qserver allowed plans            # Request the list of allowed plans
 qserver allowed devices          # Request the list of allowed devices
 qserver permissions reload       # Reload user permissions and generate lists of allowed plans and devices.
@@ -124,6 +127,18 @@ qserver re runs closed     # Get the list of closed runs (subset of active runs)
 
 qserver history get        # Request plan history
 qserver history clear      # Clear plan history
+
+qserver function execute <function-params>             # Start execution of a function
+qserver function execute <function-params> background  # ... in the background thread
+
+Example of JSON specification of a function ("args" and "kwargs" are optional):
+    '{"name": "function_sleep", "args": [20], "kwargs": {}}'
+
+qserver script upload <path-to-file>              # Upload a script to RE Worker environment
+qserver script upload <path-to-file> background   # ... in the background
+qserver script upload <path-to-file> update-re    # ... allow 'RE' and 'db' to be updated
+
+qserver task result get <task-uid>  # Load status or result of a task with the given UID
 
 qserver manager stop           # Safely exit RE Manager application
 qserver manager stop safe on   # Safely exit RE Manager application
@@ -412,6 +427,76 @@ def msg_queue_add_update(params, *, cmd_opt):
     prms["user_group"] = default_user_group
     if params[0] in ("update", "replace"):
         prms["replace"] = params[0] == "replace"
+
+    return method, prms
+
+
+def msg_function_execute(params, *, cmd_opt):
+    """
+    Generate outgoing message for `function_execute` command. See ``cli_examples`` for supported formats
+    for the command.
+
+    Parameters
+    ----------
+    params : list
+        List of parameters of the command. The first elements of the list is expected to be
+        ``["function", "execute"]``.
+    cmd_opt : str
+        Command option, must match ``param[0]``.
+
+    Returns
+    -------
+    str
+        Name of the method from RE Manager API
+    dict
+        Dictionary of the method parameters
+
+    Raises
+    ------
+    CommandParameterError
+    """
+    # Check if the function was called for the appropriate command
+    command = "function"
+    expected_p0 = cmd_opt
+    if params[0] != expected_p0:
+        raise ValueError(f"Incorrect parameter value '{params[0]}'. Expected value: '{expected_p0}'")
+
+    call_params = {}
+
+    try:
+        if params[0] == "execute":
+            if len(params) < 2:
+                raise CommandParameterError(f"Incorrect number of parameters: '{command} {params[0]}'")
+
+            item_str = params[1]
+            try:
+                # Convert quoted string to dictionary.
+                item = ast.literal_eval(item_str)
+            except Exception:
+                raise CommandParameterError(f"Error occurred while parsing the plan '{item_str}'")
+
+            item["item_type"] = "function"
+
+            run_in_background = False
+            allowed_params = ("background",)
+            for p in params[2:]:
+                if p not in allowed_params:
+                    raise CommandParameterError(f"Unsupported combination of parameters: '{command} {params}'")
+                if p == "background":
+                    run_in_background = True
+
+            call_params["item"] = item
+            call_params["run_in_background"] = run_in_background
+        else:
+            raise CommandParameterError(f"Option '{params[0]}' is not supported: '{command} {params[0]}'")
+
+    except IndexError:
+        raise CommandParameterError(f"The command '{params}' contains insufficient number of parameters")
+
+    method = f"{command}_{params[0]}"
+    prms = call_params
+    prms["user"] = default_user
+    prms["user_group"] = default_user_group
 
     return method, prms
 
@@ -713,6 +798,16 @@ def create_msg(params):
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
 
+    # ----------- existing ------------
+    elif command == "existing":
+        if len(params) != 1:
+            raise CommandParameterError(f"Request '{command}' must include only one parameter")
+        supported_params = ("plans", "devices")
+        if params[0] in supported_params:
+            method = f"{params[0]}_{command}"
+        else:
+            raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
+
     # ----------- permissions ------------
     elif command == "permissions":
         if len(params) not in (1, 2):
@@ -724,6 +819,61 @@ def create_msg(params):
                     prms["reload_plans_devices"] = True
                 else:
                     CommandParameterError(f"Request '{command} {params[0]} {params[1]}' is not supported")
+        else:
+            raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
+
+    # ----------- script ------------
+    elif command == "script":
+        if len(params) < 2:
+            raise CommandParameterError(f"Request '{command}' must include at least two parameters")
+        if params[0] == "upload":
+            # Parameter 1 (required) - file name, parameter 2 (optional) - 'background'
+            file_name = params[1]
+            try:
+                with open(file_name, "r") as f:
+                    script = f.read()
+            except Exception as ex:
+                raise CommandParameterError(
+                    f"Request '{command}': failed to read the script from file '{file_name}': {ex}"
+                )
+
+            run_in_background = False
+            update_re = False
+            allowed_values = ("background", "update-re")
+
+            for p in params[2:]:
+                if p not in allowed_values:
+                    raise CommandParameterError(
+                        f"Request '{command}': parameter combination {params} is not supported"
+                    )
+                if p == "background":
+                    run_in_background = True
+                elif p == "update-re":
+                    update_re = True
+
+            method = f"{command}_{params[0]}"
+            prms = {"script": script, "run_in_background": run_in_background, "update_re": update_re}
+
+        else:
+            raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
+
+    # ----------- task ------------
+    elif command == "task":
+        if len(params) != 3:
+            raise CommandParameterError(f"Request '{command}' must include at 3 parameters")
+        if (params[0] == "result") and (params[1] == "get"):
+            task_uid = str(params[2])
+            method = f"{command}_{params[0]}_{params[1]}"
+            prms = {"task_uid": task_uid}
+        else:
+            raise CommandParameterError(f"Request '{command} {params[0]} {params[1]}' is not supported")
+
+    # ----------- function ------------
+    elif command == "function":
+        if len(params) < 1:
+            raise CommandParameterError(f"Request '{command}' must include at least one parameter")
+        if params[0] == "execute":
+            method, prms = msg_function_execute(params, cmd_opt=params[0])
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
 
@@ -815,6 +965,31 @@ def create_msg(params):
     return method, prms, monitoring_mode
 
 
+def prepare_qserver_output(msg):
+    """
+    Prepare received message for printing by 'qserver' CLI tool.
+
+    Parameters
+    ----------
+    msg: dict
+        Full message received from RE Manager.
+
+    Returns
+    -------
+    str
+        Formatted message, which is ready for printing.
+    """
+    msg = copy.deepcopy(msg)
+    # Do not print large dicts in the log: replace values with "..."
+    large_dicts = ("plans_allowed", "plans_existing", "devices_allowed", "devices_existing")
+    for dict_name in large_dicts:
+        if dict_name in msg:
+            d = msg[dict_name]
+            for k in d.keys():
+                d[k] = "{...}"
+    return pprint.pformat(msg)
+
+
 def qserver():
 
     logging.basicConfig(level=logging.WARNING)
@@ -870,7 +1045,6 @@ def qserver():
                 raise CommandParameterError(f"ZMQ public key is improperly formatted: {ex}")
 
         method, params, monitoring_mode = create_msg(args.command)
-
         if monitoring_mode:
             print("Running QServer monitor. Press Ctrl-C to exit ...")
 
@@ -883,7 +1057,7 @@ def qserver():
             current_time = now.strftime("%H:%M:%S")
 
             if not msg_err:
-                print(f"{current_time} - MESSAGE: {pprint.pformat(msg)}")
+                print(f"{current_time} - MESSAGE: \n{prepare_qserver_output(msg)}")
                 if isinstance(msg, dict) and ("success" in msg) and (msg["success"] is False):
                     exit_code = QServerExitCodes.REQUEST_FAILED
                 else:

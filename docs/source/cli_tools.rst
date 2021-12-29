@@ -356,6 +356,8 @@ periodically requests and displays the status of Queue Server.
     qserver environment close        # Close RE environment
     qserver environment destroy      # Destroy RE environment (kill RE worker process)
 
+    qserver existing plans           # Request the list of existing plans
+    qserver existing devices         # Request the list of existing devices
     qserver allowed plans            # Request the list of allowed plans
     qserver allowed devices          # Request the list of allowed devices
     qserver permissions reload       # Reload user permissions and generate lists of allowed plans and devices.
@@ -435,6 +437,18 @@ periodically requests and displays the status of Queue Server.
 
     qserver history get        # Request plan history
     qserver history clear      # Clear plan history
+
+    qserver function execute <function-params>             # Start execution of a function
+    qserver function execute <function-params> background  # ... in the background thread
+
+    Example of JSON specification of a function ("args" and "kwargs" are optional):
+        '{"name": "function_sleep", "args": [20], "kwargs": {}}'
+
+    qserver script upload <path-to-file>              # Upload a script to RE Worker environment
+    qserver script upload <path-to-file> background   # ... in the background
+    qserver script upload <path-to-file> update-re    # ... allow 'RE' and 'db' to be updated
+
+    qserver task load result <task-uid>  # Load status or result of a task with the given UID
 
     qserver manager stop           # Safely exit RE Manager application
     qserver manager stop safe on   # Safely exit RE Manager application

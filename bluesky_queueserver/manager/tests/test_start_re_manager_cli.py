@@ -189,7 +189,7 @@ def test_cli_update_existing_plans_devices_01(
     assert resp2["success"] is True
     assert resp2["msg"] == ""
 
-    assert wait_for_condition(time=3, condition=condition_environment_created)
+    assert wait_for_condition(time=10, condition=condition_environment_created)
 
     resp3, _ = zmq_single_request("environment_close")
     assert resp3["success"] is True

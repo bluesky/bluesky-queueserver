@@ -1,6 +1,7 @@
 import time as ttime
 import subprocess
 import pytest
+import os
 
 from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
 from bluesky_queueserver.manager.comms import generate_new_zmq_key_pair
@@ -19,6 +20,7 @@ from .common import (
     get_queue,
     append_code_to_last_startup_file,
     set_qserver_zmq_public_key,
+    zmq_single_request,
 )
 
 from .common import re_manager, re_manager_pc_copy, re_manager_cmd  # noqa: F401
@@ -49,6 +51,10 @@ def test_qserver_cli_and_manager(re_manager):  # noqa: F811
     # Request the list of allowed plans and devices (we don't check what is returned)
     assert subprocess.call(["qserver", "allowed", "plans"], stdout=subprocess.DEVNULL) == SUCCESS
     assert subprocess.call(["qserver", "allowed", "devices"], stdout=subprocess.DEVNULL) == SUCCESS
+
+    # Request the list of existing plans and devices (we don't check what is returned)
+    assert subprocess.call(["qserver", "existing", "plans"], stdout=subprocess.DEVNULL) == SUCCESS
+    assert subprocess.call(["qserver", "existing", "devices"], stdout=subprocess.DEVNULL) == SUCCESS
 
     # Add a number of plans
     plan_1 = "{'name':'count', 'args':[['det1', 'det2']]}"
@@ -1093,6 +1099,137 @@ def test_qserver_re_runs(re_manager, option, exit_code):  # noqa: F811
     assert subprocess.call(["qserver", "re", "runs", *params]) == exit_code
 
 
+_script_to_upload_1 = """
+def count_modified(detectors, num=1, delay=None):
+    yield from count(detectors=detectors, num=num, delay=delay)
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("run_in_background", [False, True])
+@pytest.mark.parametrize("update_re", [False, True])
+# fmt: on
+def test_script_upload_1(re_manager, tmp_path, run_in_background, update_re):  # noqa: F811
+    """
+    Tests for 'qserver script upload'. The uploaded script does not change RE, so the tests
+    simply checks if 'update-re' parameter is accepted.
+    """
+    # Create a file with the script
+    script_fln = "script_to_upload.py"
+    script_path = os.path.join(tmp_path, script_fln)
+    with open(script_path, "w") as f:
+        f.writelines(_script_to_upload_1)
+
+    params = ["qserver", "script", "upload", script_path]
+    if run_in_background:
+        params.append("background")
+    if update_re:
+        params.append("update-re")
+
+    # Call is expected to fail (environment is not open)
+    assert subprocess.call(params) == REQ_FAILED
+
+    assert subprocess.call(["qserver", "environment", "open"]) == SUCCESS
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    # Check that 'count_modified' plan does not exist before the script is uploaded
+    resp1, _ = zmq_single_request("plans_existing")
+    assert resp1["success"] is True
+    assert "count_modified" not in resp1["plans_existing"]
+
+    if run_in_background:
+        # Start some foreground process (run a function)
+        item = r"{'name': 'function_sleep', 'kwargs': {'time': 2}}"
+        params_fg = ["qserver", "function", "execute", item]
+        assert subprocess.call(params_fg) == SUCCESS
+
+    assert subprocess.call(params) == SUCCESS
+    if run_in_background:
+        ttime.sleep(2)  # Wait for the task to be completed
+    assert wait_for_condition(time=5, condition=condition_manager_idle)
+
+    # Check that 'count_modified' function was loaded into the environment
+    resp2, _ = zmq_single_request("plans_existing")
+    assert resp2["success"] is True
+    assert "count_modified" in resp2["plans_existing"]
+
+    assert subprocess.call(["qserver", "environment", "close"]) == SUCCESS
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_script_upload_2_fail(re_manager, tmp_path):  # noqa: F811
+    """
+    Tests for 'qserver script upload': failing cases.
+    """
+    script_path = os.path.join(tmp_path, "script.py")
+    with open(script_path, "w") as f:
+        f.writelines(_script_to_upload_1)
+
+    # File does not exist (IO error)
+    assert subprocess.call(["qserver", "script", "upload", os.path.join(tmp_path, "script2.py")]) == PARAM_ERROR
+
+    # Invalid parameter
+    assert subprocess.call(["qserver", "script", "upload", script_path, "invalid_param"]) == PARAM_ERROR
+
+
+# fmt: off
+@pytest.mark.parametrize("run_in_background", [False, True])
+# fmt: on
+def test_function_execute_1(re_manager, run_in_background):  # noqa: F811
+    """
+    Tests for 'qserver function execute'.
+    """
+    item = r"{'name': 'function_sleep', 'kwargs': {'time': 2}}"
+    params = ["qserver", "function", "execute", item]
+    params_fg = params.copy()  # Parameters for foreground task
+    if run_in_background:
+        params.append("background")
+
+    # Call is expected to fail (environment is not open)
+    assert subprocess.call(params) == REQ_FAILED
+
+    assert subprocess.call(["qserver", "environment", "open"]) == SUCCESS
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    if run_in_background:
+        # Start a foreground task (the same function) to test if a function can be run in the background
+        assert subprocess.call(params_fg) == SUCCESS
+        # Attempt to start another foreground process
+        assert subprocess.call(params_fg) == REQ_FAILED
+
+    assert subprocess.call(params) == SUCCESS
+    if run_in_background:
+        ttime.sleep(3)  # Wait for the task to be completed
+    assert wait_for_condition(time=5, condition=condition_manager_idle)
+
+    assert subprocess.call(["qserver", "environment", "close"]) == SUCCESS
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_function_execute_2_fail(re_manager):  # noqa: F811
+    """
+    Tests for 'qserver function execute': failing cases.
+    """
+    item = r"{'name': 'function_sleep', 'kwargs': {'time': 2}}"
+
+    # Invalid parameter
+    assert subprocess.call(["qserver", "function", "execute", item, "invalid_param"]) == PARAM_ERROR
+
+
+def test_task_result_get_1(re_manager):  # noqa: F811
+    """
+    Tests for 'qserver task result_get'.
+    """
+    # The request should be successful for any 'task_uid'.
+    task_uid = "01e80342-5e36-44de-bc86-9bd8d57c9885"
+    assert subprocess.call(["qserver", "task", "result", "get", task_uid]) == SUCCESS
+
+    # Some cases of invalid parameters
+    assert subprocess.call(["qserver", "task", "result", "get"]) == PARAM_ERROR
+    assert subprocess.call(["qserver", "task", "result", "something"]) == PARAM_ERROR
+    assert subprocess.call(["qserver", "task", "something", "something"]) == PARAM_ERROR
+
+
 _sample_trivial_plan1 = """
 def trivial_plan_for_unit_test():
     '''
@@ -1168,6 +1305,10 @@ def test_qserver_secure_1(monkeypatch, re_manager_cmd, test_mode):  # noqa: F811
     # Request the list of allowed plans and devices (we don't check what is returned)
     assert subprocess.call(["qserver", "allowed", "plans"], stdout=subprocess.DEVNULL) == SUCCESS
     assert subprocess.call(["qserver", "allowed", "devices"], stdout=subprocess.DEVNULL) == SUCCESS
+
+    # Request the list of existing plans and devices (we don't check what is returned)
+    assert subprocess.call(["qserver", "existing", "plans"], stdout=subprocess.DEVNULL) == SUCCESS
+    assert subprocess.call(["qserver", "existing", "devices"], stdout=subprocess.DEVNULL) == SUCCESS
 
     assert subprocess.call(["qserver", "environment", "open"]) == SUCCESS
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)

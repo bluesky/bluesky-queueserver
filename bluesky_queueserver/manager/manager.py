@@ -2229,16 +2229,17 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg, "item": item, "task_uid": task_uid}
 
-    async def _task_load_result_handler(self, request):
+    async def _task_result_get_handler(self, request):
         """
-        Load result of a task executed by the worker process. The request must contain valid ``task_uid``.
-        Task UIDs are returned by the API used to start tasks. Returned parameters: ``success`` and
-        ``msg`` indicate success of the API call and error message in case of API call failure;
-        ``status`` is the status of the task (``running``, ``completed``, ``not_found``), ``result``
-        is a dictionary with information about the task. The information is be different for
-        the completed and running tasks. If ``status=='not_found'``, then is ``result`` is ``{}``.
+        Returns the information of a task executed by the worker process. The request must contain
+        valid ``task_uid``, returned by one of APIs that starts tasks. Returned
+        parameters: ``success`` and ``msg`` indicate success of the API call and error message in
+        case of API call failure; ``status`` is the status of the task (``running``, ``completed``,
+        ``not_found``), ``result`` is a dictionary with information about the task. The information
+        is be different for the completed and running tasks. If ``status=='not_found'``, then is
+        ``result`` is ``{}``.
         """
-        logger.debug("Load result of the task executed by RE worker ...")
+        logger.debug("Request for the result of the task executed by RE worker ...")
 
         task_uid = None
 
@@ -2519,7 +2520,7 @@ class RunEngineManager(Process):
             "environment_destroy": "_environment_destroy_handler",
             "script_upload": "_script_upload_handler",
             "function_execute": "_function_execute_handler",
-            "task_load_result": "_task_load_result_handler",
+            "task_result_get": "_task_result_get_handler",
             "queue_mode_set": "_queue_mode_set_handler",
             "queue_item_add": "_queue_item_add_handler",
             "queue_item_add_batch": "_queue_item_add_batch_handler",
@@ -2699,7 +2700,7 @@ class RunEngineManager(Process):
                     if dict_name in log_msg_out:
                         d = log_msg_out[dict_name]
                         for k in d.keys():
-                            d[k] = "..."
+                            d[k] = "{...}"
                 return log_msg_out
 
             #  Send reply back to client

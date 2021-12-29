@@ -1216,17 +1216,17 @@ def test_function_execute_2_fail(re_manager):  # noqa: F811
     assert subprocess.call(["qserver", "function", "execute", item, "invalid_param"]) == PARAM_ERROR
 
 
-def test_task_load_result_1(re_manager):  # noqa: F811
+def test_task_result_get_1(re_manager):  # noqa: F811
     """
-    Tests for 'qserver task load result'.
+    Tests for 'qserver task result_get'.
     """
     # The request should be successful for any 'task_uid'.
     task_uid = "01e80342-5e36-44de-bc86-9bd8d57c9885"
-    assert subprocess.call(["qserver", "task", "load", "result", task_uid]) == SUCCESS
+    assert subprocess.call(["qserver", "task", "result", "get", task_uid]) == SUCCESS
 
     # Some cases of invalid parameters
-    assert subprocess.call(["qserver", "task", "load", "result"]) == PARAM_ERROR
-    assert subprocess.call(["qserver", "task", "load", "something"]) == PARAM_ERROR
+    assert subprocess.call(["qserver", "task", "result", "get"]) == PARAM_ERROR
+    assert subprocess.call(["qserver", "task", "result", "something"]) == PARAM_ERROR
     assert subprocess.call(["qserver", "task", "something", "something"]) == PARAM_ERROR
 
 

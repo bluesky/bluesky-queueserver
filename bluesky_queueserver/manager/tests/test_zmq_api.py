@@ -1438,7 +1438,7 @@ def test_zmq_api_script_upload_1(re_manager, run_in_background):  # noqa: F811
     status, _ = zmq_single_request("status")
     assert status["worker_background_tasks"] == (1 if run_in_background else 0)
 
-    resp3, _ = zmq_single_request("task_result_get", params={"task_uid": task_uid})
+    resp3, _ = zmq_single_request("task_result", params={"task_uid": task_uid})
     assert resp3["success"] is True
     assert resp3["msg"] == ""
     assert resp3["task_uid"] == task_uid
@@ -1463,7 +1463,7 @@ def test_zmq_api_script_upload_1(re_manager, run_in_background):  # noqa: F811
     assert status["items_in_history"] == 0
     assert status["worker_background_tasks"] == 0
 
-    resp4, _ = zmq_single_request("task_result_get", params={"task_uid": task_uid})
+    resp4, _ = zmq_single_request("task_result", params={"task_uid": task_uid})
     assert resp4["success"] is True
     assert resp4["msg"] == ""
     assert resp4["task_uid"] == task_uid
@@ -2025,7 +2025,7 @@ def test_zmq_api_function_execute_1(re_manager, run_in_background, wait_for_idle
         #   manager state to switch to idle. This only makes sense when function is
         #   executed on the foreground.
         assert wait_for_condition(time=10, condition=condition_manager_idle)
-        resp2, _ = zmq_single_request("task_result_get", params={"task_uid": task_uid})
+        resp2, _ = zmq_single_request("task_result", params={"task_uid": task_uid})
         assert resp2["success"] is True, pprint.pformat(resp2)
         assert resp2["result"]["success"] is True, pprint.pformat(resp2["result"])
     else:

@@ -448,7 +448,7 @@ periodically requests and displays the status of Queue Server.
     qserver script upload <path-to-file> background   # ... in the background
     qserver script upload <path-to-file> update-re    # ... allow 'RE' and 'db' to be updated
 
-    qserver task load result <task-uid>  # Load status or result of a task with the given UID
+    qserver task result <task-uid>  # Load status or result of a task with the given UID
 
     qserver manager stop           # Safely exit RE Manager application
     qserver manager stop safe on   # Safely exit RE Manager application

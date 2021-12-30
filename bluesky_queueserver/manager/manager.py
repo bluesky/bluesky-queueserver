@@ -2229,7 +2229,7 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg, "item": item, "task_uid": task_uid}
 
-    async def _task_result_get_handler(self, request):
+    async def _task_result_handler(self, request):
         """
         Returns the information of a task executed by the worker process. The request must contain
         valid ``task_uid``, returned by one of APIs that starts tasks. Returned
@@ -2520,7 +2520,7 @@ class RunEngineManager(Process):
             "environment_destroy": "_environment_destroy_handler",
             "script_upload": "_script_upload_handler",
             "function_execute": "_function_execute_handler",
-            "task_result_get": "_task_result_get_handler",
+            "task_result": "_task_result_handler",
             "queue_mode_set": "_queue_mode_set_handler",
             "queue_item_add": "_queue_item_add_handler",
             "queue_item_add_batch": "_queue_item_add_batch_handler",

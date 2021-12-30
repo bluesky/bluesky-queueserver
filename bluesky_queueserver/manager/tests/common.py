@@ -289,7 +289,7 @@ def wait_for_task_result(time, task_uid):
     while ttime.time() < time_stop:
         ttime.sleep(dt / 2)
         try:
-            resp, _ = zmq_secure_request("task_result_get", params={"task_uid": task_uid})
+            resp, _ = zmq_secure_request("task_result", params={"task_uid": task_uid})
 
             assert resp["success"] is True, f"Request for task result failed: {resp['msg']}"
             assert resp["task_uid"] == task_uid

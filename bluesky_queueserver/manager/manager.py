@@ -14,6 +14,7 @@ from .profile_ops import (
     load_existing_plans_and_devices,
     validate_plan,
     load_user_group_permissions,
+    validate_user_group_permissions,
     check_if_function_allowed,
 )
 from .plan_queue_ops import PlanQueueOperations
@@ -1428,6 +1429,54 @@ class RunEngineManager(Process):
             msg = f"Error: {str(ex)}"
         return {"success": success, "msg": msg}
 
+    async def _permissions_set_handler(self, request):
+        logger.info("Request to set user group permission ...")
+        try:
+            supported_param_names = ["user_group_permissions"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            if "user_group_permissions" not in request:
+                raise KeyError("Parameter 'user_group_permissions' is missing")
+
+            user_group_permissions = request["user_group_permissions"]
+
+            if user_group_permissions != self._user_group_permissions:
+                validate_user_group_permissions(user_group_permissions)
+
+                self._user_group_permissions = user_group_permissions
+                self._update_allowed_plans_and_devices()
+
+                # If environment exists, then tell the worker to reload permissions. This is optional.
+                if self._environment_exists:
+                    success_opt, msg_opt = await self._worker_command_permissions_reload()
+                    if not success_opt:
+                        logger.warning("Permissions failed to reload by RE Worker process: %s", msg_opt)
+
+            success, msg = True, ""
+        except Exception as ex:
+            success = False
+            msg = f"Error: {str(ex)}"
+
+        return {"success": success, "msg": msg}
+
+    async def _permissions_get_handler(self, request):
+        """
+        Returns the current user group permissions (dictionary). The method is expected to always succeed.
+        """
+        logger.info("Request to get information on current user group permission ...")
+        try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            user_group_permissions = copy.deepcopy(self._user_group_permissions)
+            success, msg = True, ""
+        except Exception as ex:
+            user_group_permissions = {}
+            success = False
+            msg = f"Error: {str(ex)}"
+
+        return {"success": success, "msg": msg, "user_group_permissions": user_group_permissions}
+
     async def _queue_get_handler(self, request):
         """
         Returns the contents of the current queue.
@@ -2513,6 +2562,8 @@ class RunEngineManager(Process):
             "devices_allowed": "_devices_allowed_handler",
             "devices_existing": "_devices_existing_handler",
             "permissions_reload": "_permissions_reload_handler",
+            "permissions_get": "_permissions_get_handler",
+            "permissions_set": "_permissions_set_handler",
             "history_get": "_history_get_handler",
             "history_clear": "_history_clear_handler",
             "environment_open": "_environment_open_handler",

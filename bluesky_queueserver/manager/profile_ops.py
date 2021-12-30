@@ -2420,7 +2420,7 @@ _user_group_permission_schema = {
 }
 
 
-def validate_user_group_permissions_schema(user_group_permissions):
+def _validate_user_group_permissions_schema(user_group_permissions):
     """
     Validate user group permissions schema. Raises exception if validation fails.
 
@@ -2430,6 +2430,24 @@ def validate_user_group_permissions_schema(user_group_permissions):
         A dictionary with user group permissions.
     """
     jsonschema.validate(instance=user_group_permissions, schema=_user_group_permission_schema)
+
+
+def validate_user_group_permissions(user_group_permissions):
+    """
+    Validate the dictionary with user group permissions. Exception is raised errors are detected.
+
+    Parameters
+    ----------
+    user_group_permissions: dict
+        The dictionary with user group permissions.
+    """
+    if not isinstance(user_group_permissions, dict):
+        raise TypeError(f"User group permissions: Invalid type '{type(user_group_permissions)}', must be 'dict'")
+
+    _validate_user_group_permissions_schema(user_group_permissions)
+
+    if "root" not in user_group_permissions["user_groups"]:
+        raise KeyError("User group permissions: Missing required user group: 'root'")
 
 
 def load_user_group_permissions(path_to_file=None):
@@ -2464,7 +2482,7 @@ def load_user_group_permissions(path_to_file=None):
         with open(path_to_file, "r") as stream:
             user_group_permissions = yaml.safe_load(stream)
 
-        validate_user_group_permissions_schema(user_group_permissions)
+        validate_user_group_permissions(user_group_permissions)
 
         if "root" not in user_group_permissions["user_groups"]:
             raise Exception("Missing required user group: 'root'")

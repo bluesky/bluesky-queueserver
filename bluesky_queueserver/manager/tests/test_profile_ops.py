@@ -2189,11 +2189,11 @@ pa2_Enum1 = enum.Enum("pa2_Enum1", {"enum1": "enum1", "enum2": "enum2"})
         {"pa2_Device1": ("dev1", "dev2", "dev3"),
          "pa2_Enum1": ("enum1", "enum2")}},
      typing.Union[typing.List[pa2_Device1], typing.List[pa2_Enum1]], True, ""),
-    # Use Tuple instead of List (different type, but the same JSON schema)
+    # Use Tuple instead of List (produces different JSON schema)
     ({"type": "typing.Union[typing.Tuple[pa2_Device1], typing.List[pa2_Enum1]]", "devices":
         {"pa2_Device1": ("dev1", "dev2", "dev3"),
          "pa2_Enum1": ("enum1", "enum2")}},
-     typing.Union[typing.List[pa2_Device1], typing.List[pa2_Enum1]], True, ""),
+     typing.Union[typing.Tuple[pa2_Device1], typing.List[pa2_Enum1]], True, ""),
     # Failing case: unknown 'custom' type in the annotation
     ({"type": "typing.Union[typing.List[unknown_type], typing.List[pa2_Enum1]]", "devices":
         {"pa2_Device1": ("dev1", "dev2", "dev3"),

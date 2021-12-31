@@ -67,7 +67,15 @@ class RunEngineManager(Process):
     """
 
     def __init__(
-        self, *args, conn_watchdog, conn_worker, config=None, msg_queue=None, log_level=logging.DEBUG, **kwargs
+        self,
+        *args,
+        conn_watchdog,
+        conn_worker,
+        config=None,
+        msg_queue=None,
+        log_level=logging.DEBUG,
+        number_of_restarts,
+        **kwargs,
     ):
 
         if not conn_watchdog:
@@ -85,6 +93,10 @@ class RunEngineManager(Process):
 
         self._watchdog_conn = conn_watchdog
         self._worker_conn = conn_worker
+
+        # The number of time RE Manager was started (including the first attempt to start it).
+        #   Numbering starts from 1.
+        self._number_of_restarts = number_of_restarts
 
         # The following attributes hold the state of the system
         self._manager_stopping = False  # Set True to exit manager (by _manager_stop_handler)
@@ -1442,7 +1454,6 @@ class RunEngineManager(Process):
 
             if user_group_permissions != self._user_group_permissions:
                 validate_user_group_permissions(user_group_permissions)
-
                 self._user_group_permissions = user_group_permissions
                 self._update_allowed_plans_and_devices()
 

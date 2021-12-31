@@ -69,6 +69,11 @@ class PlanQueueOperations:
         self._name_plan_history = "plan_history"
         self._name_plan_queue_mode = "plan_queue_mode"
 
+        # Redis is also used for storage of some additional information not related to the queue.
+        #   The class contains only the functions for saving and retrieving the data, which is
+        #   not used by other functions of the class.
+        self._name_user_group_permissions = "user_group_permissions"
+
         # The list of allowed item parameters used for parameter filtering. Filtering operation
         #   involves removing all parameters that are not in the list.
         self._allowed_item_parameters = (
@@ -1697,3 +1702,35 @@ class PlanQueueOperations:
         """
         async with self._lock:
             return await self._set_processed_item_as_stopped(exit_status=exit_status, run_uids=run_uids)
+
+    # =============================================================================================
+    #         Methods for saving and retrieving user group permissions.
+
+    async def user_group_permissions_clear(self):
+        """
+        Clear user group permissions saved in Redis.
+        """
+        await self._r_pool.delete(self._name_user_group_permissions)
+
+    async def user_group_permissions_save(self, user_group_permissions):
+        """
+        Save user group permissions to Redis.
+
+        Parameters
+        ----------
+        user_group_permissions: dict
+            A dictionary containing user group permissions.
+        """
+        await self._r_pool.set(self._name_user_group_permissions, json.dumps(user_group_permissions))
+
+    async def user_group_permissions_retrieve(self):
+        """
+        Retreive saved user group permissions.
+
+        Returns
+        -------
+        dict or None
+            Returns dictionary with saved user group permissions or ``None`` if no permissions are saved.
+        """
+        ugp_json = await self._r_pool.get(self._name_user_group_permissions)
+        return json.loads(ugp_json) if ugp_json else None

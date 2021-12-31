@@ -41,6 +41,9 @@ class WatchdogProcess:
         self._re_manager = None
         self._re_worker = None
 
+        # The number of restarts of the manager processes including the first start.
+        self._re_manager_n_restarts = 0
+
         # Create pipes used for connections of the modules
         self._manager_conn = None  # Worker -> Manager
         self._worker_conn = None  # Manager -> Worker
@@ -144,6 +147,7 @@ class WatchdogProcess:
     # ======================================================================
 
     def _start_re_manager(self):
+        self._re_manager_n_restarts += 1
         self._init_watchdog_state()
         self._re_manager = self._cls_run_engine_manager(
             conn_watchdog=self._manager_to_watchdog_conn,
@@ -152,6 +156,7 @@ class WatchdogProcess:
             name="RE Manager Process",
             msg_queue=self._msg_queue,
             log_level=self._log_level,
+            number_of_restarts=self._re_manager_n_restarts,
         )
         self._re_manager.start()
 

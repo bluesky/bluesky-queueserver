@@ -227,6 +227,15 @@ Other Configuration Parameters
                         and devices (--existing-plans-and-devices) and user group permissions
                         (--user-group-permissions) must be explicitly specified if this option
                         is used.
+      --user-group-permissions-reload {NEVER,ON_REQUEST,ON_STARTUP}
+                        Select when user group permissions are reloaded from disk. Options:
+                        'NEVER' - RE Manager never attempts to load permissions from disk
+                        file. If permissions fail to load from Redis, they are loaded from
+                        disk at the first startup of RE Manager or on request. 'ON_REQUEST' -
+                        permissions are loaded from disk file when requested by
+                        'permission_reload' API call. 'ON_STARTUP' - permissions are loaded
+                        from disk each time RE Manager is started or when 'permission_reload'
+                        API request is received (default: ON_STARTUP)
       --existing-plans-devices EXISTING_PLANS_AND_DEVICES_PATH
                         Path to file that contains the list of existing plans and devices. The
                         path may be a relative path to the profile collection directory. If

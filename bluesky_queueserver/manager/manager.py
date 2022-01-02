@@ -966,7 +966,7 @@ class RunEngineManager(Process):
         """
         Load and validate user group permissions stored in Redis. If there is no permissions data in Redis
         or data validation fails, then attempt to load permissions from file. User group permissions are
-        left unchanged if data can not be loaded from disk.
+        left unchanged if data can not be loaded from disk either.
         """
         try:
             ug_permissions = self._plan_queue.user_group_permissions_retrieve()
@@ -2691,15 +2691,8 @@ class RunEngineManager(Process):
         # Delete Redis entries (for testing and debugging)
         # self._plan_queue.delete_pool_entries()
 
-        try:
-            ug_permissions_from_redis = self._plan_queue.user_group_permissions_retrieve()
-            validate_user_group_permissions(ug_permissions_from_redis)
-        except Exception as ex:
-            logger.error("Validation of user group permissions loaded from Redis failed: %s", str(ex))
-            ug_permissions_from_redis = None
-
         # Load user group permissions
-        if self._user_group_permissions_reload_option == "ON_STARTUP":
+        if (self._user_group_permissions_reload_option == "ON_STARTUP") and (self._number_of_restarts == 1):
             self._load_permissions_from_disk()
         else:
             self._load_permissions_from_redis()

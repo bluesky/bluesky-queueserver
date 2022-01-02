@@ -306,9 +306,9 @@ def start_manager():
         choices=["NEVER", "ON_REQUEST", "ON_STARTUP"],
         default="ON_STARTUP",
         help="Select when user group permissions are reloaded from disk. Options: 'NEVER' - "
-        "RE Manager never attempts to load permissions from disk file. If there are no permissions "
-        "saved in Redis, the permissions are loaded at the first startup of RE Manager. 'ON_REQUEST' - "
-        "permissions are loaded from disk file when requested by 'permission_reload' API call. "
+        "RE Manager never attempts to load permissions from disk file. If permissions fail to load "
+        "from Redis, they are loaded from disk at the first startup of RE Manager or on request. "
+        "'ON_REQUEST' - permissions are loaded from disk file when requested by 'permission_reload' API call. "
         "'ON_STARTUP' - permissions are loaded from disk each time RE Manager is started or when "
         "'permission_reload' API request is received "
         "(default: %(default)s)",

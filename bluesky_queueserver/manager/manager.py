@@ -950,7 +950,7 @@ class RunEngineManager(Process):
         except Exception as ex:
             logger.error("Error occurred while comparing lists of allowed devices: %s", str(ex))
 
-    def _load_permissions_from_disk(self):
+    async def _load_permissions_from_disk(self):
         """
         Load permissions from disk.
         """
@@ -958,23 +958,23 @@ class RunEngineManager(Process):
             path_ug = self._config_dict["user_group_permissions_path"]
             self._user_group_permissions = load_user_group_permissions(path_ug)
             # Save loaded permissions to Redis
-            self._plan_queue.user_group_permissions_save(self._user_group_permissions)
+            await self._plan_queue.user_group_permissions_save(self._user_group_permissions)
         except Exception as ex:
             logger.exception("Error occurred while loading user permissions from file '%s': %s", path_ug, str(ex))
 
-    def _load_permissions_from_redis(self):
+    async def _load_permissions_from_redis(self):
         """
         Load and validate user group permissions stored in Redis. If there is no permissions data in Redis
         or data validation fails, then attempt to load permissions from file. User group permissions are
         left unchanged if data can not be loaded from disk either.
         """
         try:
-            ug_permissions = self._plan_queue.user_group_permissions_retrieve()
+            ug_permissions = await self._plan_queue.user_group_permissions_retrieve()
             validate_user_group_permissions(ug_permissions)
             self._user_group_permissions = ug_permissions
         except Exception as ex:
             logger.error("Validation of user group permissions loaded from Redis failed: %s", str(ex))
-            self._load_permissions_from_disk()
+            await self._load_permissions_from_disk()
 
     def _update_allowed_plans_and_devices(self, reload_plans_devices=False):
         """
@@ -1460,9 +1460,9 @@ class RunEngineManager(Process):
                 )
 
             if reload_permissions:
-                self._load_permissions_from_disk()
+                await self._load_permissions_from_disk()
             else:
-                self._load_permissions_from_redis()
+                await self._load_permissions_from_redis()
             self._update_allowed_plans_and_devices(reload_plans_devices=reload_plans_devices)
 
             # If environment exists, then tell the worker to reload permissions. This is optional.
@@ -2693,9 +2693,9 @@ class RunEngineManager(Process):
 
         # Load user group permissions
         if (self._user_group_permissions_reload_option == "ON_STARTUP") and (self._number_of_restarts == 1):
-            self._load_permissions_from_disk()
+            await self._load_permissions_from_disk()
         else:
-            self._load_permissions_from_redis()
+            await self._load_permissions_from_redis()
 
         # Set the environment state based on whether the worker process is alive (request Watchdog)
         self._environment_exists = await self._is_worker_alive()

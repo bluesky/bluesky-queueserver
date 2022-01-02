@@ -422,7 +422,7 @@ Description   Reload user group permissions from the default location or the loc
 Parameters    **reload_plans_devices**: *boolean* (optional)
                   reload the lists of existing plans and devices from disk if *True*, otherwise
                   use current lists stored in memory. Default: *False*.
-              **reload_permissions**: *boolean (optional)
+              **reload_permissions**: *boolean* (optional)
                   reload user group permissions from disk if *True*, otherwise use current permissions.
                   Default: *True*.
 ------------  -----------------------------------------------------------------------------------------

@@ -311,6 +311,7 @@ def clear_redis_pool():
     async def run():
         await pq.start()
         await pq.delete_pool_entries()
+        await pq.user_group_permissions_clear()
 
     asyncio.run(run())
 

@@ -16,9 +16,11 @@ def pq():
     asyncio.run(pq.start())
     # Clear any pool entries
     asyncio.run(pq.delete_pool_entries())
+    asyncio.run(pq.user_group_permissions_clear())
     yield pq
     # Don't leave any test entries in the pool
     asyncio.run(pq.delete_pool_entries())
+    asyncio.run(pq.user_group_permissions_clear())
 
 
 # fmt: off

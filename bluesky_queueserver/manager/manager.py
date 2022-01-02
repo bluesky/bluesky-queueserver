@@ -165,6 +165,17 @@ class RunEngineManager(Process):
         self._running_task_uid = None  # UID of currently running foreground task (if any)
         self._task_results = None  # TaskResults(), uses threading.Lock
 
+        # Indicates when to update the existing plans and devices
+        ug_permissions_reload = self._config_dict["user_group_permissions_reload"]
+        if ug_permissions_reload not in ("NEVER", "ON_REQUEST", "ON_STARTUP"):
+            logger.error(
+                "Unknown option for reloading user group permissions: '%s'. "
+                "The permissions will be reloaded on each startup of RE Manager.",
+                ug_permissions_reload,
+            )
+            ug_permissions_reload = "ON_STARTUP"
+        self._user_group_permissions_reload_option = ug_permissions_reload
+
     async def _heartbeat_generator(self):
         """
         Heartbeat generator for Watchdog (indicates that the loop is running)
@@ -551,7 +562,7 @@ class RunEngineManager(Process):
         self._existing_plans = existing_plans
         self._existing_devices = existing_devices
 
-    async def _load_existing_plans_and_devices_from_worker(self, update_user_group_permissions=False):
+    async def _load_existing_plans_and_devices_from_worker(self):
         """
         Download the updated list of existing plans and devices from the worker environment.
         User group permissions are also downloaded from the worker and could be updated if needed.
@@ -569,9 +580,6 @@ class RunEngineManager(Process):
                 existing_plans=plan_and_devices_list["existing_plans"],
                 existing_devices=plan_and_devices_list["existing_devices"],
             )
-
-            if update_user_group_permissions:
-                self._user_group_permissions = plan_and_devices_list["user_group_permissions"]
 
             try:
                 self._generate_lists_of_allowed_plans_and_devices()
@@ -942,15 +950,31 @@ class RunEngineManager(Process):
         except Exception as ex:
             logger.error("Error occurred while comparing lists of allowed devices: %s", str(ex))
 
-    def _load_permissions(self):
+    def _load_permissions_from_disk(self):
         """
         Load permissions from disk.
         """
         try:
             path_ug = self._config_dict["user_group_permissions_path"]
             self._user_group_permissions = load_user_group_permissions(path_ug)
+            # Save loaded permissions to Redis
+            self._plan_queue.user_group_permissions_save(self._user_group_permissions)
         except Exception as ex:
             logger.exception("Error occurred while loading user permissions from file '%s': %s", path_ug, str(ex))
+
+    def _load_permissions_from_redis(self):
+        """
+        Load and validate user group permissions stored in Redis. If there is no permissions data in Redis
+        or data validation fails, then attempt to load permissions from file. User group permissions are
+        left unchanged if data can not be loaded from disk.
+        """
+        try:
+            ug_permissions = self._plan_queue.user_group_permissions_retrieve()
+            validate_user_group_permissions(ug_permissions)
+            self._user_group_permissions = ug_permissions
+        except Exception as ex:
+            logger.error("Validation of user group permissions loaded from Redis failed: %s", str(ex))
+            self._load_permissions_from_disk()
 
     def _update_allowed_plans_and_devices(self, reload_plans_devices=False):
         """
@@ -1420,13 +1444,25 @@ class RunEngineManager(Process):
         """
         logger.info("Reloading lists of allowed plans and devices ...")
         try:
-            supported_param_names = ["reload_plans_devices"]
+            supported_param_names = ["reload_plans_devices", "reload_permissions"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
             # Do not reload the lists of existing plans and devices from disk file by default
             reload_plans_devices = request.get("reload_plans_devices", False)
+            reload_permissions = request.get("reload_permissions", True)
 
-            self._load_permissions()
+            if reload_permissions and (
+                self._user_group_permissions_reload_option not in ("ON_REQUEST", "ON_STARTUP")
+            ):
+                raise RuntimeError(
+                    "Reloading of permissions from disk is not allowed: RE Manager was started with option "
+                    f"user_group_permissions_reload={self._user_group_permissions_reload_option!r}",
+                )
+
+            if reload_permissions:
+                self._load_permissions_from_disk()
+            else:
+                self._load_permissions_from_redis()
             self._update_allowed_plans_and_devices(reload_plans_devices=reload_plans_devices)
 
             # If environment exists, then tell the worker to reload permissions. This is optional.
@@ -2655,6 +2691,19 @@ class RunEngineManager(Process):
         # Delete Redis entries (for testing and debugging)
         # self._plan_queue.delete_pool_entries()
 
+        try:
+            ug_permissions_from_redis = self._plan_queue.user_group_permissions_retrieve()
+            validate_user_group_permissions(ug_permissions_from_redis)
+        except Exception as ex:
+            logger.error("Validation of user group permissions loaded from Redis failed: %s", str(ex))
+            ug_permissions_from_redis = None
+
+        # Load user group permissions
+        if self._user_group_permissions_reload_option == "ON_STARTUP":
+            self._load_permissions_from_disk()
+        else:
+            self._load_permissions_from_redis()
+
         # Set the environment state based on whether the worker process is alive (request Watchdog)
         self._environment_exists = await self._is_worker_alive()
 
@@ -2665,7 +2714,7 @@ class RunEngineManager(Process):
             #   and a copy of user group permissions, so they could be downloaded from the worker.
             #   If the request to download plans and devices fails, then the lists of existing and allowed
             #   devices and plans and the dictionary of user group permissions are going to be empty ({}).
-            await self._load_existing_plans_and_devices_from_worker(update_user_group_permissions=True)
+            await self._load_existing_plans_and_devices_from_worker()
             try:
                 self._update_allowed_plans_and_devices(reload_plans_devices=False)
             except Exception as ex:
@@ -2716,9 +2765,6 @@ class RunEngineManager(Process):
         else:
             # Load lists of allowed plans and devices
             logger.info("Loading the lists of allowed plans and devices ...")
-            # Load user group permissions and existing plans and devices from files
-            #   if RE environment does not exist
-            self._load_permissions()
             try:
                 self._update_allowed_plans_and_devices(reload_plans_devices=True)
             except Exception as ex:

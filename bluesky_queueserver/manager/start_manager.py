@@ -300,6 +300,21 @@ def start_manager():
     )
 
     parser.add_argument(
+        "--user-group-permissions-reload",
+        dest="user_group_permissions_reload",
+        type=str,
+        choices=["NEVER", "ON_REQUEST", "ON_STARTUP"],
+        default="ON_STARTUP",
+        help="Select when user group permissions are reloaded from disk. Options: 'NEVER' - "
+        "RE Manager never attempts to load permissions from disk file. If there are no permissions "
+        "saved in Redis, the permissions are loaded at the first startup of RE Manager. 'ON_REQUEST' - "
+        "permissions are loaded from disk file when requested by 'permission_reload' API call. "
+        "'ON_STARTUP' - permissions are loaded from disk each time RE Manager is started or when "
+        "'permission_reload' API request is received "
+        "(default: %(default)s)",
+    )
+
+    parser.add_argument(
         "--redis-addr",
         dest="redis_addr",
         type=str,
@@ -582,6 +597,8 @@ def start_manager():
     config_manager["user_group_permissions_path"] = user_group_pd_path
 
     config_worker["update_existing_plans_devices"] = args.update_existing_plans_devices
+
+    config_manager["user_group_permissions_reload"] = args.user_group_permissions_reload
 
     # Read private key from the environment variable, then check if the CLI parameter exists
     zmq_private_key = os.environ.get("QSERVER_ZMQ_PRIVATE_KEY", None)

@@ -3283,7 +3283,7 @@ def test_permissions_reload_2(re_manager_pc_copy, reload_permissions_from_disk):
 
     # Now create a new list of user permissions, which may allow/disallow the 'count' plan
     permissions_text = permissions_not_allow_count
-    permissions_dict = yaml.load(permissions_text)
+    permissions_dict = yaml.load(permissions_text, Loader=yaml.FullLoader)
     with open(os.path.join(pc_path, "user_group_permissions.yaml"), "w") as f:
         f.writelines(permissions_text)
 

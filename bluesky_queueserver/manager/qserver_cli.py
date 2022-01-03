@@ -6,6 +6,7 @@ import pprint
 import argparse
 import enum
 import os
+import yaml
 
 import bluesky_queueserver
 from .comms import zmq_single_request, validate_zmq_key, generate_zmq_public_key, generate_new_zmq_key_pair
@@ -52,6 +53,9 @@ qserver allowed plans            # Request the list of allowed plans
 qserver allowed devices          # Request the list of allowed devices
 qserver permissions reload       # Reload user permissions and generate lists of allowed plans and devices.
 qserver permissions reload lists # Same, but reload lists of existing plans and devices from disk.
+
+qserver permissions set <path-to-file>  # Set user group permissions (from .yaml file)
+qserver permissions get                 # Get current user group permissions
 
 qserver queue add plan '<plan-params>'                 # Add plan to the back of the queue
 qserver queue add instruction <instruction>            # Add instruction to the back of the queue
@@ -810,15 +814,39 @@ def create_msg(params):
 
     # ----------- permissions ------------
     elif command == "permissions":
-        if len(params) not in (1, 2):
-            raise CommandParameterError(f"Request '{command}' must include only one or two parameters")
         if params[0] == "reload":
+            if len(params) not in (1, 2):
+                raise CommandParameterError(
+                    f"Request '{command} {params[0]}' must include only one or two parameters"
+                )
             method = f"{command}_{params[0]}"
             if len(params) == 2:
                 if params[1] == "lists":
                     prms["reload_plans_devices"] = True
                 else:
                     CommandParameterError(f"Request '{command} {params[0]} {params[1]}' is not supported")
+
+        elif params[0] == "get":
+            if len(params) != 1:
+                raise CommandParameterError(f"Request '{command} {params[0]}' must include only one parameter")
+            method = f"{command}_{params[0]}"
+
+        elif params[0] == "set":
+            if len(params) != 2:
+                raise CommandParameterError(f"Request '{command} {params[0]}' must include only one parameter")
+            method = f"{command}_{params[0]}"
+
+            file_name = params[1]
+            try:
+                with open(file_name, "r") as f:
+                    permissions_yaml = f.read()
+                permissions_dict = yaml.load(permissions_yaml, Loader=yaml.FullLoader)
+            except Exception as ex:
+                raise CommandParameterError(
+                    f"Request '{command}': failed to read the user group permissions from file '{file_name}': {ex}"
+                )
+            prms["user_group_permissions"] = permissions_dict
+
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
 

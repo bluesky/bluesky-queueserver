@@ -3365,7 +3365,7 @@ _permissions_dict_allow_all = {
 # fmt: off
 @pytest.mark.parametrize("restart_manager", [False, True])
 # fmt: on
-def test_permissions_set_get_1(re_manager_pc_copy, restart_manager):  # noqa: F811
+def test_permissions_set_get_1(re_manager, restart_manager):  # noqa: F811
     """
     Basic test for 'permissions_set' and 'permissions_get' API: check that both API work,
     check that the permissions are updated and new list of allowed plans is generated
@@ -3405,6 +3405,62 @@ def test_permissions_set_get_1(re_manager_pc_copy, restart_manager):  # noqa: F8
     assert resp4["success"] is True
     assert resp4["msg"] == ""
     assert resp4["user_group_permissions"] == _permissions_dict_not_allow_count
+
+
+def test_permissions_set_get_2(re_manager):  # noqa: F811
+    """
+    Test that repeatedly uploading the same permissions dictionary does not update
+    the lists of allowed plans and devices (UIDs)
+    """
+    status = get_queue_state()
+    plans_allowed_uid_0 = status["plans_allowed_uid"]
+    devices_allowed_uid_0 = status["devices_allowed_uid"]
+
+    # Upload permissions the first time
+    resp1, _ = zmq_single_request(
+        "permissions_set", params={"user_group_permissions": _permissions_dict_not_allow_count}
+    )
+    assert resp1["success"] is True, pprint.pformat(resp1)
+
+    status = get_queue_state()
+    plans_allowed_uid_1 = status["plans_allowed_uid"]
+    devices_allowed_uid_1 = status["devices_allowed_uid"]
+
+    resp2a, _ = zmq_single_request("plans_allowed", params={"user_group": "admin"})
+    assert resp2a["success"] is True
+    plans_allowed_1 = resp2a["plans_allowed"]
+    resp2b, _ = zmq_single_request("devices_allowed", params={"user_group": "admin"})
+    assert resp2b["success"] is True
+    devices_allowed_1 = resp2b["devices_allowed"]
+
+    # Test that the new permissions were applied
+    assert "count" not in plans_allowed_1
+
+    # Upload permissions the second time
+    resp3, _ = zmq_single_request(
+        "permissions_set", params={"user_group_permissions": _permissions_dict_not_allow_count}
+    )
+    assert resp3["success"] is True, pprint.pformat(resp3)
+
+    status = get_queue_state()
+    plans_allowed_uid_2 = status["plans_allowed_uid"]
+    devices_allowed_uid_2 = status["devices_allowed_uid"]
+
+    resp4a, _ = zmq_single_request("plans_allowed", params={"user_group": "admin"})
+    assert resp4a["success"] is True
+    plans_allowed_2 = resp4a["plans_allowed"]
+    resp4b, _ = zmq_single_request("devices_allowed", params={"user_group": "admin"})
+    assert resp4b["success"] is True
+    devices_allowed_2 = resp4b["devices_allowed"]
+
+    assert plans_allowed_uid_1 != plans_allowed_uid_0
+    assert devices_allowed_uid_1 != devices_allowed_uid_0
+
+    # UIDs or lists should not change if the same permisions are repeatedly uploaded
+    assert plans_allowed_uid_2 == plans_allowed_uid_1
+    assert devices_allowed_uid_2 == devices_allowed_uid_1
+    assert plans_allowed_2 == plans_allowed_1
+    assert devices_allowed_2 == devices_allowed_1
 
 
 # =======================================================================================

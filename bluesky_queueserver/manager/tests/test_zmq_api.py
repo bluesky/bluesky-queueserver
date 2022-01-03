@@ -8,6 +8,7 @@ import re
 import glob
 import json
 import numpy as np
+import yaml
 
 from bluesky_queueserver.manager.profile_ops import (
     get_default_startup_dir,
@@ -3271,9 +3272,42 @@ user_groups:
 
 
 # fmt: off
+@pytest.mark.parametrize("reload_permissions_from_disk", [None, True, False])
+# fmt: on
+def test_permissions_reload_2(re_manager_pc_copy, reload_permissions_from_disk):  # noqa: F811
+    """
+    Tests for ``permissions_reload`` API: check if parameter ``reload_permissions`` works correctly.
+    """
+    _, pc_path = re_manager_pc_copy
+
+    # Now create a new list of user permissions, which may allow/disallow the 'count' plan
+    permissions_text = permissions_not_allow_count
+    permissions_dict = yaml.load(permissions_text)
+    with open(os.path.join(pc_path, "user_group_permissions.yaml"), "w") as f:
+        f.writelines(permissions_text)
+
+    # Now reload permissions. The new lists of allowed plans and devices must be generated
+    params = {}
+    if reload_permissions_from_disk in (True, False):
+        params["reload_permissions"] = reload_permissions_from_disk
+
+    resp1, _ = zmq_single_request("permissions_reload", params=params)
+    assert resp1["success"] is True, f"resp={resp1}"
+
+    resp2, _ = zmq_single_request("permissions_get")
+    assert resp2["success"] is True, f"resp={resp2}"
+    user_group_permissions = resp2["user_group_permissions"]
+
+    if reload_permissions_from_disk in (None, True):
+        assert user_group_permissions == permissions_dict
+    else:
+        assert user_group_permissions != permissions_dict
+
+
+# fmt: off
 @pytest.mark.parametrize("allow_count_plan", [True, False])
 # fmt: on
-def test_permissions_reload_2(re_manager_pc_copy, allow_count_plan):  # noqa: F811
+def test_permissions_reload_3(re_manager_pc_copy, allow_count_plan):  # noqa: F811
     """
     Test if permissions are correctly loaded from disk by the Manager process and propagated to the
     worker process if the environment is open. The test includes the following steps:

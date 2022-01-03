@@ -1,6 +1,7 @@
 import os
 import pytest
 import subprocess
+import pprint
 
 from ..comms import zmq_single_request
 from .common import re_manager_cmd  # noqa: F401
@@ -11,6 +12,7 @@ from .common import (
     condition_environment_closed,
     condition_queue_processing_finished,
     copy_default_profile_collection,
+    clear_redis_pool,
 )
 
 from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
@@ -241,3 +243,78 @@ def test_cli_update_existing_plans_devices_01(
     new_device_added = new_device_added and update_existing_plans_devices != "NEVER"
 
     verify_allowed_lists(new_plan_added=new_plan_added, new_device_added=new_device_added)
+
+
+_permissions_dict_not_allow_count = {
+    "user_groups": {
+        "root": {"allowed_plans": [None], "allowed_devices": [None]},
+        "admin": {"allowed_plans": [None], "forbidden_plans": ["^count$"], "allowed_devices": [None]},
+    }
+}
+
+
+# fmt: off
+@pytest.mark.parametrize("sim_corrupt_redis_key", [False, True])
+@pytest.mark.parametrize("user_group_permissions_reload", ["NEVER", "ON_REQUEST", "ON_STARTUP"])
+# fmt: on
+def test_cli_user_group_permissions_reload_01(
+    re_manager_cmd, user_group_permissions_reload, sim_corrupt_redis_key  # noqa: F811
+):
+    """
+    Tests for parameter ``--user-group-permissions-reload``: start manager, set permissions that
+    are different from default (on disk), stop the manager and start it again (without removing
+    Redis keys), check if correct permissions are loaded at startup, try to reload permissions
+    using ``permissions_reload`` API and check if correct permissions are loaded.
+
+    In addition, the case when Redis does not contain valid permissions is simulated.
+    Permissions should be loaded from disk with any value of the parameter.
+    """
+    re = re_manager_cmd()
+
+    resp1, _ = zmq_single_request(
+        "permissions_set", params={"user_group_permissions": _permissions_dict_not_allow_count}
+    )
+    assert resp1["success"] is True, pprint.pformat(resp1)
+    assert resp1["msg"] == ""
+
+    # Stop the manager
+    re.stop_manager(cleanup=False)
+
+    # Simulate corrupt or missing redis key (should be treated the same).
+    if sim_corrupt_redis_key:
+        clear_redis_pool()
+
+    # Start the manager again
+    params = ["--user-group-permissions-reload", user_group_permissions_reload]
+    re.start_manager(params=params, cleanup=False)
+
+    resp2, _ = zmq_single_request("permissions_get")
+    assert resp2["success"] is True
+    user_group_permissions = resp2["user_group_permissions"]
+
+    if (user_group_permissions_reload == "ON_STARTUP") or sim_corrupt_redis_key:
+        assert user_group_permissions != _permissions_dict_not_allow_count
+    else:
+        assert user_group_permissions == _permissions_dict_not_allow_count
+
+    # This should have no effect on the results of the test, but let's still check if it works.
+    if sim_corrupt_redis_key:
+        clear_redis_pool()
+
+    # Attempt to reload permissions (from disk)
+    resp3, _ = zmq_single_request("permissions_reload")
+
+    if user_group_permissions_reload == "NEVER":
+        assert resp3["success"] is False
+        assert "RE Manager was started with option user_group_permissions_reload='NEVER'" in resp3["msg"]
+    else:
+        assert resp3["success"] is True
+
+    resp4, _ = zmq_single_request("permissions_get")
+    assert resp4["success"] is True
+    user_group_permissions = resp4["user_group_permissions"]
+
+    if (user_group_permissions_reload != "NEVER") or sim_corrupt_redis_key:
+        assert user_group_permissions != _permissions_dict_not_allow_count
+    else:
+        assert user_group_permissions == _permissions_dict_not_allow_count

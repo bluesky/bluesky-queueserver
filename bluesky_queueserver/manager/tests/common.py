@@ -373,9 +373,9 @@ sources:
 class ReManager:
     def __init__(self, params=None, *, stdout=sys.stdout, stderr=sys.stdout):
         self._p = None
-        self._start_manager(params, stdout=stdout, stderr=stderr)
+        self.start_manager(params, stdout=stdout, stderr=stderr)
 
-    def _start_manager(self, params=None, *, stdout, stderr):
+    def start_manager(self, params=None, *, stdout=sys.stdout, stderr=sys.stdout, cleanup=True):
         """
         Start RE manager.
 
@@ -387,6 +387,8 @@ class ReManager:
             Device to forward stdout, ``None`` - print to console
         stderr
             Device to forward stdout, ``None`` - print to console
+        cleanup: boolean
+            Perform cleanup (remove related Redis keys) before opening the manager.
 
         Returns
         -------
@@ -402,7 +404,8 @@ class ReManager:
             params.append("--verbose")
 
         if not self._p:
-            clear_redis_pool()
+            if cleanup:
+                clear_redis_pool()
 
             cmd = ["start-re-manager"]
             if params:
@@ -423,7 +426,7 @@ class ReManager:
         except subprocess.TimeoutExpired:
             return False
 
-    def stop_manager(self, timeout=10):
+    def stop_manager(self, timeout=10, cleanup=True):
         """
         Attempt to exit the subprocess that is running manager in orderly way and kill it
         after timeout.
@@ -432,6 +435,8 @@ class ReManager:
         ----------
         timeout: float
             Timeout in seconds.
+        cleanup: boolean
+            Perform cleanup (remove created Redis keys) after closing the manager.
         """
         if self._p:
             try:
@@ -481,7 +486,8 @@ class ReManager:
                 assert False, f"RE Manager failed to stop: {str(ex)}"
 
             finally:
-                clear_redis_pool()
+                if cleanup:
+                    clear_redis_pool()
                 self._p = None
 
     def kill_manager(self, timeout=10):

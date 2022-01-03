@@ -3463,6 +3463,24 @@ def test_permissions_set_get_2(re_manager):  # noqa: F811
     assert devices_allowed_2 == devices_allowed_1
 
 
+# fmt: off
+@pytest.mark.parametrize("params, err_msg", [
+    ({"unsupported_param": 10}, "API request contains unsupported parameters: 'unsupported_param'"),
+    ({}, "Parameter 'user_group_permissions' is missing"),
+    # Following are cases of failing schema validations of permissions
+    ({"user_group_permissions": {}}, "'user_groups' is a required property"),
+    ({"user_group_permissions": {"user_groups": {}}}, "Missing required user group: 'root'"),
+])
+# fmt: on
+def test_permissions_set_get_3_fail(re_manager, params, err_msg):  # noqa: F811
+    """
+    Tests for ``permissions_set`` 0MQ API: failing cases
+    """
+    resp1, _ = zmq_single_request("permissions_set", params=params)
+    assert resp1["success"] is False, pprint.pformat(resp1)
+    assert err_msg in resp1["msg"], resp1["msg"]
+
+
 # =======================================================================================
 #                              Method `environment_destroy`
 

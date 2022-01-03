@@ -3345,6 +3345,69 @@ def test_permissions_reload_2(re_manager_pc_copy, allow_count_plan):  # noqa: F8
 
 
 # =======================================================================================
+#                Methods 'permissions_set' and 'permissions_get
+
+_permissions_dict_not_allow_count = {
+    "user_groups": {
+        "root": {"allowed_plans": [None], "allowed_devices": [None]},
+        "admin": {"allowed_plans": [None], "forbidden_plans": ["^count$"], "allowed_devices": [None]},
+    }
+}
+
+_permissions_dict_allow_all = {
+    "user_groups": {
+        "root": {"allowed_plans": [None], "allowed_devices": [None]},
+        "admin": {"allowed_plans": [None], "allowed_devices": [None]},
+    }
+}
+
+
+# fmt: off
+@pytest.mark.parametrize("restart_manager", [False, True])
+# fmt: on
+def test_permissions_set_get_1(re_manager_pc_copy, restart_manager):  # noqa: F811
+    """
+    Basic test for 'permissions_set' and 'permissions_get' API: check that both API work,
+    check that the permissions are updated and new list of allowed plans is generated
+    (expected to work for devices as well), check that if the manager process is reloaded,
+    the last set of permissions is loaded from Redis and the correct list of available plans
+    is generated.
+    """
+    status = get_queue_state()
+    plans_allowed_uid_1 = status["plans_allowed_uid"]
+
+    resp1, _ = zmq_single_request("plans_allowed", params={"user_group": "admin"})
+    assert resp1["success"] is True
+    assert "count" in resp1["plans_allowed"]
+
+    resp2, _ = zmq_single_request(
+        "permissions_set", params={"user_group_permissions": _permissions_dict_not_allow_count}
+    )
+    assert resp2["success"] is True, pprint.pformat(resp2)
+    assert resp2["msg"] == ""
+
+    if restart_manager:
+        _, err_msg = zmq_single_request("manager_kill")
+        assert err_msg != ""
+        ttime.sleep(6)
+
+    status = get_queue_state()
+    plans_allowed_uid2 = status["plans_allowed_uid"]
+    assert plans_allowed_uid2 != plans_allowed_uid_1
+
+    resp3, _ = zmq_single_request("plans_allowed", params={"user_group": "admin"})
+    assert resp3["success"] is True
+    print(f"plans: {list(resp3['plans_allowed'].keys())}")
+
+    assert "count" not in resp3["plans_allowed"]
+
+    resp4, _ = zmq_single_request("permissions_get")
+    assert resp4["success"] is True
+    assert resp4["msg"] == ""
+    assert resp4["user_group_permissions"] == _permissions_dict_not_allow_count
+
+
+# =======================================================================================
 #                              Method `environment_destroy`
 
 

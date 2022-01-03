@@ -1491,6 +1491,7 @@ class RunEngineManager(Process):
             if user_group_permissions != self._user_group_permissions:
                 validate_user_group_permissions(user_group_permissions)
                 self._user_group_permissions = user_group_permissions
+                await self._plan_queue.user_group_permissions_save(self._user_group_permissions)
                 self._update_allowed_plans_and_devices()
 
                 # If environment exists, then tell the worker to reload permissions. This is optional.
@@ -2693,8 +2694,10 @@ class RunEngineManager(Process):
 
         # Load user group permissions
         if (self._user_group_permissions_reload_option == "ON_STARTUP") and (self._number_of_restarts == 1):
+            logger.debug("Loading user permissions from disk ...")
             await self._load_permissions_from_disk()
         else:
+            logger.debug("Loading user permissions from Redis ...")
             await self._load_permissions_from_redis()
 
         # Set the environment state based on whether the worker process is alive (request Watchdog)

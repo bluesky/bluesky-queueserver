@@ -61,6 +61,7 @@ _user, _user_group, _test_user_group = "Testing Script", "admin", "test_user"
 _existing_plans_and_devices_fln = "existing_plans_and_devices.yaml"
 _user_group_permissions_fln = "user_group_permissions.yaml"
 
+timeout_env_open = 10
 
 # =======================================================================================
 #                   Thread-based ZMQ API - ZMQCommSendThreads
@@ -195,7 +196,7 @@ def test_zmq_api_environment_open_close_1(re_manager):  # noqa F811
     assert resp1["success"] is True
     assert resp1["msg"] == ""
 
-    assert wait_for_condition(time=3, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     state = get_queue_state()
     assert state["re_state"] == "idle"
@@ -226,7 +227,7 @@ def test_zmq_api_environment_open_close_2(re_manager):  # noqa F811
     assert resp1b["success"] is False
     assert "in the process of creating the RE Worker environment" in resp1b["msg"]
 
-    assert wait_for_condition(time=3, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     # Attempt to open the environment while it already exists
     resp2, _ = zmq_single_request("environment_open")
@@ -257,7 +258,7 @@ def test_zmq_api_environment_open_close_3(re_manager):  # noqa F811
     assert resp1["success"] is True
     assert resp1["msg"] == ""
 
-    assert wait_for_condition(time=3, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     # Start a plan
     resp2, _ = zmq_single_request("queue_item_add", {"item": _plan3, "user": _user, "user_group": _user_group})
@@ -437,7 +438,7 @@ def test_zmq_api_queue_item_add_4(re_manager):  # noqa F811
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
     assert wait_for_condition(
-        time=3, condition=condition_environment_created
+        time=timeout_env_open, condition=condition_environment_created
     ), "Timeout while waiting for environment to be opened"
 
     resp2, _ = zmq_single_request("queue_start")
@@ -543,7 +544,7 @@ def test_zmq_api_queue_item_add_7(db_catalog, re_manager_cmd, meta_param, meta_s
     # Open the environment.
     resp3, _ = zmq_single_request("environment_open")
     assert resp3["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     resp4, _ = zmq_single_request("queue_start")
     assert resp4["success"] is True
@@ -663,7 +664,7 @@ def test_zmq_api_queue_item_execute_1(re_manager):  # noqa: F811
 
     resp2, _ = zmq_single_request("environment_open")
     assert resp2["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     resp2a, _ = zmq_single_request("status")
     assert resp2a["items_in_queue"] == 1
@@ -735,7 +736,7 @@ def test_zmq_api_queue_item_execute_2(re_manager):  # noqa: F811
     # The queue contains only a single instruction (stop the queue).
     resp2, _ = zmq_single_request("environment_open")
     assert resp2["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     resp2a, _ = zmq_single_request("status")
     assert resp2a["items_in_queue"] == 1
@@ -795,7 +796,7 @@ def test_zmq_api_queue_item_execute_3(re_manager):  # noqa: F811
 
     resp2, _ = zmq_single_request("environment_open")
     assert resp2["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     resp2a, _ = zmq_single_request("status")
     assert resp2a["items_in_queue"] == 0
@@ -1094,7 +1095,7 @@ def test_zmq_api_queue_item_add_batch_3(re_manager):  # noqa: F811
 
     resp2, _ = zmq_single_request("environment_open")
     assert resp2["success"] is True
-    assert wait_for_condition(time=3, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     resp3, _ = zmq_single_request("queue_start")
     assert resp3["success"] is True
@@ -1399,7 +1400,7 @@ def test_zmq_api_script_upload_1(re_manager, run_in_background):  # noqa: F811
     """
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     status, _ = zmq_single_request("status")
     task_results_uid = status["task_results_uid"]
@@ -1547,7 +1548,7 @@ def test_zmq_api_script_upload_2(re_manager, scripts, updated_devs, updated_plan
     """
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     status, _ = zmq_single_request("status")
     task_results_uid = status["task_results_uid"]
@@ -1641,7 +1642,7 @@ def test_zmq_api_script_upload_3(re_manager, use_bg_task):  # noqa: F811
     """
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     # Task 1
     resp2a, _ = zmq_single_request(
@@ -1702,7 +1703,7 @@ def test_zmq_api_script_upload_4(tmp_path, re_manager_cmd):  # noqa: F811
 
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     # At this point the lists of allowed plans and devices are expected to be empty.
     resp2a, _ = zmq_single_request("plans_existing")
@@ -1784,7 +1785,7 @@ def test_zmq_api_script_upload_5(tmp_path, re_manager_cmd):  # noqa: F811
 
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     # Upload the module that uses local imports
     script = "from mod.mod_file import *\n"
@@ -1829,7 +1830,7 @@ def test_zmq_api_script_upload_6(re_manager_cmd, update_re_param, replace_re, re
 
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     # Upload script that saves instances of 'RE' and 'db' in the namespace
     resp2, _ = zmq_single_request("script_upload", params={"script": _script_save_instances_re_db})
@@ -1877,7 +1878,7 @@ def test_zmq_api_script_upload_7(re_manager):  # noqa: F811
     """
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     # Run the script in foreground
     long_script = "import time as tt\ntt.sleep(20)\n"
@@ -1905,7 +1906,7 @@ def test_zmq_api_script_upload_7(re_manager):  # noqa: F811
     # Open and close the environment to make sure everything works
     resp6a, _ = zmq_single_request("environment_open")
     assert resp6a["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     resp6b, _ = zmq_single_request("environment_close")
     assert resp6b["success"] is True, f"resp={resp6b}"
@@ -1931,7 +1932,7 @@ def test_zmq_api_script_upload_9_fail(re_manager, test_with_plan):  # noqa: F811
     """
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     if test_with_plan:
         # Now try to run a simple plan and make sure it works
@@ -1989,7 +1990,7 @@ def test_zmq_api_function_execute_1(re_manager, run_in_background, wait_for_idle
 
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     func_item = {"name": "function_sleep", "item_type": "function"}
     if test_with_args:
@@ -2058,7 +2059,7 @@ def test_zmq_api_function_execute_2(re_manager, run_in_background, option):  # n
     """
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     if option == "with_plan":
         resp2a, _ = zmq_single_request(
@@ -2122,7 +2123,7 @@ def test_zmq_api_function_execute_3(re_manager, start_fg_func):  # noqa: F811
     """
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     if start_fg_func:
         fg_func_info = {"name": "function_sleep", "args": [5], "item_type": "function"}
@@ -2174,7 +2175,7 @@ def test_zmq_api_function_execute_4(re_manager):  # noqa: F811
     """
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     resp2, _ = zmq_single_request("script_upload", params={"script": _script_func_1})
     assert resp2["success"] is True
@@ -2244,7 +2245,7 @@ def test_zmq_api_function_execute_5(
     """
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     resp2, _ = zmq_single_request("script_upload", params={"script": script})
     assert resp2["success"] is True
@@ -2279,7 +2280,7 @@ def test_zmq_api_function_execute_6(re_manager):  # noqa: F811
     """
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     func_info = {"name": "clear_buffer", "item_type": "function"}
 
@@ -2323,7 +2324,7 @@ def test_zmq_api_function_execute_7_fail(re_manager, option, item_type, msg):  #
     """
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     func_info = {"name": "function_sleep", "args": [2], "item_type": item_type}
     params = {"user": _user, "user_group": _test_user_group, "run_in_background": True}
@@ -2366,7 +2367,7 @@ def test_zmq_api_function_execute_8_fail(re_manager):  # noqa: F811
     """
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     # The function name is in the list of permitted functions
     non_existing_function_name = "non_existing_element"
@@ -2644,7 +2645,7 @@ def test_zmq_api_queue_item_get_remove_3(re_manager):  # noqa F811
     resp3, _ = zmq_single_request("environment_open")
     assert resp3["success"] is True
     assert wait_for_condition(
-        time=3, condition=condition_environment_created
+        time=timeout_env_open, condition=condition_environment_created
     ), "Timeout while waiting for environment to be opened"
 
     resp4, _ = zmq_single_request("queue_start")
@@ -3103,7 +3104,7 @@ def test_zmq_api_queue_mode_set_3_loop_mode(re_manager):  # noqa: F811
 
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     # Continuously test execution of the queue in both modes. The queue contains 2 plans and
     #   'stop' instruction. In the loop mode the queue stops after the instructions, but
@@ -3323,7 +3324,7 @@ def test_permissions_reload_3(re_manager_pc_copy, allow_count_plan):  # noqa: F8
 
     resp1a, _ = zmq_single_request("environment_open")
     assert resp1a["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     # Add the first 'count' plan
     resp1b, _ = zmq_single_request("queue_item_add", {"item": _plan1, "user": _user, "user_group": _user_group})
@@ -3536,7 +3537,7 @@ def test_zmq_api_environment_destroy(re_manager):  # noqa: F811
 
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     status = get_queue_state()
     assert status["re_state"] == "idle"
@@ -3565,7 +3566,7 @@ def test_zmq_api_environment_destroy(re_manager):  # noqa: F811
 
     resp4, _ = zmq_single_request("environment_open")
     assert resp4["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     status = get_queue_state()
     assert status["re_state"] == "idle"
@@ -3636,7 +3637,7 @@ def test_zmq_api_re_pause_1(re_manager, pause_deferred, kill_manager, pause_befo
     # The queue contains only a single instruction (stop the queue).
     resp2, _ = zmq_single_request("environment_open")
     assert resp2["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     _check_status(1, 0, "idle", "idle", "idle", False)
 
@@ -3713,7 +3714,7 @@ def test_zmq_api_re_pause_2(re_manager, n_plans, kill_manager, pause_before_kill
     # The queue contains only a single instruction (stop the queue).
     resp2, _ = zmq_single_request("environment_open")
     assert resp2["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     _check_status(n_plans, 0, "idle", "idle", False)
 
@@ -3833,7 +3834,7 @@ def test_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_restart):  # 
     # Open the environment
     resp3, _ = zmq_single_request("environment_open")
     assert resp3["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     # Get initial value of (empty) run list to capture changes in the run list
     resp, _ = zmq_single_request("status")
@@ -3983,7 +3984,7 @@ def test_manager_kill_1(re_manager_pc_copy):  # noqa: F811
     # Open the environment
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     # Add 'count' plan
     params2 = {"item": _plan1, "user": _user, "user_group": _user_group}
@@ -4092,7 +4093,7 @@ def test_zmq_api_queue_execution_1(re_manager):  # noqa: F811
     # The queue contains only a single instruction (stop the queue).
     resp2, _ = zmq_single_request("environment_open")
     assert resp2["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     resp2a, _ = zmq_single_request("status")
     assert resp2a["items_in_queue"] == 4
@@ -4194,7 +4195,7 @@ def test_zmq_api_queue_execution_2(re_manager):  # noqa: F811
     # The queue contains only a single instruction (stop the queue).
     resp2, _ = zmq_single_request("environment_open")
     assert resp2["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     resp2a, _ = zmq_single_request("status")
     assert resp2a["items_in_queue"] == 2
@@ -4285,7 +4286,7 @@ def test_zmq_api_queue_execution_3(monkeypatch, re_manager_cmd, test_mode):  # n
     # The queue contains only a single instruction (stop the queue).
     resp2, _ = zmq_secure_request("environment_open")
     assert resp2["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     resp2a, _ = zmq_secure_request("status")
     assert resp2a["items_in_queue"] == 2
@@ -4342,7 +4343,7 @@ def test_zmq_api_queue_execution_4(re_manager, stop_queue, pause_before_kill):  
     # The queue contains only a single instruction (stop the queue).
     resp2, _ = zmq_single_request("environment_open")
     assert resp2["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     _check_status(2, 0, "idle", "idle", False)
 

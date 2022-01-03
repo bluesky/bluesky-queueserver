@@ -372,6 +372,9 @@ periodically requests and displays the status of Queue Server.
     qserver permissions reload       # Reload user permissions and generate lists of allowed plans and devices.
     qserver permissions reload lists # Same, but reload lists of existing plans and devices from disk.
 
+    qserver permissions set <path-to-file>  # Set user group permissions (from .yaml file)
+    qserver permissions get                 # Get current user group permissions
+
     qserver queue add plan '<plan-params>'                 # Add plan to the back of the queue
     qserver queue add instruction <instruction>            # Add instruction to the back of the queue
     qserver queue add plan front '<plan-params>'           # Add plan to the front of the queue

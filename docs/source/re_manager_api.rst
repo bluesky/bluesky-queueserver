@@ -75,6 +75,8 @@ Existing and allowed plans and devices:
 - :ref:`method_plans_existing`
 - :ref:`method_devices_existing`
 - :ref:`method_permissions_reload`
+- :ref:`method_permissions_get`
+- :ref:`method_permissions_set`
 
 History of executed plans:
 
@@ -425,6 +427,58 @@ Parameters    **reload_plans_devices**: *boolean* (optional)
               **reload_permissions**: *boolean* (optional)
                   reload user group permissions from disk if *True*, otherwise use current permissions.
                   Default: *True*.
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+
+.. _method_permissions_get:
+
+**'permissions_get'**
+^^^^^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'permissions_get'**
+------------  -----------------------------------------------------------------------------------------
+Description   Download the dictionary of user group permissions currently used by RE Manager.
+------------  -----------------------------------------------------------------------------------------
+Parameters    ---
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **user_group_permissions**: *dict*
+                  dictionary containing user group permissions.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+
+.. _method_permissions_set:
+
+**'permissions_set'**
+^^^^^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'permissions_set'**
+------------  -----------------------------------------------------------------------------------------
+Description   Uploads the dictionary of user group permissions. If the uploaded dictionary contains
+              a valid set of permissions different from currently used one, the new permissions
+              are set as current and the updated lists of allowed plans and devices are generated.
+              The method does nothing if the uploaded permissions are identical to currently used
+              permissions. The API request fails if the uploaded dictionary does not pass validation.
+------------  -----------------------------------------------------------------------------------------
+Parameters    **user_group_permissions**: *dict*
+                  dictionary, which contains user group permissions.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.

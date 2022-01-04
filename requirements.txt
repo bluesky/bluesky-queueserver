@@ -1,4 +1,4 @@
-aioredis<2.0.0
+aioredis
 bluesky
 bluesky-kafka
 databroker
@@ -12,6 +12,7 @@ msgpack_numpy
 numpydoc
 openpyxl
 ophyd
+packaging
 pydantic
 python-multipart
 pyyaml

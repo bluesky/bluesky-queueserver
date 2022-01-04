@@ -4,8 +4,12 @@ import copy
 import json
 import uuid
 import logging
+from packaging import version
 
 logger = logging.getLogger(__name__)
+
+# Check if 'aioredis' v2 is installed. TODO: remove support for 'aioredis' v1 when it is deprecated.
+aioredis_v2 = version.parse(aioredis.__version__) >= version.parse("2.0.0")
 
 
 class PlanQueueOperations:
@@ -227,8 +231,13 @@ class PlanQueueOperations:
             self._lock = asyncio.Lock()
             async with self._lock:
                 try:
-                    self._r_pool = await aioredis.create_redis_pool(f"redis://{self._redis_host}", encoding="utf8")
-                except OSError as ex:
+                    host = f"redis://{self._redis_host}"
+                    if aioredis_v2:
+                        self._r_pool = aioredis.from_url(host, encoding="utf-8", decode_responses=True)
+                        await self._r_pool.ping()
+                    else:
+                        self._r_pool = await aioredis.create_redis_pool(host, encoding="utf8")
+                except Exception as ex:
                     error_msg = (
                         f"Failed to create the Redis pool: "
                         f"Redis server may not be available at '{self._redis_host}'. "
@@ -288,7 +297,8 @@ class PlanQueueOperations:
         async with self._lock:
             await self._delete_pool_entries()
 
-    def _verify_item_type(self, item):
+    @staticmethod
+    def _verify_item_type(item):
         """
         Check that the item (plan) is a dictionary.
         """
@@ -874,10 +884,16 @@ class PlanQueueOperations:
                     qsize = await self._r_pool.lpush(self._name_plan_queue, json.dumps(item))
             else:
                 item_to_displace = self._uid_dict_get_item(uid)
-                before = uid == before_uid
-                qsize = await self._r_pool.linsert(
-                    self._name_plan_queue, json.dumps(item_to_displace), json.dumps(item), before=before
-                )
+                if aioredis_v2:
+                    where = "BEFORE" if (uid == before_uid) else "AFTER"
+                    qsize = await self._r_pool.linsert(
+                        self._name_plan_queue, where, json.dumps(item_to_displace), json.dumps(item)
+                    )
+                else:
+                    before = uid == before_uid
+                    qsize = await self._r_pool.linsert(
+                        self._name_plan_queue, json.dumps(item_to_displace), json.dumps(item), before=before
+                    )
         elif pos == "back" or (isinstance(pos, int) and pos >= qsize0):
             qsize = await self._r_pool.rpush(self._name_plan_queue, json.dumps(item))
         elif pos == "front" or (isinstance(pos, int) and (pos == 0 or pos <= -qsize0)):
@@ -886,9 +902,14 @@ class PlanQueueOperations:
             # Put the position in the range
             item_to_displace = await self._get_item(pos=pos)
             if item_to_displace:
-                qsize = await self._r_pool.linsert(
-                    self._name_plan_queue, json.dumps(item_to_displace), json.dumps(item), before=True
-                )
+                if aioredis_v2:
+                    qsize = await self._r_pool.linsert(
+                        self._name_plan_queue, "BEFORE", json.dumps(item_to_displace), json.dumps(item)
+                    )
+                else:
+                    qsize = await self._r_pool.linsert(
+                        self._name_plan_queue, json.dumps(item_to_displace), json.dumps(item), before=True
+                    )
             else:
                 raise RuntimeError(f"Could not find an existing plan at {pos}. Queue size: {qsize0}")
         else:
@@ -1083,7 +1104,12 @@ class PlanQueueOperations:
 
         # Insert the new item after the old one and remove the old one. At this point it is guaranteed
         #   that they are not equal.
-        await self._r_pool.linsert(self._name_plan_queue, json.dumps(item_to_replace), json.dumps(item))
+        if aioredis_v2:
+            await self._r_pool.linsert(
+                self._name_plan_queue, "AFTER", json.dumps(item_to_replace), json.dumps(item)
+            )
+        else:
+            await self._r_pool.linsert(self._name_plan_queue, json.dumps(item_to_replace), json.dumps(item))
         await self._remove_item(item_to_replace)
 
         # Update self._uid_dict

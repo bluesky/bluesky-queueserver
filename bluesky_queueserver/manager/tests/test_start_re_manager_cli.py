@@ -27,6 +27,8 @@ _instruction_stop = {"name": "queue_stop", "item_type": "instruction"}
 # User name and user group name used throughout most of the tests.
 _user, _user_group = "Testing Script", "admin"
 
+timeout_env_open = 10
+
 
 # fmt: off
 @pytest.mark.parametrize("option", ["--verbose", "--quiet", "--silent"])
@@ -45,7 +47,7 @@ def test_start_re_manager_logging_1(re_manager_cmd, option):  # noqa: F811
     assert resp1["success"] is True
     assert resp1["msg"] == ""
 
-    assert wait_for_condition(time=3, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     # Attemtp to communicate with RE Manager
     resp2, _ = zmq_single_request("status")
@@ -99,7 +101,7 @@ def test_start_re_manager_console_output_1(re_manager_cmd, console_print, consol
     assert resp1["success"] is True
     assert resp1["msg"] == ""
 
-    assert wait_for_condition(time=3, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     resp2, _ = zmq_single_request("queue_item_add", {"item": _plan1, "user": _user, "user_group": _user_group})
     assert resp2["success"] is True
@@ -191,7 +193,7 @@ def test_cli_update_existing_plans_devices_01(
     assert resp2["success"] is True
     assert resp2["msg"] == ""
 
-    assert wait_for_condition(time=10, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     resp3, _ = zmq_single_request("environment_close")
     assert resp3["success"] is True

@@ -2,6 +2,7 @@ import time as ttime
 import subprocess
 import pytest
 import os
+import yaml
 
 from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
 from bluesky_queueserver.manager.comms import generate_new_zmq_key_pair
@@ -1216,18 +1217,18 @@ def test_function_execute_2_fail(re_manager):  # noqa: F811
     assert subprocess.call(["qserver", "function", "execute", item, "invalid_param"]) == PARAM_ERROR
 
 
-def test_task_result_get_1(re_manager):  # noqa: F811
+def test_task_result_1(re_manager):  # noqa: F811
     """
     Tests for 'qserver task result_get'.
     """
     # The request should be successful for any 'task_uid'.
     task_uid = "01e80342-5e36-44de-bc86-9bd8d57c9885"
-    assert subprocess.call(["qserver", "task", "result", "get", task_uid]) == SUCCESS
+    assert subprocess.call(["qserver", "task", "result", task_uid]) == SUCCESS
 
     # Some cases of invalid parameters
-    assert subprocess.call(["qserver", "task", "result", "get"]) == PARAM_ERROR
-    assert subprocess.call(["qserver", "task", "result", "something"]) == PARAM_ERROR
-    assert subprocess.call(["qserver", "task", "something", "something"]) == PARAM_ERROR
+    assert subprocess.call(["qserver", "task", "result"]) == PARAM_ERROR
+    assert subprocess.call(["qserver", "task", "something"]) == PARAM_ERROR
+    assert subprocess.call(["qserver", "task", "result", task_uid, "extra_param"]) == PARAM_ERROR
 
 
 _sample_trivial_plan1 = """
@@ -1242,7 +1243,7 @@ def trivial_plan_for_unit_test():
 # fmt: off
 @pytest.mark.parametrize("reload_plans_devices", [True, False])
 # fmt: on
-def test_qserver_reload_permissions_1(re_manager_pc_copy, tmp_path, reload_plans_devices):  # noqa F811
+def test_qserver_permissions_reload_1(re_manager_pc_copy, tmp_path, reload_plans_devices):  # noqa F811
     """
     Tests for ``qserver permissions reload [lists]`` API.
     """
@@ -1268,6 +1269,60 @@ def test_qserver_reload_permissions_1(re_manager_pc_copy, tmp_path, reload_plans
     # Attempt to add the plan to the queue. It should be successful now.
     res_expected = SUCCESS if reload_plans_devices else REQ_FAILED
     assert subprocess.call(["qserver", "queue", "add", "plan", plan]) == res_expected
+
+
+_permissions_dict_not_allow_count = {
+    "user_groups": {
+        "root": {"allowed_plans": [None], "allowed_devices": [None]},
+        "admin": {"allowed_plans": [None], "forbidden_plans": ["^count$"], "allowed_devices": [None]},
+    }
+}
+
+
+def test_qserver_permissions_set_get_1(re_manager, tmp_path):  # noqa F811
+    """
+    Tests for ``qserver permissions set`` and ``qserver permissions get``: basic tests.
+    """
+
+    user_group_permissions = _permissions_dict_not_allow_count
+
+    # Create yaml file with user group permissions
+    fl_path = os.path.join(tmp_path, "ugp.yaml")
+    with open(fl_path, "w") as f:
+        f.writelines(yaml.dump(user_group_permissions))
+
+    # Set user group permissions
+    assert subprocess.call(["qserver", "permissions", "set", fl_path]) == SUCCESS
+
+    # Check that permissions were really changed
+    resp1, _ = zmq_single_request("permissions_get")
+    assert resp1["success"] is True, f"resp={resp1}"
+    assert resp1["user_group_permissions"] == user_group_permissions
+
+    # Check if 'qserver permissions get' works
+    assert subprocess.call(["qserver", "permissions", "get"]) == SUCCESS
+
+
+def test_qserver_permissions_set_get_2_fail(re_manager, tmp_path):  # noqa F811
+    """
+    Tests for ``qserver permissions set`` and ``qserver permissions get``: failing cases.
+    """
+    # Create yaml file with user group permissions
+    fl_path = os.path.join(tmp_path, "ugp.yaml")
+    with open(fl_path, "w") as f:
+        f.writelines("This is not a valid permissions dictionary")  # Invalid file
+
+    # Non-existing file
+    assert subprocess.call(["qserver", "permissions", "set", os.path.join(tmp_path, "some_file")]) == PARAM_ERROR
+    # No file name
+    assert subprocess.call(["qserver", "permissions", "set"]) == PARAM_ERROR
+    # Extra parameters
+    assert subprocess.call(["qserver", "permissions", "set", fl_path, "extra_parameter"]) == PARAM_ERROR
+    # Request is correct, but the file does not contain valid dictionary
+    assert subprocess.call(["qserver", "permissions", "set", fl_path]) == REQ_FAILED
+
+    # Extra parameters
+    assert subprocess.call(["qserver", "permissions", "get", "extra_parameter"]) == PARAM_ERROR
 
 
 # fmt: off

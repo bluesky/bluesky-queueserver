@@ -41,6 +41,9 @@ class WatchdogProcess:
         self._re_manager = None
         self._re_worker = None
 
+        # The number of restarts of the manager processes including the first start.
+        self._re_manager_n_restarts = 0
+
         # Create pipes used for connections of the modules
         self._manager_conn = None  # Worker -> Manager
         self._worker_conn = None  # Manager -> Worker
@@ -144,6 +147,7 @@ class WatchdogProcess:
     # ======================================================================
 
     def _start_re_manager(self):
+        self._re_manager_n_restarts += 1
         self._init_watchdog_state()
         self._re_manager = self._cls_run_engine_manager(
             conn_watchdog=self._manager_to_watchdog_conn,
@@ -152,6 +156,7 @@ class WatchdogProcess:
             name="RE Manager Process",
             msg_queue=self._msg_queue,
             log_level=self._log_level,
+            number_of_restarts=self._re_manager_n_restarts,
         )
         self._re_manager.start()
 
@@ -292,6 +297,21 @@ def start_manager():
         "The path may be a relative path to the profile collection directory. "
         "If the path is a directory, then the default file name "
         "'user_group_permissions.yaml' is used.",
+    )
+
+    parser.add_argument(
+        "--user-group-permissions-reload",
+        dest="user_group_permissions_reload",
+        type=str,
+        choices=["NEVER", "ON_REQUEST", "ON_STARTUP"],
+        default="ON_STARTUP",
+        help="Select when user group permissions are reloaded from disk. Options: 'NEVER' - "
+        "RE Manager never attempts to load permissions from disk file. If permissions fail to load "
+        "from Redis, they are loaded from disk at the first startup of RE Manager or on request. "
+        "'ON_REQUEST' - permissions are loaded from disk file when requested by 'permission_reload' API call. "
+        "'ON_STARTUP' - permissions are loaded from disk each time RE Manager is started or when "
+        "'permission_reload' API request is received "
+        "(default: %(default)s)",
     )
 
     parser.add_argument(
@@ -577,6 +597,8 @@ def start_manager():
     config_manager["user_group_permissions_path"] = user_group_pd_path
 
     config_worker["update_existing_plans_devices"] = args.update_existing_plans_devices
+
+    config_manager["user_group_permissions_reload"] = args.user_group_permissions_reload
 
     # Read private key from the environment variable, then check if the CLI parameter exists
     zmq_private_key = os.environ.get("QSERVER_ZMQ_PRIVATE_KEY", None)

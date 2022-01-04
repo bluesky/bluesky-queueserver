@@ -16,9 +16,11 @@ def pq():
     asyncio.run(pq.start())
     # Clear any pool entries
     asyncio.run(pq.delete_pool_entries())
+    asyncio.run(pq.user_group_permissions_clear())
     yield pq
     # Don't leave any test entries in the pool
     asyncio.run(pq.delete_pool_entries())
+    asyncio.run(pq.user_group_permissions_clear())
 
 
 # fmt: off
@@ -2040,5 +2042,29 @@ def test_set_processed_item_as_stopped_3(pq, loop_mode, func):
         history, _ = await pq.get_history()
         assert history[0] == plan1
         assert "properties" not in history[0]
+
+    asyncio.run(testing())
+
+
+# ==============================================================================================
+#                    Saving and retrieving user group permissions
+def test_user_group_permissions_1(pq):
+    """
+    Test for saving and retrieving and clearing user group permissions, which are backed up in Redis.
+    """
+    ug_permissions_1 = {"some_key_1": "some_value_1"}
+    ug_permissions_2 = {"some_key_2": "some_value_2"}
+
+    async def testing():
+        assert await pq.user_group_permissions_retrieve() is None
+
+        await pq.user_group_permissions_save(ug_permissions_1)
+        assert await pq.user_group_permissions_retrieve() == ug_permissions_1
+
+        await pq.user_group_permissions_save(ug_permissions_2)
+        assert await pq.user_group_permissions_retrieve() == ug_permissions_2
+
+        await pq.user_group_permissions_clear()
+        assert await pq.user_group_permissions_retrieve() is None
 
     asyncio.run(testing())

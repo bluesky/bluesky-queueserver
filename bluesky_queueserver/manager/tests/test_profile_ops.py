@@ -59,7 +59,7 @@ from bluesky_queueserver.manager.profile_ops import (
     _check_ranges,
     format_text_descriptions,
     check_if_function_allowed,
-    validate_user_group_permissions_schema,
+    _validate_user_group_permissions_schema,
     prepare_function,
 )
 
@@ -2189,11 +2189,11 @@ pa2_Enum1 = enum.Enum("pa2_Enum1", {"enum1": "enum1", "enum2": "enum2"})
         {"pa2_Device1": ("dev1", "dev2", "dev3"),
          "pa2_Enum1": ("enum1", "enum2")}},
      typing.Union[typing.List[pa2_Device1], typing.List[pa2_Enum1]], True, ""),
-    # Use Tuple instead of List (different type, but the same JSON schema)
+    # Use Tuple instead of List (produces different JSON schema)
     ({"type": "typing.Union[typing.Tuple[pa2_Device1], typing.List[pa2_Enum1]]", "devices":
         {"pa2_Device1": ("dev1", "dev2", "dev3"),
          "pa2_Enum1": ("enum1", "enum2")}},
-     typing.Union[typing.List[pa2_Device1], typing.List[pa2_Enum1]], True, ""),
+     typing.Union[typing.Tuple[pa2_Device1], typing.List[pa2_Enum1]], True, ""),
     # Failing case: unknown 'custom' type in the annotation
     ({"type": "typing.Union[typing.List[unknown_type], typing.List[pa2_Enum1]]", "devices":
         {"pa2_Device1": ("dev1", "dev2", "dev3"),
@@ -2889,7 +2889,7 @@ def test_prepare_function_2(func_info, except_type, msg):
     nspace = {}
     load_script_into_existing_nspace(script=_prep_func_script_1, nspace=nspace)
 
-    validate_user_group_permissions_schema(_prep_func_permissions)
+    _validate_user_group_permissions_schema(_prep_func_permissions)
     with pytest.raises(except_type, match=msg):
         prepare_function(func_info=func_info, nspace=nspace, user_group_permissions=_prep_func_permissions)
 
@@ -4075,7 +4075,7 @@ _func_permissions_dict_7 = {
 ])
 # fmt: on
 def test_check_if_function_allowed_1(permissions_dict, func_name, group, accepted):
-    validate_user_group_permissions_schema(permissions_dict)
+    _validate_user_group_permissions_schema(permissions_dict)
     is_accepted = check_if_function_allowed(func_name, group_name=group, user_group_permissions=permissions_dict)
     assert is_accepted == accepted
 

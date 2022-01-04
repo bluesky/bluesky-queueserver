@@ -243,6 +243,15 @@ Other Configuration Parameters
                         users. The path may be a relative path to the profile collection
                         directory. If the path is a directory, then the default file name
                         'user_group_permissions.yaml' is used.
+      --user-group-permissions-reload {NEVER,ON_REQUEST,ON_STARTUP}
+                        Select when user group permissions are reloaded from disk. Options:
+                        'NEVER' - RE Manager never attempts to load permissions from disk
+                        file. If permissions fail to load from Redis, they are loaded from
+                        disk at the first startup of RE Manager or on request. 'ON_REQUEST' -
+                        permissions are loaded from disk file when requested by
+                        'permission_reload' API call. 'ON_STARTUP' - permissions are loaded
+                        from disk each time RE Manager is started or when 'permission_reload'
+                        API request is received (default: ON_STARTUP)
       --redis-addr REDIS_ADDR
                         The address of Redis server, e.g. 'localhost', '127.0.0.1',
                         'localhost:6379' (default: localhost).
@@ -363,6 +372,9 @@ periodically requests and displays the status of Queue Server.
     qserver permissions reload       # Reload user permissions and generate lists of allowed plans and devices.
     qserver permissions reload lists # Same, but reload lists of existing plans and devices from disk.
 
+    qserver permissions set <path-to-file>  # Set user group permissions (from .yaml file)
+    qserver permissions get                 # Get current user group permissions
+
     qserver queue add plan '<plan-params>'                 # Add plan to the back of the queue
     qserver queue add instruction <instruction>            # Add instruction to the back of the queue
     qserver queue add plan front '<plan-params>'           # Add plan to the front of the queue
@@ -448,7 +460,7 @@ periodically requests and displays the status of Queue Server.
     qserver script upload <path-to-file> background   # ... in the background
     qserver script upload <path-to-file> update-re    # ... allow 'RE' and 'db' to be updated
 
-    qserver task load result <task-uid>  # Load status or result of a task with the given UID
+    qserver task result <task-uid>  # Load status or result of a task with the given UID
 
     qserver manager stop           # Safely exit RE Manager application
     qserver manager stop safe on   # Safely exit RE Manager application

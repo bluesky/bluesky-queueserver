@@ -17,7 +17,15 @@ class ReManagerEmulation(threading.Thread):
     """
 
     def __init__(
-        self, *args, conn_watchdog, conn_worker, config=None, msg_queue=None, log_level=logging.DEBUG, **kwargs
+        self,
+        *args,
+        conn_watchdog,
+        conn_worker,
+        config=None,
+        msg_queue=None,
+        log_level=logging.DEBUG,
+        number_of_restarts,
+        **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self._conn_watchdog = conn_watchdog
@@ -28,6 +36,7 @@ class ReManagerEmulation(threading.Thread):
         self._lock = threading.Lock()
         self._config_dict = config or {}
         self._log_level = log_level
+        self._number_of_restarts = number_of_restarts
 
     def _heartbeat(self):
         hb_period, dt = 0.5, 0.01
@@ -142,13 +151,17 @@ def test_WatchdogProcess_1():
 
 
 def test_WatchdogProcess_2():
-    """Test starting RE Manager, stopping heartbeat generator
-    and waiting for restart of RE Manager"""
+    """
+    Test starting RE Manager, stopping heartbeat generator and waiting for restart of RE Manager.
+    Check that the number of restarts of the manager process is properly counted and propagated.
+    """
     wp = WatchdogProcess(cls_run_engine_manager=ReManagerEmulation)
     wp_th = threading.Thread(target=wp.run)
     wp_th.start()
     ttime.sleep(1)  # Let RE Manager run 1 second
     assert wp._re_manager.n_loops > 0, "RE is not running"
+    assert wp._re_manager_n_restarts == 1
+
     n_loops = wp._re_manager.n_loops
 
     wp._re_manager.stop_heartbeat()
@@ -159,6 +172,7 @@ def test_WatchdogProcess_2():
     #   Here we check if RE Manager was really restarted and the number of
     #   loops reset.
     assert wp._re_manager.n_loops < n_loops, "Unexpected number of loops"
+    assert wp._re_manager_n_restarts == 2
 
     wp._re_manager.exit(restart=False)
     ttime.sleep(0.05)

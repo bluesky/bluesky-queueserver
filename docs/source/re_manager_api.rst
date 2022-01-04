@@ -75,6 +75,8 @@ Existing and allowed plans and devices:
 - :ref:`method_plans_existing`
 - :ref:`method_devices_existing`
 - :ref:`method_permissions_reload`
+- :ref:`method_permissions_get`
+- :ref:`method_permissions_set`
 
 History of executed plans:
 
@@ -122,7 +124,7 @@ Run tasks in RE Worker namespace:
 
 - :ref:`method_script_upload`
 - :ref:`method_function_execute`
-- :ref:`method_task_result_get`
+- :ref:`method_task_result`
 
 Stopping RE Manager (mostly used in testing):
 
@@ -192,7 +194,7 @@ Returns       **msg**: *str*
               **task_results_uid**: *str*
                  UID of the dictionary of task results. UID is updated each time results of a new
                  completed tasks are added to the dictionary. Check the status of the pending tasks
-                 (see *task_result_get* API) once UID is changed.
+                 (see *task_result* API) once UID is changed.
 
               **plans_allowed_uid**: *str*
                  UID for the list of allowed plans. UID is updated each time the contents of
@@ -422,6 +424,61 @@ Description   Reload user group permissions from the default location or the loc
 Parameters    **reload_plans_devices**: *boolean* (optional)
                   reload the lists of existing plans and devices from disk if *True*, otherwise
                   use current lists stored in memory. Default: *False*.
+              **reload_permissions**: *boolean* (optional)
+                  reload user group permissions from disk if *True*, otherwise use current permissions.
+                  Default: *True*.
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+
+.. _method_permissions_get:
+
+**'permissions_get'**
+^^^^^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'permissions_get'**
+------------  -----------------------------------------------------------------------------------------
+Description   Download the dictionary of user group permissions currently used by RE Manager.
+------------  -----------------------------------------------------------------------------------------
+Parameters    ---
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **user_group_permissions**: *dict*
+                  dictionary containing user group permissions.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+
+.. _method_permissions_set:
+
+**'permissions_set'**
+^^^^^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'permissions_set'**
+------------  -----------------------------------------------------------------------------------------
+Description   Uploads the dictionary of user group permissions. If the uploaded dictionary contains
+              a valid set of permissions different from currently used one, the new permissions
+              are set as current and the updated lists of allowed plans and devices are generated.
+              The method does nothing if the uploaded permissions are identical to currently used
+              permissions. The API request fails if the uploaded dictionary does not pass validation.
+------------  -----------------------------------------------------------------------------------------
+Parameters    **user_group_permissions**: *dict*
+                  dictionary, which contains user group permissions.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -1339,7 +1396,7 @@ Description   Upload and execute script in RE Worker namespace. The script may a
               objects defined in the namespace, including plans and devices. Dynamic modification
               of the worker namespace may be used to implement more flexible workflows. The API call
               updates the lists of existing and allowed plans and devices if necessary. Changes in
-              the lists will be indicated by changed list UIDs. Use *'task_result_get'* API to check
+              the lists will be indicated by changed list UIDs. Use *'task_result'* API to check
               if the script was loaded correctly. Note, that if the task fails, the script is
               still executed to the point where the exception is raised, changing the environment.
 ------------  -----------------------------------------------------------------------------------------
@@ -1371,10 +1428,10 @@ Returns       **success**: *boolean*
 
               **task_uid**: *str* or *None*
                   Task UID can be used to check status of the task and download results once the task
-                  is completed (see *task_result_get* API).
+                  is completed (see *task_result* API).
 ------------  -----------------------------------------------------------------------------------------
 Execution     The method initiates the operation. Monitor *task_results_uid* status field and call
-              *task_result_get* API to check for success.
+              *task_result* API to check for success.
 ============  =========================================================================================
 
 
@@ -1397,7 +1454,7 @@ Description   Start execution of a function in RE Worker namespace. The function
 
               The method allows to pass parameters (*args* and *kwargs*) to the function. Once the task
               is completed, the results of the function execution, including the return value, can be
-              loaded using *task_result_get* method. If the task fails, the return value is a string
+              loaded using *task_result* method. If the task fails, the return value is a string
               with full traceback of the raised exception. The data types of parameters and return
               values must be JSON serializable. The task fails if the return value can not be serialized.
 
@@ -1405,7 +1462,7 @@ Description   Start execution of a function in RE Worker namespace. The function
               (*success=True*), the server starts the task, which attempts to execute the function
               with given name and parameters. The function may still fail start (e.g. if the user is
               permitted to execute function with the given name, but the function is not defined
-              in the namespace). Use *'task_result_get'* method with the returned *task_uid* to
+              in the namespace). Use *'task_result'* method with the returned *task_uid* to
               check the status of the taks and load the result upon completion.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **item**: *dict*
@@ -1440,20 +1497,20 @@ Returns       **success**: *boolean*
 
               **task_uid**: *str* or *None*
                   Task UID can be used to check status of the task and download results once the task
-                  is completed (see *task_result_get* API). *None* is returned if the request fails.
+                  is completed (see *task_result* API). *None* is returned if the request fails.
 ------------  -----------------------------------------------------------------------------------------
 Execution     The method initiates the operation. Monitor *task_results_uid* status field and call
-              *task_result_get* API to check for success.
+              *task_result* API to check for success.
 ============  =========================================================================================
 
 
-.. _method_task_result_get:
+.. _method_task_result:
 
-**'task_result_get'**
-^^^^^^^^^^^^^^^^^^^^^
+**'task_result'**
+^^^^^^^^^^^^^^^^^
 
 ============  =========================================================================================
-Method        **'task_result_get'**
+Method        **'task_result'**
 ------------  -----------------------------------------------------------------------------------------
 Description   Get the status and results of task execution. The completed tasks are stored at
               the server at least for the period determined by retention time (currently 120 seconds

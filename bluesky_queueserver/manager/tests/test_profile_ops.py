@@ -158,7 +158,7 @@ get_ipython().user_ns
     # Patched as expected ('get_ipython' is commented in the import statement)
     ("""
 \n
-from IPython import config #, get_ipython
+from IPython import version_info #, get_ipython
 
 get_ipython().user_ns
 """, True, ""),

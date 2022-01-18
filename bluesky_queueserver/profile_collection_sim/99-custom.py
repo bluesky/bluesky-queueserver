@@ -2,6 +2,7 @@
 import time as ttime
 import typing
 import ophyd
+from ophyd import Component as Cpt
 import bluesky
 import bluesky.preprocessors as bpp
 import bluesky.plan_stubs as bps
@@ -150,3 +151,52 @@ def clear_buffer():
 
 
 # ===========================================================================================
+#     Simulated devices with subdevices. The devices are used in unit tests. Do not delete.
+
+
+class SimStage(ophyd.Device):
+    x = Cpt(ophyd.sim.SynAxis, name="y", labels={"motors"})
+    y = Cpt(ophyd.sim.SynAxis, name="y", labels={"motors"})
+    z = Cpt(ophyd.sim.SynAxis, name="z", labels={"motors"})
+
+    def set(self, x, y, z):
+        """Makes the device Movable"""
+        self.x.set(x)
+        self.y.set(y)
+        self.z.set(z)
+
+
+class SimDetectors(ophyd.Device):
+    """
+    The detectors are controlled by simulated 'motor1' and 'motor2'
+    defined on the global scale.
+    """
+
+    det_A = Cpt(
+        ophyd.sim.SynGauss,
+        name="det_A",
+        motor=motor1,
+        motor_field="motor1",
+        center=0,
+        Imax=5,
+        sigma=0.5,
+        labels={"detectors"},
+    )
+    det_B = Cpt(
+        ophyd.sim.SynGauss,
+        name="det_B",
+        motor=motor2,
+        motor_field="motor2",
+        center=0,
+        Imax=5,
+        sigma=0.5,
+        labels={"detectors"},
+    )
+
+
+class SimBundle(ophyd.Device):
+    stage_motors = Cpt(SimStage, name="stage")
+    detectors = Cpt(SimStage, name="detectors")
+
+
+sim_bundle = SimBundle(name="sim_bundle")

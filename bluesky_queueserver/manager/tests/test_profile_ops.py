@@ -2583,6 +2583,7 @@ def test_devices_from_nspace():
     for c in class_names:
         assert c not in devices
 
+
 # fmt: off
 @pytest.mark.parametrize(
     "plan, exp_args, exp_kwargs, success, err_msg",

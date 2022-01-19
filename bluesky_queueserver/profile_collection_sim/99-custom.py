@@ -203,5 +203,6 @@ class SimBundle(ophyd.Device):
 
 
 sim_bundle = SimBundle(name="sim_bundle")
+sim_bundle_1 = SimBundle(name="sim_bundle")  # Used for tests
 
 # =======================================================================================

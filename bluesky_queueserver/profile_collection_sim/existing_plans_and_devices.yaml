@@ -246,6 +246,12 @@ existing_devices:
     is_movable: false
     is_readable: true
     module: <run_path>
+  sim_bundle_1:
+    classname: SimBundle
+    is_flyable: false
+    is_movable: false
+    is_readable: true
+    module: <run_path>
   trivial_flyer:
     classname: TrivialFlyer
     is_flyable: true

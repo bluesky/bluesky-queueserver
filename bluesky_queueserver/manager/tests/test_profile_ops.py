@@ -472,7 +472,7 @@ def test_load_startup_script_1(tmp_path, keep_re, enable_local_imports, reset_sy
         assert "RE" not in nspace, pprint.pformat(nspace)
         assert "db" not in nspace, pprint.pformat(nspace)
 
-    # Load different script (same name, but different path)
+    # Load script #2 (same name, but different path)
     script_dir = os.path.join(tmp_path, "script_dir2")
     script_path = os.path.join(script_dir, "startup_script.py")
 
@@ -645,7 +645,50 @@ def test_load_startup_script_3(tmp_path, reset_sys_modules):  # noqa: F811
         assert nspace[k] == v
 
 
-def test_load_startup_script_4(tmp_path, monkeypatch):
+_startup_script_4 = """
+# Script with more sophisticated imports
+
+import ophyd
+from ophyd import Device, Component as Cpt
+
+class SimStage(Device):
+    x = Cpt(ophyd.sim.SynAxis, name="y", labels={"motors"})
+    y = Cpt(ophyd.sim.SynAxis, name="y", labels={"motors"})
+    z = Cpt(ophyd.sim.SynAxis, name="z", labels={"motors"})
+
+    def set(self, x, y, z):
+        self.x.set(x)
+        self.y.set(y)
+        self.z.set(z)
+
+sim_stage = SimStage(name="sim_stage")
+"""
+
+
+@pytest.mark.parametrize("keep_re", [True, False])
+@pytest.mark.parametrize("enable_local_imports", [True, False])
+def test_load_startup_script_4(tmp_path, keep_re, enable_local_imports, reset_sys_modules):  # noqa: F811
+    """
+    Load a startup script with more sophisticated imports
+    """
+    # Load script script #2a (same name, but different path)
+    script_dir = os.path.join(tmp_path, "script_dir3")
+    script_path = os.path.join(script_dir, "startup_script.py")
+
+    os.makedirs(script_dir, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(_startup_script_4)
+
+    nspace = load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+
+    assert nspace
+    assert "SimStage" in nspace, pprint.pformat(nspace)
+    assert "sim_stage" in nspace, pprint.pformat(nspace)
+    assert "RE" not in nspace, pprint.pformat(nspace)
+    assert "db" not in nspace, pprint.pformat(nspace)
+
+
+def test_load_startup_script_5(tmp_path, monkeypatch):
     """
     Load startup script: instantiation of devices using Happi.
     """
@@ -739,6 +782,7 @@ def test_load_script_into_existing_nspace_2(
         f.write(_imported_module_1)
 
     script = script_patch + _startup_script_1
+
     nspace = {}
 
     if enable_local_imports:
@@ -984,6 +1028,19 @@ def test_load_script_into_existing_nspace_8(update_re):  # noqa: F811
         assert nspace["db"]
 
 
+def test_load_script_into_existing_nspace_9():  # noqa: F811
+    """
+    Load script with more sophisticated use of imported types.
+    """
+    nspace = {}
+
+    # Load script that contains RE and db. Set 'update_re' as True.
+    load_script_into_existing_nspace(script=_startup_script_4, nspace=nspace, update_re=True)
+
+    assert "SimStage" in nspace
+    assert "sim_stage" in nspace
+
+
 @pytest.mark.parametrize("keep_re", [True, False])
 def test_load_startup_module_1(tmp_path, monkeypatch, keep_re, reset_sys_modules):  # noqa: F811
     """
@@ -1051,6 +1108,29 @@ def test_load_startup_module_1(tmp_path, monkeypatch, keep_re, reset_sys_modules
 
 
 def test_load_startup_module_2(tmp_path, monkeypatch, reset_sys_modules):  # noqa: F811
+    """
+    Import module with more sophisticated imports.
+    """
+    # Load first script
+    script_dir = os.path.join(tmp_path, "script_dir1")
+    script_path = os.path.join(script_dir, "startup_script.py")
+
+    os.makedirs(script_dir, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(_startup_script_4)
+
+    # Temporarily add module to the search path
+    sys_path = sys.path
+    monkeypatch.setattr(sys, "path", [str(tmp_path)] + sys_path)
+
+    nspace = load_startup_module("script_dir1.startup_script", keep_re=True)
+
+    assert nspace
+    assert "SimStage" in nspace, pprint.pformat(nspace)
+    assert "sim_stage" in nspace, pprint.pformat(nspace)
+
+
+def test_load_startup_module_3(tmp_path, monkeypatch, reset_sys_modules):  # noqa: F811
     """
     Load startup module: instantiation of devices using Happi.
     """

@@ -332,10 +332,8 @@ def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True
         sm_keys = list(sys.modules.keys())
 
     try:
-        nspace_global, nspace_local = {}, {}
-        exec(open(script_path).read(), nspace_global, nspace_local)
-        nspace = nspace_global
-        nspace.update(nspace_local)
+        nspace = {}
+        exec(open(script_path).read(), nspace, nspace)
 
     except BaseException as ex:
         raise StartupLoadingError(f"Error encountered executing startup script at '{script_path}'") from ex
@@ -487,24 +485,29 @@ def load_script_into_existing_nspace(
         # Save the list of available modules
         sm_keys = list(sys.modules.keys())
 
-    nspace_local = {}
-    try:
-        exec(script, nspace, nspace_local)
-    except Exception as ex:
-        raise ScriptLoadingError(f"Failed to load stript: {ex}") from ex
-    finally:
-        if not update_re:
-            # Discard 'RE' and 'db'
-            if "RE" in nspace_local:
-                del nspace_local["RE"]
-            if "db" in nspace_local:
-                del nspace_local["db"]
+    object_backup = {}
+    if not update_re:
+        # Save references to RE and db in case they are changed by the script
+        if "RE" in nspace:
+            object_backup["RE"] = nspace["RE"]
+        if "db" in nspace:
+            object_backup["db"] = nspace["db"]
 
+    try:
         # A script may be partially loaded into the environment in case it fails.
         #   This is 'realistic' behavior, similar to what happens in IPython.
-        #   So make sure that all components that were loaded successfully are properly
-        #   added to the environment.
-        nspace.update(nspace_local)
+        exec(script, nspace, nspace)
+
+    except Exception as ex:
+        raise ScriptLoadingError(f"Failed to load stript: {ex}") from ex
+
+    finally:
+        if not update_re:
+            # Remove references for 'RE' and 'db' from the namespace
+            nspace.pop("RE", None)
+            nspace.pop("db", None)
+            # Restore the original reference to 'RE' and 'db' (if they existed)
+            nspace.update(object_backup)
 
         if use_local_imports:
             # Delete data on all modules that were loaded by the script.

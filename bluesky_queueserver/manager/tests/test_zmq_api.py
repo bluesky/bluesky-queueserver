@@ -1721,7 +1721,11 @@ def test_zmq_api_script_upload_4(tmp_path, re_manager_cmd):  # noqa: F811
         with open(fn, "r") as f:
             script = f.read()
             resp3, _ = zmq_single_request("script_upload", params={"script": script})
+            assert resp3["success"] is True
             wait_for_task_result(10, resp3["task_uid"])
+            resp3a, _ = zmq_single_request("task_result", params={"task_uid": resp3["task_uid"]})
+            assert resp3a["success"] is True
+            assert resp3a["result"]["success"] is True, resp3a["result"]["return_value"]
 
     # At this point the list of existing plans and devices must be identical to the default
     nspace = load_profile_collection(default_pc_path)

@@ -565,7 +565,7 @@ def devices_from_nspace(nspace):
 
     devices = {}
     for name, obj in nspace.items():
-        if isinstance(obj, (protocols.Readable, protocols.Flyable)):
+        if isinstance(obj, (protocols.Readable, protocols.Flyable)) and not inspect.isclass(obj):
             devices[name] = obj
     return devices
 

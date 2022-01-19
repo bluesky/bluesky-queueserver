@@ -2,7 +2,7 @@
 import time as ttime
 import typing
 import ophyd
-from ophyd import Component as Cpt
+from ophyd import Device, Component as Cpt  # Keep 'Device' imported, used in unit tests
 import bluesky
 import bluesky.preprocessors as bpp
 import bluesky.plan_stubs as bps
@@ -152,9 +152,12 @@ def clear_buffer():
 
 # ===========================================================================================
 #     Simulated devices with subdevices. The devices are used in unit tests. Do not delete.
+#     If class names are changed, search and change the names in unit tests.
+#     Formatting of imported classes is inconsistent (e.g. 'Device', 'ophyd.Device' and
+#     'ophyd.sim.SynAxis') is inconsistent on purpose to check if all possible versions work.
 
 
-class SimStage(ophyd.Device):
+class SimStage(Device):
     x = Cpt(ophyd.sim.SynAxis, name="y", labels={"motors"})
     y = Cpt(ophyd.sim.SynAxis, name="y", labels={"motors"})
     z = Cpt(ophyd.sim.SynAxis, name="z", labels={"motors"})
@@ -166,7 +169,7 @@ class SimStage(ophyd.Device):
         self.z.set(z)
 
 
-class SimDetectors(ophyd.Device):
+class SimDetectors(Device):
     """
     The detectors are controlled by simulated 'motor1' and 'motor2'
     defined on the global scale.
@@ -200,3 +203,5 @@ class SimBundle(ophyd.Device):
 
 
 sim_bundle = SimBundle(name="sim_bundle")
+
+# =======================================================================================

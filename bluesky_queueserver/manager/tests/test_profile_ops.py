@@ -2575,10 +2575,13 @@ def test_devices_from_nspace():
         ), f"The object '{device}' is not a device"
 
     # Check that both devices and signals are recognized by the function
-    assert "custom_test_device" in devices
-    assert "custom_test_signal" in devices
-    assert "custom_test_flyer" in devices
-
+    device_names = ("custom_test_device", "custom_test_signal", "custom_test_flyer", "sim_bundle")
+    for d in device_names:
+        assert d in devices
+    # Device classes should not be included
+    class_names = ("Device", "SimStage", "SimDetectors", "SimBundle")
+    for c in class_names:
+        assert c not in devices
 
 # fmt: off
 @pytest.mark.parametrize(

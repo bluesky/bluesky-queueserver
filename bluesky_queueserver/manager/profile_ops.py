@@ -1926,25 +1926,50 @@ def _prepare_plans(plans, *, existing_devices):
     return {k: _process_plan(v, existing_devices=existing_devices) for k, v in plans.items()}
 
 
-def _prepare_devices(devices):
+def _prepare_devices(devices, *, max_depth=50):
     """
     Prepare dictionary of existing devices for saving to YAML file.
+    ``max_depth`` is the maximum depth for the components. The default value (50)
+    is a very large number.
     """
     try:
         from bluesky import protocols
     except ImportError:
         import bluesky_queueserver.manager._protocols as protocols
 
-    return {
-        k: {
-            "is_readable": isinstance(v, protocols.Readable),
-            "is_movable": isinstance(v, protocols.Movable),
-            "is_flyable": isinstance(v, protocols.Flyable),
-            "classname": type(v).__name__,
-            "module": type(v).__module__,
+    def get_device_params(device):
+        return {
+            "is_readable": isinstance(device, protocols.Readable),
+            "is_movable": isinstance(device, protocols.Movable),
+            "is_flyable": isinstance(device, protocols.Flyable),
+            "classname": type(device).__name__,
+            "module": type(device).__module__,
         }
-        for k, v in devices.items()
-    }
+
+    def get_device_component_names(device):
+        if hasattr(device, "component_names"):
+            component_names = device.component_names
+            if not isinstance(component_names, Iterable):
+                component_names = []
+        else:
+            component_names = []
+        return component_names
+
+    def create_device_description(device, *, depth=0):
+        description = get_device_params(device)
+        comps = get_device_component_names(device)
+        components = {}
+        if depth <= max_depth:
+            for comp_name in comps:
+                if hasattr(device, comp_name):
+                    c = getattr(device, comp_name)
+                    desc = create_device_description(c, depth=depth + 1)
+                    components[comp_name] = desc
+        if components:
+            description["components"] = components
+        return description
+
+    return {k: create_device_description(v) for k, v in devices.items()}
 
 
 def existing_plans_and_devices_from_nspace(*, nspace):

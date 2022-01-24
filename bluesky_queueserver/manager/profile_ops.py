@@ -1575,6 +1575,133 @@ def _parse_docstring(docstring):
     return doc_annotation
 
 
+def _split_list_definition(list_def):
+    """
+    Split definition of the list into a name and depth. List definition can be ``AllDetectors``,
+    ``AllDetectors:2``, ``sim_stage``, ``sim_stage:2``, ``sim_stage.motors:2``, etc.
+    If depth is missing, it is assumed to be 0.
+
+    Parameters
+    ----------
+    list_def: str
+        Definition of the list (typically a list of devices), e.g. ``AllDetectors``,
+        ``AllDetectors:2``, ``sim_stage``, ``sim_stage:2``, ``sim_stage.motors:2`
+
+    Returns
+    -------
+    str, int
+        Device/list name and depth
+
+    Raises
+    ------
+    TypeError
+        ``list_def`` is not a string
+    ValueError
+        ``list_def`` is has improper format
+    """
+    if not isinstance(list_def, str):
+        raise TypeError(
+            f"List definition {list_def!r} has incorrect type {type(list_def)!r}. Expected type: 'str'"
+        )
+    if re.search(r"^[_A-Za-z][_A-Za-z0-9\.]*$", list_def):
+        list_name, depth = list_def, 0
+    elif re.search(r"^[_A-Za-z][_A-Za-z0-9\.]*:[0-9]+$", list_def):
+        list_name, depth = list_def.split(":")
+        depth = int(depth)
+    else:
+        raise ValueError(f"Invalid format of the list definition: {list_def}")
+
+    return list_name, depth
+
+
+def _build_subdevice_list(device_name, *, allowed_devices, depth=0, device_type="all"):
+    """
+    Generate device list based on the list of allowed/existing devices and the device name.
+    The device name may be a subdevice of an existing device in the list of allowed devices
+    (e.g. ``dev.val``). The list contains the subdevices of the selected type (``device_type``).
+    If the root device (``device_name``) does not satisfy the type requirement, it is not
+    included in the list.
+
+    Parameters
+    ----------
+    device_name: str
+        The name of the 'root' device for generating the device list, such as ``det`` or ``det.val``
+    depth: int
+        The depth of the included subdevices in the tree (0 - no subdevices are included).
+    allowed_devices: dict
+        A dictionary of the allowed or existing devices. If ``None``, then the returned list
+        is empty.
+    device_type: str
+        Types of devices to include in the list: ``all``, ``detector``, ``motor``, ``flyer``.
+    """
+    supported_device_types = ("all", "detector", "motor", "flyer")
+    if device_type not in supported_device_types:
+        raise ValueError(f"Unsupported device type: {device_type!r}. Supported types: {supported_device_types}")
+
+    # The condition is applied to the device to decide if it is included in the list
+    if device_type == "detector":
+
+        def condition(_btype):
+            return _btype["is_readable"] and not _btype["is_movable"]
+
+    elif device_type == "motor":
+
+        def condition(_btype):
+            return _btype["is_readable"] and _btype["is_movable"]
+
+    elif device_type == "flyer":
+
+        def condition(_btype):
+            return _btype["is_flyable"]
+
+    else:
+
+        def condition(_btype):
+            return True
+
+    device_name_comps = device_name.split(".")
+
+    # Find the device in `existing_devices`
+    root_device = None
+
+    # Find the root device in the dictionary of existing devices
+    if allowed_devices:
+        root = allowed_devices
+        for n, comp in enumerate(device_name_comps):
+            if comp in root:
+                root = root[comp]
+                if n == len(device_name_comps) - 1:
+                    root_device = root
+                if "components" in root:
+                    root = root["components"]
+            else:
+                break
+
+    device_list = []
+
+    if root_device:
+        root_device_name = device_name
+        if condition(root_device):
+            device_list.append(root_device_name)
+
+        def process_devices(root_device, root_device_name, depth):
+            print(f"root_device_name: {root_device_name} depth: {depth}")
+            if (depth > 0) and root_device:
+                print("Looking for components ...")
+                if "components" in root_device:
+                    print(f"components: {list(root_device['components'])}")
+                    for cname, c in root_device["components"].items():
+                        print(f"testing component {cname!r}")
+                        dname = root_device_name + "." + cname
+                        if condition(c):
+                            device_list.append(dname)
+                        process_devices(c, dname, depth - 1)
+
+        process_devices(root_device, root_device_name, depth)
+
+    return device_list
+
+
 def _process_plan(plan, *, existing_devices):
     """
     Returns parameters of a plan. The function accepts callable object that implements the plan
@@ -1599,36 +1726,36 @@ def _process_plan(plan, *, existing_devices):
     .. code-block:: python
 
         {
-            "name": <plan name>  # REQUIRED
-            "module": <module name>  # whenever available
-            "description": <plan description (multiline text)>
+            "name": <plan name>,  # REQUIRED
+            "module": <module name>,  # whenever available
+            "description": <plan description (multiline text)>,
             "properties": {  # REQUIRED, may be empty
                 "is_generator": <boolean that indicates if this is a generator function>
-            }
+            },
             "parameters": [  # REQUIRED, may be empty
                 <param_name_1>: {
-                     "name": <parameter name>  # REQUIRED
-                     "description": <parameter description>
+                     "name": <parameter name>,  # REQUIRED
+                     "description": <parameter description>,
                      # For values of the 'kind' see documentation for 'inspect.Parameter'
                      "kind": {  # REQUIRED
-                         "name": <string representation>
-                         "value": <integer representation>
-                     }
+                         "name": <string representation>,
+                         "value": <integer representation>,
+                     },
                      "annotation": {
                          # 'type' is REQUIRED if annotation is present
-                         "type": <parameter type represented as a string>
+                         "type": <parameter type represented as a string>,
                          # Enums for devices, plans and simple enums are in the same format as
                          #   the 'parameter_annotation_decorator'.
-                         "devices": <dict of device types (lists of device names)>
-                         "plans": <dict of plan types (lists of plan names)>
-                         "enums": <dict of enum types (lists of strings)>
+                         "devices": <dict of device types (lists of device names)>,
+                         "plans": <dict of plan types (lists of plan names)>,
+                         "enums": <dict of enum types (lists of strings)>,
                      }
-                     "default": <string representation of the default value>
-                     "default_defined_in_decorator": boolean  # True if the default value is defined
+                     "default": <string representation of the default value>,
+                     "default_defined_in_decorator": boolean,  # True if the default value is defined
                                                               # in decorator, otherwise False/not set
-                     "min": <string representing int or float>
-                     "max": <string representing int or float>
-                     "step": <string representing int or float>
+                     "min": <string representing int or float>,
+                     "max": <string representing int or float>,
+                     "step": <string representing int or float>,
                 }
                 <parameter_name_2>: ...
                 <parameter_name_3>: ...
@@ -2568,7 +2695,7 @@ def _check_if_item_allowed(item_name, allow_patterns, disallow_patterns):
 def check_if_function_allowed(function_name, *, group_name, user_group_permissions=None):
     """
     Check if the function with name ``function_name`` is allowed for users of ``group_name`` group.
-    The function first checks if the functio name passes root permissions and then permissions
+    The function first checks if the function name passes root permissions and then permissions
     for the specific group.
 
     Parameters

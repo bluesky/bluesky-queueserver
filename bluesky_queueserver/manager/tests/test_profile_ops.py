@@ -61,6 +61,8 @@ from bluesky_queueserver.manager.profile_ops import (
     check_if_function_allowed,
     _validate_user_group_permissions_schema,
     prepare_function,
+    _build_subdevice_list,
+    _split_list_definition,
 )
 
 # User name and user group name used throughout most of the tests.
@@ -2582,6 +2584,147 @@ def test_devices_from_nspace():
     class_names = ("Device", "SimStage", "SimDetectors", "SimBundle")
     for c in class_names:
         assert c not in devices
+
+
+# fmt: off
+_allowed_devices_dict_1 = {
+    "da0_motor": {
+        "is_readable": True, "is_movable": True, "is_flyable": False,
+        "components": {
+            "db0_motor": {
+                "is_readable": True, "is_movable": True, "is_flyable": False,
+                "components": {
+                    "dc0_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
+                    "dc1_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
+                    "dc2_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
+                    "dc3_motor": {
+                        "is_readable": True, "is_movable": True, "is_flyable": False,
+                        "components": {
+                            "dd0_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
+                            "dd1_motor": {"is_readable": True, "is_movable": True, "is_flyable": False},
+                        }
+                    },
+                }
+            },
+            "db1_det": {
+                "is_readable": True, "is_movable": False, "is_flyable": False,
+                "components": {
+                    "dc0_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
+                    "dc1_motor": {"is_readable": True, "is_movable": True, "is_flyable": False},
+                }
+            },
+            "db2_flyer": {
+                "is_readable": False, "is_movable": False, "is_flyable": True,
+            },
+        }
+    }
+}
+# fmt: on
+
+
+# fmt: off
+@pytest.mark.parametrize("device_name, device_type, depth, device_name_list", [
+    ("da0_motor", "all", 100, [
+        'da0_motor', 'da0_motor.db0_motor', 'da0_motor.db0_motor.dc0_det',
+        'da0_motor.db0_motor.dc1_det', 'da0_motor.db0_motor.dc2_det', 'da0_motor.db0_motor.dc3_motor',
+        'da0_motor.db0_motor.dc3_motor.dd0_det', 'da0_motor.db0_motor.dc3_motor.dd1_motor', 'da0_motor.db1_det',
+        'da0_motor.db1_det.dc0_det', 'da0_motor.db1_det.dc1_motor', 'da0_motor.db2_flyer']),
+    ("da0_motor", "motor", 100, [
+        'da0_motor', 'da0_motor.db1_det.dc1_motor', 'da0_motor.db0_motor.dc3_motor',
+        'da0_motor.db0_motor.dc3_motor.dd1_motor', 'da0_motor.db0_motor']),
+    ("da0_motor", "detector", 100, [
+        'da0_motor.db0_motor.dc0_det', 'da0_motor.db0_motor.dc1_det',
+        'da0_motor.db0_motor.dc2_det', 'da0_motor.db0_motor.dc3_motor.dd0_det', 'da0_motor.db1_det',
+        'da0_motor.db1_det.dc0_det']),
+    ("da0_motor", "flyer", 100, ['da0_motor.db2_flyer']),
+    ("da0_motor", "all", 0, ['da0_motor']),
+    ("da0_motor", "all", 1, ['da0_motor', 'da0_motor.db0_motor', 'da0_motor.db1_det', 'da0_motor.db2_flyer']),
+    ("da0_motor", "all", 2, [
+        'da0_motor', 'da0_motor.db0_motor', 'da0_motor.db0_motor.dc0_det',
+        'da0_motor.db0_motor.dc1_det', 'da0_motor.db0_motor.dc2_det', 'da0_motor.db0_motor.dc3_motor',
+        'da0_motor.db1_det', 'da0_motor.db1_det.dc0_det', 'da0_motor.db1_det.dc1_motor', 'da0_motor.db2_flyer']),
+    ("da0_motor", "flyer", 0, []),
+    ("da0_motor", "flyer", 2, ['da0_motor.db2_flyer']),
+    ("da0_motor.db0_motor", "detector", 1, [
+        'da0_motor.db0_motor.dc0_det', 'da0_motor.db0_motor.dc1_det', 'da0_motor.db0_motor.dc2_det']),
+    ("da0_motor.db0_motor", "detector", 2, [
+        'da0_motor.db0_motor.dc0_det', 'da0_motor.db0_motor.dc1_det', 'da0_motor.db0_motor.dc2_det',
+        'da0_motor.db0_motor.dc3_motor.dd0_det']),
+    ("da0_motor.db0_motor.dc3_motor", "detector", 2, ['da0_motor.db0_motor.dc3_motor.dd0_det']),
+    ("da0_motor.db0_motor.dc3_motor", "detector", 0, []),
+    ("da0_motor.db0_motor.dc3_motor", "motor", 0, ['da0_motor.db0_motor.dc3_motor']),
+    ("da0_motor.db0_motor.unknown", "detector", 2, []),
+])
+# fmt: on
+def test_build_subdevice_list_1(device_name, device_type, depth, device_name_list):
+    """
+    ``_build_subdevice_list``: basic tests.
+    """
+
+    name_list = _build_subdevice_list(
+        device_name, allowed_devices=_allowed_devices_dict_1, depth=depth, device_type=device_type
+    )
+    print(f"name_list={name_list}")
+    assert set(name_list) == set(device_name_list)
+    assert len(name_list) == len(device_name_list)
+
+
+@pytest.mark.parametrize("allowed_devices", ({}, None))
+def test_build_subdevice_list_2(allowed_devices):
+    """
+    ``_build_subdevice_list``: returns [] if ``allowed_devices`` is {} or None
+    """
+    name_list = _build_subdevice_list("da0_motor", allowed_devices=allowed_devices, depth=100, device_type="all")
+    assert name_list == []
+
+
+def test_build_subdevice_list_3_fail():
+    """
+    ``_build_subdevice_list``: call with unsupported device type
+    """
+    with pytest.raises(ValueError, match="Unsupported device type: 'unsupported'"):
+        _build_subdevice_list(
+            "da0_motor", allowed_devices=_allowed_devices_dict_1, depth=100, device_type="unsupported"
+        )
+
+
+# fmt: off
+@pytest.mark.parametrize("list_def, name, depth", [
+    ("det1", "det1", 0),
+    ("det1:0", "det1", 0),
+    ("det1:5", "det1", 5),
+    ("det1.val:5", "det1.val", 5),
+    ("_det1", "_det1", 0),
+    ("AllDetectors", "AllDetectors", 0),
+    ("AllDetectors:0", "AllDetectors", 0),
+    ("AllDetectors:50", "AllDetectors", 50),
+])
+# fmt: on
+def test_split_list_definition_1(list_def, name, depth):
+    """
+    ``_split_list_definition``: basic tests
+    """
+    _name, _depth = _split_list_definition(list_def)
+    assert _name == name
+    assert _depth == depth
+
+
+# fmt: off
+@pytest.mark.parametrize("list_def, exception_type, msg", [
+    (".det1", ValueError, "Invalid format of the list definition"),
+    ("8det1", ValueError, "Invalid format of the list definition"),
+    ("det1:a", ValueError, "Invalid format of the list definition"),
+    ("det1:10a", ValueError, "Invalid format of the list definition"),
+    ("det1:1:", ValueError, "Invalid format of the list definition"),
+    (10, TypeError, "incorrect type"),
+])
+# fmt: on
+def test_split_list_definition_2_fail(list_def, exception_type, msg):
+    """
+    ``_split_list_definition``: failing cases
+    """
+    with pytest.raises(exception_type, match=msg):
+        _split_list_definition(list_def)
 
 
 # fmt: off

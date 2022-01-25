@@ -829,6 +829,221 @@ def prepare_function(*, func_info, nspace, user_group_permissions=None):
 
 
 # ===============================================================================
+#   Processing of plan annotations and plan descriptions
+
+
+def _split_list_definition(list_def):
+    """
+    Split definition of the list into a name and depth. List definition can be ``AllDetectors``,
+    ``AllDetectors:2``, ``sim_stage``, ``sim_stage:2``, ``sim_stage.motors:2``, etc.
+    If depth is missing, it is assumed to be 0.
+
+    Parameters
+    ----------
+    list_def: str
+        Definition of the list (typically a list of devices), e.g. ``AllDetectors``,
+        ``AllDetectors:2``, ``sim_stage``, ``sim_stage:2``, ``sim_stage.motors:2`
+
+    Returns
+    -------
+    str, int
+        Device/list name and depth
+
+    Raises
+    ------
+    TypeError
+        ``list_def`` is not a string
+    ValueError
+        ``list_def`` is has improper format
+    """
+    if not isinstance(list_def, str):
+        raise TypeError(
+            f"List definition {list_def!r} has incorrect type {type(list_def)!r}. Expected type: 'str'"
+        )
+    if re.search(r"^[_A-Za-z][_A-Za-z0-9\.]*$", list_def):
+        list_name, depth = list_def, 0
+    elif re.search(r"^[_A-Za-z][_A-Za-z0-9\.]*:[0-9]+$", list_def):
+        list_name, depth = list_def.split(":")
+        depth = int(depth)
+    else:
+        raise ValueError(f"Invalid format of the list definition: {list_def}")
+
+    return list_name, depth
+
+
+def _build_subdevice_list(device_name, *, allowed_devices, depth=0, device_type="all"):
+    """
+    Generate device list based on the list of allowed/existing devices and the device name.
+    The device name may be a subdevice of an existing device in the list of allowed devices
+    (e.g. ``dev.val``). The list contains the subdevices of the selected type (``device_type``).
+    If the root device (``device_name``) does not satisfy the type requirement, it is not
+    included in the list.
+
+    Parameters
+    ----------
+    device_name: str
+        The name of the 'root' device for generating the device list, such as ``det`` or ``det.val``
+    depth: int
+        The depth of the included subdevices in the tree (0 - no subdevices are included).
+    allowed_devices: dict
+        A dictionary of the allowed or existing devices. If ``None``, then the returned list
+        is empty.
+    device_type: str
+        Types of devices to include in the list: ``all``, ``detector``, ``motor``, ``flyer``.
+    """
+    supported_device_types = ("all", "detector", "motor", "flyer")
+    if device_type not in supported_device_types:
+        raise ValueError(f"Unsupported device type: {device_type!r}. Supported types: {supported_device_types}")
+
+    # The condition is applied to the device to decide if it is included in the list
+    if device_type == "detector":
+
+        def condition(_btype):
+            return _btype["is_readable"] and not _btype["is_movable"]
+
+    elif device_type == "motor":
+
+        def condition(_btype):
+            return _btype["is_readable"] and _btype["is_movable"]
+
+    elif device_type == "flyer":
+
+        def condition(_btype):
+            return _btype["is_flyable"]
+
+    else:
+
+        def condition(_btype):
+            return True
+
+    device_name_comps = device_name.split(".")
+
+    # Find the device in `existing_devices`
+    root_device = None
+
+    # Find the root device in the dictionary of existing devices
+    if allowed_devices:
+        root = allowed_devices
+        for n, comp in enumerate(device_name_comps):
+            if comp in root:
+                root = root[comp]
+                if n == len(device_name_comps) - 1:
+                    root_device = root
+                if "components" in root:
+                    root = root["components"]
+            else:
+                break
+
+    device_list = []
+
+    if root_device:
+        root_device_name = device_name
+        if condition(root_device):
+            device_list.append(root_device_name)
+
+        def process_devices(root_device, root_device_name, depth):
+            print(f"root_device_name: {root_device_name} depth: {depth}")
+            if (depth > 0) and root_device:
+                print("Looking for components ...")
+                if "components" in root_device:
+                    print(f"components: {list(root_device['components'])}")
+                    for cname, c in root_device["components"].items():
+                        print(f"testing component {cname!r}")
+                        dname = root_device_name + "." + cname
+                        if condition(c):
+                            device_list.append(dname)
+                        process_devices(c, dname, depth - 1)
+
+        process_devices(root_device, root_device_name, depth)
+
+    return device_list
+
+
+def _expand_parameter_annotation(annotation, *, allowed_devices):
+    """
+    Expand the lists if items for custom enum types define in parameter annotation.
+
+    Parameters
+    ----------
+    annotation: dict
+        Parameter annotation.
+    existing_devices: dict, None
+        Dictionary with allowed or existing devices. If ``None``, then all the expanded lists
+        will be empty.
+
+    Returns
+    -------
+    dict
+        Expanded annotation. Always returns deep copy, so the original annotation remains unchanged
+    """
+    allowed_devices = allowed_devices or {}
+    built_in_lists = {"AllDevices": "all", "AllMotors": "motor", "AllDetectors": "detector", "AllFlyers": "flyer"}
+
+    annotation = copy.deepcopy(annotation)
+    if "devices" in annotation:
+        for k, v in annotation["devices"].items():
+            if isinstance(v, (list, tuple)):
+                # Process each item in the list in case it has specified depth
+                dev_list = []
+                for d in v:
+                    name, depth = _split_list_definition(d)
+                    dlist = _build_subdevice_list(name, depth=depth, allowed_devices=allowed_devices)
+                    dev_list.expand(dlist)
+                annotation["devices"][k] = dev_list
+            elif isinstance(v, str) and (v.split(":")[0] in built_in_lists):
+                # Process built-in list
+                list_name, depth = _split_list_definition(d)
+                dev_list = []
+                for name in allowed_devices:
+                    dlist = _build_subdevice_list(name, depth=depth, allowed_devices=built_in_lists[list_name])
+                    dev_list.expand(dlist)
+                annotation["devices"][k] = dev_list
+            else:
+                raise ValueError(f"Unsupported type of device list {k!r}: {v}")
+
+    return annotation
+
+
+def expand_plan_description(plan_description, *, allowed_devices):
+    """
+    Expand lists of items for custom enum types for each parameter in the plan description.
+    After expansion, plan description is ready for use in plan validation. The function
+    does not change the plan description if there are no lists to expand, therefore it can
+    be repeatedly applied to the same plan description without consequences (except extra
+    execution time). The function always returnes a COPY of the plan description, so
+    it is safe to apply to elements of the list of allowed/existing plans without changing
+    the original descriptions.
+
+    Parameters
+    ----------
+    plan_description: dict
+        Plan description. The format of plan description is the same as in the list of
+        allowed/existing plans. The function will not change the original dictionary,
+        which is referenced by this parameter.
+    allowed_devices: dict
+        The list of allowed/existing devices.
+
+    Returns
+    -------
+    dict
+        Expanded plan description, which contains full lists of items. Always returns the
+        copy of the plan description.
+
+    Raises
+    ------
+        Exceptions are raised if plan description can not be properly processed.
+    """
+    plan_description = copy.deepcopy(plan_description)
+
+    if "parameters" in plan_description:
+        for p in plan_description["parameters"]:
+            if "annotation" in p:
+                p["annotation"] = _expand_parameter_annotation(p["annotation"], allowed_devices=allowed_devices)
+
+    return plan_description
+
+
+# ===============================================================================
 #   Validation of plan parameters
 
 
@@ -1573,217 +1788,6 @@ def _parse_docstring(docstring):
             doc_annotation["returns"]["description"] = p_str
 
     return doc_annotation
-
-
-def _split_list_definition(list_def):
-    """
-    Split definition of the list into a name and depth. List definition can be ``AllDetectors``,
-    ``AllDetectors:2``, ``sim_stage``, ``sim_stage:2``, ``sim_stage.motors:2``, etc.
-    If depth is missing, it is assumed to be 0.
-
-    Parameters
-    ----------
-    list_def: str
-        Definition of the list (typically a list of devices), e.g. ``AllDetectors``,
-        ``AllDetectors:2``, ``sim_stage``, ``sim_stage:2``, ``sim_stage.motors:2`
-
-    Returns
-    -------
-    str, int
-        Device/list name and depth
-
-    Raises
-    ------
-    TypeError
-        ``list_def`` is not a string
-    ValueError
-        ``list_def`` is has improper format
-    """
-    if not isinstance(list_def, str):
-        raise TypeError(
-            f"List definition {list_def!r} has incorrect type {type(list_def)!r}. Expected type: 'str'"
-        )
-    if re.search(r"^[_A-Za-z][_A-Za-z0-9\.]*$", list_def):
-        list_name, depth = list_def, 0
-    elif re.search(r"^[_A-Za-z][_A-Za-z0-9\.]*:[0-9]+$", list_def):
-        list_name, depth = list_def.split(":")
-        depth = int(depth)
-    else:
-        raise ValueError(f"Invalid format of the list definition: {list_def}")
-
-    return list_name, depth
-
-
-def _build_subdevice_list(device_name, *, allowed_devices, depth=0, device_type="all"):
-    """
-    Generate device list based on the list of allowed/existing devices and the device name.
-    The device name may be a subdevice of an existing device in the list of allowed devices
-    (e.g. ``dev.val``). The list contains the subdevices of the selected type (``device_type``).
-    If the root device (``device_name``) does not satisfy the type requirement, it is not
-    included in the list.
-
-    Parameters
-    ----------
-    device_name: str
-        The name of the 'root' device for generating the device list, such as ``det`` or ``det.val``
-    depth: int
-        The depth of the included subdevices in the tree (0 - no subdevices are included).
-    allowed_devices: dict
-        A dictionary of the allowed or existing devices. If ``None``, then the returned list
-        is empty.
-    device_type: str
-        Types of devices to include in the list: ``all``, ``detector``, ``motor``, ``flyer``.
-    """
-    supported_device_types = ("all", "detector", "motor", "flyer")
-    if device_type not in supported_device_types:
-        raise ValueError(f"Unsupported device type: {device_type!r}. Supported types: {supported_device_types}")
-
-    # The condition is applied to the device to decide if it is included in the list
-    if device_type == "detector":
-
-        def condition(_btype):
-            return _btype["is_readable"] and not _btype["is_movable"]
-
-    elif device_type == "motor":
-
-        def condition(_btype):
-            return _btype["is_readable"] and _btype["is_movable"]
-
-    elif device_type == "flyer":
-
-        def condition(_btype):
-            return _btype["is_flyable"]
-
-    else:
-
-        def condition(_btype):
-            return True
-
-    device_name_comps = device_name.split(".")
-
-    # Find the device in `existing_devices`
-    root_device = None
-
-    # Find the root device in the dictionary of existing devices
-    if allowed_devices:
-        root = allowed_devices
-        for n, comp in enumerate(device_name_comps):
-            if comp in root:
-                root = root[comp]
-                if n == len(device_name_comps) - 1:
-                    root_device = root
-                if "components" in root:
-                    root = root["components"]
-            else:
-                break
-
-    device_list = []
-
-    if root_device:
-        root_device_name = device_name
-        if condition(root_device):
-            device_list.append(root_device_name)
-
-        def process_devices(root_device, root_device_name, depth):
-            print(f"root_device_name: {root_device_name} depth: {depth}")
-            if (depth > 0) and root_device:
-                print("Looking for components ...")
-                if "components" in root_device:
-                    print(f"components: {list(root_device['components'])}")
-                    for cname, c in root_device["components"].items():
-                        print(f"testing component {cname!r}")
-                        dname = root_device_name + "." + cname
-                        if condition(c):
-                            device_list.append(dname)
-                        process_devices(c, dname, depth - 1)
-
-        process_devices(root_device, root_device_name, depth)
-
-    return device_list
-
-
-def _expand_parameter_annotation(annotation, *, allowed_devices):
-    """
-    Expand the lists if items for custom enum types define in parameter annotation.
-
-    Parameters
-    ----------
-    annotation: dict
-        Parameter annotation.
-    existing_devices: dict, None
-        Dictionary with allowed or existing devices. If ``None``, then all the expanded lists
-        will be empty.
-
-    Returns
-    -------
-    dict
-        Expanded annotation. Always returns deep copy, so the original annotation remains unchanged
-    """
-    allowed_devices = allowed_devices or {}
-    built_in_lists = {"AllDevices": "all", "AllMotors": "motor", "AllDetectors": "detector", "AllFlyers": "flyer"}
-
-    annotation = copy.deepcopy(annotation)
-    if "devices" in annotation:
-        for k, v in annotation["devices"].items():
-            if isinstance(v, (list, tuple)):
-                # Process each item in the list in case it has specified depth
-                dev_list = []
-                for d in v:
-                    name, depth = _split_list_definition(d)
-                    dlist = _build_subdevice_list(name, depth=depth, allowed_devices=allowed_devices)
-                    dev_list.expand(dlist)
-                annotation["devices"][k] = dev_list
-            elif isinstance(v, str) and (v.split(":")[0] in built_in_lists):
-                # Process built-in list
-                list_name, depth = _split_list_definition(d)
-                dev_list = []
-                for name in allowed_devices:
-                    dlist = _build_subdevice_list(name, depth=depth, allowed_devices=built_in_lists[list_name])
-                    dev_list.expand(dlist)
-                annotation["devices"][k] = dev_list
-            else:
-                raise ValueError(f"Unsupported type of device list {k!r}: {v}")
-
-    return annotation
-
-
-def expand_plan_description(plan_description, *, allowed_devices):
-    """
-    Expand lists of items for custom enum types for each parameter in the plan description.
-    After expansion, plan description is ready for use in plan validation. The function
-    does not change the plan description if there are no lists to expand, therefore it can
-    be repeatedly applied to the same plan description without consequences (except extra
-    execution time). The function always returnes a COPY of the plan description, so
-    it is safe to apply to elements of the list of allowed/existing plans without changing
-    the original descriptions.
-
-    Parameters
-    ----------
-    plan_description: dict
-        Plan description. The format of plan description is the same as in the list of
-        allowed/existing plans. The function will not change the original dictionary,
-        which is referenced by this parameter.
-    allowed_devices: dict
-        The list of allowed/existing devices.
-
-    Returns
-    -------
-    dict
-        Expanded plan description, which contains full lists of items. Always returns the
-        copy of the plan description.
-
-    Raises
-    ------
-        Exceptions are raised if plan description can not be properly processed.
-    """
-    plan_description = copy.deepcopy(plan_description)
-
-    if "parameters" in plan_description:
-        for p in plan_description["parameters"]:
-            if "annotation" in p:
-                p["annotation"] = _expand_parameter_annotation(p["annotation"], allowed_devices=allowed_devices)
-
-    return plan_description
 
 
 def _process_plan(plan, *, existing_devices):

@@ -1702,6 +1702,90 @@ def _build_subdevice_list(device_name, *, allowed_devices, depth=0, device_type=
     return device_list
 
 
+def _expand_parameter_annotation(annotation, *, allowed_devices):
+    """
+    Expand the lists if items for custom enum types define in parameter annotation.
+
+    Parameters
+    ----------
+    annotation: dict
+        Parameter annotation.
+    existing_devices: dict, None
+        Dictionary with allowed or existing devices. If ``None``, then all the expanded lists
+        will be empty.
+
+    Returns
+    -------
+    dict
+        Expanded annotation. Always returns deep copy, so the original annotation remains unchanged
+    """
+    allowed_devices = allowed_devices or {}
+    built_in_lists = {"AllDevices": "all", "AllMotors": "motor", "AllDetectors": "detector", "AllFlyers": "flyer"}
+
+    annotation = copy.deepcopy(annotation)
+    if "devices" in annotation:
+        for k, v in annotation["devices"].items():
+            if isinstance(v, (list, tuple)):
+                # Process each item in the list in case it has specified depth
+                dev_list = []
+                for d in v:
+                    name, depth = _split_list_definition(d)
+                    dlist = _build_subdevice_list(name, depth=depth, allowed_devices=allowed_devices)
+                    dev_list.expand(dlist)
+                annotation["devices"][k] = dev_list
+            elif isinstance(v, str) and (v.split(":")[0] in built_in_lists):
+                # Process built-in list
+                list_name, depth = _split_list_definition(d)
+                dev_list = []
+                for name in allowed_devices:
+                    dlist = _build_subdevice_list(name, depth=depth, allowed_devices=built_in_lists[list_name])
+                    dev_list.expand(dlist)
+                annotation["devices"][k] = dev_list
+            else:
+                raise ValueError(f"Unsupported type of device list {k!r}: {v}")
+
+    return annotation
+
+
+def expand_plan_description(plan_description, *, allowed_devices):
+    """
+    Expand lists of items for custom enum types for each parameter in the plan description.
+    After expansion, plan description is ready for use in plan validation. The function
+    does not change the plan description if there are no lists to expand, therefore it can
+    be repeatedly applied to the same plan description without consequences (except extra
+    execution time). The function always returnes a COPY of the plan description, so
+    it is safe to apply to elements of the list of allowed/existing plans without changing
+    the original descriptions.
+
+    Parameters
+    ----------
+    plan_description: dict
+        Plan description. The format of plan description is the same as in the list of
+        allowed/existing plans. The function will not change the original dictionary,
+        which is referenced by this parameter.
+    allowed_devices: dict
+        The list of allowed/existing devices.
+
+    Returns
+    -------
+    dict
+        Expanded plan description, which contains full lists of items. Always returns the
+        copy of the plan description.
+
+    Raises
+    ------
+        Exceptions are raised if plan description can not be properly processed.
+    """
+    plan_description = copy.deepcopy(plan_description)
+
+    if "parameters" in plan_description:
+        for p in plan_description["parameters"]:
+            if "annotation" in p:
+                p["annotation"] = _expand_parameter_annotation(p["annotation"], allowed_devices=allowed_devices)
+
+    return plan_description
+
+
 def _process_plan(plan, *, existing_devices):
     """
     Returns parameters of a plan. The function accepts callable object that implements the plan
@@ -1826,7 +1910,7 @@ def _process_plan(plan, *, existing_devices):
             )
         return s_value
 
-    def assemble_custom_annotation(parameter, *, existing_devices):
+    def assemble_custom_annotation(parameter):  ##, *, existing_devices):
         """
         Assemble annotation from decorator parameters. It will be stored as a separate dictionary.
         Returns ``None`` if there is no annotation.
@@ -1841,43 +1925,43 @@ def _process_plan(plan, *, existing_devices):
             if k in parameter:
                 annotation[k] = copy.copy(parameter[k])
 
-        # Add lists of device names for built-in types
-        built_in_types = ("AllDetectors", "AllMotors", "AllFlyers")
-        for btype in built_in_types:
-            type_found = False
-            nvchars = "[^_A-Za-z0-9]"
-            for start, end in (("^", "$"), ("^", nvchars), (nvchars, "$"), (nvchars, nvchars)):
-                pattern = f"{start}{btype}{end}"
-                if re.search(pattern, annotation["type"]):
-                    type_found = True
-                    break
+        ## # Add lists of device names for built-in types
+        # built_in_types = ("AllDetectors", "AllMotors", "AllFlyers")
+        # for btype in built_in_types:
+        #     type_found = False
+        #     nvchars = "[^_A-Za-z0-9]"
+        #     for start, end in (("^", "$"), ("^", nvchars), (nvchars, "$"), (nvchars, nvchars)):
+        #         pattern = f"{start}{btype}{end}"
+        #         if re.search(pattern, annotation["type"]):
+        #             type_found = True
+        #             break
 
-            if type_found:
-                if "devices" not in annotation:
-                    annotation["devices"] = {}
-                # If annotation already contains type definition for 'built-in' type
-                #   then no name list is created.
-                if btype not in annotation["devices"]:
-                    if btype == "AllDetectors":
+        #     if type_found:
+        #         if "devices" not in annotation:
+        #             annotation["devices"] = {}
+        #         # If annotation already contains type definition for 'built-in' type
+        #         #   then no name list is created.
+        #         if btype not in annotation["devices"]:
+        #             if btype == "AllDetectors":
 
-                        def condition(_btype):
-                            return _btype["is_readable"] and not _btype["is_movable"]
+        #                 def condition(_btype):
+        #                     return _btype["is_readable"] and not _btype["is_movable"]
 
-                    elif btype == "AllMotors":
+        #             elif btype == "AllMotors":
 
-                        def condition(_btype):
-                            return _btype["is_readable"] and _btype["is_movable"]
+        #                 def condition(_btype):
+        #                     return _btype["is_readable"] and _btype["is_movable"]
 
-                    elif btype == "AllFlyers":
+        #             elif btype == "AllFlyers":
 
-                        def condition(_btype):
-                            return _btype["is_flyable"]
+        #                 def condition(_btype):
+        #                     return _btype["is_flyable"]
 
-                    else:
-                        raise RuntimeError(f"Error in processing algorithm: unsupported built-in type '{btype}'")
-                    device_names = [k for k, v in existing_devices.items() if condition(v)]
+        #             else:
+        #                 raise RuntimeError(f"Error in processing algorithm: unsupported built-in type '{btype}'")
+        #             device_names = [k for k, v in existing_devices.items() if condition(v)]
 
-                    annotation["devices"][btype] = device_names
+        #             annotation["devices"][btype] = device_names
 
         return annotation
 
@@ -1927,46 +2011,35 @@ def _process_plan(plan, *, existing_devices):
                 )
                 try:
                     _ = param_annotation["parameters"][p.name].get("default", None)
-                    default = (
-                        _
-                        if _ is None
-                        else convert_expression_to_string(
-                            _,
-                            expression_role="default value in decorator",
-                        )
-                    )
+
+                    if _ is None:
+                        default = _
+                    else:
+                        default = convert_expression_to_string(_, expression_role="default value in decorator")
+
                     if default:
                         default_defined_in_decorator = True
 
                     _ = param_annotation["parameters"][p.name].get("min", None)
-                    vmin = (
-                        _
-                        if _ is None
-                        else convert_expression_to_string(
-                            _,
-                            expression_role="min value in decorator",
-                        )
-                    )
+
+                    if _ is None:
+                        vmin = _
+                    else:
+                        vmin = convert_expression_to_string(_, expression_role="min value in decorator")
 
                     _ = param_annotation["parameters"][p.name].get("max", None)
-                    vmax = (
-                        _
-                        if _ is None
-                        else convert_expression_to_string(
-                            _,
-                            expression_role="max value in decorator",
-                        )
-                    )
+
+                    if _ is None:
+                        vmax = _
+                    else:
+                        vmax = convert_expression_to_string(_, expression_role="max value in decorator")
 
                     _ = param_annotation["parameters"][p.name].get("step", None)
-                    step = (
-                        _
-                        if _ is None
-                        else convert_expression_to_string(
-                            _,
-                            expression_role="step value in decorator",
-                        )
-                    )
+                    if _ is None:
+                        step = _
+                    else:
+                        step = convert_expression_to_string(_, expression_role="step value in decorator")
+
                 except Exception as ex:
                     raise ValueError(f"Parameter '{p.name}': {ex}")
 

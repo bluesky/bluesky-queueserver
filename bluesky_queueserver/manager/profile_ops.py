@@ -962,6 +962,9 @@ def _build_subdevice_list(device_name, *, allowed_devices, depth=0, device_type=
 def _expand_parameter_annotation(annotation, *, allowed_devices):
     """
     Expand the lists if items for custom enum types define in parameter annotation.
+    The function also filters the lists of devices and removes all the devices that are
+    not in the list of allowed devices. The lists that contain only the devices that are
+    not in the list of allowed devices become empty.
 
     Parameters
     ----------
@@ -993,15 +996,23 @@ def _expand_parameter_annotation(annotation, *, allowed_devices):
                 for d in v:
                     name, depth = _split_list_definition(d)
                     dlist = _build_subdevice_list(name, depth=depth, allowed_devices=allowed_devices)
-                    dev_list.expand(dlist)
+                    dev_list.extend(dlist)
                 annotation["devices"][k] = dev_list
             elif isinstance(v, str) and (v.split(":")[0] in built_in_lists):
                 # Process built-in list
-                list_name, depth = _split_list_definition(d)
+                list_name, depth = _split_list_definition(v)
+                if list_name not in built_in_lists:
+                    raise ValueError(
+                        f"Unknown name for a built-in list: {list_name!r}. "
+                        f"Supported lists: {list(built_in_lists)!r}"
+                    )
+
                 dev_list = []
                 for name in allowed_devices:
-                    dlist = _build_subdevice_list(name, depth=depth, allowed_devices=built_in_lists[list_name])
-                    dev_list.expand(dlist)
+                    dlist = _build_subdevice_list(
+                        name, depth=depth, allowed_devices=allowed_devices, device_type=built_in_lists[list_name]
+                    )
+                    dev_list.extend(dlist)
                 annotation["devices"][k] = dev_list
             else:
                 raise ValueError(f"Unsupported type of device list {k!r}: {v}")
@@ -2109,7 +2120,7 @@ def _process_plan(plan, *, existing_devices):
                     raise ValueError(f"Failed to process step value: {ex}")
 
     except Exception as ex:
-        raise ValueError(f"Failed to create description of plan '{plan.__name__}': {ex}")
+        raise ValueError(f"Failed to create description of plan '{plan.__name__}': {ex}") from ex
 
     return ret
 

@@ -1808,7 +1808,7 @@ _pf3c_processed = {
         "parameters": {
             "val3": {
                 "annotation": "typing.List[typing.Union[Devices1, Plans1, Enums1]]",
-                "devices": {"Devices1": ("dev1", "dev2", "dev3")},
+                "devices": {"Devices1": ("dev_det1", "dev_det2", "dev3")},
                 "plans": {"Plans1": ("plan1", "plan2", "plan3")},
                 "enums": {"Enums1": ("enum1", "enum2", "enum3")},
             }
@@ -1852,7 +1852,7 @@ _pf3d_processed = {
             "default": "None",
             "annotation": {
                 "type": "typing.List[typing.Union[Devices1, Plans1, Enums1]]",
-                "devices": {"Devices1": ("dev1", "dev2", "dev3")},
+                "devices": {"Devices1": ["dev_det1", "dev_det2"]},
                 "plans": {"Plans1": ("plan1", "plan2", "plan3")},
                 "enums": {"Enums1": ("enum1", "enum2", "enum3")},
             },
@@ -1936,7 +1936,12 @@ _pf3f_processed = {
 
 @parameter_annotation_decorator(
     {
-        "parameters": {"val1": {"annotation": "AllDetectors"}},
+        "parameters": {
+            "val1": {
+                "annotation": "all_detectors",
+                "devices": {"all_detectors": "AllDetectorsList"},
+            },
+        }
     }
 )
 def _pf3g(val1):
@@ -1948,7 +1953,7 @@ _pf3g_processed = {
         {
             "name": "val1",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "AllDetectors", "devices": {"AllDetectors": ["dev_det1", "dev_det2"]}},
+            "annotation": {"type": "all_detectors", "devices": {"all_detectors": ["dev_det1", "dev_det2"]}},
         },
     ],
     "properties": {"is_generator": True},
@@ -1959,34 +1964,7 @@ _pf3g_empty_processed = {
         {
             "name": "val1",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "AllDetectors", "devices": {"AllDetectors": []}},
-        },
-    ],
-    "properties": {"is_generator": True},
-}
-
-
-@parameter_annotation_decorator(
-    {
-        "parameters": {
-            "val1": {
-                "annotation": "AllDetectors",
-                # Type 'AllDetectors' is explicitly defined, so it is not treated as default
-                "devices": {"AllDetectors": ["dev1", "dev2", "dev3"]},
-            }
-        },
-    }
-)
-def _pf3h(val1):
-    yield from [val1]
-
-
-_pf3h_processed = {
-    "parameters": [
-        {
-            "name": "val1",
-            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "AllDetectors", "devices": {"AllDetectors": ["dev1", "dev2", "dev3"]}},
+            "annotation": {"type": "all_detectors", "devices": {"all_detectors": []}},
         },
     ],
     "properties": {"is_generator": True},
@@ -2043,8 +2021,10 @@ _pf3j_processed = {
     {
         "parameters": {
             "val1": {
-                "annotation": "typing.Union[all_motors, all_flyers]",
+                "annotation": "typing.Union[all_devices, all_detectors, all_motors, all_flyers]",
                 "devices": {
+                    "all_devices": "AllDevicesList",
+                    "all_detectors": "AllDetectorsList",
                     "all_motors": "AllMotorsList",
                     "all_flyers": "AllFlyersList",
                 },
@@ -2062,8 +2042,13 @@ _pf3k_processed = {
             "name": "val1",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "annotation": {
-                "type": "typing.Union[all_motors, all_flyers]",
-                "devices": {"all_motors": ["dev_m1"], "all_flyers": ["dev_fly1"]},
+                "type": "typing.Union[all_devices, all_detectors, all_motors, all_flyers]",
+                "devices": {
+                    "all_devices": ["dev_det1", "dev_det2", "dev_m1", "dev_fly1"],
+                    "all_detectors": ["dev_det1", "dev_det2"],
+                    "all_motors": ["dev_m1"],
+                    "all_flyers": ["dev_fly1"],
+                },
             },
         },
     ],
@@ -2107,12 +2092,11 @@ _pf3_existing_devices = {
     (_pf3a, {}, _pf3a_processed),
     (_pf3b, {}, _pf3b_processed),
     (_pf3c, {}, _pf3c_processed),
-    (_pf3d, {}, _pf3d_processed),
+    (_pf3d, _pf3_existing_devices, _pf3d_processed),
     (_pf3e, {}, _pf3e_processed),
     (_pf3f, {}, _pf3f_processed),
     (_pf3g, _pf3_existing_devices, _pf3g_processed),
     (_pf3g, {}, _pf3g_empty_processed),
-    (_pf3h, _pf3_existing_devices, _pf3h_processed),
     (_pf3i, _pf3_existing_devices, _pf3i_processed),
     (_pf3j, _pf3_existing_devices, _pf3j_processed),
     (_pf3k, _pf3_existing_devices, _pf3k_processed),
@@ -2709,9 +2693,9 @@ def test_build_subdevice_list_3_fail():
     ("det1:5", "det1", 5),
     ("det1.val:5", "det1.val", 5),
     ("_det1", "_det1", 0),
-    ("AllDetectors", "AllDetectors", 0),
-    ("AllDetectors:0", "AllDetectors", 0),
-    ("AllDetectors:50", "AllDetectors", 50),
+    ("AllDetectorsList", "AllDetectorsList", 0),
+    ("AllDetectorsList:0", "AllDetectorsList", 0),
+    ("AllDetectorsList:50", "AllDetectorsList", 50),
 ])
 # fmt: on
 def test_split_list_definition_1(list_def, name, depth):

@@ -423,8 +423,8 @@ _trivial_annotation_error6 = {
      r"Additional properties are not allowed \('descriptions' was unexpected\)"),
     (_trivial_annotation_error4, jsonschema.ValidationError,
      r"Additional properties are not allowed \('some_devices' was unexpected\)"),
-    (_trivial_annotation_error5, jsonschema.ValidationError, "is not of type 'string'"),
-    (_trivial_annotation_error6, jsonschema.ValidationError, "is not of type 'array'"),
+    (_trivial_annotation_error5, jsonschema.ValidationError, r"\(1, 2, 3\) is not valid"),
+    (_trivial_annotation_error6, jsonschema.ValidationError, "'abcde' is not valid"),
 ])
 # fmt: on
 def test_annotation_dectorator_8_fail(custom_annotation, ex_type, err_msg):

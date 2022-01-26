@@ -16,7 +16,7 @@ _parameter_annotation_schema = {
                     "description": {"type": "string"},
                     "annotation": {"type": "string"},
                     "devices": {
-                        "$ref": "#/definitions/custom_types",
+                        "$ref": "#/definitions/custom_types_devices",
                     },
                     "plans": {
                         "$ref": "#/definitions/custom_types",
@@ -36,9 +36,30 @@ _parameter_annotation_schema = {
     "definitions": {
         "custom_types": {
             "type": "object",
-            "additionalProperties": {
-                "type": "array",
-                "items": {"type": "string"},
+            "additionalProperties": False,
+            "patternProperties": {
+                "^[_a-zA-Z][_a-zA-Z0-9]*$": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+            },
+        },
+        "custom_types_devices": {
+            "type": "object",
+            "additionalProperties": False,
+            "patternProperties": {
+                "^[_a-zA-Z][_a-zA-Z0-9]*$": {
+                    "anyOf": [
+                        {
+                            "type": "string",
+                            "enum": ["AllDevicesList", "AllDetectorsList", "AllMotorsList", "AllFlyersList"],
+                        },
+                        {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                    ],
+                },
             },
         },
     },
@@ -213,7 +234,7 @@ def parameter_annotation_decorator(annotation):
             return isinstance(instance, (list, tuple))
 
         type_checker = jsonschema.Draft3Validator.TYPE_CHECKER.redefine("array", is_array)
-        ValidatorCustom = jsonschema.validators.extend(jsonschema.Draft3Validator, type_checker=type_checker)
+        ValidatorCustom = jsonschema.validators.extend(jsonschema.Draft7Validator, type_checker=type_checker)
         validator = ValidatorCustom(schema=_parameter_annotation_schema)
 
         # Validate annotation

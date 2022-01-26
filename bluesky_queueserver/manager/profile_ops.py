@@ -977,7 +977,12 @@ def _expand_parameter_annotation(annotation, *, allowed_devices):
         Expanded annotation. Always returns deep copy, so the original annotation remains unchanged
     """
     allowed_devices = allowed_devices or {}
-    built_in_lists = {"AllDevices": "all", "AllMotors": "motor", "AllDetectors": "detector", "AllFlyers": "flyer"}
+    built_in_lists = {
+        "AllDevicesList": "all",
+        "AllMotorsList": "motor",
+        "AllDetectorsList": "detector",
+        "AllFlyersList": "flyer",
+    }
 
     annotation = copy.deepcopy(annotation)
     if "devices" in annotation:
@@ -1857,8 +1862,8 @@ def _process_plan(plan, *, existing_devices):
         Reference to the function implementing the plan
     existing_devices : dict
         Prepared dictionary of existing devices (returned by the function ``_prepare_devices``.
-        The dictionary is used to create lists of devices for built-in custom types
-        ``AllDetectors``, ``AllMotors``, ``AllFlyers``. If it is known that built-in plans
+        The dictionary is used to create lists of devices for built-in device lists ``AllDevicesList``,
+        ``AllDetectorsList``, ``AllMotorsList``, ``AllFlyersList``. If it is known that built-in plans
         are not used, then empty dictionary can be passed instead of the list of existing devices.
 
     Returns
@@ -2010,9 +2015,7 @@ def _process_plan(plan, *, existing_devices):
             default_defined_in_decorator = False
             if use_custom and (p.name in param_annotation["parameters"]):
                 desc = param_annotation["parameters"][p.name].get("description", None)
-                annotation = assemble_custom_annotation(
-                    param_annotation["parameters"][p.name], existing_devices=existing_devices
-                )
+                annotation = assemble_custom_annotation(param_annotation["parameters"][p.name])
                 try:
                     _ = param_annotation["parameters"][p.name].get("default", None)
 
@@ -2073,8 +2076,8 @@ def _process_plan(plan, *, existing_devices):
                 working_dict["description"] = desc
 
             if annotation:
-                # Verify that the encoded type could be decoded.
-                _process_annotation(annotation)  # May raises exception
+                # Verify that the encoded type could be decoded (raises an exception if fails)
+                _process_annotation(_expand_parameter_annotation(annotation, allowed_devices=existing_devices))
                 working_dict["annotation"] = annotation
 
             if default:

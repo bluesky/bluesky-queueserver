@@ -63,6 +63,7 @@ from bluesky_queueserver.manager.profile_ops import (
     prepare_function,
     _build_subdevice_list,
     _split_list_definition,
+    expand_plan_description,
 )
 
 # User name and user group name used throughout most of the tests.
@@ -1994,7 +1995,9 @@ _pf3h_processed = {
 
 @parameter_annotation_decorator(
     {
-        "parameters": {"val1": {"annotation": "typing.List[AllMotors]"}},
+        "parameters": {
+            "val1": {"annotation": "typing.List[all_motors]", "devices": {"all_motors": "AllMotorsList"}}
+        },
     }
 )
 def _pf3i(val1):
@@ -2006,7 +2009,7 @@ _pf3i_processed = {
         {
             "name": "val1",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "typing.List[AllMotors]", "devices": {"AllMotors": ["dev_m1"]}},
+            "annotation": {"type": "typing.List[all_motors]", "devices": {"all_motors": ["dev_m1"]}},
         },
     ],
     "properties": {"is_generator": True},
@@ -2015,7 +2018,9 @@ _pf3i_processed = {
 
 @parameter_annotation_decorator(
     {
-        "parameters": {"val1": {"annotation": "typing.List[AllFlyers]"}},
+        "parameters": {
+            "val1": {"annotation": "typing.List[all_flyers]", "devices": {"all_flyers": "AllFlyersList"}}
+        },
     }
 )
 def _pf3j(val1):
@@ -2027,7 +2032,7 @@ _pf3j_processed = {
         {
             "name": "val1",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "typing.List[AllFlyers]", "devices": {"AllFlyers": ["dev_fly1"]}},
+            "annotation": {"type": "typing.List[all_flyers]", "devices": {"all_flyers": ["dev_fly1"]}},
         },
     ],
     "properties": {"is_generator": True},
@@ -2036,7 +2041,15 @@ _pf3j_processed = {
 
 @parameter_annotation_decorator(
     {
-        "parameters": {"val1": {"annotation": "typing.Union[AllMotors, AllFlyers]"}},
+        "parameters": {
+            "val1": {
+                "annotation": "typing.Union[all_motors, all_flyers]",
+                "devices": {
+                    "all_motors": "AllMotorsList",
+                    "all_flyers": "AllFlyersList",
+                },
+            }
+        },
     }
 )
 def _pf3k(val1):
@@ -2049,8 +2062,8 @@ _pf3k_processed = {
             "name": "val1",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "annotation": {
-                "type": "typing.Union[AllMotors, AllFlyers]",
-                "devices": {"AllMotors": ["dev_m1"], "AllFlyers": ["dev_fly1"]},
+                "type": "typing.Union[all_motors, all_flyers]",
+                "devices": {"all_motors": ["dev_m1"], "all_flyers": ["dev_fly1"]},
             },
         },
     ],
@@ -2116,8 +2129,9 @@ def test_process_plan_3(plan_func, existing_devices, plan_info_expected):
     plan_info_expected["module"] = plan_func.__module__
 
     pf_info = _process_plan(plan_func, existing_devices=existing_devices)
+    pf_info_exp = expand_plan_description(pf_info, allowed_devices=existing_devices)
 
-    assert pf_info == plan_info_expected, pprint.pformat(pf_info)
+    assert pf_info_exp == plan_info_expected, pprint.pformat(pf_info)
 
 
 def _pf4a_factory():

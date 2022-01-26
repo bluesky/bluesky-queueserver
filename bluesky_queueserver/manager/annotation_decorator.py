@@ -52,7 +52,11 @@ _parameter_annotation_schema = {
                     "anyOf": [
                         {
                             "type": "string",
-                            "enum": ["AllDevicesList", "AllDetectorsList", "AllMotorsList", "AllFlyersList"],
+                            "pattern": (
+                                "(^AllDevicesList$)|(^AllDetectorsList$)|(^AllMotorsList$)|(^AllFlyersList$)|"
+                                "(^AllDevicesList:[0-9]+$)|(^AllDetectorsList:[0-9]+$)|"
+                                "(^AllMotorsList:[0-9]+$)|(^AllFlyersList:[0-9]+$)"
+                            ),
                         },
                         {
                             "type": "array",

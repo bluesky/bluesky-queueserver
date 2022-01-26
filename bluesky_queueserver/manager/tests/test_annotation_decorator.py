@@ -2,6 +2,7 @@ import typing
 import pytest
 import jsonschema
 import inspect
+import copy
 from bluesky_queueserver.manager.annotation_decorator import (
     parameter_annotation_decorator,
 )
@@ -146,7 +147,7 @@ _simple_annotation_long_descriptions = {
     _simple_annotation_long_descriptions,
 ])
 # fmt: on
-def test_annotation_dectorator_1(custom_annotation):
+def test_annotation_dectorator_01(custom_annotation):
     """
     Basic test: decorator is applied to a simple function
     """
@@ -167,7 +168,7 @@ def test_annotation_dectorator_1(custom_annotation):
 
 ])
 # fmt: on
-def test_annotation_dectorator_2(custom_annotation):
+def test_annotation_dectorator_02(custom_annotation):
     """
     Types are specified in the custom annotation and in Python parameter annotations.
     Python annotations are not used. Verify that the signature was not broken.
@@ -196,7 +197,7 @@ _simple_annotation_no_types = {
     _simple_annotation_no_types,
 ])
 # fmt: on
-def test_annotation_dectorator_3(custom_annotation):
+def test_annotation_dectorator_03(custom_annotation):
     """
     Types are specified in the custom annotation and in Python parameter annotations.
     Python annotations are not used.
@@ -216,7 +217,7 @@ def test_annotation_dectorator_3(custom_annotation):
     _simple_annotation,
 ])
 # fmt: on
-def test_annotation_dectorator_4(custom_annotation):
+def test_annotation_dectorator_04(custom_annotation):
     """
     Basic test: decorator is applied to a generator function.
     """
@@ -254,7 +255,7 @@ _custom_annotation_plans_and_devices = {
     _custom_annotation_plans_and_devices,
 ])
 # fmt: on
-def test_annotation_dectorator_5(custom_annotation):
+def test_annotation_dectorator_05(custom_annotation):
     """
     Test if the list of plans and devices is displayed correctly in the docstring.
     """
@@ -303,7 +304,7 @@ _more_complicated_annotation = {
     _more_complicated_annotation,
 ])
 # fmt: on
-def test_annotation_dectorator_6(custom_annotation):
+def test_annotation_dectorator_06(custom_annotation):
     """
     An example of more complicated docstring with varargs and varkwargs. Some of the
     args and kwargs are not documented.
@@ -341,7 +342,7 @@ _trivial_annotation = {
     _trivial_annotation,
 ])
 # fmt: on
-def test_annotation_dectorator_7(custom_annotation):
+def test_annotation_dectorator_07(custom_annotation):
     """
     The trivial case of the decorator that only specifies function description
     and the function has no parameters.
@@ -356,6 +357,40 @@ def test_annotation_dectorator_7(custom_annotation):
     assert func._custom_parameter_annotation_ == custom_annotation
     assert list(func()) == ["str1", "str2", "str3"]
     assert func.__name__ == "func"
+
+
+_annotation_built_in_list = {
+    "description": "Example of annotation with varargs and varkwargs.",
+    "parameters": {
+        "existing_param": {
+            "description": "Required key is 'discription'. Schema validation should fail.",
+            "annotation": "Motor",
+            "devices": {
+                "Motor": (1, 2, 3),  # Type must be 'str'
+            },
+        }
+    },
+}
+
+
+# fmt: off
+@pytest.mark.parametrize("built_in_list", [
+    "AllDevicesList", "AllMotorsList", "AllDetectorsList", "AllFlyersList",
+    "AllDevicesList:0", "AllDevicesList:12", "AllMotorsList:0", "AllMotorsList:012",
+    "AllDetectorsList:0", "AllDetectorsList:120", "AllFlyersList:0", "AllFlyersList:412",
+])
+# fmt: on
+def test_annotation_dectorator_08(built_in_list):
+    """
+    The trivial case of the decorator that only specified function description
+    and the function has no parameters.
+    """
+    custom_annotation = copy.deepcopy(_annotation_built_in_list)
+    custom_annotation["parameters"]["existing_param"]["devices"]["Motor"] = built_in_list
+
+    @parameter_annotation_decorator(custom_annotation)
+    def func(existing_param):
+        pass
 
 
 _trivial_annotation_error1 = {
@@ -407,7 +442,20 @@ _trivial_annotation_error6 = {
             "description": "Required key is 'discription'. Schema validation should fail.",
             "annotation": "Motor",
             "devices": {
-                "Motor": "abcde",  # Type must be 'array' (tuple or list)
+                "Motor": "unsupported_list",  # Incorrect name for built-in list
+            },
+        }
+    },
+}
+
+_trivial_annotation_error7 = {
+    "description": "Example of annotation with varargs and varkwargs.",
+    "parameters": {
+        "existing_param": {
+            "description": "Required key is 'discription'. Schema validation should fail.",
+            "annotation": "Motor",
+            "devices": {
+                "Motor": "AllDevicesList:1a",  # Incorrect name for built-in list
             },
         }
     },
@@ -424,10 +472,11 @@ _trivial_annotation_error6 = {
     (_trivial_annotation_error4, jsonschema.ValidationError,
      r"Additional properties are not allowed \('some_devices' was unexpected\)"),
     (_trivial_annotation_error5, jsonschema.ValidationError, r"\(1, 2, 3\) is not valid"),
-    (_trivial_annotation_error6, jsonschema.ValidationError, "'abcde' is not valid"),
+    (_trivial_annotation_error6, jsonschema.ValidationError, "'unsupported_list' is not valid"),
+    (_trivial_annotation_error7, jsonschema.ValidationError, "'AllDevicesList:1a' is not valid"),
 ])
 # fmt: on
-def test_annotation_dectorator_8_fail(custom_annotation, ex_type, err_msg):
+def test_annotation_dectorator_09_fail(custom_annotation, ex_type, err_msg):
     """
     The trivial case of the decorator that only specified function description
     and the function has no parameters.
@@ -444,7 +493,7 @@ _trivial_annotation = {
 }
 
 
-def test_annotation_dectorator_9():
+def test_annotation_dectorator_10():
     """
     Test if decorated generator function is recognized as a generator function by ``inspect``.
     """

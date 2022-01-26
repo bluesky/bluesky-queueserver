@@ -461,6 +461,19 @@ _trivial_annotation_error7 = {
     },
 }
 
+_trivial_annotation_error8 = {
+    "description": "Example of annotation with varargs and varkwargs.",
+    "parameters": {
+        "existing_param": {
+            "description": "Required key is 'discription'. Schema validation should fail.",
+            "annotation": "Plans",
+            "plans": {
+                "Plans.": "someplan",  # Plan name 'Plans.' contains character '.' which is not allowed
+            },
+        }
+    },
+}
+
 
 # fmt: off
 @pytest.mark.parametrize("custom_annotation, ex_type, err_msg", [
@@ -474,6 +487,7 @@ _trivial_annotation_error7 = {
     (_trivial_annotation_error5, jsonschema.ValidationError, r"\(1, 2, 3\) is not valid"),
     (_trivial_annotation_error6, jsonschema.ValidationError, "'unsupported_list' is not valid"),
     (_trivial_annotation_error7, jsonschema.ValidationError, "'AllDevicesList:1a' is not valid"),
+    (_trivial_annotation_error8, jsonschema.ValidationError, "'Plans.' does not match any of the regexes"),
 ])
 # fmt: on
 def test_annotation_dectorator_09_fail(custom_annotation, ex_type, err_msg):

@@ -19,7 +19,7 @@ _parameter_annotation_schema = {
                         "$ref": "#/definitions/custom_types_devices",
                     },
                     "plans": {
-                        "$ref": "#/definitions/custom_types",
+                        "$ref": "#/definitions/custom_types_plans",
                     },
                     "enums": {
                         "$ref": "#/definitions/custom_types",
@@ -41,6 +41,16 @@ _parameter_annotation_schema = {
                 "^[_a-zA-Z][_a-zA-Z0-9]*$": {
                     "type": "array",
                     "items": {"type": "string"},
+                },
+            },
+        },
+        "custom_types_plans": {
+            "type": "object",
+            "additionalProperties": False,
+            "patternProperties": {
+                "^[_a-zA-Z][_a-zA-Z0-9]*$": {
+                    "type": "array",
+                    "items": {"type": "string", "pattern": "^[_a-zA-Z][_a-zA-Z0-9]*$"},
                 },
             },
         },

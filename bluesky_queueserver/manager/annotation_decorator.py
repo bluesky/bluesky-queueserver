@@ -169,25 +169,37 @@ def parameter_annotation_decorator(annotation):
                 "plans_to_run": {
                     # Text descriptions of parameters are optional.
                     "description": "Parameter that accepts a plan or a list of plans.",
-                    "annotation": "typing.Union[Plan1, typing.List[Plan2]]",
+                    "annotation": "typing.Union[PlanType1, typing.List[PlanType2]]",
                     "plans": {
                         # Here we have two groups of plans. Names of the plans are used
                         #   as types in 'annotation'. The example of annotation above
-                        #   allows to pass one plan from the group 'Plan1' or a list of
-                        #   plans from 'Plan2'.
-                        "Plan1": ("count", "scan", "gridscan"),
-                        "Plan2": ("more", "plan", "names"),
+                        #   allows to pass one plan from the group 'PlanType1' or a list of
+                        #   plans from 'PlanType2'.
+                        "PlanType1": ("count", "scan", "gridscan"),
+                        "PlanType2": ("more", "plan", "names"),
                     },
                 },
 
                 "devices": {
                     "description": "Parameter that accepts the list of devices.",
-                    "annotation": "typing.List[DeviceType1]",
+                    "annotation": "typing.List[typing.Union[DeviceType1, DeviceType2]]",
                     # Here we provide the list of devices. 'devices' and 'plans' are
                     #   treated similarly, but it may be useful to distinguish lists of
                     #    plans and devices on the stage of plan parameter validation.
+                    #    The decorator also supports the following built-in device
+                    #    lists ``AllDevicesList``, ``AllDetectorsList``, ``AllMotorsList``
+                    #    and ``AllFlyersList``. The devices and built-in device lists
+                    #    may contain optional depth specification (e.g. ``det3:1``
+                    #    specifies depth 1). If depth is specified, the lists are expanded
+                    #    to include all subdevices found up to the given depth. The default
+                    #    depth is 0 (``det2:0`` is identical to ``det2``). If depth 1 is
+                    #    specified, the list will include the device itself and all its
+                    #    subdevices. If depth is 2, then subdevices of subdevices are
+                    #    added to the list. Avoid using depth, which is too large, since
+                    #    it may slow down processing of the submitted plans.
                     "devices": {
-                        "DeviceType1": ("det1", "det2", "det3"),
+                        "DeviceType1": ("det1", "det2:0", "det3:1"),
+                        "DeviceType2": "AllMotorsList:2",  # Depth 2, depth is optional
                     },
                     # Set default value to string 'det1'. The default value MUST be
                     #   defined in the function header for the parameter that has

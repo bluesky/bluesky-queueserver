@@ -942,13 +942,9 @@ def _build_subdevice_list(device_name, *, allowed_devices, depth=0, device_type=
             device_list.append(root_device_name)
 
         def process_devices(root_device, root_device_name, depth):
-            print(f"root_device_name: {root_device_name} depth: {depth}")
             if (depth > 0) and root_device:
-                print("Looking for components ...")
                 if "components" in root_device:
-                    print(f"components: {list(root_device['components'])}")
                     for cname, c in root_device["components"].items():
-                        print(f"testing component {cname!r}")
                         dname = root_device_name + "." + cname
                         if condition(c):
                             device_list.append(dname)
@@ -1930,7 +1926,7 @@ def _process_plan(plan, *, existing_devices):
             )
         return s_value
 
-    def assemble_custom_annotation(parameter):  ##, *, existing_devices):
+    def assemble_custom_annotation(parameter):
         """
         Assemble annotation from decorator parameters. It will be stored as a separate dictionary.
         Returns ``None`` if there is no annotation.
@@ -1944,44 +1940,6 @@ def _process_plan(plan, *, existing_devices):
         for k in keys:
             if k in parameter:
                 annotation[k] = copy.copy(parameter[k])
-
-        ## # Add lists of device names for built-in types
-        # built_in_types = ("AllDetectors", "AllMotors", "AllFlyers")
-        # for btype in built_in_types:
-        #     type_found = False
-        #     nvchars = "[^_A-Za-z0-9]"
-        #     for start, end in (("^", "$"), ("^", nvchars), (nvchars, "$"), (nvchars, nvchars)):
-        #         pattern = f"{start}{btype}{end}"
-        #         if re.search(pattern, annotation["type"]):
-        #             type_found = True
-        #             break
-
-        #     if type_found:
-        #         if "devices" not in annotation:
-        #             annotation["devices"] = {}
-        #         # If annotation already contains type definition for 'built-in' type
-        #         #   then no name list is created.
-        #         if btype not in annotation["devices"]:
-        #             if btype == "AllDetectors":
-
-        #                 def condition(_btype):
-        #                     return _btype["is_readable"] and not _btype["is_movable"]
-
-        #             elif btype == "AllMotors":
-
-        #                 def condition(_btype):
-        #                     return _btype["is_readable"] and _btype["is_movable"]
-
-        #             elif btype == "AllFlyers":
-
-        #                 def condition(_btype):
-        #                     return _btype["is_flyable"]
-
-        #             else:
-        #                 raise RuntimeError(f"Error in processing algorithm: unsupported built-in type '{btype}'")
-        #             device_names = [k for k, v in existing_devices.items() if condition(v)]
-
-        #             annotation["devices"][btype] = device_names
 
         return annotation
 

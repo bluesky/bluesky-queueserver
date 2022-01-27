@@ -832,43 +832,95 @@ def prepare_function(*, func_info, nspace, user_group_permissions=None):
 #   Processing of plan annotations and plan descriptions
 
 
-def _split_list_definition(list_def):
+def _split_list_element_definition(element_def):
     """
-    Split definition of the list into a name and depth. List definition can be ``AllDetectors``,
-    ``AllDetectors:2``, ``sim_stage``, ``sim_stage:2``, ``sim_stage.motors:2``, etc.
-    If depth is missing, it is assumed to be 0.
+    Split definition of the list into components. The list element may contain device or
+    subdevice name (e.g. ``det1``, ``det1.val``, ``sim_stage.det.val``) or specify
+    regular expressions used to find elements in the list of existing elements (e.g.
+    ``:^det:^val$``, ``:+^det:^val$``, ``__DETECTORS__:+^sim_stage$:+.+:^val$``).
+    The ``+`` character immediately following ``:`` is not part of the regular expression
+    and indicates that all subdevices that satisfy the condition are included in the list.
+    The ``__DETECTORS__`` keyword indicates that only detectors that satisfy the conditions
+    are included in the list. The following keywords are currently supported:
+    ``__READABLE__``, ``__FLYABLE__``, ``__DETECTOR__``, ``__MOTOR__``.
 
     Parameters
     ----------
-    list_def: str
-        Definition of the list (typically a list of devices), e.g. ``AllDetectors``,
-        ``AllDetectors:2``, ``sim_stage``, ``sim_stage:2``, ``sim_stage.motors:2`
+    element_def: str
+        Definition of the list element.
 
     Returns
     -------
-    str, int
-        Device/list name and depth
+    components: list(tuple)
+        List of tuples, each tuple contains the component (regular expression or device/subdevice name) and
+        boolean flag that indicates if the devices that satisfy regular expression found at the respective
+        level should be included in the list.
+    uses_re: boolean
+        Boolean value that indicates if the components are regular expressions.
+    device_type: str
+        Contains the keyword that specifies device type (for regular expressions). Empty string if
+        the device type is not specified or if the components are device/subdevice names.
 
     Raises
     ------
     TypeError
-        ``list_def`` is not a string
+        The element definition is not a string.
     ValueError
-        ``list_def`` is has improper format
+        The element definition is incorrectly formatted and can not be processed.
     """
-    if not isinstance(list_def, str):
+    if not isinstance(element_def, str):
         raise TypeError(
-            f"List definition {list_def!r} has incorrect type {type(list_def)!r}. Expected type: 'str'"
+            f"Device description {element_def!r} has incorrect type {type(element_def)!r}. Expected type: 'str'"
         )
-    if re.search(r"^[_A-Za-z][_A-Za-z0-9\.]*$", list_def):
-        list_name, depth = list_def, 0
-    elif re.search(r"^[_A-Za-z][_A-Za-z0-9\.]*:[0-9]+$", list_def):
-        list_name, depth = list_def.split(":")
-        depth = int(depth)
-    else:
-        raise ValueError(f"Invalid format of the list definition: {list_def}")
 
-    return list_name, depth
+    # Remove spaces
+    element_def = element_def.replace(" ", "")
+
+    if not len(element_def):
+        raise ValueError(f"Device description {element_def!r} is an empty string")
+
+    supported_device_types = ("", "__READABLE__", "__FLYABLE__", "__DETECTOR__", "__MOTOR__")
+
+    # Check if the element is defined using regular expressions
+    uses_re = ":" in element_def
+    device_type = ""
+
+    if uses_re:
+        components = element_def.split(":")
+        device_type = components[:1][0]  # The first element is a string (may be empty string)
+        components = components[1:]
+
+        components_include = [False] * len(components)
+        components_include = [True if _.startswith("+") else False for _ in components]
+        components_include[-1] = True  # Always include all the devices defined by the last component
+        # Remove '+' from the beginning of each component
+        components = [_[1:] if _.startswith("+") else _ for _ in components]
+        components = list(zip(components, components_include))
+
+        if device_type not in supported_device_types:
+            raise ValueError(
+                f"Device type {device_type!r} is not supported. Supported types: {supported_device_types}"
+            )
+        for c in components:
+            if not c[0]:
+                raise ValueError(f"Device description {element_def!r} contains empty components")
+    else:
+        components = element_def.split(".")
+        for c in components:
+            if not c:
+                raise ValueError(
+                    f"Device or subdevice name in the device description {element_def!r} is an empty string"
+                )
+            if not re.search("^[_a-zA-Z][_a-zA-Z0-9]*$", c):
+                raise ValueError(
+                    f"Device or subdevice name {c!r} in the device description "
+                    f"{element_def!r} contains invalid characters"
+                )
+        components_include = [False] * len(components)
+        components_include[-1] = True
+        components = list(zip(components, components_include))
+
+    return components, uses_re, device_type
 
 
 def _build_subdevice_list(device_name, *, allowed_devices, depth=0, device_type="all"):

@@ -10,6 +10,7 @@ import sys
 import enum
 import inspect
 from collections.abc import Callable
+import re
 import shutil
 import time as ttime
 
@@ -62,7 +63,7 @@ from bluesky_queueserver.manager.profile_ops import (
     _validate_user_group_permissions_schema,
     prepare_function,
     _build_subdevice_list,
-    _split_list_definition,
+    _split_list_element_definition,
     expand_plan_description,
 )
 
@@ -3072,42 +3073,55 @@ def test_build_subdevice_list_3_fail():
 
 
 # fmt: off
-@pytest.mark.parametrize("list_def, name, depth", [
-    ("det1", "det1", 0),
-    ("det1:0", "det1", 0),
-    ("det1:5", "det1", 5),
-    ("det1.val:5", "det1.val", 5),
-    ("_det1", "_det1", 0),
-    ("AllDetectorsList", "AllDetectorsList", 0),
-    ("AllDetectorsList:0", "AllDetectorsList", 0),
-    ("AllDetectorsList:50", "AllDetectorsList", 50),
+@pytest.mark.parametrize("element_def, components, uses_re, device_type", [
+    # Device/subdevice names
+    ("det1", [("det1", True)], False, ""),
+    ("det1 ", [("det1", True)], False, ""),  # Spaces are removed
+    ("det1.val", [("det1", False), ("val", True)], False, ""),
+    ("sim_stage.det1.val", [("sim_stage", False), ("det1", False), ("val", True)], False, ""),
+    # Regular expressions
+    (":^det", [("^det", True)], True, ""),
+    (":^det:^val$", [("^det", False), ("^val$", True)], True, ""),
+    (":+^det:^val$", [("^det", True), ("^val$", True)], True, ""),
+    (":+sim_stage:^det:^val$", [("sim_stage", True), ("^det", False), ("^val$", True)], True, ""),
+    ("__READABLE__:.*", [(".*", True)], True, "__READABLE__"),
+    ("__FLYABLE__:.*", [(".*", True)], True, "__FLYABLE__"),
+    ("__DETECTOR__:.*:.*", [(".*", False), (".*", True)], True, "__DETECTOR__"),
+    ("__MOTOR__:+.*:.*", [(".*", True), (".*", True)], True, "__MOTOR__"),
 ])
 # fmt: on
-def test_split_list_definition_1(list_def, name, depth):
+def test_split_list_element_definition_1(element_def, components, uses_re, device_type):
     """
-    ``_split_list_definition``: basic tests
+    ``_split_list_element_definition``: basic tests
     """
-    _name, _depth = _split_list_definition(list_def)
-    assert _name == name
-    assert _depth == depth
+    _components, _uses_re, _device_type = _split_list_element_definition(element_def)
+    assert _components == components
+    assert _uses_re == uses_re
+    assert _device_type == device_type
 
 
 # fmt: off
-@pytest.mark.parametrize("list_def, exception_type, msg", [
-    (".det1", ValueError, "Invalid format of the list definition"),
-    ("8det1", ValueError, "Invalid format of the list definition"),
-    ("det1:a", ValueError, "Invalid format of the list definition"),
-    ("det1:10a", ValueError, "Invalid format of the list definition"),
-    ("det1:1:", ValueError, "Invalid format of the list definition"),
-    (10, TypeError, "incorrect type"),
+@pytest.mark.parametrize("element_def, exception_type, msg", [
+    (10, TypeError, "Device description 10 has incorrect type"),
+    ("", ValueError, "Device description '' is an empty string"),
+    (":", ValueError, "Device description ':' contains empty components"),
+    (":^det:", ValueError, "Device description ':^det:' contains empty components"),
+    (":^det::val", ValueError, "Device description ':^det::val' contains empty components"),
+    ("__UNSUPPORTED_TYPE__:^det", ValueError, "Device type '__UNSUPPORTED_TYPE__' is not supported."),
+    ("det..val", ValueError, "Device or subdevice name in the device description 'det..val' is an empty string"),
+    ("det.", ValueError, "Device or subdevice name in the device description 'det.' is an empty string"),
+    (".det", ValueError, "Device or subdevice name in the device description '.det' is an empty string"),
+    ("d$et", ValueError, "'d$et' in the device description 'd$et' contains invalid characters"),
+    ("d$et.val", ValueError, "'d$et' in the device description 'd$et.val' contains invalid characters"),
+    ("det.v$al", ValueError, "'v$al' in the device description 'det.v$al' contains invalid characters"),
 ])
 # fmt: on
-def test_split_list_definition_2_fail(list_def, exception_type, msg):
+def test_split_list_element_definition_2_fail(element_def, exception_type, msg):
     """
-    ``_split_list_definition``: failing cases
+    ``_split_list_element_definition``: failing cases
     """
-    with pytest.raises(exception_type, match=msg):
-        _split_list_definition(list_def)
+    with pytest.raises(exception_type, match=re.escape(msg)):
+        _split_list_element_definition(element_def)
 
 
 # fmt: off

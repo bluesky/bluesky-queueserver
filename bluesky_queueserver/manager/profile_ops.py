@@ -1863,6 +1863,13 @@ def _process_plan(plan, *, existing_devices):
             ]
         }
 
+    .. note::
+
+        This function does not expand built-in lists of devices or add subdevices for devices with
+        specified length if those are used in the plan annotation decorator. Call ``expand_plan_description()``
+        for each plan description in order for the lists to be expanded based on the current list of
+        available or existing devices.
+
     Parameters
     ----------
     plan: callable

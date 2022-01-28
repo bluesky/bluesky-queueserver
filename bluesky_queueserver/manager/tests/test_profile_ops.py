@@ -62,8 +62,8 @@ from bluesky_queueserver.manager.profile_ops import (
     check_if_function_allowed,
     _validate_user_group_permissions_schema,
     prepare_function,
-    _build_subdevice_list,
     _split_list_element_definition,
+    _build_device_name_list,
     expand_plan_description,
 )
 
@@ -2971,108 +2971,6 @@ def test_devices_from_nspace():
 
 
 # fmt: off
-_allowed_devices_dict_1 = {
-    "da0_motor": {
-        "is_readable": True, "is_movable": True, "is_flyable": False,
-        "components": {
-            "db0_motor": {
-                "is_readable": True, "is_movable": True, "is_flyable": False,
-                "components": {
-                    "dc0_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
-                    "dc1_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
-                    "dc2_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
-                    "dc3_motor": {
-                        "is_readable": True, "is_movable": True, "is_flyable": False,
-                        "components": {
-                            "dd0_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
-                            "dd1_motor": {"is_readable": True, "is_movable": True, "is_flyable": False},
-                        }
-                    },
-                }
-            },
-            "db1_det": {
-                "is_readable": True, "is_movable": False, "is_flyable": False,
-                "components": {
-                    "dc0_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
-                    "dc1_motor": {"is_readable": True, "is_movable": True, "is_flyable": False},
-                }
-            },
-            "db2_flyer": {
-                "is_readable": False, "is_movable": False, "is_flyable": True,
-            },
-        }
-    }
-}
-# fmt: on
-
-
-# fmt: off
-@pytest.mark.parametrize("device_name, device_type, depth, device_name_list", [
-    ("da0_motor", "all", 100, [
-        'da0_motor', 'da0_motor.db0_motor', 'da0_motor.db0_motor.dc0_det',
-        'da0_motor.db0_motor.dc1_det', 'da0_motor.db0_motor.dc2_det', 'da0_motor.db0_motor.dc3_motor',
-        'da0_motor.db0_motor.dc3_motor.dd0_det', 'da0_motor.db0_motor.dc3_motor.dd1_motor', 'da0_motor.db1_det',
-        'da0_motor.db1_det.dc0_det', 'da0_motor.db1_det.dc1_motor', 'da0_motor.db2_flyer']),
-    ("da0_motor", "motor", 100, [
-        'da0_motor', 'da0_motor.db1_det.dc1_motor', 'da0_motor.db0_motor.dc3_motor',
-        'da0_motor.db0_motor.dc3_motor.dd1_motor', 'da0_motor.db0_motor']),
-    ("da0_motor", "detector", 100, [
-        'da0_motor.db0_motor.dc0_det', 'da0_motor.db0_motor.dc1_det',
-        'da0_motor.db0_motor.dc2_det', 'da0_motor.db0_motor.dc3_motor.dd0_det', 'da0_motor.db1_det',
-        'da0_motor.db1_det.dc0_det']),
-    ("da0_motor", "flyer", 100, ['da0_motor.db2_flyer']),
-    ("da0_motor", "all", 0, ['da0_motor']),
-    ("da0_motor", "all", 1, ['da0_motor', 'da0_motor.db0_motor', 'da0_motor.db1_det', 'da0_motor.db2_flyer']),
-    ("da0_motor", "all", 2, [
-        'da0_motor', 'da0_motor.db0_motor', 'da0_motor.db0_motor.dc0_det',
-        'da0_motor.db0_motor.dc1_det', 'da0_motor.db0_motor.dc2_det', 'da0_motor.db0_motor.dc3_motor',
-        'da0_motor.db1_det', 'da0_motor.db1_det.dc0_det', 'da0_motor.db1_det.dc1_motor', 'da0_motor.db2_flyer']),
-    ("da0_motor", "flyer", 0, []),
-    ("da0_motor", "flyer", 2, ['da0_motor.db2_flyer']),
-    ("da0_motor.db0_motor", "detector", 1, [
-        'da0_motor.db0_motor.dc0_det', 'da0_motor.db0_motor.dc1_det', 'da0_motor.db0_motor.dc2_det']),
-    ("da0_motor.db0_motor", "detector", 2, [
-        'da0_motor.db0_motor.dc0_det', 'da0_motor.db0_motor.dc1_det', 'da0_motor.db0_motor.dc2_det',
-        'da0_motor.db0_motor.dc3_motor.dd0_det']),
-    ("da0_motor.db0_motor.dc3_motor", "detector", 2, ['da0_motor.db0_motor.dc3_motor.dd0_det']),
-    ("da0_motor.db0_motor.dc3_motor", "detector", 0, []),
-    ("da0_motor.db0_motor.dc3_motor", "motor", 0, ['da0_motor.db0_motor.dc3_motor']),
-    ("da0_motor.db0_motor.unknown", "detector", 2, []),
-])
-# fmt: on
-def test_build_subdevice_list_1(device_name, device_type, depth, device_name_list):
-    """
-    ``_build_subdevice_list``: basic tests.
-    """
-
-    name_list = _build_subdevice_list(
-        device_name, allowed_devices=_allowed_devices_dict_1, depth=depth, device_type=device_type
-    )
-    print(f"name_list={name_list}")
-    assert set(name_list) == set(device_name_list)
-    assert len(name_list) == len(device_name_list)
-
-
-@pytest.mark.parametrize("allowed_devices", ({}, None))
-def test_build_subdevice_list_2(allowed_devices):
-    """
-    ``_build_subdevice_list``: returns [] if ``allowed_devices`` is {} or None
-    """
-    name_list = _build_subdevice_list("da0_motor", allowed_devices=allowed_devices, depth=100, device_type="all")
-    assert name_list == []
-
-
-def test_build_subdevice_list_3_fail():
-    """
-    ``_build_subdevice_list``: call with unsupported device type
-    """
-    with pytest.raises(ValueError, match="Unsupported device type: 'unsupported'"):
-        _build_subdevice_list(
-            "da0_motor", allowed_devices=_allowed_devices_dict_1, depth=100, device_type="unsupported"
-        )
-
-
-# fmt: off
 @pytest.mark.parametrize("element_def, components, uses_re, device_type", [
     # Device/subdevice names
     ("det1", [("det1", True)], False, ""),
@@ -3122,6 +3020,96 @@ def test_split_list_element_definition_2_fail(element_def, exception_type, msg):
     """
     with pytest.raises(exception_type, match=re.escape(msg)):
         _split_list_element_definition(element_def)
+
+
+# fmt: off
+_allowed_devices_dict_1 = {
+    "da0_motor": {
+        "is_readable": True, "is_movable": True, "is_flyable": False,
+        "components": {
+            "db0_motor": {
+                "is_readable": True, "is_movable": True, "is_flyable": False,
+                "components": {
+                    "dc0_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
+                    "dc1_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
+                    "dc2_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
+                    "dc3_motor": {
+                        "is_readable": True, "is_movable": True, "is_flyable": False,
+                        "components": {
+                            "dd0_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
+                            "dd1_motor": {"is_readable": True, "is_movable": True, "is_flyable": False},
+                        }
+                    },
+                }
+            },
+            "db1_det": {
+                "is_readable": True, "is_movable": False, "is_flyable": False,
+                "components": {
+                    "dc0_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
+                    "dc1_motor": {"is_readable": True, "is_movable": True, "is_flyable": False},
+                }
+            },
+            "db2_flyer": {
+                "is_readable": False, "is_movable": False, "is_flyable": True,
+            },
+        }
+    },
+    "da1_det": {
+        "is_readable": True, "is_movable": False, "is_flyable": False,
+        "components": {
+            "db0_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
+            "db1_motor": {"is_readable": True, "is_movable": True, "is_flyable": False},
+        }
+    },
+}
+# fmt: on
+
+
+# fmt: off
+@pytest.mark.parametrize("element_def, expected_name_list", [
+    # Device names
+    ("da0_motor", ["da0_motor"]),
+    ("da0_motor.db0_motor", ["da0_motor.db0_motor"]),
+    ("da0_motor.db0_motor.dc2_det", ["da0_motor.db0_motor.dc2_det"]),
+    # Patterns
+    (":.+", ["da0_motor", "da1_det"]),
+    (":.*", ["da0_motor", "da1_det"]),
+    (":+.*", ["da0_motor", "da1_det"]),
+    (":.+:^db0", ["da0_motor.db0_motor", "da1_det.db0_det"]),
+    (":+.+:^db0", ["da0_motor", "da0_motor.db0_motor", "da1_det", "da1_det.db0_det"]),
+    (":+det$:^db0", ["da1_det", "da1_det.db0_det"]),
+    (":.+:+^db0:^dc", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc0_det", "da0_motor.db0_motor.dc1_det",
+     "da0_motor.db0_motor.dc2_det", "da0_motor.db0_motor.dc3_motor", "da1_det.db0_det"]),
+    ("__MOTOR__:.+:+^db0:^dc", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc3_motor"]),
+    ("__DETECTOR__:.+:+^db0:^dc", ["da0_motor.db0_motor.dc0_det", "da0_motor.db0_motor.dc1_det",
+     "da0_motor.db0_motor.dc2_det", "da1_det.db0_det"]),
+    ("__READABLE__:.+:+^(db0)|(db2):^dc", [
+        "da0_motor.db0_motor", "da0_motor.db0_motor.dc0_det", "da0_motor.db0_motor.dc1_det",
+        "da0_motor.db0_motor.dc2_det", "da0_motor.db0_motor.dc3_motor", "da1_det.db0_det"]),
+    ("__FLYABLE__:.+:+^(db0)|(db2):^dc", ["da0_motor.db2_flyer"]),
+    ("__FLYABLE__:.+:+^db0:^dc", []),
+])
+# fmt: on
+def test_build_device_name_list_1(element_def, expected_name_list):
+    """
+    ``_build_device_name_list``: basic tests
+    """
+    components, uses_re, device_type = _split_list_element_definition(element_def)
+    name_list = _build_device_name_list(
+        components=components, uses_re=uses_re, device_type=device_type, existing_devices=_allowed_devices_dict_1
+    )
+    assert name_list == expected_name_list, pprint.pformat(name_list)
+
+
+def test_build_device_name_list_2_fail():
+    """
+    ``_build_device_name_list``: failing cases
+    """
+    components, uses_re, device_type = _split_list_element_definition("def")
+    with pytest.raises(ValueError, match="Unsupported device type: 'unknown'"):
+        _build_device_name_list(
+            components=components, uses_re=uses_re, device_type="unknown", existing_devices=_allowed_devices_dict_1
+        )
 
 
 # fmt: off

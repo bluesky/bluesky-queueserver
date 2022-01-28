@@ -831,6 +831,8 @@ def prepare_function(*, func_info, nspace, user_group_permissions=None):
 # ===============================================================================
 #   Processing of plan annotations and plan descriptions
 
+_supported_device_types = ("", "__READABLE__", "__FLYABLE__", "__DETECTOR__", "__MOTOR__")
+
 
 def _split_list_element_definition(element_def):
     """
@@ -879,8 +881,6 @@ def _split_list_element_definition(element_def):
     if not len(element_def):
         raise ValueError(f"Device description {element_def!r} is an empty string")
 
-    supported_device_types = ("", "__READABLE__", "__FLYABLE__", "__DETECTOR__", "__MOTOR__")
-
     # Check if the element is defined using regular expressions
     uses_re = ":" in element_def
     device_type = ""
@@ -897,9 +897,9 @@ def _split_list_element_definition(element_def):
         components = [_[1:] if _.startswith("+") else _ for _ in components]
         components = list(zip(components, components_include))
 
-        if device_type not in supported_device_types:
+        if device_type not in _supported_device_types:
             raise ValueError(
-                f"Device type {device_type!r} is not supported. Supported types: {supported_device_types}"
+                f"Device type {device_type!r} is not supported. Supported types: {_supported_device_types}"
             )
         for c in components:
             if not c[0]:
@@ -923,86 +923,95 @@ def _split_list_element_definition(element_def):
     return components, uses_re, device_type
 
 
-def _build_subdevice_list(device_name, *, allowed_devices, depth=0, device_type="all"):
+def _build_device_name_list(*, components, uses_re, device_type, existing_devices):
     """
-    Generate device list based on the list of allowed/existing devices and the device name.
-    The device name may be a subdevice of an existing device in the list of allowed devices
-    (e.g. ``dev.val``). The list contains the subdevices of the selected type (``device_type``).
-    If the root device (``device_name``) does not satisfy the type requirement, it is not
-    included in the list.
+    Generate list of device names (including subdevices) based on one element of a device
+    list from plan parameter annotation. The element is preprocessed with
+    ``_split_list_element_definition()`` represented as ``components``, ``uses_re`` and
+    ``device_type`` parameters. If the element is a device name, it is simply included
+    in the list. If the element is a pattern, the matching devices are selected
+    from ``existing_devices`` dictionary and added to the list. The ``components`` is
+    a list of tuples for each depth level. The first element of the tuple represents
+    a pattern device/subdevice name at the given level. If matching devices are found,
+    they are added to the list of devices if the second tuple element is ``True`` and then
+    the subdevices of each matching device are processed using the pattern defined for
+    the next depth level (the second element may be ``True`` or ``False``).
+
+    It is assumed that element definitions are first processed using
+    ``_split_list_element_definition``, which catches and processes all the errors,
+    so this function does not perform any validation of data integrity.
 
     Parameters
     ----------
-    device_name: str
-        The name of the 'root' device for generating the device list, such as ``det`` or ``det.val``
-    depth: int
-        The depth of the included subdevices in the tree (0 - no subdevices are included).
-    allowed_devices: dict
-        A dictionary of the allowed or existing devices. If ``None``, then the returned list
-        is empty.
+    components: list(tuple)
+        List of tuples, each tuple consists of two elements: device/subdevice name or
+        pattern for name search and the boolean flag that tells if the matching devices or
+        subdevices at this level should be added to the device list.
+    uses_re: boolean
+        Boolean parameter that tells if the components represent device name or pattern based
+        on regular expressions.
     device_type: str
-        Types of devices to include in the list: ``all``, ``detector``, ``motor``, ``flyer``.
+        If components define the pattern, then device type is used to limit search to the devices
+        of certain type.
+    existing_devices: dict
+        The list of existing (or allowed) devices.
+
+    Returns
+    -------
+    list(str)
+        List of device names.
     """
-    supported_device_types = ("all", "detector", "motor", "flyer")
-    if device_type not in supported_device_types:
-        raise ValueError(f"Unsupported device type: {device_type!r}. Supported types: {supported_device_types}")
-
     # The condition is applied to the device to decide if it is included in the list
-    if device_type == "detector":
-
-        def condition(_btype):
-            return _btype["is_readable"] and not _btype["is_movable"]
-
-    elif device_type == "motor":
-
-        def condition(_btype):
-            return _btype["is_readable"] and _btype["is_movable"]
-
-    elif device_type == "flyer":
-
-        def condition(_btype):
-            return _btype["is_flyable"]
-
-    else:
+    if device_type == "":
 
         def condition(_btype):
             return True
 
-    device_name_comps = device_name.split(".")
+    elif device_type == "__READABLE__":
 
-    # Find the device in `existing_devices`
-    root_device = None
+        def condition(_btype):
+            return bool(_btype["is_readable"])
 
-    # Find the root device in the dictionary of existing devices
-    if allowed_devices:
-        root = allowed_devices
-        for n, comp in enumerate(device_name_comps):
-            if comp in root:
-                root = root[comp]
-                if n == len(device_name_comps) - 1:
-                    root_device = root
-                if "components" in root:
-                    root = root["components"]
-            else:
-                break
+    elif device_type == "__DETECTOR__":
 
-    device_list = []
+        def condition(_btype):
+            return _btype["is_readable"] and not _btype["is_movable"]
 
-    if root_device:
-        root_device_name = device_name
-        if condition(root_device):
-            device_list.append(root_device_name)
+    elif device_type == "__MOTOR__":
 
-        def process_devices(root_device, root_device_name, depth):
-            if (depth > 0) and root_device:
-                if "components" in root_device:
-                    for cname, c in root_device["components"].items():
-                        dname = root_device_name + "." + cname
-                        if condition(c):
-                            device_list.append(dname)
-                        process_devices(c, dname, depth - 1)
+        def condition(_btype):
+            return _btype["is_readable"] and _btype["is_movable"]
 
-        process_devices(root_device, root_device_name, depth)
+    elif device_type == "__FLYABLE__":
+
+        def condition(_btype):
+            return bool(_btype["is_flyable"])
+
+    else:
+        raise ValueError(f"Unsupported device type: {device_type!r}. Supported types: {_supported_device_types}")
+
+    if uses_re:
+        max_depth, device_list = len(components), []
+
+        def process_devices(devices, base_name, depth):
+            if (depth < max_depth) and devices:
+                pattern, include_devices = components[depth]
+                for dname, dparams in devices.items():
+                    if re.search(pattern, dname):
+
+                        full_name = dname if not base_name else (base_name + "." + dname)
+                        if include_devices and condition(dparams):
+                            device_list.append(full_name)
+                        if "components" in dparams:
+                            process_devices(devices=dparams["components"], base_name=full_name, depth=depth + 1)
+
+        process_devices(devices=existing_devices, base_name="", depth=0)
+
+    else:
+        # Simplified approach: just copy the device name to list. No checks are performed.
+        # Change the code in this block if device names are to be handled differently.
+        device_name = ".".join([_[0] for _ in components])
+        device_list = [device_name]
 
     return device_list
 

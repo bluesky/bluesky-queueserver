@@ -840,11 +840,31 @@ def _split_list_element_definition(element_def):
     subdevice name (e.g. ``det1``, ``det1.val``, ``sim_stage.det.val``) or specify
     regular expressions used to find elements in the list of existing elements (e.g.
     ``:^det:^val$``, ``:+^det:^val$``, ``__DETECTORS__:+^sim_stage$:+.+:^val$``).
-    The ``+`` character immediately following ``:`` is not part of the regular expression
-    and indicates that all subdevices that satisfy the condition are included in the list.
-    The ``__DETECTORS__`` keyword indicates that only detectors that satisfy the conditions
-    are included in the list. The following keywords are currently supported:
-    ``__READABLE__``, ``__FLYABLE__``, ``__DETECTOR__``, ``__MOTOR__``.
+    The ``+`` character immediately following ``:`` is not part of the regular expression.
+    It indicates that all subdevices that satisfy the condition that are found at the
+    current depth are included in the list. The ``__DETECTORS__`` keyword indicates that
+    only detectors that satisfy the conditions are included in the list. The following
+    keywords are currently supported: ``__READABLE__``, ``__FLYABLE__``, ``__DETECTOR__``
+    and ``__MOTOR__``. The definition may also contain 'full name' patterns that are
+    applyed to the remaining part of the subdevice name. The 'full name' pattern is
+    defined by putting '?' after ':', e.g. the pattern ``:?^det.*val$`` selects
+    all device and subdevice names that starts with ``det`` and ends with ``val``,
+    such as ``detector_val``, ``det.val``, ``det.somesubdevice.val`` etc. The search
+    depth may be limited by specifying ``depth`` parameter after the full name pattern,
+    e.g. ``:?det.*val$:depth=5`` limits depth search to 5. Depth values starts with 1,
+    e.g. in the example above, ``:?det.*val$:depth=1`` will find only ``detector_val``.
+    If 'full name' pattern is preceded with a number of subdevice name patterns,
+    then 'full_name' pattern is applied to the remainder of the name, e.g.
+    ``:+^sim_stage$:?^det.*val$:depth=3`` whould select ``sim_stage`` and all its
+    subdevices such as ``sim_stage.det5.val`` searching to the total depth of 4
+    (``sim_stage`` name is at level 1 and full name search is performed at levels
+    2, 3 and 4).
+
+    The function may be applied to list elements describing plans, since they consist of
+    the same set of components. The element may be a name, such as ``count`` or
+    regular expression used to pick plans from the list of existing names, such as ``:^count``.
+    Since plan names and patterns are much simpler, additional validation of the split
+    results should be performed.
 
     Parameters
     ----------
@@ -854,9 +874,12 @@ def _split_list_element_definition(element_def):
     Returns
     -------
     components: list(tuple)
-        List of tuples, each tuple contains the component (regular expression or device/subdevice name) and
-        boolean flag that indicates if the devices that satisfy regular expression found at the respective
-        level should be included in the list.
+        List of tuples, each tuple contains the following items: regular expression or device/subdevice name,
+        boolean flag that indicates if the matching is found at the current depth level should be included
+        in the list (for regular expressions), boolean flag that indicates if regular expression should
+        be applied to the full remaining part of the subdevice name (the full tree or subtree is going to
+        be searched), depth (int, 1-based or ``None`` if not set) that limites depth of the tree searched
+        for the name matching full name regular expressions.
     uses_re: boolean
         Boolean value that indicates if the components are regular expressions.
     device_type: str
@@ -929,7 +952,6 @@ def _split_list_element_definition(element_def):
 
         components_include = [False] * len(components)
         components_include = [True if _.startswith("+") else False for _ in components]
-        components_include[-1] = True  # Always include all the devices defined by the last component
 
         components_full_re = [False] * len(components)
         components_depth = [None] * len(components)  # 'depth == None' means that depth is not specified
@@ -963,7 +985,6 @@ def _split_list_element_definition(element_def):
                     f"{element_def!r} contains invalid characters"
                 )
         components_include = [False] * len(components)
-        components_include[-1] = True
         components_full_re = [False] * len(components)
         components_depth = [None] * len(components)
 
@@ -985,6 +1006,10 @@ def _build_device_name_list(*, components, uses_re, device_type, existing_device
     they are added to the list of devices if the second tuple element is ``True`` and then
     the subdevices of each matching device are processed using the pattern defined for
     the next depth level (the second element may be ``True`` or ``False``).
+    A pattern may also be a 'full name' regular expression applied to the remainder
+    of the subdevice (if 3rd element of the tuple is True). Depth for 'full name' search
+    can be restricted (4th component of the tuple). Depth may be integer (>=1) or ``None``
+    (depth is not define, therefore considered infinite).
 
     It is assumed that element definitions are first processed using
     ``_split_list_element_definition``, which catches and processes all the errors,
@@ -993,9 +1018,12 @@ def _build_device_name_list(*, components, uses_re, device_type, existing_device
     Parameters
     ----------
     components: list(tuple)
-        List of tuples, each tuple consists of two elements: device/subdevice name or
-        pattern for name search and the boolean flag that tells if the matching devices or
-        subdevices at this level should be added to the device list.
+        List of tuples, each tuple consists of four elements: device/subdevice name or
+        pattern for name search; a boolean flag that tells if the matching devices or
+        subdevices at this level should be added to the device list; a boolean flag
+        that tells if the pattern should be applied to the remainder of the device name
+        (full name search); integer value that limits the depth of full name search
+        (``None`` if the depth is not limited).
     uses_re: boolean
         Boolean parameter that tells if the components represent device name or pattern based
         on regular expressions.
@@ -1040,6 +1068,11 @@ def _build_device_name_list(*, components, uses_re, device_type, existing_device
         raise ValueError(f"Unsupported device type: {device_type!r}. Supported types: {_supported_device_types}")
 
     if uses_re:
+        # Always Set 'include_devices = True' for the last component
+        components = copy.copy(components)
+        _ = components[-1]
+        components[-1] = (_[0], True, _[2], _[3])
+
         max_depth, device_list = len(components), []
 
         def process_devices_full_name(devices, base_name, name_suffix, pattern, depth, depth_stop):
@@ -1091,6 +1124,67 @@ def _build_device_name_list(*, components, uses_re, device_type, existing_device
         device_list = [device_name]
 
     return device_list
+
+
+def _build_plan_name_list(*, components, uses_re, device_type, existing_plans):
+    """
+    Parameters
+    ----------
+    components: list(tuple)
+        List of tuples returned by ``_split_list_element_definition()``. For the plans
+        the list must contain exactly one component, elements 2 and 3 of each tuple
+        must be ``False`` and element 4 must be ``None``. Exception will be raised if those
+        requirements are not satisfied (this is part of normal operation, it means that
+        the definition contains elements, such as ``+`` or ``?`` that are not supported
+        for plans, so the user should be informed that the definition can not be processed)
+    uses_re: boolean
+        Boolean parameter that tells if the components represent device name or pattern based
+        on regular expressions.
+    device_type: str
+        This parameter is returned by ``_split_list_element_definition()`` and must be
+        an empty string ``""``. Exception will be raised otherwise (device type can not be
+        used in the pattern defining a plan).
+    existing_plans: set or dict
+        A set of plan names or a list (dictionary) of existing (or allowed) plans.
+
+    Returns
+    -------
+    list(str)
+        List of device names.
+    """
+
+    if len(components) != 1:
+        c = [_[0] for _ in components]
+        raise ValueError(f"List element describing a plan may contain only one component. Components: {c}")
+
+    # At this point we know that 'components' has precisely one element.
+    pattern, include_devices, is_full_re, remaining_depth = components[0]
+
+    if remaining_depth is not None:
+        raise ValueError(f"Depth specification can not be part of the element describing a plan: {pattern!r}")
+
+    if device_type:
+        raise ValueError(f"Device type can not be included in the plan description: {(device_type + ':')!r}")
+
+    # '?' and '+' should not be used in plan descriptions, since they have no meaning
+    #   and would contaminate the code
+    if include_devices:
+        raise ValueError(f"Plus sign (+) can not be used in a pattern for a plan name: {('+'+pattern)!r}")
+    if is_full_re:
+        raise ValueError(f"Question mark (?) can not be used in a pattern for a plan name: {('?'+pattern)!r}")
+
+    plan_list = []
+
+    if uses_re:
+        for plan_name in existing_plans:
+            if re.search(pattern, plan_name):
+                plan_list.append(plan_name)
+    else:
+        # Simplified approach: just add the plan name to the list. No checks are performed.
+        # Change the code in this block if device names are to be handled differently.
+        plan_list = [pattern]
+
+    return plan_list
 
 
 def _expand_parameter_annotation(annotation, *, allowed_devices):

@@ -64,6 +64,7 @@ from bluesky_queueserver.manager.profile_ops import (
     prepare_function,
     _split_list_element_definition,
     _build_device_name_list,
+    _build_plan_name_list,
     expand_plan_description,
 )
 
@@ -2973,28 +2974,28 @@ def test_devices_from_nspace():
 # fmt: off
 @pytest.mark.parametrize("element_def, components, uses_re, device_type", [
     # Device/subdevice names
-    ("det1", [("det1", True, False, None)], False, ""),
-    ("det1 ", [("det1", True, False, None)], False, ""),  # Spaces are removed
-    ("det1.val", [("det1", False, False, None), ("val", True, False, None)], False, ""),
+    ("det1", [("det1", False, False, None)], False, ""),
+    ("det1 ", [("det1", False, False, None)], False, ""),  # Spaces are removed
+    ("det1.val", [("det1", False, False, None), ("val", False, False, None)], False, ""),
     ("sim_stage.det1.val", [("sim_stage", False, False, None), ("det1", False, False, None),
-     ("val", True, False, None)], False, ""),
+     ("val", False, False, None)], False, ""),
     # Regular expressions
-    (":^det", [("^det", True, False, None)], True, ""),
-    (":^det:^val$", [("^det", False, False, None), ("^val$", True, False, None)], True, ""),
-    (":+^det:^val$", [("^det", True, False, None), ("^val$", True, False, None)], True, ""),
+    (":^det", [("^det", False, False, None)], True, ""),
+    (":^det:^val$", [("^det", False, False, None), ("^val$", False, False, None)], True, ""),
+    (":+^det:^val$", [("^det", True, False, None), ("^val$", False, False, None)], True, ""),
     (":+sim_stage:^det:^val$", [("sim_stage", True, False, None), ("^det", False, False, None),
-     ("^val$", True, False, None)], True, ""),
-    ("__READABLE__:.*", [(".*", True, False, None)], True, "__READABLE__"),
-    ("__FLYABLE__:.*", [(".*", True, False, None)], True, "__FLYABLE__"),
-    ("__DETECTOR__:.*:.*", [(".*", False, False, None), (".*", True, False, None)], True, "__DETECTOR__"),
-    ("__MOTOR__:+.*:.*", [(".*", True, False, None), (".*", True, False, None)], True, "__MOTOR__"),
+     ("^val$", False, False, None)], True, ""),
+    ("__READABLE__:.*", [(".*", False, False, None)], True, "__READABLE__"),
+    ("__FLYABLE__:.*", [(".*", False, False, None)], True, "__FLYABLE__"),
+    ("__DETECTOR__:.*:.*", [(".*", False, False, None), (".*", False, False, None)], True, "__DETECTOR__"),
+    ("__MOTOR__:+.*:.*", [(".*", True, False, None), (".*", False, False, None)], True, "__MOTOR__"),
     # Full-name regular expressions
-    (":?det1", [("det1", True, True, None)], True, ""),
-    (":?^det1$:depth=5", [("^det1$", True, True, 5)], True, ""),
-    (r":?.*\.^val$", [(r".*\.^val$", True, True, None)], True, ""),
-    (r"__READABLE__:?.*\.^val$", [(r".*\.^val$", True, True, None)], True, "__READABLE__"),
-    (":+^det:?^val$", [("^det", True, False, None), ("^val$", True, True, None)], True, ""),
-    (":+^det:?^val$:depth=1", [("^det", True, False, None), ("^val$", True, True, 1)], True, ""),
+    (":?det1", [("det1", False, True, None)], True, ""),
+    (":?^det1$:depth=5", [("^det1$", False, True, 5)], True, ""),
+    (r":?.*\.^val$", [(r".*\.^val$", False, True, None)], True, ""),
+    (r"__READABLE__:?.*\.^val$", [(r".*\.^val$", False, True, None)], True, "__READABLE__"),
+    (":+^det:?^val$", [("^det", True, False, None), ("^val$", False, True, None)], True, ""),
+    (":+^det:?^val$:depth=1", [("^det", True, False, None), ("^val$", False, True, 1)], True, ""),
 ])
 # fmt: on
 def test_split_list_element_definition_1(element_def, components, uses_re, device_type):
@@ -3133,6 +3134,51 @@ def test_build_device_name_list_2_fail():
     with pytest.raises(ValueError, match="Unsupported device type: 'unknown'"):
         _build_device_name_list(
             components=components, uses_re=uses_re, device_type="unknown", existing_devices=_allowed_devices_dict_1
+        )
+
+
+_allowed_plans_set_1 = {"count", "count_modified", "mycount", "other_plan"}
+
+
+# fmt: off
+@pytest.mark.parametrize("plan_def, expected_name_list", [
+    ("count", ["count"]),  # Plan in the list
+    ("some_plan", ["some_plan"]),  # Plan is not in the list
+    (":count", ["count", "count_modified", "mycount"]),
+    (":^count$", ["count"]),
+    (":^count", ["count", "count_modified"]),
+    (":count$", ["count", "mycount"]),
+])
+# fmt: on
+def test_build_plan_name_list_1(plan_def, expected_name_list):
+    """
+    ``_build_plan_name_list``: basic tests
+    """
+    components, uses_re, device_type = _split_list_element_definition(plan_def)
+    name_list = _build_plan_name_list(
+        components=components, uses_re=uses_re, device_type=device_type, existing_plans=_allowed_plans_set_1
+    )
+    assert name_list.sort() == expected_name_list.sort(), pprint.pformat(name_list)
+
+
+# fmt: off
+@pytest.mark.parametrize("plan_def, exception_type, msg", [
+    ("abc.def", ValueError, "may contain only one component. Components: ['abc', 'def']"),
+    (":?abc:depth=5", ValueError, "Depth specification can not be part of the element"),
+    ("__READABLE__:abc", ValueError, "Device type can not be included in the plan description: '__READABLE__:'"),
+    (":+abc", ValueError, "Plus sign (+) can not be used in a pattern for a plan name: '+abc'"),
+    (":?abc", ValueError, "Question mark (?) can not be used in a pattern for a plan name: '?abc'"),
+])
+# fmt: on
+def test_build_plan_name_list_2_fail(plan_def, exception_type, msg):
+    """
+    ``_build_plan_name_list``: failing cases
+    """
+    components, uses_re, device_type = _split_list_element_definition(plan_def)
+
+    with pytest.raises(exception_type, match=re.escape(msg)):
+        _build_plan_name_list(
+            components=components, uses_re=uses_re, device_type=device_type, existing_plans=_allowed_plans_set_1
         )
 
 

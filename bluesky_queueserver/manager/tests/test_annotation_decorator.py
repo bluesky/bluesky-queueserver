@@ -2,7 +2,6 @@ import typing
 import pytest
 import jsonschema
 import inspect
-import copy
 from bluesky_queueserver.manager.annotation_decorator import (
     parameter_annotation_decorator,
 )
@@ -359,38 +358,29 @@ def test_annotation_dectorator_07(custom_annotation):
     assert func.__name__ == "func"
 
 
-_annotation_built_in_list = {
-    "description": "Example of annotation with varargs and varkwargs.",
+_annotation_with_convert_strings_to_objects = {
+    "description": "Example of using 'convert_strings_to_objects'.",
     "parameters": {
         "existing_param": {
-            "description": "Required key is 'discription'. Schema validation should fail.",
-            "annotation": "Motor",
-            "devices": {
-                "Motor": (1, 2, 3),  # Type must be 'str'
-            },
+            "description": "The list of strings that should be converted to plans or devices.",
+            "annotation": "typing.List[str]",
+            "convert_strings_to_objects": True,
         }
     },
 }
 
 
-# fmt: off
-@pytest.mark.parametrize("built_in_list", [
-    "AllDevicesList", "AllMotorsList", "AllDetectorsList", "AllFlyersList",
-    "AllDevicesList:0", "AllDevicesList:12", "AllMotorsList:0", "AllMotorsList:012",
-    "AllDetectorsList:0", "AllDetectorsList:120", "AllFlyersList:0", "AllFlyersList:412",
-])
-# fmt: on
-def test_annotation_dectorator_08(built_in_list):
+def test_annotation_dectorator_08():
     """
     The trivial case of the decorator that only specified function description
     and the function has no parameters.
     """
-    custom_annotation = copy.deepcopy(_annotation_built_in_list)
-    custom_annotation["parameters"]["existing_param"]["devices"]["Motor"] = built_in_list
 
-    @parameter_annotation_decorator(custom_annotation)
+    @parameter_annotation_decorator(_annotation_with_convert_strings_to_objects)
     def func(existing_param):
         pass
+
+    assert func._custom_parameter_annotation_ == _annotation_with_convert_strings_to_objects
 
 
 _trivial_annotation_error1 = {
@@ -474,6 +464,17 @@ _trivial_annotation_error8 = {
     },
 }
 
+_trivial_annotation_error9 = {
+    "description": "Example of annotation with varargs and varkwargs.",
+    "parameters": {
+        "existing_param": {
+            "description": "Required key is 'discription'. Schema validation should fail.",
+            "annotation": "str",
+            "convert_strings_to_objects": "abc",  # Must be boolean
+        }
+    },
+}
+
 
 # fmt: off
 @pytest.mark.parametrize("custom_annotation, ex_type, err_msg", [
@@ -488,6 +489,7 @@ _trivial_annotation_error8 = {
     (_trivial_annotation_error6, jsonschema.ValidationError, "'unsupported_list' is not valid"),
     (_trivial_annotation_error7, jsonschema.ValidationError, "'AllDevicesList:1a' is not valid"),
     (_trivial_annotation_error8, jsonschema.ValidationError, "'Plans.' does not match any of the regexes"),
+    (_trivial_annotation_error9, jsonschema.ValidationError, "'abc' is not of type 'boolean'"),
 ])
 # fmt: on
 def test_annotation_dectorator_09_fail(custom_annotation, ex_type, err_msg):

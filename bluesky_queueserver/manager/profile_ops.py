@@ -1187,12 +1187,12 @@ def _build_plan_name_list(*, components, uses_re, device_type, existing_plans):
     return plan_list
 
 
-def _expand_parameter_annotation(annotation, *, allowed_devices):
+def _expand_parameter_annotation(annotation, *, existing_devices, existing_plans):
     """
-    Expand the lists if items for custom enum types define in parameter annotation.
-    The function also filters the lists of devices and removes all the devices that are
-    not in the list of allowed devices. The lists that contain only the devices that are
-    not in the list of allowed devices become empty.
+    Expand the lists if plans and device in annotation. The function does not filter
+    the lists: all names of plans and devices that are explicitely defined in the lists
+    are copied to the new lists. Plans and devices that are defined using regular
+    expressions are searched in the lists of existing plans and devices respectively.
 
     Parameters
     ----------
@@ -1201,54 +1201,54 @@ def _expand_parameter_annotation(annotation, *, allowed_devices):
     existing_devices: dict, None
         Dictionary with allowed or existing devices. If ``None``, then all the expanded lists
         will be empty.
+    existing_plans: set, dict or None
+        A set of existng plan names or a dictionary where the keys are the existing plan names.
+        The function does not require complete plan descriptions, since they are typically not
+        available on this stage. If ``None``, then all the expanded lists will be empty.
 
     Returns
     -------
     dict
         Expanded annotation. Always returns deep copy, so the original annotation remains unchanged
     """
-    allowed_devices = allowed_devices or {}
-    built_in_lists = {
-        "AllDevicesList": "all",
-        "AllMotorsList": "motor",
-        "AllDetectorsList": "detector",
-        "AllFlyersList": "flyer",
-    }
+    existing_devices = existing_devices or {}
+    existing_plans = existing_plans or {}
 
     annotation = copy.deepcopy(annotation)
-    if "devices" in annotation:
-        for k, v in annotation["devices"].items():
-            if isinstance(v, (list, tuple)):
-                # Process each item in the list in case it has specified depth
-                dev_list = []
-                for d in v:
-                    name, depth = _split_list_definition(d)
-                    dlist = _build_subdevice_list(name, depth=depth, allowed_devices=allowed_devices)
-                    dev_list.extend(dlist)
-                annotation["devices"][k] = dev_list
-            elif isinstance(v, str) and (v.split(":")[0] in built_in_lists):
-                # Process built-in list
-                list_name, depth = _split_list_definition(v)
-                if list_name not in built_in_lists:
-                    raise ValueError(
-                        f"Unknown name for a built-in list: {list_name!r}. "
-                        f"Supported lists: {list(built_in_lists)!r}"
+    for section in ("devices", "plans"):
+        if section not in annotation:
+            continue
+        for k, v in annotation[section].items():
+            if not isinstance(v, (list, tuple)):
+                raise ValueError(f"Unsupported type of a device or plan list {k!r}: {v}")
+            item_list = []
+            for d in v:
+                components, uses_re, device_type = _split_list_element_definition(d)
+                if section == "plans":
+                    name_list = _build_plan_name_list(
+                        components=components,
+                        uses_re=uses_re,
+                        device_type=device_type,
+                        existing_plans=existing_plans,
                     )
-
-                dev_list = []
-                for name in allowed_devices:
-                    dlist = _build_subdevice_list(
-                        name, depth=depth, allowed_devices=allowed_devices, device_type=built_in_lists[list_name]
+                else:
+                    name_list = _build_device_name_list(
+                        components=components,
+                        uses_re=uses_re,
+                        device_type=device_type,
+                        existing_devices=existing_devices,
                     )
-                    dev_list.extend(dlist)
-                annotation["devices"][k] = dev_list
-            else:
-                raise ValueError(f"Unsupported type of device list {k!r}: {v}")
+                item_list.extend(name_list)
+            # Remove repeated entries
+            item_list = list(set(item_list))
+            # Sort the list of names by lower case letters
+            item_list = sorted(item_list, key=lambda _: (_.upper(), _[0].islower()))
+            annotation[section][k] = item_list
 
     return annotation
 
 
-def expand_plan_description(plan_description, *, allowed_devices):
+def _expand_plan_description(plan_description, *, existing_devices, existing_plans):
     """
     Expand lists of items for custom enum types for each parameter in the plan description.
     After expansion, plan description is ready for use in plan validation. The function
@@ -1264,8 +1264,13 @@ def expand_plan_description(plan_description, *, allowed_devices):
         Plan description. The format of plan description is the same as in the list of
         allowed/existing plans. The function will not change the original dictionary,
         which is referenced by this parameter.
-    allowed_devices: dict
-        The list of allowed/existing devices.
+    existing_devices: dict, None
+        Dictionary with allowed or existing devices. If ``None``, then all the expanded lists
+        will be empty.
+    existing_plans: set, dict or None
+        A set of existng plan names or a dictionary where the keys are the existing plan names.
+        The function does not require complete plan descriptions, since they are typically not
+        available on this stage. If ``None``, then all the expanded lists will be empty.
 
     Returns
     -------
@@ -1282,7 +1287,9 @@ def expand_plan_description(plan_description, *, allowed_devices):
     if "parameters" in plan_description:
         for p in plan_description["parameters"]:
             if "annotation" in p:
-                p["annotation"] = _expand_parameter_annotation(p["annotation"], allowed_devices=allowed_devices)
+                p["annotation"] = _expand_parameter_annotation(
+                    p["annotation"], existing_devices=existing_devices, existing_plans=existing_plans
+                )
 
     return plan_description
 
@@ -2034,7 +2041,7 @@ def _parse_docstring(docstring):
     return doc_annotation
 
 
-def _process_plan(plan, *, existing_devices):
+def _process_plan(plan, *, existing_devices, existing_plans):
     """
     Returns parameters of a plan. The function accepts callable object that implements the plan
     and returns the dictionary with descriptions of the plan and plan parameters. The function
@@ -2165,9 +2172,9 @@ def _process_plan(plan, *, existing_devices):
             )
         return s_value
 
-    def assemble_custom_annotation(parameter):
+    def assemble_custom_annotation(parameter, *, existing_plans, existing_devices):
         """
-        Assemble annotation from decorator parameters. It will be stored as a separate dictionary.
+        Assemble annotation from parameters of the decorator.
         Returns ``None`` if there is no annotation.
         """
         annotation = {}
@@ -2179,6 +2186,12 @@ def _process_plan(plan, *, existing_devices):
         for k in keys:
             if k in parameter:
                 annotation[k] = copy.copy(parameter[k])
+        if "convert_strings_to_objects" in parameter:
+            annotation["convert_strings_to_objects"] = parameter["convert_strings_to_objects"]
+
+        annotation = _expand_parameter_annotation(
+            annotation, existing_devices=existing_devices, existing_plans=existing_plans
+        )
 
         return annotation
 
@@ -2188,6 +2201,7 @@ def _process_plan(plan, *, existing_devices):
     param_annotation = getattr(plan, "_custom_parameter_annotation_", None)
     doc_annotation = _parse_docstring(docstring)
 
+    # Returned value: dictionary with fully processed plan description
     ret = {"name": plan.__name__, "properties": {}, "parameters": []}
 
     module_name = plan.__module__
@@ -2195,7 +2209,6 @@ def _process_plan(plan, *, existing_devices):
         ret.update({"module": module_name})
 
     try:
-
         # Properties
         ret["properties"]["is_generator"] = inspect.isgeneratorfunction(plan) or inspect.isgenerator(plan)
 
@@ -2223,7 +2236,11 @@ def _process_plan(plan, *, existing_devices):
             default_defined_in_decorator = False
             if use_custom and (p.name in param_annotation["parameters"]):
                 desc = param_annotation["parameters"][p.name].get("description", None)
-                annotation = assemble_custom_annotation(param_annotation["parameters"][p.name])
+                annotation = assemble_custom_annotation(
+                    param_annotation["parameters"][p.name],
+                    existing_plans=existing_plans,
+                    existing_devices=existing_devices,
+                )
                 try:
                     _ = param_annotation["parameters"][p.name].get("default", None)
 
@@ -2285,7 +2302,7 @@ def _process_plan(plan, *, existing_devices):
 
             if annotation:
                 # Verify that the encoded type could be decoded (raises an exception if fails)
-                _process_annotation(_expand_parameter_annotation(annotation, allowed_devices=existing_devices))
+                _process_annotation(annotation)
                 working_dict["annotation"] = annotation
 
             if default:
@@ -2338,7 +2355,10 @@ def _prepare_plans(plans, *, existing_devices):
     dict
         Dictionary that maps plan names to plan descriptions
     """
-    return {k: _process_plan(v, existing_devices=existing_devices) for k, v in plans.items()}
+    plan_names = set(plans.keys())
+    return {
+        k: _process_plan(v, existing_devices=existing_devices, existing_plans=plan_names) for k, v in plans.items()
+    }
 
 
 def _prepare_devices(devices, *, max_depth=50):

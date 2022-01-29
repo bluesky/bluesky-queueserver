@@ -65,7 +65,6 @@ from bluesky_queueserver.manager.profile_ops import (
     _split_list_element_definition,
     _build_device_name_list,
     _build_plan_name_list,
-    expand_plan_description,
 )
 
 # User name and user group name used throughout most of the tests.
@@ -2115,9 +2114,8 @@ def test_process_plan_3(plan_func, existing_devices, plan_info_expected):
     plan_info_expected["module"] = plan_func.__module__
 
     pf_info = _process_plan(plan_func, existing_devices=existing_devices)
-    pf_info_exp = expand_plan_description(pf_info, allowed_devices=existing_devices)
 
-    assert pf_info_exp == plan_info_expected, pprint.pformat(pf_info)
+    assert pf_info == plan_info_expected, pprint.pformat(pf_info)
 
 
 @parameter_annotation_decorator(
@@ -2146,33 +2144,33 @@ def _pf4a(p1, p2, p3, p4):
     yield from [p1, p2, p3, p4]
 
 
-_pf4a_processed = {
-    "parameters": [
-        {
-            "name": "p1",
-            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "all_devices", "devices": {"all_devices": "AllDevicesList"}},
-        },
-        {
-            "name": "p2",
-            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "all_detectors", "devices": {"all_detectors": "AllDetectorsList"}},
-        },
-        {
-            "name": "p3",
-            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "all_motors", "devices": {"all_motors": "AllMotorsList"}},
-        },
-        {
-            "name": "p4",
-            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "all_flyers", "devices": {"all_flyers": "AllFlyersList"}},
-        },
-    ],
-    "properties": {"is_generator": True},
-}
+# _pf4a_processed = {
+#     "parameters": [
+#         {
+#             "name": "p1",
+#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+#             "annotation": {"type": "all_devices", "devices": {"all_devices": "AllDevicesList"}},
+#         },
+#         {
+#             "name": "p2",
+#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+#             "annotation": {"type": "all_detectors", "devices": {"all_detectors": "AllDetectorsList"}},
+#         },
+#         {
+#             "name": "p3",
+#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+#             "annotation": {"type": "all_motors", "devices": {"all_motors": "AllMotorsList"}},
+#         },
+#         {
+#             "name": "p4",
+#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+#             "annotation": {"type": "all_flyers", "devices": {"all_flyers": "AllFlyersList"}},
+#         },
+#     ],
+#     "properties": {"is_generator": True},
+# }
 
-_pf4a_processed_exp = {
+_pf4a_processed = {
     "parameters": [
         {
             "name": "p1",
@@ -2230,33 +2228,33 @@ def _pf4b(p1, p2, p3, p4):
     yield from [p1, p2, p3, p4]
 
 
-_pf4b_processed = {
-    "parameters": [
-        {
-            "name": "p1",
-            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "all_devices", "devices": {"all_devices": "AllDevicesList:0"}},
-        },
-        {
-            "name": "p2",
-            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "all_detectors", "devices": {"all_detectors": "AllDetectorsList:1"}},
-        },
-        {
-            "name": "p3",
-            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "all_motors", "devices": {"all_motors": "AllMotorsList:2"}},
-        },
-        {
-            "name": "p4",
-            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "all_flyers", "devices": {"all_flyers": "AllFlyersList:3"}},
-        },
-    ],
-    "properties": {"is_generator": True},
-}
+# _pf4b_processed = {
+#     "parameters": [
+#         {
+#             "name": "p1",
+#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+#             "annotation": {"type": "all_devices", "devices": {"all_devices": "AllDevicesList:0"}},
+#         },
+#         {
+#             "name": "p2",
+#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+#             "annotation": {"type": "all_detectors", "devices": {"all_detectors": "AllDetectorsList:1"}},
+#         },
+#         {
+#             "name": "p3",
+#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+#             "annotation": {"type": "all_motors", "devices": {"all_motors": "AllMotorsList:2"}},
+#         },
+#         {
+#             "name": "p4",
+#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+#             "annotation": {"type": "all_flyers", "devices": {"all_flyers": "AllFlyersList:3"}},
+#         },
+#     ],
+#     "properties": {"is_generator": True},
+# }
 
-_pf4b_processed_exp = {
+_pf4b_processed = {
     "parameters": [
         {
             "name": "p1",
@@ -2332,38 +2330,38 @@ def _pf4c(p1, p2, p3, p4, p5):
     yield from [p1, p2, p3, p4, p5]
 
 
-_pf4c_processed = {
-    "parameters": [
-        {
-            "name": "p1",
-            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "my_devices", "devices": {"my_devices": ["da0_motor:0"]}},
-        },
-        {
-            "name": "p2",
-            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "my_devices", "devices": {"my_devices": ["da0_motor.db0_motor:0"]}},
-        },
-        {
-            "name": "p3",
-            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "my_devices", "devices": {"my_devices": ["da0_motor.db0_motor:1"]}},
-        },
-        {
-            "name": "p4",
-            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "my_devices", "devices": {"my_devices": ["da0_motor.db0_motor:2"]}},
-        },
-        {
-            "name": "p5",
-            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "my_devices", "devices": {"my_devices": ["da0_motor.db0_motor:100"]}},
-        },
-    ],
-    "properties": {"is_generator": True},
-}
+# _pf4c_processed = {
+#     "parameters": [
+#         {
+#             "name": "p1",
+#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+#             "annotation": {"type": "my_devices", "devices": {"my_devices": ["da0_motor:0"]}},
+#         },
+#         {
+#             "name": "p2",
+#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+#             "annotation": {"type": "my_devices", "devices": {"my_devices": ["da0_motor.db0_motor:0"]}},
+#         },
+#         {
+#             "name": "p3",
+#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+#             "annotation": {"type": "my_devices", "devices": {"my_devices": ["da0_motor.db0_motor:1"]}},
+#         },
+#         {
+#             "name": "p4",
+#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+#             "annotation": {"type": "my_devices", "devices": {"my_devices": ["da0_motor.db0_motor:2"]}},
+#         },
+#         {
+#             "name": "p5",
+#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+#             "annotation": {"type": "my_devices", "devices": {"my_devices": ["da0_motor.db0_motor:100"]}},
+#         },
+#     ],
+#     "properties": {"is_generator": True},
+# }
 
-_pf4c_processed_exp = {
+_pf4c_processed = {
     "parameters": [
         {
             "name": "p1",
@@ -2481,10 +2479,10 @@ _pp4_allowed_devices_dict_1 = {
 
 
 # fmt: off
-@pytest.mark.parametrize("plan_func, existing_devices, plan_info_expected, plan_info_expanded", [
-    (_pf4a, _pp4_allowed_devices_dict_1, _pf4a_processed, _pf4a_processed_exp),
-    (_pf4b, _pp4_allowed_devices_dict_1, _pf4b_processed, _pf4b_processed_exp),
-    (_pf4c, _pp4_allowed_devices_dict_1, _pf4c_processed, _pf4c_processed_exp),
+@pytest.mark.parametrize("plan_func, existing_devices, plan_info_expected", [
+    (_pf4a, _pp4_allowed_devices_dict_1, _pf4a_processed),
+    (_pf4b, _pp4_allowed_devices_dict_1, _pf4b_processed),
+    (_pf4c, _pp4_allowed_devices_dict_1, _pf4c_processed),
 ])
 # fmt: on
 def test_process_plan_4(plan_func, existing_devices, plan_info_expected, plan_info_expanded):
@@ -2499,10 +2497,8 @@ def test_process_plan_4(plan_func, existing_devices, plan_info_expected, plan_in
     plan_info_expanded["module"] = plan_func.__module__
 
     pf_info = _process_plan(plan_func, existing_devices=existing_devices)
-    pf_info_exp = expand_plan_description(pf_info, allowed_devices=existing_devices)
 
-    assert pf_info == plan_info_expected, pprint.pformat(pf_info_exp)
-    assert pf_info_exp == plan_info_expanded, pprint.pformat(pf_info_exp)
+    assert pf_info == plan_info_expected, pprint.pformat(pf_info)
 
 
 def _pf5a_factory():

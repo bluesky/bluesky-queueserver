@@ -28,6 +28,7 @@ _parameter_annotation_schema = {
                     "min": {"type": "number"},
                     "max": {"type": "number"},
                     "step": {"type": "number"},
+                    "convert_strings_to_objects": {"type": "boolean"},
                 },
             },
         },

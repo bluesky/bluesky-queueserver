@@ -2973,19 +2973,28 @@ def test_devices_from_nspace():
 # fmt: off
 @pytest.mark.parametrize("element_def, components, uses_re, device_type", [
     # Device/subdevice names
-    ("det1", [("det1", True)], False, ""),
-    ("det1 ", [("det1", True)], False, ""),  # Spaces are removed
-    ("det1.val", [("det1", False), ("val", True)], False, ""),
-    ("sim_stage.det1.val", [("sim_stage", False), ("det1", False), ("val", True)], False, ""),
+    ("det1", [("det1", True, False, None)], False, ""),
+    ("det1 ", [("det1", True, False, None)], False, ""),  # Spaces are removed
+    ("det1.val", [("det1", False, False, None), ("val", True, False, None)], False, ""),
+    ("sim_stage.det1.val", [("sim_stage", False, False, None), ("det1", False, False, None),
+     ("val", True, False, None)], False, ""),
     # Regular expressions
-    (":^det", [("^det", True)], True, ""),
-    (":^det:^val$", [("^det", False), ("^val$", True)], True, ""),
-    (":+^det:^val$", [("^det", True), ("^val$", True)], True, ""),
-    (":+sim_stage:^det:^val$", [("sim_stage", True), ("^det", False), ("^val$", True)], True, ""),
-    ("__READABLE__:.*", [(".*", True)], True, "__READABLE__"),
-    ("__FLYABLE__:.*", [(".*", True)], True, "__FLYABLE__"),
-    ("__DETECTOR__:.*:.*", [(".*", False), (".*", True)], True, "__DETECTOR__"),
-    ("__MOTOR__:+.*:.*", [(".*", True), (".*", True)], True, "__MOTOR__"),
+    (":^det", [("^det", True, False, None)], True, ""),
+    (":^det:^val$", [("^det", False, False, None), ("^val$", True, False, None)], True, ""),
+    (":+^det:^val$", [("^det", True, False, None), ("^val$", True, False, None)], True, ""),
+    (":+sim_stage:^det:^val$", [("sim_stage", True, False, None), ("^det", False, False, None),
+     ("^val$", True, False, None)], True, ""),
+    ("__READABLE__:.*", [(".*", True, False, None)], True, "__READABLE__"),
+    ("__FLYABLE__:.*", [(".*", True, False, None)], True, "__FLYABLE__"),
+    ("__DETECTOR__:.*:.*", [(".*", False, False, None), (".*", True, False, None)], True, "__DETECTOR__"),
+    ("__MOTOR__:+.*:.*", [(".*", True, False, None), (".*", True, False, None)], True, "__MOTOR__"),
+    # Full-name regular expressions
+    (":?det1", [("det1", True, True, None)], True, ""),
+    (":?^det1$:depth=5", [("^det1$", True, True, 5)], True, ""),
+    (r":?.*\.^val$", [(r".*\.^val$", True, True, None)], True, ""),
+    (r"__READABLE__:?.*\.^val$", [(r".*\.^val$", True, True, None)], True, "__READABLE__"),
+    (":+^det:?^val$", [("^det", True, False, None), ("^val$", True, True, None)], True, ""),
+    (":+^det:?^val$:depth=1", [("^det", True, False, None), ("^val$", True, True, 1)], True, ""),
 ])
 # fmt: on
 def test_split_list_element_definition_1(element_def, components, uses_re, device_type):
@@ -3005,7 +3014,13 @@ def test_split_list_element_definition_1(element_def, components, uses_re, devic
     (":", ValueError, "Device description ':' contains empty components"),
     (":^det:", ValueError, "Device description ':^det:' contains empty components"),
     (":^det::val", ValueError, "Device description ':^det::val' contains empty components"),
+    (":*det:val", ValueError, "':*det:val' contains invalid regular expression '*det'"),
     ("__UNSUPPORTED_TYPE__:^det", ValueError, "Device type '__UNSUPPORTED_TYPE__' is not supported."),
+    (":?^det:depth=0", ValueError, "Depth (0) must be positive integer greater or equal to 1"),
+    (":?^det:depth=a", ValueError, "Depth specification 'depth=a' has incorrect format"),
+    (":?^det:^val$", ValueError, "'?^det' can be only followed by the depth specification"),
+    (":?^det:?^val$", ValueError, "'?^det' can be only followed by the depth specification"),
+    (":?^det:^val:^val$", ValueError, "'?^det' must be the last"),
     ("det..val", ValueError, "Device or subdevice name in the device description 'det..val' is an empty string"),
     ("det.", ValueError, "Device or subdevice name in the device description 'det.' is an empty string"),
     (".det", ValueError, "Device or subdevice name in the device description '.det' is an empty string"),
@@ -3088,6 +3103,15 @@ _allowed_devices_dict_1 = {
         "da0_motor.db0_motor.dc2_det", "da0_motor.db0_motor.dc3_motor", "da1_det.db0_det"]),
     ("__FLYABLE__:.+:+^(db0)|(db2):^dc", ["da0_motor.db2_flyer"]),
     ("__FLYABLE__:.+:+^db0:^dc", []),
+    # Full-name patterns
+    (":?motor$", ["da0_motor", "da0_motor.db0_motor", "da0_motor.db0_motor.dc3_motor",
+     "da0_motor.db0_motor.dc3_motor.dd1_motor", "da0_motor.db1_det.dc1_motor", "da1_det.db1_motor"]),
+    (":?motor$:depth=1", ["da0_motor"]),
+    (":?motor$:depth=2", ["da0_motor", "da0_motor.db0_motor", "da1_det.db1_motor"]),
+    (":+^da:?motor$:depth=1", ["da0_motor", "da0_motor.db0_motor", "da1_det", "da1_det.db1_motor"]),
+    (":^da:?motor$:depth=2", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc3_motor",
+     "da0_motor.db1_det.dc1_motor", "da1_det.db1_motor"]),
+    ("__MOTOR__:+^da:?motor$:depth=1", ["da0_motor", "da0_motor.db0_motor", "da1_det.db1_motor"]),
 ])
 # fmt: on
 def test_build_device_name_list_1(element_def, expected_name_list):

@@ -890,20 +890,66 @@ def _split_list_element_definition(element_def):
         device_type = components[:1][0]  # The first element is a string (may be empty string)
         components = components[1:]
 
-        components_include = [False] * len(components)
-        components_include = [True if _.startswith("+") else False for _ in components]
-        components_include[-1] = True  # Always include all the devices defined by the last component
-        # Remove '+' from the beginning of each component
-        components = [_[1:] if _.startswith("+") else _ for _ in components]
-        components = list(zip(components, components_include))
+        # Find the components starting with '?'
+        n_full_re = None
+        for n, c in enumerate(components):
+            if c.startswith("?"):
+                n_full_re = n
+                break
+
+        depth = None
+        if n_full_re is not None:
+            # 'Full name' RE can be the last or next to last component.
+            if n_full_re < len(components) - 2:
+                raise ValueError(
+                    f"Full name regular expression {components[n_full_re]!r} must be the last: {element_def!r}"
+                )
+            elif n_full_re == len(components) - 2:
+                # If 'full name' RE is next to last, it can be followed only by 'depth' specification
+                if not components[-1].startswith("depth="):
+                    raise ValueError(
+                        f"Full name regular expression {components[n_full_re]!r} can be only followed by "
+                        f"the depth specification: {element_def!r}"
+                    )
+                elif not re.search("^depth=[0-9]+$", components[-1]):
+                    raise ValueError(
+                        f"Depth specification {components[-1]!r} has incorrect format: {element_def!r}"
+                    )
+                else:
+                    _, depth = components.pop().split("=")  # Remove depth specification
+                    depth = int(depth)
+
+        if (depth is not None) and (depth < 1):
+            raise ValueError(f"Depth ({depth}) must be positive integer greater or equal to 1: {element_def!r}")
 
         if device_type not in _supported_device_types:
             raise ValueError(
                 f"Device type {device_type!r} is not supported. Supported types: {_supported_device_types}"
             )
+
+        components_include = [False] * len(components)
+        components_include = [True if _.startswith("+") else False for _ in components]
+        components_include[-1] = True  # Always include all the devices defined by the last component
+
+        components_full_re = [False] * len(components)
+        components_depth = [None] * len(components)  # 'depth == None' means that depth is not specified
+        if n_full_re is not None:
+            components_full_re[n_full_re] = True
+            components_depth[n_full_re] = depth
+
+        # Remove '+' and '?' from the beginning of each component
+        components = [_[1:] if _.startswith("+") or _.startswith("?") else _ for _ in components]
+
         for c in components:
-            if not c[0]:
+            if not c:
                 raise ValueError(f"Device description {element_def!r} contains empty components")
+            try:
+                re.compile(c)
+            except re.error:
+                raise ValueError(f"Device description {element_def!r} contains invalid regular expression {c!r}")
+
+        components = list(zip(components, components_include, components_full_re, components_depth))
+
     else:
         components = element_def.split(".")
         for c in components:
@@ -918,7 +964,10 @@ def _split_list_element_definition(element_def):
                 )
         components_include = [False] * len(components)
         components_include[-1] = True
-        components = list(zip(components, components_include))
+        components_full_re = [False] * len(components)
+        components_depth = [None] * len(components)
+
+        components = list(zip(components, components_include, components_full_re, components_depth))
 
     return components, uses_re, device_type
 
@@ -993,17 +1042,45 @@ def _build_device_name_list(*, components, uses_re, device_type, existing_device
     if uses_re:
         max_depth, device_list = len(components), []
 
+        def process_devices_full_name(devices, base_name, name_suffix, pattern, depth, depth_stop):
+            if (depth_stop is None) or (depth < depth_stop):
+                for dname, dparams in devices.items():
+                    name_suffix_new = dname if not name_suffix else (name_suffix + "." + dname)
+                    full_name = name_suffix_new if not base_name else (base_name + "." + name_suffix_new)
+                    if re.search(pattern, dname) and condition(dparams):
+                        device_list.append(full_name)
+                    if "components" in dparams:
+                        process_devices_full_name(
+                            devices=dparams["components"],
+                            base_name=base_name,
+                            name_suffix=name_suffix_new,
+                            pattern=pattern,
+                            depth=depth + 1,
+                            depth_stop=depth_stop,
+                        )
+
         def process_devices(devices, base_name, depth):
             if (depth < max_depth) and devices:
-                pattern, include_devices = components[depth]
-                for dname, dparams in devices.items():
-                    if re.search(pattern, dname):
-
-                        full_name = dname if not base_name else (base_name + "." + dname)
-                        if include_devices and condition(dparams):
-                            device_list.append(full_name)
-                        if "components" in dparams:
-                            process_devices(devices=dparams["components"], base_name=full_name, depth=depth + 1)
+                pattern, include_devices, is_full_re, remaining_depth = components[depth]
+                if is_full_re:
+                    process_devices_full_name(
+                        devices=devices,
+                        base_name=base_name,
+                        name_suffix="",
+                        pattern=pattern,
+                        depth=depth,
+                        depth_stop=depth + remaining_depth if remaining_depth else None,
+                    )
+                else:
+                    for dname, dparams in devices.items():
+                        if re.search(pattern, dname):
+                            full_name = dname if not base_name else (base_name + "." + dname)
+                            if include_devices and condition(dparams):
+                                device_list.append(full_name)
+                            if "components" in dparams:
+                                process_devices(
+                                    devices=dparams["components"], base_name=full_name, depth=depth + 1
+                                )
 
         process_devices(devices=existing_devices, base_name="", depth=0)
 

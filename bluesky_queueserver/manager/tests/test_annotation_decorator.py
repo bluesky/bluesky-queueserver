@@ -358,13 +358,14 @@ def test_annotation_dectorator_07(custom_annotation):
     assert func.__name__ == "func"
 
 
-_annotation_with_convert_strings_to_objects = {
+_annotation_with_convert_plan_and_device_names = {
     "description": "Example of using 'convert_strings_to_objects'.",
     "parameters": {
         "existing_param": {
             "description": "The list of strings that should be converted to plans or devices.",
             "annotation": "typing.List[str]",
-            "convert_strings_to_objects": True,
+            "convert_plan_names": True,
+            "convert_device_names": True,
         }
     },
 }
@@ -376,11 +377,11 @@ def test_annotation_dectorator_08():
     and the function has no parameters.
     """
 
-    @parameter_annotation_decorator(_annotation_with_convert_strings_to_objects)
+    @parameter_annotation_decorator(_annotation_with_convert_plan_and_device_names)
     def func(existing_param):
         pass
 
-    assert func._custom_parameter_annotation_ == _annotation_with_convert_strings_to_objects
+    assert func._custom_parameter_annotation_ == _annotation_with_convert_plan_and_device_names
 
 
 _trivial_annotation_error1 = {
@@ -470,7 +471,18 @@ _trivial_annotation_error9 = {
         "existing_param": {
             "description": "Required key is 'discription'. Schema validation should fail.",
             "annotation": "str",
-            "convert_strings_to_objects": "abc",  # Must be boolean
+            "convert_plan_names": "abc",  # Must be boolean
+        }
+    },
+}
+
+_trivial_annotation_error10 = {
+    "description": "Example of annotation with varargs and varkwargs.",
+    "parameters": {
+        "existing_param": {
+            "description": "Required key is 'discription'. Schema validation should fail.",
+            "annotation": "str",
+            "convert_device_names": 10,  # Must be boolean
         }
     },
 }
@@ -490,6 +502,7 @@ _trivial_annotation_error9 = {
     (_trivial_annotation_error7, jsonschema.ValidationError, "'AllDevicesList:1a' is not valid"),
     (_trivial_annotation_error8, jsonschema.ValidationError, "'Plans.' does not match any of the regexes"),
     (_trivial_annotation_error9, jsonschema.ValidationError, "'abc' is not of type 'boolean'"),
+    (_trivial_annotation_error10, jsonschema.ValidationError, "10 is not of type 'boolean'"),
 ])
 # fmt: on
 def test_annotation_dectorator_09_fail(custom_annotation, ex_type, err_msg):

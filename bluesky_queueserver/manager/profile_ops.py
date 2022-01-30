@@ -1190,7 +1190,7 @@ def _build_plan_name_list(*, components, uses_re, device_type, existing_plans):
 def _expand_parameter_annotation(annotation, *, existing_devices, existing_plans):
     """
     Expand the lists if plans and device in annotation. The function does not filter
-    the lists: all names of plans and devices that are explicitely defined in the lists
+    the lists: all names of plans and devices that are explicitly defined in the lists
     are copied to the new lists. Plans and devices that are defined using regular
     expressions are searched in the lists of existing plans and devices respectively.
 
@@ -1482,13 +1482,19 @@ def _find_and_replace_built_in_types(annotation_type_str, *, plans=None, devices
 
 def _process_annotation(encoded_annotation, *, ns=None):
     """
-    Process annotation encoded the same way as in the descriptions of existing plans.
-    Returns reference to the annotation (type object) and the list temporary types
+    Processed annotation is encoded the same way as in the descriptions of existing plans.
+    Returns reference to the annotation (type object) and the list of temporary types
     that needs to be deleted once the processing (parameter validation) is complete.
-    If a built-in type name is detected in the parameter type and 'plans', 'devices' or
-    'enums' sections of the annotation do not contain the lists with such name, then the
-    type name is replaced with ``str`` and ``convert_string_to_objects=True`` is
-    returned.
+    The built-in type names (__DEVICE__, __PLAN__, __PLAN_OR_DEVICE__) are replaced with ``str``
+    unless types with the same name are defined in ``plans``, ``devices`` or
+    ``enums`` sections of the annotation. Explicitly defined the types with the same names
+    as built-in types are treated as regular types.
+
+    The function validates annotation and raises exceptions in the following cases:
+    the types defined in 'plans', 'devices' or 'enums' sections are not lists or tuples;
+    the types defined in 'plans', 'devices' or 'enums' sections are not used as part
+    of the parameter type (may indicate a bug in the user code); annotation contains
+    unsupported keys.
 
     Parameters
     ----------
@@ -1552,35 +1558,35 @@ def _process_annotation(encoded_annotation, *, ns=None):
 
         # Create types
         for item_name in items:
-            # The dictionary value for the devices/plans may be a list(tuple) of items
-            #   or None. If the value is None, then any device or plan will be accepted.
-            #   The list of device or plan names will be used to construct enum.Enum
-            #   type, which is used to verify if the name in args or kwargs matches
-            #   one of the arguments.
-            if items[item_name] is not None:
-                # Create temporary unique type name
-                type_name = type_name_base = item_name
-                while True:
-                    # Try the original name first
-                    if type_name not in ns:
-                        break
-                    type_name = f"{type_name_base}_{random.randint(0, 100000)}_"
+            # The dictionary value for the devices/plans may be a list(tuple) of items.
+            if not isinstance(items[item_name], (list, tuple)):
+                raise TypeError(
+                    f"The list of items ({item_name!r}: {items[item_name]!r}) must be a list of a tuple."
+                )
 
-                # Replace all occurrences of the type nae in the custom annotation.
-                annotation_type_str = annotation_type_str.replace(item_name, type_name)
+            if item_name not in annotation_type_str:
+                raise ValueError(
+                    f"Type {item_name!r} is defined in the annotation, but not used in the parameter type"
+                )
 
-                # Create temporary type as a subclass of enum.Enum, e.g.
-                # enum.Enum('Device', {'det1': 'det1', 'det2': 'det2', 'det3': 'det3'})
-                type_code = f"enum.Enum('{type_name}', {{"
-                for d in items[item_name]:
-                    type_code += f"'{d}': '{d}',"
-                type_code += "})"
-                ns[type_name] = eval(type_code, ns, ns)
+            # Create temporary unique type name
+            type_name = type_name_base = item_name
+            while True:
+                # Try the original name first
+                if type_name not in ns:
+                    break
+                type_name = f"{type_name_base}_{random.randint(0, 100000)}_"
 
-            else:
-                # Accept any device or plan: any string will be accepted without
-                #   verification.
-                annotation_type_str = annotation_type_str.replace(item_name, "str")
+            # Replace all occurrences of the type name in the custom annotation.
+            annotation_type_str = annotation_type_str.replace(item_name, type_name)
+
+            # Create temporary type as a subclass of enum.Enum, e.g.
+            # enum.Enum('Device', {'det1': 'det1', 'det2': 'det2', 'det3': 'det3'})
+            type_code = f"enum.Enum('{type_name}', {{"
+            for d in items[item_name]:
+                type_code += f"'{d}': '{d}',"
+            type_code += "})"
+            ns[type_name] = eval(type_code, ns, ns)
 
         # Once all the types are created,  execute the code for annotation.
         annotation_type = eval(annotation_type_str, ns, ns)

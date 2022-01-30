@@ -2629,18 +2629,25 @@ def _create_schema_for_testing(annotation_type):
     ({"type": "typing.List[typing.Union[int, float]]"}, typing.List[typing.Union[int, float]], True, ""),
     ({"type": "List[int]"}, typing.List[int], False, "name 'List' is not defined"),
 
-    # Type specification that would allow ANY values to pass, but would specify structure
-    ({"type": "Device1", "devices": {"Device1": None}}, str, True, ""),
-    ({"type": "Plan1", "plans": {"Plan1": None}}, str, True, ""),
-    ({"type": "Enum1", "enums": {"Enum1": None}}, str, True, ""),
-    ({"type": "typing.Union[typing.List[Device1], Device1]",
-      "devices": {"Device1": None}}, typing.Union[typing.List[str], str], True, ""),
+    #  Built-in types: allow any value to pass
+    ({"type": "__PLAN__"}, str, True, ""),
+    ({"type": "typing.List[__PLAN__]"}, typing.List[str], True, ""),
+    ({"type": "__DEVICE__"}, str, True, ""),
+    ({"type": "typing.List[__DEVICE__]"}, typing.List[str], True, ""),
+    ({"type": "__PLAN_OR_DEVICE__"}, str, True, ""),
+    ({"type": "typing.List[__PLAN_OR_DEVICE__]"}, typing.List[str], True, ""),
+    ({"type": "typing.Union[typing.List[__PLAN__], __DEVICE__]"},
+     typing.Union[typing.List[str], str], True, ""),
+
+    # Errors
     ({"type": "typing.Union[typing.List[Device1], Device2]",
-      "devices": {"Device1": None, "Device2": None}}, typing.Union[typing.List[str], str], True, ""),
-    ({"type": "typing.Union[typing.List[Device1], Device2]",
-      "devices": {"Device1": None}}, typing.Union[typing.List[str], str], False, "name 'Device2' is not defined"),
-    ({"type": "Enum1", "unknown": {"Enum1": None}}, str, False,
+      "devices": {"Device1": []}}, typing.Union[typing.List[str], str], False, "name 'Device2' is not defined"),
+    ({"type": "Enum1", "unknown": {"Enum1": []}}, str, False,
      r"Annotation contains unsupported keys: \['unknown'\]"),
+    ({"type": "str", "devices": {"Device1": []}}, str, False,
+     r"Type 'Device1' is defined in the annotation, but not used"),
+    ({"type": "Device1", "devices": {"Device1": None}}, str, False,
+     r"The list of items \('Device1': None\) must be a list of a tuple"),
 ])
 # fmt: on
 def test_process_annotation_1(encoded_annotation, type_expected, success, errmsg):
@@ -2667,6 +2674,10 @@ pa2_Device2 = enum.Enum("pa2_Device2", {"dev4": "dev4", "dev5": "dev5"})
 pa2_Plan1 = enum.Enum("pa2_Plan1", {"plan1": "plan1", "plan2": "plan2"})
 pa2_Enum1 = enum.Enum("pa2_Enum1", {"enum1": "enum1", "enum2": "enum2"})
 
+pa2__DEVICE__ = enum.Enum("__DEVICE__", {"dev1": "dev1", "dev2": "dev2", "dev3": "dev3"})
+pa2__PLAN__ = enum.Enum("__PLAN__", {"plan1": "plan1", "plan2": "plan2"})
+pa2__PLAN_OR_DEVICE__ = enum.Enum("__PLAN_OR_DEVICE__", {})
+
 
 # fmt: off
 @pytest.mark.parametrize("encoded_annotation, type_expected, success, errmsg", [
@@ -2690,15 +2701,18 @@ pa2_Enum1 = enum.Enum("pa2_Enum1", {"enum1": "enum1", "enum2": "enum2"})
         {"pa2_Device1": ("dev1", "dev2", "dev3"),
          "pa2_Enum1": ("enum1", "enum2")}},
      typing.Union[typing.Tuple[pa2_Device1], typing.List[pa2_Enum1]], True, ""),
+    # Redefine built-in types.
+    ({"type": "typing.Union[__PLAN__, __DEVICE__, __PLAN_OR_DEVICE__]",
+      "devices": {"__DEVICE__": ("dev1", "dev2", "dev3"), "__PLAN_OR_DEVICE__": []},
+      "plans": {"__PLAN__": ("plan1", "plan2")}},
+     typing.Union[pa2__PLAN__, pa2__DEVICE__, pa2__PLAN_OR_DEVICE__], True, ""),
     # Failing case: unknown 'custom' type in the annotation
     ({"type": "typing.Union[typing.List[unknown_type], typing.List[pa2_Enum1]]", "devices":
-        {"pa2_Device1": ("dev1", "dev2", "dev3"),
-         "pa2_Enum1": ("enum1", "enum2")}},
+        {"pa2_Enum1": ("enum1", "enum2")}},
      typing.Union[typing.List[pa2_Device1], typing.List[pa2_Enum1]], False, "name 'unknown_type' is not defined"),
     # Name for custom type is not a valid Python name
     ({"type": "typing.Union[typing.List[unknown-type], typing.List[pa2_Enum1]]", "devices":
-        {"pa2_Device1": ("dev1", "dev2", "dev3"),
-         "pa2_Enum1": ("enum1", "enum2")}},
+        {"pa2_Enum1": ("enum1", "enum2")}},
      typing.Union[typing.List[pa2_Device1], typing.List[pa2_Enum1]], False, "name 'unknown' is not defined"),
     # Non-existing type 'typing.list'
     ({"type": "typing.Union[typing.list[pa2_Device1], typing.List[pa2_Enum1]]", "devices":

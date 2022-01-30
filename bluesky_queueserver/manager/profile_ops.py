@@ -1425,11 +1425,70 @@ def _check_ranges(kwargs_in, param_list):
     return match, msg
 
 
+def _find_and_replace_built_in_types(annotation_type_str, *, plans=None, devices=None, enums=None):
+    """
+    Find and replace built-in types in parameter annotation type string. Built-in types are
+    ``__PLAN__``, ``__DEVICE__``, ``__PLAN_OR_DEVICE__``. Since plan and device names are passed
+    as strings and then converted to respective object, the built-in plan names are replaced by ``str``
+    type, which is then used in parameter validation. The function also determines whether plans, devices
+    or both plans and devices need to be converted. If the name of the built-in type is redefined
+    in ``plans``, ``devices`` or ``enums`` section, then the keyword is ignored.
+
+    Parameters
+    ----------
+    annotation_type_str: str
+        String that represents a type from parameter annotation
+    plans: dict or None
+        Reference to the ``plans`` section of the parameter annotation
+    devices: dict or None
+        Reference to the ``devices`` section of the parameter annotation
+    enums: dict or None
+        Reference to the ``enum`` section of the parameter annotation
+
+    Returns
+    -------
+    annotation_type_str: str
+        Modified parameter type
+    convert_plan_names: boolean
+        Indicates whether the plan names need to be converted based on the parameter type.
+    convert_device_names: boolean
+        Indicates whether the devices names need to be converted based on the parameter type.
+    """
+    # Built-in types that may be contained in 'annotation_type_str' and
+    #   should be converted to another known type
+    plans = plans or {}
+    devices = devices or {}
+    enums = enums or {}
+
+    built_in_types = {
+        "__PLAN__": ("str", True, False),
+        "__DEVICE__": ("str", False, True),
+        "__PLAN_OR_DEVICE__": ("str", True, True),
+    }
+    convert_plan_names = False
+    convert_device_names = False
+
+    for btype, (btype_replace, pl, dev) in built_in_types.items():
+        # If 'plans', 'devices' or 'enums' contains the type name, then leave it as is
+        if (btype in plans) or (btype in devices) or (btype in enums):
+            continue
+        if re.search(btype, annotation_type_str):
+            annotation_type_str = re.sub(btype, btype_replace, annotation_type_str)
+            convert_plan_names = convert_plan_names or pl
+            convert_device_names = convert_device_names or dev
+
+    return annotation_type_str, convert_plan_names, convert_device_names
+
+
 def _process_annotation(encoded_annotation, *, ns=None):
     """
     Process annotation encoded the same way as in the descriptions of existing plans.
     Returns reference to the annotation (type object) and the list temporary types
     that needs to be deleted once the processing (parameter validation) is complete.
+    If a built-in type name is detected in the parameter type and 'plans', 'devices' or
+    'enums' sections of the annotation do not contain the lists with such name, then the
+    type name is replaced with ``str`` and ``convert_string_to_objects=True`` is
+    returned.
 
     Parameters
     ----------
@@ -1446,6 +1505,9 @@ def _process_annotation(encoded_annotation, *, ns=None):
     -------
     type
         Type reconstructed from annotation.
+    bool
+        Indicates if strings should be converted to objects for this parameter because
+        one of the built-in types was detected in the string that defines the parameter type.
     dict
         Namespace dictionary with created types.
     """
@@ -1483,6 +1545,10 @@ def _process_annotation(encoded_annotation, *, ns=None):
         items = devices.copy()
         items.update(plans)
         items.update(enums)
+
+        annotation_type_str, _, _ = _find_and_replace_built_in_types(
+            annotation_type_str, plans=plans, devices=devices, enums=enums
+        )
 
         # Create types
         for item_name in items:

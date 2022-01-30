@@ -65,6 +65,7 @@ from bluesky_queueserver.manager.profile_ops import (
     _split_list_element_definition,
     _build_device_name_list,
     _build_plan_name_list,
+    _find_and_replace_built_in_types,
 )
 
 # User name and user group name used throughout most of the tests.
@@ -2573,6 +2574,38 @@ def test_process_plan_5_fail(plan_func, err_msg):
     """
     with pytest.raises(ValueError, match=err_msg):
         _process_plan(plan_func, existing_devices={})
+
+
+# ---------------------------------------------------------------------------------
+#                    _find_and_replace_built_in_types()
+
+# fmt: off
+@pytest.mark.parametrize("type_str_in, plans, devices, enums, type_str_out, convert_plans, convert_devices", [
+    ("some_type", None, None, None, "some_type", False, False),
+    ("some_type", {}, {}, {}, "some_type", False, False),
+    ("__PLAN__", {}, {}, {}, "str", True, False),
+    ("__DEVICE__", {}, {}, {}, "str", False, True),
+    ("__PLAN_OR_DEVICE__", {}, {}, {}, "str", True, True),
+    ("typing.List[__PLAN__]", {}, {}, {}, "typing.List[str]", True, False),
+    ("typing.Union[typing.List[__PLAN__], typing.List[__DEVICE__]]", {}, {}, {},
+     "typing.Union[typing.List[str], typing.List[str]]", True, True),
+    ("__PLAN__", {"__PLAN__": {}}, {}, {}, "__PLAN__", False, False),
+    ("__DEVICE__", {}, {"__DEVICE__": {}}, {}, "__DEVICE__", False, False),
+    ("__PLAN_OR_DEVICE__", {}, {}, {"__PLAN_OR_DEVICE__": {}}, "__PLAN_OR_DEVICE__", False, False),
+])
+# fmt: on
+def test_find_and_replace_built_in_types_1(
+    type_str_in, plans, devices, enums, type_str_out, convert_plans, convert_devices
+):
+    """
+    ``_find_and_replace_built_in_types``: basic tests
+    """
+    annotation_type_str, convert_plan_names, convert_device_names = _find_and_replace_built_in_types(
+        type_str_in, plans=plans, devices=devices, enums=enums
+    )
+    assert annotation_type_str == type_str_out
+    assert convert_plan_names == convert_plans
+    assert convert_device_names == convert_devices
 
 
 # ---------------------------------------------------------------------------------

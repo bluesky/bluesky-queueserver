@@ -1936,149 +1936,210 @@ _pf3f_processed = {
 }
 
 
-# @parameter_annotation_decorator(
-#     {
-#         "parameters": {
-#             "val1": {
-#                 "annotation": "all_detectors",
-#                 "devices": {"all_detectors": "AllDetectorsList"},
-#             },
-#         }
-#     }
-# )
-# def _pf3g(val1):
-#     yield from [val1]
+# Check that built-in types are handled correctly when they are used as stand-alone type
+#   and when they are overridden.
+@parameter_annotation_decorator(
+    {
+        "parameters": {
+            "val1": {
+                "annotation": "typing.Union[__PLAN__, __DEVICE__]",
+                "devices": {"__DEVICE__": ("det1", "det2")},
+            },
+            "val2": {
+                "annotation": "typing.Union[__PLAN__, __DEVICE__]",
+                "plans": {"__PLAN__": ("plan1", "plan2")},
+            },
+            "val3": {
+                "annotation": "typing.Union[__PLAN_OR_DEVICE__, __DEVICE__]",
+                "devices": {"__DEVICE__": ("det1", "det2")},
+            },
+            "val4": {
+                "annotation": "typing.Union[__PLAN_OR_DEVICE__, __DEVICE__]",
+                "devices": {"__PLAN_OR_DEVICE__": ("det1", "det2")},
+            },
+        }
+    }
+)
+def _pf3g(val1, val2, val3, val4):
+    yield from [val1, val2, val3, val4]
 
 
-# _pf3g_processed = {
-#     "parameters": [
-#         {
-#             "name": "val1",
-#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-#             "annotation": {"type": "all_detectors", "devices": {"all_detectors": ["dev_det1", "dev_det2"]}},
-#         },
-#     ],
-#     "properties": {"is_generator": True},
-# }
-
-# _pf3g_empty_processed = {
-#     "parameters": [
-#         {
-#             "name": "val1",
-#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-#             "annotation": {"type": "all_detectors", "devices": {"all_detectors": []}},
-#         },
-#     ],
-#     "properties": {"is_generator": True},
-# }
-
-
-# @parameter_annotation_decorator(
-#     {
-#         "parameters": {
-#             "val1": {"annotation": "typing.List[all_motors]", "devices": {"all_motors": "AllMotorsList"}}
-#         },
-#     }
-# )
-# def _pf3i(val1):
-#     yield from [val1]
-
-
-# _pf3i_processed = {
-#     "parameters": [
-#         {
-#             "name": "val1",
-#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-#             "annotation": {"type": "typing.List[all_motors]", "devices": {"all_motors": ["dev_m1"]}},
-#         },
-#     ],
-#     "properties": {"is_generator": True},
-# }
+_pf3g_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "typing.Union[__PLAN__, __DEVICE__]",
+                "devices": {"__DEVICE__": ["det1", "det2"]},
+            },
+            "convert_plan_names": True,
+        },
+        {
+            "name": "val2",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "typing.Union[__PLAN__, __DEVICE__]",
+                "plans": {"__PLAN__": ["plan1", "plan2"]},
+            },
+            "convert_device_names": True,
+        },
+        {
+            "name": "val3",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "typing.Union[__PLAN_OR_DEVICE__, __DEVICE__]",
+                "devices": {"__DEVICE__": ["det1", "det2"]},
+            },
+            "convert_plan_names": True,
+            "convert_device_names": True,
+        },
+        {
+            "name": "val4",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "typing.Union[__PLAN_OR_DEVICE__, __DEVICE__]",
+                "devices": {"__PLAN_OR_DEVICE__": ["det1", "det2"]},
+            },
+            "convert_device_names": True,
+        },
+    ],
+    "properties": {"is_generator": True},
+}
 
 
-# @parameter_annotation_decorator(
-#     {
-#         "parameters": {
-#             "val1": {"annotation": "typing.List[all_flyers]", "devices": {"all_flyers": "AllFlyersList"}}
-#         },
-#     }
-# )
-# def _pf3j(val1):
-#     yield from [val1]
+# Check that built-in types are handled correctly when they are used as stand-alone type
+#   and when they are overridden.
+@parameter_annotation_decorator(
+    {
+        "parameters": {
+            "val1": {
+                "annotation": "__PLAN__",
+            },
+            "val2": {
+                "annotation": "__PLAN__",
+                "convert_plan_names": False,
+            },
+            "val3": {
+                "annotation": "__PLAN__",
+                "convert_plan_names": True,
+            },
+            "val4": {
+                "annotation": "__DEVICE__",
+            },
+            "val5": {
+                "annotation": "__DEVICE__",
+                "convert_device_names": False,
+            },
+            "val6": {
+                "annotation": "__DEVICE__",
+                "convert_device_names": True,
+            },
+            "val7": {
+                "annotation": "__PLAN_OR_DEVICE__",
+            },
+            "val8": {
+                "annotation": "__PLAN_OR_DEVICE__",
+                "convert_plan_names": False,
+                "convert_device_names": False,
+            },
+            "val9": {
+                "annotation": "__PLAN_OR_DEVICE__",
+                "convert_plan_names": True,
+                "convert_device_names": True,
+            },
+        }
+    }
+)
+def _pf3h(val1, val2, val3, val4, val5, val6, val7, val8, val9):
+    yield from [val1, val2, val3, val4, val5, val6, val7, val8, val9]
 
 
-# _pf3j_processed = {
-#     "parameters": [
-#         {
-#             "name": "val1",
-#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-#             "annotation": {"type": "typing.List[all_flyers]", "devices": {"all_flyers": ["dev_fly1"]}},
-#         },
-#     ],
-#     "properties": {"is_generator": True},
-# }
+_pf3h_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "__PLAN__"},
+            "convert_plan_names": True,
+        },
+        {
+            "name": "val2",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "__PLAN__"},
+            "convert_plan_names": False,
+        },
+        {
+            "name": "val3",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "__PLAN__"},
+            "convert_plan_names": True,
+        },
+        {
+            "name": "val4",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "__DEVICE__"},
+            "convert_device_names": True,
+        },
+        {
+            "name": "val5",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "__DEVICE__"},
+            "convert_device_names": False,
+        },
+        {
+            "name": "val6",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "__DEVICE__"},
+            "convert_device_names": True,
+        },
+        {
+            "name": "val7",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "__PLAN_OR_DEVICE__"},
+            "convert_plan_names": True,
+            "convert_device_names": True,
+        },
+        {
+            "name": "val8",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "__PLAN_OR_DEVICE__"},
+            "convert_plan_names": False,
+            "convert_device_names": False,
+        },
+        {
+            "name": "val9",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "__PLAN_OR_DEVICE__"},
+            "convert_plan_names": True,
+            "convert_device_names": True,
+        },
+    ],
+    "properties": {"is_generator": True},
+}
 
 
-# @parameter_annotation_decorator(
-#     {
-#         "parameters": {
-#             "val1": {
-#                 "annotation": "typing.Union[all_devices, all_detectors, all_motors, all_flyers]",
-#                 "devices": {
-#                     "all_devices": "AllDevicesList",
-#                     "all_detectors": "AllDetectorsList",
-#                     "all_motors": "AllMotorsList",
-#                     "all_flyers": "AllFlyersList",
-#                 },
-#             }
-#         },
-#     }
-# )
-# def _pf3k(val1):
-#     yield from [val1]
+@parameter_annotation_decorator(
+    {
+        "parameters": {"val1": {"min": 0.1, "max": 100, "step": 0.02}},
+    }
+)
+def _pf3i(val1):
+    yield from [val1]
 
 
-# _pf3k_processed = {
-#     "parameters": [
-#         {
-#             "name": "val1",
-#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-#             "annotation": {
-#                 "type": "typing.Union[all_devices, all_detectors, all_motors, all_flyers]",
-#                 "devices": {
-#                     "all_devices": ["dev_det1", "dev_det2", "dev_m1", "dev_fly1"],
-#                     "all_detectors": ["dev_det1", "dev_det2"],
-#                     "all_motors": ["dev_m1"],
-#                     "all_flyers": ["dev_fly1"],
-#                 },
-#             },
-#         },
-#     ],
-#     "properties": {"is_generator": True},
-# }
-
-
-# @parameter_annotation_decorator(
-#     {
-#         "parameters": {"val1": {"min": 0.1, "max": 100, "step": 0.02}},
-#     }
-# )
-# def _pf3l(val1):
-#     yield from [val1]
-
-
-# _pf3l_processed = {
-#     "parameters": [
-#         {
-#             "name": "val1",
-#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-#             "min": "0.1",
-#             "max": "100",
-#             "step": "0.02",
-#         },
-#     ],
-#     "properties": {"is_generator": True},
-# }
+_pf3i_processed = {
+    "parameters": [
+        {
+            "name": "val1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "min": "0.1",
+            "max": "100",
+            "step": "0.02",
+        },
+    ],
+    "properties": {"is_generator": True},
+}
 
 
 _pf3_existing_devices = {
@@ -2097,12 +2158,9 @@ _pf3_existing_devices = {
     (_pf3d, _pf3_existing_devices, _pf3d_processed),
     (_pf3e, {}, _pf3e_processed),
     (_pf3f, {}, _pf3f_processed),
-    # (_pf3g, _pf3_existing_devices, _pf3g_processed),
-    # (_pf3g, {}, _pf3g_empty_processed),
-    # (_pf3i, _pf3_existing_devices, _pf3i_processed),
-    # (_pf3j, _pf3_existing_devices, _pf3j_processed),
-    # (_pf3k, _pf3_existing_devices, _pf3k_processed),
-    # (_pf3l, {}, _pf3l_processed),
+    (_pf3g, {}, _pf3g_processed),
+    (_pf3h, {}, _pf3h_processed),
+    (_pf3i, {}, _pf3i_processed),
 ])
 # fmt: on
 def test_process_plan_3(plan_func, existing_devices, plan_info_expected):
@@ -2689,43 +2747,48 @@ def _create_schema_for_testing(annotation_type):
 
 
 # fmt: off
-@pytest.mark.parametrize("encoded_annotation, type_expected, success, errmsg", [
-    ({"type": "int"}, int, True, ""),
-    ({"type": "str"}, str, True, ""),
-    ({"type": "typing.List[int]"}, typing.List[int], True, ""),
-    ({"type": "typing.List[typing.Union[int, float]]"}, typing.List[typing.Union[int, float]], True, ""),
-    ({"type": "List[int]"}, typing.List[int], False, "name 'List' is not defined"),
+@pytest.mark.parametrize("encoded_annotation, type_expected, built_in_plans, built_in_devices, success, errmsg", [
+    ({"type": "int"}, int, False, False, True, ""),
+    ({"type": "str"}, str, False, False, True, ""),
+    ({"type": "typing.List[int]"}, typing.List[int], False, False, True, ""),
+    ({"type": "typing.List[typing.Union[int, float]]"},
+     typing.List[typing.Union[int, float]], False, False, True, ""),
+    ({"type": "List[int]"}, typing.List[int], False, False, False, "name 'List' is not defined"),
 
     #  Built-in types: allow any value to pass
-    ({"type": "__PLAN__"}, str, True, ""),
-    ({"type": "typing.List[__PLAN__]"}, typing.List[str], True, ""),
-    ({"type": "__DEVICE__"}, str, True, ""),
-    ({"type": "typing.List[__DEVICE__]"}, typing.List[str], True, ""),
-    ({"type": "__PLAN_OR_DEVICE__"}, str, True, ""),
-    ({"type": "typing.List[__PLAN_OR_DEVICE__]"}, typing.List[str], True, ""),
+    ({"type": "__PLAN__"}, str, True, False, True, ""),
+    ({"type": "typing.List[__PLAN__]"}, typing.List[str], True, False, True, ""),
+    ({"type": "__DEVICE__"}, str, False, True, True, ""),
+    ({"type": "typing.List[__DEVICE__]"}, typing.List[str], False, True, True, ""),
+    ({"type": "__PLAN_OR_DEVICE__"}, str, True, True, True, ""),
+    ({"type": "typing.List[__PLAN_OR_DEVICE__]"}, typing.List[str], True, True, True, ""),
     ({"type": "typing.Union[typing.List[__PLAN__], __DEVICE__]"},
-     typing.Union[typing.List[str], str], True, ""),
+     typing.Union[typing.List[str], str], True, True, True, ""),
 
     # Errors
-    ({"type": "typing.Union[typing.List[Device1], Device2]",
-      "devices": {"Device1": []}}, typing.Union[typing.List[str], str], False, "name 'Device2' is not defined"),
-    ({"type": "Enum1", "unknown": {"Enum1": []}}, str, False,
+    ({"type": "typing.Union[typing.List[Device1], Device2]", "devices": {"Device1": []}},
+     typing.Union[typing.List[str], str], False, False, False, "name 'Device2' is not defined"),
+    ({"type": "Enum1", "unknown": {"Enum1": []}}, str, False, False, False,
      r"Annotation contains unsupported keys: \['unknown'\]"),
-    ({"type": "str", "devices": {"Device1": []}}, str, False,
+    ({"type": "str", "devices": {"Device1": []}}, str, False, False, False,
      r"Type 'Device1' is defined in the annotation, but not used"),
-    ({"type": "Device1", "devices": {"Device1": None}}, str, False,
+    ({"type": "Device1", "devices": {"Device1": None}}, str, False, False, False,
      r"The list of items \('Device1': None\) must be a list of a tuple"),
 ])
 # fmt: on
-def test_process_annotation_1(encoded_annotation, type_expected, success, errmsg):
+def test_process_annotation_1(
+    encoded_annotation, type_expected, built_in_plans, built_in_devices, success, errmsg
+):
     """
     Function ``_process_annotation``: generate type based on annotation and compare it with the expected type.
     Also verify that JSON schema can be created from the class.
     """
     if success:
         # Compare types directly
-        type_recovered, ns = _process_annotation(encoded_annotation)
+        type_recovered, conv_plan_nms, conv_dev_nms, ns = _process_annotation(encoded_annotation)
         assert type_recovered == type_expected
+        assert conv_plan_nms == built_in_plans
+        assert conv_dev_nms == built_in_devices
 
         # Compare generated JSON schemas
         schema_recovered = _create_schema_for_testing(type_recovered)
@@ -2802,7 +2865,7 @@ def test_process_annotation_2(encoded_annotation, type_expected, success, errmsg
     a meaningful test.
     """
     if success:
-        type_recovered, ns = _process_annotation(encoded_annotation)
+        type_recovered, _, _, ns = _process_annotation(encoded_annotation)
 
         schema_recovered = _create_schema_for_testing(type_recovered)
         schema_expected = _create_schema_for_testing(type_expected)
@@ -2837,7 +2900,7 @@ def test_process_annotation_3(encoded_annotation, type_expected, success, errmsg
     type definitions are different.
     """
     if success:
-        type_recovered, ns = _process_annotation(encoded_annotation)
+        type_recovered, _, _, ns = _process_annotation(encoded_annotation)
 
         schema_recovered = _create_schema_for_testing(type_recovered)
         schema_expected = _create_schema_for_testing(type_expected)

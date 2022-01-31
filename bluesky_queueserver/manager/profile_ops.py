@@ -1502,6 +1502,8 @@ def _process_annotation(encoded_annotation, *, ns=None):
     of the parameter type (may indicate a bug in the user code); annotation contains
     unsupported keys.
 
+    This function does not change the annotation.
+
     Parameters
     ----------
     encoded_annotation : dict
@@ -1515,12 +1517,15 @@ def _process_annotation(encoded_annotation, *, ns=None):
 
     Returns
     -------
-    type
+    annotation_type: type
         Type reconstructed from annotation.
-    bool
-        Indicates if strings should be converted to objects for this parameter because
-        one of the built-in types was detected in the string that defines the parameter type.
-    dict
+    convert_plan_names: bool
+        Indicates if __PLAN__ or __PLAN_OR_DEVICE__ built-in type was detected and matching
+        strings should be converted to plan objects.
+    convert_device_names: bool
+        Indicates if __DEVICE__ or __PLAN_OR_DEVICE__ built-in type was detected and matching
+        strings should be converted to devuce objects.
+    ns: dict
         Namespace dictionary with created types.
     """
     # Namespace that contains the types created in the process of processing the annotation
@@ -1558,7 +1563,7 @@ def _process_annotation(encoded_annotation, *, ns=None):
         items.update(plans)
         items.update(enums)
 
-        annotation_type_str, _, _ = _find_and_replace_built_in_types(
+        annotation_type_str, convert_plan_names, convert_device_names = _find_and_replace_built_in_types(
             annotation_type_str, plans=plans, devices=devices, enums=enums
         )
 
@@ -1600,7 +1605,7 @@ def _process_annotation(encoded_annotation, *, ns=None):
     except Exception as ex:
         raise TypeError(f"Failed to process annotation '{annotation_type_str}': {ex}'")
 
-    return annotation_type, ns
+    return annotation_type, convert_plan_names, convert_device_names, ns
 
 
 def _process_default_value(encoded_default_value):
@@ -1655,7 +1660,7 @@ def _decode_parameter_types_and_defaults(param_list):
             raise KeyError(f"No 'name' key in the parameter description {p}")
 
         if "annotation" in p:
-            p_type, _ = _process_annotation(p["annotation"])
+            p_type, _, _, _ = _process_annotation(p["annotation"])
         else:
             p_type = typing.Any
 
@@ -2264,8 +2269,6 @@ def _process_plan(plan, *, existing_devices, existing_plans):
         for k in keys:
             if k in parameter:
                 annotation[k] = copy.copy(parameter[k])
-        if "convert_strings_to_objects" in parameter:
-            annotation["convert_strings_to_objects"] = parameter["convert_strings_to_objects"]
 
         annotation = _expand_parameter_annotation(
             annotation, existing_devices=existing_devices, existing_plans=existing_plans
@@ -2314,6 +2317,12 @@ def _process_plan(plan, *, existing_devices, existing_plans):
             default_defined_in_decorator = False
             if use_custom and (p.name in param_annotation["parameters"]):
                 desc = param_annotation["parameters"][p.name].get("description", None)
+
+                # Copy 'convert_plan_names' and 'convert_device_names' if they exist
+                for k in ("convert_plan_names", "convert_device_names"):
+                    if k in param_annotation["parameters"][p.name]:
+                        working_dict[k] = param_annotation["parameters"][p.name][k]
+
                 annotation = assemble_custom_annotation(
                     param_annotation["parameters"][p.name],
                     existing_plans=existing_plans,
@@ -2380,8 +2389,14 @@ def _process_plan(plan, *, existing_devices, existing_plans):
 
             if annotation:
                 # Verify that the encoded type could be decoded (raises an exception if fails)
-                _process_annotation(annotation)
+                _, convert_plan_names, convert_device_names, _ = _process_annotation(annotation)
                 working_dict["annotation"] = annotation
+
+                # Set the following parameters True only if they do not already exist (ignore if False)
+                if convert_plan_names and ("convert_plan_names" not in working_dict):
+                    working_dict["convert_plan_names"] = True
+                if convert_device_names and ("convert_device_names" not in working_dict):
+                    working_dict["convert_device_names"] = True
 
             if default:
                 # Verify that the encoded representation of the default can be decoded.

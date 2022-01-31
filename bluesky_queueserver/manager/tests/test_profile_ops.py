@@ -23,7 +23,7 @@ except ImportError:
 import ophyd
 import ophyd.sim
 
-from .common import copy_default_profile_collection, patch_first_startup_file
+from .common import copy_default_profile_collection, patch_first_startup_file, append_code_to_last_startup_file
 
 from .common import reset_sys_modules  # noqa: F401
 
@@ -4348,9 +4348,12 @@ def test_load_user_group_permissions_6_fail(tmp_path):
     ({"abc34": 1, "abcd": 2}, [], [None], {}),
     ({"abc34": 1, "abcd": 2}, [None], [], {"abc34": 1, "abcd": 2}),
     ({}, [r"^abc"], [r"^abc\d+$"], {}),
+    # Apply to base names of subdevices
+    ({"abc34.val": 1, "abcd34.tmp": 2}, [r"34$"], [], {"abc34.val": 1, "abcd34.tmp": 2}),
+    ({"abc34.val": 1, "abcd34.tmp": 2}, [r"34$"], [r".*34$"], {}),
 ])
 # fmt: on
-def test_select_allowed_items(item_dict, allow_patterns, disallow_patterns, result):
+def test_select_allowed_items_1(item_dict, allow_patterns, disallow_patterns, result):
     """
     Tests for ``_select_allowed_items``.
     """
@@ -4450,7 +4453,6 @@ def junk_plan():
 })
 def plan_check_filtering(device_param, plan_param):
     yield None
-
 """
 
 
@@ -4776,6 +4778,95 @@ def test_load_allowed_plans_and_devices_3(
         assert len(allowed_devices["admin"]) > 0
 
 
+_patch_plan_with_subdevices = """
+@parameter_annotation_decorator({
+    "parameters":{
+        "device1": {
+            "annotation": "Devices1",
+            "devices": {"Devices1": (
+                "sim_bundle", "sim_bundle.detectors", "sim_bundle1.detectors.det_A"
+                )
+            }
+        },
+        "device2": {
+            "annotation": "Devices1",
+            "devices": {"Devices1": (":^sim:+^det:A$", ":.*:.+motors$:y")}
+        },
+        "device3": {
+            "annotation": "Devices1",
+            "devices": {"Devices1": (":?_le.*z$", ":?_le_1.*z$")}
+        },
+    }
+})
+def plan_with_subdevices(device1, device2, device3):
+    yield None
+"""
+
+_user_permissions_subdevices_1 = """user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - null  # Everything is allowed
+    allowed_devices:
+      - null  # Everything is allowed
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - ".*"  # A different way to allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - ".*"  # A different way to allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("pass_permissions_as_parameter", [False, True])
+@pytest.mark.parametrize("permissions_str, dev_device1, dev_device2, dev_device3", [
+    (_user_permissions_subdevices_1,
+     ["sim_bundle", "sim_bundle.detectors", "sim_bundle1.detectors.det_A"],
+     ["sim_bundle.detectors", "sim_bundle.detectors.det_A",
+      "sim_bundle_1.detectors", "sim_bundle_1.detectors.det_A"],
+     ["sim_bundle.stage_motors.z", "sim_bundle.stage_motors.z"]),
+])
+# fmt: on
+def test_load_allowed_plans_and_devices_4(
+    tmp_path, permissions_str, dev_device1, dev_device2, dev_device3, pass_permissions_as_parameter
+):
+    """
+    Test if plan parameters are properly filtered if they contain subdevices
+    ``load_allowed_plans_and_devices``.
+    """
+
+    pc_path = copy_default_profile_collection(tmp_path)
+    create_local_imports_dirs(pc_path)
+    append_code_to_last_startup_file(pc_path, _patch_plan_with_subdevices)
+
+    # Generate list of plans and devices for the patched profile collection
+    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, overwrite=True)
+
+    permissions_fln = os.path.join(pc_path, "user_group_permissions.yaml")
+    with open(permissions_fln, "w") as f:
+        f.write(permissions_str)
+
+    plans_and_devices_fln = os.path.join(pc_path, "existing_plans_and_devices.yaml")
+
+    if pass_permissions_as_parameter:
+        user_group_permissions = load_user_group_permissions(permissions_fln)
+        allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+            path_existing_plans_and_devices=plans_and_devices_fln,
+            user_group_permissions=user_group_permissions,
+        )
+    else:
+        allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+            path_existing_plans_and_devices=plans_and_devices_fln,
+            path_user_group_permissions=permissions_fln,
+        )
+    assert "plan_with_subdevices" in allowed_plans["admin"], pprint.pformat(allowed_plans)
+    assert "sim_bundle" in allowed_devices["admin"]
+    assert "sim_bundle_1" in allowed_devices["admin"]
+
+
 # fmt: off
 @pytest.mark.parametrize("option", [
     "full_lists",
@@ -4786,7 +4877,7 @@ def test_load_allowed_plans_and_devices_3(
     "empty_lists",
 ])
 # fmt: on
-def test_load_allowed_plans_and_devices_4(tmp_path, option):
+def test_load_allowed_plans_and_devices_5(tmp_path, option):
     """
     Basic test for ``load_allowed_plans_and_devices``.
     """

@@ -3053,7 +3053,8 @@ def load_user_group_permissions(path_to_file=None):
 def _check_if_item_allowed(item_name, allow_patterns, disallow_patterns):
     """
     Check if an item with ``item_name`` is allowed based on ``allow_patterns``
-    and ``disallow_patterns``.
+    and ``disallow_patterns``. If the item name represents a subdevice, then
+    patterns will be applied only to the base name.
 
     Parameters
     ----------
@@ -3074,6 +3075,9 @@ def _check_if_item_allowed(item_name, allow_patterns, disallow_patterns):
     """
     item_is_allowed = False
 
+    # Separate the base name (for devices). Patterns are applied only to the base name,
+    #   e.g. if the device name is 'dev1.val', then the pattern should be applied only to 'dev1'
+    item_name = item_name.split(".")[0]
     if allow_patterns:
         if allow_patterns[0] is None:
             item_is_allowed = True

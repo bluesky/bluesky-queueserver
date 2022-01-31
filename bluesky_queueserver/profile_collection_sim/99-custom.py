@@ -199,7 +199,7 @@ class SimDetectors(Device):
 
 class SimBundle(ophyd.Device):
     stage_motors = Cpt(SimStage, name="stage")
-    detectors = Cpt(SimStage, name="detectors")
+    detectors = Cpt(SimDetectors, name="detectors")
 
 
 sim_bundle = SimBundle(name="sim_bundle")

@@ -446,7 +446,7 @@ _trivial_annotation_error7 = {
             "description": "Required key is 'discription'. Schema validation should fail.",
             "annotation": "Motor",
             "devices": {
-                "Motor": "AllDevicesList:1a",  # Incorrect name for built-in list
+                "Motor": None,  # Incorrect name for built-in list
             },
         }
     },
@@ -499,7 +499,7 @@ _trivial_annotation_error10 = {
      r"Additional properties are not allowed \('some_devices' was unexpected\)"),
     (_trivial_annotation_error5, jsonschema.ValidationError, r"\(1, 2, 3\) is not valid"),
     (_trivial_annotation_error6, jsonschema.ValidationError, "'unsupported_list' is not valid"),
-    (_trivial_annotation_error7, jsonschema.ValidationError, "'AllDevicesList:1a' is not valid"),
+    (_trivial_annotation_error7, jsonschema.ValidationError, "None is not valid under any of the given schemas"),
     (_trivial_annotation_error8, jsonschema.ValidationError, "'Plans.' does not match any of the regexes"),
     (_trivial_annotation_error9, jsonschema.ValidationError, "'abc' is not of type 'boolean'"),
     (_trivial_annotation_error10, jsonschema.ValidationError, "10 is not of type 'boolean'"),

@@ -1950,7 +1950,7 @@ existing_plans:
     parameters:
     - annotation:
         devices:
-          Motors: !!python/tuple
+          Motors:
           - motor1
           - motor2
         type: typing.List[Motors]
@@ -1962,7 +1962,7 @@ existing_plans:
       name: motors
     - annotation:
         devices:
-          Detectors: !!python/tuple
+          Detectors:
           - det1
           - det2
           - det3

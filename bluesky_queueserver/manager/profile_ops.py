@@ -895,14 +895,14 @@ def _split_list_element_definition(element_def):
     """
     if not isinstance(element_def, str):
         raise TypeError(
-            f"Device description {element_def!r} has incorrect type {type(element_def)!r}. Expected type: 'str'"
+            f"List item {element_def!r} has incorrect type {type(element_def)!r}. Expected type: 'str'"
         )
 
     # Remove spaces
     element_def = element_def.replace(" ", "")
 
     if not len(element_def):
-        raise ValueError(f"Device description {element_def!r} is an empty string")
+        raise ValueError(f"List item {element_def!r} is an empty string")
 
     # Check if the element is defined using regular expressions
     uses_re = ":" in element_def
@@ -964,11 +964,11 @@ def _split_list_element_definition(element_def):
 
         for c in components:
             if not c:
-                raise ValueError(f"Device description {element_def!r} contains empty components")
+                raise ValueError(f"List item {element_def!r} contains empty components")
             try:
                 re.compile(c)
             except re.error:
-                raise ValueError(f"Device description {element_def!r} contains invalid regular expression {c!r}")
+                raise ValueError(f"List item {element_def!r} contains invalid regular expression {c!r}")
 
         components = list(zip(components, components_include, components_full_re, components_depth))
 
@@ -977,11 +977,11 @@ def _split_list_element_definition(element_def):
         for c in components:
             if not c:
                 raise ValueError(
-                    f"Device or subdevice name in the device description {element_def!r} is an empty string"
+                    f"Plan, device or subdevice name in the description {element_def!r} is an empty string"
                 )
             if not re.search("^[_a-zA-Z][_a-zA-Z0-9]*$", c):
                 raise ValueError(
-                    f"Device or subdevice name {c!r} in the device description "
+                    f"Plan, device or subdevice name {c!r} in the description "
                     f"{element_def!r} contains invalid characters"
                 )
         components_include = [False] * len(components)
@@ -1080,7 +1080,7 @@ def _build_device_name_list(*, components, uses_re, device_type, existing_device
                 for dname, dparams in devices.items():
                     name_suffix_new = dname if not name_suffix else (name_suffix + "." + dname)
                     full_name = name_suffix_new if not base_name else (base_name + "." + name_suffix_new)
-                    if re.search(pattern, dname) and condition(dparams):
+                    if re.search(pattern, full_name) and condition(dparams):
                         device_list.append(full_name)
                     if "components" in dparams:
                         process_devices_full_name(
@@ -1244,6 +1244,12 @@ def _expand_parameter_annotation(annotation, *, existing_devices, existing_plans
             # Sort the list of names by lower case letters
             item_list = sorted(item_list, key=lambda _: (_.upper(), _[0].islower()))
             annotation[section][k] = item_list
+
+    # Process enums: convert tuples to lists
+    if "enums" in annotation:
+        an_enums = annotation["enums"]
+        for k in an_enums.keys():
+            an_enums[k] = list(an_enums[k])
 
     return annotation
 

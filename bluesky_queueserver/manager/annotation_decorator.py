@@ -16,10 +16,10 @@ _parameter_annotation_schema = {
                     "description": {"type": "string"},
                     "annotation": {"type": "string"},
                     "devices": {
-                        "$ref": "#/definitions/custom_types_devices",
+                        "$ref": "#/definitions/custom_types_plans_devices",
                     },
                     "plans": {
-                        "$ref": "#/definitions/custom_types_plans",
+                        "$ref": "#/definitions/custom_types_plans_devices",
                     },
                     "enums": {
                         "$ref": "#/definitions/custom_types",
@@ -46,30 +46,12 @@ _parameter_annotation_schema = {
                 },
             },
         },
-        "custom_types_plans": {
-            "type": "object",
-            "additionalProperties": False,
-            "patternProperties": {
-                "^[_a-zA-Z][_a-zA-Z0-9]*$": {
-                    "type": "array",
-                    "items": {"type": "string", "pattern": "^[_a-zA-Z][_a-zA-Z0-9]*$"},
-                },
-            },
-        },
-        "custom_types_devices": {
+        "custom_types_plans_devices": {
             "type": "object",
             "additionalProperties": False,
             "patternProperties": {
                 "^[_a-zA-Z][_a-zA-Z0-9]*$": {
                     "anyOf": [
-                        {
-                            "type": "string",
-                            "pattern": (
-                                "(^AllDevicesList$)|(^AllDetectorsList$)|(^AllMotorsList$)|(^AllFlyersList$)|"
-                                "(^AllDevicesList:[0-9]+$)|(^AllDetectorsList:[0-9]+$)|"
-                                "(^AllMotorsList:[0-9]+$)|(^AllFlyersList:[0-9]+$)"
-                            ),
-                        },
                         {
                             "type": "array",
                             "items": {"type": "string"},
@@ -177,8 +159,11 @@ def parameter_annotation_decorator(annotation):
                         #   as types in 'annotation'. The example of annotation above
                         #   allows to pass one plan from the group 'PlanType1' or a list of
                         #   plans from 'PlanType2'.
+                        # The lists may contain regular expressions (start with ``:``).
+                        #   For example, definition for ``PlanType2`` will contain all plans
+                        #   from the list of existing plans that start with ``move_``.
                         "PlanType1": ("count", "scan", "gridscan"),
-                        "PlanType2": ("more", "plan", "names"),
+                        "PlanType2": ("more", "plan", "names", ":^move_"),
                     },
                 },
 
@@ -186,22 +171,39 @@ def parameter_annotation_decorator(annotation):
                     "description": "Parameter that accepts the list of devices.",
                     "annotation": "typing.List[typing.Union[DeviceType1, DeviceType2]]",
                     # Here we provide the list of devices. 'devices' and 'plans' are
-                    #   treated similarly, but it may be useful to distinguish lists of
+                    #    treated similarly, but it may be useful to distinguish lists of
                     #    plans and devices on the stage of plan parameter validation.
-                    #    The decorator also supports the following built-in device
-                    #    lists ``AllDevicesList``, ``AllDetectorsList``, ``AllMotorsList``
-                    #    and ``AllFlyersList``. The devices and built-in device lists
-                    #    may contain optional depth specification (e.g. ``det3:1``
-                    #    specifies depth 1). If depth is specified, the lists are expanded
-                    #    to include all subdevices found up to the given depth. The default
-                    #    depth is 0 (``det2:0`` is identical to ``det2``). If depth 1 is
-                    #    specified, the list will include the device itself and all its
-                    #    subdevices. If depth is 2, then subdevices of subdevices are
-                    #    added to the list. Avoid using depth, which is too large, since
-                    #    it may slow down processing of the submitted plans.
+                    #    The devices may be listed explicitly by name or using regular
+                    #    expressions. Regular expressions may be specified as a sequence of
+                    #    of simple expressions separated by ``:`` that are applied to the
+                    #    device name and subdevice names (e.g. ``:^stage_:^det:val$ will
+                    #    pick devices similar to ``stage_sim.det2.val``). Adding ``+``
+                    #    after ``:`` will include the devices/subdevices at this level in
+                    #    the list (e.g. ``:+^stage_:^det:val$ adds ``stage_sim`` device
+                    #    to the list, but not ``stage_sim.det2``).
+                    #    Alternatively, a 'full-name' regular expression could be specified
+                    #    (starts with ``:?``). For example ``:?^stage_.*val$`` would pick
+                    #    all devices with names starting with ``stage_`` and ending with
+                    #    ``val`` from the complete tree of existing devices. The search
+                    #    depth may be restricted by adding ``depth`` parameter (e.g.
+                    #    ``:?^stage_.*val$:depth=5`` restricts the search depth to 5).
+                    #    The search tree may also be restricted by specifying expressions
+                    #    for device/subdevice names at upper levels, for example
+                    #    ``:+^stage_:?^det.*val$:depth=4`` will include the device ``stage_sim``
+                    #    (preceding with ``:+``) and all its subdevices starting with ``det``
+                    #    and ending with ``val`` up to the total depth of 5 (level of
+                    #    ``stage_`` + 4). Note, that specifying a 'full-name' expressions
+                    #    is less efficient, since it requires search through the whole
+                    #    device tree. When a sequence of short expressions is specified,
+                    #    search follows only the branches that satisfy the expressions.
+                    #    Regular expressions may be preceded with one the supported keywords:
+                    #    ``__READABLE__``, ``__MOTOR__``, ``__DETECTOR__`` and ``__FLYABLE__``.
+                    #    For example, ``__READABLE__:+^stage_:?^det.*val$:depth=4`` will
+                    #    check if the devices are readable before including them in the list.
+                    #    The following type definitions include examples of all
                     "devices": {
-                        "DeviceType1": ("det1", "det2:0", "det3:1"),
-                        "DeviceType2": "AllMotorsList:2",  # Depth 2, depth is optional
+                        "DeviceType1": ("det1", ":^det2$", ":^det:val$", ":?^det.*val$"),
+                        "DeviceType2": ("__MOTOR__:?.*:depth=5"),
                     },
                     # Set default value to string 'det1'. The default value MUST be
                     #   defined in the function header for the parameter that has

@@ -1433,7 +1433,7 @@ def test_process_plan_1(plan_func, plan_info_expected):
     plan_info_expected = plan_info_expected.copy()
     plan_info_expected["name"] = plan_func.__name__
     plan_info_expected["module"] = plan_func.__module__
-    pf_info = _process_plan(plan_func, existing_devices={})
+    pf_info = _process_plan(plan_func, existing_devices={}, existing_plans={})
 
     assert pf_info == plan_info_expected
 
@@ -1652,7 +1652,7 @@ def test_process_plan_2(plan_func, plan_info_expected):
     plan_info_expected["name"] = plan_func.__name__
     plan_info_expected["module"] = plan_func.__module__
 
-    pf_info = _process_plan(plan_func, existing_devices={})
+    pf_info = _process_plan(plan_func, existing_devices={}, existing_plans={})
 
     assert pf_info == plan_info_expected, pprint.pformat(pf_info)
 
@@ -1854,9 +1854,9 @@ _pf3d_processed = {
             "default": "None",
             "annotation": {
                 "type": "typing.List[typing.Union[Devices1, Plans1, Enums1]]",
-                "devices": {"Devices1": ["dev_det1", "dev_det2"]},
-                "plans": {"Plans1": ("plan1", "plan2", "plan3")},
-                "enums": {"Enums1": ("enum1", "enum2", "enum3")},
+                "devices": {"Devices1": ["dev3", "dev_det1", "dev_det2"]},
+                "plans": {"Plans1": ["plan1", "plan2", "plan3"]},
+                "enums": {"Enums1": ["enum1", "enum2", "enum3"]},
             },
             "description": "The description for 'val3' from the docstring",
         },
@@ -1936,149 +1936,149 @@ _pf3f_processed = {
 }
 
 
-@parameter_annotation_decorator(
-    {
-        "parameters": {
-            "val1": {
-                "annotation": "all_detectors",
-                "devices": {"all_detectors": "AllDetectorsList"},
-            },
-        }
-    }
-)
-def _pf3g(val1):
-    yield from [val1]
+# @parameter_annotation_decorator(
+#     {
+#         "parameters": {
+#             "val1": {
+#                 "annotation": "all_detectors",
+#                 "devices": {"all_detectors": "AllDetectorsList"},
+#             },
+#         }
+#     }
+# )
+# def _pf3g(val1):
+#     yield from [val1]
 
 
-_pf3g_processed = {
-    "parameters": [
-        {
-            "name": "val1",
-            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "all_detectors", "devices": {"all_detectors": ["dev_det1", "dev_det2"]}},
-        },
-    ],
-    "properties": {"is_generator": True},
-}
+# _pf3g_processed = {
+#     "parameters": [
+#         {
+#             "name": "val1",
+#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+#             "annotation": {"type": "all_detectors", "devices": {"all_detectors": ["dev_det1", "dev_det2"]}},
+#         },
+#     ],
+#     "properties": {"is_generator": True},
+# }
 
-_pf3g_empty_processed = {
-    "parameters": [
-        {
-            "name": "val1",
-            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "all_detectors", "devices": {"all_detectors": []}},
-        },
-    ],
-    "properties": {"is_generator": True},
-}
-
-
-@parameter_annotation_decorator(
-    {
-        "parameters": {
-            "val1": {"annotation": "typing.List[all_motors]", "devices": {"all_motors": "AllMotorsList"}}
-        },
-    }
-)
-def _pf3i(val1):
-    yield from [val1]
+# _pf3g_empty_processed = {
+#     "parameters": [
+#         {
+#             "name": "val1",
+#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+#             "annotation": {"type": "all_detectors", "devices": {"all_detectors": []}},
+#         },
+#     ],
+#     "properties": {"is_generator": True},
+# }
 
 
-_pf3i_processed = {
-    "parameters": [
-        {
-            "name": "val1",
-            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "typing.List[all_motors]", "devices": {"all_motors": ["dev_m1"]}},
-        },
-    ],
-    "properties": {"is_generator": True},
-}
+# @parameter_annotation_decorator(
+#     {
+#         "parameters": {
+#             "val1": {"annotation": "typing.List[all_motors]", "devices": {"all_motors": "AllMotorsList"}}
+#         },
+#     }
+# )
+# def _pf3i(val1):
+#     yield from [val1]
 
 
-@parameter_annotation_decorator(
-    {
-        "parameters": {
-            "val1": {"annotation": "typing.List[all_flyers]", "devices": {"all_flyers": "AllFlyersList"}}
-        },
-    }
-)
-def _pf3j(val1):
-    yield from [val1]
+# _pf3i_processed = {
+#     "parameters": [
+#         {
+#             "name": "val1",
+#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+#             "annotation": {"type": "typing.List[all_motors]", "devices": {"all_motors": ["dev_m1"]}},
+#         },
+#     ],
+#     "properties": {"is_generator": True},
+# }
 
 
-_pf3j_processed = {
-    "parameters": [
-        {
-            "name": "val1",
-            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "typing.List[all_flyers]", "devices": {"all_flyers": ["dev_fly1"]}},
-        },
-    ],
-    "properties": {"is_generator": True},
-}
+# @parameter_annotation_decorator(
+#     {
+#         "parameters": {
+#             "val1": {"annotation": "typing.List[all_flyers]", "devices": {"all_flyers": "AllFlyersList"}}
+#         },
+#     }
+# )
+# def _pf3j(val1):
+#     yield from [val1]
 
 
-@parameter_annotation_decorator(
-    {
-        "parameters": {
-            "val1": {
-                "annotation": "typing.Union[all_devices, all_detectors, all_motors, all_flyers]",
-                "devices": {
-                    "all_devices": "AllDevicesList",
-                    "all_detectors": "AllDetectorsList",
-                    "all_motors": "AllMotorsList",
-                    "all_flyers": "AllFlyersList",
-                },
-            }
-        },
-    }
-)
-def _pf3k(val1):
-    yield from [val1]
+# _pf3j_processed = {
+#     "parameters": [
+#         {
+#             "name": "val1",
+#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+#             "annotation": {"type": "typing.List[all_flyers]", "devices": {"all_flyers": ["dev_fly1"]}},
+#         },
+#     ],
+#     "properties": {"is_generator": True},
+# }
 
 
-_pf3k_processed = {
-    "parameters": [
-        {
-            "name": "val1",
-            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {
-                "type": "typing.Union[all_devices, all_detectors, all_motors, all_flyers]",
-                "devices": {
-                    "all_devices": ["dev_det1", "dev_det2", "dev_m1", "dev_fly1"],
-                    "all_detectors": ["dev_det1", "dev_det2"],
-                    "all_motors": ["dev_m1"],
-                    "all_flyers": ["dev_fly1"],
-                },
-            },
-        },
-    ],
-    "properties": {"is_generator": True},
-}
+# @parameter_annotation_decorator(
+#     {
+#         "parameters": {
+#             "val1": {
+#                 "annotation": "typing.Union[all_devices, all_detectors, all_motors, all_flyers]",
+#                 "devices": {
+#                     "all_devices": "AllDevicesList",
+#                     "all_detectors": "AllDetectorsList",
+#                     "all_motors": "AllMotorsList",
+#                     "all_flyers": "AllFlyersList",
+#                 },
+#             }
+#         },
+#     }
+# )
+# def _pf3k(val1):
+#     yield from [val1]
 
 
-@parameter_annotation_decorator(
-    {
-        "parameters": {"val1": {"min": 0.1, "max": 100, "step": 0.02}},
-    }
-)
-def _pf3l(val1):
-    yield from [val1]
+# _pf3k_processed = {
+#     "parameters": [
+#         {
+#             "name": "val1",
+#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+#             "annotation": {
+#                 "type": "typing.Union[all_devices, all_detectors, all_motors, all_flyers]",
+#                 "devices": {
+#                     "all_devices": ["dev_det1", "dev_det2", "dev_m1", "dev_fly1"],
+#                     "all_detectors": ["dev_det1", "dev_det2"],
+#                     "all_motors": ["dev_m1"],
+#                     "all_flyers": ["dev_fly1"],
+#                 },
+#             },
+#         },
+#     ],
+#     "properties": {"is_generator": True},
+# }
 
 
-_pf3l_processed = {
-    "parameters": [
-        {
-            "name": "val1",
-            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "min": "0.1",
-            "max": "100",
-            "step": "0.02",
-        },
-    ],
-    "properties": {"is_generator": True},
-}
+# @parameter_annotation_decorator(
+#     {
+#         "parameters": {"val1": {"min": 0.1, "max": 100, "step": 0.02}},
+#     }
+# )
+# def _pf3l(val1):
+#     yield from [val1]
+
+
+# _pf3l_processed = {
+#     "parameters": [
+#         {
+#             "name": "val1",
+#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+#             "min": "0.1",
+#             "max": "100",
+#             "step": "0.02",
+#         },
+#     ],
+#     "properties": {"is_generator": True},
+# }
 
 
 _pf3_existing_devices = {
@@ -2097,12 +2097,12 @@ _pf3_existing_devices = {
     (_pf3d, _pf3_existing_devices, _pf3d_processed),
     (_pf3e, {}, _pf3e_processed),
     (_pf3f, {}, _pf3f_processed),
-    (_pf3g, _pf3_existing_devices, _pf3g_processed),
-    (_pf3g, {}, _pf3g_empty_processed),
-    (_pf3i, _pf3_existing_devices, _pf3i_processed),
-    (_pf3j, _pf3_existing_devices, _pf3j_processed),
-    (_pf3k, _pf3_existing_devices, _pf3k_processed),
-    (_pf3l, {}, _pf3l_processed),
+    # (_pf3g, _pf3_existing_devices, _pf3g_processed),
+    # (_pf3g, {}, _pf3g_empty_processed),
+    # (_pf3i, _pf3_existing_devices, _pf3i_processed),
+    # (_pf3j, _pf3_existing_devices, _pf3j_processed),
+    # (_pf3k, _pf3_existing_devices, _pf3k_processed),
+    # (_pf3l, {}, _pf3l_processed),
 ])
 # fmt: on
 def test_process_plan_3(plan_func, existing_devices, plan_info_expected):
@@ -2114,7 +2114,7 @@ def test_process_plan_3(plan_func, existing_devices, plan_info_expected):
     plan_info_expected["name"] = plan_func.__name__
     plan_info_expected["module"] = plan_func.__module__
 
-    pf_info = _process_plan(plan_func, existing_devices=existing_devices)
+    pf_info = _process_plan(plan_func, existing_devices=existing_devices, existing_plans={})
 
     assert pf_info == plan_info_expected, pprint.pformat(pf_info)
 
@@ -2124,52 +2124,30 @@ def test_process_plan_3(plan_func, existing_devices, plan_info_expected):
         "parameters": {
             "p1": {
                 "annotation": "all_devices",
-                "devices": {"all_devices": "AllDevicesList"},
+                "devices": {"all_devices": (":.*",)},
             },
             "p2": {
                 "annotation": "all_detectors",
-                "devices": {"all_detectors": "AllDetectorsList"},
+                "devices": {"all_detectors": ("__DETECTOR__:.*",)},
             },
             "p3": {
                 "annotation": "all_motors",
-                "devices": {"all_motors": "AllMotorsList"},
+                "devices": {"all_motors": ("__MOTOR__:.*",)},
             },
             "p4": {
                 "annotation": "all_flyers",
-                "devices": {"all_flyers": "AllFlyersList"},
+                "devices": {"all_flyers": ("__FLYABLE__:.*",)},
+            },
+            "p5": {
+                "annotation": "all_readable",
+                "devices": {"all_readable": ("__READABLE__:.*",)},
             },
         }
     }
 )
-def _pf4a(p1, p2, p3, p4):
-    yield from [p1, p2, p3, p4]
+def _pf4a(p1, p2, p3, p4, p5):
+    yield from [p1, p2, p3, p4, p5]
 
-
-# _pf4a_processed = {
-#     "parameters": [
-#         {
-#             "name": "p1",
-#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-#             "annotation": {"type": "all_devices", "devices": {"all_devices": "AllDevicesList"}},
-#         },
-#         {
-#             "name": "p2",
-#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-#             "annotation": {"type": "all_detectors", "devices": {"all_detectors": "AllDetectorsList"}},
-#         },
-#         {
-#             "name": "p3",
-#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-#             "annotation": {"type": "all_motors", "devices": {"all_motors": "AllMotorsList"}},
-#         },
-#         {
-#             "name": "p4",
-#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-#             "annotation": {"type": "all_flyers", "devices": {"all_flyers": "AllFlyersList"}},
-#         },
-#     ],
-#     "properties": {"is_generator": True},
-# }
 
 _pf4a_processed = {
     "parameters": [
@@ -2179,7 +2157,7 @@ _pf4a_processed = {
             "annotation": {
                 "type": "all_devices",
                 "devices": {
-                    "all_devices": ["da0_motor", "da0_motor2", "da0_detector"],
+                    "all_devices": ["da0_detector", "da0_flyer", "da0_motor", "da0_motor2"],
                 },
             },
         },
@@ -2196,7 +2174,15 @@ _pf4a_processed = {
         {
             "name": "p4",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "all_flyers", "devices": {"all_flyers": []}},
+            "annotation": {"type": "all_flyers", "devices": {"all_flyers": ["da0_flyer"]}},
+        },
+        {
+            "name": "p5",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "all_readable",
+                "devices": {"all_readable": ["da0_detector", "da0_motor", "da0_motor2"]},
+            },
         },
     ],
     "properties": {"is_generator": True},
@@ -2207,53 +2193,31 @@ _pf4a_processed = {
     {
         "parameters": {
             "p1": {
-                "annotation": "all_devices",
-                "devices": {"all_devices": "AllDevicesList:0"},
+                "annotation": "devices1",
+                "devices": {"devices1": ("some_dev", ":motor$:+motor$:det$")},
             },
             "p2": {
-                "annotation": "all_detectors",
-                "devices": {"all_detectors": "AllDetectorsList:1"},
+                "annotation": "devices2",
+                "devices": {"devices2": ("some_dev", "__MOTOR__:motor$:+motor$:det$")},
             },
             "p3": {
-                "annotation": "all_motors",
-                "devices": {"all_motors": "AllMotorsList:2"},
+                "annotation": "devices3",
+                "devices": {"devices3": ("some_dev", "__READABLE__:+motor$:motor$:det$")},
             },
             "p4": {
-                "annotation": "all_flyers",
-                "devices": {"all_flyers": "AllFlyersList:3"},
+                "annotation": "devices4",
+                "devices": {"devices4": ("__MOTOR__:motor$:+motor$:det$", "__READABLE__:+motor$:motor$:det$")},
+            },
+            "p5": {
+                "annotation": "devices5",
+                "devices": {"devices5": ("__MOTOR__:motor$:+motor$:det$", "__FLYABLE__:.*")},
             },
         }
     }
 )
-def _pf4b(p1, p2, p3, p4):
-    yield from [p1, p2, p3, p4]
+def _pf4b(p1, p2, p3, p4, p5):
+    yield from [p1, p2, p3, p4, p5]
 
-
-# _pf4b_processed = {
-#     "parameters": [
-#         {
-#             "name": "p1",
-#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-#             "annotation": {"type": "all_devices", "devices": {"all_devices": "AllDevicesList:0"}},
-#         },
-#         {
-#             "name": "p2",
-#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-#             "annotation": {"type": "all_detectors", "devices": {"all_detectors": "AllDetectorsList:1"}},
-#         },
-#         {
-#             "name": "p3",
-#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-#             "annotation": {"type": "all_motors", "devices": {"all_motors": "AllMotorsList:2"}},
-#         },
-#         {
-#             "name": "p4",
-#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-#             "annotation": {"type": "all_flyers", "devices": {"all_flyers": "AllFlyersList:3"}},
-#         },
-#     ],
-#     "properties": {"is_generator": True},
-# }
 
 _pf4b_processed = {
     "parameters": [
@@ -2261,32 +2225,35 @@ _pf4b_processed = {
             "name": "p1",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "annotation": {
-                "type": "all_devices",
+                "type": "devices1",
                 "devices": {
-                    "all_devices": ["da0_motor", "da0_motor2", "da0_detector"],
+                    "devices1": [
+                        "da0_motor.db0_motor",
+                        "da0_motor.db0_motor.dc0_det",
+                        "da0_motor.db0_motor.dc1_det",
+                        "da0_motor.db0_motor.dc2_det",
+                        "some_dev",
+                    ],
                 },
             },
         },
         {
             "name": "p2",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {
-                "type": "all_detectors",
-                "devices": {"all_detectors": ["da0_motor.db1_det", "da0_detector"]},
-            },
+            "annotation": {"type": "devices2", "devices": {"devices2": ["da0_motor.db0_motor", "some_dev"]}},
         },
         {
             "name": "p3",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "annotation": {
-                "type": "all_motors",
+                "type": "devices3",
                 "devices": {
-                    "all_motors": [
+                    "devices3": [
                         "da0_motor",
-                        "da0_motor.db0_motor",
-                        "da0_motor.db0_motor.dc3_motor",
-                        "da0_motor.db1_det.dc1_motor",
-                        "da0_motor2",
+                        "da0_motor.db0_motor.dc0_det",
+                        "da0_motor.db0_motor.dc1_det",
+                        "da0_motor.db0_motor.dc2_det",
+                        "some_dev",
                     ]
                 },
             },
@@ -2294,7 +2261,26 @@ _pf4b_processed = {
         {
             "name": "p4",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "all_flyers", "devices": {"all_flyers": ["da0_motor.db2_flyer"]}},
+            "annotation": {
+                "type": "devices4",
+                "devices": {
+                    "devices4": [
+                        "da0_motor",
+                        "da0_motor.db0_motor",
+                        "da0_motor.db0_motor.dc0_det",
+                        "da0_motor.db0_motor.dc1_det",
+                        "da0_motor.db0_motor.dc2_det",
+                    ]
+                },
+            },
+        },
+        {
+            "name": "p5",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "devices5",
+                "devices": {"devices5": ["da0_flyer", "da0_motor.db0_motor"]},
+            },
         },
     ],
     "properties": {"is_generator": True},
@@ -2305,24 +2291,29 @@ _pf4b_processed = {
     {
         "parameters": {
             "p1": {
-                "annotation": "my_devices",
-                "devices": {"my_devices": ["da0_motor:0"]},
+                "annotation": "devices1",
+                "devices": {"devices1": ("some_dev", ":?.*motor$")},
             },
             "p2": {
-                "annotation": "my_devices",
-                "devices": {"my_devices": ["da0_motor.db0_motor:0"]},
+                "annotation": "devices2",
+                "devices": {"devices2": ("some_dev", "__FLYABLE__:?.*$")},
             },
             "p3": {
-                "annotation": "my_devices",
-                "devices": {"my_devices": ["da0_motor.db0_motor:1"]},
+                "annotation": "devices3",
+                "devices": {
+                    "devices3": (
+                        "some_dev",
+                        "__READABLE__:?.*db0_motor.*:depth=3",
+                    )
+                },
             },
             "p4": {
-                "annotation": "my_devices",
-                "devices": {"my_devices": ["da0_motor.db0_motor:2"]},
+                "annotation": "devices4",
+                "devices": {"devices4": ("__MOTOR__:?.*db0_motor.*:depth=3",)},
             },
             "p5": {
-                "annotation": "my_devices",
-                "devices": {"my_devices": ["da0_motor.db0_motor:100"]},
+                "annotation": "devices5",
+                "devices": {"devices5": ("__FLYABLE__:motor$:?.*db.*$",)},
             },
         }
     }
@@ -2331,68 +2322,47 @@ def _pf4c(p1, p2, p3, p4, p5):
     yield from [p1, p2, p3, p4, p5]
 
 
-# _pf4c_processed = {
-#     "parameters": [
-#         {
-#             "name": "p1",
-#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-#             "annotation": {"type": "my_devices", "devices": {"my_devices": ["da0_motor:0"]}},
-#         },
-#         {
-#             "name": "p2",
-#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-#             "annotation": {"type": "my_devices", "devices": {"my_devices": ["da0_motor.db0_motor:0"]}},
-#         },
-#         {
-#             "name": "p3",
-#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-#             "annotation": {"type": "my_devices", "devices": {"my_devices": ["da0_motor.db0_motor:1"]}},
-#         },
-#         {
-#             "name": "p4",
-#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-#             "annotation": {"type": "my_devices", "devices": {"my_devices": ["da0_motor.db0_motor:2"]}},
-#         },
-#         {
-#             "name": "p5",
-#             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-#             "annotation": {"type": "my_devices", "devices": {"my_devices": ["da0_motor.db0_motor:100"]}},
-#         },
-#     ],
-#     "properties": {"is_generator": True},
-# }
-
 _pf4c_processed = {
     "parameters": [
         {
             "name": "p1",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "annotation": {
-                "type": "my_devices",
-                "devices": {"my_devices": ["da0_motor"]},
+                "type": "devices1",
+                "devices": {
+                    "devices1": [
+                        "da0_motor",
+                        "da0_motor.db0_motor",
+                        "da0_motor.db0_motor.dc3_motor",
+                        "da0_motor.db0_motor.dc3_motor.dd1_motor",
+                        "da0_motor.db1_det.dc1_motor",
+                        "some_dev",
+                    ],
+                },
             },
         },
         {
             "name": "p2",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "annotation": {
-                "type": "my_devices",
-                "devices": {"my_devices": ["da0_motor.db0_motor"]},
+                "type": "devices2",
+                "devices": {"devices2": ["da0_flyer", "da0_motor.db2_flyer", "some_dev"]},
             },
         },
         {
             "name": "p3",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "annotation": {
-                "type": "my_devices",
+                "type": "devices3",
                 "devices": {
-                    "my_devices": [
+                    "devices3": [
                         "da0_motor.db0_motor",
                         "da0_motor.db0_motor.dc0_det",
                         "da0_motor.db0_motor.dc1_det",
                         "da0_motor.db0_motor.dc2_det",
                         "da0_motor.db0_motor.dc3_motor",
-                    ],
+                        "some_dev",
+                    ]
                 },
             },
         },
@@ -2400,17 +2370,12 @@ _pf4c_processed = {
             "name": "p4",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "annotation": {
-                "type": "my_devices",
+                "type": "devices4",
                 "devices": {
-                    "my_devices": [
+                    "devices4": [
                         "da0_motor.db0_motor",
-                        "da0_motor.db0_motor.dc0_det",
-                        "da0_motor.db0_motor.dc1_det",
-                        "da0_motor.db0_motor.dc2_det",
                         "da0_motor.db0_motor.dc3_motor",
-                        "da0_motor.db0_motor.dc3_motor.dd0_det",
-                        "da0_motor.db0_motor.dc3_motor.dd1_motor",
-                    ],
+                    ]
                 },
             },
         },
@@ -2418,17 +2383,66 @@ _pf4c_processed = {
             "name": "p5",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "annotation": {
-                "type": "my_devices",
-                "devices": {
-                    "my_devices": [
-                        "da0_motor.db0_motor",
-                        "da0_motor.db0_motor.dc0_det",
-                        "da0_motor.db0_motor.dc1_det",
-                        "da0_motor.db0_motor.dc2_det",
-                        "da0_motor.db0_motor.dc3_motor",
-                        "da0_motor.db0_motor.dc3_motor.dd0_det",
-                        "da0_motor.db0_motor.dc3_motor.dd1_motor",
-                    ],
+                "type": "devices5",
+                "devices": {"devices5": ["da0_motor.db2_flyer"]},
+            },
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+@parameter_annotation_decorator(
+    {
+        "parameters": {
+            "p1": {
+                "annotation": "plans1",
+                "plans": {"plans1": ("some_plan", ":.*$")},
+            },
+            "p2": {
+                "annotation": "plans2",
+                "plans": {"plans2": ("some_plan", ":motor$")},
+            },
+            "p3": {
+                "annotation": "plans3",
+                "plans": {"plans3": (":count",)},
+            },
+        }
+    }
+)
+def _pf4d(p1, p2, p3):
+    yield from [p1, p2, p3]
+
+
+_pf4d_processed = {
+    "parameters": [
+        {
+            "name": "p1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "plans1",
+                "plans": {"plans1": ["count", "count2", "count_modified", "plan1", "some_plan"]},
+            },
+        },
+        {
+            "name": "p2",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "plans2",
+                "plans": {"plans2": ["some_plan"]},
+            },
+        },
+        {
+            "name": "p3",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "plans3",
+                "plans": {
+                    "plans3": [
+                        "count",
+                        "count2",
+                        "count_modified",
+                    ]
                 },
             },
         },
@@ -2475,8 +2489,13 @@ _pp4_allowed_devices_dict_1 = {
     "da0_detector": {
         "is_readable": True, "is_movable": False, "is_flyable": False,
     },
+    "da0_flyer": {
+        "is_readable": False, "is_movable": False, "is_flyable": True,
+    },
 }
 # fmt: on
+
+_pp4_allowed_plans_set_1 = {"plan1", "count", "count_modified", "count2"}
 
 
 # fmt: off
@@ -2484,20 +2503,20 @@ _pp4_allowed_devices_dict_1 = {
     (_pf4a, _pp4_allowed_devices_dict_1, _pf4a_processed),
     (_pf4b, _pp4_allowed_devices_dict_1, _pf4b_processed),
     (_pf4c, _pp4_allowed_devices_dict_1, _pf4c_processed),
+    (_pf4d, _pp4_allowed_devices_dict_1, _pf4d_processed),
 ])
 # fmt: on
-def test_process_plan_4(plan_func, existing_devices, plan_info_expected, plan_info_expanded):
+def test_process_plan_4(plan_func, existing_devices, plan_info_expected):
     """
-    Function '_process_plan': parameter annotations from the annotation
+    Function '_process_plan': Using regular expressions for selecting plans and
+    devices from the lists of existing plans and devices.
     """
 
     plan_info_expected = plan_info_expected.copy()
     plan_info_expected["name"] = plan_func.__name__
     plan_info_expected["module"] = plan_func.__module__
-    plan_info_expanded["name"] = plan_func.__name__
-    plan_info_expanded["module"] = plan_func.__module__
 
-    pf_info = _process_plan(plan_func, existing_devices=existing_devices)
+    pf_info = _process_plan(plan_func, existing_devices=existing_devices, existing_plans=_pp4_allowed_plans_set_1)
 
     assert pf_info == plan_info_expected, pprint.pformat(pf_info)
 
@@ -2560,12 +2579,60 @@ def _pf5d_factory():
     return f
 
 
+def _pf5e_factory():
+    """Invalid regular expression in plan type"""
+
+    @parameter_annotation_decorator({"parameters": {"val1": {"annotation": "Plan1", "plans": {"Plan1": [":*"]}}}})
+    def f(val1):
+        yield from [val1]
+
+    return f
+
+
+def _pf5f_factory():
+    """Invalid regular expression in device type"""
+
+    @parameter_annotation_decorator({"parameters": {"val1": {"annotation": "Dev1", "devices": {"Dev1": [":*"]}}}})
+    def f(val1):
+        yield from [val1]
+
+    return f
+
+
+def _pf5g_factory():
+    """Exlicitly listed device contains invalid symbols"""
+
+    @parameter_annotation_decorator(
+        {"parameters": {"val1": {"annotation": "Dev1", "devices": {"Dev1": ["*dev"]}}}}
+    )
+    def f(val1):
+        yield from [val1]
+
+    return f
+
+
+def _pf5h_factory():
+    """Exlicitly listed plan contains invalid symbols"""
+
+    @parameter_annotation_decorator(
+        {"parameters": {"val1": {"annotation": "Plan1", "plans": {"Plan1": ["*plan"]}}}}
+    )
+    def f(val1):
+        yield from [val1]
+
+    return f
+
+
 # fmt: off
 @pytest.mark.parametrize("plan_func, err_msg", [
     (_pf5a_factory(), "unsupported type of default value"),
     (_pf5b, "name 'Plans1' is not defined'"),
     (_pf5c, "Missing default value for the parameter 'detector' in the plan signature"),
     (_pf5d_factory(), "unsupported type of default value in decorator"),
+    (_pf5e_factory(), r"List item ':\*' contains invalid regular expression '\*'"),
+    (_pf5f_factory(), r"List item ':\*' contains invalid regular expression '\*'"),
+    (_pf5g_factory(), r"'\*dev' in the description '\*dev' contains invalid characters"),
+    (_pf5h_factory(), r"'\*plan' in the description '\*plan' contains invalid characters"),
 ])
 # fmt: on
 def test_process_plan_5_fail(plan_func, err_msg):
@@ -2573,7 +2640,7 @@ def test_process_plan_5_fail(plan_func, err_msg):
     Failing cases for 'process_plan' function. Some plans are expected to be rejected.
     """
     with pytest.raises(ValueError, match=err_msg):
-        _process_plan(plan_func, existing_devices={})
+        _process_plan(plan_func, existing_devices={}, existing_plans={})
 
 
 # ---------------------------------------------------------------------------------
@@ -3053,11 +3120,11 @@ def test_split_list_element_definition_1(element_def, components, uses_re, devic
 
 # fmt: off
 @pytest.mark.parametrize("element_def, exception_type, msg", [
-    (10, TypeError, "Device description 10 has incorrect type"),
-    ("", ValueError, "Device description '' is an empty string"),
-    (":", ValueError, "Device description ':' contains empty components"),
-    (":^det:", ValueError, "Device description ':^det:' contains empty components"),
-    (":^det::val", ValueError, "Device description ':^det::val' contains empty components"),
+    (10, TypeError, "List item 10 has incorrect type"),
+    ("", ValueError, "List item '' is an empty string"),
+    (":", ValueError, "List item ':' contains empty components"),
+    (":^det:", ValueError, "List item ':^det:' contains empty components"),
+    (":^det::val", ValueError, "List item ':^det::val' contains empty components"),
     (":*det:val", ValueError, "':*det:val' contains invalid regular expression '*det'"),
     ("__UNSUPPORTED_TYPE__:^det", ValueError, "Device type '__UNSUPPORTED_TYPE__' is not supported."),
     (":?^det:depth=0", ValueError, "Depth (0) must be positive integer greater or equal to 1"),
@@ -3065,12 +3132,12 @@ def test_split_list_element_definition_1(element_def, components, uses_re, devic
     (":?^det:^val$", ValueError, "'?^det' can be only followed by the depth specification"),
     (":?^det:?^val$", ValueError, "'?^det' can be only followed by the depth specification"),
     (":?^det:^val:^val$", ValueError, "'?^det' must be the last"),
-    ("det..val", ValueError, "Device or subdevice name in the device description 'det..val' is an empty string"),
-    ("det.", ValueError, "Device or subdevice name in the device description 'det.' is an empty string"),
-    (".det", ValueError, "Device or subdevice name in the device description '.det' is an empty string"),
-    ("d$et", ValueError, "'d$et' in the device description 'd$et' contains invalid characters"),
-    ("d$et.val", ValueError, "'d$et' in the device description 'd$et.val' contains invalid characters"),
-    ("det.v$al", ValueError, "'v$al' in the device description 'det.v$al' contains invalid characters"),
+    ("det..val", ValueError, "Plan, device or subdevice name in the description 'det..val' is an empty string"),
+    ("det.", ValueError, "Plan, device or subdevice name in the description 'det.' is an empty string"),
+    (".det", ValueError, "Plan, device or subdevice name in the description '.det' is an empty string"),
+    ("d$et", ValueError, "'d$et' in the description 'd$et' contains invalid characters"),
+    ("d$et.val", ValueError, "'d$et' in the description 'd$et.val' contains invalid characters"),
+    ("det.v$al", ValueError, "'v$al' in the description 'det.v$al' contains invalid characters"),
 ])
 # fmt: on
 def test_split_list_element_definition_2_fail(element_def, exception_type, msg):
@@ -3156,6 +3223,10 @@ _allowed_devices_dict_1 = {
     (":^da:?motor$:depth=2", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc3_motor",
      "da0_motor.db1_det.dc1_motor", "da1_det.db1_motor"]),
     ("__MOTOR__:+^da:?motor$:depth=1", ["da0_motor", "da0_motor.db0_motor", "da1_det.db1_motor"]),
+    ("__READABLE__:?.*db0_motor.*:depth=3", [
+        "da0_motor.db0_motor", "da0_motor.db0_motor.dc0_det", "da0_motor.db0_motor.dc1_det",
+        "da0_motor.db0_motor.dc2_det", "da0_motor.db0_motor.dc3_motor"]),
+    ("__MOTOR__:?.*db0_motor.*:depth=3", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc3_motor"]),
 ])
 # fmt: on
 def test_build_device_name_list_1(element_def, expected_name_list):
@@ -4480,7 +4551,7 @@ def test_load_allowed_plans_and_devices_2(
             assert plans == ("count", "scan"), test_case
         else:
             assert devs == ("det1", "det2", "junk_device"), test_case
-            assert plans == ("count", "scan", "junk_plan"), test_case
+            assert plans == ("count", "junk_plan", "scan"), test_case
 
 
 _user_permissions_incomplete_1 = """user_groups:
@@ -4958,7 +5029,7 @@ def test_validate_plan_1(func, plan, success, errmsg):
     """
     Tests for the plan validation algorithm.
     """
-    allowed_plans = {"existing": _process_plan(func, existing_devices={})}
+    allowed_plans = {"existing": _process_plan(func, existing_devices={}, existing_plans={})}
     success_out, errmsg_out = validate_plan(plan, allowed_plans=allowed_plans, allowed_devices=None)
 
     assert success_out == success, f"errmsg: {errmsg_out}"
@@ -5093,7 +5164,7 @@ def test_validate_plan_3(plan_func, plan, allowed_devices, success, errmsg):
     """
     plan["name"] = plan_func.__name__
     allowed_plans = {
-        "_vp3a": _process_plan(_vp3a, existing_devices={}),
+        "_vp3a": _process_plan(_vp3a, existing_devices={}, existing_plans={}),
         "p1": {},  # The plan is used only as a parameter value
         "p2": {},  # The plan is used only as a parameter value
     }
@@ -5137,7 +5208,7 @@ def test_validate_plan_4(plan_func, plan, success, errmsg):
     """
     plan["name"] = plan_func.__name__
     allowed_plans = {
-        "_vp4a": _process_plan(_vp4a, existing_devices={}),
+        "_vp4a": _process_plan(_vp4a, existing_devices={}, existing_plans={}),
     }
 
     success_out, errmsg_out = validate_plan(plan, allowed_plans=allowed_plans, allowed_devices={})
@@ -5189,7 +5260,7 @@ def test_bind_plan_arguments_1(func, plan_args, plan_kwargs, plan_bound_params, 
     """
     Tests for ``bind_plan_arguments()`` function.
     """
-    allowed_plans = {"existing": _process_plan(func, existing_devices={})}
+    allowed_plans = {"existing": _process_plan(func, existing_devices={}, existing_plans={})}
     if success:
         plan_parameters_copy = copy.deepcopy(allowed_plans["existing"])
 
@@ -5397,7 +5468,7 @@ _desc_ftd1f_html = {
 ])
 # fmt: on
 def test_format_text_descriptions_1(plan, desc_plain, desc_html):
-    plan_params = _process_plan(plan, existing_devices={})
+    plan_params = _process_plan(plan, existing_devices={}, existing_plans={})
 
     desc = format_text_descriptions(plan_params, use_html=False)
     assert desc == desc_plain

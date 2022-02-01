@@ -3135,7 +3135,7 @@ def test_devices_from_nspace():
         ), f"The object '{device}' is not a device"
 
     # Check that both devices and signals are recognized by the function
-    device_names = ("custom_test_device", "custom_test_signal", "custom_test_flyer", "sim_bundle")
+    device_names = ("custom_test_device", "custom_test_signal", "custom_test_flyer", "sim_bundle_A")
     for d in device_names:
         assert d in devices
     # Device classes should not be included
@@ -4612,11 +4612,11 @@ def test_load_allowed_plans_and_devices_2(
         plans = params[1]["annotation"]["plans"]["Plans"]
         test_case = f"only_admin = {only_admin} user = '{user}'"
         if items_are_removed and not (only_admin and user == "root"):
-            assert devs == ("det1", "det2"), test_case
-            assert plans == ("count", "scan"), test_case
+            assert devs == ["det1", "det2"], test_case
+            assert plans == ["count", "scan"], test_case
         else:
-            assert devs == ("det1", "det2", "junk_device"), test_case
-            assert plans == ("count", "junk_plan", "scan"), test_case
+            assert devs == ["det1", "det2", "junk_device"], test_case
+            assert plans == ["count", "junk_plan", "scan"], test_case
 
 
 _user_permissions_incomplete_1 = """user_groups:
@@ -4897,6 +4897,34 @@ _user_permissions_subdevices_3 = """user_groups:
       - "g_B$"  # Block 'stg_B'
 """
 
+_user_permissions_subdevices_4 = """user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - null  # Everything is allowed
+    allowed_devices:
+      - "g_B$"  # Allow 'stg_B'
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - ".*"  # A different way to allow all
+    allowed_devices:
+       - ".*"  # A different way to allow all
+"""
+
+_user_permissions_subdevices_5 = """user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - null  # Everything is allowed
+    allowed_devices:
+      - null  # Everything is allowed
+    forbidden_devices:
+      - "g_B$"  # Block 'stg_B'
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - ".*"  # A different way to allow all
+    allowed_devices:
+      - ".*"  # A different way to allow all
+"""
+
 
 # fmt: off
 @pytest.mark.parametrize("pass_permissions_as_parameter", [False, True])
@@ -4905,11 +4933,21 @@ _user_permissions_subdevices_3 = """user_groups:
      ["stg_A", "stg_A.dets", "stg_B.dets.det_A"],
      ["stg_A.dets", "stg_A.dets.det_A", "stg_B.dets", "stg_B.dets.det_A"],
      ["stg_A.mtrs.z", "stg_B.mtrs.z"]),
+    # Filtering of lists for the 'admin' user
     (_user_permissions_subdevices_2,
      ["stg_B.dets.det_A"],
      ["stg_B.dets", "stg_B.dets.det_A"],
      ["stg_B.mtrs.z"]),
     (_user_permissions_subdevices_3,
+     ["stg_A", "stg_A.dets"],
+     ["stg_A.dets", "stg_A.dets.det_A"],
+     ["stg_A.mtrs.z"]),
+    # Filtering of lists for the 'root' user
+    (_user_permissions_subdevices_4,
+     ["stg_B.dets.det_A"],
+     ["stg_B.dets", "stg_B.dets.det_A"],
+     ["stg_B.mtrs.z"]),
+    (_user_permissions_subdevices_5,
      ["stg_A", "stg_A.dets"],
      ["stg_A.dets", "stg_A.dets.det_A"],
      ["stg_A.mtrs.z"]),

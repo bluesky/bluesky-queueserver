@@ -66,6 +66,8 @@ from bluesky_queueserver.manager.profile_ops import (
     _build_device_name_list,
     _build_plan_name_list,
     _find_and_replace_built_in_types,
+    _is_object_name_in_list,
+    _get_nspace_object,
 )
 
 # User name and user group name used throughout most of the tests.
@@ -3255,6 +3257,31 @@ _allowed_devices_dict_1 = {
 
 
 # fmt: off
+@pytest.mark.parametrize("device_name, in_list, success, error_type, msg", [
+    ("da0_motor", True, True, None, ""),
+    ("not_exist", False, True, None, ""),
+    ("da0_motor.db0_motor", True, True, None, ""),
+    ("da0_motor.db0_motor.dc3_motor.dd1_motor", True, True, None, ""),
+    ("da0_motor.not_exist.dc3_motor.dd1_motor", False, True, None, ""),
+    ("da0_motor.db0_motor.not_exist.dd1_motor", False, True, None, ""),
+    ("da0_motor.db0_motor.dc3_motor.not_exist", False, True, None, ""),
+    (":da0_motor", True, False, ValueError,
+     "Device name ':da0_motor' can not contain regular expressions"),
+])
+# fmt: on
+def test_is_object_name_in_list_1(device_name, in_list, success, error_type, msg):
+    """
+    ``_is_object_name_in_list``: basic test (test on devices, but expected to work on plans)
+    """
+    if success:
+        res = _is_object_name_in_list(device_name, allowed_objects=_allowed_devices_dict_1)
+        assert res == in_list
+    else:
+        with pytest.raises(error_type, match=msg):
+            _is_object_name_in_list(device_name, allowed_objects=_allowed_devices_dict_1)
+
+
+# fmt: off
 @pytest.mark.parametrize("element_def, expected_name_list", [
     # Device names
     ("da0_motor", ["da0_motor"]),
@@ -3357,6 +3384,45 @@ def test_build_plan_name_list_2_fail(plan_def, exception_type, msg):
         _build_plan_name_list(
             components=components, uses_re=uses_re, device_type=device_type, existing_plans=_allowed_plans_set_1
         )
+
+
+# fmt: off
+@pytest.mark.parametrize("object_name, exists_in_plans, exists_in_devices, exists_in_all", [
+    ("count", True, False, True),
+    ("unknown", False, False, False),
+    ("det", False, True, True),
+    ("det.val", False, True, True),
+    ("sim_bundle_A.mtrs.z", False, True, True),
+    ("sim_bundle_A.mtrs.a", False, False, False),
+    ("sim_bundle_A.unknown.z", False, False, False),
+])
+# fmt: on
+def test_get_nspace_object_1(object_name, exists_in_plans, exists_in_devices, exists_in_all):
+    pc_path = get_default_startup_dir()
+    nspace = load_profile_collection(pc_path)
+    plans = plans_from_nspace(nspace)
+    devices = devices_from_nspace(nspace)
+
+    all_objects = plans.copy()
+    all_objects.update(devices)
+
+    object_ref = _get_nspace_object(object_name, objects_in_nspace=all_objects)
+    if exists_in_all:
+        assert not isinstance(object_ref, str)
+    else:
+        assert isinstance(object_ref, str)
+
+    object_ref = _get_nspace_object(object_name, objects_in_nspace=plans)
+    if exists_in_plans:
+        assert not isinstance(object_ref, str)
+    else:
+        assert isinstance(object_ref, str)
+
+    object_ref = _get_nspace_object(object_name, objects_in_nspace=devices)
+    if exists_in_devices:
+        assert not isinstance(object_ref, str)
+    else:
+        assert isinstance(object_ref, str)
 
 
 # fmt: off

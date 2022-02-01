@@ -570,6 +570,65 @@ def devices_from_nspace(nspace):
     return devices
 
 
+def _get_nspace_object(object_name, *, objects_in_nspace):
+    """
+    Search for object in namespace by name (e.g. ``count`` or ``det1.val``).
+    The function searches for subdevices by using ``component_name`` device property
+    (plans have no ``component_name`` attribute). Returns a reference to
+    the device object if it is found or device name (string) if the device is not found.
+
+    Parameters
+    ----------
+    object_name: str
+        Object (device or plan) name, such as ``count``, ``det1`` or ``det1.val``.
+    objects_in_nspace: dict
+        Dictionary of objects (devices and/or plans) in namespace.
+
+    Returns
+    -------
+    device: callable, ophyd.Object or str
+        Reference to the object or object name (str) if the object is not found.
+    """
+
+    components, uses_re, _ = _split_list_element_definition(object_name)
+    if uses_re:
+        raise ValueError(f"Object (device or plan) name {object_name!r} can not contain regular expressions")
+
+    components = [_[0] for _ in components]  # We use only the 1st element
+
+    if not components:
+        raise ValueError(f"Device name {object_name!r} contains no components")
+
+    object_found = True
+    if components[0] in objects_in_nspace:
+        device = objects_in_nspace[components[0]]
+    else:
+        object_found = False
+
+    if object_found:
+        for c in components[1:]:
+            print(f"c={c} {hasattr(device, 'component_names')}")
+            if hasattr(device, "component_names") and (c in device.component_names):
+                # The defice MUST have the attribute 'c', but still process the case when
+                #   there is a bug and the device doesn't have the attribute
+                device = getattr(device, c, None)
+                if object_found is None:
+                    object_found = False
+                    logger.error("Device '%s' does not have attribute (subdevice) '%s'", str(object_name), str(c))
+                object_found = object_found if device else False
+
+            else:
+                object_found = False
+
+            if not object_found:
+                break
+
+    if not object_found:
+        device = object_name
+
+    return device
+
+
 def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, allowed_devices):
     """
     Prepare the plan for execution: replace the device names (str) in the plan specification
@@ -650,31 +709,32 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
                 default_value = _process_default_value(p["default"])
                 default_params.update({p["name"]: default_value})
 
-    def ref_from_name(v, items_in_nspace, allowed_items):
+    def ref_from_name(v, objects_in_nspace, allowed_objects):
         if isinstance(v, str):
-            if (v in allowed_items) and (v in items_in_nspace):
-                v = items_in_nspace[v]
+            if _is_object_name_in_list(v, allowed_objects=allowed_objects):
+                v = _get_nspace_object(v, objects_in_nspace=objects_in_nspace)
         return v
 
-    def process_argument(v, items_in_nspace, allowed_items):
+    def process_argument(v, objects_in_nspace, allowed_objects):
         # Recursively process lists (iterables) and dictionaries
         if isinstance(v, str):
-            v = ref_from_name(v, items_in_nspace, allowed_items)
+            v = ref_from_name(v, objects_in_nspace, allowed_objects)
         elif isinstance(v, dict):
             for key, value in v.copy().items():
-                v[key] = process_argument(value, items_in_nspace, allowed_items)
+                v[key] = process_argument(value, objects_in_nspace, allowed_objects)
         elif isinstance(v, Iterable):
             v_original = v
             v = list()
             for item in v_original:
-                v.append(process_argument(item, items_in_nspace, allowed_items))
+                v.append(process_argument(item, objects_in_nspace, allowed_objects))
         return v
 
-    def process_parameter_value(value, pp, items_in_nspace, group_plans, group_devices):
+    def process_parameter_value(value, pp, objects_in_nspace, group_plans, group_devices):
         """
         Process a parameter value ``value`` based on parameter description ``pp``
         (``pp = allowed_plans[<plan_name>][<param_name>]``).
         """
+
         if "annotation" not in pp:
             # No annotation - attempt to convert all strings to devices
             sel_item_list = set(group_devices).union(set(group_plans))
@@ -695,8 +755,25 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
             #   lists of devices or plans, then don't attempt to do the conversion
             sel_item_list = set()
 
+        # Include/exclude all devices/plans if required
+        convert_all_plan_names = pp.get("convert_plan_names", None)  # None - not defined
+        convert_all_device_names = pp.get("convert_device_names", None)
+
+        if convert_all_plan_names is True:
+            sel_item_list = sel_item_list.union(set(group_plans))
+        elif convert_all_plan_names is False:
+            sel_item_list = sel_item_list.difference(set(group_plans))
+
+        if convert_all_device_names is True:
+            sel_item_list = sel_item_list.union(set(group_devices))
+        elif convert_all_device_names is False:
+            sel_item_list = sel_item_list.difference(set(group_devices))
+
         if sel_item_list:
-            value = process_argument(value, items_in_nspace, sel_item_list)
+            group_allowed_objects = group_plans.copy()
+            group_allowed_objects.update(group_devices)
+            allowed_objects = {_: group_allowed_objects[_] for _ in sel_item_list}
+            value = process_argument(value, objects_in_nspace, allowed_objects)
 
         return value
 
@@ -993,17 +1070,19 @@ def _split_list_element_definition(element_def):
     return components, uses_re, device_type
 
 
-def _is_device_in_list(device_name, *, allowed_devices):
+def _is_object_name_in_list(object_name, *, allowed_objects):
     """
-    Search for device name (e.g. ``det1.val``) in the tree of device names (list of allowed
-    devices) and returns ``True`` if the device is in the list and ``False`` otherwise.
+    Search for object (plan or device) name (e.g. ``count`` or ``det1.val``) in the tree
+    of device names (list of allowed devices) and returns ``True`` if the device is in
+    the list and ``False`` otherwise.
 
     Parameters
     ----------
-    device_name: str
-        Device name, such as ``det1`` or ``det1.val``.
-    allowed_devices: dict
-        Dictionary that contains descriptions of allowed devices for a user group.
+    object_name: str
+        Object name, such as ``count``, ``det1`` or ``det1.val``.
+    allowed_objects: dict
+        Dictionary that contains descriptions of allowed objects (plans and/or devices)
+        for a user group.
 
     Returns
     -------
@@ -1011,32 +1090,30 @@ def _is_device_in_list(device_name, *, allowed_devices):
         ``True`` if device was found in the list, ``False`` otherwise.
     """
 
-    components, uses_re, device_type = _split_list_element_definition(device_name)
+    components, uses_re, _ = _split_list_element_definition(object_name)
     if uses_re:
-        raise ValueError(f"Device name {device_name!r} can not contain regular expressions")
-    if device_type:
-        raise ValueError(f"Device name {device_name!r} can not contain device type keyword")
+        raise ValueError(f"Device name {object_name!r} can not contain regular expressions")
 
     components = [_[0] for _ in components]  # We use only the 1st element
 
     if not components:
-        raise ValueError(f"Device name {device_name!r} contains no components")
+        raise ValueError(f"Device name {object_name!r} contains no components")
 
-    device_in_list = True
-    if components[0] in allowed_devices:
-        root = allowed_devices[components[0]]
+    object_in_list = True
+    if components[0] in allowed_objects:
+        root = allowed_objects[components[0]]
     else:
-        device_in_list = False
+        object_in_list = False
 
-    if device_in_list:
+    if object_in_list:
         for c in components[1:]:
             if ("components" in root) and (c in root["components"]):
                 root = root["components"][c]
             else:
-                device_in_list = True
+                object_in_list = False
                 break
 
-    return device_in_list
+    return object_in_list
 
 
 def _build_device_name_list(*, components, uses_re, device_type, existing_devices):
@@ -1936,7 +2013,7 @@ def filter_plan_description(plan_description, *, allowed_plans, allowed_devices)
                     p_dev = p["annotation"]["devices"]
                     for p_type in p_dev:
                         p_dev[p_type] = [
-                            _ for _ in p_dev[p_type] if _is_device_in_list(_, allowed_devices=allowed_devices)
+                            _ for _ in p_dev[p_type] if _is_object_name_in_list(_, allowed_objects=allowed_devices)
                         ]
     return plan_description
 

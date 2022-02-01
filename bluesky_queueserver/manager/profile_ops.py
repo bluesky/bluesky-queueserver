@@ -993,6 +993,52 @@ def _split_list_element_definition(element_def):
     return components, uses_re, device_type
 
 
+def _is_device_in_list(device_name, *, allowed_devices):
+    """
+    Search for device name (e.g. ``det1.val``) in the tree of device names (list of allowed
+    devices) and returns ``True`` if the device is in the list and ``False`` otherwise.
+
+    Parameters
+    ----------
+    device_name: str
+        Device name, such as ``det1`` or ``det1.val``.
+    allowed_devices: dict
+        Dictionary that contains descriptions of allowed devices for a user group.
+
+    Returns
+    -------
+    bool
+        ``True`` if device was found in the list, ``False`` otherwise.
+    """
+
+    components, uses_re, device_type = _split_list_element_definition(device_name)
+    if uses_re:
+        raise ValueError(f"Device name {device_name!r} can not contain regular expressions")
+    if device_type:
+        raise ValueError(f"Device name {device_name!r} can not contain device type keyword")
+
+    components = [_[0] for _ in components]  # We use only the 1st element
+
+    if not components:
+        raise ValueError(f"Device name {device_name!r} contains no components")
+
+    device_in_list = True
+    if components[0] in allowed_devices:
+        root = allowed_devices[components[0]]
+    else:
+        device_in_list = False
+
+    if device_in_list:
+        for c in components[1:]:
+            if ("components" in root) and (c in root["components"]):
+                root = root["components"][c]
+            else:
+                device_in_list = True
+                break
+
+    return device_in_list
+
+
 def _build_device_name_list(*, components, uses_re, device_type, existing_devices):
     """
     Generate list of device names (including subdevices) based on one element of a device
@@ -1885,11 +1931,13 @@ def filter_plan_description(plan_description, *, allowed_plans, allowed_devices)
                 if (allowed_plans is not None) and ("plans" in p["annotation"]):
                     p_plans = p["annotation"]["plans"]
                     for p_type in p_plans:
-                        p_plans[p_type] = tuple(_ for _ in p_plans[p_type] if _ in allowed_plans)
+                        p_plans[p_type] = [_ for _ in p_plans[p_type] if _ in allowed_plans]
                 if (allowed_devices is not None) and ("devices" in p["annotation"]):
                     p_dev = p["annotation"]["devices"]
                     for p_type in p_dev:
-                        p_dev[p_type] = tuple(_ for _ in p_dev[p_type] if _ in allowed_devices)
+                        p_dev[p_type] = [
+                            _ for _ in p_dev[p_type] if _is_device_in_list(_, allowed_devices=allowed_devices)
+                        ]
     return plan_description
 
 

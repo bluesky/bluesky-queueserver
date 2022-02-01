@@ -4779,22 +4779,66 @@ def test_load_allowed_plans_and_devices_3(
 
 
 _patch_plan_with_subdevices = """
+
+class SimStg(Device):
+    x = Cpt(ophyd.sim.SynAxis, name="y", labels={"motors"})
+    y = Cpt(ophyd.sim.SynAxis, name="y", labels={"motors"})
+    z = Cpt(ophyd.sim.SynAxis, name="z", labels={"motors"})
+
+    def set(self, x, y, z):
+        # Makes the device Movable
+        self.x.set(x)
+        self.y.set(y)
+        self.z.set(z)
+
+
+class SimDets(Device):
+    # The detectors are controlled by simulated 'motor1' and 'motor2'
+    # defined on the global scale.
+
+    det_A = Cpt(
+        ophyd.sim.SynGauss,
+        name="det_A",
+        motor=motor1,
+        motor_field="motor1",
+        center=0,
+        Imax=5,
+        sigma=0.5,
+        labels={"detectors"},
+    )
+    det_B = Cpt(
+        ophyd.sim.SynGauss,
+        name="det_B",
+        motor=motor2,
+        motor_field="motor2",
+        center=0,
+        Imax=5,
+        sigma=0.5,
+        labels={"detectors"},
+    )
+
+
+class SimBundle(ophyd.Device):
+    mtrs = Cpt(SimStage, name="stage")
+    dets = Cpt(SimDetectors, name="detectors")
+
+
+stg_A = SimBundle(name="sim_bundle")
+stg_B = SimBundle(name="sim_bundle")  # Used for tests
+
 @parameter_annotation_decorator({
     "parameters":{
         "device1": {
             "annotation": "Devices1",
-            "devices": {"Devices1": (
-                "sim_bundle", "sim_bundle.detectors", "sim_bundle1.detectors.det_A"
-                )
-            }
+            "devices": {"Devices1": ("stg_A", "stg_A.dets", "stg_B.dets.det_A")}
         },
         "device2": {
             "annotation": "Devices1",
-            "devices": {"Devices1": (":^sim:+^det:A$", ":.*:.+motors$:y")}
+            "devices": {"Devices1": (":^stg:+^det:A$", ":.*:.+mtrs$:y")}
         },
         "device3": {
             "annotation": "Devices1",
-            "devices": {"Devices1": (":?_le.*z$", ":?_le_1.*z$")}
+            "devices": {"Devices1": (":?tg_A.*z$", ":?tg_B.*z$")}
         },
     }
 })
@@ -4819,23 +4863,64 @@ _user_permissions_subdevices_1 = """user_groups:
       - null  # Nothing is forbidden
 """
 
+_user_permissions_subdevices_2 = """user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - null  # Everything is allowed
+    allowed_devices:
+      - null  # Everything is allowed
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - ".*"  # A different way to allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - "g_B$"  # Allow 'stg_B'
+    forbidden_devices:
+      - null  # Nothing is forbidden
+"""
+
+_user_permissions_subdevices_3 = """user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - null  # Everything is allowed
+    allowed_devices:
+      - null  # Everything is allowed
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - ".*"  # A different way to allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - ".*"  # A different way to allow all
+    forbidden_devices:
+      - "g_B$"  # Block 'stg_B'
+"""
+
 
 # fmt: off
 @pytest.mark.parametrize("pass_permissions_as_parameter", [False, True])
-@pytest.mark.parametrize("permissions_str, dev_device1, dev_device2, dev_device3", [
+@pytest.mark.parametrize("permissions_str, dev1, dev2, dev3", [
     (_user_permissions_subdevices_1,
-     ["sim_bundle", "sim_bundle.detectors", "sim_bundle1.detectors.det_A"],
-     ["sim_bundle.detectors", "sim_bundle.detectors.det_A",
-      "sim_bundle_1.detectors", "sim_bundle_1.detectors.det_A"],
-     ["sim_bundle.stage_motors.z", "sim_bundle.stage_motors.z"]),
+     ["stg_A", "stg_A.dets", "stg_B.dets.det_A"],
+     ["stg_A.dets", "stg_A.dets.det_A", "stg_B.dets", "stg_B.dets.det_A"],
+     ["stg_A.mtrs.z", "stg_B.mtrs.z"]),
+    (_user_permissions_subdevices_2,
+     ["stg_B.dets.det_A"],
+     ["stg_B.dets", "stg_B.dets.det_A"],
+     ["stg_B.mtrs.z"]),
+    (_user_permissions_subdevices_3,
+     ["stg_A", "stg_A.dets"],
+     ["stg_A.dets", "stg_A.dets.det_A"],
+     ["stg_A.mtrs.z"]),
 ])
 # fmt: on
 def test_load_allowed_plans_and_devices_4(
-    tmp_path, permissions_str, dev_device1, dev_device2, dev_device3, pass_permissions_as_parameter
+    tmp_path, permissions_str, dev1, dev2, dev3, pass_permissions_as_parameter
 ):
     """
-    Test if plan parameters are properly filtered if they contain subdevices
-    ``load_allowed_plans_and_devices``.
+    ``load_allowed_plans_and_devices``: test if lists of devices in plan parameters
+    are properly generated and filtered in case if they contain subdevices .
     """
 
     pc_path = copy_default_profile_collection(tmp_path)
@@ -4862,9 +4947,18 @@ def test_load_allowed_plans_and_devices_4(
             path_existing_plans_and_devices=plans_and_devices_fln,
             path_user_group_permissions=permissions_fln,
         )
-    assert "plan_with_subdevices" in allowed_plans["admin"], pprint.pformat(allowed_plans)
-    assert "sim_bundle" in allowed_devices["admin"]
-    assert "sim_bundle_1" in allowed_devices["admin"]
+    assert "plan_with_subdevices" in allowed_plans["admin"], list(allowed_plans.keys())
+
+    params = allowed_plans["admin"]["plan_with_subdevices"]["parameters"]
+    assert params[0]["name"] == "device1"
+    assert params[0]["annotation"]["type"] == "Devices1"
+    assert params[0]["annotation"]["devices"]["Devices1"] == dev1
+    assert params[1]["name"] == "device2"
+    assert params[1]["annotation"]["type"] == "Devices1"
+    assert params[1]["annotation"]["devices"]["Devices1"] == dev2
+    assert params[2]["name"] == "device3"
+    assert params[2]["annotation"]["type"] == "Devices1"
+    assert params[2]["annotation"]["devices"]["Devices1"] == dev3
 
 
 # fmt: off

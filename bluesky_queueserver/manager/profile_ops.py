@@ -709,24 +709,24 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
                 default_value = _process_default_value(p["default"])
                 default_params.update({p["name"]: default_value})
 
-    def ref_from_name(v, objects_in_nspace, allowed_objects):
+    def ref_from_name(v, objects_in_nspace, sel_object_names, selected_object_tree):
         if isinstance(v, str):
-            if _is_object_name_in_list(v, allowed_objects=allowed_objects):
+            if (v in sel_object_names) or _is_object_name_in_list(v, allowed_objects=selected_object_tree):
                 v = _get_nspace_object(v, objects_in_nspace=objects_in_nspace)
         return v
 
-    def process_argument(v, objects_in_nspace, allowed_objects):
+    def process_argument(v, objects_in_nspace, sel_object_names, selected_object_tree):
         # Recursively process lists (iterables) and dictionaries
         if isinstance(v, str):
-            v = ref_from_name(v, objects_in_nspace, allowed_objects)
+            v = ref_from_name(v, objects_in_nspace, sel_object_names, selected_object_tree)
         elif isinstance(v, dict):
             for key, value in v.copy().items():
-                v[key] = process_argument(value, objects_in_nspace, allowed_objects)
+                v[key] = process_argument(value, objects_in_nspace, sel_object_names, selected_object_tree)
         elif isinstance(v, Iterable):
             v_original = v
             v = list()
             for item in v_original:
-                v.append(process_argument(item, objects_in_nspace, allowed_objects))
+                v.append(process_argument(item, objects_in_nspace, sel_object_names, selected_object_tree))
         return v
 
     def process_parameter_value(value, pp, objects_in_nspace, group_plans, group_devices):
@@ -735,45 +735,44 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
         (``pp = allowed_plans[<plan_name>][<param_name>]``).
         """
 
-        if "annotation" not in pp:
-            # No annotation - attempt to convert all strings to devices
-            sel_item_list = set(group_devices).union(set(group_plans))
-        elif ("plans" in pp["annotation"]) or ("devices" in pp["annotation"]):
-            # 'Custom' annotation: attempt to convert strings only to the devices
-            #    and plans that are part of the description.
-            pname_list, dname_list = [], []
-            for _ in pp["annotation"].get("plans", {}).values():
-                pname_list.extend(_)
-            for _ in pp["annotation"].get("devices", {}).values():
-                dname_list.extend(list(_))
-            # Make sure the names are  in the allowed list
-            pname_list = set([_ for _ in pname_list if _ in group_plans])
-            dname_list = set([_ for _ in dname_list if _ in group_devices])
-            sel_item_list = pname_list.union(dname_list)
-        else:
-            # If annotation (from decorator or function signature) does not contain
-            #   lists of devices or plans, then don't attempt to do the conversion
-            sel_item_list = set()
-
         # Include/exclude all devices/plans if required
         convert_all_plan_names = pp.get("convert_plan_names", None)  # None - not defined
         convert_all_device_names = pp.get("convert_device_names", None)
 
+        # A set of the selected device names (device names are listed explicitly, not as a tree)
+        sel_object_names, pname_list, dname_list = set(), set(), set()
+
+        if "annotation" not in pp:
+            convert_all_plan_names = True if (convert_all_plan_names is None) else convert_all_plan_names
+            convert_all_device_names = True if (convert_all_device_names is None) else convert_all_device_names
+        elif ("plans" in pp["annotation"]) or ("devices" in pp["annotation"]):
+            # 'Custom' annotation: attempt to convert strings only to the devices
+            #    and plans that are part of the description.
+            pname_list, dname_list = [], []
+            for plist in pp["annotation"].get("plans", {}).values():
+                plist = [_ for _ in plist if _is_object_name_in_list(_, allowed_objects=group_plans)]
+                pname_list.extend(list(plist))
+            for dlist in pp["annotation"].get("devices", {}).values():
+                dlist = [_ for _ in dlist if _is_object_name_in_list(_, allowed_objects=group_devices)]
+                dname_list.extend(list(dlist))
+            pname_list, dname_list = set(pname_list), set(dname_list)
+
+        # Create a tree of objects (dictionary of plans and devices)
+        selected_object_tree = {}
         if convert_all_plan_names is True:
-            sel_item_list = sel_item_list.union(set(group_plans))
+            selected_object_tree.update(group_plans)
         elif convert_all_plan_names is False:
-            sel_item_list = sel_item_list.difference(set(group_plans))
+            pname_list = set()
 
         if convert_all_device_names is True:
-            sel_item_list = sel_item_list.union(set(group_devices))
+            selected_object_tree.update(group_devices)
         elif convert_all_device_names is False:
-            sel_item_list = sel_item_list.difference(set(group_devices))
+            dname_list = set()
 
-        if sel_item_list:
-            group_allowed_objects = group_plans.copy()
-            group_allowed_objects.update(group_devices)
-            allowed_objects = {_: group_allowed_objects[_] for _ in sel_item_list}
-            value = process_argument(value, objects_in_nspace, allowed_objects)
+        sel_object_names = pname_list.union(dname_list)
+
+        if sel_object_names or selected_object_tree:
+            value = process_argument(value, objects_in_nspace, sel_object_names, selected_object_tree)
 
         return value
 
@@ -781,7 +780,7 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
     items_in_nspace = devices_in_nspace.copy()
     items_in_nspace.update(plans_in_nspace)
 
-    plan_func = process_argument(plan_name, plans_in_nspace, group_plans)
+    plan_func = process_argument(plan_name, plans_in_nspace, set(), group_plans)
     if isinstance(plan_func, str):
         success = False
         err_msg = f"Plan '{plan_name}' is not allowed or does not exist"
@@ -1074,7 +1073,9 @@ def _is_object_name_in_list(object_name, *, allowed_objects):
     """
     Search for object (plan or device) name (e.g. ``count`` or ``det1.val``) in the tree
     of device names (list of allowed devices) and returns ``True`` if the device is in
-    the list and ``False`` otherwise.
+    the list and ``False`` otherwise. If search for a device name n the tree is terminated
+    prematurely or at the node which has optional ``excluded`` attribute set ``True``, then
+    it is considered that the name is not in the list.
 
     Parameters
     ----------
@@ -1099,16 +1100,18 @@ def _is_object_name_in_list(object_name, *, allowed_objects):
     if not components:
         raise ValueError(f"Device name {object_name!r} contains no components")
 
-    object_in_list = True
+    root = None
     if components[0] in allowed_objects:
         root = allowed_objects[components[0]]
+        object_in_list = not root.get("excluded", False)
     else:
         object_in_list = False
 
-    if object_in_list:
+    if root:
         for c in components[1:]:
             if ("components" in root) and (c in root["components"]):
                 root = root["components"][c]
+                object_in_list = not root.get("excluded", False)
             else:
                 object_in_list = False
                 break
@@ -1133,6 +1136,8 @@ def _build_device_name_list(*, components, uses_re, device_type, existing_device
     of the subdevice (if 3rd element of the tuple is True). Depth for 'full name' search
     can be restricted (4th component of the tuple). Depth may be integer (>=1) or ``None``
     (depth is not define, therefore considered infinite).
+
+    The devices with set parameter ``'excluded': True`` are not included in the list.
 
     It is assumed that element definitions are first processed using
     ``_split_list_element_definition``, which catches and processes all the errors,
@@ -1203,7 +1208,7 @@ def _build_device_name_list(*, components, uses_re, device_type, existing_device
                 for dname, dparams in devices.items():
                     name_suffix_new = dname if not name_suffix else (name_suffix + "." + dname)
                     full_name = name_suffix_new if not base_name else (base_name + "." + name_suffix_new)
-                    if re.search(pattern, full_name) and condition(dparams):
+                    if re.search(pattern, full_name) and not dparams.get("excluded", False) and condition(dparams):
                         device_list.append(full_name)
                     if "components" in dparams:
                         process_devices_full_name(
@@ -1231,7 +1236,7 @@ def _build_device_name_list(*, components, uses_re, device_type, existing_device
                     for dname, dparams in devices.items():
                         if re.search(pattern, dname):
                             full_name = dname if not base_name else (base_name + "." + dname)
-                            if include_devices and condition(dparams):
+                            if include_devices and not dparams.get("excluded", False) and condition(dparams):
                                 device_list.append(full_name)
                             if "components" in dparams:
                                 process_devices(
@@ -2008,7 +2013,9 @@ def filter_plan_description(plan_description, *, allowed_plans, allowed_devices)
                 if (allowed_plans is not None) and ("plans" in p["annotation"]):
                     p_plans = p["annotation"]["plans"]
                     for p_type in p_plans:
-                        p_plans[p_type] = [_ for _ in p_plans[p_type] if _ in allowed_plans]
+                        p_plans[p_type] = [
+                            _ for _ in p_plans[p_type] if _is_object_name_in_list(_, allowed_objects=allowed_plans)
+                        ]
                 if (allowed_devices is not None) and ("devices" in p["annotation"]):
                     p_dev = p["annotation"]["devices"]
                     for p_type in p_dev:

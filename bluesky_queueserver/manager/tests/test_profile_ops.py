@@ -68,6 +68,7 @@ from bluesky_queueserver.manager.profile_ops import (
     _find_and_replace_built_in_types,
     _is_object_name_in_list,
     _get_nspace_object,
+    _filter_allowed_plans,
 )
 
 # User name and user group name used throughout most of the tests.
@@ -3225,12 +3226,16 @@ _allowed_devices_dict_1 = {
                     "dc1_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
                     "dc2_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
                     "dc3_motor": {
+                        "excluded": False,
                         "is_readable": True, "is_movable": True, "is_flyable": False,
                         "components": {
                             "dd0_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
                             "dd1_motor": {"is_readable": True, "is_movable": True, "is_flyable": False},
                         }
                     },
+                    "dc4_motor": {
+                        "excluded": True, "is_readable": True, "is_movable": True, "is_flyable": False,
+                    }
                 }
             },
             "db1_det": {
@@ -3246,12 +3251,17 @@ _allowed_devices_dict_1 = {
         }
     },
     "da1_det": {
+        "excluded": False,
         "is_readable": True, "is_movable": False, "is_flyable": False,
         "components": {
             "db0_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
             "db1_motor": {"is_readable": True, "is_movable": True, "is_flyable": False},
         }
     },
+    "da2_det": {
+        "excluded": True,
+        "is_readable": True, "is_movable": False, "is_flyable": False,
+    }
 }
 # fmt: on
 
@@ -3265,6 +3275,8 @@ _allowed_devices_dict_1 = {
     ("da0_motor.not_exist.dc3_motor.dd1_motor", False, True, None, ""),
     ("da0_motor.db0_motor.not_exist.dd1_motor", False, True, None, ""),
     ("da0_motor.db0_motor.dc3_motor.not_exist", False, True, None, ""),
+    ("da2_det", False, True, None, ""),  # excluded
+    ("da0_motor.db0_motor.dc4_motor", False, True, None, ""),  # excluded
     (":da0_motor", True, False, ValueError,
      "Device name ':da0_motor' can not contain regular expressions"),
 ])
@@ -3514,6 +3526,64 @@ def _pp_p3():
     yield from []
 
 
+def _pp_generate_stage_devs():
+    """
+    Created compound devices for testing 'prepare_plan' function.
+    """
+
+    from ophyd.sim import motor1 as _pp_motor1, motor2 as _pp_motor2
+
+    class SimStage(ophyd.Device):
+        x = ophyd.Component(ophyd.sim.SynAxis, name="y", labels={"motors"})
+        y = ophyd.Component(ophyd.sim.SynAxis, name="y", labels={"motors"})
+        z = ophyd.Component(ophyd.sim.SynAxis, name="z", labels={"motors"})
+
+        def set(self, x, y, z):
+            """Makes the device Movable"""
+            self.x.set(x)
+            self.y.set(y)
+            self.z.set(z)
+
+    class SimDetectors(ophyd.Device):
+        """
+        The detectors are controlled by simulated 'motor1' and 'motor2'
+        defined on the global scale.
+        """
+
+        det_A = ophyd.Component(
+            ophyd.sim.SynGauss,
+            name="det_A",
+            motor=_pp_motor1,
+            motor_field="motor1",
+            center=0,
+            Imax=5,
+            sigma=0.5,
+            labels={"detectors"},
+        )
+        det_B = ophyd.Component(
+            ophyd.sim.SynGauss,
+            name="det_B",
+            motor=_pp_motor2,
+            motor_field="motor2",
+            center=0,
+            Imax=5,
+            sigma=0.5,
+            labels={"detectors"},
+        )
+
+    class SimBundle(ophyd.Device):
+        mtrs = ophyd.Component(SimStage, name="mtrs")
+        dets = ophyd.Component(SimDetectors, name="dets")
+
+    sim_bundle_A = SimBundle(name="sim_bundle_A")
+    sim_bundle_B = SimBundle(name="sim_bundle_B")  # Used for tests
+
+    return sim_bundle_A, sim_bundle_B
+
+
+_pp_stg_A, _pp_stg_B = _pp_generate_stage_devs()
+
+
 def _gen_environment_pp2():
     def plan1(a, b, c):
         yield from [a, b, c]
@@ -3551,6 +3621,76 @@ def _gen_environment_pp2():
         detectors = detectors or [_pp_dev2, _pp_dev3]
         yield from detectors
 
+    # Explicitly specifying subdevices in the list
+    @parameter_annotation_decorator(
+        {
+            "parameters": {
+                "detectors": {
+                    "annotation": "typing.List[Detectors]",
+                    "devices": {"Detectors": ["_pp_dev1", "_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]},
+                    # Default list of the detectors
+                    "default": ["_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"],
+                }
+            }
+        }
+    )
+    def plan4a(detectors: typing.Optional[typing.List[ophyd.Device]] = None):
+        # Default for 'detectors' is None, which is converted to the default list of detectors
+        detectors = detectors or [_pp_dev2, _pp_dev3]
+        yield from detectors
+
+    # Enable converting all devices (using __DEVICE__ built-in type)
+    @parameter_annotation_decorator(
+        {
+            "parameters": {
+                "detectors": {
+                    "annotation": "typing.List[__DEVICE__]",
+                    # Default list of the detectors
+                    "default": ["_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"],
+                }
+            }
+        }
+    )
+    def plan4b(detectors: typing.Optional[typing.List[ophyd.Device]] = None):
+        # Default for 'detectors' is None, which is converted to the default list of detectors
+        detectors = detectors or [_pp_dev2, _pp_dev3]
+        yield from detectors
+
+    # Enable converting all devices (using 'convert_device_names')
+    @parameter_annotation_decorator(
+        {
+            "parameters": {
+                "detectors": {
+                    "annotation": "typing.List[str]",
+                    "convert_device_names": True,
+                    # Default list of the detectors
+                    "default": ["_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"],
+                }
+            }
+        }
+    )
+    def plan4c(detectors: typing.Optional[typing.List[ophyd.Device]] = None):
+        # Default for 'detectors' is None, which is converted to the default list of detectors
+        detectors = detectors or [_pp_dev2, _pp_dev3]
+        yield from detectors
+
+    # Enable converting all devices (using __PLAN_OR_DEVICE__ built-in type)
+    @parameter_annotation_decorator(
+        {
+            "parameters": {
+                "detectors": {
+                    "annotation": "typing.List[__PLAN_OR_DEVICE__]",
+                    # Default list of the detectors
+                    "default": ["_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"],
+                }
+            }
+        }
+    )
+    def plan4d(detectors: typing.Optional[typing.List[ophyd.Device]] = None):
+        # Default for 'detectors' is None, which is converted to the default list of detectors
+        detectors = detectors or [_pp_dev2, _pp_dev3]
+        yield from detectors
+
     @parameter_annotation_decorator(
         {
             "parameters": {
@@ -3564,6 +3704,49 @@ def _gen_environment_pp2():
         }
     )
     def plan5(plan_to_execute: typing.Callable = _pp_p2):
+        yield from plan_to_execute
+
+    @parameter_annotation_decorator(
+        {
+            "parameters": {
+                "plan_to_execute": {
+                    "annotation": "__PLAN__",
+                    # Default list of plans
+                    "default": "_pp_p2",
+                }
+            }
+        }
+    )
+    def plan5b(plan_to_execute: typing.Callable = _pp_p2):
+        yield from plan_to_execute
+
+    @parameter_annotation_decorator(
+        {
+            "parameters": {
+                "plan_to_execute": {
+                    "annotation": "str",
+                    "convert_plan_names": True,
+                    # Default list of plans
+                    "default": "_pp_p2",
+                }
+            }
+        }
+    )
+    def plan5c(plan_to_execute: typing.Callable = _pp_p2):
+        yield from plan_to_execute
+
+    @parameter_annotation_decorator(
+        {
+            "parameters": {
+                "plan_to_execute": {
+                    "annotation": "__PLAN_OR_DEVICE__",
+                    # Default list of plans
+                    "default": "_pp_p2",
+                }
+            }
+        }
+    )
+    def plan5d(plan_to_execute: typing.Callable = _pp_p2):
         yield from plan_to_execute
 
     @parameter_annotation_decorator(
@@ -3587,12 +3770,20 @@ def _gen_environment_pp2():
 
     # Create namespace
     nspace = {"_pp_dev1": _pp_dev1, "_pp_dev2": _pp_dev2, "_pp_dev3": _pp_dev3}
+    nspace.update({"_pp_stg_A": _pp_stg_A, "_pp_stg_B": _pp_stg_B})
     nspace.update({"_pp_p1": _pp_p1, "_pp_p2": _pp_p2, "_pp_p3": _pp_p3})
     nspace.update({"plan1": plan1})
     nspace.update({"plan2": plan2})
     nspace.update({"plan3": plan3})
     nspace.update({"plan4": plan4})
+    nspace.update({"plan4a": plan4a})
+    nspace.update({"plan4b": plan4b})
+    nspace.update({"plan4c": plan4c})
+    nspace.update({"plan4d": plan4d})
     nspace.update({"plan5": plan5})
+    nspace.update({"plan5b": plan5b})
+    nspace.update({"plan5c": plan5c})
+    nspace.update({"plan5d": plan5d})
     nspace.update({"plan6": plan6})
     nspace.update({"plan7": plan7})
 
@@ -3610,85 +3801,321 @@ def _gen_environment_pp2():
 
 # fmt: off
 @pytest.mark.parametrize(
-    "plan_name, plan, exp_args, exp_kwargs, exp_meta, success, err_msg",
+    "plan_name, plan, remove_objs, exp_args, exp_kwargs, exp_meta, success, err_msg",
     [
-        ("plan1", {"user_group": "admin", "args": [3, 4, 5]},
+        # Passing simple set of parameters as args, kwargs or combination. No default values.
+        ("plan1", {"user_group": "admin", "args": [3, 4, 5]}, [],
          [3, 4, 5], {}, {}, True, ""),
-        ("plan1", {"user_group": "admin", "args": [3, 4], "kwargs": {"c": 5}},
+        ("plan1", {"user_group": "admin", "args": [3, 4], "kwargs": {"c": 5}}, [],
          [3, 4, 5], {}, {}, True, ""),
-        ("plan1", {"user_group": "admin", "args": [3, 4], "kwargs": {"b": 5}},
+        ("plan1", {"user_group": "admin", "args": [3, 4], "kwargs": {"b": 5}}, [],
          [3, 4, 5], {}, {}, False, "Plan validation failed: multiple values for argument 'b'"),
-        ("plan1", {"user_group": "admin", "args": [3, 4, 5], "meta": {"p1": 10, "p2": "abc"}},
+        ("plan1", {"user_group": "admin", "args": [3, 4, 5], "meta": {"p1": 10, "p2": "abc"}}, [],
          [3, 4, 5], {}, {"p1": 10, "p2": "abc"}, True, ""),
-        ("plan1", {"user_group": "admin", "args": [3, 4, 5], "meta": [{"p1": 10}, {"p2": "abc"}]},
+        ("plan1", {"user_group": "admin", "args": [3, 4, 5], "meta": [{"p1": 10}, {"p2": "abc"}]}, [],
          [3, 4, 5], {}, {"p1": 10, "p2": "abc"}, True, ""),
-        ("plan1", {"user_group": "admin", "args": [3, 4, 5], "meta": [{"p1": 10}, {"p1": 5, "p2": "abc"}]},
+        ("plan1", {"user_group": "admin", "args": [3, 4, 5], "meta": [{"p1": 10}, {"p1": 5, "p2": "abc"}]}, [],
          [3, 4, 5], {}, {"p1": 10, "p2": "abc"}, True, ""),
 
-        ("plan2", {"user_group": "admin"},
+        # Passing simple set of parameters as args and kwargs with default values.
+        ("plan2", {"user_group": "admin"}, [],
          [], {}, {}, True, ""),
-        ("plan2", {"user_group": "admin", "args": [3, 2.6]},
+        ("plan2", {"user_group": "admin", "args": [3, 2.6]}, [],
          [3, 2.6], {}, {}, True, ""),
-        ("plan2", {"user_group": "admin", "args": [2.6, 3]},
+        ("plan2", {"user_group": "admin", "args": [2.6, 3]}, [],
          [2.6, 3], {}, {}, False, " Incorrect parameter type: key='a', value='2.6'"),
-        ("plan2", {"user_group": "admin", "kwargs": {"b": 9.9, "s": "def"}},
+        ("plan2", {"user_group": "admin", "kwargs": {"b": 9.9, "s": "def"}}, [],
          [], {"b": 9.9, "s": "def"}, {}, True, ""),
 
-        ("plan3", {"user_group": "admin"},
+        # Plan with parameters of numerical type. Parameter types and default values are specified
+        #   in 'parameter_annotation_decorator'.
+        ("plan3", {"user_group": "admin"}, [],
          [], {'a': 0.5, 'b': 5, 's': 50}, {}, True, ""),
-        ("plan3", {"user_group": "admin", "args": [2.8]},
+        ("plan3", {"user_group": "admin", "args": [2.8]}, [],
          [2.8], {'b': 5, 's': 50}, {}, True, ""),
-        ("plan3", {"user_group": "admin", "args": [2.8], "kwargs": {"a": 2.8}},
+        ("plan3", {"user_group": "admin", "args": [2.8], "kwargs": {"a": 2.8}}, [],
          [2.8], {'b': 5, 's': 50}, {}, False, "multiple values for argument 'a'"),
-        ("plan3", {"user_group": "admin", "args": [], "kwargs": {"b": 30}},
+        ("plan3", {"user_group": "admin", "args": [], "kwargs": {"b": 30}}, [],
          [], {'a': 0.5, 'b': 30, 's': 50}, {}, True, ""),
-        ("plan3", {"user_group": "admin", "args": [], "kwargs": {"b": 2.8}},
+        ("plan3", {"user_group": "admin", "args": [], "kwargs": {"b": 2.8}}, [],
          [], {'a': 0.5, 'b': 2.8, 's': 50}, {}, False, "Incorrect parameter type: key='b', value='2.8'"),
 
-        ("plan4", {"user_group": "admin"},
+        # Plan with a single parameter, which is a list of detector. The list of detector names (enum)
+        #   and default value (list of detectors) is specified in 'parameter_annotation_decorator'.
+        #   Test if the detector names are properly converted to objects when passed as args, kwargs
+        #   or if the default value is used (function is called without an argument).
+        ("plan4", {"user_group": "admin"}, [],
          [], {"detectors": [_pp_dev2, _pp_dev3]}, {}, True, ""),
-        ("plan4", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3"]]},
+        ("plan4", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3"]]}, [],
          [[_pp_dev1, _pp_dev3]], {}, {}, True, ""),
-        ("plan4", {"user_group": "admin", "kwargs": {"detectors": ["_pp_dev1", "_pp_dev3"]}},
+        ("plan4", {"user_group": "admin", "kwargs": {"detectors": ["_pp_dev1", "_pp_dev3"]}}, [],
          [[_pp_dev1, _pp_dev3]], {}, {}, True, ""),
-        ("plan4", {"user_group": "admin", "kwargs": {"detectors": ["nonexisting_dev", "_pp_dev3"]}},
+        ("plan4", {"user_group": "admin", "kwargs": {"detectors": ["nonexisting_dev", "_pp_dev3"]}}, [],
          [[_pp_dev1, _pp_dev3]], {}, {}, False, "value is not a valid enumeration member"),
 
-        ("plan5", {"user_group": "admin"},
-         [], {"plan_to_execute": _pp_p2}, {}, True, ""),
-        ("plan5", {"user_group": "admin", "args": ["_pp_p3"]},
-         [_pp_p3], {}, {}, True, ""),
-        ("plan5", {"user_group": "admin", "args": ["nonexisting_plan"]},
-         [_pp_p3], {}, {}, False, "value is not a valid enumeration member"),
+        # Passing subdevice names to plans. Parameter annotation contains fixed lists of device names,
+        #   so the passed devices should be converted to objects or parameter validation should fail
+        ("plan4a", {"user_group": "admin"}, [],
+         [], {"detectors": [_pp_stg_A.mtrs, _pp_stg_A.mtrs.y]}, {}, True, ""),
+        # If some of the default values are not in the list of allowed devices, they are still passed
+        #   to the plan, but not converted to the device objects
+        ("plan4a", {"user_group": "admin"}, ["_pp_stg_A.mtrs"],  # Remove '_pp_stg_A' from the list
+         [], {"detectors": ["_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}, {}, True, ""),
+        ("plan4a", {"user_group": "admin"}, ["_pp_stg_A", True],  # Set '_pp_stg_A' as excluded
+         [], {"detectors": [_pp_stg_A.mtrs, _pp_stg_A.mtrs.y]}, {}, True, ""),
+        ("plan4a", {"user_group": "admin"}, ["_pp_stg_A.mtrs", True],  # Set '_pp_stg_A.mtrs' as excluded
+         [], {"detectors": ["_pp_stg_A.mtrs", _pp_stg_A.mtrs.y]}, {}, True, ""),
+        # Passing a list of devices as args
+        ("plan4a", {"user_group": "admin", "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, [],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+        # Passing a list of devices as kwargs
+        ("plan4a", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, [],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+        # Passing a list of devices as args, remove a device from the list, or set a device as excluded
+        ("plan4a", {"user_group": "admin",
+         "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A"],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, False, "Validation of plan parameters failed"),
+        ("plan4a", {"user_group": "admin",
+         "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A", True],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, False, "Validation of plan parameters failed"),
+        ("plan4a", {"user_group": "admin",
+         "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A.mtrs.y", True],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, False, "Validation of plan parameters failed"),
+        # Passing a list of devices as kwargs, remove a device from the list, or set a device as excluded
+        ("plan4a", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A"],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, False, "Validation of plan parameters failed"),
+        ("plan4a", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A", True],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, False, "Validation of plan parameters failed"),
+        ("plan4a", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A.mtrs.y", True],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, False, "Validation of plan parameters failed"),
 
-        ("plan6", {"user_group": "admin"},
+        # Passing subdevice names to plans. Parameter contains '__DEVICE__' built-in type in the annotation.
+        # Processing of detault types is employing a different mechanism, so the tests should be repeated even
+        #   if they work differently.
+        ("plan4b", {"user_group": "admin"}, [],
+         [], {"detectors": [_pp_stg_A.mtrs, _pp_stg_A.mtrs.y]}, {}, True, ""),
+        # If some of the default values are not in the list of allowed devices, they are still passed
+        #   to the plan, but not converted to the device objects
+        ("plan4b", {"user_group": "admin"}, ["_pp_stg_A.mtrs"],  # Remove '_pp_stg_A' from the list
+         [], {"detectors": ["_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}, {}, True, ""),
+        ("plan4b", {"user_group": "admin"}, ["_pp_stg_A", True],  # Set '_pp_stg_A' as excluded
+         [], {"detectors": [_pp_stg_A.mtrs, _pp_stg_A.mtrs.y]}, {}, True, ""),
+        ("plan4b", {"user_group": "admin"}, ["_pp_stg_A.mtrs", True],  # Set '_pp_stg_A.mtrs' as excluded
+         [], {"detectors": ["_pp_stg_A.mtrs", _pp_stg_A.mtrs.y]}, {}, True, ""),
+        # Passing a list of devices as args
+        ("plan4b", {"user_group": "admin", "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, [],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+        # Passing a list of devices as kwargs
+        ("plan4b", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, [],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+        # Passing a list of devices as args, remove a device from the list, or set a device as excluded
+        ("plan4b", {"user_group": "admin",
+         "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A"],
+         [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
+        ("plan4b", {"user_group": "admin",
+         "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A", True],
+         [["_pp_stg_A", _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+        ("plan4b", {"user_group": "admin",
+         "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A.mtrs.y", True],
+         [[_pp_stg_A, _pp_stg_A.mtrs, "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
+        # Passing a list of devices as kwargs, remove a device from the list, or set a device as excluded
+        ("plan4b", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A"],
+         [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
+        ("plan4b", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A", True],
+         [["_pp_stg_A", _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+        ("plan4b", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A.mtrs.y", True],
+         [[_pp_stg_A, _pp_stg_A.mtrs, "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
+
+        # Passing subdevice names to plans. Use "convert_device_name": True to enable conversion
+        # Processing is employing a different mechanism, so the tests should be repeated even
+        #   if they work differently.
+        ("plan4c", {"user_group": "admin"}, [],
+         [], {"detectors": [_pp_stg_A.mtrs, _pp_stg_A.mtrs.y]}, {}, True, ""),
+        # If some of the default values are not in the list of allowed devices, they are still passed
+        #   to the plan, but not converted to the device objects
+        ("plan4c", {"user_group": "admin"}, ["_pp_stg_A.mtrs"],  # Remove '_pp_stg_A' from the list
+         [], {"detectors": ["_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}, {}, True, ""),
+        ("plan4c", {"user_group": "admin"}, ["_pp_stg_A", True],  # Set '_pp_stg_A' as excluded
+         [], {"detectors": [_pp_stg_A.mtrs, _pp_stg_A.mtrs.y]}, {}, True, ""),
+        ("plan4c", {"user_group": "admin"}, ["_pp_stg_A.mtrs", True],  # Set '_pp_stg_A.mtrs' as excluded
+         [], {"detectors": ["_pp_stg_A.mtrs", _pp_stg_A.mtrs.y]}, {}, True, ""),
+        # Passing a list of devices as args
+        ("plan4c", {"user_group": "admin", "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, [],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+        # Passing a list of devices as kwargs
+        ("plan4c", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, [],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+        # Passing a list of devices as args, remove a device from the list, or set a device as excluded
+        ("plan4c", {"user_group": "admin",
+         "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A"],
+         [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
+        ("plan4c", {"user_group": "admin",
+         "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A", True],
+         [["_pp_stg_A", _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+        ("plan4c", {"user_group": "admin",
+         "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A.mtrs.y", True],
+         [[_pp_stg_A, _pp_stg_A.mtrs, "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
+        # Passing a list of devices as kwargs, remove a device from the list, or set a device as excluded
+        ("plan4c", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A"],
+         [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
+        ("plan4c", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A", True],
+         [["_pp_stg_A", _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+        ("plan4c", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A.mtrs.y", True],
+         [[_pp_stg_A, _pp_stg_A.mtrs, "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
+
+        # Passing subdevice names to plans. Parameter contains '__PLAN_OR_DEVICE__' built-in type
+        #   in the annotation. The mechanism is similar to the one used with '__PLAN__" type, so
+        #   just run a few tests to see if it works.
+        ("plan4d", {"user_group": "admin"}, [],
+         [], {"detectors": [_pp_stg_A.mtrs, _pp_stg_A.mtrs.y]}, {}, True, ""),
+        # Passing a list of devices as args
+        ("plan4d", {"user_group": "admin", "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, [],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+        # Passing a list of devices as kwargs
+        ("plan4d", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, [],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+
+
+
+        # Check if a plan name passed as arg, kwarg or using default value is properly converted to an object.
+        ("plan5", {"user_group": "admin"}, [],
+         [], {"plan_to_execute": _pp_p2}, {}, True, ""),
+        ("plan5", {"user_group": "admin", "args": ["_pp_p3"]}, [],
+         [_pp_p3], {}, {}, True, ""),
+        ("plan5", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, [],
+         [_pp_p3], {}, {}, True, ""),
+        ("plan5", {"user_group": "admin", "args": ["nonexisting_plan"]}, [],
+         [_pp_p3], {}, {}, False, "value is not a valid enumeration member"),
+        # Remove plan from the list of allowed plans
+        ("plan5", {"user_group": "admin"}, ["_pp_p2"],
+         [], {"plan_to_execute": "_pp_p2"}, {}, True, ""),
+        ("plan5", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3"],  # remove
+         [_pp_p3], {}, {}, False, "Validation of plan parameters failed"),
+        ("plan5", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3", True],  # exclude
+         [_pp_p3], {}, {}, False, "Validation of plan parameters failed"),
+
+        # Passing plan names. Parameter contains '__PLAN__' built-in type in the annotation.
+        ("plan5b", {"user_group": "admin"}, [],
+         [], {"plan_to_execute": _pp_p2}, {}, True, ""),
+        ("plan5b", {"user_group": "admin", "args": ["_pp_p3"]}, [],
+         [_pp_p3], {}, {}, True, ""),
+        ("plan5b", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, [],
+         [_pp_p3], {}, {}, True, ""),
+        ("plan5b", {"user_group": "admin"}, ["_pp_p2"],
+         [], {"plan_to_execute": "_pp_p2"}, {}, True, ""),
+        ("plan5b", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3"],  # remove
+         ["_pp_p3"], {}, {}, True, ""),
+        ("plan5b", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3", True],  # exclude
+         ["_pp_p3"], {}, {}, True, ""),
+
+        # Passing plan names. Use Parameter 'convert_plan_names'.
+        ("plan5c", {"user_group": "admin"}, [],
+         [], {"plan_to_execute": _pp_p2}, {}, True, ""),
+        ("plan5c", {"user_group": "admin", "args": ["_pp_p3"]}, [],
+         [_pp_p3], {}, {}, True, ""),
+        ("plan5c", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, [],
+         [_pp_p3], {}, {}, True, ""),
+        ("plan5c", {"user_group": "admin"}, ["_pp_p2"],
+         [], {"plan_to_execute": "_pp_p2"}, {}, True, ""),
+        ("plan5c", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3"],  # remove
+         ["_pp_p3"], {}, {}, True, ""),
+        ("plan5c", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3", True],  # exclude
+         ["_pp_p3"], {}, {}, True, ""),
+
+        # Passing plan names. Parameter contains '__PLAN_OR_DEVICE__' built-in type in the annotation.
+        ("plan5d", {"user_group": "admin"}, [],
+         [], {"plan_to_execute": _pp_p2}, {}, True, ""),
+        ("plan5d", {"user_group": "admin", "args": ["_pp_p3"]}, [],
+         [_pp_p3], {}, {}, True, ""),
+        ("plan5d", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, [],
+         [_pp_p3], {}, {}, True, ""),
+        ("plan5d", {"user_group": "admin"}, ["_pp_p2"],
+         [], {"plan_to_execute": "_pp_p2"}, {}, True, ""),
+        ("plan5d", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3"],  # remove
+         ["_pp_p3"], {}, {}, True, ""),
+        ("plan5d", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3", True],  # exclude
+         ["_pp_p3"], {}, {}, True, ""),
+
+
+        # Pass values of custom enum type. The values are not converted to objects.
+        ("plan6", {"user_group": "admin"}, [],
          [], {"strings": ["one", "three"]}, {}, True, ""),
-        ("plan6", {"user_group": "admin", "args": [["one", "two"]]},
+        ("plan6", {"user_group": "admin", "args": [["one", "two"]]}, [],
          [["one", "two"]], {}, {}, True, ""),
-        ("plan6", {"user_group": "admin", "args": [("one", "two")]},
+        ("plan6", {"user_group": "admin", "args": [("one", "two")]}, [],
          [("one", "two")], {}, {}, True, ""),
-        ("plan6", {"user_group": "admin", "args": [("one", "nonexisting")]},
+        ("plan6", {"user_group": "admin", "args": [("one", "nonexisting")]}, [],
          [("one", "two")], {}, {}, False, "value is not a valid enumeration member"),
 
-        ("plan7", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3"], "_pp_dev2"]},
+        # Plan has no custom annotation. All strings must be converted to objects whenever possible.
+        ("plan7", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3"], "_pp_dev2"]}, [],
          [[_pp_dev1, _pp_dev3], "_pp_dev2"], {}, {}, True, ""),
-        ("plan7", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3", "some_str"], "_pp_dev2"]},
+        ("plan7", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3", "some_str"], "_pp_dev2"]}, [],
          [[_pp_dev1, _pp_dev3, "some_str"], "_pp_dev2"], {}, {}, True, ""),
+        ("plan7", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3", "some_str"], 50]}, [],
+         [[_pp_dev1, _pp_dev3, "some_str"], "_pp_dev2"], {}, {}, False,
+         "Incorrect parameter type: key='b', value='50'"),
 
-        ("nonexisting_plan", {"user_group": "admin"},
+        # General failing cases
+        ("nonexisting_plan", {"user_group": "admin"}, [],
          [], {}, {}, False, "Plan 'nonexisting_plan' is not in the list of allowed plans"),
-        ("plan2", {"user_group": "nonexisting_group"},
+        ("plan2", {"user_group": "nonexisting_group"}, [],
          [], {}, {}, False,
          "Lists of allowed plans and devices is not defined for the user group 'nonexisting_group'"),
     ],
 )
 # fmt: on
-def test_prepare_plan_2(plan_name, plan, exp_args, exp_kwargs, exp_meta, success, err_msg):
+def test_prepare_plan_2(plan_name, plan, remove_objs, exp_args, exp_kwargs, exp_meta, success, err_msg):
     """
     Detailed tests for ``prepare_plan``. Preparation of plan parameters before execution
     is one of the key features, so unit tests are needed for all use cases.
     """
     plans_in_nspace, devices_in_nspace, allowed_plans, allowed_devices = _gen_environment_pp2()
+
+    if remove_objs and isinstance(remove_objs[-1], bool):
+        use_exclude = remove_objs.pop()
+    else:
+        use_exclude = False
+
+    # Remove some objects from 'allowed_plans' and 'allowed_devices'
+    for obj_name in remove_objs:
+        if use_exclude:
+            print(f"Set the following objects as excluded: {remove_objs}")
+            # Exclude individual nodes. Assume that the device is in the list.
+            components = obj_name.split(".")
+            for allowed_objs in (allowed_plans["admin"], allowed_devices["admin"]):
+                try:
+                    root = allowed_objs[components[0]]
+                    for c in components[1:]:
+                        root = root["components"][c]
+                    print(f"Excluding {obj_name!r} ...")
+                    root["excluded"] = True
+                except Exception:
+                    pass
+        else:
+            # Remove elements from the list based on the root name for the device
+            print(f"Removing object {obj_name.split('.')[0]!r}")
+            allowed_plans["admin"].pop(obj_name.split(".")[0], None)
+            allowed_devices["admin"].pop(obj_name.split(".")[0], None)
+
+    # assert False, list(allowed_plans.keys())
+    allowed_plans["admin"] = _filter_allowed_plans(
+        allowed_plans=allowed_plans["admin"], allowed_devices=allowed_devices["admin"]
+    )
+    # assert False, allowed_plans["plan4a"]
 
     plan["name"] = plan_name
 
@@ -3704,9 +4131,9 @@ def test_prepare_plan_2(plan_name, plan, exp_args, exp_kwargs, exp_meta, success
         for k in expected_keys:
             assert k in plan_parsed, f"Key '{k}' does not exist: {plan_parsed.keys()}"
         assert isinstance(plan_parsed["callable"], Callable)
-        assert plan_parsed["args"] == exp_args
-        assert plan_parsed["kwargs"] == exp_kwargs
-        assert plan_parsed["meta"] == exp_meta
+        assert plan_parsed["args"] == exp_args, pprint.pformat(plan_parsed["args"])
+        assert plan_parsed["kwargs"] == exp_kwargs, pprint.pformat(plan_parsed["kwargs"])
+        assert plan_parsed["meta"] == exp_meta, pprint.pformat(plan_parsed["meta"])
     else:
         with pytest.raises(Exception, match=err_msg):
             prepare_plan(
@@ -5521,7 +5948,7 @@ def test_validate_plan_3(plan_func, plan, allowed_devices, success, errmsg):
         "p2": {},  # The plan is used only as a parameter value
     }
     # 'allowed_devices' must be a dictionary
-    allowed_devices = {_: None for _ in allowed_devices}
+    allowed_devices = {_: {} for _ in allowed_devices}
 
     success_out, errmsg_out = validate_plan(plan, allowed_plans=allowed_plans, allowed_devices=allowed_devices)
 

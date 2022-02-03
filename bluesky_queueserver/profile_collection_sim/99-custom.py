@@ -198,11 +198,11 @@ class SimDetectors(Device):
 
 
 class SimBundle(ophyd.Device):
-    mtrs = Cpt(SimStage, name="stage")
-    dets = Cpt(SimDetectors, name="detectors")
+    mtrs = Cpt(SimStage, name="mtrs")
+    dets = Cpt(SimDetectors, name="dets")
 
 
-sim_bundle_A = SimBundle(name="sim_bundle")
-sim_bundle_B = SimBundle(name="sim_bundle")  # Used for tests
+sim_bundle_A = SimBundle(name="sim_bundle_A")
+sim_bundle_B = SimBundle(name="sim_bundle_B")  # Used for tests
 
 # =======================================================================================

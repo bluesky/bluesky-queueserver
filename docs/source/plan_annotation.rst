@@ -8,8 +8,8 @@ Introduction
 ------------
 
 Queue Server is using information on existing plans and devices stored in
-``existing_plans_and_devices.yaml`` file for validating submitted plans. The file
-must be generated using :ref:`qserver_list_plans_devices_cli` CLI tool and
+the file ``existing_plans_and_devices.yaml`` for validating submitted plans.
+The file can be generated using :ref:`qserver_list_plans_devices_cli` CLI tool or
 automatically created/updated by RE Manager (see :ref:`update_existing_plans_devices` for
 available options).
 
@@ -22,8 +22,8 @@ client applications (:ref:`method_plans_allowed` 0MQ API) and used to validate
 plan parameters before the plans are submitted to the server. For details on plan
 parameter validation see :ref:`plan_validation`.
 Client applications may also use items such as text descriptions, type annotations,
-default values and ranges for generating or annotating user interfaces (e.g.
-GUI forms for plan parameters).
+default values and ranges for generating or annotating user interfaces, such as
+GUI forms for plan parameters.
 
 In this manual, the elements of a plan (Python function) header, docstring and
 the parameters of the optional ``parameter_annotation_decorator`` that are used
@@ -40,7 +40,7 @@ to waiting for plans to fail when they are sent for execution.
 
   Validation of plan parameters is performed each time a new or modified plan is
   submitted to Queue Server. Validation can be also performed on the client side
-  before the plan is submitted. To run validation the client must download
+  before the plan is submitted. To run validation, the client must download
   the lists of allowed plans and devices  (:ref:`method_plans_allowed` and
   `:ref:`method_devices_allowed` 0MQ API) and call `validate_plan()`
   (:ref:`plan_validation_api`).
@@ -70,7 +70,7 @@ Plan annotation may contain the following (optional) elements:
 
 The elements of plan annotations are defined in the plan header (type hints and
 default values) and the docstring (parameter descriptions). In addition, Queue Server
-provides ``parameter_annotation_decorator`` (:ref:`parameter_annotation_decorator`),
+supports ``parameter_annotation_decorator`` (:ref:`parameter_annotation_decorator`),
 which allows to define or override any annotation item. The decorator is optional
 and should be used only when necessary.
 
@@ -96,14 +96,14 @@ applications.
 
 Depending on whether plan annotation contains a default value for a parameter,
 the parameter is considered **required** or **optional**. Plans submitted to the queue
-must contain values for all required parameters and default values are used for
+must contain values for all required parameters. The default values are used for
 missing optional parameters.
 
-For each plan parameter, annotation may contain optional specification of type
-for values expected for this parameter. All submitted parameter values undergo
-type validation. For parameter with type annotation, validation includes matching
-the type of the submitted value and the expected parameter type. The parameters
-with no type annotations are treated according to the default rules:
+For each plan parameter, annotation may contain optional type specification.
+All submitted parameter values undergo type validation. For parameter with
+type annotation, validation includes verification of the type of the submitted
+value based on specified parameter type. The parameters with no type annotations
+are treated according to the default rules:
 
 * Type checking always succeeds, i.e. any submitted value is accepted
   and passed to the plan. Plan execution may fail due to incorrect parameter type.
@@ -111,7 +111,8 @@ with no type annotations are treated according to the default rules:
 * All strings found in the submitted parameter value (elements of lists, values of
   dictionaries, etc.) are matched against the lists of plans and devices allowed for
   the user submitting the plan. The matching strings are replaced by references to
-  respective objects (plans or devices) from RE Worker namespace.
+  respective objects (plans or devices) from RE Worker namespace, all the other strings
+  are passed as strings.
 
 The validation algorithm is processing each parameter independently. Type validation
 is applied to the parameters with specified type annotation and default rules to
@@ -133,21 +134,24 @@ The examples of the plans with no annotation:
       #   No type validation is performed for any parameter.
       <code implementing the plan>
 
-Queue Server supports plans with parameters accepting references to devices or other plans.
-The devices or plans passed as parameters must be defined in startup scripts,
-loaded in RE Worker namespace and represented in ``existing_plans_and_devices.yaml``.
-In parameter values of plans submitted to the queue, the devices and plans must
-be represented by their names (type ``str``). The names are replaced by
-references to objects in RE Worker namespace before the parameter values are passed to
-the plans for execution. Submitted parameter values are parsed and each string found in the tree
-formed by lists, tuples and dictionaries is replaced with a reference to an object with
-the matching name. If there is no object with the name matching the string or the name
-is not in the list of allowed plans or allowed devices for the user submitting the plan,
-then the string is not modified. Dictionary keys are never modified by the algorithm.
+Queue Server supports plans with parameters accepting references to devices
+or other plans. The devices or plans passed as parameters must be defined
+in startup scripts, loaded in RE Worker namespace and represented in the list
+of existing devices (``existing_plans_and_devices.yaml``). When submitting
+plans to the queue, the devices and plans must be represented by their names
+(type ``str``). The names are replaced by references to objects in RE Worker
+namespace before the parameter values are passed to the plans for execution.
+All submitted parameter values are parsed and each string found in the tree
+formed by lists, tuples and dictionaries is replaced with a reference to
+the matching object. If there is no object with the matching name found or
+the name is not in the list of allowed plans or devices for the user
+submitting the plan, then the string is not modified and passed directly
+to the plan. If the parameter value contains dictionaries, the dictionary
+keys are never modified by the algorithm.
 
 The operation of replacing plan and device names with references to objects from RE Worker
 namespace is performed for each parameter with no type annotation. This means that
-every string that matches a name of a device or a plan from the list of allowed
+every string that matches a name of a device, subdevice or a plan from the list of allowed
 devices or the list of allowed plans is replaced by the reference to the respective object
 from RE Worker namespace.
 
@@ -174,12 +178,13 @@ using
 
   RE(plan_demo1c([det1, det3], <value of npts>))
 
-The default behavior of blindly attempting to convert all strings in the passed parameter
-to references may works well simple cases (especially in demos). In practice, it may
-be necessary to pass strings that match names of the existing objects without change.
-In those cases the conversion may be disabled for a given parameter by specifying
-the parameter type, e.g. using type hints in the plan header.
-For example, one may need to pass plan or device names to the plan:
+The default behavior, when Queue Server blindly attempts to convert each string found
+in each parameter to an object reference may works well in simple cases (especially
+in demos). In some applications it may be important to guarantee that strings are
+passed as strings regardless on whether the match is found. In those cases
+the conversion may be disabled for a given parameter by specifying the parameter type,
+e.g. using type hints in the plan header. For example, one may need to pass plan
+or device names to the plan:
 
 .. code-block:: python
 
@@ -207,18 +212,20 @@ value is not a list of strings. Type hint may be as restrictive as needed. For e
 type hint ``typing.Any`` will still disable conversion of strings, but the server will accept
 value of any type.
 
-The operation of string conversion always succeeds. If the device name is incorrectly spelled
-or not in the list of allowed plans or devices, then the name is passed
-to the plan as a string. For example, assume that ``"detectors": ["det1", "det4"]`` is passed to
+The operation of converting strings to objects never fails. If the device name is
+incorrectly spelled or not in the list of allowed plans or devices, then the plan will
+be added to the queue and sent for execution. Since the name is passed will be passed
+to the plan as a string, the plan will likely fail and the queue is going to be stopped.
+For example, assume that ``"detectors": ["det1", "det4"]`` is passed to
 ``plan_demo1c``. There is no device named ``det4`` in the RE Worker namespace, so it will
-not be converted to the reference. As a result, the plan will receive the value of
-``detectors=[det1, "det4"]`` and the plan will fail during execution. Queue Server provides
+not be converted to a reference. As a result, the plan will receive the value of
+``detectors=[det1, "det4"]`` and fail during execution. Queue Server provides
 ``parameter_annotation_decorator`` (:ref:`parameter_annotation_decorator`), which can be
 used to define custom types for advanced parameter validation. In particular, the decorator
 allows to define custom enums based on lists of device or plan names and
-thus restrict object names that that could be passed to the parameter. Setting up custom enums
-with specified lists of plans or devices enables the string conversion, but only
-the listed names will be converted to references:
+thus restrict sets of object names that that are accepted by the parameter. Setting
+up custom enums with specified lists of plans or devices enables the string conversion,
+but only the listed names will be converted to references:
 
 .. code-block:: python
 
@@ -241,9 +248,10 @@ the listed names will be converted to references:
         <code implementing the plan>
 
 The type annotation in the decorator overrides the type annotation in the function header.
-Custom enums are also used in type validation and only the device/plan names from the defined
-in the enum are accepted. For example, if the submitted plan contains ``"detectors": ["det1", "det4"]``,
-then the plan is rejected, because there is no detector ``det4`` in the enum type ``DeviceType1``.
+Custom enums based on name lists are also used in type validation to guarantee that
+only the device/plan names from the defined in the enum are accepted. For example,
+if the submitted plan contains ``"detectors": ["det1", "det4"]``, then the plan
+is rejected, because there is no detector ``det4`` in the enum type ``DeviceType1``.
 
 .. note::
 
@@ -317,11 +325,12 @@ using ``parameter_annotation_decorator`` (:ref:`parameter_annotation_decorator`)
 Defining Types in Plan Header
 -----------------------------
 
-Signatures of plans from RE Worker namespace are analyzed by ``qserver-list-plans-devices`` tool.
-If a plan signature contains type hints, the processing algorithm verify if the types are supported
-and saves their string representations of supported types. Unsupported types are ignored and
-the respective parameters are treated as having no type hints (unless type annotations for those
-parameters are defined in ``parameter_annotation_decorator``).
+Signatures of plans from RE Worker namespace are analyzed each time the list of existing plans
+is generated (e.g. by ``qserver-list-plans-devices`` tool). If a plan signature contains type
+hints, the processing algorithm verify if the types are supported and saves their string
+representations. Unsupported types are ignored and the respective parameters are treated
+as having no type hints (unless type annotations for those parameters are defined in
+``parameter_annotation_decorator``).
 
 .. note::
 
@@ -560,11 +569,16 @@ are not converted to references, but are still used for plan parameter validatio
 Mixing devices, plans and enums in one type definition is possible (Queue Server will handle
 the types correctly), but not recommended.
 
-The decorator supports three built-in enum types: ``AllDetectors``, ``AllMotors`` and ``AllFlyers``.
-The built-in enum types should not be defined in the parameter annotation. Those enum types are
-automaticall generated based on lists of all detectors (readable devices), all motors (readable
-and writable devices) or all flyers (flyable devices) from the namespace. Explicitly defining
-those types in the annotation for a parameter overrides the default behavior.
+The lists of plan and device may contain a mix of explicitly listed plan/device names and
+regular expressions used to select plans and devices. See :ref:`lists_of_device_and_plan_names`
+for detailed reference to writing lists of devices and plans.
+
+The decorator supports three built-in types: ``__PLAN__``, ``__DEVICE__`` and
+``__PLAN_OR_DEVICE__``. The built-in types are replaced by ``str`` for type validation and
+conversion of plan and/or device names enabled for this parameter. No plan/device lists
+are generated and plan/device name is not validated. The built-in types should not be
+defined in ``devices``, ``plans`` or ``enum`` sections of the parameter annotation, since
+it is going to be treated as a regular custom enum type.
 
 .. code-block:: python
 
@@ -574,20 +588,20 @@ those types in the annotation for a parameter overrides the default behavior.
   @parameter_annotation_decorator({
       "parameters": {
           "detectors": {
-              # 'AllDetectors' is the built-in enum type. All detectors (readable
-              #   devices) from the namespace will be automatically included
-              #   in the list ('det1', 'det2', 'det3' and 'det4').
-              "annotation": "typing.List[AllDetectors]",
-              # Explicitly defining the type 'AllDetectors' will override
-              #   the default behavior (only for this parameter).
+              # '__DEVICE__' is the built-in type. The plan will accept a list of
+              # object names (strings), validate the parameter type and attempt to
+              # convert all string to device objects (not to plans).
+              "annotation": "typing.List[__DEVICE__]",
+              # If '__DEVICE__' is explicitly defined in the 'devices' section,
+              # it will be treated as a custom enum type(only for this parameter).
           }
       }
   })
   def plan_demo5c(detectors, npts: int, delay: float=1.0):
       <code implementing the plan>
 
-Definitions of custom enum types for devices or plans may include any devices defined in
-startup scripts and loaded into RE Worker namespace. The type definitions are saved
+The lists of custom enum types for devices or plans may include any device or plan names
+defined in startup scripts and loaded into RE Worker namespace. The type definitions are saved
 as part of plan representations in the list of existing plans. If built-in enum types are used,
 the definitions will contain full lists of devices from the namespace. When lists of allowed
 plans are generated for user groups, custom type definitions are filtered based on user group
@@ -598,6 +612,51 @@ since it is guaranteed, that the type definitions contain only devices and plans
 is allowed to use. Filtering type definitions may cause some lists to become empty
 in case current user does not have permission to use any devices or plans that are
 listed in type definition.
+
+.. _enabling_disabling_name_conversion:
+
+Explicitly Enabling/Disabling Conversion of Plan and Device Names
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Parameter annotation allows to specify explicitly whether strings passed to this parameter
+are converted to plan or device objects. Optional boolean parameters ``convert_device_names``
+and ``convert_plan_names`` override any default behavior. If those parameters are not
+specified, then Queue Server determines whether to convert names to objects based on
+parameter annotation defined in plan header and ``parameter_annotation_decorator``:
+
+.. code-block:: python
+
+  from ophyd.sim import det1, det2, det3, det4
+  from bluesky_queueserver import parameter_annotation_decorator
+
+  @parameter_annotation_decorator({
+      "parameters": {
+          "dets_1": {
+              "annotation": "typing.List[str]",
+              # Queue Server attempts to convert each string to a device
+              #   or subdevice from the list of allowed devices.
+              "convert_device_names": True,
+          }
+          "dets_2": {
+              "annotation": "typing.List[__DEVICE__]",
+              # The device names are not converted to device objects and
+              #   passed to the plan as strings.
+              "convert_device_names": False,
+          }
+          "dets_3": {
+              # Device names are going to be converted to device objects.
+              "annotation": "typing.List[__DEVICE__]",
+          }
+      }
+  })
+  def plan_demo5d(detectors, npts: int, delay: float=1.0):
+      <code implementing the plan>
+
+.. note::
+
+  Parameters ``convert_plan_names`` and ``convert_device_names`` control only
+  conversion of plan and device names to objects from the worker namespace
+  and have no effect on the process of validation of plan parameters.
 
 .. _default_values_in_decorator:
 
@@ -704,6 +763,185 @@ The plan will be rejected if
   {"v": [20, 100.5, 90]}  # Value 100.5 is out of range
   {"v": {"a": -2, "b": 80}}  # Value -2 is out of range
   {"v": {"a": 30, "b": [50.5, 190.4]}}  # Value 190.4 is out of range
+
+
+.. _lists_of_device_and_plan_names:
+
+Lists of Device and Plan Names
+++++++++++++++++++++++++++++++
+
+Annotation of a parameter may contain optional ``devices`` and/or ``plans``
+section, which contains definitions of lists of device or plan names accepted
+by the parameter. The names are converted to objects from Run Engine Worker
+namespace and passed to the plan. In the following example, two lists (``Type1``
+and ``Type2``) are defined in the ``devices`` section:
+
+.. code-block:: python
+
+  @parameter_annotation_decorator({
+      "parameters": {
+          "dets": {
+              "annotation": "typing.Union[typing.List[Type1]" \
+                            "typing.List[Type2]]",
+              "devices": {"Type1": ["det1", "det2", "det3"],
+                          "Type2": ["det1", "det4", "det5"]},
+          }
+      }
+  })
+  def plan_demo8a(dets, npts: int, delay: float=1.0):
+      <code implementing the plan>
+
+The parameters that accept plan names may have similar ``plans`` sections that
+define lists of plans. List names may be used in ``annotation`` section as part
+of parameter type definition.
+
+Lists of Device Names
+~~~~~~~~~~~~~~~~~~~~~
+
+The elements of lists of device names may include:
+
+  - names of devices defined in the global scope of the startup script,
+    e.g. ``"det1"``, ``sim_stage_A``, etc.
+
+  - names of subdevices of devices defined in the global scope of startup script,
+    e.g. ``det1.val``, ``sim_stageA.mtrs.y``, etc.
+
+  - regular expressions that define a set of existing devices and subdevices
+    to be added to the list.
+
+The explicitly listed device and subdevice names are always included in the list.
+Regular expressions are used to pick devices and subdevices from the list of
+existing devices:
+
+.. code-block:: python
+
+  # The following devices will be added to the list:
+  #   'det1'
+  #   'det1.val'
+  #   devices such as 'd3', 'det3', 'detector3' etc. matching reg. expression 'd.*3'
+  "Type3": ["det1", "det1.val", ":d.*3"]
+
+Note, that the semicolon ``:`` is not part of regular expressions. It is used to
+distinguish explicitly listed names and regular expressions. For example, ``"det"``
+is an explicitly listed name of the detector ``det``, while ``":det"`` is
+a regular expression that matches any device name that contains the sequence of
+characters ``"d", "e", "t"``, e.g. ``mydetector``.
+
+One list item may contain multiple regular expressions separated by ``:``.
+Those expressions are used to select subdevices of a device defined in global
+scope. Looking from left to right, the regular expressions are applied to
+global device names, subdevices of the matching devices, subdevices of matching
+subdevices of matching devices etc. The depth of lookup is defined by the number
+of combined regular expressions:
+
+.. code-block:: python
+
+  # The item contains three regular expressions: '^sim' is applied to device
+  #   names (selects all devices starting with 'sim'), '^mt' applies to
+  #   subdevices of matching devices (all subdevices starting with 'mt')
+  #   and '^x$' is applied to subdevices of matching subdevices (all subdevices
+  #   named 'x'). As a result, the list may contain the following
+  #   devices:
+  #     'sim_stage_A.mtrs.x',
+  #     'sim_stage_B.mtrs.x'.
+  #   The list will not contain 'sim_stage_A', 'sim_stage_A.mtrs', 'sim_stage_B'
+  #      or 'sim_stage_B.mtrs'.
+  "Type3": [":^sim:^mt:^x$"]
+
+Devices found at a given depth may be selected by putting ``+`` before the regular
+expressions (``+`` is not part of the regular expression):
+
+.. code-block:: python
+
+  # The list will contain devices such as
+  #   'sim_stage_A.mtrs',
+  #   'sim_stage_A.mtrs.x',
+  #   'sim_stage_B.mtrs',
+  #   'sim_stage_B.mtrs.x'.
+  #   The list will not contain 'sim_stage_A' or 'sim_stage_B'.
+  "Type4": [":^sim:+^mt:^x$"]
+
+  # The list will contain devices such as
+  #   'sim_stage_A',
+  #   'sim_stage_A.det1',
+  #   'sim_stage_A.det1.val',
+  #   'sim_stage_B',
+  #   'sim_stage_B.det2',
+  #   'sim_stage_B.det2.val'.
+  "Type5": [":+^sim:+^mt:^x$"]
+
+Regular expressions could be applied to the full subdevice name or the remaining
+part of the subdevice name by putting ``?`` before the regular expression (``?``
+is not part of the regular expression). The full name regular expression may only
+be the last component of the combined expressions and ``+`` can not be used in
+conjunction with ``?``:
+
+.. code-block:: python
+
+  # The list may contain devices with names such as
+  #   'simval',
+  #   'sim_stage_A.val',
+  #   'sim_stage_A.det1.val',
+  #   'sim_stage_A.detectors.det1.val',
+  "Type6": [":^sim.*val$"]
+
+  # The list will contain devices such as
+  #   'sim_stage_A',
+  #   'sim_stage_A.val',
+  #   'sim_stage_A.det1_val',
+  #   'sim_stage_A.det1.val',
+  #   'sim_stage_A.detectors.det1.val',
+  "Type7": [":+^sim_stage_A$:?.*val$"]
+
+Using full name regular expressions is less efficient, since it requires
+searching the full tree of subdevices for matching names. The depth of search
+may be limited by adding ``depth`` parameter (``:?<regex>:depth=N``):
+
+.. code-block:: python
+
+  # The list will contain devices such as
+  #   'sim_stage_A',
+  #   'sim_stage_A.val',
+  #   'sim_stage_A.det1_val',
+  #   'sim_stage_A.det1.val',
+  # The list will not contain 'sim_stage_A.detectors.det1.val',
+  #   since the depth of search is limited to 2 levels.
+  "Type8": [":+^sim_stage_A$:?.*val$:depth=2"]
+
+A set of devices selected using regular expression may be restricted to
+certain device types by placing one of the following keywords ``__DETECTOR__``
+(readable, not movable), ``__MOTOR__`` (readable and movable),
+``__READABLE__``, ``__FLYABLE__`` before the expression:
+
+.. code-block:: python
+
+  # Select only detectors with names matching the regular expression:
+  "Type9": ["__DETECTORS__:+^sim_stage_A$:?.*:depth=3"]
+
+  # Select only motors:
+  "Type10": ["__MOTORS__:+^sim_stage_A$:?.*:depth=3"]
+
+A list may contain multiple items with regular expressions and explicitly
+listed device names. Duplicate items that are listed or selected by the
+expressions are removed from the generated list, which is then sorted in
+alphabetical order.
+
+Lists of Plan Names
+~~~~~~~~~~~~~~~~~~~
+
+Similarly to lists of device names, the lists of plan names may include
+regular expressions used to pick matching names of the existing plans:
+
+.. code-block:: python
+
+  # The list contains the following names: explicitly listed name of the plan
+  #   ``count`` and regular expression that selects all the plans ending
+  #   with ``_count``, such as ``_count``, ``my_count`` etc.
+  "Type11": ["count", ":_count$"]
+
+Plan name lists may contain only single regular expressions. The separators
+``:+`` and ``:?`` have no meaning in plan name lists and can not be used
+in the expressions.
 
 .. _plan_annotation_api:
 

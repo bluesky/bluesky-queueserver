@@ -1630,6 +1630,113 @@ existing_plans:
       name: md
     properties:
       is_generator: true
+  count_bundle_test:
+    name: count_bundle_test
+    parameters:
+    - annotation:
+        devices:
+          DetList:
+          - det
+          - det1
+          - det2
+          - det3
+          - sim_bundle_A
+          - sim_bundle_A.dets
+          - sim_bundle_A.dets.det_A
+          - sim_bundle_A.dets.det_A.center
+          - sim_bundle_A.dets.det_A.Imax
+          - sim_bundle_A.dets.det_A.noise
+          - sim_bundle_A.dets.det_A.noise_multiplier
+          - sim_bundle_A.dets.det_A.sigma
+          - sim_bundle_A.dets.det_A.val
+          - sim_bundle_A.dets.det_B
+          - sim_bundle_A.dets.det_B.center
+          - sim_bundle_A.dets.det_B.Imax
+          - sim_bundle_A.dets.det_B.noise
+          - sim_bundle_A.dets.det_B.noise_multiplier
+          - sim_bundle_A.dets.det_B.sigma
+          - sim_bundle_A.dets.det_B.val
+          - sim_bundle_A.mtrs
+          - sim_bundle_A.mtrs.x
+          - sim_bundle_A.mtrs.x.acceleration
+          - sim_bundle_A.mtrs.x.readback
+          - sim_bundle_A.mtrs.x.setpoint
+          - sim_bundle_A.mtrs.x.unused
+          - sim_bundle_A.mtrs.x.velocity
+          - sim_bundle_A.mtrs.y
+          - sim_bundle_A.mtrs.y.acceleration
+          - sim_bundle_A.mtrs.y.readback
+          - sim_bundle_A.mtrs.y.setpoint
+          - sim_bundle_A.mtrs.y.unused
+          - sim_bundle_A.mtrs.y.velocity
+          - sim_bundle_A.mtrs.z
+          - sim_bundle_A.mtrs.z.acceleration
+          - sim_bundle_A.mtrs.z.readback
+          - sim_bundle_A.mtrs.z.setpoint
+          - sim_bundle_A.mtrs.z.unused
+          - sim_bundle_A.mtrs.z.velocity
+          - sim_bundle_B
+          - sim_bundle_B.dets
+          - sim_bundle_B.dets.det_A
+          - sim_bundle_B.dets.det_A.center
+          - sim_bundle_B.dets.det_A.Imax
+          - sim_bundle_B.dets.det_A.noise
+          - sim_bundle_B.dets.det_A.noise_multiplier
+          - sim_bundle_B.dets.det_A.sigma
+          - sim_bundle_B.dets.det_A.val
+          - sim_bundle_B.dets.det_B
+          - sim_bundle_B.dets.det_B.center
+          - sim_bundle_B.dets.det_B.Imax
+          - sim_bundle_B.dets.det_B.noise
+          - sim_bundle_B.dets.det_B.noise_multiplier
+          - sim_bundle_B.dets.det_B.sigma
+          - sim_bundle_B.dets.det_B.val
+          - sim_bundle_B.mtrs
+          - sim_bundle_B.mtrs.x
+          - sim_bundle_B.mtrs.x.acceleration
+          - sim_bundle_B.mtrs.x.readback
+          - sim_bundle_B.mtrs.x.setpoint
+          - sim_bundle_B.mtrs.x.unused
+          - sim_bundle_B.mtrs.x.velocity
+          - sim_bundle_B.mtrs.y
+          - sim_bundle_B.mtrs.y.acceleration
+          - sim_bundle_B.mtrs.y.readback
+          - sim_bundle_B.mtrs.y.setpoint
+          - sim_bundle_B.mtrs.y.unused
+          - sim_bundle_B.mtrs.y.velocity
+          - sim_bundle_B.mtrs.z
+          - sim_bundle_B.mtrs.z.acceleration
+          - sim_bundle_B.mtrs.z.readback
+          - sim_bundle_B.mtrs.z.setpoint
+          - sim_bundle_B.mtrs.z.unused
+          - sim_bundle_B.mtrs.z.velocity
+        type: typing.List[DetList]
+      kind:
+        name: POSITIONAL_OR_KEYWORD
+        value: 1
+      name: detectors
+    - default: '1'
+      kind:
+        name: POSITIONAL_OR_KEYWORD
+        value: 1
+      name: num
+    - default: None
+      kind:
+        name: POSITIONAL_OR_KEYWORD
+        value: 1
+      name: delay
+    - default: None
+      kind:
+        name: KEYWORD_ONLY
+        value: 3
+      name: per_shot
+    - default: None
+      kind:
+        name: KEYWORD_ONLY
+        value: 3
+      name: md
+    properties:
+      is_generator: true
   fly:
     description: Perform a fly scan with one or more 'flyers'.
     module: bluesky.plans

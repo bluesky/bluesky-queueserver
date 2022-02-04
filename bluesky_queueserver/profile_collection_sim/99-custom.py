@@ -205,4 +205,19 @@ class SimBundle(ophyd.Device):
 sim_bundle_A = SimBundle(name="sim_bundle_A")
 sim_bundle_B = SimBundle(name="sim_bundle_B")  # Used for tests
 
+
+@parameter_annotation_decorator(
+    {
+        "parameters": {
+            "detectors": {  # Annotation for the parameter 'detectors'
+                "annotation": "typing.List[DetList]",
+                "devices": {"DetList": ["det", "det1", "det2", "det3", ":+^sim_bundle:?.*$"]},
+            }
+        }
+    }
+)
+def count_bundle_test(detectors, num=1, delay=None, *, per_shot=None, md=None):
+    yield from count(detectors, num=num, delay=delay, per_shot=per_shot, md=md)
+
+
 # =======================================================================================

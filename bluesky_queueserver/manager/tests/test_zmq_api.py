@@ -471,7 +471,105 @@ def test_zmq_api_queue_item_add_4(re_manager):  # noqa F811
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_queue_item_add_5(re_manager):  # noqa: F811
+# fmt: off
+@pytest.mark.parametrize("plan_to_add, ugroup, success_submit, success_run, msg", [
+    # 'count' plan does not have restrictions on the name of devices, so all
+    #   the following plans can be submitted, but some of them will fail during
+    #   execution.
+    ({"name": "count",
+      "args": [["sim_bundle_A.dets.det_A", "sim_bundle_B.dets.det_B"]],
+      "kwargs": {"num": 1, "delay": 1}, "item_type": "plan"},
+     _user_group, True, True, ""),
+    ({"name": "count",
+      "kwargs": {"detectors": ["sim_bundle_A.dets.det_A", "sim_bundle_B.dets.det_B"],
+                 "num": 1, "delay": 1}, "item_type": "plan"},
+     _user_group, True, True, ""),
+    ({"name": "count",
+      "args": [["sim_bundle_A.dets", "sim_bundle_A"]],
+      "kwargs": {"num": 1, "delay": 1}, "item_type": "plan"},
+     _user_group, True, True, ""),
+    ({"name": "count",
+      "args": [["sim_bundle_A.dets", "sim_bundle_B"]],
+      "kwargs": {"num": 1, "delay": 1}, "item_type": "plan"},
+     _test_user_group, True, False, ""),
+    ({"name": "count",
+      "args": [["sim_bundle_A.dets", "sim_bundle_B.dets"]],
+      "kwargs": {"num": 1, "delay": 1}, "item_type": "plan"},
+     _test_user_group, True, False, ""),
+    ({"name": "count",
+      "args": [["sim_bundle_A.dets", "sim_bundle_B.dets.det_A"]],
+      "kwargs": {"num": 1, "delay": 1}, "item_type": "plan"},
+     _test_user_group, True, False, ""),
+    # Specially designed test plan with defined set of items. Plan validation
+    #   fails at submission if a parameter is not in the list
+    ({"name": "count_bundle_test",
+      "args": [["sim_bundle_A.dets.det_A", "sim_bundle_B.dets.det_B"]],
+      "kwargs": {"num": 1, "delay": 1}, "item_type": "plan"},
+     _user_group, True, True, ""),
+    ({"name": "count_bundle_test",
+      "kwargs": {"detectors": ["sim_bundle_A.dets.det_A", "sim_bundle_B"],
+                 "num": 1, "delay": 1}, "item_type": "plan"},
+     _user_group, True, True, ""),
+    ({"name": "count_bundle_test",
+      "args": [["sim_bundle_A.dets.det_A", "sim_bundle_A.dets.det_B"]],
+      "kwargs": {"num": 1, "delay": 1}, "item_type": "plan"},
+     _test_user_group, True, True, ""),
+    ({"name": "count_bundle_test",
+      "args": [["sim_bundle_A.dets.det_A", "sim_bundle_B.dets.det_B"]],
+      "kwargs": {"num": 1, "delay": 1}, "item_type": "plan"},
+     _test_user_group, False, False, "Failed to add an item: Plan validation failed"),
+    ({"name": "count_bundle_test",
+      "kwargs": {"detectors": ["sim_bundle_A.dets.det_A", "sim_bundle_B.dets.det_B"],
+                 "num": 1, "delay": 1}, "item_type": "plan"},
+     _test_user_group, False, False, "Failed to add an item: Plan validation failed"),
+    ({"name": "count_bundle_test",
+      "args": [["sim_bundle_A.dets.det_A", "sim_bundle_B"]],
+      "kwargs": {"num": 1, "delay": 1}, "item_type": "plan"},
+     _test_user_group, False, False, "Failed to add an item: Plan validation failed"),
+])
+# fmt: on
+def test_zmq_api_queue_item_add_5(re_manager, plan_to_add, ugroup, success_submit, success_run, msg):  # noqa F811
+    """
+    Check if subdevice names could be passed to plans
+    """
+    params = {"item": plan_to_add, "user": _user, "user_group": ugroup}
+    resp0a, _ = zmq_single_request("queue_item_add", params)
+    assert resp0a["success"] is success_submit
+    response_msg = resp0a["msg"]
+
+    state = get_queue_state()
+    assert state["items_in_queue"] == (1 if success_submit else 0)
+    assert state["items_in_history"] == 0
+
+    if not success_submit:
+        assert msg in response_msg, pprint.pformat(resp0a)
+
+    else:
+        # Now execute the plan
+        resp1, _ = zmq_single_request("environment_open")
+        assert resp1["success"] is True
+        assert wait_for_condition(
+            time=timeout_env_open, condition=condition_environment_created
+        ), "Timeout while waiting for environment to be opened"
+
+        resp2, _ = zmq_single_request("queue_start")
+        assert resp2["success"] is True
+
+        assert wait_for_condition(
+            time=10, condition=condition_manager_idle
+        ), "Timeout while waiting for environment to be opened"
+
+        state = get_queue_state()
+        assert state["items_in_queue"] == (0 if success_run else 1)
+        assert state["items_in_history"] == 1
+
+        # Close the environment
+        resp5, _ = zmq_single_request("environment_close")
+        assert resp5["success"] is True
+        assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_queue_item_add_6(re_manager):  # noqa: F811
     """
     Make sure that the new plan UID is generated when the plan is added
     """
@@ -487,7 +585,7 @@ def test_zmq_api_queue_item_add_5(re_manager):  # noqa: F811
     assert resp1["item"]["item_uid"] != plan1["item_uid"]
 
 
-def test_zmq_api_queue_item_add_6(re_manager):  # noqa: F811
+def test_zmq_api_queue_item_add_7(re_manager):  # noqa: F811
     """
     Add instruction ('queue_stop') to the queue.
     """
@@ -523,7 +621,7 @@ def test_zmq_api_queue_item_add_6(re_manager):  # noqa: F811
     ([{"test_key": 10}, {"test_key": 20}], {"test_key": 10}),
 ])
 # fmt: on
-def test_zmq_api_queue_item_add_7(db_catalog, re_manager_cmd, meta_param, meta_saved):  # noqa: F811
+def test_zmq_api_queue_item_add_8(db_catalog, re_manager_cmd, meta_param, meta_saved):  # noqa: F811
     """
     Add plan with metadata.
     """
@@ -572,7 +670,7 @@ def test_zmq_api_queue_item_add_7(db_catalog, re_manager_cmd, meta_param, meta_s
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_queue_item_add_8_fail(re_manager):  # noqa F811
+def test_zmq_api_queue_item_add_9_fail(re_manager):  # noqa F811
 
     # Unknown plan name
     plan1 = {"name": "count_test", "args": [["det1", "det2"]], "item_type": "plan"}

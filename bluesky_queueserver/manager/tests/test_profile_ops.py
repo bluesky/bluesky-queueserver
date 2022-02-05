@@ -10,6 +10,7 @@ import sys
 import enum
 import inspect
 from collections.abc import Callable
+import re
 import shutil
 import time as ttime
 
@@ -22,7 +23,7 @@ except ImportError:
 import ophyd
 import ophyd.sim
 
-from .common import copy_default_profile_collection, patch_first_startup_file
+from .common import copy_default_profile_collection, patch_first_startup_file, append_code_to_last_startup_file
 
 from .common import reset_sys_modules  # noqa: F401
 
@@ -61,6 +62,13 @@ from bluesky_queueserver.manager.profile_ops import (
     check_if_function_allowed,
     _validate_user_group_permissions_schema,
     prepare_function,
+    _split_list_element_definition,
+    _build_device_name_list,
+    _build_plan_name_list,
+    _find_and_replace_built_in_types,
+    _is_object_name_in_list,
+    _get_nspace_object,
+    _filter_allowed_plans,
 )
 
 # User name and user group name used throughout most of the tests.
@@ -158,7 +166,7 @@ get_ipython().user_ns
     # Patched as expected ('get_ipython' is commented in the import statement)
     ("""
 \n
-from IPython import config #, get_ipython
+from IPython import version_info #, get_ipython
 
 get_ipython().user_ns
 """, True, ""),
@@ -472,7 +480,7 @@ def test_load_startup_script_1(tmp_path, keep_re, enable_local_imports, reset_sy
         assert "RE" not in nspace, pprint.pformat(nspace)
         assert "db" not in nspace, pprint.pformat(nspace)
 
-    # Load different script (same name, but different path)
+    # Load script #2 (same name, but different path)
     script_dir = os.path.join(tmp_path, "script_dir2")
     script_path = os.path.join(script_dir, "startup_script.py")
 
@@ -645,7 +653,50 @@ def test_load_startup_script_3(tmp_path, reset_sys_modules):  # noqa: F811
         assert nspace[k] == v
 
 
-def test_load_startup_script_4(tmp_path, monkeypatch):
+_startup_script_4 = """
+# Script with more sophisticated imports
+
+import ophyd
+from ophyd import Device, Component as Cpt
+
+class SimStage(Device):
+    x = Cpt(ophyd.sim.SynAxis, name="y", labels={"motors"})
+    y = Cpt(ophyd.sim.SynAxis, name="y", labels={"motors"})
+    z = Cpt(ophyd.sim.SynAxis, name="z", labels={"motors"})
+
+    def set(self, x, y, z):
+        self.x.set(x)
+        self.y.set(y)
+        self.z.set(z)
+
+sim_stage = SimStage(name="sim_stage")
+"""
+
+
+@pytest.mark.parametrize("keep_re", [True, False])
+@pytest.mark.parametrize("enable_local_imports", [True, False])
+def test_load_startup_script_4(tmp_path, keep_re, enable_local_imports, reset_sys_modules):  # noqa: F811
+    """
+    Load a startup script with more sophisticated imports
+    """
+    # Load script script #2a (same name, but different path)
+    script_dir = os.path.join(tmp_path, "script_dir3")
+    script_path = os.path.join(script_dir, "startup_script.py")
+
+    os.makedirs(script_dir, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(_startup_script_4)
+
+    nspace = load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+
+    assert nspace
+    assert "SimStage" in nspace, pprint.pformat(nspace)
+    assert "sim_stage" in nspace, pprint.pformat(nspace)
+    assert "RE" not in nspace, pprint.pformat(nspace)
+    assert "db" not in nspace, pprint.pformat(nspace)
+
+
+def test_load_startup_script_5(tmp_path, monkeypatch):
     """
     Load startup script: instantiation of devices using Happi.
     """
@@ -739,6 +790,7 @@ def test_load_script_into_existing_nspace_2(
         f.write(_imported_module_1)
 
     script = script_patch + _startup_script_1
+
     nspace = {}
 
     if enable_local_imports:
@@ -984,6 +1036,19 @@ def test_load_script_into_existing_nspace_8(update_re):  # noqa: F811
         assert nspace["db"]
 
 
+def test_load_script_into_existing_nspace_9():  # noqa: F811
+    """
+    Load script with more sophisticated use of imported types.
+    """
+    nspace = {}
+
+    # Load script that contains RE and db. Set 'update_re' as True.
+    load_script_into_existing_nspace(script=_startup_script_4, nspace=nspace, update_re=True)
+
+    assert "SimStage" in nspace
+    assert "sim_stage" in nspace
+
+
 @pytest.mark.parametrize("keep_re", [True, False])
 def test_load_startup_module_1(tmp_path, monkeypatch, keep_re, reset_sys_modules):  # noqa: F811
     """
@@ -1051,6 +1116,29 @@ def test_load_startup_module_1(tmp_path, monkeypatch, keep_re, reset_sys_modules
 
 
 def test_load_startup_module_2(tmp_path, monkeypatch, reset_sys_modules):  # noqa: F811
+    """
+    Import module with more sophisticated imports.
+    """
+    # Load first script
+    script_dir = os.path.join(tmp_path, "script_dir1")
+    script_path = os.path.join(script_dir, "startup_script.py")
+
+    os.makedirs(script_dir, exist_ok=True)
+    with open(script_path, "w") as f:
+        f.write(_startup_script_4)
+
+    # Temporarily add module to the search path
+    sys_path = sys.path
+    monkeypatch.setattr(sys, "path", [str(tmp_path)] + sys_path)
+
+    nspace = load_startup_module("script_dir1.startup_script", keep_re=True)
+
+    assert nspace
+    assert "SimStage" in nspace, pprint.pformat(nspace)
+    assert "sim_stage" in nspace, pprint.pformat(nspace)
+
+
+def test_load_startup_module_3(tmp_path, monkeypatch, reset_sys_modules):  # noqa: F811
     """
     Load startup module: instantiation of devices using Happi.
     """
@@ -1348,7 +1436,7 @@ def test_process_plan_1(plan_func, plan_info_expected):
     plan_info_expected = plan_info_expected.copy()
     plan_info_expected["name"] = plan_func.__name__
     plan_info_expected["module"] = plan_func.__module__
-    pf_info = _process_plan(plan_func, existing_devices={})
+    pf_info = _process_plan(plan_func, existing_devices={}, existing_plans={})
 
     assert pf_info == plan_info_expected
 
@@ -1567,7 +1655,7 @@ def test_process_plan_2(plan_func, plan_info_expected):
     plan_info_expected["name"] = plan_func.__name__
     plan_info_expected["module"] = plan_func.__module__
 
-    pf_info = _process_plan(plan_func, existing_devices={})
+    pf_info = _process_plan(plan_func, existing_devices={}, existing_plans={})
 
     assert pf_info == plan_info_expected, pprint.pformat(pf_info)
 
@@ -1725,7 +1813,7 @@ _pf3c_processed = {
         "parameters": {
             "val3": {
                 "annotation": "typing.List[typing.Union[Devices1, Plans1, Enums1]]",
-                "devices": {"Devices1": ("dev1", "dev2", "dev3")},
+                "devices": {"Devices1": ("dev_det1", "dev_det2", "dev3")},
                 "plans": {"Plans1": ("plan1", "plan2", "plan3")},
                 "enums": {"Enums1": ("enum1", "enum2", "enum3")},
             }
@@ -1769,9 +1857,9 @@ _pf3d_processed = {
             "default": "None",
             "annotation": {
                 "type": "typing.List[typing.Union[Devices1, Plans1, Enums1]]",
-                "devices": {"Devices1": ("dev1", "dev2", "dev3")},
-                "plans": {"Plans1": ("plan1", "plan2", "plan3")},
-                "enums": {"Enums1": ("enum1", "enum2", "enum3")},
+                "devices": {"Devices1": ["dev3", "dev_det1", "dev_det2"]},
+                "plans": {"Plans1": ["plan1", "plan2", "plan3"]},
+                "enums": {"Enums1": ["enum1", "enum2", "enum3"]},
             },
             "description": "The description for 'val3' from the docstring",
         },
@@ -1851,13 +1939,32 @@ _pf3f_processed = {
 }
 
 
+# Check that built-in types are handled correctly when they are used as stand-alone type
+#   and when they are overridden.
 @parameter_annotation_decorator(
     {
-        "parameters": {"val1": {"annotation": "AllDetectors"}},
+        "parameters": {
+            "val1": {
+                "annotation": "typing.Union[__PLAN__, __DEVICE__]",
+                "devices": {"__DEVICE__": ("det1", "det2")},
+            },
+            "val2": {
+                "annotation": "typing.Union[__PLAN__, __DEVICE__]",
+                "plans": {"__PLAN__": ("plan1", "plan2")},
+            },
+            "val3": {
+                "annotation": "typing.Union[__PLAN_OR_DEVICE__, __DEVICE__]",
+                "devices": {"__DEVICE__": ("det1", "det2")},
+            },
+            "val4": {
+                "annotation": "typing.Union[__PLAN_OR_DEVICE__, __DEVICE__]",
+                "devices": {"__PLAN_OR_DEVICE__": ("det1", "det2")},
+            },
+        }
     }
 )
-def _pf3g(val1):
-    yield from [val1]
+def _pf3g(val1, val2, val3, val4):
+    yield from [val1, val2, val3, val4]
 
 
 _pf3g_processed = {
@@ -1865,37 +1972,90 @@ _pf3g_processed = {
         {
             "name": "val1",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "AllDetectors", "devices": {"AllDetectors": ["dev_det1", "dev_det2"]}},
+            "annotation": {
+                "type": "typing.Union[__PLAN__, __DEVICE__]",
+                "devices": {"__DEVICE__": ["det1", "det2"]},
+            },
+            "convert_plan_names": True,
         },
-    ],
-    "properties": {"is_generator": True},
-}
-
-_pf3g_empty_processed = {
-    "parameters": [
         {
-            "name": "val1",
+            "name": "val2",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "AllDetectors", "devices": {"AllDetectors": []}},
+            "annotation": {
+                "type": "typing.Union[__PLAN__, __DEVICE__]",
+                "plans": {"__PLAN__": ["plan1", "plan2"]},
+            },
+            "convert_device_names": True,
+        },
+        {
+            "name": "val3",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "typing.Union[__PLAN_OR_DEVICE__, __DEVICE__]",
+                "devices": {"__DEVICE__": ["det1", "det2"]},
+            },
+            "convert_plan_names": True,
+            "convert_device_names": True,
+        },
+        {
+            "name": "val4",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "typing.Union[__PLAN_OR_DEVICE__, __DEVICE__]",
+                "devices": {"__PLAN_OR_DEVICE__": ["det1", "det2"]},
+            },
+            "convert_device_names": True,
         },
     ],
     "properties": {"is_generator": True},
 }
 
 
+# Check that built-in types are handled correctly when they are used as stand-alone type
+#   and when they are overridden.
 @parameter_annotation_decorator(
     {
         "parameters": {
             "val1": {
-                "annotation": "AllDetectors",
-                # Type 'AllDetectors' is explicitly defined, so it is not treated as default
-                "devices": {"AllDetectors": ["dev1", "dev2", "dev3"]},
-            }
-        },
+                "annotation": "__PLAN__",
+            },
+            "val2": {
+                "annotation": "__PLAN__",
+                "convert_plan_names": False,
+            },
+            "val3": {
+                "annotation": "__PLAN__",
+                "convert_plan_names": True,
+            },
+            "val4": {
+                "annotation": "__DEVICE__",
+            },
+            "val5": {
+                "annotation": "__DEVICE__",
+                "convert_device_names": False,
+            },
+            "val6": {
+                "annotation": "__DEVICE__",
+                "convert_device_names": True,
+            },
+            "val7": {
+                "annotation": "__PLAN_OR_DEVICE__",
+            },
+            "val8": {
+                "annotation": "__PLAN_OR_DEVICE__",
+                "convert_plan_names": False,
+                "convert_device_names": False,
+            },
+            "val9": {
+                "annotation": "__PLAN_OR_DEVICE__",
+                "convert_plan_names": True,
+                "convert_device_names": True,
+            },
+        }
     }
 )
-def _pf3h(val1):
-    yield from [val1]
+def _pf3h(val1, val2, val3, val4, val5, val6, val7, val8, val9):
+    yield from [val1, val2, val3, val4, val5, val6, val7, val8, val9]
 
 
 _pf3h_processed = {
@@ -1903,73 +2063,59 @@ _pf3h_processed = {
         {
             "name": "val1",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "AllDetectors", "devices": {"AllDetectors": ["dev1", "dev2", "dev3"]}},
+            "annotation": {"type": "__PLAN__"},
+            "convert_plan_names": True,
         },
-    ],
-    "properties": {"is_generator": True},
-}
-
-
-@parameter_annotation_decorator(
-    {
-        "parameters": {"val1": {"annotation": "typing.List[AllMotors]"}},
-    }
-)
-def _pf3i(val1):
-    yield from [val1]
-
-
-_pf3i_processed = {
-    "parameters": [
         {
-            "name": "val1",
+            "name": "val2",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "typing.List[AllMotors]", "devices": {"AllMotors": ["dev_m1"]}},
+            "annotation": {"type": "__PLAN__"},
+            "convert_plan_names": False,
         },
-    ],
-    "properties": {"is_generator": True},
-}
-
-
-@parameter_annotation_decorator(
-    {
-        "parameters": {"val1": {"annotation": "typing.List[AllFlyers]"}},
-    }
-)
-def _pf3j(val1):
-    yield from [val1]
-
-
-_pf3j_processed = {
-    "parameters": [
         {
-            "name": "val1",
+            "name": "val3",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {"type": "typing.List[AllFlyers]", "devices": {"AllFlyers": ["dev_fly1"]}},
+            "annotation": {"type": "__PLAN__"},
+            "convert_plan_names": True,
         },
-    ],
-    "properties": {"is_generator": True},
-}
-
-
-@parameter_annotation_decorator(
-    {
-        "parameters": {"val1": {"annotation": "typing.Union[AllMotors, AllFlyers]"}},
-    }
-)
-def _pf3k(val1):
-    yield from [val1]
-
-
-_pf3k_processed = {
-    "parameters": [
         {
-            "name": "val1",
+            "name": "val4",
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
-            "annotation": {
-                "type": "typing.Union[AllMotors, AllFlyers]",
-                "devices": {"AllMotors": ["dev_m1"], "AllFlyers": ["dev_fly1"]},
-            },
+            "annotation": {"type": "__DEVICE__"},
+            "convert_device_names": True,
+        },
+        {
+            "name": "val5",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "__DEVICE__"},
+            "convert_device_names": False,
+        },
+        {
+            "name": "val6",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "__DEVICE__"},
+            "convert_device_names": True,
+        },
+        {
+            "name": "val7",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "__PLAN_OR_DEVICE__"},
+            "convert_plan_names": True,
+            "convert_device_names": True,
+        },
+        {
+            "name": "val8",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "__PLAN_OR_DEVICE__"},
+            "convert_plan_names": False,
+            "convert_device_names": False,
+        },
+        {
+            "name": "val9",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "__PLAN_OR_DEVICE__"},
+            "convert_plan_names": True,
+            "convert_device_names": True,
         },
     ],
     "properties": {"is_generator": True},
@@ -1981,11 +2127,11 @@ _pf3k_processed = {
         "parameters": {"val1": {"min": 0.1, "max": 100, "step": 0.02}},
     }
 )
-def _pf3l(val1):
+def _pf3i(val1):
     yield from [val1]
 
 
-_pf3l_processed = {
+_pf3i_processed = {
     "parameters": [
         {
             "name": "val1",
@@ -2012,16 +2158,12 @@ _pf3_existing_devices = {
     (_pf3a, {}, _pf3a_processed),
     (_pf3b, {}, _pf3b_processed),
     (_pf3c, {}, _pf3c_processed),
-    (_pf3d, {}, _pf3d_processed),
+    (_pf3d, _pf3_existing_devices, _pf3d_processed),
     (_pf3e, {}, _pf3e_processed),
     (_pf3f, {}, _pf3f_processed),
-    (_pf3g, _pf3_existing_devices, _pf3g_processed),
-    (_pf3g, {}, _pf3g_empty_processed),
-    (_pf3h, _pf3_existing_devices, _pf3h_processed),
-    (_pf3i, _pf3_existing_devices, _pf3i_processed),
-    (_pf3j, _pf3_existing_devices, _pf3j_processed),
-    (_pf3k, _pf3_existing_devices, _pf3k_processed),
-    (_pf3l, {}, _pf3l_processed),
+    (_pf3g, {}, _pf3g_processed),
+    (_pf3h, {}, _pf3h_processed),
+    (_pf3i, {}, _pf3i_processed),
 ])
 # fmt: on
 def test_process_plan_3(plan_func, existing_devices, plan_info_expected):
@@ -2033,12 +2175,414 @@ def test_process_plan_3(plan_func, existing_devices, plan_info_expected):
     plan_info_expected["name"] = plan_func.__name__
     plan_info_expected["module"] = plan_func.__module__
 
-    pf_info = _process_plan(plan_func, existing_devices=existing_devices)
+    pf_info = _process_plan(plan_func, existing_devices=existing_devices, existing_plans={})
 
     assert pf_info == plan_info_expected, pprint.pformat(pf_info)
 
 
-def _pf4a_factory():
+@parameter_annotation_decorator(
+    {
+        "parameters": {
+            "p1": {
+                "annotation": "all_devices",
+                "devices": {"all_devices": (":.*",)},
+            },
+            "p2": {
+                "annotation": "all_detectors",
+                "devices": {"all_detectors": ("__DETECTOR__:.*",)},
+            },
+            "p3": {
+                "annotation": "all_motors",
+                "devices": {"all_motors": ("__MOTOR__:.*",)},
+            },
+            "p4": {
+                "annotation": "all_flyers",
+                "devices": {"all_flyers": ("__FLYABLE__:.*",)},
+            },
+            "p5": {
+                "annotation": "all_readable",
+                "devices": {"all_readable": ("__READABLE__:.*",)},
+            },
+        }
+    }
+)
+def _pf4a(p1, p2, p3, p4, p5):
+    yield from [p1, p2, p3, p4, p5]
+
+
+_pf4a_processed = {
+    "parameters": [
+        {
+            "name": "p1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "all_devices",
+                "devices": {
+                    "all_devices": ["da0_detector", "da0_flyer", "da0_motor", "da0_motor2"],
+                },
+            },
+        },
+        {
+            "name": "p2",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "all_detectors", "devices": {"all_detectors": ["da0_detector"]}},
+        },
+        {
+            "name": "p3",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "all_motors", "devices": {"all_motors": ["da0_motor", "da0_motor2"]}},
+        },
+        {
+            "name": "p4",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "all_flyers", "devices": {"all_flyers": ["da0_flyer"]}},
+        },
+        {
+            "name": "p5",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "all_readable",
+                "devices": {"all_readable": ["da0_detector", "da0_motor", "da0_motor2"]},
+            },
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+@parameter_annotation_decorator(
+    {
+        "parameters": {
+            "p1": {
+                "annotation": "devices1",
+                "devices": {"devices1": ("some_dev", ":motor$:+motor$:det$")},
+            },
+            "p2": {
+                "annotation": "devices2",
+                "devices": {"devices2": ("some_dev", "__MOTOR__:motor$:+motor$:det$")},
+            },
+            "p3": {
+                "annotation": "devices3",
+                "devices": {"devices3": ("some_dev", "__READABLE__:+motor$:motor$:det$")},
+            },
+            "p4": {
+                "annotation": "devices4",
+                "devices": {"devices4": ("__MOTOR__:motor$:+motor$:det$", "__READABLE__:+motor$:motor$:det$")},
+            },
+            "p5": {
+                "annotation": "devices5",
+                "devices": {"devices5": ("__MOTOR__:motor$:+motor$:det$", "__FLYABLE__:.*")},
+            },
+        }
+    }
+)
+def _pf4b(p1, p2, p3, p4, p5):
+    yield from [p1, p2, p3, p4, p5]
+
+
+_pf4b_processed = {
+    "parameters": [
+        {
+            "name": "p1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "devices1",
+                "devices": {
+                    "devices1": [
+                        "da0_motor.db0_motor",
+                        "da0_motor.db0_motor.dc0_det",
+                        "da0_motor.db0_motor.dc1_det",
+                        "da0_motor.db0_motor.dc2_det",
+                        "some_dev",
+                    ],
+                },
+            },
+        },
+        {
+            "name": "p2",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {"type": "devices2", "devices": {"devices2": ["da0_motor.db0_motor", "some_dev"]}},
+        },
+        {
+            "name": "p3",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "devices3",
+                "devices": {
+                    "devices3": [
+                        "da0_motor",
+                        "da0_motor.db0_motor.dc0_det",
+                        "da0_motor.db0_motor.dc1_det",
+                        "da0_motor.db0_motor.dc2_det",
+                        "some_dev",
+                    ]
+                },
+            },
+        },
+        {
+            "name": "p4",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "devices4",
+                "devices": {
+                    "devices4": [
+                        "da0_motor",
+                        "da0_motor.db0_motor",
+                        "da0_motor.db0_motor.dc0_det",
+                        "da0_motor.db0_motor.dc1_det",
+                        "da0_motor.db0_motor.dc2_det",
+                    ]
+                },
+            },
+        },
+        {
+            "name": "p5",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "devices5",
+                "devices": {"devices5": ["da0_flyer", "da0_motor.db0_motor"]},
+            },
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+@parameter_annotation_decorator(
+    {
+        "parameters": {
+            "p1": {
+                "annotation": "devices1",
+                "devices": {"devices1": ("some_dev", ":?.*motor$")},
+            },
+            "p2": {
+                "annotation": "devices2",
+                "devices": {"devices2": ("some_dev", "__FLYABLE__:?.*$")},
+            },
+            "p3": {
+                "annotation": "devices3",
+                "devices": {
+                    "devices3": (
+                        "some_dev",
+                        "__READABLE__:?.*db0_motor.*:depth=3",
+                    )
+                },
+            },
+            "p4": {
+                "annotation": "devices4",
+                "devices": {"devices4": ("__MOTOR__:?.*db0_motor.*:depth=3",)},
+            },
+            "p5": {
+                "annotation": "devices5",
+                "devices": {"devices5": ("__FLYABLE__:motor$:?.*db.*$",)},
+            },
+        }
+    }
+)
+def _pf4c(p1, p2, p3, p4, p5):
+    yield from [p1, p2, p3, p4, p5]
+
+
+_pf4c_processed = {
+    "parameters": [
+        {
+            "name": "p1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "devices1",
+                "devices": {
+                    "devices1": [
+                        "da0_motor",
+                        "da0_motor.db0_motor",
+                        "da0_motor.db0_motor.dc3_motor",
+                        "da0_motor.db0_motor.dc3_motor.dd1_motor",
+                        "da0_motor.db1_det.dc1_motor",
+                        "some_dev",
+                    ],
+                },
+            },
+        },
+        {
+            "name": "p2",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "devices2",
+                "devices": {"devices2": ["da0_flyer", "da0_motor.db2_flyer", "some_dev"]},
+            },
+        },
+        {
+            "name": "p3",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "devices3",
+                "devices": {
+                    "devices3": [
+                        "da0_motor.db0_motor",
+                        "da0_motor.db0_motor.dc0_det",
+                        "da0_motor.db0_motor.dc1_det",
+                        "da0_motor.db0_motor.dc2_det",
+                        "da0_motor.db0_motor.dc3_motor",
+                        "some_dev",
+                    ]
+                },
+            },
+        },
+        {
+            "name": "p4",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "devices4",
+                "devices": {
+                    "devices4": [
+                        "da0_motor.db0_motor",
+                        "da0_motor.db0_motor.dc3_motor",
+                    ]
+                },
+            },
+        },
+        {
+            "name": "p5",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "devices5",
+                "devices": {"devices5": ["da0_motor.db2_flyer"]},
+            },
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+@parameter_annotation_decorator(
+    {
+        "parameters": {
+            "p1": {
+                "annotation": "plans1",
+                "plans": {"plans1": ("some_plan", ":.*$")},
+            },
+            "p2": {
+                "annotation": "plans2",
+                "plans": {"plans2": ("some_plan", ":motor$")},
+            },
+            "p3": {
+                "annotation": "plans3",
+                "plans": {"plans3": (":count",)},
+            },
+        }
+    }
+)
+def _pf4d(p1, p2, p3):
+    yield from [p1, p2, p3]
+
+
+_pf4d_processed = {
+    "parameters": [
+        {
+            "name": "p1",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "plans1",
+                "plans": {"plans1": ["count", "count2", "count_modified", "plan1", "some_plan"]},
+            },
+        },
+        {
+            "name": "p2",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "plans2",
+                "plans": {"plans2": ["some_plan"]},
+            },
+        },
+        {
+            "name": "p3",
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "annotation": {
+                "type": "plans3",
+                "plans": {
+                    "plans3": [
+                        "count",
+                        "count2",
+                        "count_modified",
+                    ]
+                },
+            },
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+# fmt: off
+_pp4_allowed_devices_dict_1 = {
+    "da0_motor": {
+        "is_readable": True, "is_movable": True, "is_flyable": False,
+        "components": {
+            "db0_motor": {
+                "is_readable": True, "is_movable": True, "is_flyable": False,
+                "components": {
+                    "dc0_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
+                    "dc1_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
+                    "dc2_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
+                    "dc3_motor": {
+                        "is_readable": True, "is_movable": True, "is_flyable": False,
+                        "components": {
+                            "dd0_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
+                            "dd1_motor": {"is_readable": True, "is_movable": True, "is_flyable": False},
+                        }
+                    },
+                }
+            },
+            "db1_det": {
+                "is_readable": True, "is_movable": False, "is_flyable": False,
+                "components": {
+                    "dc0_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
+                    "dc1_motor": {"is_readable": True, "is_movable": True, "is_flyable": False},
+                }
+            },
+            "db2_flyer": {
+                "is_readable": False, "is_movable": False, "is_flyable": True,
+            },
+        }
+    },
+    "da0_motor2": {
+        "is_readable": True, "is_movable": True, "is_flyable": False,
+    },
+    "da0_detector": {
+        "is_readable": True, "is_movable": False, "is_flyable": False,
+    },
+    "da0_flyer": {
+        "is_readable": False, "is_movable": False, "is_flyable": True,
+    },
+}
+# fmt: on
+
+_pp4_allowed_plans_set_1 = {"plan1", "count", "count_modified", "count2"}
+
+
+# fmt: off
+@pytest.mark.parametrize("plan_func, existing_devices, plan_info_expected", [
+    (_pf4a, _pp4_allowed_devices_dict_1, _pf4a_processed),
+    (_pf4b, _pp4_allowed_devices_dict_1, _pf4b_processed),
+    (_pf4c, _pp4_allowed_devices_dict_1, _pf4c_processed),
+    (_pf4d, _pp4_allowed_devices_dict_1, _pf4d_processed),
+])
+# fmt: on
+def test_process_plan_4(plan_func, existing_devices, plan_info_expected):
+    """
+    Function '_process_plan': Using regular expressions for selecting plans and
+    devices from the lists of existing plans and devices.
+    """
+
+    plan_info_expected = plan_info_expected.copy()
+    plan_info_expected["name"] = plan_func.__name__
+    plan_info_expected["module"] = plan_func.__module__
+
+    pf_info = _process_plan(plan_func, existing_devices=existing_devices, existing_plans=_pp4_allowed_plans_set_1)
+
+    assert pf_info == plan_info_expected, pprint.pformat(pf_info)
+
+
+def _pf5a_factory():
     """Arbitrary classes are not supported"""
 
     class SomeClass:
@@ -2063,7 +2607,7 @@ def _pf4a_factory():
         },
     }
 )
-def _pf4b(val1, val2: str = "some_str", val3: None = None):
+def _pf5b(val1, val2: str = "some_str", val3: None = None):
     yield from [val1, val2, val3]
 
 
@@ -2078,12 +2622,12 @@ def _pf4b(val1, val2: str = "some_str", val3: None = None):
         },
     }
 )
-def _pf4c(detector: Optional[ophyd.Device]):
+def _pf5c(detector: Optional[ophyd.Device]):
     # Expected to fail: the default value is in the decorator, but not in the header
     yield from [detector]
 
 
-def _pf4d_factory():
+def _pf5d_factory():
     """Arbitrary classes are not supported"""
 
     class SomeClass:
@@ -2096,20 +2640,100 @@ def _pf4d_factory():
     return f
 
 
+def _pf5e_factory():
+    """Invalid regular expression in plan type"""
+
+    @parameter_annotation_decorator({"parameters": {"val1": {"annotation": "Plan1", "plans": {"Plan1": [":*"]}}}})
+    def f(val1):
+        yield from [val1]
+
+    return f
+
+
+def _pf5f_factory():
+    """Invalid regular expression in device type"""
+
+    @parameter_annotation_decorator({"parameters": {"val1": {"annotation": "Dev1", "devices": {"Dev1": [":*"]}}}})
+    def f(val1):
+        yield from [val1]
+
+    return f
+
+
+def _pf5g_factory():
+    """Exlicitly listed device contains invalid symbols"""
+
+    @parameter_annotation_decorator(
+        {"parameters": {"val1": {"annotation": "Dev1", "devices": {"Dev1": ["*dev"]}}}}
+    )
+    def f(val1):
+        yield from [val1]
+
+    return f
+
+
+def _pf5h_factory():
+    """Exlicitly listed plan contains invalid symbols"""
+
+    @parameter_annotation_decorator(
+        {"parameters": {"val1": {"annotation": "Plan1", "plans": {"Plan1": ["*plan"]}}}}
+    )
+    def f(val1):
+        yield from [val1]
+
+    return f
+
+
 # fmt: off
 @pytest.mark.parametrize("plan_func, err_msg", [
-    (_pf4a_factory(), "unsupported type of default value"),
-    (_pf4b, "name 'Plans1' is not defined'"),
-    (_pf4c, "Missing default value for the parameter 'detector' in the plan signature"),
-    (_pf4d_factory(), "unsupported type of default value in decorator"),
+    (_pf5a_factory(), "unsupported type of default value"),
+    (_pf5b, "name 'Plans1' is not defined'"),
+    (_pf5c, "Missing default value for the parameter 'detector' in the plan signature"),
+    (_pf5d_factory(), "unsupported type of default value in decorator"),
+    (_pf5e_factory(), r"List item ':\*' contains invalid regular expression '\*'"),
+    (_pf5f_factory(), r"List item ':\*' contains invalid regular expression '\*'"),
+    (_pf5g_factory(), r"'\*dev' in the description '\*dev' contains invalid characters"),
+    (_pf5h_factory(), r"'\*plan' in the description '\*plan' contains invalid characters"),
 ])
 # fmt: on
-def test_process_plan_4_fail(plan_func, err_msg):
+def test_process_plan_5_fail(plan_func, err_msg):
     """
     Failing cases for 'process_plan' function. Some plans are expected to be rejected.
     """
     with pytest.raises(ValueError, match=err_msg):
-        _process_plan(plan_func, existing_devices={})
+        _process_plan(plan_func, existing_devices={}, existing_plans={})
+
+
+# ---------------------------------------------------------------------------------
+#                    _find_and_replace_built_in_types()
+
+# fmt: off
+@pytest.mark.parametrize("type_str_in, plans, devices, enums, type_str_out, convert_plans, convert_devices", [
+    ("some_type", None, None, None, "some_type", False, False),
+    ("some_type", {}, {}, {}, "some_type", False, False),
+    ("__PLAN__", {}, {}, {}, "str", True, False),
+    ("__DEVICE__", {}, {}, {}, "str", False, True),
+    ("__PLAN_OR_DEVICE__", {}, {}, {}, "str", True, True),
+    ("typing.List[__PLAN__]", {}, {}, {}, "typing.List[str]", True, False),
+    ("typing.Union[typing.List[__PLAN__], typing.List[__DEVICE__]]", {}, {}, {},
+     "typing.Union[typing.List[str], typing.List[str]]", True, True),
+    ("__PLAN__", {"__PLAN__": {}}, {}, {}, "__PLAN__", False, False),
+    ("__DEVICE__", {}, {"__DEVICE__": {}}, {}, "__DEVICE__", False, False),
+    ("__PLAN_OR_DEVICE__", {}, {}, {"__PLAN_OR_DEVICE__": {}}, "__PLAN_OR_DEVICE__", False, False),
+])
+# fmt: on
+def test_find_and_replace_built_in_types_1(
+    type_str_in, plans, devices, enums, type_str_out, convert_plans, convert_devices
+):
+    """
+    ``_find_and_replace_built_in_types``: basic tests
+    """
+    annotation_type_str, convert_plan_names, convert_device_names = _find_and_replace_built_in_types(
+        type_str_in, plans=plans, devices=devices, enums=enums
+    )
+    assert annotation_type_str == type_str_out
+    assert convert_plan_names == convert_plans
+    assert convert_device_names == convert_devices
 
 
 # ---------------------------------------------------------------------------------
@@ -2126,36 +2750,48 @@ def _create_schema_for_testing(annotation_type):
 
 
 # fmt: off
-@pytest.mark.parametrize("encoded_annotation, type_expected, success, errmsg", [
-    ({"type": "int"}, int, True, ""),
-    ({"type": "str"}, str, True, ""),
-    ({"type": "typing.List[int]"}, typing.List[int], True, ""),
-    ({"type": "typing.List[typing.Union[int, float]]"}, typing.List[typing.Union[int, float]], True, ""),
-    ({"type": "List[int]"}, typing.List[int], False, "name 'List' is not defined"),
+@pytest.mark.parametrize("encoded_annotation, type_expected, built_in_plans, built_in_devices, success, errmsg", [
+    ({"type": "int"}, int, False, False, True, ""),
+    ({"type": "str"}, str, False, False, True, ""),
+    ({"type": "typing.List[int]"}, typing.List[int], False, False, True, ""),
+    ({"type": "typing.List[typing.Union[int, float]]"},
+     typing.List[typing.Union[int, float]], False, False, True, ""),
+    ({"type": "List[int]"}, typing.List[int], False, False, False, "name 'List' is not defined"),
 
-    # Type specification that would allow ANY values to pass, but would specify structure
-    ({"type": "Device1", "devices": {"Device1": None}}, str, True, ""),
-    ({"type": "Plan1", "plans": {"Plan1": None}}, str, True, ""),
-    ({"type": "Enum1", "enums": {"Enum1": None}}, str, True, ""),
-    ({"type": "typing.Union[typing.List[Device1], Device1]",
-      "devices": {"Device1": None}}, typing.Union[typing.List[str], str], True, ""),
-    ({"type": "typing.Union[typing.List[Device1], Device2]",
-      "devices": {"Device1": None, "Device2": None}}, typing.Union[typing.List[str], str], True, ""),
-    ({"type": "typing.Union[typing.List[Device1], Device2]",
-      "devices": {"Device1": None}}, typing.Union[typing.List[str], str], False, "name 'Device2' is not defined"),
-    ({"type": "Enum1", "unknown": {"Enum1": None}}, str, False,
+    #  Built-in types: allow any value to pass
+    ({"type": "__PLAN__"}, str, True, False, True, ""),
+    ({"type": "typing.List[__PLAN__]"}, typing.List[str], True, False, True, ""),
+    ({"type": "__DEVICE__"}, str, False, True, True, ""),
+    ({"type": "typing.List[__DEVICE__]"}, typing.List[str], False, True, True, ""),
+    ({"type": "__PLAN_OR_DEVICE__"}, str, True, True, True, ""),
+    ({"type": "typing.List[__PLAN_OR_DEVICE__]"}, typing.List[str], True, True, True, ""),
+    ({"type": "typing.Union[typing.List[__PLAN__], __DEVICE__]"},
+     typing.Union[typing.List[str], str], True, True, True, ""),
+
+    # Errors
+    ({"type": "typing.Union[typing.List[Device1], Device2]", "devices": {"Device1": []}},
+     typing.Union[typing.List[str], str], False, False, False, "name 'Device2' is not defined"),
+    ({"type": "Enum1", "unknown": {"Enum1": []}}, str, False, False, False,
      r"Annotation contains unsupported keys: \['unknown'\]"),
+    ({"type": "str", "devices": {"Device1": []}}, str, False, False, False,
+     r"Type 'Device1' is defined in the annotation, but not used"),
+    ({"type": "Device1", "devices": {"Device1": None}}, str, False, False, False,
+     r"The list of items \('Device1': None\) must be a list of a tuple"),
 ])
 # fmt: on
-def test_process_annotation_1(encoded_annotation, type_expected, success, errmsg):
+def test_process_annotation_1(
+    encoded_annotation, type_expected, built_in_plans, built_in_devices, success, errmsg
+):
     """
     Function ``_process_annotation``: generate type based on annotation and compare it with the expected type.
     Also verify that JSON schema can be created from the class.
     """
     if success:
         # Compare types directly
-        type_recovered, ns = _process_annotation(encoded_annotation)
+        type_recovered, conv_plan_nms, conv_dev_nms, ns = _process_annotation(encoded_annotation)
         assert type_recovered == type_expected
+        assert conv_plan_nms == built_in_plans
+        assert conv_dev_nms == built_in_devices
 
         # Compare generated JSON schemas
         schema_recovered = _create_schema_for_testing(type_recovered)
@@ -2170,6 +2806,10 @@ pa2_Device1 = enum.Enum("pa2_Device1", {"dev1": "dev1", "dev2": "dev2", "dev3": 
 pa2_Device2 = enum.Enum("pa2_Device2", {"dev4": "dev4", "dev5": "dev5"})
 pa2_Plan1 = enum.Enum("pa2_Plan1", {"plan1": "plan1", "plan2": "plan2"})
 pa2_Enum1 = enum.Enum("pa2_Enum1", {"enum1": "enum1", "enum2": "enum2"})
+
+pa2__DEVICE__ = enum.Enum("__DEVICE__", {"dev1": "dev1", "dev2": "dev2", "dev3": "dev3"})
+pa2__PLAN__ = enum.Enum("__PLAN__", {"plan1": "plan1", "plan2": "plan2"})
+pa2__PLAN_OR_DEVICE__ = enum.Enum("__PLAN_OR_DEVICE__", {})
 
 
 # fmt: off
@@ -2194,15 +2834,18 @@ pa2_Enum1 = enum.Enum("pa2_Enum1", {"enum1": "enum1", "enum2": "enum2"})
         {"pa2_Device1": ("dev1", "dev2", "dev3"),
          "pa2_Enum1": ("enum1", "enum2")}},
      typing.Union[typing.Tuple[pa2_Device1], typing.List[pa2_Enum1]], True, ""),
+    # Redefine built-in types.
+    ({"type": "typing.Union[__PLAN__, __DEVICE__, __PLAN_OR_DEVICE__]",
+      "devices": {"__DEVICE__": ("dev1", "dev2", "dev3"), "__PLAN_OR_DEVICE__": []},
+      "plans": {"__PLAN__": ("plan1", "plan2")}},
+     typing.Union[pa2__PLAN__, pa2__DEVICE__, pa2__PLAN_OR_DEVICE__], True, ""),
     # Failing case: unknown 'custom' type in the annotation
     ({"type": "typing.Union[typing.List[unknown_type], typing.List[pa2_Enum1]]", "devices":
-        {"pa2_Device1": ("dev1", "dev2", "dev3"),
-         "pa2_Enum1": ("enum1", "enum2")}},
+        {"pa2_Enum1": ("enum1", "enum2")}},
      typing.Union[typing.List[pa2_Device1], typing.List[pa2_Enum1]], False, "name 'unknown_type' is not defined"),
     # Name for custom type is not a valid Python name
     ({"type": "typing.Union[typing.List[unknown-type], typing.List[pa2_Enum1]]", "devices":
-        {"pa2_Device1": ("dev1", "dev2", "dev3"),
-         "pa2_Enum1": ("enum1", "enum2")}},
+        {"pa2_Enum1": ("enum1", "enum2")}},
      typing.Union[typing.List[pa2_Device1], typing.List[pa2_Enum1]], False, "name 'unknown' is not defined"),
     # Non-existing type 'typing.list'
     ({"type": "typing.Union[typing.list[pa2_Device1], typing.List[pa2_Enum1]]", "devices":
@@ -2225,7 +2868,7 @@ def test_process_annotation_2(encoded_annotation, type_expected, success, errmsg
     a meaningful test.
     """
     if success:
-        type_recovered, ns = _process_annotation(encoded_annotation)
+        type_recovered, _, _, ns = _process_annotation(encoded_annotation)
 
         schema_recovered = _create_schema_for_testing(type_recovered)
         schema_expected = _create_schema_for_testing(type_expected)
@@ -2260,7 +2903,7 @@ def test_process_annotation_3(encoded_annotation, type_expected, success, errmsg
     type definitions are different.
     """
     if success:
-        type_recovered, ns = _process_annotation(encoded_annotation)
+        type_recovered, _, _, ns = _process_annotation(encoded_annotation)
 
         schema_recovered = _create_schema_for_testing(type_recovered)
         schema_expected = _create_schema_for_testing(type_expected)
@@ -2495,9 +3138,303 @@ def test_devices_from_nspace():
         ), f"The object '{device}' is not a device"
 
     # Check that both devices and signals are recognized by the function
-    assert "custom_test_device" in devices
-    assert "custom_test_signal" in devices
-    assert "custom_test_flyer" in devices
+    device_names = ("custom_test_device", "custom_test_signal", "custom_test_flyer", "sim_bundle_A")
+    for d in device_names:
+        assert d in devices
+    # Device classes should not be included
+    class_names = ("Device", "SimStage", "SimDetectors", "SimBundle")
+    for c in class_names:
+        assert c not in devices
+
+
+# fmt: off
+@pytest.mark.parametrize("element_def, components, uses_re, device_type", [
+    # Device/subdevice names
+    ("det1", [("det1", False, False, None)], False, ""),
+    ("det1 ", [("det1", False, False, None)], False, ""),  # Spaces are removed
+    ("det1.val", [("det1", False, False, None), ("val", False, False, None)], False, ""),
+    ("sim_stage.det1.val", [("sim_stage", False, False, None), ("det1", False, False, None),
+     ("val", False, False, None)], False, ""),
+    # Regular expressions
+    (":^det", [("^det", False, False, None)], True, ""),
+    (":^det:^val$", [("^det", False, False, None), ("^val$", False, False, None)], True, ""),
+    (":+^det:^val$", [("^det", True, False, None), ("^val$", False, False, None)], True, ""),
+    (":+sim_stage:^det:^val$", [("sim_stage", True, False, None), ("^det", False, False, None),
+     ("^val$", False, False, None)], True, ""),
+    ("__READABLE__:.*", [(".*", False, False, None)], True, "__READABLE__"),
+    ("__FLYABLE__:.*", [(".*", False, False, None)], True, "__FLYABLE__"),
+    ("__DETECTOR__:.*:.*", [(".*", False, False, None), (".*", False, False, None)], True, "__DETECTOR__"),
+    ("__MOTOR__:+.*:.*", [(".*", True, False, None), (".*", False, False, None)], True, "__MOTOR__"),
+    # Full-name regular expressions
+    (":?det1", [("det1", False, True, None)], True, ""),
+    (":?^det1$:depth=5", [("^det1$", False, True, 5)], True, ""),
+    (r":?.*\.^val$", [(r".*\.^val$", False, True, None)], True, ""),
+    (r"__READABLE__:?.*\.^val$", [(r".*\.^val$", False, True, None)], True, "__READABLE__"),
+    (":+^det:?^val$", [("^det", True, False, None), ("^val$", False, True, None)], True, ""),
+    (":+^det:?^val$:depth=1", [("^det", True, False, None), ("^val$", False, True, 1)], True, ""),
+])
+# fmt: on
+def test_split_list_element_definition_1(element_def, components, uses_re, device_type):
+    """
+    ``_split_list_element_definition``: basic tests
+    """
+    _components, _uses_re, _device_type = _split_list_element_definition(element_def)
+    assert _components == components
+    assert _uses_re == uses_re
+    assert _device_type == device_type
+
+
+# fmt: off
+@pytest.mark.parametrize("element_def, exception_type, msg", [
+    (10, TypeError, "List item 10 has incorrect type"),
+    ("", ValueError, "List item '' is an empty string"),
+    (":", ValueError, "List item ':' contains empty components"),
+    (":^det:", ValueError, "List item ':^det:' contains empty components"),
+    (":^det::val", ValueError, "List item ':^det::val' contains empty components"),
+    (":*det:val", ValueError, "':*det:val' contains invalid regular expression '*det'"),
+    ("__UNSUPPORTED_TYPE__:^det", ValueError, "Device type '__UNSUPPORTED_TYPE__' is not supported."),
+    (":?^det:depth=0", ValueError, "Depth (0) must be positive integer greater or equal to 1"),
+    (":?^det:depth=a", ValueError, "Depth specification 'depth=a' has incorrect format"),
+    (":?^det:^val$", ValueError, "'?^det' can be only followed by the depth specification"),
+    (":?^det:?^val$", ValueError, "'?^det' can be only followed by the depth specification"),
+    (":?^det:^val:^val$", ValueError, "'?^det' must be the last"),
+    ("det..val", ValueError, "Plan, device or subdevice name in the description 'det..val' is an empty string"),
+    ("det.", ValueError, "Plan, device or subdevice name in the description 'det.' is an empty string"),
+    (".det", ValueError, "Plan, device or subdevice name in the description '.det' is an empty string"),
+    ("d$et", ValueError, "'d$et' in the description 'd$et' contains invalid characters"),
+    ("d$et.val", ValueError, "'d$et' in the description 'd$et.val' contains invalid characters"),
+    ("det.v$al", ValueError, "'v$al' in the description 'det.v$al' contains invalid characters"),
+])
+# fmt: on
+def test_split_list_element_definition_2_fail(element_def, exception_type, msg):
+    """
+    ``_split_list_element_definition``: failing cases
+    """
+    with pytest.raises(exception_type, match=re.escape(msg)):
+        _split_list_element_definition(element_def)
+
+
+# fmt: off
+_allowed_devices_dict_1 = {
+    "da0_motor": {
+        "is_readable": True, "is_movable": True, "is_flyable": False,
+        "components": {
+            "db0_motor": {
+                "is_readable": True, "is_movable": True, "is_flyable": False,
+                "components": {
+                    "dc0_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
+                    "dc1_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
+                    "dc2_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
+                    "dc3_motor": {
+                        "excluded": False,
+                        "is_readable": True, "is_movable": True, "is_flyable": False,
+                        "components": {
+                            "dd0_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
+                            "dd1_motor": {"is_readable": True, "is_movable": True, "is_flyable": False},
+                        }
+                    },
+                    "dc4_motor": {
+                        "excluded": True, "is_readable": True, "is_movable": True, "is_flyable": False,
+                    }
+                }
+            },
+            "db1_det": {
+                "is_readable": True, "is_movable": False, "is_flyable": False,
+                "components": {
+                    "dc0_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
+                    "dc1_motor": {"is_readable": True, "is_movable": True, "is_flyable": False},
+                }
+            },
+            "db2_flyer": {
+                "is_readable": False, "is_movable": False, "is_flyable": True,
+            },
+        }
+    },
+    "da1_det": {
+        "excluded": False,
+        "is_readable": True, "is_movable": False, "is_flyable": False,
+        "components": {
+            "db0_det": {"is_readable": True, "is_movable": False, "is_flyable": False},
+            "db1_motor": {"is_readable": True, "is_movable": True, "is_flyable": False},
+        }
+    },
+    "da2_det": {
+        "excluded": True,
+        "is_readable": True, "is_movable": False, "is_flyable": False,
+    }
+}
+# fmt: on
+
+
+# fmt: off
+@pytest.mark.parametrize("device_name, in_list, success, error_type, msg", [
+    ("da0_motor", True, True, None, ""),
+    ("not_exist", False, True, None, ""),
+    ("da0_motor.db0_motor", True, True, None, ""),
+    ("da0_motor.db0_motor.dc3_motor.dd1_motor", True, True, None, ""),
+    ("da0_motor.not_exist.dc3_motor.dd1_motor", False, True, None, ""),
+    ("da0_motor.db0_motor.not_exist.dd1_motor", False, True, None, ""),
+    ("da0_motor.db0_motor.dc3_motor.not_exist", False, True, None, ""),
+    ("da2_det", False, True, None, ""),  # excluded
+    ("da0_motor.db0_motor.dc4_motor", False, True, None, ""),  # excluded
+    (":da0_motor", True, False, ValueError,
+     "Device name ':da0_motor' can not contain regular expressions"),
+])
+# fmt: on
+def test_is_object_name_in_list_1(device_name, in_list, success, error_type, msg):
+    """
+    ``_is_object_name_in_list``: basic test (test on devices, but expected to work on plans)
+    """
+    if success:
+        res = _is_object_name_in_list(device_name, allowed_objects=_allowed_devices_dict_1)
+        assert res == in_list
+    else:
+        with pytest.raises(error_type, match=msg):
+            _is_object_name_in_list(device_name, allowed_objects=_allowed_devices_dict_1)
+
+
+# fmt: off
+@pytest.mark.parametrize("element_def, expected_name_list", [
+    # Device names
+    ("da0_motor", ["da0_motor"]),
+    ("da0_motor.db0_motor", ["da0_motor.db0_motor"]),
+    ("da0_motor.db0_motor.dc2_det", ["da0_motor.db0_motor.dc2_det"]),
+    # Patterns
+    (":.+", ["da0_motor", "da1_det"]),
+    (":.*", ["da0_motor", "da1_det"]),
+    (":+.*", ["da0_motor", "da1_det"]),
+    (":.+:^db0", ["da0_motor.db0_motor", "da1_det.db0_det"]),
+    (":+.+:^db0", ["da0_motor", "da0_motor.db0_motor", "da1_det", "da1_det.db0_det"]),
+    (":+det$:^db0", ["da1_det", "da1_det.db0_det"]),
+    (":.+:+^db0:^dc", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc0_det", "da0_motor.db0_motor.dc1_det",
+     "da0_motor.db0_motor.dc2_det", "da0_motor.db0_motor.dc3_motor", "da1_det.db0_det"]),
+    ("__MOTOR__:.+:+^db0:^dc", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc3_motor"]),
+    ("__DETECTOR__:.+:+^db0:^dc", ["da0_motor.db0_motor.dc0_det", "da0_motor.db0_motor.dc1_det",
+     "da0_motor.db0_motor.dc2_det", "da1_det.db0_det"]),
+    ("__READABLE__:.+:+^(db0)|(db2):^dc", [
+        "da0_motor.db0_motor", "da0_motor.db0_motor.dc0_det", "da0_motor.db0_motor.dc1_det",
+        "da0_motor.db0_motor.dc2_det", "da0_motor.db0_motor.dc3_motor", "da1_det.db0_det"]),
+    ("__FLYABLE__:.+:+^(db0)|(db2):^dc", ["da0_motor.db2_flyer"]),
+    ("__FLYABLE__:.+:+^db0:^dc", []),
+    # Full-name patterns
+    (":?motor$", ["da0_motor", "da0_motor.db0_motor", "da0_motor.db0_motor.dc3_motor",
+     "da0_motor.db0_motor.dc3_motor.dd1_motor", "da0_motor.db1_det.dc1_motor", "da1_det.db1_motor"]),
+    (":?motor$:depth=1", ["da0_motor"]),
+    (":?motor$:depth=2", ["da0_motor", "da0_motor.db0_motor", "da1_det.db1_motor"]),
+    (":+^da:?motor$:depth=1", ["da0_motor", "da0_motor.db0_motor", "da1_det", "da1_det.db1_motor"]),
+    (":^da:?motor$:depth=2", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc3_motor",
+     "da0_motor.db1_det.dc1_motor", "da1_det.db1_motor"]),
+    ("__MOTOR__:+^da:?motor$:depth=1", ["da0_motor", "da0_motor.db0_motor", "da1_det.db1_motor"]),
+    ("__READABLE__:?.*db0_motor.*:depth=3", [
+        "da0_motor.db0_motor", "da0_motor.db0_motor.dc0_det", "da0_motor.db0_motor.dc1_det",
+        "da0_motor.db0_motor.dc2_det", "da0_motor.db0_motor.dc3_motor"]),
+    ("__MOTOR__:?.*db0_motor.*:depth=3", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc3_motor"]),
+])
+# fmt: on
+def test_build_device_name_list_1(element_def, expected_name_list):
+    """
+    ``_build_device_name_list``: basic tests
+    """
+    components, uses_re, device_type = _split_list_element_definition(element_def)
+    name_list = _build_device_name_list(
+        components=components, uses_re=uses_re, device_type=device_type, existing_devices=_allowed_devices_dict_1
+    )
+    assert name_list == expected_name_list, pprint.pformat(name_list)
+
+
+def test_build_device_name_list_2_fail():
+    """
+    ``_build_device_name_list``: failing cases
+    """
+    components, uses_re, device_type = _split_list_element_definition("def")
+    with pytest.raises(ValueError, match="Unsupported device type: 'unknown'"):
+        _build_device_name_list(
+            components=components, uses_re=uses_re, device_type="unknown", existing_devices=_allowed_devices_dict_1
+        )
+
+
+_allowed_plans_set_1 = {"count", "count_modified", "mycount", "other_plan"}
+
+
+# fmt: off
+@pytest.mark.parametrize("plan_def, expected_name_list", [
+    ("count", ["count"]),  # Plan in the list
+    ("some_plan", ["some_plan"]),  # Plan is not in the list
+    (":count", ["count", "count_modified", "mycount"]),
+    (":^count$", ["count"]),
+    (":^count", ["count", "count_modified"]),
+    (":count$", ["count", "mycount"]),
+])
+# fmt: on
+def test_build_plan_name_list_1(plan_def, expected_name_list):
+    """
+    ``_build_plan_name_list``: basic tests
+    """
+    components, uses_re, device_type = _split_list_element_definition(plan_def)
+    name_list = _build_plan_name_list(
+        components=components, uses_re=uses_re, device_type=device_type, existing_plans=_allowed_plans_set_1
+    )
+    assert name_list.sort() == expected_name_list.sort(), pprint.pformat(name_list)
+
+
+# fmt: off
+@pytest.mark.parametrize("plan_def, exception_type, msg", [
+    ("abc.def", ValueError, "may contain only one component. Components: ['abc', 'def']"),
+    (":?abc:depth=5", ValueError, "Depth specification can not be part of the element"),
+    ("__READABLE__:abc", ValueError, "Device type can not be included in the plan description: '__READABLE__:'"),
+    (":+abc", ValueError, "Plus sign (+) can not be used in a pattern for a plan name: '+abc'"),
+    (":?abc", ValueError, "Question mark (?) can not be used in a pattern for a plan name: '?abc'"),
+])
+# fmt: on
+def test_build_plan_name_list_2_fail(plan_def, exception_type, msg):
+    """
+    ``_build_plan_name_list``: failing cases
+    """
+    components, uses_re, device_type = _split_list_element_definition(plan_def)
+
+    with pytest.raises(exception_type, match=re.escape(msg)):
+        _build_plan_name_list(
+            components=components, uses_re=uses_re, device_type=device_type, existing_plans=_allowed_plans_set_1
+        )
+
+
+# fmt: off
+@pytest.mark.parametrize("object_name, exists_in_plans, exists_in_devices, exists_in_all", [
+    ("count", True, False, True),
+    ("unknown", False, False, False),
+    ("det", False, True, True),
+    ("det.val", False, True, True),
+    ("sim_bundle_A.mtrs.z", False, True, True),
+    ("sim_bundle_A.mtrs.a", False, False, False),
+    ("sim_bundle_A.unknown.z", False, False, False),
+])
+# fmt: on
+def test_get_nspace_object_1(object_name, exists_in_plans, exists_in_devices, exists_in_all):
+    pc_path = get_default_startup_dir()
+    nspace = load_profile_collection(pc_path)
+    plans = plans_from_nspace(nspace)
+    devices = devices_from_nspace(nspace)
+
+    all_objects = plans.copy()
+    all_objects.update(devices)
+
+    object_ref = _get_nspace_object(object_name, objects_in_nspace=all_objects)
+    if exists_in_all:
+        assert not isinstance(object_ref, str)
+    else:
+        assert isinstance(object_ref, str)
+
+    object_ref = _get_nspace_object(object_name, objects_in_nspace=plans)
+    if exists_in_plans:
+        assert not isinstance(object_ref, str)
+    else:
+        assert isinstance(object_ref, str)
+
+    object_ref = _get_nspace_object(object_name, objects_in_nspace=devices)
+    if exists_in_devices:
+        assert not isinstance(object_ref, str)
+    else:
+        assert isinstance(object_ref, str)
 
 
 # fmt: off
@@ -2589,6 +3526,64 @@ def _pp_p3():
     yield from []
 
 
+def _pp_generate_stage_devs():
+    """
+    Created compound devices for testing 'prepare_plan' function.
+    """
+
+    from ophyd.sim import motor1 as _pp_motor1, motor2 as _pp_motor2
+
+    class SimStage(ophyd.Device):
+        x = ophyd.Component(ophyd.sim.SynAxis, name="y", labels={"motors"})
+        y = ophyd.Component(ophyd.sim.SynAxis, name="y", labels={"motors"})
+        z = ophyd.Component(ophyd.sim.SynAxis, name="z", labels={"motors"})
+
+        def set(self, x, y, z):
+            """Makes the device Movable"""
+            self.x.set(x)
+            self.y.set(y)
+            self.z.set(z)
+
+    class SimDetectors(ophyd.Device):
+        """
+        The detectors are controlled by simulated 'motor1' and 'motor2'
+        defined on the global scale.
+        """
+
+        det_A = ophyd.Component(
+            ophyd.sim.SynGauss,
+            name="det_A",
+            motor=_pp_motor1,
+            motor_field="motor1",
+            center=0,
+            Imax=5,
+            sigma=0.5,
+            labels={"detectors"},
+        )
+        det_B = ophyd.Component(
+            ophyd.sim.SynGauss,
+            name="det_B",
+            motor=_pp_motor2,
+            motor_field="motor2",
+            center=0,
+            Imax=5,
+            sigma=0.5,
+            labels={"detectors"},
+        )
+
+    class SimBundle(ophyd.Device):
+        mtrs = ophyd.Component(SimStage, name="mtrs")
+        dets = ophyd.Component(SimDetectors, name="dets")
+
+    sim_bundle_A = SimBundle(name="sim_bundle_A")
+    sim_bundle_B = SimBundle(name="sim_bundle_B")  # Used for tests
+
+    return sim_bundle_A, sim_bundle_B
+
+
+_pp_stg_A, _pp_stg_B = _pp_generate_stage_devs()
+
+
 def _gen_environment_pp2():
     def plan1(a, b, c):
         yield from [a, b, c]
@@ -2626,6 +3621,76 @@ def _gen_environment_pp2():
         detectors = detectors or [_pp_dev2, _pp_dev3]
         yield from detectors
 
+    # Explicitly specifying subdevices in the list
+    @parameter_annotation_decorator(
+        {
+            "parameters": {
+                "detectors": {
+                    "annotation": "typing.List[Detectors]",
+                    "devices": {"Detectors": ["_pp_dev1", "_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]},
+                    # Default list of the detectors
+                    "default": ["_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"],
+                }
+            }
+        }
+    )
+    def plan4a(detectors: typing.Optional[typing.List[ophyd.Device]] = None):
+        # Default for 'detectors' is None, which is converted to the default list of detectors
+        detectors = detectors or [_pp_dev2, _pp_dev3]
+        yield from detectors
+
+    # Enable converting all devices (using __DEVICE__ built-in type)
+    @parameter_annotation_decorator(
+        {
+            "parameters": {
+                "detectors": {
+                    "annotation": "typing.List[__DEVICE__]",
+                    # Default list of the detectors
+                    "default": ["_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"],
+                }
+            }
+        }
+    )
+    def plan4b(detectors: typing.Optional[typing.List[ophyd.Device]] = None):
+        # Default for 'detectors' is None, which is converted to the default list of detectors
+        detectors = detectors or [_pp_dev2, _pp_dev3]
+        yield from detectors
+
+    # Enable converting all devices (using 'convert_device_names')
+    @parameter_annotation_decorator(
+        {
+            "parameters": {
+                "detectors": {
+                    "annotation": "typing.List[str]",
+                    "convert_device_names": True,
+                    # Default list of the detectors
+                    "default": ["_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"],
+                }
+            }
+        }
+    )
+    def plan4c(detectors: typing.Optional[typing.List[ophyd.Device]] = None):
+        # Default for 'detectors' is None, which is converted to the default list of detectors
+        detectors = detectors or [_pp_dev2, _pp_dev3]
+        yield from detectors
+
+    # Enable converting all devices (using __PLAN_OR_DEVICE__ built-in type)
+    @parameter_annotation_decorator(
+        {
+            "parameters": {
+                "detectors": {
+                    "annotation": "typing.List[__PLAN_OR_DEVICE__]",
+                    # Default list of the detectors
+                    "default": ["_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"],
+                }
+            }
+        }
+    )
+    def plan4d(detectors: typing.Optional[typing.List[ophyd.Device]] = None):
+        # Default for 'detectors' is None, which is converted to the default list of detectors
+        detectors = detectors or [_pp_dev2, _pp_dev3]
+        yield from detectors
+
     @parameter_annotation_decorator(
         {
             "parameters": {
@@ -2639,6 +3704,49 @@ def _gen_environment_pp2():
         }
     )
     def plan5(plan_to_execute: typing.Callable = _pp_p2):
+        yield from plan_to_execute
+
+    @parameter_annotation_decorator(
+        {
+            "parameters": {
+                "plan_to_execute": {
+                    "annotation": "__PLAN__",
+                    # Default list of plans
+                    "default": "_pp_p2",
+                }
+            }
+        }
+    )
+    def plan5b(plan_to_execute: typing.Callable = _pp_p2):
+        yield from plan_to_execute
+
+    @parameter_annotation_decorator(
+        {
+            "parameters": {
+                "plan_to_execute": {
+                    "annotation": "str",
+                    "convert_plan_names": True,
+                    # Default list of plans
+                    "default": "_pp_p2",
+                }
+            }
+        }
+    )
+    def plan5c(plan_to_execute: typing.Callable = _pp_p2):
+        yield from plan_to_execute
+
+    @parameter_annotation_decorator(
+        {
+            "parameters": {
+                "plan_to_execute": {
+                    "annotation": "__PLAN_OR_DEVICE__",
+                    # Default list of plans
+                    "default": "_pp_p2",
+                }
+            }
+        }
+    )
+    def plan5d(plan_to_execute: typing.Callable = _pp_p2):
         yield from plan_to_execute
 
     @parameter_annotation_decorator(
@@ -2662,12 +3770,20 @@ def _gen_environment_pp2():
 
     # Create namespace
     nspace = {"_pp_dev1": _pp_dev1, "_pp_dev2": _pp_dev2, "_pp_dev3": _pp_dev3}
+    nspace.update({"_pp_stg_A": _pp_stg_A, "_pp_stg_B": _pp_stg_B})
     nspace.update({"_pp_p1": _pp_p1, "_pp_p2": _pp_p2, "_pp_p3": _pp_p3})
     nspace.update({"plan1": plan1})
     nspace.update({"plan2": plan2})
     nspace.update({"plan3": plan3})
     nspace.update({"plan4": plan4})
+    nspace.update({"plan4a": plan4a})
+    nspace.update({"plan4b": plan4b})
+    nspace.update({"plan4c": plan4c})
+    nspace.update({"plan4d": plan4d})
     nspace.update({"plan5": plan5})
+    nspace.update({"plan5b": plan5b})
+    nspace.update({"plan5c": plan5c})
+    nspace.update({"plan5d": plan5d})
     nspace.update({"plan6": plan6})
     nspace.update({"plan7": plan7})
 
@@ -2685,85 +3801,321 @@ def _gen_environment_pp2():
 
 # fmt: off
 @pytest.mark.parametrize(
-    "plan_name, plan, exp_args, exp_kwargs, exp_meta, success, err_msg",
+    "plan_name, plan, remove_objs, exp_args, exp_kwargs, exp_meta, success, err_msg",
     [
-        ("plan1", {"user_group": "admin", "args": [3, 4, 5]},
+        # Passing simple set of parameters as args, kwargs or combination. No default values.
+        ("plan1", {"user_group": "admin", "args": [3, 4, 5]}, [],
          [3, 4, 5], {}, {}, True, ""),
-        ("plan1", {"user_group": "admin", "args": [3, 4], "kwargs": {"c": 5}},
+        ("plan1", {"user_group": "admin", "args": [3, 4], "kwargs": {"c": 5}}, [],
          [3, 4, 5], {}, {}, True, ""),
-        ("plan1", {"user_group": "admin", "args": [3, 4], "kwargs": {"b": 5}},
+        ("plan1", {"user_group": "admin", "args": [3, 4], "kwargs": {"b": 5}}, [],
          [3, 4, 5], {}, {}, False, "Plan validation failed: multiple values for argument 'b'"),
-        ("plan1", {"user_group": "admin", "args": [3, 4, 5], "meta": {"p1": 10, "p2": "abc"}},
+        ("plan1", {"user_group": "admin", "args": [3, 4, 5], "meta": {"p1": 10, "p2": "abc"}}, [],
          [3, 4, 5], {}, {"p1": 10, "p2": "abc"}, True, ""),
-        ("plan1", {"user_group": "admin", "args": [3, 4, 5], "meta": [{"p1": 10}, {"p2": "abc"}]},
+        ("plan1", {"user_group": "admin", "args": [3, 4, 5], "meta": [{"p1": 10}, {"p2": "abc"}]}, [],
          [3, 4, 5], {}, {"p1": 10, "p2": "abc"}, True, ""),
-        ("plan1", {"user_group": "admin", "args": [3, 4, 5], "meta": [{"p1": 10}, {"p1": 5, "p2": "abc"}]},
+        ("plan1", {"user_group": "admin", "args": [3, 4, 5], "meta": [{"p1": 10}, {"p1": 5, "p2": "abc"}]}, [],
          [3, 4, 5], {}, {"p1": 10, "p2": "abc"}, True, ""),
 
-        ("plan2", {"user_group": "admin"},
+        # Passing simple set of parameters as args and kwargs with default values.
+        ("plan2", {"user_group": "admin"}, [],
          [], {}, {}, True, ""),
-        ("plan2", {"user_group": "admin", "args": [3, 2.6]},
+        ("plan2", {"user_group": "admin", "args": [3, 2.6]}, [],
          [3, 2.6], {}, {}, True, ""),
-        ("plan2", {"user_group": "admin", "args": [2.6, 3]},
+        ("plan2", {"user_group": "admin", "args": [2.6, 3]}, [],
          [2.6, 3], {}, {}, False, " Incorrect parameter type: key='a', value='2.6'"),
-        ("plan2", {"user_group": "admin", "kwargs": {"b": 9.9, "s": "def"}},
+        ("plan2", {"user_group": "admin", "kwargs": {"b": 9.9, "s": "def"}}, [],
          [], {"b": 9.9, "s": "def"}, {}, True, ""),
 
-        ("plan3", {"user_group": "admin"},
+        # Plan with parameters of numerical type. Parameter types and default values are specified
+        #   in 'parameter_annotation_decorator'.
+        ("plan3", {"user_group": "admin"}, [],
          [], {'a': 0.5, 'b': 5, 's': 50}, {}, True, ""),
-        ("plan3", {"user_group": "admin", "args": [2.8]},
+        ("plan3", {"user_group": "admin", "args": [2.8]}, [],
          [2.8], {'b': 5, 's': 50}, {}, True, ""),
-        ("plan3", {"user_group": "admin", "args": [2.8], "kwargs": {"a": 2.8}},
+        ("plan3", {"user_group": "admin", "args": [2.8], "kwargs": {"a": 2.8}}, [],
          [2.8], {'b': 5, 's': 50}, {}, False, "multiple values for argument 'a'"),
-        ("plan3", {"user_group": "admin", "args": [], "kwargs": {"b": 30}},
+        ("plan3", {"user_group": "admin", "args": [], "kwargs": {"b": 30}}, [],
          [], {'a': 0.5, 'b': 30, 's': 50}, {}, True, ""),
-        ("plan3", {"user_group": "admin", "args": [], "kwargs": {"b": 2.8}},
+        ("plan3", {"user_group": "admin", "args": [], "kwargs": {"b": 2.8}}, [],
          [], {'a': 0.5, 'b': 2.8, 's': 50}, {}, False, "Incorrect parameter type: key='b', value='2.8'"),
 
-        ("plan4", {"user_group": "admin"},
+        # Plan with a single parameter, which is a list of detector. The list of detector names (enum)
+        #   and default value (list of detectors) is specified in 'parameter_annotation_decorator'.
+        #   Test if the detector names are properly converted to objects when passed as args, kwargs
+        #   or if the default value is used (function is called without an argument).
+        ("plan4", {"user_group": "admin"}, [],
          [], {"detectors": [_pp_dev2, _pp_dev3]}, {}, True, ""),
-        ("plan4", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3"]]},
+        ("plan4", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3"]]}, [],
          [[_pp_dev1, _pp_dev3]], {}, {}, True, ""),
-        ("plan4", {"user_group": "admin", "kwargs": {"detectors": ["_pp_dev1", "_pp_dev3"]}},
+        ("plan4", {"user_group": "admin", "kwargs": {"detectors": ["_pp_dev1", "_pp_dev3"]}}, [],
          [[_pp_dev1, _pp_dev3]], {}, {}, True, ""),
-        ("plan4", {"user_group": "admin", "kwargs": {"detectors": ["nonexisting_dev", "_pp_dev3"]}},
+        ("plan4", {"user_group": "admin", "kwargs": {"detectors": ["nonexisting_dev", "_pp_dev3"]}}, [],
          [[_pp_dev1, _pp_dev3]], {}, {}, False, "value is not a valid enumeration member"),
 
-        ("plan5", {"user_group": "admin"},
-         [], {"plan_to_execute": _pp_p2}, {}, True, ""),
-        ("plan5", {"user_group": "admin", "args": ["_pp_p3"]},
-         [_pp_p3], {}, {}, True, ""),
-        ("plan5", {"user_group": "admin", "args": ["nonexisting_plan"]},
-         [_pp_p3], {}, {}, False, "value is not a valid enumeration member"),
+        # Passing subdevice names to plans. Parameter annotation contains fixed lists of device names,
+        #   so the passed devices should be converted to objects or parameter validation should fail
+        ("plan4a", {"user_group": "admin"}, [],
+         [], {"detectors": [_pp_stg_A.mtrs, _pp_stg_A.mtrs.y]}, {}, True, ""),
+        # If some of the default values are not in the list of allowed devices, they are still passed
+        #   to the plan, but not converted to the device objects
+        ("plan4a", {"user_group": "admin"}, ["_pp_stg_A.mtrs"],  # Remove '_pp_stg_A' from the list
+         [], {"detectors": ["_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}, {}, True, ""),
+        ("plan4a", {"user_group": "admin"}, ["_pp_stg_A", True],  # Set '_pp_stg_A' as excluded
+         [], {"detectors": [_pp_stg_A.mtrs, _pp_stg_A.mtrs.y]}, {}, True, ""),
+        ("plan4a", {"user_group": "admin"}, ["_pp_stg_A.mtrs", True],  # Set '_pp_stg_A.mtrs' as excluded
+         [], {"detectors": ["_pp_stg_A.mtrs", _pp_stg_A.mtrs.y]}, {}, True, ""),
+        # Passing a list of devices as args
+        ("plan4a", {"user_group": "admin", "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, [],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+        # Passing a list of devices as kwargs
+        ("plan4a", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, [],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+        # Passing a list of devices as args, remove a device from the list, or set a device as excluded
+        ("plan4a", {"user_group": "admin",
+         "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A"],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, False, "Validation of plan parameters failed"),
+        ("plan4a", {"user_group": "admin",
+         "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A", True],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, False, "Validation of plan parameters failed"),
+        ("plan4a", {"user_group": "admin",
+         "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A.mtrs.y", True],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, False, "Validation of plan parameters failed"),
+        # Passing a list of devices as kwargs, remove a device from the list, or set a device as excluded
+        ("plan4a", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A"],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, False, "Validation of plan parameters failed"),
+        ("plan4a", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A", True],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, False, "Validation of plan parameters failed"),
+        ("plan4a", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A.mtrs.y", True],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, False, "Validation of plan parameters failed"),
 
-        ("plan6", {"user_group": "admin"},
+        # Passing subdevice names to plans. Parameter contains '__DEVICE__' built-in type in the annotation.
+        # Processing of detault types is employing a different mechanism, so the tests should be repeated even
+        #   if they work differently.
+        ("plan4b", {"user_group": "admin"}, [],
+         [], {"detectors": [_pp_stg_A.mtrs, _pp_stg_A.mtrs.y]}, {}, True, ""),
+        # If some of the default values are not in the list of allowed devices, they are still passed
+        #   to the plan, but not converted to the device objects
+        ("plan4b", {"user_group": "admin"}, ["_pp_stg_A.mtrs"],  # Remove '_pp_stg_A' from the list
+         [], {"detectors": ["_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}, {}, True, ""),
+        ("plan4b", {"user_group": "admin"}, ["_pp_stg_A", True],  # Set '_pp_stg_A' as excluded
+         [], {"detectors": [_pp_stg_A.mtrs, _pp_stg_A.mtrs.y]}, {}, True, ""),
+        ("plan4b", {"user_group": "admin"}, ["_pp_stg_A.mtrs", True],  # Set '_pp_stg_A.mtrs' as excluded
+         [], {"detectors": ["_pp_stg_A.mtrs", _pp_stg_A.mtrs.y]}, {}, True, ""),
+        # Passing a list of devices as args
+        ("plan4b", {"user_group": "admin", "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, [],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+        # Passing a list of devices as kwargs
+        ("plan4b", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, [],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+        # Passing a list of devices as args, remove a device from the list, or set a device as excluded
+        ("plan4b", {"user_group": "admin",
+         "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A"],
+         [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
+        ("plan4b", {"user_group": "admin",
+         "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A", True],
+         [["_pp_stg_A", _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+        ("plan4b", {"user_group": "admin",
+         "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A.mtrs.y", True],
+         [[_pp_stg_A, _pp_stg_A.mtrs, "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
+        # Passing a list of devices as kwargs, remove a device from the list, or set a device as excluded
+        ("plan4b", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A"],
+         [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
+        ("plan4b", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A", True],
+         [["_pp_stg_A", _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+        ("plan4b", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A.mtrs.y", True],
+         [[_pp_stg_A, _pp_stg_A.mtrs, "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
+
+        # Passing subdevice names to plans. Use "convert_device_name": True to enable conversion
+        # Processing is employing a different mechanism, so the tests should be repeated even
+        #   if they work differently.
+        ("plan4c", {"user_group": "admin"}, [],
+         [], {"detectors": [_pp_stg_A.mtrs, _pp_stg_A.mtrs.y]}, {}, True, ""),
+        # If some of the default values are not in the list of allowed devices, they are still passed
+        #   to the plan, but not converted to the device objects
+        ("plan4c", {"user_group": "admin"}, ["_pp_stg_A.mtrs"],  # Remove '_pp_stg_A' from the list
+         [], {"detectors": ["_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}, {}, True, ""),
+        ("plan4c", {"user_group": "admin"}, ["_pp_stg_A", True],  # Set '_pp_stg_A' as excluded
+         [], {"detectors": [_pp_stg_A.mtrs, _pp_stg_A.mtrs.y]}, {}, True, ""),
+        ("plan4c", {"user_group": "admin"}, ["_pp_stg_A.mtrs", True],  # Set '_pp_stg_A.mtrs' as excluded
+         [], {"detectors": ["_pp_stg_A.mtrs", _pp_stg_A.mtrs.y]}, {}, True, ""),
+        # Passing a list of devices as args
+        ("plan4c", {"user_group": "admin", "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, [],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+        # Passing a list of devices as kwargs
+        ("plan4c", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, [],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+        # Passing a list of devices as args, remove a device from the list, or set a device as excluded
+        ("plan4c", {"user_group": "admin",
+         "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A"],
+         [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
+        ("plan4c", {"user_group": "admin",
+         "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A", True],
+         [["_pp_stg_A", _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+        ("plan4c", {"user_group": "admin",
+         "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A.mtrs.y", True],
+         [[_pp_stg_A, _pp_stg_A.mtrs, "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
+        # Passing a list of devices as kwargs, remove a device from the list, or set a device as excluded
+        ("plan4c", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A"],
+         [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
+        ("plan4c", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A", True],
+         [["_pp_stg_A", _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+        ("plan4c", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A.mtrs.y", True],
+         [[_pp_stg_A, _pp_stg_A.mtrs, "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
+
+        # Passing subdevice names to plans. Parameter contains '__PLAN_OR_DEVICE__' built-in type
+        #   in the annotation. The mechanism is similar to the one used with '__PLAN__" type, so
+        #   just run a few tests to see if it works.
+        ("plan4d", {"user_group": "admin"}, [],
+         [], {"detectors": [_pp_stg_A.mtrs, _pp_stg_A.mtrs.y]}, {}, True, ""),
+        # Passing a list of devices as args
+        ("plan4d", {"user_group": "admin", "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, [],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+        # Passing a list of devices as kwargs
+        ("plan4d", {"user_group": "admin",
+         "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, [],
+         [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
+
+
+
+        # Check if a plan name passed as arg, kwarg or using default value is properly converted to an object.
+        ("plan5", {"user_group": "admin"}, [],
+         [], {"plan_to_execute": _pp_p2}, {}, True, ""),
+        ("plan5", {"user_group": "admin", "args": ["_pp_p3"]}, [],
+         [_pp_p3], {}, {}, True, ""),
+        ("plan5", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, [],
+         [_pp_p3], {}, {}, True, ""),
+        ("plan5", {"user_group": "admin", "args": ["nonexisting_plan"]}, [],
+         [_pp_p3], {}, {}, False, "value is not a valid enumeration member"),
+        # Remove plan from the list of allowed plans
+        ("plan5", {"user_group": "admin"}, ["_pp_p2"],
+         [], {"plan_to_execute": "_pp_p2"}, {}, True, ""),
+        ("plan5", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3"],  # remove
+         [_pp_p3], {}, {}, False, "Validation of plan parameters failed"),
+        ("plan5", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3", True],  # exclude
+         [_pp_p3], {}, {}, False, "Validation of plan parameters failed"),
+
+        # Passing plan names. Parameter contains '__PLAN__' built-in type in the annotation.
+        ("plan5b", {"user_group": "admin"}, [],
+         [], {"plan_to_execute": _pp_p2}, {}, True, ""),
+        ("plan5b", {"user_group": "admin", "args": ["_pp_p3"]}, [],
+         [_pp_p3], {}, {}, True, ""),
+        ("plan5b", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, [],
+         [_pp_p3], {}, {}, True, ""),
+        ("plan5b", {"user_group": "admin"}, ["_pp_p2"],
+         [], {"plan_to_execute": "_pp_p2"}, {}, True, ""),
+        ("plan5b", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3"],  # remove
+         ["_pp_p3"], {}, {}, True, ""),
+        ("plan5b", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3", True],  # exclude
+         ["_pp_p3"], {}, {}, True, ""),
+
+        # Passing plan names. Use Parameter 'convert_plan_names'.
+        ("plan5c", {"user_group": "admin"}, [],
+         [], {"plan_to_execute": _pp_p2}, {}, True, ""),
+        ("plan5c", {"user_group": "admin", "args": ["_pp_p3"]}, [],
+         [_pp_p3], {}, {}, True, ""),
+        ("plan5c", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, [],
+         [_pp_p3], {}, {}, True, ""),
+        ("plan5c", {"user_group": "admin"}, ["_pp_p2"],
+         [], {"plan_to_execute": "_pp_p2"}, {}, True, ""),
+        ("plan5c", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3"],  # remove
+         ["_pp_p3"], {}, {}, True, ""),
+        ("plan5c", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3", True],  # exclude
+         ["_pp_p3"], {}, {}, True, ""),
+
+        # Passing plan names. Parameter contains '__PLAN_OR_DEVICE__' built-in type in the annotation.
+        ("plan5d", {"user_group": "admin"}, [],
+         [], {"plan_to_execute": _pp_p2}, {}, True, ""),
+        ("plan5d", {"user_group": "admin", "args": ["_pp_p3"]}, [],
+         [_pp_p3], {}, {}, True, ""),
+        ("plan5d", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, [],
+         [_pp_p3], {}, {}, True, ""),
+        ("plan5d", {"user_group": "admin"}, ["_pp_p2"],
+         [], {"plan_to_execute": "_pp_p2"}, {}, True, ""),
+        ("plan5d", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3"],  # remove
+         ["_pp_p3"], {}, {}, True, ""),
+        ("plan5d", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3", True],  # exclude
+         ["_pp_p3"], {}, {}, True, ""),
+
+
+        # Pass values of custom enum type. The values are not converted to objects.
+        ("plan6", {"user_group": "admin"}, [],
          [], {"strings": ["one", "three"]}, {}, True, ""),
-        ("plan6", {"user_group": "admin", "args": [["one", "two"]]},
+        ("plan6", {"user_group": "admin", "args": [["one", "two"]]}, [],
          [["one", "two"]], {}, {}, True, ""),
-        ("plan6", {"user_group": "admin", "args": [("one", "two")]},
+        ("plan6", {"user_group": "admin", "args": [("one", "two")]}, [],
          [("one", "two")], {}, {}, True, ""),
-        ("plan6", {"user_group": "admin", "args": [("one", "nonexisting")]},
+        ("plan6", {"user_group": "admin", "args": [("one", "nonexisting")]}, [],
          [("one", "two")], {}, {}, False, "value is not a valid enumeration member"),
 
-        ("plan7", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3"], "_pp_dev2"]},
+        # Plan has no custom annotation. All strings must be converted to objects whenever possible.
+        ("plan7", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3"], "_pp_dev2"]}, [],
          [[_pp_dev1, _pp_dev3], "_pp_dev2"], {}, {}, True, ""),
-        ("plan7", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3", "some_str"], "_pp_dev2"]},
+        ("plan7", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3", "some_str"], "_pp_dev2"]}, [],
          [[_pp_dev1, _pp_dev3, "some_str"], "_pp_dev2"], {}, {}, True, ""),
+        ("plan7", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3", "some_str"], 50]}, [],
+         [[_pp_dev1, _pp_dev3, "some_str"], "_pp_dev2"], {}, {}, False,
+         "Incorrect parameter type: key='b', value='50'"),
 
-        ("nonexisting_plan", {"user_group": "admin"},
+        # General failing cases
+        ("nonexisting_plan", {"user_group": "admin"}, [],
          [], {}, {}, False, "Plan 'nonexisting_plan' is not in the list of allowed plans"),
-        ("plan2", {"user_group": "nonexisting_group"},
+        ("plan2", {"user_group": "nonexisting_group"}, [],
          [], {}, {}, False,
          "Lists of allowed plans and devices is not defined for the user group 'nonexisting_group'"),
     ],
 )
 # fmt: on
-def test_prepare_plan_2(plan_name, plan, exp_args, exp_kwargs, exp_meta, success, err_msg):
+def test_prepare_plan_2(plan_name, plan, remove_objs, exp_args, exp_kwargs, exp_meta, success, err_msg):
     """
     Detailed tests for ``prepare_plan``. Preparation of plan parameters before execution
     is one of the key features, so unit tests are needed for all use cases.
     """
     plans_in_nspace, devices_in_nspace, allowed_plans, allowed_devices = _gen_environment_pp2()
+
+    if remove_objs and isinstance(remove_objs[-1], bool):
+        use_exclude = remove_objs.pop()
+    else:
+        use_exclude = False
+
+    # Remove some objects from 'allowed_plans' and 'allowed_devices'
+    for obj_name in remove_objs:
+        if use_exclude:
+            print(f"Set the following objects as excluded: {remove_objs}")
+            # Exclude individual nodes. Assume that the device is in the list.
+            components = obj_name.split(".")
+            for allowed_objs in (allowed_plans["admin"], allowed_devices["admin"]):
+                try:
+                    root = allowed_objs[components[0]]
+                    for c in components[1:]:
+                        root = root["components"][c]
+                    print(f"Excluding {obj_name!r} ...")
+                    root["excluded"] = True
+                except Exception:
+                    pass
+        else:
+            # Remove elements from the list based on the root name for the device
+            print(f"Removing object {obj_name.split('.')[0]!r}")
+            allowed_plans["admin"].pop(obj_name.split(".")[0], None)
+            allowed_devices["admin"].pop(obj_name.split(".")[0], None)
+
+    # assert False, list(allowed_plans.keys())
+    allowed_plans["admin"] = _filter_allowed_plans(
+        allowed_plans=allowed_plans["admin"], allowed_devices=allowed_devices["admin"]
+    )
+    # assert False, allowed_plans["plan4a"]
 
     plan["name"] = plan_name
 
@@ -2779,9 +4131,9 @@ def test_prepare_plan_2(plan_name, plan, exp_args, exp_kwargs, exp_meta, success
         for k in expected_keys:
             assert k in plan_parsed, f"Key '{k}' does not exist: {plan_parsed.keys()}"
         assert isinstance(plan_parsed["callable"], Callable)
-        assert plan_parsed["args"] == exp_args
-        assert plan_parsed["kwargs"] == exp_kwargs
-        assert plan_parsed["meta"] == exp_meta
+        assert plan_parsed["args"] == exp_args, pprint.pformat(plan_parsed["args"])
+        assert plan_parsed["kwargs"] == exp_kwargs, pprint.pformat(plan_parsed["kwargs"])
+        assert plan_parsed["meta"] == exp_meta, pprint.pformat(plan_parsed["meta"])
     else:
         with pytest.raises(Exception, match=err_msg):
             prepare_plan(
@@ -3489,9 +4841,12 @@ def test_load_user_group_permissions_6_fail(tmp_path):
     ({"abc34": 1, "abcd": 2}, [], [None], {}),
     ({"abc34": 1, "abcd": 2}, [None], [], {"abc34": 1, "abcd": 2}),
     ({}, [r"^abc"], [r"^abc\d+$"], {}),
+    # Apply to base names of subdevices
+    ({"abc34.val": 1, "abcd34.tmp": 2}, [r"34$"], [], {"abc34.val": 1, "abcd34.tmp": 2}),
+    ({"abc34.val": 1, "abcd34.tmp": 2}, [r"34$"], [r".*34$"], {}),
 ])
 # fmt: on
-def test_select_allowed_items(item_dict, allow_patterns, disallow_patterns, result):
+def test_select_allowed_items_1(item_dict, allow_patterns, disallow_patterns, result):
     """
     Tests for ``_select_allowed_items``.
     """
@@ -3591,7 +4946,6 @@ def junk_plan():
 })
 def plan_check_filtering(device_param, plan_param):
     yield None
-
 """
 
 
@@ -3751,11 +5105,11 @@ def test_load_allowed_plans_and_devices_2(
         plans = params[1]["annotation"]["plans"]["Plans"]
         test_case = f"only_admin = {only_admin} user = '{user}'"
         if items_are_removed and not (only_admin and user == "root"):
-            assert devs == ("det1", "det2"), test_case
-            assert plans == ("count", "scan"), test_case
+            assert devs == ["det1", "det2"], test_case
+            assert plans == ["count", "scan"], test_case
         else:
-            assert devs == ("det1", "det2", "junk_device"), test_case
-            assert plans == ("count", "scan", "junk_plan"), test_case
+            assert devs == ["det1", "det2", "junk_device"], test_case
+            assert plans == ["count", "junk_plan", "scan"], test_case
 
 
 _user_permissions_incomplete_1 = """user_groups:
@@ -3917,6 +5271,227 @@ def test_load_allowed_plans_and_devices_3(
         assert len(allowed_devices["admin"]) > 0
 
 
+_patch_plan_with_subdevices = """
+
+class SimStg(Device):
+    x = Cpt(ophyd.sim.SynAxis, name="y", labels={"motors"})
+    y = Cpt(ophyd.sim.SynAxis, name="y", labels={"motors"})
+    z = Cpt(ophyd.sim.SynAxis, name="z", labels={"motors"})
+
+    def set(self, x, y, z):
+        # Makes the device Movable
+        self.x.set(x)
+        self.y.set(y)
+        self.z.set(z)
+
+
+class SimDets(Device):
+    # The detectors are controlled by simulated 'motor1' and 'motor2'
+    # defined on the global scale.
+
+    det_A = Cpt(
+        ophyd.sim.SynGauss,
+        name="det_A",
+        motor=motor1,
+        motor_field="motor1",
+        center=0,
+        Imax=5,
+        sigma=0.5,
+        labels={"detectors"},
+    )
+    det_B = Cpt(
+        ophyd.sim.SynGauss,
+        name="det_B",
+        motor=motor2,
+        motor_field="motor2",
+        center=0,
+        Imax=5,
+        sigma=0.5,
+        labels={"detectors"},
+    )
+
+
+class SimBundle(ophyd.Device):
+    mtrs = Cpt(SimStage, name="stage")
+    dets = Cpt(SimDetectors, name="detectors")
+
+
+stg_A = SimBundle(name="sim_bundle")
+stg_B = SimBundle(name="sim_bundle")  # Used for tests
+
+@parameter_annotation_decorator({
+    "parameters":{
+        "device1": {
+            "annotation": "Devices1",
+            "devices": {"Devices1": ("stg_A", "stg_A.dets", "stg_B.dets.det_A")}
+        },
+        "device2": {
+            "annotation": "Devices1",
+            "devices": {"Devices1": (":^stg:+^det:A$", ":.*:.+mtrs$:y")}
+        },
+        "device3": {
+            "annotation": "Devices1",
+            "devices": {"Devices1": (":?tg_A.*z$", ":?tg_B.*z$")}
+        },
+    }
+})
+def plan_with_subdevices(device1, device2, device3):
+    yield None
+"""
+
+_user_permissions_subdevices_1 = """user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - null  # Everything is allowed
+    allowed_devices:
+      - null  # Everything is allowed
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - ".*"  # A different way to allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - ".*"  # A different way to allow all
+    forbidden_devices:
+      - null  # Nothing is forbidden
+"""
+
+_user_permissions_subdevices_2 = """user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - null  # Everything is allowed
+    allowed_devices:
+      - null  # Everything is allowed
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - ".*"  # A different way to allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - "g_B$"  # Allow 'stg_B'
+    forbidden_devices:
+      - null  # Nothing is forbidden
+"""
+
+_user_permissions_subdevices_3 = """user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - null  # Everything is allowed
+    allowed_devices:
+      - null  # Everything is allowed
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - ".*"  # A different way to allow all
+    forbidden_plans:
+      - null  # Nothing is forbidden
+    allowed_devices:
+      - ".*"  # A different way to allow all
+    forbidden_devices:
+      - "g_B$"  # Block 'stg_B'
+"""
+
+_user_permissions_subdevices_4 = """user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - null  # Everything is allowed
+    allowed_devices:
+      - "g_B$"  # Allow 'stg_B'
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - ".*"  # A different way to allow all
+    allowed_devices:
+       - ".*"  # A different way to allow all
+"""
+
+_user_permissions_subdevices_5 = """user_groups:
+  root:  # The group includes all available plan and devices
+    allowed_plans:
+      - null  # Everything is allowed
+    allowed_devices:
+      - null  # Everything is allowed
+    forbidden_devices:
+      - "g_B$"  # Block 'stg_B'
+  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    allowed_plans:
+      - ".*"  # A different way to allow all
+    allowed_devices:
+      - ".*"  # A different way to allow all
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("pass_permissions_as_parameter", [False, True])
+@pytest.mark.parametrize("permissions_str, dev1, dev2, dev3", [
+    (_user_permissions_subdevices_1,
+     ["stg_A", "stg_A.dets", "stg_B.dets.det_A"],
+     ["stg_A.dets", "stg_A.dets.det_A", "stg_B.dets", "stg_B.dets.det_A"],
+     ["stg_A.mtrs.z", "stg_B.mtrs.z"]),
+    # Filtering of lists for the 'admin' user
+    (_user_permissions_subdevices_2,
+     ["stg_B.dets.det_A"],
+     ["stg_B.dets", "stg_B.dets.det_A"],
+     ["stg_B.mtrs.z"]),
+    (_user_permissions_subdevices_3,
+     ["stg_A", "stg_A.dets"],
+     ["stg_A.dets", "stg_A.dets.det_A"],
+     ["stg_A.mtrs.z"]),
+    # Filtering of lists for the 'root' user
+    (_user_permissions_subdevices_4,
+     ["stg_B.dets.det_A"],
+     ["stg_B.dets", "stg_B.dets.det_A"],
+     ["stg_B.mtrs.z"]),
+    (_user_permissions_subdevices_5,
+     ["stg_A", "stg_A.dets"],
+     ["stg_A.dets", "stg_A.dets.det_A"],
+     ["stg_A.mtrs.z"]),
+])
+# fmt: on
+def test_load_allowed_plans_and_devices_4(
+    tmp_path, permissions_str, dev1, dev2, dev3, pass_permissions_as_parameter
+):
+    """
+    ``load_allowed_plans_and_devices``: test if lists of devices in plan parameters
+    are properly generated and filtered in case if they contain subdevices .
+    """
+
+    pc_path = copy_default_profile_collection(tmp_path)
+    create_local_imports_dirs(pc_path)
+    append_code_to_last_startup_file(pc_path, _patch_plan_with_subdevices)
+
+    # Generate list of plans and devices for the patched profile collection
+    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, overwrite=True)
+
+    permissions_fln = os.path.join(pc_path, "user_group_permissions.yaml")
+    with open(permissions_fln, "w") as f:
+        f.write(permissions_str)
+
+    plans_and_devices_fln = os.path.join(pc_path, "existing_plans_and_devices.yaml")
+
+    if pass_permissions_as_parameter:
+        user_group_permissions = load_user_group_permissions(permissions_fln)
+        allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+            path_existing_plans_and_devices=plans_and_devices_fln,
+            user_group_permissions=user_group_permissions,
+        )
+    else:
+        allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+            path_existing_plans_and_devices=plans_and_devices_fln,
+            path_user_group_permissions=permissions_fln,
+        )
+    assert "plan_with_subdevices" in allowed_plans["admin"], list(allowed_plans.keys())
+
+    params = allowed_plans["admin"]["plan_with_subdevices"]["parameters"]
+    assert params[0]["name"] == "device1"
+    assert params[0]["annotation"]["type"] == "Devices1"
+    assert params[0]["annotation"]["devices"]["Devices1"] == dev1
+    assert params[1]["name"] == "device2"
+    assert params[1]["annotation"]["type"] == "Devices1"
+    assert params[1]["annotation"]["devices"]["Devices1"] == dev2
+    assert params[2]["name"] == "device3"
+    assert params[2]["annotation"]["type"] == "Devices1"
+    assert params[2]["annotation"]["devices"]["Devices1"] == dev3
+
+
 # fmt: off
 @pytest.mark.parametrize("option", [
     "full_lists",
@@ -3927,7 +5502,7 @@ def test_load_allowed_plans_and_devices_3(
     "empty_lists",
 ])
 # fmt: on
-def test_load_allowed_plans_and_devices_4(tmp_path, option):
+def test_load_allowed_plans_and_devices_5(tmp_path, option):
     """
     Basic test for ``load_allowed_plans_and_devices``.
     """
@@ -4233,7 +5808,7 @@ def test_validate_plan_1(func, plan, success, errmsg):
     """
     Tests for the plan validation algorithm.
     """
-    allowed_plans = {"existing": _process_plan(func, existing_devices={})}
+    allowed_plans = {"existing": _process_plan(func, existing_devices={}, existing_plans={})}
     success_out, errmsg_out = validate_plan(plan, allowed_plans=allowed_plans, allowed_devices=None)
 
     assert success_out == success, f"errmsg: {errmsg_out}"
@@ -4368,12 +5943,12 @@ def test_validate_plan_3(plan_func, plan, allowed_devices, success, errmsg):
     """
     plan["name"] = plan_func.__name__
     allowed_plans = {
-        "_vp3a": _process_plan(_vp3a, existing_devices={}),
+        "_vp3a": _process_plan(_vp3a, existing_devices={}, existing_plans={}),
         "p1": {},  # The plan is used only as a parameter value
         "p2": {},  # The plan is used only as a parameter value
     }
     # 'allowed_devices' must be a dictionary
-    allowed_devices = {_: None for _ in allowed_devices}
+    allowed_devices = {_: {} for _ in allowed_devices}
 
     success_out, errmsg_out = validate_plan(plan, allowed_plans=allowed_plans, allowed_devices=allowed_devices)
 
@@ -4412,7 +5987,7 @@ def test_validate_plan_4(plan_func, plan, success, errmsg):
     """
     plan["name"] = plan_func.__name__
     allowed_plans = {
-        "_vp4a": _process_plan(_vp4a, existing_devices={}),
+        "_vp4a": _process_plan(_vp4a, existing_devices={}, existing_plans={}),
     }
 
     success_out, errmsg_out = validate_plan(plan, allowed_plans=allowed_plans, allowed_devices={})
@@ -4464,7 +6039,7 @@ def test_bind_plan_arguments_1(func, plan_args, plan_kwargs, plan_bound_params, 
     """
     Tests for ``bind_plan_arguments()`` function.
     """
-    allowed_plans = {"existing": _process_plan(func, existing_devices={})}
+    allowed_plans = {"existing": _process_plan(func, existing_devices={}, existing_plans={})}
     if success:
         plan_parameters_copy = copy.deepcopy(allowed_plans["existing"])
 
@@ -4672,7 +6247,7 @@ _desc_ftd1f_html = {
 ])
 # fmt: on
 def test_format_text_descriptions_1(plan, desc_plain, desc_html):
-    plan_params = _process_plan(plan, existing_devices={})
+    plan_params = _process_plan(plan, existing_devices={}, existing_plans={})
 
     desc = format_text_descriptions(plan_params, use_html=False)
     assert desc == desc_plain

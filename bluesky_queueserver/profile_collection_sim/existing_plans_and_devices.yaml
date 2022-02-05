@@ -2,6 +2,19 @@
 existing_devices:
   ab_det:
     classname: ABDetector
+    components:
+      a:
+        classname: SynSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      b:
+        classname: SynSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
     is_flyable: false
     is_movable: false
     is_readable: true
@@ -32,60 +45,334 @@ existing_devices:
     module: ophyd.signal
   det:
     classname: SynGauss
+    components:
+      Imax:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      center:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      noise:
+        classname: EnumSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      noise_multiplier:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      sigma:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      val:
+        classname: SynSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
     is_flyable: false
     is_movable: false
     is_readable: true
     module: ophyd.sim
   det1:
     classname: SynGauss
+    components:
+      Imax:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      center:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      noise:
+        classname: EnumSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      noise_multiplier:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      sigma:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      val:
+        classname: SynSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
     is_flyable: false
     is_movable: false
     is_readable: true
     module: ophyd.sim
   det2:
     classname: SynGauss
+    components:
+      Imax:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      center:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      noise:
+        classname: EnumSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      noise_multiplier:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      sigma:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      val:
+        classname: SynSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
     is_flyable: false
     is_movable: false
     is_readable: true
     module: ophyd.sim
   det3:
     classname: SynGauss
+    components:
+      Imax:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      center:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      noise:
+        classname: EnumSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      noise_multiplier:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      sigma:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      val:
+        classname: SynSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
     is_flyable: false
     is_movable: false
     is_readable: true
     module: ophyd.sim
   det4:
     classname: Syn2DGauss
+    components:
+      Imax:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      center:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      noise:
+        classname: EnumSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      noise_multiplier:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      sigma:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      val:
+        classname: SynSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
     is_flyable: false
     is_movable: false
     is_readable: true
     module: ophyd.sim
   det5:
     classname: Syn2DGauss
+    components:
+      Imax:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      center:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      noise:
+        classname: EnumSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      noise_multiplier:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      sigma:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      val:
+        classname: SynSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
     is_flyable: false
     is_movable: false
     is_readable: true
     module: ophyd.sim
   det_with_conf:
     classname: DetWithConf
+    components:
+      a:
+        classname: SynSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      b:
+        classname: SynSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      c:
+        classname: SynSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      d:
+        classname: SynSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
     is_flyable: false
     is_movable: false
     is_readable: true
     module: ophyd.sim
   det_with_count_time:
     classname: DetWithCountTime
+    components:
+      count_time:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      intensity:
+        classname: SynSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
     is_flyable: false
     is_movable: false
     is_readable: true
     module: ophyd.sim
   direct_img:
     classname: DirectImage
+    components:
+      img:
+        classname: SynSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
     is_flyable: false
     is_movable: false
     is_readable: true
     module: ophyd.sim
   direct_img_list:
     classname: DirectImage
+    components:
+      img:
+        classname: SynSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
     is_flyable: false
     is_movable: false
     is_readable: true
@@ -104,6 +391,43 @@ existing_devices:
     module: ophyd.sim
   identical_det:
     classname: SynGauss
+    components:
+      Imax:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      center:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      noise:
+        classname: EnumSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      noise_multiplier:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      sigma:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      val:
+        classname: SynSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
     is_flyable: false
     is_movable: false
     is_readable: true
@@ -128,66 +452,407 @@ existing_devices:
     module: ophyd.sim
   jittery_motor1:
     classname: SynAxis
+    components:
+      acceleration:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      readback:
+        classname: _ReadbackSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      setpoint:
+        classname: _SetpointSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      unused:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      velocity:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
     is_flyable: false
     is_movable: true
     is_readable: true
     module: ophyd.sim
   jittery_motor2:
     classname: SynAxis
+    components:
+      acceleration:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      readback:
+        classname: _ReadbackSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      setpoint:
+        classname: _SetpointSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      unused:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      velocity:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
     is_flyable: false
     is_movable: true
     is_readable: true
     module: ophyd.sim
   motor:
     classname: SynAxis
+    components:
+      acceleration:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      readback:
+        classname: _ReadbackSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      setpoint:
+        classname: _SetpointSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      unused:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      velocity:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
     is_flyable: false
     is_movable: true
     is_readable: true
     module: ophyd.sim
   motor1:
     classname: SynAxis
+    components:
+      acceleration:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      readback:
+        classname: _ReadbackSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      setpoint:
+        classname: _SetpointSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      unused:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      velocity:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
     is_flyable: false
     is_movable: true
     is_readable: true
     module: ophyd.sim
   motor2:
     classname: SynAxis
+    components:
+      acceleration:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      readback:
+        classname: _ReadbackSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      setpoint:
+        classname: _SetpointSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      unused:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      velocity:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
     is_flyable: false
     is_movable: true
     is_readable: true
     module: ophyd.sim
   motor3:
     classname: SynAxis
+    components:
+      acceleration:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      readback:
+        classname: _ReadbackSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      setpoint:
+        classname: _SetpointSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      unused:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      velocity:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
     is_flyable: false
     is_movable: true
     is_readable: true
     module: ophyd.sim
   motor_empty_hints1:
     classname: SynAxisEmptyHints
+    components:
+      acceleration:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      readback:
+        classname: _ReadbackSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      setpoint:
+        classname: _SetpointSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      unused:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      velocity:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
     is_flyable: false
     is_movable: true
     is_readable: true
     module: ophyd.sim
   motor_empty_hints2:
     classname: SynAxisEmptyHints
+    components:
+      acceleration:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      readback:
+        classname: _ReadbackSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      setpoint:
+        classname: _SetpointSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      unused:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      velocity:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
     is_flyable: false
     is_movable: true
     is_readable: true
     module: ophyd.sim
   motor_no_hints1:
     classname: SynAxisNoHints
+    components:
+      acceleration:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      readback:
+        classname: _ReadbackSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      setpoint:
+        classname: _SetpointSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      unused:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      velocity:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
     is_flyable: false
     is_movable: true
     is_readable: true
     module: ophyd.sim
   motor_no_hints2:
     classname: SynAxisNoHints
+    components:
+      acceleration:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      readback:
+        classname: _ReadbackSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      setpoint:
+        classname: _SetpointSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      unused:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      velocity:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
     is_flyable: false
     is_movable: true
     is_readable: true
     module: ophyd.sim
   motor_no_pos:
     classname: SynAxisNoPosition
+    components:
+      acceleration:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      readback:
+        classname: _ReadbackSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      setpoint:
+        classname: _SetpointSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      unused:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      velocity:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
     is_flyable: false
     is_movable: true
     is_readable: true
@@ -200,18 +865,175 @@ existing_devices:
     module: ophyd.sim
   noisy_det:
     classname: SynGauss
+    components:
+      Imax:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      center:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      noise:
+        classname: EnumSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
+      noise_multiplier:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      sigma:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
+      val:
+        classname: SynSignal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.sim
     is_flyable: false
     is_movable: false
     is_readable: true
     module: ophyd.sim
   pseudo1x3:
     classname: SPseudo1x3
+    components:
+      pseudo1:
+        classname: PseudoSingle
+        components:
+          readback:
+            classname: AttributeSignal
+            is_flyable: false
+            is_movable: true
+            is_readable: true
+            module: ophyd.signal
+          setpoint:
+            classname: AttributeSignal
+            is_flyable: false
+            is_movable: true
+            is_readable: true
+            module: ophyd.signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.pseudopos
+      real1:
+        classname: SoftPositioner
+        is_flyable: false
+        is_movable: false
+        is_readable: false
+        module: ophyd.positioner
+      real2:
+        classname: SoftPositioner
+        is_flyable: false
+        is_movable: false
+        is_readable: false
+        module: ophyd.positioner
+      real3:
+        classname: SoftPositioner
+        is_flyable: false
+        is_movable: false
+        is_readable: false
+        module: ophyd.positioner
     is_flyable: false
     is_movable: true
     is_readable: true
     module: ophyd.sim
   pseudo3x3:
     classname: SPseudo3x3
+    components:
+      pseudo1:
+        classname: PseudoSingle
+        components:
+          readback:
+            classname: AttributeSignal
+            is_flyable: false
+            is_movable: true
+            is_readable: true
+            module: ophyd.signal
+          setpoint:
+            classname: AttributeSignal
+            is_flyable: false
+            is_movable: true
+            is_readable: true
+            module: ophyd.signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.pseudopos
+      pseudo2:
+        classname: PseudoSingle
+        components:
+          readback:
+            classname: AttributeSignal
+            is_flyable: false
+            is_movable: true
+            is_readable: true
+            module: ophyd.signal
+          setpoint:
+            classname: AttributeSignal
+            is_flyable: false
+            is_movable: true
+            is_readable: true
+            module: ophyd.signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.pseudopos
+      pseudo3:
+        classname: PseudoSingle
+        components:
+          readback:
+            classname: AttributeSignal
+            is_flyable: false
+            is_movable: true
+            is_readable: true
+            module: ophyd.signal
+          setpoint:
+            classname: AttributeSignal
+            is_flyable: false
+            is_movable: true
+            is_readable: true
+            module: ophyd.signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.pseudopos
+      real1:
+        classname: SoftPositioner
+        is_flyable: false
+        is_movable: false
+        is_readable: false
+        module: ophyd.positioner
+      real2:
+        classname: SoftPositioner
+        is_flyable: false
+        is_movable: false
+        is_readable: false
+        module: ophyd.positioner
+      real3:
+        classname: SoftPositioner
+        is_flyable: false
+        is_movable: false
+        is_readable: false
+        module: ophyd.positioner
+      sig:
+        classname: Signal
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: ophyd.signal
     is_flyable: false
     is_movable: true
     is_readable: true
@@ -240,6 +1062,442 @@ existing_devices:
     is_movable: true
     is_readable: true
     module: ophyd.sim
+  sim_bundle_A:
+    classname: SimBundle
+    components:
+      dets:
+        classname: SimDetectors
+        components:
+          det_A:
+            classname: SynGauss
+            components:
+              Imax:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              center:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              noise:
+                classname: EnumSignal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.sim
+              noise_multiplier:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              sigma:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              val:
+                classname: SynSignal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.sim
+            is_flyable: false
+            is_movable: false
+            is_readable: true
+            module: ophyd.sim
+          det_B:
+            classname: SynGauss
+            components:
+              Imax:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              center:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              noise:
+                classname: EnumSignal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.sim
+              noise_multiplier:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              sigma:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              val:
+                classname: SynSignal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.sim
+            is_flyable: false
+            is_movable: false
+            is_readable: true
+            module: ophyd.sim
+        is_flyable: false
+        is_movable: false
+        is_readable: true
+        module: <run_path>
+      mtrs:
+        classname: SimStage
+        components:
+          x:
+            classname: SynAxis
+            components:
+              acceleration:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              readback:
+                classname: _ReadbackSignal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.sim
+              setpoint:
+                classname: _SetpointSignal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.sim
+              unused:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              velocity:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+            is_flyable: false
+            is_movable: true
+            is_readable: true
+            module: ophyd.sim
+          y:
+            classname: SynAxis
+            components:
+              acceleration:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              readback:
+                classname: _ReadbackSignal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.sim
+              setpoint:
+                classname: _SetpointSignal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.sim
+              unused:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              velocity:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+            is_flyable: false
+            is_movable: true
+            is_readable: true
+            module: ophyd.sim
+          z:
+            classname: SynAxis
+            components:
+              acceleration:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              readback:
+                classname: _ReadbackSignal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.sim
+              setpoint:
+                classname: _SetpointSignal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.sim
+              unused:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              velocity:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+            is_flyable: false
+            is_movable: true
+            is_readable: true
+            module: ophyd.sim
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: <run_path>
+    is_flyable: false
+    is_movable: false
+    is_readable: true
+    module: <run_path>
+  sim_bundle_B:
+    classname: SimBundle
+    components:
+      dets:
+        classname: SimDetectors
+        components:
+          det_A:
+            classname: SynGauss
+            components:
+              Imax:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              center:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              noise:
+                classname: EnumSignal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.sim
+              noise_multiplier:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              sigma:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              val:
+                classname: SynSignal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.sim
+            is_flyable: false
+            is_movable: false
+            is_readable: true
+            module: ophyd.sim
+          det_B:
+            classname: SynGauss
+            components:
+              Imax:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              center:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              noise:
+                classname: EnumSignal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.sim
+              noise_multiplier:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              sigma:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              val:
+                classname: SynSignal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.sim
+            is_flyable: false
+            is_movable: false
+            is_readable: true
+            module: ophyd.sim
+        is_flyable: false
+        is_movable: false
+        is_readable: true
+        module: <run_path>
+      mtrs:
+        classname: SimStage
+        components:
+          x:
+            classname: SynAxis
+            components:
+              acceleration:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              readback:
+                classname: _ReadbackSignal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.sim
+              setpoint:
+                classname: _SetpointSignal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.sim
+              unused:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              velocity:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+            is_flyable: false
+            is_movable: true
+            is_readable: true
+            module: ophyd.sim
+          y:
+            classname: SynAxis
+            components:
+              acceleration:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              readback:
+                classname: _ReadbackSignal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.sim
+              setpoint:
+                classname: _SetpointSignal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.sim
+              unused:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              velocity:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+            is_flyable: false
+            is_movable: true
+            is_readable: true
+            module: ophyd.sim
+          z:
+            classname: SynAxis
+            components:
+              acceleration:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              readback:
+                classname: _ReadbackSignal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.sim
+              setpoint:
+                classname: _SetpointSignal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.sim
+              unused:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+              velocity:
+                classname: Signal
+                is_flyable: false
+                is_movable: true
+                is_readable: true
+                module: ophyd.signal
+            is_flyable: false
+            is_movable: true
+            is_readable: true
+            module: ophyd.sim
+        is_flyable: false
+        is_movable: true
+        is_readable: true
+        module: <run_path>
+    is_flyable: false
+    is_movable: false
+    is_readable: true
+    module: <run_path>
   trivial_flyer:
     classname: TrivialFlyer
     is_flyable: true
@@ -366,6 +1624,113 @@ existing_plans:
       name: per_shot
     - default: None
       description: metadata
+      kind:
+        name: KEYWORD_ONLY
+        value: 3
+      name: md
+    properties:
+      is_generator: true
+  count_bundle_test:
+    name: count_bundle_test
+    parameters:
+    - annotation:
+        devices:
+          DetList:
+          - det
+          - det1
+          - det2
+          - det3
+          - sim_bundle_A
+          - sim_bundle_A.dets
+          - sim_bundle_A.dets.det_A
+          - sim_bundle_A.dets.det_A.center
+          - sim_bundle_A.dets.det_A.Imax
+          - sim_bundle_A.dets.det_A.noise
+          - sim_bundle_A.dets.det_A.noise_multiplier
+          - sim_bundle_A.dets.det_A.sigma
+          - sim_bundle_A.dets.det_A.val
+          - sim_bundle_A.dets.det_B
+          - sim_bundle_A.dets.det_B.center
+          - sim_bundle_A.dets.det_B.Imax
+          - sim_bundle_A.dets.det_B.noise
+          - sim_bundle_A.dets.det_B.noise_multiplier
+          - sim_bundle_A.dets.det_B.sigma
+          - sim_bundle_A.dets.det_B.val
+          - sim_bundle_A.mtrs
+          - sim_bundle_A.mtrs.x
+          - sim_bundle_A.mtrs.x.acceleration
+          - sim_bundle_A.mtrs.x.readback
+          - sim_bundle_A.mtrs.x.setpoint
+          - sim_bundle_A.mtrs.x.unused
+          - sim_bundle_A.mtrs.x.velocity
+          - sim_bundle_A.mtrs.y
+          - sim_bundle_A.mtrs.y.acceleration
+          - sim_bundle_A.mtrs.y.readback
+          - sim_bundle_A.mtrs.y.setpoint
+          - sim_bundle_A.mtrs.y.unused
+          - sim_bundle_A.mtrs.y.velocity
+          - sim_bundle_A.mtrs.z
+          - sim_bundle_A.mtrs.z.acceleration
+          - sim_bundle_A.mtrs.z.readback
+          - sim_bundle_A.mtrs.z.setpoint
+          - sim_bundle_A.mtrs.z.unused
+          - sim_bundle_A.mtrs.z.velocity
+          - sim_bundle_B
+          - sim_bundle_B.dets
+          - sim_bundle_B.dets.det_A
+          - sim_bundle_B.dets.det_A.center
+          - sim_bundle_B.dets.det_A.Imax
+          - sim_bundle_B.dets.det_A.noise
+          - sim_bundle_B.dets.det_A.noise_multiplier
+          - sim_bundle_B.dets.det_A.sigma
+          - sim_bundle_B.dets.det_A.val
+          - sim_bundle_B.dets.det_B
+          - sim_bundle_B.dets.det_B.center
+          - sim_bundle_B.dets.det_B.Imax
+          - sim_bundle_B.dets.det_B.noise
+          - sim_bundle_B.dets.det_B.noise_multiplier
+          - sim_bundle_B.dets.det_B.sigma
+          - sim_bundle_B.dets.det_B.val
+          - sim_bundle_B.mtrs
+          - sim_bundle_B.mtrs.x
+          - sim_bundle_B.mtrs.x.acceleration
+          - sim_bundle_B.mtrs.x.readback
+          - sim_bundle_B.mtrs.x.setpoint
+          - sim_bundle_B.mtrs.x.unused
+          - sim_bundle_B.mtrs.x.velocity
+          - sim_bundle_B.mtrs.y
+          - sim_bundle_B.mtrs.y.acceleration
+          - sim_bundle_B.mtrs.y.readback
+          - sim_bundle_B.mtrs.y.setpoint
+          - sim_bundle_B.mtrs.y.unused
+          - sim_bundle_B.mtrs.y.velocity
+          - sim_bundle_B.mtrs.z
+          - sim_bundle_B.mtrs.z.acceleration
+          - sim_bundle_B.mtrs.z.readback
+          - sim_bundle_B.mtrs.z.setpoint
+          - sim_bundle_B.mtrs.z.unused
+          - sim_bundle_B.mtrs.z.velocity
+        type: typing.List[DetList]
+      kind:
+        name: POSITIONAL_OR_KEYWORD
+        value: 1
+      name: detectors
+    - default: '1'
+      kind:
+        name: POSITIONAL_OR_KEYWORD
+        value: 1
+      name: num
+    - default: None
+      kind:
+        name: POSITIONAL_OR_KEYWORD
+        value: 1
+      name: delay
+    - default: None
+      kind:
+        name: KEYWORD_ONLY
+        value: 3
+      name: per_shot
+    - default: None
       kind:
         name: KEYWORD_ONLY
         value: 3
@@ -642,7 +2007,7 @@ existing_plans:
     parameters:
     - annotation:
         devices:
-          Motors: !!python/tuple
+          Motors:
           - motor1
           - motor2
         type: typing.List[Motors]
@@ -654,7 +2019,7 @@ existing_plans:
       name: motors
     - annotation:
         devices:
-          Detectors: !!python/tuple
+          Detectors:
           - det1
           - det2
           - det3

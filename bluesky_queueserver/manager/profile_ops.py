@@ -332,10 +332,8 @@ def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True
         sm_keys = list(sys.modules.keys())
 
     try:
-        nspace_global, nspace_local = {}, {}
-        exec(open(script_path).read(), nspace_global, nspace_local)
-        nspace = nspace_global
-        nspace.update(nspace_local)
+        nspace = {}
+        exec(open(script_path).read(), nspace, nspace)
 
     except BaseException as ex:
         raise StartupLoadingError(f"Error encountered executing startup script at '{script_path}'") from ex
@@ -487,24 +485,29 @@ def load_script_into_existing_nspace(
         # Save the list of available modules
         sm_keys = list(sys.modules.keys())
 
-    nspace_local = {}
-    try:
-        exec(script, nspace, nspace_local)
-    except Exception as ex:
-        raise ScriptLoadingError(f"Failed to load stript: {ex}") from ex
-    finally:
-        if not update_re:
-            # Discard 'RE' and 'db'
-            if "RE" in nspace_local:
-                del nspace_local["RE"]
-            if "db" in nspace_local:
-                del nspace_local["db"]
+    object_backup = {}
+    if not update_re:
+        # Save references to RE and db in case they are changed by the script
+        if "RE" in nspace:
+            object_backup["RE"] = nspace["RE"]
+        if "db" in nspace:
+            object_backup["db"] = nspace["db"]
 
+    try:
         # A script may be partially loaded into the environment in case it fails.
         #   This is 'realistic' behavior, similar to what happens in IPython.
-        #   So make sure that all components that were loaded successfully are properly
-        #   added to the environment.
-        nspace.update(nspace_local)
+        exec(script, nspace, nspace)
+
+    except Exception as ex:
+        raise ScriptLoadingError(f"Failed to load stript: {ex}") from ex
+
+    finally:
+        if not update_re:
+            # Remove references for 'RE' and 'db' from the namespace
+            nspace.pop("RE", None)
+            nspace.pop("db", None)
+            # Restore the original reference to 'RE' and 'db' (if they existed)
+            nspace.update(object_backup)
 
         if use_local_imports:
             # Delete data on all modules that were loaded by the script.
@@ -562,9 +565,68 @@ def devices_from_nspace(nspace):
 
     devices = {}
     for name, obj in nspace.items():
-        if isinstance(obj, (protocols.Readable, protocols.Flyable)):
+        if isinstance(obj, (protocols.Readable, protocols.Flyable)) and not inspect.isclass(obj):
             devices[name] = obj
     return devices
+
+
+def _get_nspace_object(object_name, *, objects_in_nspace):
+    """
+    Search for object in namespace by name (e.g. ``count`` or ``det1.val``).
+    The function searches for subdevices by using ``component_name`` device property
+    (plans have no ``component_name`` attribute). Returns a reference to
+    the device object if it is found or device name (string) if the device is not found.
+
+    Parameters
+    ----------
+    object_name: str
+        Object (device or plan) name, such as ``count``, ``det1`` or ``det1.val``.
+    objects_in_nspace: dict
+        Dictionary of objects (devices and/or plans) in namespace.
+
+    Returns
+    -------
+    device: callable, ophyd.Object or str
+        Reference to the object or object name (str) if the object is not found.
+    """
+
+    components, uses_re, _ = _split_list_element_definition(object_name)
+    if uses_re:
+        raise ValueError(f"Object (device or plan) name {object_name!r} can not contain regular expressions")
+
+    components = [_[0] for _ in components]  # We use only the 1st element
+
+    if not components:
+        raise ValueError(f"Device name {object_name!r} contains no components")
+
+    object_found = True
+    if components[0] in objects_in_nspace:
+        device = objects_in_nspace[components[0]]
+    else:
+        object_found = False
+
+    if object_found:
+        for c in components[1:]:
+            print(f"c={c} {hasattr(device, 'component_names')}")
+            if hasattr(device, "component_names") and (c in device.component_names):
+                # The defice MUST have the attribute 'c', but still process the case when
+                #   there is a bug and the device doesn't have the attribute
+                device = getattr(device, c, None)
+                if object_found is None:
+                    object_found = False
+                    logger.error("Device '%s' does not have attribute (subdevice) '%s'", str(object_name), str(c))
+                object_found = object_found if device else False
+
+            else:
+                object_found = False
+
+            if not object_found:
+                break
+
+    if not object_found:
+        device = object_name
+
+    return device
 
 
 def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, allowed_devices):
@@ -647,53 +709,70 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
                 default_value = _process_default_value(p["default"])
                 default_params.update({p["name"]: default_value})
 
-    def ref_from_name(v, items_in_nspace, allowed_items):
+    def ref_from_name(v, objects_in_nspace, sel_object_names, selected_object_tree):
         if isinstance(v, str):
-            if (v in allowed_items) and (v in items_in_nspace):
-                v = items_in_nspace[v]
+            if (v in sel_object_names) or _is_object_name_in_list(v, allowed_objects=selected_object_tree):
+                v = _get_nspace_object(v, objects_in_nspace=objects_in_nspace)
         return v
 
-    def process_argument(v, items_in_nspace, allowed_items):
+    def process_argument(v, objects_in_nspace, sel_object_names, selected_object_tree):
         # Recursively process lists (iterables) and dictionaries
         if isinstance(v, str):
-            v = ref_from_name(v, items_in_nspace, allowed_items)
+            v = ref_from_name(v, objects_in_nspace, sel_object_names, selected_object_tree)
         elif isinstance(v, dict):
             for key, value in v.copy().items():
-                v[key] = process_argument(value, items_in_nspace, allowed_items)
+                v[key] = process_argument(value, objects_in_nspace, sel_object_names, selected_object_tree)
         elif isinstance(v, Iterable):
             v_original = v
             v = list()
             for item in v_original:
-                v.append(process_argument(item, items_in_nspace, allowed_items))
+                v.append(process_argument(item, objects_in_nspace, sel_object_names, selected_object_tree))
         return v
 
-    def process_parameter_value(value, pp, items_in_nspace, group_plans, group_devices):
+    def process_parameter_value(value, pp, objects_in_nspace, group_plans, group_devices):
         """
         Process a parameter value ``value`` based on parameter description ``pp``
         (``pp = allowed_plans[<plan_name>][<param_name>]``).
         """
+
+        # Include/exclude all devices/plans if required
+        convert_all_plan_names = pp.get("convert_plan_names", None)  # None - not defined
+        convert_all_device_names = pp.get("convert_device_names", None)
+
+        # A set of the selected device names (device names are listed explicitly, not as a tree)
+        sel_object_names, pname_list, dname_list = set(), set(), set()
+
         if "annotation" not in pp:
-            # No annotation - attempt to convert all strings to devices
-            sel_item_list = set(group_devices).union(set(group_plans))
+            convert_all_plan_names = True if (convert_all_plan_names is None) else convert_all_plan_names
+            convert_all_device_names = True if (convert_all_device_names is None) else convert_all_device_names
         elif ("plans" in pp["annotation"]) or ("devices" in pp["annotation"]):
             # 'Custom' annotation: attempt to convert strings only to the devices
             #    and plans that are part of the description.
             pname_list, dname_list = [], []
-            for _ in pp["annotation"].get("plans", {}).values():
-                pname_list.extend(_)
-            for _ in pp["annotation"].get("devices", {}).values():
-                dname_list.extend(list(_))
-            # Make sure the names are  in the allowed list
-            pname_list = set([_ for _ in pname_list if _ in group_plans])
-            dname_list = set([_ for _ in dname_list if _ in group_devices])
-            sel_item_list = pname_list.union(dname_list)
-        else:
-            # If annotation (from decorator or function signature) does not contain
-            #   lists of devices or plans, then don't attempt to do the conversion
-            sel_item_list = set()
+            for plist in pp["annotation"].get("plans", {}).values():
+                plist = [_ for _ in plist if _is_object_name_in_list(_, allowed_objects=group_plans)]
+                pname_list.extend(list(plist))
+            for dlist in pp["annotation"].get("devices", {}).values():
+                dlist = [_ for _ in dlist if _is_object_name_in_list(_, allowed_objects=group_devices)]
+                dname_list.extend(list(dlist))
+            pname_list, dname_list = set(pname_list), set(dname_list)
 
-        if sel_item_list:
-            value = process_argument(value, items_in_nspace, sel_item_list)
+        # Create a tree of objects (dictionary of plans and devices)
+        selected_object_tree = {}
+        if convert_all_plan_names is True:
+            selected_object_tree.update(group_plans)
+        elif convert_all_plan_names is False:
+            pname_list = set()
+
+        if convert_all_device_names is True:
+            selected_object_tree.update(group_devices)
+        elif convert_all_device_names is False:
+            dname_list = set()
+
+        sel_object_names = pname_list.union(dname_list)
+
+        if sel_object_names or selected_object_tree:
+            value = process_argument(value, objects_in_nspace, sel_object_names, selected_object_tree)
 
         return value
 
@@ -701,7 +780,7 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
     items_in_nspace = devices_in_nspace.copy()
     items_in_nspace.update(plans_in_nspace)
 
-    plan_func = process_argument(plan_name, plans_in_nspace, group_plans)
+    plan_func = process_argument(plan_name, plans_in_nspace, set(), group_plans)
     if isinstance(plan_func, str):
         success = False
         err_msg = f"Plan '{plan_name}' is not allowed or does not exist"
@@ -823,6 +902,530 @@ def prepare_function(*, func_info, nspace, user_group_permissions=None):
         "kwargs": func_kwargs,
     }
     return func_prepared
+
+
+# ===============================================================================
+#   Processing of plan annotations and plan descriptions
+
+_supported_device_types = ("", "__READABLE__", "__FLYABLE__", "__DETECTOR__", "__MOTOR__")
+
+
+def _split_list_element_definition(element_def):
+    """
+    Split definition of the list into components. The list element may contain device or
+    subdevice name (e.g. ``det1``, ``det1.val``, ``sim_stage.det.val``) or specify
+    regular expressions used to find elements in the list of existing elements (e.g.
+    ``:^det:^val$``, ``:+^det:^val$``, ``__DETECTORS__:+^sim_stage$:+.+:^val$``).
+    The ``+`` character immediately following ``:`` is not part of the regular expression.
+    It indicates that all subdevices that satisfy the condition that are found at the
+    current depth are included in the list. The ``__DETECTORS__`` keyword indicates that
+    only detectors that satisfy the conditions are included in the list. The following
+    keywords are currently supported: ``__READABLE__``, ``__FLYABLE__``, ``__DETECTOR__``
+    and ``__MOTOR__``. The definition may also contain 'full name' patterns that are
+    applyed to the remaining part of the subdevice name. The 'full name' pattern is
+    defined by putting '?' after ':', e.g. the pattern ``:?^det.*val$`` selects
+    all device and subdevice names that starts with ``det`` and ends with ``val``,
+    such as ``detector_val``, ``det.val``, ``det.somesubdevice.val`` etc. The search
+    depth may be limited by specifying ``depth`` parameter after the full name pattern,
+    e.g. ``:?det.*val$:depth=5`` limits depth search to 5. Depth values starts with 1,
+    e.g. in the example above, ``:?det.*val$:depth=1`` will find only ``detector_val``.
+    If 'full name' pattern is preceded with a number of subdevice name patterns,
+    then 'full_name' pattern is applied to the remainder of the name, e.g.
+    ``:+^sim_stage$:?^det.*val$:depth=3`` whould select ``sim_stage`` and all its
+    subdevices such as ``sim_stage.det5.val`` searching to the total depth of 4
+    (``sim_stage`` name is at level 1 and full name search is performed at levels
+    2, 3 and 4).
+
+    The function may be applied to list elements describing plans, since they consist of
+    the same set of components. The element may be a name, such as ``count`` or
+    regular expression used to pick plans from the list of existing names, such as ``:^count``.
+    Since plan names and patterns are much simpler, additional validation of the split
+    results should be performed.
+
+    Parameters
+    ----------
+    element_def: str
+        Definition of the list element.
+
+    Returns
+    -------
+    components: list(tuple)
+        List of tuples, each tuple contains the following items: regular expression or device/subdevice name,
+        boolean flag that indicates if the matching is found at the current depth level should be included
+        in the list (for regular expressions), boolean flag that indicates if regular expression should
+        be applied to the full remaining part of the subdevice name (the full tree or subtree is going to
+        be searched), depth (int, 1-based or ``None`` if not set) that limites depth of the tree searched
+        for the name matching full name regular expressions.
+    uses_re: boolean
+        Boolean value that indicates if the components are regular expressions.
+    device_type: str
+        Contains the keyword that specifies device type (for regular expressions). Empty string if
+        the device type is not specified or if the components are device/subdevice names.
+
+    Raises
+    ------
+    TypeError
+        The element definition is not a string.
+    ValueError
+        The element definition is incorrectly formatted and can not be processed.
+    """
+    if not isinstance(element_def, str):
+        raise TypeError(
+            f"List item {element_def!r} has incorrect type {type(element_def)!r}. Expected type: 'str'"
+        )
+
+    # Remove spaces
+    element_def = element_def.replace(" ", "")
+
+    if not len(element_def):
+        raise ValueError(f"List item {element_def!r} is an empty string")
+
+    # Check if the element is defined using regular expressions
+    uses_re = ":" in element_def
+    device_type = ""
+
+    if uses_re:
+        components = element_def.split(":")
+        device_type = components[:1][0]  # The first element is a string (may be empty string)
+        components = components[1:]
+
+        # Find the components starting with '?'
+        n_full_re = None
+        for n, c in enumerate(components):
+            if c.startswith("?"):
+                n_full_re = n
+                break
+
+        depth = None
+        if n_full_re is not None:
+            # 'Full name' RE can be the last or next to last component.
+            if n_full_re < len(components) - 2:
+                raise ValueError(
+                    f"Full name regular expression {components[n_full_re]!r} must be the last: {element_def!r}"
+                )
+            elif n_full_re == len(components) - 2:
+                # If 'full name' RE is next to last, it can be followed only by 'depth' specification
+                if not components[-1].startswith("depth="):
+                    raise ValueError(
+                        f"Full name regular expression {components[n_full_re]!r} can be only followed by "
+                        f"the depth specification: {element_def!r}"
+                    )
+                elif not re.search("^depth=[0-9]+$", components[-1]):
+                    raise ValueError(
+                        f"Depth specification {components[-1]!r} has incorrect format: {element_def!r}"
+                    )
+                else:
+                    _, depth = components.pop().split("=")  # Remove depth specification
+                    depth = int(depth)
+
+        if (depth is not None) and (depth < 1):
+            raise ValueError(f"Depth ({depth}) must be positive integer greater or equal to 1: {element_def!r}")
+
+        if device_type not in _supported_device_types:
+            raise ValueError(
+                f"Device type {device_type!r} is not supported. Supported types: {_supported_device_types}"
+            )
+
+        components_include = [False] * len(components)
+        components_include = [True if _.startswith("+") else False for _ in components]
+
+        components_full_re = [False] * len(components)
+        components_depth = [None] * len(components)  # 'depth == None' means that depth is not specified
+        if n_full_re is not None:
+            components_full_re[n_full_re] = True
+            components_depth[n_full_re] = depth
+
+        # Remove '+' and '?' from the beginning of each component
+        components = [_[1:] if _.startswith("+") or _.startswith("?") else _ for _ in components]
+
+        for c in components:
+            if not c:
+                raise ValueError(f"List item {element_def!r} contains empty components")
+            try:
+                re.compile(c)
+            except re.error:
+                raise ValueError(f"List item {element_def!r} contains invalid regular expression {c!r}")
+
+        components = list(zip(components, components_include, components_full_re, components_depth))
+
+    else:
+        components = element_def.split(".")
+        for c in components:
+            if not c:
+                raise ValueError(
+                    f"Plan, device or subdevice name in the description {element_def!r} is an empty string"
+                )
+            if not re.search("^[_a-zA-Z][_a-zA-Z0-9]*$", c):
+                raise ValueError(
+                    f"Plan, device or subdevice name {c!r} in the description "
+                    f"{element_def!r} contains invalid characters"
+                )
+        components_include = [False] * len(components)
+        components_full_re = [False] * len(components)
+        components_depth = [None] * len(components)
+
+        components = list(zip(components, components_include, components_full_re, components_depth))
+
+    return components, uses_re, device_type
+
+
+def _is_object_name_in_list(object_name, *, allowed_objects):
+    """
+    Search for object (plan or device) name (e.g. ``count`` or ``det1.val``) in the tree
+    of device names (list of allowed devices) and returns ``True`` if the device is in
+    the list and ``False`` otherwise. If search for a device name n the tree is terminated
+    prematurely or at the node which has optional ``excluded`` attribute set ``True``, then
+    it is considered that the name is not in the list.
+
+    Parameters
+    ----------
+    object_name: str
+        Object name, such as ``count``, ``det1`` or ``det1.val``.
+    allowed_objects: dict
+        Dictionary that contains descriptions of allowed objects (plans and/or devices)
+        for a user group.
+
+    Returns
+    -------
+    bool
+        ``True`` if device was found in the list, ``False`` otherwise.
+    """
+
+    components, uses_re, _ = _split_list_element_definition(object_name)
+    if uses_re:
+        raise ValueError(f"Device name {object_name!r} can not contain regular expressions")
+
+    components = [_[0] for _ in components]  # We use only the 1st element
+
+    if not components:
+        raise ValueError(f"Device name {object_name!r} contains no components")
+
+    root = None
+    if components[0] in allowed_objects:
+        root = allowed_objects[components[0]]
+        object_in_list = not root.get("excluded", False)
+    else:
+        object_in_list = False
+
+    if root:
+        for c in components[1:]:
+            if ("components" in root) and (c in root["components"]):
+                root = root["components"][c]
+                object_in_list = not root.get("excluded", False)
+            else:
+                object_in_list = False
+                break
+
+    return object_in_list
+
+
+def _build_device_name_list(*, components, uses_re, device_type, existing_devices):
+    """
+    Generate list of device names (including subdevices) based on one element of a device
+    list from plan parameter annotation. The element is preprocessed with
+    ``_split_list_element_definition()`` represented as ``components``, ``uses_re`` and
+    ``device_type`` parameters. If the element is a device name, it is simply included
+    in the list. If the element is a pattern, the matching devices are selected
+    from ``existing_devices`` dictionary and added to the list. The ``components`` is
+    a list of tuples for each depth level. The first element of the tuple represents
+    a pattern device/subdevice name at the given level. If matching devices are found,
+    they are added to the list of devices if the second tuple element is ``True`` and then
+    the subdevices of each matching device are processed using the pattern defined for
+    the next depth level (the second element may be ``True`` or ``False``).
+    A pattern may also be a 'full name' regular expression applied to the remainder
+    of the subdevice (if 3rd element of the tuple is True). Depth for 'full name' search
+    can be restricted (4th component of the tuple). Depth may be integer (>=1) or ``None``
+    (depth is not define, therefore considered infinite).
+
+    The devices with set parameter ``'excluded': True`` are not included in the list.
+
+    It is assumed that element definitions are first processed using
+    ``_split_list_element_definition``, which catches and processes all the errors,
+    so this function does not perform any validation of data integrity.
+
+    Parameters
+    ----------
+    components: list(tuple)
+        List of tuples, each tuple consists of four elements: device/subdevice name or
+        pattern for name search; a boolean flag that tells if the matching devices or
+        subdevices at this level should be added to the device list; a boolean flag
+        that tells if the pattern should be applied to the remainder of the device name
+        (full name search); integer value that limits the depth of full name search
+        (``None`` if the depth is not limited).
+    uses_re: boolean
+        Boolean parameter that tells if the components represent device name or pattern based
+        on regular expressions.
+    device_type: str
+        If components define the pattern, then device type is used to limit search to the devices
+        of certain type.
+    existing_devices: dict
+        The list of existing (or allowed) devices.
+
+    Returns
+    -------
+    list(str)
+        List of device names.
+    """
+    # The condition is applied to the device to decide if it is included in the list
+    if device_type == "":
+
+        def condition(_btype):
+            return True
+
+    elif device_type == "__READABLE__":
+
+        def condition(_btype):
+            return bool(_btype["is_readable"])
+
+    elif device_type == "__DETECTOR__":
+
+        def condition(_btype):
+            return _btype["is_readable"] and not _btype["is_movable"]
+
+    elif device_type == "__MOTOR__":
+
+        def condition(_btype):
+            return _btype["is_readable"] and _btype["is_movable"]
+
+    elif device_type == "__FLYABLE__":
+
+        def condition(_btype):
+            return bool(_btype["is_flyable"])
+
+    else:
+        raise ValueError(f"Unsupported device type: {device_type!r}. Supported types: {_supported_device_types}")
+
+    if uses_re:
+        # Always Set 'include_devices = True' for the last component
+        components = copy.copy(components)
+        _ = components[-1]
+        components[-1] = (_[0], True, _[2], _[3])
+
+        max_depth, device_list = len(components), []
+
+        def process_devices_full_name(devices, base_name, name_suffix, pattern, depth, depth_stop):
+            if (depth_stop is None) or (depth < depth_stop):
+                for dname, dparams in devices.items():
+                    name_suffix_new = dname if not name_suffix else (name_suffix + "." + dname)
+                    full_name = name_suffix_new if not base_name else (base_name + "." + name_suffix_new)
+                    if re.search(pattern, full_name) and not dparams.get("excluded", False) and condition(dparams):
+                        device_list.append(full_name)
+                    if "components" in dparams:
+                        process_devices_full_name(
+                            devices=dparams["components"],
+                            base_name=base_name,
+                            name_suffix=name_suffix_new,
+                            pattern=pattern,
+                            depth=depth + 1,
+                            depth_stop=depth_stop,
+                        )
+
+        def process_devices(devices, base_name, depth):
+            if (depth < max_depth) and devices:
+                pattern, include_devices, is_full_re, remaining_depth = components[depth]
+                if is_full_re:
+                    process_devices_full_name(
+                        devices=devices,
+                        base_name=base_name,
+                        name_suffix="",
+                        pattern=pattern,
+                        depth=depth,
+                        depth_stop=depth + remaining_depth if remaining_depth else None,
+                    )
+                else:
+                    for dname, dparams in devices.items():
+                        if re.search(pattern, dname):
+                            full_name = dname if not base_name else (base_name + "." + dname)
+                            if include_devices and not dparams.get("excluded", False) and condition(dparams):
+                                device_list.append(full_name)
+                            if "components" in dparams:
+                                process_devices(
+                                    devices=dparams["components"], base_name=full_name, depth=depth + 1
+                                )
+
+        process_devices(devices=existing_devices, base_name="", depth=0)
+
+    else:
+        # Simplified approach: just copy the device name to list. No checks are performed.
+        # Change the code in this block if device names are to be handled differently.
+        device_name = ".".join([_[0] for _ in components])
+        device_list = [device_name]
+
+    return device_list
+
+
+def _build_plan_name_list(*, components, uses_re, device_type, existing_plans):
+    """
+    Parameters
+    ----------
+    components: list(tuple)
+        List of tuples returned by ``_split_list_element_definition()``. For the plans
+        the list must contain exactly one component, elements 2 and 3 of each tuple
+        must be ``False`` and element 4 must be ``None``. Exception will be raised if those
+        requirements are not satisfied (this is part of normal operation, it means that
+        the definition contains elements, such as ``+`` or ``?`` that are not supported
+        for plans, so the user should be informed that the definition can not be processed)
+    uses_re: boolean
+        Boolean parameter that tells if the components represent device name or pattern based
+        on regular expressions.
+    device_type: str
+        This parameter is returned by ``_split_list_element_definition()`` and must be
+        an empty string ``""``. Exception will be raised otherwise (device type can not be
+        used in the pattern defining a plan).
+    existing_plans: set or dict
+        A set of plan names or a list (dictionary) of existing (or allowed) plans.
+
+    Returns
+    -------
+    list(str)
+        List of device names.
+    """
+
+    if len(components) != 1:
+        c = [_[0] for _ in components]
+        raise ValueError(f"List element describing a plan may contain only one component. Components: {c}")
+
+    # At this point we know that 'components' has precisely one element.
+    pattern, include_devices, is_full_re, remaining_depth = components[0]
+
+    if remaining_depth is not None:
+        raise ValueError(f"Depth specification can not be part of the element describing a plan: {pattern!r}")
+
+    if device_type:
+        raise ValueError(f"Device type can not be included in the plan description: {(device_type + ':')!r}")
+
+    # '?' and '+' should not be used in plan descriptions, since they have no meaning
+    #   and would contaminate the code
+    if include_devices:
+        raise ValueError(f"Plus sign (+) can not be used in a pattern for a plan name: {('+'+pattern)!r}")
+    if is_full_re:
+        raise ValueError(f"Question mark (?) can not be used in a pattern for a plan name: {('?'+pattern)!r}")
+
+    plan_list = []
+
+    if uses_re:
+        for plan_name in existing_plans:
+            if re.search(pattern, plan_name):
+                plan_list.append(plan_name)
+    else:
+        # Simplified approach: just add the plan name to the list. No checks are performed.
+        # Change the code in this block if device names are to be handled differently.
+        plan_list = [pattern]
+
+    return plan_list
+
+
+def _expand_parameter_annotation(annotation, *, existing_devices, existing_plans):
+    """
+    Expand the lists if plans and device in annotation. The function does not filter
+    the lists: all names of plans and devices that are explicitly defined in the lists
+    are copied to the new lists. Plans and devices that are defined using regular
+    expressions are searched in the lists of existing plans and devices respectively.
+
+    Parameters
+    ----------
+    annotation: dict
+        Parameter annotation.
+    existing_devices: dict, None
+        Dictionary with allowed or existing devices. If ``None``, then all the expanded lists
+        will be empty.
+    existing_plans: set, dict or None
+        A set of existng plan names or a dictionary where the keys are the existing plan names.
+        The function does not require complete plan descriptions, since they are typically not
+        available on this stage. If ``None``, then all the expanded lists will be empty.
+
+    Returns
+    -------
+    dict
+        Expanded annotation. Always returns deep copy, so the original annotation remains unchanged
+    """
+    existing_devices = existing_devices or {}
+    existing_plans = existing_plans or {}
+
+    annotation = copy.deepcopy(annotation)
+    for section in ("devices", "plans"):
+        if section not in annotation:
+            continue
+        for k, v in annotation[section].items():
+            if not isinstance(v, (list, tuple)):
+                raise ValueError(f"Unsupported type of a device or plan list {k!r}: {v}")
+            item_list = []
+            for d in v:
+                components, uses_re, device_type = _split_list_element_definition(d)
+                if section == "plans":
+                    name_list = _build_plan_name_list(
+                        components=components,
+                        uses_re=uses_re,
+                        device_type=device_type,
+                        existing_plans=existing_plans,
+                    )
+                else:
+                    name_list = _build_device_name_list(
+                        components=components,
+                        uses_re=uses_re,
+                        device_type=device_type,
+                        existing_devices=existing_devices,
+                    )
+                item_list.extend(name_list)
+            # Remove repeated entries
+            item_list = list(set(item_list))
+            # Sort the list of names by lower case letters
+            item_list = sorted(item_list, key=lambda _: (_.upper(), _[0].islower()))
+            annotation[section][k] = item_list
+
+    # Process enums: convert tuples to lists
+    if "enums" in annotation:
+        an_enums = annotation["enums"]
+        for k in an_enums.keys():
+            an_enums[k] = list(an_enums[k])
+
+    return annotation
+
+
+def _expand_plan_description(plan_description, *, existing_devices, existing_plans):
+    """
+    Expand lists of items for custom enum types for each parameter in the plan description.
+    After expansion, plan description is ready for use in plan validation. The function
+    does not change the plan description if there are no lists to expand, therefore it can
+    be repeatedly applied to the same plan description without consequences (except extra
+    execution time). The function always returnes a COPY of the plan description, so
+    it is safe to apply to elements of the list of allowed/existing plans without changing
+    the original descriptions.
+
+    Parameters
+    ----------
+    plan_description: dict
+        Plan description. The format of plan description is the same as in the list of
+        allowed/existing plans. The function will not change the original dictionary,
+        which is referenced by this parameter.
+    existing_devices: dict, None
+        Dictionary with allowed or existing devices. If ``None``, then all the expanded lists
+        will be empty.
+    existing_plans: set, dict or None
+        A set of existng plan names or a dictionary where the keys are the existing plan names.
+        The function does not require complete plan descriptions, since they are typically not
+        available on this stage. If ``None``, then all the expanded lists will be empty.
+
+    Returns
+    -------
+    dict
+        Expanded plan description, which contains full lists of items. Always returns the
+        copy of the plan description.
+
+    Raises
+    ------
+        Exceptions are raised if plan description can not be properly processed.
+    """
+    plan_description = copy.deepcopy(plan_description)
+
+    if "parameters" in plan_description:
+        for p in plan_description["parameters"]:
+            if "annotation" in p:
+                p["annotation"] = _expand_parameter_annotation(
+                    p["annotation"], existing_devices=existing_devices, existing_plans=existing_plans
+                )
+
+    return plan_description
 
 
 # ===============================================================================
@@ -956,11 +1559,78 @@ def _check_ranges(kwargs_in, param_list):
     return match, msg
 
 
+def _find_and_replace_built_in_types(annotation_type_str, *, plans=None, devices=None, enums=None):
+    """
+    Find and replace built-in types in parameter annotation type string. Built-in types are
+    ``__PLAN__``, ``__DEVICE__``, ``__PLAN_OR_DEVICE__``. Since plan and device names are passed
+    as strings and then converted to respective object, the built-in plan names are replaced by ``str``
+    type, which is then used in parameter validation. The function also determines whether plans, devices
+    or both plans and devices need to be converted. If the name of the built-in type is redefined
+    in ``plans``, ``devices`` or ``enums`` section, then the keyword is ignored.
+
+    Parameters
+    ----------
+    annotation_type_str: str
+        String that represents a type from parameter annotation
+    plans: dict or None
+        Reference to the ``plans`` section of the parameter annotation
+    devices: dict or None
+        Reference to the ``devices`` section of the parameter annotation
+    enums: dict or None
+        Reference to the ``enum`` section of the parameter annotation
+
+    Returns
+    -------
+    annotation_type_str: str
+        Modified parameter type
+    convert_plan_names: boolean
+        Indicates whether the plan names need to be converted based on the parameter type.
+    convert_device_names: boolean
+        Indicates whether the devices names need to be converted based on the parameter type.
+    """
+    # Built-in types that may be contained in 'annotation_type_str' and
+    #   should be converted to another known type
+    plans = plans or {}
+    devices = devices or {}
+    enums = enums or {}
+
+    built_in_types = {
+        "__PLAN__": ("str", True, False),
+        "__DEVICE__": ("str", False, True),
+        "__PLAN_OR_DEVICE__": ("str", True, True),
+    }
+    convert_plan_names = False
+    convert_device_names = False
+
+    for btype, (btype_replace, pl, dev) in built_in_types.items():
+        # If 'plans', 'devices' or 'enums' contains the type name, then leave it as is
+        if (btype in plans) or (btype in devices) or (btype in enums):
+            continue
+        if re.search(btype, annotation_type_str):
+            annotation_type_str = re.sub(btype, btype_replace, annotation_type_str)
+            convert_plan_names = convert_plan_names or pl
+            convert_device_names = convert_device_names or dev
+
+    return annotation_type_str, convert_plan_names, convert_device_names
+
+
 def _process_annotation(encoded_annotation, *, ns=None):
     """
-    Process annotation encoded the same way as in the descriptions of existing plans.
-    Returns reference to the annotation (type object) and the list temporary types
+    Processed annotation is encoded the same way as in the descriptions of existing plans.
+    Returns reference to the annotation (type object) and the list of temporary types
     that needs to be deleted once the processing (parameter validation) is complete.
+    The built-in type names (__DEVICE__, __PLAN__, __PLAN_OR_DEVICE__) are replaced with ``str``
+    unless types with the same name are defined in ``plans``, ``devices`` or
+    ``enums`` sections of the annotation. Explicitly defined the types with the same names
+    as built-in types are treated as regular types.
+
+    The function validates annotation and raises exceptions in the following cases:
+    the types defined in 'plans', 'devices' or 'enums' sections are not lists or tuples;
+    the types defined in 'plans', 'devices' or 'enums' sections are not used as part
+    of the parameter type (may indicate a bug in the user code); annotation contains
+    unsupported keys.
+
+    This function does not change the annotation.
 
     Parameters
     ----------
@@ -975,9 +1645,15 @@ def _process_annotation(encoded_annotation, *, ns=None):
 
     Returns
     -------
-    type
+    annotation_type: type
         Type reconstructed from annotation.
-    dict
+    convert_plan_names: bool
+        Indicates if __PLAN__ or __PLAN_OR_DEVICE__ built-in type was detected and matching
+        strings should be converted to plan objects.
+    convert_device_names: bool
+        Indicates if __DEVICE__ or __PLAN_OR_DEVICE__ built-in type was detected and matching
+        strings should be converted to devuce objects.
+    ns: dict
         Namespace dictionary with created types.
     """
     # Namespace that contains the types created in the process of processing the annotation
@@ -1015,37 +1691,41 @@ def _process_annotation(encoded_annotation, *, ns=None):
         items.update(plans)
         items.update(enums)
 
+        annotation_type_str, convert_plan_names, convert_device_names = _find_and_replace_built_in_types(
+            annotation_type_str, plans=plans, devices=devices, enums=enums
+        )
+
         # Create types
         for item_name in items:
-            # The dictionary value for the devices/plans may be a list(tuple) of items
-            #   or None. If the value is None, then any device or plan will be accepted.
-            #   The list of device or plan names will be used to construct enum.Enum
-            #   type, which is used to verify if the name in args or kwargs matches
-            #   one of the arguments.
-            if items[item_name] is not None:
-                # Create temporary unique type name
-                type_name = type_name_base = item_name
-                while True:
-                    # Try the original name first
-                    if type_name not in ns:
-                        break
-                    type_name = f"{type_name_base}_{random.randint(0, 100000)}_"
+            # The dictionary value for the devices/plans may be a list(tuple) of items.
+            if not isinstance(items[item_name], (list, tuple)):
+                raise TypeError(
+                    f"The list of items ({item_name!r}: {items[item_name]!r}) must be a list of a tuple."
+                )
 
-                # Replace all occurrences of the type nae in the custom annotation.
-                annotation_type_str = annotation_type_str.replace(item_name, type_name)
+            if item_name not in annotation_type_str:
+                raise ValueError(
+                    f"Type {item_name!r} is defined in the annotation, but not used in the parameter type"
+                )
 
-                # Create temporary type as a subclass of enum.Enum, e.g.
-                # enum.Enum('Device', {'det1': 'det1', 'det2': 'det2', 'det3': 'det3'})
-                type_code = f"enum.Enum('{type_name}', {{"
-                for d in items[item_name]:
-                    type_code += f"'{d}': '{d}',"
-                type_code += "})"
-                ns[type_name] = eval(type_code, ns, ns)
+            # Create temporary unique type name
+            type_name = type_name_base = item_name
+            while True:
+                # Try the original name first
+                if type_name not in ns:
+                    break
+                type_name = f"{type_name_base}_{random.randint(0, 100000)}_"
 
-            else:
-                # Accept any device or plan: any string will be accepted without
-                #   verification.
-                annotation_type_str = annotation_type_str.replace(item_name, "str")
+            # Replace all occurrences of the type name in the custom annotation.
+            annotation_type_str = annotation_type_str.replace(item_name, type_name)
+
+            # Create temporary type as a subclass of enum.Enum, e.g.
+            # enum.Enum('Device', {'det1': 'det1', 'det2': 'det2', 'det3': 'det3'})
+            type_code = f"enum.Enum('{type_name}', {{"
+            for d in items[item_name]:
+                type_code += f"'{d}': '{d}',"
+            type_code += "})"
+            ns[type_name] = eval(type_code, ns, ns)
 
         # Once all the types are created,  execute the code for annotation.
         annotation_type = eval(annotation_type_str, ns, ns)
@@ -1053,7 +1733,7 @@ def _process_annotation(encoded_annotation, *, ns=None):
     except Exception as ex:
         raise TypeError(f"Failed to process annotation '{annotation_type_str}': {ex}'")
 
-    return annotation_type, ns
+    return annotation_type, convert_plan_names, convert_device_names, ns
 
 
 def _process_default_value(encoded_default_value):
@@ -1108,7 +1788,7 @@ def _decode_parameter_types_and_defaults(param_list):
             raise KeyError(f"No 'name' key in the parameter description {p}")
 
         if "annotation" in p:
-            p_type, _ = _process_annotation(p["annotation"])
+            p_type, _, _, _ = _process_annotation(p["annotation"])
         else:
             p_type = typing.Any
 
@@ -1333,11 +2013,15 @@ def filter_plan_description(plan_description, *, allowed_plans, allowed_devices)
                 if (allowed_plans is not None) and ("plans" in p["annotation"]):
                     p_plans = p["annotation"]["plans"]
                     for p_type in p_plans:
-                        p_plans[p_type] = tuple(_ for _ in p_plans[p_type] if _ in allowed_plans)
+                        p_plans[p_type] = [
+                            _ for _ in p_plans[p_type] if _is_object_name_in_list(_, allowed_objects=allowed_plans)
+                        ]
                 if (allowed_devices is not None) and ("devices" in p["annotation"]):
                     p_dev = p["annotation"]["devices"]
                     for p_type in p_dev:
-                        p_dev[p_type] = tuple(_ for _ in p_dev[p_type] if _ in allowed_devices)
+                        p_dev[p_type] = [
+                            _ for _ in p_dev[p_type] if _is_object_name_in_list(_, allowed_objects=allowed_devices)
+                        ]
     return plan_description
 
 
@@ -1572,7 +2256,7 @@ def _parse_docstring(docstring):
     return doc_annotation
 
 
-def _process_plan(plan, *, existing_devices):
+def _process_plan(plan, *, existing_devices, existing_plans):
     """
     Returns parameters of a plan. The function accepts callable object that implements the plan
     and returns the dictionary with descriptions of the plan and plan parameters. The function
@@ -1596,36 +2280,36 @@ def _process_plan(plan, *, existing_devices):
     .. code-block:: python
 
         {
-            "name": <plan name>  # REQUIRED
-            "module": <module name>  # whenever available
-            "description": <plan description (multiline text)>
+            "name": <plan name>,  # REQUIRED
+            "module": <module name>,  # whenever available
+            "description": <plan description (multiline text)>,
             "properties": {  # REQUIRED, may be empty
                 "is_generator": <boolean that indicates if this is a generator function>
-            }
+            },
             "parameters": [  # REQUIRED, may be empty
                 <param_name_1>: {
-                     "name": <parameter name>  # REQUIRED
-                     "description": <parameter description>
+                     "name": <parameter name>,  # REQUIRED
+                     "description": <parameter description>,
                      # For values of the 'kind' see documentation for 'inspect.Parameter'
                      "kind": {  # REQUIRED
-                         "name": <string representation>
-                         "value": <integer representation>
-                     }
+                         "name": <string representation>,
+                         "value": <integer representation>,
+                     },
                      "annotation": {
                          # 'type' is REQUIRED if annotation is present
-                         "type": <parameter type represented as a string>
+                         "type": <parameter type represented as a string>,
                          # Enums for devices, plans and simple enums are in the same format as
                          #   the 'parameter_annotation_decorator'.
-                         "devices": <dict of device types (lists of device names)>
-                         "plans": <dict of plan types (lists of plan names)>
-                         "enums": <dict of enum types (lists of strings)>
+                         "devices": <dict of device types (lists of device names)>,
+                         "plans": <dict of plan types (lists of plan names)>,
+                         "enums": <dict of enum types (lists of strings)>,
                      }
-                     "default": <string representation of the default value>
-                     "default_defined_in_decorator": boolean  # True if the default value is defined
+                     "default": <string representation of the default value>,
+                     "default_defined_in_decorator": boolean,  # True if the default value is defined
                                                               # in decorator, otherwise False/not set
-                     "min": <string representing int or float>
-                     "max": <string representing int or float>
-                     "step": <string representing int or float>
+                     "min": <string representing int or float>,
+                     "max": <string representing int or float>,
+                     "step": <string representing int or float>,
                 }
                 <parameter_name_2>: ...
                 <parameter_name_3>: ...
@@ -1633,14 +2317,21 @@ def _process_plan(plan, *, existing_devices):
             ]
         }
 
+    .. note::
+
+        This function does not expand built-in lists of devices or add subdevices for devices with
+        specified length if those are used in the plan annotation decorator. Call ``expand_plan_description()``
+        for each plan description in order for the lists to be expanded based on the current list of
+        available or existing devices.
+
     Parameters
     ----------
     plan: callable
         Reference to the function implementing the plan
     existing_devices : dict
         Prepared dictionary of existing devices (returned by the function ``_prepare_devices``.
-        The dictionary is used to create lists of devices for built-in custom types
-        ``AllDetectors``, ``AllMotors``, ``AllFlyers``. If it is known that built-in plans
+        The dictionary is used to create lists of devices for built-in device lists ``AllDevicesList``,
+        ``AllDetectorsList``, ``AllMotorsList``, ``AllFlyersList``. If it is known that built-in plans
         are not used, then empty dictionary can be passed instead of the list of existing devices.
 
     Returns
@@ -1696,9 +2387,9 @@ def _process_plan(plan, *, existing_devices):
             )
         return s_value
 
-    def assemble_custom_annotation(parameter, *, existing_devices):
+    def assemble_custom_annotation(parameter, *, existing_plans, existing_devices):
         """
-        Assemble annotation from decorator parameters. It will be stored as a separate dictionary.
+        Assemble annotation from parameters of the decorator.
         Returns ``None`` if there is no annotation.
         """
         annotation = {}
@@ -1711,43 +2402,9 @@ def _process_plan(plan, *, existing_devices):
             if k in parameter:
                 annotation[k] = copy.copy(parameter[k])
 
-        # Add lists of device names for built-in types
-        built_in_types = ("AllDetectors", "AllMotors", "AllFlyers")
-        for btype in built_in_types:
-            type_found = False
-            nvchars = "[^_A-Za-z0-9]"
-            for start, end in (("^", "$"), ("^", nvchars), (nvchars, "$"), (nvchars, nvchars)):
-                pattern = f"{start}{btype}{end}"
-                if re.search(pattern, annotation["type"]):
-                    type_found = True
-                    break
-
-            if type_found:
-                if "devices" not in annotation:
-                    annotation["devices"] = {}
-                # If annotation already contains type definition for 'built-in' type
-                #   then no name list is created.
-                if btype not in annotation["devices"]:
-                    if btype == "AllDetectors":
-
-                        def condition(_btype):
-                            return _btype["is_readable"] and not _btype["is_movable"]
-
-                    elif btype == "AllMotors":
-
-                        def condition(_btype):
-                            return _btype["is_readable"] and _btype["is_movable"]
-
-                    elif btype == "AllFlyers":
-
-                        def condition(_btype):
-                            return _btype["is_flyable"]
-
-                    else:
-                        raise RuntimeError(f"Error in processing algorithm: unsupported built-in type '{btype}'")
-                    device_names = [k for k, v in existing_devices.items() if condition(v)]
-
-                    annotation["devices"][btype] = device_names
+        annotation = _expand_parameter_annotation(
+            annotation, existing_devices=existing_devices, existing_plans=existing_plans
+        )
 
         return annotation
 
@@ -1757,6 +2414,7 @@ def _process_plan(plan, *, existing_devices):
     param_annotation = getattr(plan, "_custom_parameter_annotation_", None)
     doc_annotation = _parse_docstring(docstring)
 
+    # Returned value: dictionary with fully processed plan description
     ret = {"name": plan.__name__, "properties": {}, "parameters": []}
 
     module_name = plan.__module__
@@ -1764,7 +2422,6 @@ def _process_plan(plan, *, existing_devices):
         ret.update({"module": module_name})
 
     try:
-
         # Properties
         ret["properties"]["is_generator"] = inspect.isgeneratorfunction(plan) or inspect.isgenerator(plan)
 
@@ -1792,51 +2449,48 @@ def _process_plan(plan, *, existing_devices):
             default_defined_in_decorator = False
             if use_custom and (p.name in param_annotation["parameters"]):
                 desc = param_annotation["parameters"][p.name].get("description", None)
+
+                # Copy 'convert_plan_names' and 'convert_device_names' if they exist
+                for k in ("convert_plan_names", "convert_device_names"):
+                    if k in param_annotation["parameters"][p.name]:
+                        working_dict[k] = param_annotation["parameters"][p.name][k]
+
                 annotation = assemble_custom_annotation(
-                    param_annotation["parameters"][p.name], existing_devices=existing_devices
+                    param_annotation["parameters"][p.name],
+                    existing_plans=existing_plans,
+                    existing_devices=existing_devices,
                 )
                 try:
                     _ = param_annotation["parameters"][p.name].get("default", None)
-                    default = (
-                        _
-                        if _ is None
-                        else convert_expression_to_string(
-                            _,
-                            expression_role="default value in decorator",
-                        )
-                    )
+
+                    if _ is None:
+                        default = _
+                    else:
+                        default = convert_expression_to_string(_, expression_role="default value in decorator")
+
                     if default:
                         default_defined_in_decorator = True
 
                     _ = param_annotation["parameters"][p.name].get("min", None)
-                    vmin = (
-                        _
-                        if _ is None
-                        else convert_expression_to_string(
-                            _,
-                            expression_role="min value in decorator",
-                        )
-                    )
+
+                    if _ is None:
+                        vmin = _
+                    else:
+                        vmin = convert_expression_to_string(_, expression_role="min value in decorator")
 
                     _ = param_annotation["parameters"][p.name].get("max", None)
-                    vmax = (
-                        _
-                        if _ is None
-                        else convert_expression_to_string(
-                            _,
-                            expression_role="max value in decorator",
-                        )
-                    )
+
+                    if _ is None:
+                        vmax = _
+                    else:
+                        vmax = convert_expression_to_string(_, expression_role="max value in decorator")
 
                     _ = param_annotation["parameters"][p.name].get("step", None)
-                    step = (
-                        _
-                        if _ is None
-                        else convert_expression_to_string(
-                            _,
-                            expression_role="step value in decorator",
-                        )
-                    )
+                    if _ is None:
+                        step = _
+                    else:
+                        step = convert_expression_to_string(_, expression_role="step value in decorator")
+
                 except Exception as ex:
                     raise ValueError(f"Parameter '{p.name}': {ex}")
 
@@ -1866,9 +2520,15 @@ def _process_plan(plan, *, existing_devices):
                 working_dict["description"] = desc
 
             if annotation:
-                # Verify that the encoded type could be decoded.
-                _process_annotation(annotation)  # May raises exception
+                # Verify that the encoded type could be decoded (raises an exception if fails)
+                _, convert_plan_names, convert_device_names, _ = _process_annotation(annotation)
                 working_dict["annotation"] = annotation
+
+                # Set the following parameters True only if they do not already exist (ignore if False)
+                if convert_plan_names and ("convert_plan_names" not in working_dict):
+                    working_dict["convert_plan_names"] = True
+                if convert_device_names and ("convert_device_names" not in working_dict):
+                    working_dict["convert_device_names"] = True
 
             if default:
                 # Verify that the encoded representation of the default can be decoded.
@@ -1899,7 +2559,7 @@ def _process_plan(plan, *, existing_devices):
                     raise ValueError(f"Failed to process step value: {ex}")
 
     except Exception as ex:
-        raise ValueError(f"Failed to create description of plan '{plan.__name__}': {ex}")
+        raise ValueError(f"Failed to create description of plan '{plan.__name__}': {ex}") from ex
 
     return ret
 
@@ -1920,28 +2580,56 @@ def _prepare_plans(plans, *, existing_devices):
     dict
         Dictionary that maps plan names to plan descriptions
     """
-    return {k: _process_plan(v, existing_devices=existing_devices) for k, v in plans.items()}
+    plan_names = set(plans.keys())
+    return {
+        k: _process_plan(v, existing_devices=existing_devices, existing_plans=plan_names) for k, v in plans.items()
+    }
 
 
-def _prepare_devices(devices):
+def _prepare_devices(devices, *, max_depth=50):
     """
     Prepare dictionary of existing devices for saving to YAML file.
+    ``max_depth`` is the maximum depth for the components. The default value (50)
+    is a very large number.
     """
     try:
         from bluesky import protocols
     except ImportError:
         import bluesky_queueserver.manager._protocols as protocols
 
-    return {
-        k: {
-            "is_readable": isinstance(v, protocols.Readable),
-            "is_movable": isinstance(v, protocols.Movable),
-            "is_flyable": isinstance(v, protocols.Flyable),
-            "classname": type(v).__name__,
-            "module": type(v).__module__,
+    def get_device_params(device):
+        return {
+            "is_readable": isinstance(device, protocols.Readable),
+            "is_movable": isinstance(device, protocols.Movable),
+            "is_flyable": isinstance(device, protocols.Flyable),
+            "classname": type(device).__name__,
+            "module": type(device).__module__,
         }
-        for k, v in devices.items()
-    }
+
+    def get_device_component_names(device):
+        if hasattr(device, "component_names"):
+            component_names = device.component_names
+            if not isinstance(component_names, Iterable):
+                component_names = []
+        else:
+            component_names = []
+        return component_names
+
+    def create_device_description(device, *, depth=0):
+        description = get_device_params(device)
+        comps = get_device_component_names(device)
+        components = {}
+        if depth <= max_depth:
+            for comp_name in comps:
+                if hasattr(device, comp_name):
+                    c = getattr(device, comp_name)
+                    desc = create_device_description(c, depth=depth + 1)
+                    components[comp_name] = desc
+        if components:
+            description["components"] = components
+        return description
+
+    return {k: create_device_description(v) for k, v in devices.items()}
 
 
 def existing_plans_and_devices_from_nspace(*, nspace):
@@ -2497,7 +3185,8 @@ def load_user_group_permissions(path_to_file=None):
 def _check_if_item_allowed(item_name, allow_patterns, disallow_patterns):
     """
     Check if an item with ``item_name`` is allowed based on ``allow_patterns``
-    and ``disallow_patterns``.
+    and ``disallow_patterns``. If the item name represents a subdevice, then
+    patterns will be applied only to the base name.
 
     Parameters
     ----------
@@ -2518,6 +3207,9 @@ def _check_if_item_allowed(item_name, allow_patterns, disallow_patterns):
     """
     item_is_allowed = False
 
+    # Separate the base name (for devices). Patterns are applied only to the base name,
+    #   e.g. if the device name is 'dev1.val', then the pattern should be applied only to 'dev1'
+    item_name = item_name.split(".")[0]
     if allow_patterns:
         if allow_patterns[0] is None:
             item_is_allowed = True
@@ -2540,7 +3232,7 @@ def _check_if_item_allowed(item_name, allow_patterns, disallow_patterns):
 def check_if_function_allowed(function_name, *, group_name, user_group_permissions=None):
     """
     Check if the function with name ``function_name`` is allowed for users of ``group_name`` group.
-    The function first checks if the functio name passes root permissions and then permissions
+    The function first checks if the function name passes root permissions and then permissions
     for the specific group.
 
     Parameters

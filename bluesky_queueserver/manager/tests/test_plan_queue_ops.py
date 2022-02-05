@@ -35,8 +35,8 @@ class PQ:
         Cleanup after test.
         """
         # Don't leave any test entries in the pool
-        self._pq.delete_pool_entries()
-        self._pq.user_group_permissions_clear()
+        await self._pq.delete_pool_entries()
+        await self._pq.user_group_permissions_clear()
 
 
 # fmt: off

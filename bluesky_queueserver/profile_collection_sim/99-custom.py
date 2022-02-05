@@ -2,6 +2,7 @@
 import time as ttime
 import typing
 import ophyd
+from ophyd import Device, Component as Cpt  # Keep 'Device' imported, used in unit tests
 import bluesky
 import bluesky.preprocessors as bpp
 import bluesky.plan_stubs as bps
@@ -150,3 +151,73 @@ def clear_buffer():
 
 
 # ===========================================================================================
+#     Simulated devices with subdevices. The devices are used in unit tests. Do not delete.
+#     If class names are changed, search and change the names in unit tests.
+#     Formatting of imported classes is inconsistent (e.g. 'Device', 'ophyd.Device' and
+#     'ophyd.sim.SynAxis') is inconsistent on purpose to check if all possible versions work.
+
+
+class SimStage(Device):
+    x = Cpt(ophyd.sim.SynAxis, name="y", labels={"motors"})
+    y = Cpt(ophyd.sim.SynAxis, name="y", labels={"motors"})
+    z = Cpt(ophyd.sim.SynAxis, name="z", labels={"motors"})
+
+    def set(self, x, y, z):
+        """Makes the device Movable"""
+        self.x.set(x)
+        self.y.set(y)
+        self.z.set(z)
+
+
+class SimDetectors(Device):
+    """
+    The detectors are controlled by simulated 'motor1' and 'motor2'
+    defined on the global scale.
+    """
+
+    det_A = Cpt(
+        ophyd.sim.SynGauss,
+        name="det_A",
+        motor=motor1,
+        motor_field="motor1",
+        center=0,
+        Imax=5,
+        sigma=0.5,
+        labels={"detectors"},
+    )
+    det_B = Cpt(
+        ophyd.sim.SynGauss,
+        name="det_B",
+        motor=motor2,
+        motor_field="motor2",
+        center=0,
+        Imax=5,
+        sigma=0.5,
+        labels={"detectors"},
+    )
+
+
+class SimBundle(ophyd.Device):
+    mtrs = Cpt(SimStage, name="mtrs")
+    dets = Cpt(SimDetectors, name="dets")
+
+
+sim_bundle_A = SimBundle(name="sim_bundle_A")
+sim_bundle_B = SimBundle(name="sim_bundle_B")  # Used for tests
+
+
+@parameter_annotation_decorator(
+    {
+        "parameters": {
+            "detectors": {  # Annotation for the parameter 'detectors'
+                "annotation": "typing.List[DetList]",
+                "devices": {"DetList": ["det", "det1", "det2", "det3", ":+^sim_bundle:?.*$"]},
+            }
+        }
+    }
+)
+def count_bundle_test(detectors, num=1, delay=None, *, per_shot=None, md=None):
+    yield from count(detectors, num=num, delay=delay, per_shot=per_shot, md=md)
+
+
+# =======================================================================================

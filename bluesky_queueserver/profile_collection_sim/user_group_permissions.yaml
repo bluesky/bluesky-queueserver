@@ -25,7 +25,7 @@ user_groups:
       - "^function_sleep$"
   test_user:  # Users with limited access capabilities
     allowed_plans:
-      - "^count$"  # Use regular expression patterns
+      - "^count"  # Use regular expression patterns
       - "scan$"
     forbidden_plans:
       - "^adaptive_scan$" # Use regular expression patterns
@@ -33,6 +33,7 @@ user_groups:
     allowed_devices:
       - "^det"  # Use regular expression patterns
       - "^motor"
+      - "^sim_bundle_A"
     forbidden_devices:
       - "^det[3-5]$" # Use regular expression patterns
       - "^motor\\d+$"

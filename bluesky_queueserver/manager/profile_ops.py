@@ -607,7 +607,6 @@ def _get_nspace_object(object_name, *, objects_in_nspace):
 
     if object_found:
         for c in components[1:]:
-            print(f"c={c} {hasattr(device, 'component_names')}")
             if hasattr(device, "component_names") and (c in device.component_names):
                 # The defice MUST have the attribute 'c', but still process the case when
                 #   there is a bug and the device doesn't have the attribute

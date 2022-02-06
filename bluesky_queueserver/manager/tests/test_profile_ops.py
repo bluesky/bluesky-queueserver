@@ -62,7 +62,7 @@ from bluesky_queueserver.manager.profile_ops import (
     check_if_function_allowed,
     _validate_user_group_permissions_schema,
     prepare_function,
-    _split_list_element_definition,
+    _split_name_pattern,
     _build_device_name_list,
     _build_plan_name_list,
     _find_and_replace_built_in_types,
@@ -3176,11 +3176,11 @@ def test_devices_from_nspace():
     (":^det:?^val$:depth=1", [("^det", True, False, None), ("^val$", True, True, 1)], True, ""),
 ])
 # fmt: on
-def test_split_list_element_definition_1(element_def, components, uses_re, device_type):
+def test_split_name_pattern_1(element_def, components, uses_re, device_type):
     """
     ``_split_list_element_definition``: basic tests
     """
-    _components, _uses_re, _device_type = _split_list_element_definition(element_def)
+    _components, _uses_re, _device_type = _split_name_pattern(element_def)
     assert _components == components
     assert _uses_re == uses_re
     assert _device_type == device_type
@@ -3208,12 +3208,12 @@ def test_split_list_element_definition_1(element_def, components, uses_re, devic
     ("det.v$al", ValueError, "Name pattern 'det.v$al' contains invalid characters"),
 ])
 # fmt: on
-def test_split_list_element_definition_2_fail(element_def, exception_type, msg):
+def test_split_name_pattern_2_fail(element_def, exception_type, msg):
     """
     ``_split_list_element_definition``: failing cases
     """
     with pytest.raises(exception_type, match=re.escape(msg)):
-        _split_list_element_definition(element_def)
+        _split_name_pattern(element_def)
 
 
 # fmt: off
@@ -3338,7 +3338,7 @@ def test_build_device_name_list_1(element_def, expected_name_list):
     """
     ``_build_device_name_list``: basic tests
     """
-    components, uses_re, device_type = _split_list_element_definition(element_def)
+    components, uses_re, device_type = _split_name_pattern(element_def)
     name_list = _build_device_name_list(
         components=components, uses_re=uses_re, device_type=device_type, existing_devices=_allowed_devices_dict_1
     )
@@ -3349,7 +3349,7 @@ def test_build_device_name_list_2_fail():
     """
     ``_build_device_name_list``: failing cases
     """
-    components, uses_re, device_type = _split_list_element_definition("def")
+    components, uses_re, device_type = _split_name_pattern("def")
     with pytest.raises(ValueError, match="Unsupported device type: 'unknown'"):
         _build_device_name_list(
             components=components, uses_re=uses_re, device_type="unknown", existing_devices=_allowed_devices_dict_1
@@ -3373,7 +3373,7 @@ def test_build_plan_name_list_1(plan_def, expected_name_list):
     """
     ``_build_plan_name_list``: basic tests
     """
-    components, uses_re, device_type = _split_list_element_definition(plan_def)
+    components, uses_re, device_type = _split_name_pattern(plan_def)
     name_list = _build_plan_name_list(
         components=components, uses_re=uses_re, device_type=device_type, existing_plans=_allowed_plans_set_1
     )
@@ -3393,7 +3393,7 @@ def test_build_plan_name_list_2_fail(plan_def, exception_type, msg):
     """
     ``_build_plan_name_list``: failing cases
     """
-    components, uses_re, device_type = _split_list_element_definition(plan_def)
+    components, uses_re, device_type = _split_name_pattern(plan_def)
 
     with pytest.raises(exception_type, match=re.escape(msg)):
         _build_plan_name_list(

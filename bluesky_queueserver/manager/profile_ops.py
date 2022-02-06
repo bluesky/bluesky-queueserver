@@ -590,7 +590,7 @@ def _get_nspace_object(object_name, *, objects_in_nspace):
         Reference to the object or object name (str) if the object is not found.
     """
 
-    components, uses_re, _ = _split_list_element_definition(object_name)
+    components, uses_re, _ = _split_name_pattern(object_name)
     if uses_re:
         raise ValueError(f"Object (device or plan) name {object_name!r} can not contain regular expressions")
 
@@ -909,7 +909,7 @@ def prepare_function(*, func_info, nspace, user_group_permissions=None):
 _supported_device_types = ("", "__READABLE__", "__FLYABLE__", "__DETECTOR__", "__MOTOR__")
 
 
-def _split_list_element_definition(element_def):
+def _split_name_pattern(name_pattern):
     """
     Split name pattern into components. The pattern may represent names of devices
     plans or functions. The patterns for device names may consist of multiple components,
@@ -952,8 +952,8 @@ def _split_list_element_definition(element_def):
 
     Parameters
     ----------
-    element_def: str
-        Definition of the list element.
+    name_pattern: str
+        Name pattern of a device, plan or function.
 
     Returns
     -------
@@ -977,23 +977,23 @@ def _split_list_element_definition(element_def):
     ValueError
         The element definition is incorrectly formatted and can not be processed.
     """
-    if not isinstance(element_def, str):
+    if not isinstance(name_pattern, str):
         raise TypeError(
-            f"Name pattern {element_def!r} has incorrect type {type(element_def)!r}. Expected type: 'str'"
+            f"Name pattern {name_pattern!r} has incorrect type {type(name_pattern)!r}. Expected type: 'str'"
         )
 
     # Remove spaces
-    element_def = element_def.replace(" ", "")
+    name_pattern = name_pattern.replace(" ", "")
 
-    if not len(element_def):
-        raise ValueError(f"Name pattern {element_def!r} is an empty string")
+    if not len(name_pattern):
+        raise ValueError(f"Name pattern {name_pattern!r} is an empty string")
 
     # Check if the element is defined using regular expressions
-    uses_re = ":" in element_def
+    uses_re = ":" in name_pattern
     device_type = ""
 
     if uses_re:
-        components = element_def.split(":")
+        components = name_pattern.split(":")
         device_type = components[:1][0]  # The first element is a string (may be empty string)
         components = components[1:]
 
@@ -1009,25 +1009,25 @@ def _split_list_element_definition(element_def):
             # 'Full name' RE can be the last or next to last component.
             if n_full_re < len(components) - 2:
                 raise ValueError(
-                    f"Full name regular expression {components[n_full_re]!r} must be the last: {element_def!r}"
+                    f"Full name regular expression {components[n_full_re]!r} must be the last: {name_pattern!r}"
                 )
             elif n_full_re == len(components) - 2:
                 # If 'full name' RE is next to last, it can be followed only by 'depth' specification
                 if not components[-1].startswith("depth="):
                     raise ValueError(
                         f"Full name regular expression {components[n_full_re]!r} can be only followed by "
-                        f"the depth specification: {element_def!r}"
+                        f"the depth specification: {name_pattern!r}"
                     )
                 elif not re.search("^depth=[0-9]+$", components[-1]):
                     raise ValueError(
-                        f"Depth specification {components[-1]!r} has incorrect format: {element_def!r}"
+                        f"Depth specification {components[-1]!r} has incorrect format: {name_pattern!r}"
                     )
                 else:
                     _, depth = components.pop().split("=")  # Remove depth specification
                     depth = int(depth)
 
         if (depth is not None) and (depth < 1):
-            raise ValueError(f"Depth ({depth}) must be positive integer greater or equal to 1: {element_def!r}")
+            raise ValueError(f"Depth ({depth}) must be positive integer greater or equal to 1: {name_pattern!r}")
 
         if device_type not in _supported_device_types:
             raise ValueError(
@@ -1050,25 +1050,25 @@ def _split_list_element_definition(element_def):
 
         for c in components:
             if not c:
-                raise ValueError(f"Name pattern {element_def!r} contains empty components")
+                raise ValueError(f"Name pattern {name_pattern!r} contains empty components")
             try:
                 re.compile(c)
             except re.error:
-                raise ValueError(f"Name pattern {element_def!r} contains invalid regular expression {c!r}")
+                raise ValueError(f"Name pattern {name_pattern!r} contains invalid regular expression {c!r}")
 
         components = list(zip(components, components_include, components_full_re, components_depth))
 
     else:
-        if not re.search(r"^[_a-zA-Z][_a-zA-Z0-9\.]*[_a-zA-Z0-9]$", element_def):
+        if not re.search(r"^[_a-zA-Z][_a-zA-Z0-9\.]*[_a-zA-Z0-9]$", name_pattern):
             raise ValueError(
-                f"Name pattern {element_def!r} contains invalid characters. "
+                f"Name pattern {name_pattern!r} contains invalid characters. "
                 "The pattern could be a valid regular expression, but it is not labeled with ':' (e.g. ':^det$')"
             )
-        components = element_def.split(".")
+        components = name_pattern.split(".")
         for c in components:
             if not c:
                 raise ValueError(
-                    f"Plan, device or subdevice name in the description {element_def!r} is an empty string"
+                    f"Plan, device or subdevice name in the description {name_pattern!r} is an empty string"
                 )
         components_include = [True] * len(components)
         components_full_re = [False] * len(components)
@@ -1101,7 +1101,7 @@ def _is_object_name_in_list(object_name, *, allowed_objects):
         ``True`` if device was found in the list, ``False`` otherwise.
     """
 
-    components, uses_re, _ = _split_list_element_definition(object_name)
+    components, uses_re, _ = _split_name_pattern(object_name)
     if uses_re:
         raise ValueError(f"Device name {object_name!r} can not contain regular expressions")
 
@@ -1356,7 +1356,7 @@ def _filter_device_tree(item_dict, allow_patterns, disallow_patterns):
         -------
         None
         """
-        components, uses_re, device_type = _split_list_element_definition(pattern)
+        components, uses_re, device_type = _split_name_pattern(pattern)
 
         if uses_re:
             # Always Set 'include_devices = True' for the last component
@@ -1576,7 +1576,7 @@ def _expand_parameter_annotation(annotation, *, existing_devices, existing_plans
                 raise ValueError(f"Unsupported type of a device or plan list {k!r}: {v}")
             item_list = []
             for d in v:
-                components, uses_re, device_type = _split_list_element_definition(d)
+                components, uses_re, device_type = _split_name_pattern(d)
                 if section == "plans":
                     name_list = _build_plan_name_list(
                         components=components,
@@ -3437,7 +3437,7 @@ def _check_if_plan_or_func_allowed(item_name, allow_patterns, disallow_patterns)
         if not isinstance(pattern, str):
             raise TypeError("Pattern is not a string: {pattern!r} ({allow_patterns})")
         # Prepare patterns
-        components, uses_re, _ = _split_list_element_definition(pattern)
+        components, uses_re, _ = _split_name_pattern(pattern)
         if len(components) != 1:
             raise ValueError("Name pattern for functions and plans must contain one component: {components}")
         component = components[0][0]

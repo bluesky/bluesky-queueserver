@@ -1048,16 +1048,16 @@ def _split_list_element_definition(element_def):
         components = list(zip(components, components_include, components_full_re, components_depth))
 
     else:
+        if not re.search(r"^[_a-zA-Z][_a-zA-Z0-9\.]*[_a-zA-Z0-9]$", element_def):
+            raise ValueError(
+                f"Element name pattern {element_def!r} contains invalid characters. "
+                "The pattern could be a valid regular expression, but it is not labeled with ':' (e.g. ':^det$')"
+            )
         components = element_def.split(".")
         for c in components:
             if not c:
                 raise ValueError(
                     f"Plan, device or subdevice name in the description {element_def!r} is an empty string"
-                )
-            if not re.search("^[_a-zA-Z][_a-zA-Z0-9]*$", c):
-                raise ValueError(
-                    f"Plan, device or subdevice name {c!r} in the description "
-                    f"{element_def!r} contains invalid characters"
                 )
         components_include = [False] * len(components)
         components_full_re = [False] * len(components)
@@ -1118,6 +1118,52 @@ def _is_object_name_in_list(object_name, *, allowed_objects):
     return object_in_list
 
 
+def _get_device_type_condition(device_type):
+    """
+    Generator function that returns reference to a function that verifies if device
+    satisfy condition for the selecte device type.
+
+    Parameters
+    ----------
+    device_type: str
+        Deivce type
+
+    Returns
+    -------
+    callable
+    """
+    # The condition is applied to the device to decide if it is included in the list
+    if device_type == "":
+
+        def condition(_btype):
+            return True
+
+    elif device_type == "__READABLE__":
+
+        def condition(_btype):
+            return bool(_btype["is_readable"])
+
+    elif device_type == "__DETECTOR__":
+
+        def condition(_btype):
+            return _btype["is_readable"] and not _btype["is_movable"]
+
+    elif device_type == "__MOTOR__":
+
+        def condition(_btype):
+            return _btype["is_readable"] and _btype["is_movable"]
+
+    elif device_type == "__FLYABLE__":
+
+        def condition(_btype):
+            return bool(_btype["is_flyable"])
+
+    else:
+        raise ValueError(f"Unsupported device type: {device_type!r}. Supported types: {_supported_device_types}")
+
+    return condition
+
+
 def _build_device_name_list(*, components, uses_re, device_type, existing_devices):
     """
     Generate list of device names (including subdevices) based on one element of a device
@@ -1165,34 +1211,8 @@ def _build_device_name_list(*, components, uses_re, device_type, existing_device
     list(str)
         List of device names.
     """
-    # The condition is applied to the device to decide if it is included in the list
-    if device_type == "":
 
-        def condition(_btype):
-            return True
-
-    elif device_type == "__READABLE__":
-
-        def condition(_btype):
-            return bool(_btype["is_readable"])
-
-    elif device_type == "__DETECTOR__":
-
-        def condition(_btype):
-            return _btype["is_readable"] and not _btype["is_movable"]
-
-    elif device_type == "__MOTOR__":
-
-        def condition(_btype):
-            return _btype["is_readable"] and _btype["is_movable"]
-
-    elif device_type == "__FLYABLE__":
-
-        def condition(_btype):
-            return bool(_btype["is_flyable"])
-
-    else:
-        raise ValueError(f"Unsupported device type: {device_type!r}. Supported types: {_supported_device_types}")
+    condition = _get_device_type_condition(device_type)
 
     if uses_re:
         # Always Set 'include_devices = True' for the last component
@@ -1207,7 +1227,11 @@ def _build_device_name_list(*, components, uses_re, device_type, existing_device
                 for dname, dparams in devices.items():
                     name_suffix_new = dname if not name_suffix else (name_suffix + "." + dname)
                     full_name = name_suffix_new if not base_name else (base_name + "." + name_suffix_new)
-                    if re.search(pattern, full_name) and not dparams.get("excluded", False) and condition(dparams):
+                    if (
+                        re.search(pattern, name_suffix_new)
+                        and not dparams.get("excluded", False)
+                        and condition(dparams)
+                    ):
                         device_list.append(full_name)
                     if "components" in dparams:
                         process_devices_full_name(
@@ -1251,6 +1275,197 @@ def _build_device_name_list(*, components, uses_re, device_type, existing_device
         device_list = [device_name]
 
     return device_list
+
+
+def _filter_device_tree(item_dict, allow_patterns, disallow_patterns):
+    """
+    Filter device tree based on sets of patterns for 'allowed' and 'disallowed'
+    devices.
+
+    Parameters
+    ----------
+    item_dict: dict
+        Dictionary that represents a tree of existing devices. Some of the devices
+        may be labeled as excluded: those devices will remain excluded and could be
+        removed from the tree.
+    allowed_patterns: list(str)
+        List of patterns from ``allowed_devices`` section of user group permissions.
+        If the parameter value is ``[]`` or the first list element is ``None``,
+        then it is assumed that all the devices are allowed.
+    disallow_patterns: list(str)
+        List of patterns from ``forbidden_devices`` section of user group permissions.
+        If the parameter value is ``[]`` or the first list element is ``None``,
+        then it is assumed that no devices are forbidden.
+
+    Returns
+    -------
+    allowed_devices: dict
+        Dictionary that represents a tree of devices after filtering. Excluded
+        devices could be labeled as excluded (parameter ``"exclude": True``).
+        Branches that consist of excluded parameters are removed from the tree.
+
+    Raises
+    ------
+        May raise exceptions if provided patterns are invalid and/or filtering
+        can not be completed.
+    """
+
+    # Add temporary flag ('excl': False) to each device
+    def add_excl_flag(devices_dict, exclude_all):
+        """
+        Add temporary ``excl`` parameter to each device and subdevice.
+
+        Parameters
+        ----------
+        devices_dict: dict
+            Dictionary that contains the device tree
+        exclude_all: boolean
+            The value for the ``excl`` parameter.
+        """
+        for _, dparam in devices_dict.items():
+            dparam["excl"] = exclude_all
+            if "components" in dparam:
+                add_excl_flag(dparam["components"], exclude_all)
+
+    def apply_pattern_filter(*, pattern, devices_dict, exclude):
+        """
+        Apply a pattern to the tree of deivce. Pattern can be an explicitly state name
+        such as ``"det"`` or ``"det.val"`` or regular expression, such as ``":^det:val$"``.
+
+        Parameters
+        ----------
+        pattern_item: str
+            Device/subdevice name or regular expression to be applied to the device names.
+        existing_devices: dict
+            Dictionary that represents a tree of devices/subdevices.
+        exclude: boolean
+            True - exclude devices, False - include devices.
+
+        Returns
+        -------
+        None
+        """
+        components, uses_re, device_type = _split_list_element_definition(pattern)
+
+        if uses_re:
+            # Always Set 'include_devices = True' for the last component
+            components = copy.copy(components)
+            _ = components[-1]
+            components[-1] = (_[0], True, _[2], _[3])
+
+            condition = _get_device_type_condition(device_type)
+
+            max_depth = len(components)
+
+            def apply_filter_full_name(devices, name_suffix, pattern, depth, depth_stop, *, exclude):
+                if (depth_stop is None) or (depth < depth_stop):
+                    for dname, dparams in devices.items():
+                        name_suffix_new = dname if not name_suffix else (name_suffix + "." + dname)
+                        if re.search(pattern, name_suffix_new) and condition(dparams):
+                            dparams["excl"] = exclude
+                        if "components" in dparams:
+                            apply_filter_full_name(
+                                devices=dparams["components"],
+                                name_suffix=name_suffix_new,
+                                pattern=pattern,
+                                depth=depth + 1,
+                                depth_stop=depth_stop,
+                                exclude=exclude,
+                            )
+
+            def apply_filter(devices, depth, *, exclude):
+                if (depth < max_depth) and devices:
+                    pattern, include_devices, is_full_re, remaining_depth = components[depth]
+                    if is_full_re:
+                        apply_filter_full_name(
+                            devices=devices,
+                            name_suffix="",
+                            pattern=pattern,
+                            depth=depth,
+                            depth_stop=depth + remaining_depth if remaining_depth else None,
+                            exclude=exclude,
+                        )
+                    else:
+                        for dname, dparams in devices.items():
+                            if re.search(pattern, dname):
+                                if include_devices and condition(dparams):
+                                    dparams["excl"] = bool(exclude)
+                                if "components" in dparams:
+                                    apply_filter(devices=dparams["components"], depth=depth + 1, exclude=exclude)
+
+            apply_filter(devices=devices_dict, depth=0, exclude=exclude)
+
+        else:
+            # 'components' represent an explicitly stated name
+            root = allowed_devices
+            for n, c in enumerate([_[0] for _ in components]):
+                if c in root:
+                    if n == len(components) - 1:
+                        root[c]["excl"] = exclude
+                    if "components" in root[c]:
+                        root = root[c]["components"]
+                    else:
+                        break
+                else:
+                    break
+
+    def trim_device_dict(devices_dict):
+        """
+        Remove ``excl`` parameter from each device. Remove branches that contain only
+        the devices that were excluded. Add ``"excluded": True`` to the devices that
+        were excluded but can not be removed from the tree (``"excl": True``).
+
+        Parameters
+        ----------
+        devices_dict: dict
+            Dictionary representing the tree of devices.
+        """
+        contains_devices = False
+        for dname in list(devices_dict.keys()):
+            dparam = devices_dict[dname]
+
+            exclude_this_device = True
+
+            if "components" in dparam:
+                if trim_device_dict(dparam["components"]):
+                    exclude_this_device = False
+                else:
+                    del dparam["components"]
+
+            if dparam.get("excluded", False) or (dparam["excl"] is True):
+                dparam["excluded"] = True
+            else:
+                exclude_this_device = False
+
+            if exclude_this_device:
+                # Device is excluded and contains no subdevices that were not excluded.
+                del devices_dict[dname]
+            else:
+                del dparam["excl"]
+                contains_devices = True
+
+        return contains_devices
+
+    allowed_devices = copy.deepcopy(item_dict)
+
+    # Process the case when all devices/subdevices are allowed
+    allow_all = len(allow_patterns) and (allow_patterns[0] is None)
+
+    add_excl_flag(allowed_devices, exclude_all=not allow_all)
+
+    # Process 'allow_patterns'
+    if not allow_all:
+        for pattern in allow_patterns:
+            apply_pattern_filter(pattern=pattern, devices_dict=allowed_devices, exclude=False)
+
+    # Process 'disallow_patterns'
+    if len(disallow_patterns) and (disallow_patterns[0] is not None):
+        for pattern in disallow_patterns:
+            apply_pattern_filter(pattern=pattern, devices_dict=allowed_devices, exclude=True)
+
+    trim_device_dict(allowed_devices)
+
+    return allowed_devices
 
 
 def _build_plan_name_list(*, components, uses_re, device_type, existing_plans):
@@ -3181,11 +3396,12 @@ def load_user_group_permissions(path_to_file=None):
     return user_group_permissions
 
 
-def _check_if_item_allowed(item_name, allow_patterns, disallow_patterns):
+def _check_if_plan_or_func_allowed(item_name, allow_patterns, disallow_patterns):
     """
     Check if an item with ``item_name`` is allowed based on ``allow_patterns``
-    and ``disallow_patterns``. If the item name represents a subdevice, then
-    patterns will be applied only to the base name.
+    and ``disallow_patterns``. Patterns may be explicitly listed names and regular expressions.
+    ``None`` may appear only as a first element of the pattern list.
+    The function should be used only with function and plan names.
 
     Parameters
     ----------
@@ -3206,24 +3422,50 @@ def _check_if_item_allowed(item_name, allow_patterns, disallow_patterns):
     """
     item_is_allowed = False
 
-    # Separate the base name (for devices). Patterns are applied only to the base name,
-    #   e.g. if the device name is 'dev1.val', then the pattern should be applied only to 'dev1'
-    item_name = item_name.split(".")[0]
+    def prepare_pattern(pattern):
+        if not isinstance(pattern, str):
+            raise TypeError("Pattern is not a string: {pattern!r} ({allow_patterns})")
+        # Prepare patterns
+        components, uses_re, _ = _split_list_element_definition(pattern)
+        if len(components) != 1:
+            raise ValueError("Name pattern for functions and plans must contain one component: {components}")
+        component = components[0][0]
+        if not uses_re:
+            if not re.search("[_a-zA-Z][_0-9a-zA-Z]*", component):
+                assert ValueError(
+                    f"Plan or function name pattern {component!r} contains invalid characters. "
+                    "The pattern could be a valid regular expression, "
+                    "but it is not labeled with ':' (e.g. ':^count$')"
+                )
+        return component, uses_re
+
     if allow_patterns:
         if allow_patterns[0] is None:
             item_is_allowed = True
         else:
             for pattern in allow_patterns:
-                if re.search(pattern, item_name):
-                    item_is_allowed = True
-                    break
+                component, uses_re = prepare_pattern(pattern)
+                if uses_re:
+                    if re.search(component, item_name):
+                        item_is_allowed = True
+                        break
+                else:
+                    if item_name == component:
+                        item_is_allowed = True
+                        break
 
     if item_is_allowed:
         if disallow_patterns and (disallow_patterns[0] is not None):
             for pattern in disallow_patterns:
-                if re.search(pattern, item_name):
-                    item_is_allowed = False
-                    break
+                component, uses_re = prepare_pattern(pattern)
+                if uses_re:
+                    if re.search(component, item_name):
+                        item_is_allowed = False
+                        break
+                else:
+                    if item_name == component:
+                        item_is_allowed = False
+                        break
 
     return item_is_allowed
 
@@ -3272,21 +3514,21 @@ def check_if_function_allowed(function_name, *, group_name, user_group_permissio
     group_allow_patterns = user_groups[group_name].get("allowed_functions", [])
     group_disallow_patterns = user_groups[group_name].get("forbidden_functions", [])
 
-    return _check_if_item_allowed(
+    return _check_if_plan_or_func_allowed(
         function_name,
         root_allow_patterns,
         root_disallow_patterns,
-    ) and _check_if_item_allowed(
+    ) and _check_if_plan_or_func_allowed(
         function_name,
         group_allow_patterns,
         group_disallow_patterns,
     )
 
 
-def _select_allowed_items(item_dict, allow_patterns, disallow_patterns):
+def _select_allowed_plans(item_dict, allow_patterns, disallow_patterns):
     """
-    Creates the dictionary of items selected from `item_dict` such that item names
-    satisfy re patterns in `allow_patterns` and not satisfy patterns in `disallow_patterns`.
+    Creates the dictionary of items selected from `item_dict` with names names that
+    satisfy patterns in `allow_patterns` and not satisfy patterns in `disallow_patterns`.
     The function does not modify the dictionary, but creates a new dictionary with
     selected items, where item values are deep copies of the values of the original
     dictionary.
@@ -3310,7 +3552,7 @@ def _select_allowed_items(item_dict, allow_patterns, disallow_patterns):
     """
     items_selected = {}
     for item_name in item_dict:
-        if _check_if_item_allowed(item_name, allow_patterns, disallow_patterns):
+        if _check_if_plan_or_func_allowed(item_name, allow_patterns, disallow_patterns):
             items_selected[item_name] = copy.deepcopy(item_dict[item_name])
 
     return items_selected
@@ -3403,13 +3645,13 @@ def load_allowed_plans_and_devices(
         if "root" in user_groups:
             group_permissions_root = user_group_permissions["user_groups"]["root"]
             if existing_devices:
-                devices_root = _select_allowed_items(
+                devices_root = _filter_device_tree(
                     existing_devices,
                     group_permissions_root.get("allowed_devices", []),
                     group_permissions_root.get("forbidden_devices", []),
                 )
             if existing_plans:
-                plans_root = _select_allowed_items(
+                plans_root = _select_allowed_plans(
                     existing_plans,
                     group_permissions_root.get("allowed_plans", []),
                     group_permissions_root.get("forbidden_plans", []),
@@ -3425,14 +3667,14 @@ def load_allowed_plans_and_devices(
                 group_permissions = user_group_permissions["user_groups"][group]
 
                 if existing_devices:
-                    selected_devices = _select_allowed_items(
+                    selected_devices = _filter_device_tree(
                         devices_root,
                         group_permissions.get("allowed_devices", []),
                         group_permissions.get("forbidden_devices", []),
                     )
 
                 if existing_plans:
-                    selected_plans = _select_allowed_items(
+                    selected_plans = _select_allowed_plans(
                         plans_root,
                         group_permissions.get("allowed_plans", []),
                         group_permissions.get("forbidden_plans", []),

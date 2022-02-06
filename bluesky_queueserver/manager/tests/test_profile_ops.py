@@ -47,7 +47,7 @@ from bluesky_queueserver.manager.profile_ops import (
     _process_plan,
     validate_plan,
     bind_plan_arguments,
-    _select_allowed_items,
+    _select_allowed_plans,
     load_allowed_plans_and_devices,
     _prepare_plans,
     _prepare_devices,
@@ -2692,8 +2692,8 @@ def _pf5h_factory():
     (_pf5d_factory(), "unsupported type of default value in decorator"),
     (_pf5e_factory(), r"List item ':\*' contains invalid regular expression '\*'"),
     (_pf5f_factory(), r"List item ':\*' contains invalid regular expression '\*'"),
-    (_pf5g_factory(), r"'\*dev' in the description '\*dev' contains invalid characters"),
-    (_pf5h_factory(), r"'\*plan' in the description '\*plan' contains invalid characters"),
+    (_pf5g_factory(), r"Element name pattern '\*dev' contains invalid characters"),
+    (_pf5h_factory(), r"Element name pattern '\*plan' contains invalid characters"),
 ])
 # fmt: on
 def test_process_plan_5_fail(plan_func, err_msg):
@@ -3199,11 +3199,11 @@ def test_split_list_element_definition_1(element_def, components, uses_re, devic
     (":?^det:?^val$", ValueError, "'?^det' can be only followed by the depth specification"),
     (":?^det:^val:^val$", ValueError, "'?^det' must be the last"),
     ("det..val", ValueError, "Plan, device or subdevice name in the description 'det..val' is an empty string"),
-    ("det.", ValueError, "Plan, device or subdevice name in the description 'det.' is an empty string"),
-    (".det", ValueError, "Plan, device or subdevice name in the description '.det' is an empty string"),
-    ("d$et", ValueError, "'d$et' in the description 'd$et' contains invalid characters"),
-    ("d$et.val", ValueError, "'d$et' in the description 'd$et.val' contains invalid characters"),
-    ("det.v$al", ValueError, "'v$al' in the description 'det.v$al' contains invalid characters"),
+    ("det.", ValueError, "Element name pattern 'det.' contains invalid characters"),
+    (".det", ValueError, "Element name pattern '.det' contains invalid characters"),
+    ("d$et", ValueError, "Element name pattern 'd$et' contains invalid characters"),
+    ("d$et.val", ValueError, "Element name pattern 'd$et.val' contains invalid characters"),
+    ("det.v$al", ValueError, "Element name pattern 'det.v$al' contains invalid characters"),
 ])
 # fmt: on
 def test_split_list_element_definition_2_fail(element_def, exception_type, msg):
@@ -3324,6 +3324,7 @@ def test_is_object_name_in_list_1(device_name, in_list, success, error_type, msg
     (":+^da:?motor$:depth=1", ["da0_motor", "da0_motor.db0_motor", "da1_det", "da1_det.db1_motor"]),
     (":^da:?motor$:depth=2", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc3_motor",
      "da0_motor.db1_det.dc1_motor", "da1_det.db1_motor"]),
+    (":^da:?^da:depth=2", []),
     ("__MOTOR__:+^da:?motor$:depth=1", ["da0_motor", "da0_motor.db0_motor", "da1_det.db1_motor"]),
     ("__READABLE__:?.*db0_motor.*:depth=3", [
         "da0_motor.db0_motor", "da0_motor.db0_motor.dc0_det", "da0_motor.db0_motor.dc1_det",
@@ -4184,7 +4185,7 @@ _prep_func_permissions = {
     "user_groups": {
         "root": {"allowed_functions": [None], "forbidden_functions": [None]},
         "admin": {
-            "allowed_functions": ["^func", "^gen", "^some_object$", "unknown"],
+            "allowed_functions": [":^func", ":^gen", ":^some_object$", "unknown"],
             "forbidden_functions": [None],
         },
     }
@@ -4830,27 +4831,24 @@ def test_load_user_group_permissions_6_fail(tmp_path):
 
 # fmt: off
 @pytest.mark.parametrize("item_dict, allow_patterns, disallow_patterns, result", [
-    ({"abc34": 1, "abcd": 2}, [r"^abc"], [r"^abc\d+$"], {"abcd": 2}),
-    ({"abc34": 1, "abcd": 2}, [r"^abc"], [r"^abc.*$"], {}),
-    ({"abc34": 1, "abcd": 2}, [r"^abc"], [r"^abcde$", r"^abc.*$"], {}),
-    ({"abc34": 1, "abcd": 2}, [r"^abc"], [r"^abcde$", r"^a.2$"], {"abc34": 1, "abcd": 2}),
-    ({"abc34": 1, "abcd": 2}, [r"d$", r"4$"], [r"^abcde$", r"^a.2$"], {"abc34": 1, "abcd": 2}),
-    ({"abc34": 1, "abcd": 2}, [None], [r"^abc\d+$"], {"abcd": 2}),
-    ({"abc34": 1, "abcd": 2}, [r"^abc"], [None], {"abc34": 1, "abcd": 2}),
+    ({"abc34": 1, "abcd": 2}, [r":^abc"], [r":^abc\d+$"], {"abcd": 2}),
+    ({"abc34": 1, "abcd": 2}, [r":^abc"], [r":^abc.*$"], {}),
+    ({"abc34": 1, "abcd": 2}, [r":^abc"], [r":^abcde$", r":^abc.*$"], {}),
+    ({"abc34": 1, "abcd": 2}, [r":^abc"], [r":^abcde$", r":^a.2$"], {"abc34": 1, "abcd": 2}),
+    ({"abc34": 1, "abcd": 2}, [r":d$", r":4$"], [r":^abcde$", r":^a.2$"], {"abc34": 1, "abcd": 2}),
+    ({"abc34": 1, "abcd": 2}, [None], [r":^abc\d+$"], {"abcd": 2}),
+    ({"abc34": 1, "abcd": 2}, [r":^abc"], [None], {"abc34": 1, "abcd": 2}),
     ({"abc34": 1, "abcd": 2}, [None], [None], {"abc34": 1, "abcd": 2}),
     ({"abc34": 1, "abcd": 2}, [], [None], {}),
     ({"abc34": 1, "abcd": 2}, [None], [], {"abc34": 1, "abcd": 2}),
-    ({}, [r"^abc"], [r"^abc\d+$"], {}),
-    # Apply to base names of subdevices
-    ({"abc34.val": 1, "abcd34.tmp": 2}, [r"34$"], [], {"abc34.val": 1, "abcd34.tmp": 2}),
-    ({"abc34.val": 1, "abcd34.tmp": 2}, [r"34$"], [r".*34$"], {}),
+    ({}, [r":^abc"], [r":^abc\d+$"], {}),
 ])
 # fmt: on
-def test_select_allowed_items_1(item_dict, allow_patterns, disallow_patterns, result):
+def test_select_allowed_plans_1(item_dict, allow_patterns, disallow_patterns, result):
     """
-    Tests for ``_select_allowed_items``.
+    Tests for ``_select_allowed_plans``.
     """
-    r = _select_allowed_items(item_dict, allow_patterns, disallow_patterns)
+    r = _select_allowed_plans(item_dict, allow_patterns, disallow_patterns)
     assert r == result
 
 
@@ -4961,11 +4959,11 @@ _user_permissions_clear = """user_groups:
       - null  # Nothing is forbidden
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":.*"  # A different way to allow all
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_devices:
       - null  # Nothing is forbidden
 """
@@ -4975,18 +4973,18 @@ _user_permissions_excluding_junk1 = """user_groups:
     allowed_plans:
       - null  # Allow all
     forbidden_plans:
-      - "^junk_plan$"
+      - ":^junk_plan$"
     allowed_devices:
       - null  # Allow all
     forbidden_devices:
-      - "^junk_device$"
+      - ":+^junk_device$:?.*"
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":.*"  # A different way to allow all
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_devices:
       - null  # Nothing is forbidden
 """
@@ -4994,20 +4992,20 @@ _user_permissions_excluding_junk1 = """user_groups:
 _user_permissions_excluding_junk2 = """user_groups:
   root:  # The group includes all available plan and devices
     allowed_plans:
-      - "^(?!.*junk)"  # Allow all plans that don't contain 'junk' in their names
+      - ":^(?!.*junk)"  # Allow all plans that don't contain 'junk' in their names
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - "^(?!.*junk)"  # Allow all devices that don't contain 'junk' in their names
+      - ":?^(?!.*junk)"  # Allow all devices that don't contain 'junk' in their names
     forbidden_devices:
       - null  # Nothing is forbidden
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":.*"  # A different way to allow all
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_devices:
       - null  # Nothing is forbidden
 """
@@ -5016,20 +5014,20 @@ _user_permissions_excluding_junk2 = """user_groups:
 _user_permissions_excluding_junk3 = """user_groups:
   root:  # The group includes all available plan and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":.*"  # A different way to allow all
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_devices:
       - null  # Nothing is forbidden
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - "^(?!.*junk)"  # Allow all plans that don't contain 'junk' in their names
+      - ":^(?!.*junk)"  # Allow all plans that don't contain 'junk' in their names
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - "^(?!.*junk)"  # Allow all devices that don't contain 'junk' in their names
+      - ":+^(?!.*junk):?.*"  # Allow all devices that don't contain 'junk' in their names
     forbidden_devices:
       - null  # Nothing is forbidden
 """
@@ -5124,11 +5122,11 @@ _user_permissions_incomplete_1 = """user_groups:
       - null  # Nothing is forbidden
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_devices:
       - null  # Nothing is forbidden
 """
@@ -5145,9 +5143,9 @@ _user_permissions_incomplete_2 = """user_groups:
       - null  # Nothing is forbidden
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     allowed_devices:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
 """
 
 _user_permissions_incomplete_3 = """user_groups:
@@ -5175,11 +5173,11 @@ _user_permissions_incomplete_4 = """user_groups:
       - null  # Allow all
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_devices:
       - null  # Nothing is forbidden
 """
@@ -5192,11 +5190,11 @@ _user_permissions_incomplete_5 = """user_groups:
       - null  # Nothing is forbidden
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_devices:
       - null  # Nothing is forbidden
 """
@@ -5347,11 +5345,11 @@ _user_permissions_subdevices_1 = """user_groups:
       - null  # Everything is allowed
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":.*"  # A different way to allow all
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_devices:
       - null  # Nothing is forbidden
 """
@@ -5364,11 +5362,11 @@ _user_permissions_subdevices_2 = """user_groups:
       - null  # Everything is allowed
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":.*"  # A different way to allow all
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - "g_B$"  # Allow 'stg_B'
+      - ":+g_B$:?.*"  # Allow 'stg_B'
     forbidden_devices:
       - null  # Nothing is forbidden
 """
@@ -5381,13 +5379,13 @@ _user_permissions_subdevices_3 = """user_groups:
       - null  # Everything is allowed
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":.*"  # A different way to allow all
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_devices:
-      - "g_B$"  # Block 'stg_B'
+      - ":+g_B$:?.*"  # Block 'stg_B'
 """
 
 _user_permissions_subdevices_4 = """user_groups:
@@ -5395,12 +5393,12 @@ _user_permissions_subdevices_4 = """user_groups:
     allowed_plans:
       - null  # Everything is allowed
     allowed_devices:
-      - "g_B$"  # Allow 'stg_B'
+      - ":+g_B$:?.*"  # Allow 'stg_B'
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":.*"  # A different way to allow all
     allowed_devices:
-       - ".*"  # A different way to allow all
+       - ":?.*"  # A different way to allow all
 """
 
 _user_permissions_subdevices_5 = """user_groups:
@@ -5410,12 +5408,12 @@ _user_permissions_subdevices_5 = """user_groups:
     allowed_devices:
       - null  # Everything is allowed
     forbidden_devices:
-      - "g_B$"  # Block 'stg_B'
+      - ":+g_B$:?.*"  # Block 'stg_B'
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":.*"  # A different way to allow all
     allowed_devices:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
 """
 
 
@@ -5616,21 +5614,21 @@ _func_permissions_dict_4 = {
 _func_permissions_dict_5 = {
     "user_groups": {
         "root": {"allowed_functions": [None]},
-        "admin": {"allowed_functions": [None], "forbidden_functions": [".*"]},
+        "admin": {"allowed_functions": [None], "forbidden_functions": [":.*"]},
     }
 }
 
 _func_permissions_dict_6 = {
     "user_groups": {
         "root": {"allowed_functions": [None]},
-        "admin": {"allowed_functions": ["^tmp", "^test"], "forbidden_functions": ["end$"]},
+        "admin": {"allowed_functions": [":^tmp", ":^test"], "forbidden_functions": [":end$"]},
     }
 }
 
 _func_permissions_dict_7 = {
     "user_groups": {
         "root": {"allowed_functions": [None]},
-        "admin": {"allowed_functions": ["^tmp", "^test"], "forbidden_functions": ["^test"]},
+        "admin": {"allowed_functions": [":^tmp", ":^test"], "forbidden_functions": [":^test"]},
     }
 }
 

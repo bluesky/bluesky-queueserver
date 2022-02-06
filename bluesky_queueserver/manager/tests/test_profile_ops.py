@@ -2255,23 +2255,23 @@ _pf4a_processed = {
         "parameters": {
             "p1": {
                 "annotation": "devices1",
-                "devices": {"devices1": ("some_dev", ":motor$:+motor$:det$")},
+                "devices": {"devices1": ("some_dev", ":-motor$:+motor$:det$")},
             },
             "p2": {
                 "annotation": "devices2",
-                "devices": {"devices2": ("some_dev", "__MOTOR__:motor$:+motor$:det$")},
+                "devices": {"devices2": ("some_dev", "__MOTOR__:-motor$:+motor$:det$")},
             },
             "p3": {
                 "annotation": "devices3",
-                "devices": {"devices3": ("some_dev", "__READABLE__:+motor$:motor$:det$")},
+                "devices": {"devices3": ("some_dev", "__READABLE__:motor$:-motor$:det$")},
             },
             "p4": {
                 "annotation": "devices4",
-                "devices": {"devices4": ("__MOTOR__:motor$:+motor$:det$", "__READABLE__:+motor$:motor$:det$")},
+                "devices": {"devices4": ("__MOTOR__:-motor$:motor$:det$", "__READABLE__:motor$:-motor$:det$")},
             },
             "p5": {
                 "annotation": "devices5",
-                "devices": {"devices5": ("__MOTOR__:motor$:+motor$:det$", "__FLYABLE__:.*")},
+                "devices": {"devices5": ("__MOTOR__:-motor$:motor$:det$", "__FLYABLE__:.*")},
             },
         }
     }
@@ -2690,10 +2690,10 @@ def _pf5h_factory():
     (_pf5b, "name 'Plans1' is not defined'"),
     (_pf5c, "Missing default value for the parameter 'detector' in the plan signature"),
     (_pf5d_factory(), "unsupported type of default value in decorator"),
-    (_pf5e_factory(), r"List item ':\*' contains invalid regular expression '\*'"),
-    (_pf5f_factory(), r"List item ':\*' contains invalid regular expression '\*'"),
-    (_pf5g_factory(), r"Element name pattern '\*dev' contains invalid characters"),
-    (_pf5h_factory(), r"Element name pattern '\*plan' contains invalid characters"),
+    (_pf5e_factory(), r"Name pattern ':\*' contains invalid regular expression '\*'"),
+    (_pf5f_factory(), r"Name pattern ':\*' contains invalid regular expression '\*'"),
+    (_pf5g_factory(), r"Name pattern '\*dev' contains invalid characters"),
+    (_pf5h_factory(), r"Name pattern '\*plan' contains invalid characters"),
 ])
 # fmt: on
 def test_process_plan_5_fail(plan_func, err_msg):
@@ -3305,29 +3305,31 @@ def test_is_object_name_in_list_1(device_name, in_list, success, error_type, msg
     (":.+", ["da0_motor", "da1_det"]),
     (":.*", ["da0_motor", "da1_det"]),
     (":+.*", ["da0_motor", "da1_det"]),
-    (":.+:^db0", ["da0_motor.db0_motor", "da1_det.db0_det"]),
-    (":+.+:^db0", ["da0_motor", "da0_motor.db0_motor", "da1_det", "da1_det.db0_det"]),
-    (":+det$:^db0", ["da1_det", "da1_det.db0_det"]),
-    (":.+:+^db0:^dc", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc0_det", "da0_motor.db0_motor.dc1_det",
+    (":-.*", ["da0_motor", "da1_det"]),  # "-" is ignored
+    (":-.+:^db0", ["da0_motor.db0_motor", "da1_det.db0_det"]),
+    (":.+:^db0", ["da0_motor", "da0_motor.db0_motor", "da1_det", "da1_det.db0_det"]),
+    (":+.+:^db0", ["da0_motor", "da0_motor.db0_motor", "da1_det", "da1_det.db0_det"]),  # "+" is not needed
+    (":det$:^db0", ["da1_det", "da1_det.db0_det"]),
+    (":-.+:^db0:^dc", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc0_det", "da0_motor.db0_motor.dc1_det",
      "da0_motor.db0_motor.dc2_det", "da0_motor.db0_motor.dc3_motor", "da1_det.db0_det"]),
-    ("__MOTOR__:.+:+^db0:^dc", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc3_motor"]),
-    ("__DETECTOR__:.+:+^db0:^dc", ["da0_motor.db0_motor.dc0_det", "da0_motor.db0_motor.dc1_det",
+    ("__MOTOR__:-.+:^db0:^dc", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc3_motor"]),
+    ("__DETECTOR__:-.+:^db0:^dc", ["da0_motor.db0_motor.dc0_det", "da0_motor.db0_motor.dc1_det",
      "da0_motor.db0_motor.dc2_det", "da1_det.db0_det"]),
-    ("__READABLE__:.+:+^(db0)|(db2):^dc", [
+    ("__READABLE__:-.+:^(db0)|(db2):^dc", [
         "da0_motor.db0_motor", "da0_motor.db0_motor.dc0_det", "da0_motor.db0_motor.dc1_det",
         "da0_motor.db0_motor.dc2_det", "da0_motor.db0_motor.dc3_motor", "da1_det.db0_det"]),
-    ("__FLYABLE__:.+:+^(db0)|(db2):^dc", ["da0_motor.db2_flyer"]),
-    ("__FLYABLE__:.+:+^db0:^dc", []),
+    ("__FLYABLE__:-.+:^(db0)|(db2):^dc", ["da0_motor.db2_flyer"]),
+    ("__FLYABLE__:-.+:^db0:^dc", []),
     # Full-name patterns
     (":?motor$", ["da0_motor", "da0_motor.db0_motor", "da0_motor.db0_motor.dc3_motor",
      "da0_motor.db0_motor.dc3_motor.dd1_motor", "da0_motor.db1_det.dc1_motor", "da1_det.db1_motor"]),
     (":?motor$:depth=1", ["da0_motor"]),
     (":?motor$:depth=2", ["da0_motor", "da0_motor.db0_motor", "da1_det.db1_motor"]),
-    (":+^da:?motor$:depth=1", ["da0_motor", "da0_motor.db0_motor", "da1_det", "da1_det.db1_motor"]),
-    (":^da:?motor$:depth=2", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc3_motor",
+    (":^da:?motor$:depth=1", ["da0_motor", "da0_motor.db0_motor", "da1_det", "da1_det.db1_motor"]),
+    (":-^da:?motor$:depth=2", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc3_motor",
      "da0_motor.db1_det.dc1_motor", "da1_det.db1_motor"]),
-    (":^da:?^da:depth=2", []),
-    ("__MOTOR__:+^da:?motor$:depth=1", ["da0_motor", "da0_motor.db0_motor", "da1_det.db1_motor"]),
+    (":-^da:?^da:depth=2", []),
+    ("__MOTOR__:^da:?motor$:depth=1", ["da0_motor", "da0_motor.db0_motor", "da1_det.db1_motor"]),
     ("__READABLE__:?.*db0_motor.*:depth=3", [
         "da0_motor.db0_motor", "da0_motor.db0_motor.dc0_det", "da0_motor.db0_motor.dc1_det",
         "da0_motor.db0_motor.dc2_det", "da0_motor.db0_motor.dc3_motor"]),
@@ -3367,6 +3369,9 @@ _allowed_plans_set_1 = {"count", "count_modified", "mycount", "other_plan"}
     (":^count$", ["count"]),
     (":^count", ["count", "count_modified"]),
     (":count$", ["count", "mycount"]),
+    (":+count$", ["count", "mycount"]),
+    (":-count$", ["count", "mycount"]),
+    (":?count$", ["count", "mycount"]),
 ])
 # fmt: on
 def test_build_plan_name_list_1(plan_def, expected_name_list):
@@ -3383,10 +3388,9 @@ def test_build_plan_name_list_1(plan_def, expected_name_list):
 # fmt: off
 @pytest.mark.parametrize("plan_def, exception_type, msg", [
     ("abc.def", ValueError, "may contain only one component. Components: ['abc', 'def']"),
-    (":?abc:depth=5", ValueError, "Depth specification can not be part of the element"),
-    ("__READABLE__:abc", ValueError, "Device type can not be included in the plan description: '__READABLE__:'"),
-    (":+abc", ValueError, "Plus sign (+) can not be used in a pattern for a plan name: '+abc'"),
-    (":?abc", ValueError, "Question mark (?) can not be used in a pattern for a plan name: '?abc'"),
+    (":?abc:depth=5", ValueError, "Depth specification can not be part of the name pattern for a plan"),
+    ("__READABLE__:abc", ValueError,
+     "Device type can not be included in the name pattern for a plan: '__READABLE__:'"),
 ])
 # fmt: on
 def test_build_plan_name_list_2_fail(plan_def, exception_type, msg):
@@ -5327,7 +5331,7 @@ stg_B = SimBundle(name="sim_bundle")  # Used for tests
         },
         "device2": {
             "annotation": "Devices1",
-            "devices": {"Devices1": (":^stg:+^det:A$", ":.*:.+mtrs$:y")}
+            "devices": {"Devices1": (":-^stg:+^det:A$", ":-.*:-.+mtrs$:y")}
         },
         "device3": {
             "annotation": "Devices1",
@@ -5368,7 +5372,7 @@ _user_permissions_subdevices_2 = """user_groups:
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - ":+g_B$:?.*"  # Allow 'stg_B'
+      - ":g_B$:?.*"  # Allow 'stg_B'
     forbidden_devices:
       - null  # Nothing is forbidden
 """
@@ -5387,7 +5391,7 @@ _user_permissions_subdevices_3 = """user_groups:
     allowed_devices:
       - ":?.*"  # A different way to allow all
     forbidden_devices:
-      - ":+g_B$:?.*"  # Block 'stg_B'
+      - ":g_B$:?.*"  # Block 'stg_B'
 """
 
 _user_permissions_subdevices_4 = """user_groups:
@@ -5395,7 +5399,7 @@ _user_permissions_subdevices_4 = """user_groups:
     allowed_plans:
       - null  # Everything is allowed
     allowed_devices:
-      - ":+g_B$:?.*"  # Allow 'stg_B'
+      - ":g_B$:?.*"  # Allow 'stg_B'
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
       - ":.*"  # A different way to allow all
@@ -5410,7 +5414,7 @@ _user_permissions_subdevices_5 = """user_groups:
     allowed_devices:
       - null  # Everything is allowed
     forbidden_devices:
-      - ":+g_B$:?.*"  # Block 'stg_B'
+      - ":g_B$:?.*"  # Block 'stg_B'
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
       - ":.*"  # A different way to allow all

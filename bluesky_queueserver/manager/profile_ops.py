@@ -1226,11 +1226,6 @@ def _build_device_name_list(*, components, uses_re, device_type, existing_device
     condition = _get_device_type_condition(device_type)
 
     if uses_re:
-        # Always Set 'include_devices = True' for the last component
-        components = copy.copy(components)
-        _ = components[-1]
-        components[-1] = (_[0], True, _[2], _[3])
-
         max_depth, device_list = len(components), []
 
         def process_devices_full_name(devices, base_name, name_suffix, pattern, depth, depth_stop):
@@ -1359,13 +1354,7 @@ def _filter_device_tree(item_dict, allow_patterns, disallow_patterns):
         components, uses_re, device_type = _split_name_pattern(pattern)
 
         if uses_re:
-            # Always Set 'include_devices = True' for the last component
-            components = copy.copy(components)
-            _ = components[-1]
-            components[-1] = (_[0], True, _[2], _[3])
-
             condition = _get_device_type_condition(device_type)
-
             max_depth = len(components)
 
             def apply_filter_full_name(devices, name_suffix, pattern, depth, depth_stop, *, exclude):
@@ -1514,17 +1503,12 @@ def _build_plan_name_list(*, components, uses_re, device_type, existing_plans):
     pattern, include_devices, is_full_re, remaining_depth = components[0]
 
     if remaining_depth is not None:
-        raise ValueError(f"Depth specification can not be part of the element describing a plan: {pattern!r}")
+        raise ValueError(f"Depth specification can not be part of the name pattern for a plan: {pattern!r}")
 
     if device_type:
-        raise ValueError(f"Device type can not be included in the plan description: {(device_type + ':')!r}")
-
-    # '?' and '+' should not be used in plan descriptions, since they have no meaning
-    #   and would contaminate the code
-    if include_devices:
-        raise ValueError(f"Plus sign (+) can not be used in a pattern for a plan name: {('+'+pattern)!r}")
-    if is_full_re:
-        raise ValueError(f"Question mark (?) can not be used in a pattern for a plan name: {('?'+pattern)!r}")
+        raise ValueError(
+            f"Device type can not be included in the name pattern for a plan: {(device_type + ':')!r}"
+        )
 
     plan_list = []
 

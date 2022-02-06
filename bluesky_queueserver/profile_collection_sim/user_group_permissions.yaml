@@ -31,12 +31,12 @@ user_groups:
       - ":^adaptive_scan$" # Use regular expression patterns
       - ":^inner_product"
     allowed_devices:
-      - ":+^det:?.*"  # Use regular expression patterns
-      - ":+^motor:?.*"
-      - ":+^sim_bundle_A:?.*"
+      - ":^det:?.*"  # Use regular expression patterns
+      - ":^motor:?.*"
+      - ":^sim_bundle_A:?.*"
     forbidden_devices:
-      - ":+^det[3-5]$:?.*" # Use regular expression patterns
-      - ":+^motor\\d+$:?.*"
+      - ":^det[3-5]$:?.*" # Use regular expression patterns
+      - ":^motor\\d+$:?.*"
     allowed_functions:
       - ":element$"
       - ":elements$"

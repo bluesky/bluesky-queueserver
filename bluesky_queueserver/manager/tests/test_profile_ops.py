@@ -69,6 +69,7 @@ from bluesky_queueserver.manager.profile_ops import (
     _is_object_name_in_list,
     _get_nspace_object,
     _filter_allowed_plans,
+    _filter_device_tree,
 )
 
 # User name and user group name used throughout most of the tests.
@@ -3296,7 +3297,7 @@ def test_is_object_name_in_list_1(device_name, in_list, success, error_type, msg
 
 
 # fmt: off
-@pytest.mark.parametrize("element_def, expected_name_list", [
+@pytest.mark.parametrize("name_pattern, expected_name_list", [
     # Device names
     ("da0_motor", ["da0_motor"]),
     ("da0_motor.db0_motor", ["da0_motor.db0_motor"]),
@@ -3336,11 +3337,11 @@ def test_is_object_name_in_list_1(device_name, in_list, success, error_type, msg
     ("__MOTOR__:?.*db0_motor.*:depth=3", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc3_motor"]),
 ])
 # fmt: on
-def test_build_device_name_list_1(element_def, expected_name_list):
+def test_build_device_name_list_1(name_pattern, expected_name_list):
     """
     ``_build_device_name_list``: basic tests
     """
-    components, uses_re, device_type = _split_name_pattern(element_def)
+    components, uses_re, device_type = _split_name_pattern(name_pattern)
     name_list = _build_device_name_list(
         components=components, uses_re=uses_re, device_type=device_type, existing_devices=_allowed_devices_dict_1
     )
@@ -3356,6 +3357,79 @@ def test_build_device_name_list_2_fail():
         _build_device_name_list(
             components=components, uses_re=uses_re, device_type="unknown", existing_devices=_allowed_devices_dict_1
         )
+
+
+# fmt: off
+@pytest.mark.parametrize("allow_patterns, disallow_patterns, expected_name_list", [
+    # Allow all
+    ([None], [None], ['da0_motor', 'da0_motor.db0_motor', 'da0_motor.db0_motor.dc0_det',
+                      'da0_motor.db0_motor.dc1_det', 'da0_motor.db0_motor.dc2_det',
+                      'da0_motor.db0_motor.dc3_motor', 'da0_motor.db0_motor.dc3_motor.dd0_det',
+                      'da0_motor.db0_motor.dc3_motor.dd1_motor', 'da0_motor.db1_det',
+                      'da0_motor.db1_det.dc0_det', 'da0_motor.db1_det.dc1_motor',
+                      'da0_motor.db2_flyer', 'da1_det', 'da1_det.db0_det', 'da1_det.db1_motor']),
+    ([":?.*"], [None], ['da0_motor', 'da0_motor.db0_motor', 'da0_motor.db0_motor.dc0_det',
+                        'da0_motor.db0_motor.dc1_det', 'da0_motor.db0_motor.dc2_det',
+                        'da0_motor.db0_motor.dc3_motor', 'da0_motor.db0_motor.dc3_motor.dd0_det',
+                        'da0_motor.db0_motor.dc3_motor.dd1_motor', 'da0_motor.db1_det',
+                        'da0_motor.db1_det.dc0_det', 'da0_motor.db1_det.dc1_motor',
+                        'da0_motor.db2_flyer', 'da1_det', 'da1_det.db0_det', 'da1_det.db1_motor']),
+    ([":?.*"], [], ['da0_motor', 'da0_motor.db0_motor', 'da0_motor.db0_motor.dc0_det',
+                    'da0_motor.db0_motor.dc1_det', 'da0_motor.db0_motor.dc2_det',
+                    'da0_motor.db0_motor.dc3_motor', 'da0_motor.db0_motor.dc3_motor.dd0_det',
+                    'da0_motor.db0_motor.dc3_motor.dd1_motor', 'da0_motor.db1_det',
+                    'da0_motor.db1_det.dc0_det', 'da0_motor.db1_det.dc1_motor',
+                    'da0_motor.db2_flyer', 'da1_det', 'da1_det.db0_det', 'da1_det.db1_motor']),
+    # Disallow all
+    ([None], [":?.*"], []),
+    ([], [None], []),
+    ([], [], []),
+    # Test different combinations
+    ([":^da1", ":-^da0:^db1"], [None], ['da0_motor.db1_det', 'da1_det']),
+    ([":?.*"], [":^da1", ":-^da0:^db1"],
+     ['da0_motor', 'da0_motor.db0_motor', 'da0_motor.db0_motor.dc0_det',
+      'da0_motor.db0_motor.dc1_det', 'da0_motor.db0_motor.dc2_det',
+      'da0_motor.db0_motor.dc3_motor', 'da0_motor.db0_motor.dc3_motor.dd0_det',
+      'da0_motor.db0_motor.dc3_motor.dd1_motor',
+      'da0_motor.db1_det.dc0_det', 'da0_motor.db1_det.dc1_motor',
+      'da0_motor.db2_flyer', 'da1_det.db0_det', 'da1_det.db1_motor']),
+    ([":-^da1:.*", ":^da0:-^db1:.*"], [None],
+     ['da0_motor', 'da0_motor.db1_det.dc0_det', 'da0_motor.db1_det.dc1_motor',
+      'da1_det.db0_det', 'da1_det.db1_motor']),
+    ([":-^da1:.*", ":^da0:-^db1:.*"], [":-^da0:-^db1:det$"],
+     ['da0_motor', 'da0_motor.db1_det.dc1_motor', 'da1_det.db0_det', 'da1_det.db1_motor']),
+    ([":-^da1:.*", ":^da0:-^db1:.*"], [":^da0:-^db1:det$"],
+     ['da0_motor.db1_det.dc1_motor', 'da1_det.db0_det', 'da1_det.db1_motor']),
+    ([":-^da1:?motor$", ":-^da0:-^db0:?motor$"], [None],
+     ['da0_motor.db0_motor.dc3_motor', 'da0_motor.db0_motor.dc3_motor.dd1_motor', 'da1_det.db1_motor']),
+    ([":-^da1:?motor$", ":-^da0:-^db0:?motor$"], [":^da0:?dd1"],
+     ['da0_motor.db0_motor.dc3_motor', 'da1_det.db1_motor']),
+    ([":-^da1:?motor$", ":-^da0:-^db0:?motor$"], [":^da0:?dd1:depth=2"],
+     ['da0_motor.db0_motor.dc3_motor', 'da0_motor.db0_motor.dc3_motor.dd1_motor', 'da1_det.db1_motor']),
+    ([":-^da1:?motor$", ":-^da0:-^db0:?motor$"], [":^da0:?dd1:depth=3"],
+     ['da0_motor.db0_motor.dc3_motor', 'da1_det.db1_motor']),
+    ([":-^da1:?motor$", ":-^da0:-^db0:?motor$"], [":^da0:?dd1:depth=4"],
+     ['da0_motor.db0_motor.dc3_motor', 'da1_det.db1_motor']),
+    ([":-^da1:?motor$", ":-^da0:?motor$:depth=2"], [None],
+     ['da0_motor.db0_motor', 'da0_motor.db0_motor.dc3_motor',
+      'da0_motor.db1_det.dc1_motor', 'da1_det.db1_motor'])
+])
+# fmt: on
+def test_filter_device_name_list_1(allow_patterns, disallow_patterns, expected_name_list):
+    """
+    ``_filter_device_name_list``: basic tests
+    """
+
+    allowed_devices = _filter_device_tree(
+        item_dict=_allowed_devices_dict_1, allow_patterns=allow_patterns, disallow_patterns=disallow_patterns
+    )
+
+    components, uses_re, device_type = _split_name_pattern(":?.*")
+    name_list = _build_device_name_list(
+        components=components, uses_re=uses_re, device_type=device_type, existing_devices=allowed_devices
+    )
+
+    assert name_list == expected_name_list, pprint.pformat(name_list)
 
 
 _allowed_plans_set_1 = {"count", "count_modified", "mycount", "other_plan"}

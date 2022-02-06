@@ -911,35 +911,44 @@ _supported_device_types = ("", "__READABLE__", "__FLYABLE__", "__DETECTOR__", "_
 
 def _split_list_element_definition(element_def):
     """
-    Split definition of the list into components. The list element may contain device or
-    subdevice name (e.g. ``det1``, ``det1.val``, ``sim_stage.det.val``) or specify
-    regular expressions used to find elements in the list of existing elements (e.g.
-    ``:^det:^val$``, ``:+^det:^val$``, ``__DETECTORS__:+^sim_stage$:+.+:^val$``).
-    The ``+`` character immediately following ``:`` is not part of the regular expression.
-    It indicates that all subdevices that satisfy the condition that are found at the
-    current depth are included in the list. The ``__DETECTORS__`` keyword indicates that
-    only detectors that satisfy the conditions are included in the list. The following
-    keywords are currently supported: ``__READABLE__``, ``__FLYABLE__``, ``__DETECTOR__``
-    and ``__MOTOR__``. The definition may also contain 'full name' patterns that are
-    applyed to the remaining part of the subdevice name. The 'full name' pattern is
-    defined by putting '?' after ':', e.g. the pattern ``:?^det.*val$`` selects
-    all device and subdevice names that starts with ``det`` and ends with ``val``,
-    such as ``detector_val``, ``det.val``, ``det.somesubdevice.val`` etc. The search
-    depth may be limited by specifying ``depth`` parameter after the full name pattern,
-    e.g. ``:?det.*val$:depth=5`` limits depth search to 5. Depth values starts with 1,
-    e.g. in the example above, ``:?det.*val$:depth=1`` will find only ``detector_val``.
-    If 'full name' pattern is preceded with a number of subdevice name patterns,
-    then 'full_name' pattern is applied to the remainder of the name, e.g.
-    ``:+^sim_stage$:?^det.*val$:depth=3`` whould select ``sim_stage`` and all its
-    subdevices such as ``sim_stage.det5.val`` searching to the total depth of 4
-    (``sim_stage`` name is at level 1 and full name search is performed at levels
+    Split name pattern into components. The pattern may represent names of devices
+    plans or functions. The patterns for device names may consist of multiple components,
+    while the patterns from plan and function name always have one component.
+    For devices, the list element may contain device or subdevice name (e.g. ``det1``,
+    ``det1.val``, ``sim_stage.det.val``) or specify regular expressions used to find
+    elements in the list of existing elements (e.g. ``:^det:^val$``, ``:-^det:^val$``,
+    ``__DETECTORS__:-^sim_stage$:.+:^val$``). The ``-`` character immediately following
+    ``:`` (``:-``) is not part of the regular expression. It indicates that all subdevices
+    with matching regular expressions in this and previous pattern components are
+    not included in the list but search continues to its subdevices. Optionally ``:``
+    may be followed by ``+`` character, which indicates that the device must be included
+    in the search result (this is the default behavior). The ``__DETECTORS__`` keyword
+    indicates that only detectors that satisfy the conditions are included in the list.
+    The following keywords are currently supported: ``__READABLE__``, ``__FLYABLE__``,
+    ``__DETECTOR__`` and ``__MOTOR__``. The definition may also contain 'full name'
+    patterns that are applyed to the remaining part of the subdevice name. The
+    'full name' pattern is defined by putting '?' after ':', e.g. the pattern
+    ``:?^det.*val$`` selects  all device and subdevice names that starts with ``det``
+    and ends with ``val``, such as ``detector_val``, ``det.val``, ``det.somesubdevice.val``
+    etc. The search depth may be limited by specifying ``depth`` parameter after
+    the full name pattern, e.g. ``:?det.*val$:depth=5`` limits depth search to 5.
+    Depth values starts with 1, e.g. in the example above, ``:?det.*val$:depth=1``
+    will find only ``detector_val``. If 'full name' pattern is preceded with a number
+    of subdevice name patterns, then 'full_name' pattern is applied to the remainder of
+    the name, e.g. ``:^sim_stage$:?^det.*val$:depth=3`` would select ``sim_stage``
+    and all its subdevices such as ``sim_stage.det5.val`` searching to the total depth
+    of 4 (``sim_stage`` name is at level 1 and full name search is performed at levels
     2, 3 and 4).
+
+    Note, that the last pattern component can not be deselected. For example ``:^det:-val$``
+    is identical to ``:^det:val$``.
 
     The function may be applied to list elements describing plans, since they consist of
     the same set of components. The element may be a name, such as ``count`` or
     regular expression used to pick plans from the list of existing names, such as ``:^count``.
     Since plan names and patterns are much simpler, additional validation of the split
-    results should be performed.
+    results should be performed. The separators ``:+``, ``:-`` and ``:?`` can still be used
+    with plan or function names, but they have no meaning and are ignored during processing.
 
     Parameters
     ----------
@@ -970,14 +979,14 @@ def _split_list_element_definition(element_def):
     """
     if not isinstance(element_def, str):
         raise TypeError(
-            f"List item {element_def!r} has incorrect type {type(element_def)!r}. Expected type: 'str'"
+            f"Name pattern {element_def!r} has incorrect type {type(element_def)!r}. Expected type: 'str'"
         )
 
     # Remove spaces
     element_def = element_def.replace(" ", "")
 
     if not len(element_def):
-        raise ValueError(f"List item {element_def!r} is an empty string")
+        raise ValueError(f"Name pattern {element_def!r} is an empty string")
 
     # Check if the element is defined using regular expressions
     uses_re = ":" in element_def
@@ -1025,8 +1034,8 @@ def _split_list_element_definition(element_def):
                 f"Device type {device_type!r} is not supported. Supported types: {_supported_device_types}"
             )
 
-        components_include = [False] * len(components)
-        components_include = [True if _.startswith("+") else False for _ in components]
+        components_include = [False if _.startswith("-") else True for _ in components]
+        components_include[-1] = True  # Always set the last component as included.
 
         components_full_re = [False] * len(components)
         components_depth = [None] * len(components)  # 'depth == None' means that depth is not specified
@@ -1035,22 +1044,24 @@ def _split_list_element_definition(element_def):
             components_depth[n_full_re] = depth
 
         # Remove '+' and '?' from the beginning of each component
-        components = [_[1:] if _.startswith("+") or _.startswith("?") else _ for _ in components]
+        components = [
+            _[1:] if _.startswith("+") or _.startswith("-") or _.startswith("?") else _ for _ in components
+        ]
 
         for c in components:
             if not c:
-                raise ValueError(f"List item {element_def!r} contains empty components")
+                raise ValueError(f"Name pattern {element_def!r} contains empty components")
             try:
                 re.compile(c)
             except re.error:
-                raise ValueError(f"List item {element_def!r} contains invalid regular expression {c!r}")
+                raise ValueError(f"Name pattern {element_def!r} contains invalid regular expression {c!r}")
 
         components = list(zip(components, components_include, components_full_re, components_depth))
 
     else:
         if not re.search(r"^[_a-zA-Z][_a-zA-Z0-9\.]*[_a-zA-Z0-9]$", element_def):
             raise ValueError(
-                f"Element name pattern {element_def!r} contains invalid characters. "
+                f"Name pattern {element_def!r} contains invalid characters. "
                 "The pattern could be a valid regular expression, but it is not labeled with ':' (e.g. ':^det$')"
             )
         components = element_def.split(".")
@@ -1059,7 +1070,7 @@ def _split_list_element_definition(element_def):
                 raise ValueError(
                     f"Plan, device or subdevice name in the description {element_def!r} is an empty string"
                 )
-        components_include = [False] * len(components)
+        components_include = [True] * len(components)
         components_full_re = [False] * len(components)
         components_depth = [None] * len(components)
 

@@ -3150,28 +3150,30 @@ def test_devices_from_nspace():
 # fmt: off
 @pytest.mark.parametrize("element_def, components, uses_re, device_type", [
     # Device/subdevice names
-    ("det1", [("det1", False, False, None)], False, ""),
-    ("det1 ", [("det1", False, False, None)], False, ""),  # Spaces are removed
-    ("det1.val", [("det1", False, False, None), ("val", False, False, None)], False, ""),
-    ("sim_stage.det1.val", [("sim_stage", False, False, None), ("det1", False, False, None),
-     ("val", False, False, None)], False, ""),
+    ("det1", [("det1", True, False, None)], False, ""),
+    ("det1 ", [("det1", True, False, None)], False, ""),  # Spaces are removed
+    ("det1.val", [("det1", True, False, None), ("val", True, False, None)], False, ""),
+    ("sim_stage.det1.val", [("sim_stage", True, False, None), ("det1", True, False, None),
+     ("val", True, False, None)], False, ""),
     # Regular expressions
-    (":^det", [("^det", False, False, None)], True, ""),
-    (":^det:^val$", [("^det", False, False, None), ("^val$", False, False, None)], True, ""),
-    (":+^det:^val$", [("^det", True, False, None), ("^val$", False, False, None)], True, ""),
-    (":+sim_stage:^det:^val$", [("sim_stage", True, False, None), ("^det", False, False, None),
-     ("^val$", False, False, None)], True, ""),
-    ("__READABLE__:.*", [(".*", False, False, None)], True, "__READABLE__"),
-    ("__FLYABLE__:.*", [(".*", False, False, None)], True, "__FLYABLE__"),
-    ("__DETECTOR__:.*:.*", [(".*", False, False, None), (".*", False, False, None)], True, "__DETECTOR__"),
-    ("__MOTOR__:+.*:.*", [(".*", True, False, None), (".*", False, False, None)], True, "__MOTOR__"),
+    (":^det", [("^det", True, False, None)], True, ""),
+    (":^det:^val$", [("^det", True, False, None), ("^val$", True, False, None)], True, ""),
+    (":+^det:+^val$", [("^det", True, False, None), ("^val$", True, False, None)], True, ""),
+    (":-^det:^val$", [("^det", False, False, None), ("^val$", True, False, None)], True, ""),
+    (":-^det:-^val$", [("^det", False, False, None), ("^val$", True, False, None)], True, ""),
+    (":sim_stage:-^det:^val$", [("sim_stage", True, False, None), ("^det", False, False, None),
+     ("^val$", True, False, None)], True, ""),
+    ("__READABLE__:.*", [(".*", True, False, None)], True, "__READABLE__"),
+    ("__FLYABLE__:.*", [(".*", True, False, None)], True, "__FLYABLE__"),
+    ("__DETECTOR__:-.*:.*", [(".*", False, False, None), (".*", True, False, None)], True, "__DETECTOR__"),
+    ("__MOTOR__:.*:.*", [(".*", True, False, None), (".*", True, False, None)], True, "__MOTOR__"),
     # Full-name regular expressions
-    (":?det1", [("det1", False, True, None)], True, ""),
-    (":?^det1$:depth=5", [("^det1$", False, True, 5)], True, ""),
-    (r":?.*\.^val$", [(r".*\.^val$", False, True, None)], True, ""),
-    (r"__READABLE__:?.*\.^val$", [(r".*\.^val$", False, True, None)], True, "__READABLE__"),
-    (":+^det:?^val$", [("^det", True, False, None), ("^val$", False, True, None)], True, ""),
-    (":+^det:?^val$:depth=1", [("^det", True, False, None), ("^val$", False, True, 1)], True, ""),
+    (":?det1", [("det1", True, True, None)], True, ""),
+    (":?^det1$:depth=5", [("^det1$", True, True, 5)], True, ""),
+    (r":?.*\.^val$", [(r".*\.^val$", True, True, None)], True, ""),
+    (r"__READABLE__:?.*\.^val$", [(r".*\.^val$", True, True, None)], True, "__READABLE__"),
+    (":-^det:?^val$", [("^det", False, False, None), ("^val$", True, True, None)], True, ""),
+    (":^det:?^val$:depth=1", [("^det", True, False, None), ("^val$", True, True, 1)], True, ""),
 ])
 # fmt: on
 def test_split_list_element_definition_1(element_def, components, uses_re, device_type):
@@ -3186,11 +3188,11 @@ def test_split_list_element_definition_1(element_def, components, uses_re, devic
 
 # fmt: off
 @pytest.mark.parametrize("element_def, exception_type, msg", [
-    (10, TypeError, "List item 10 has incorrect type"),
-    ("", ValueError, "List item '' is an empty string"),
-    (":", ValueError, "List item ':' contains empty components"),
-    (":^det:", ValueError, "List item ':^det:' contains empty components"),
-    (":^det::val", ValueError, "List item ':^det::val' contains empty components"),
+    (10, TypeError, "Name pattern 10 has incorrect type"),
+    ("", ValueError, "Name pattern '' is an empty string"),
+    (":", ValueError, "Name pattern ':' contains empty components"),
+    (":^det:", ValueError, "Name pattern ':^det:' contains empty components"),
+    (":^det::val", ValueError, "Name pattern ':^det::val' contains empty components"),
     (":*det:val", ValueError, "':*det:val' contains invalid regular expression '*det'"),
     ("__UNSUPPORTED_TYPE__:^det", ValueError, "Device type '__UNSUPPORTED_TYPE__' is not supported."),
     (":?^det:depth=0", ValueError, "Depth (0) must be positive integer greater or equal to 1"),
@@ -3199,11 +3201,11 @@ def test_split_list_element_definition_1(element_def, components, uses_re, devic
     (":?^det:?^val$", ValueError, "'?^det' can be only followed by the depth specification"),
     (":?^det:^val:^val$", ValueError, "'?^det' must be the last"),
     ("det..val", ValueError, "Plan, device or subdevice name in the description 'det..val' is an empty string"),
-    ("det.", ValueError, "Element name pattern 'det.' contains invalid characters"),
-    (".det", ValueError, "Element name pattern '.det' contains invalid characters"),
-    ("d$et", ValueError, "Element name pattern 'd$et' contains invalid characters"),
-    ("d$et.val", ValueError, "Element name pattern 'd$et.val' contains invalid characters"),
-    ("det.v$al", ValueError, "Element name pattern 'det.v$al' contains invalid characters"),
+    ("det.", ValueError, "Name pattern 'det.' contains invalid characters"),
+    (".det", ValueError, "Name pattern '.det' contains invalid characters"),
+    ("d$et", ValueError, "Name pattern 'd$et' contains invalid characters"),
+    ("d$et.val", ValueError, "Name pattern 'd$et.val' contains invalid characters"),
+    ("det.v$al", ValueError, "Name pattern 'det.v$al' contains invalid characters"),
 ])
 # fmt: on
 def test_split_list_element_definition_2_fail(element_def, exception_type, msg):

@@ -136,6 +136,7 @@ def parameter_annotation_decorator(annotation):
                     # This parameter will probably have type hint 'some_name: str`.
                     "description": "String selected from a list of strings (similar to enum)",
                     "annotation": "Names",
+
                     # Note, that "devices", "plans" and "names" are treated identically
                     #   during type checking, since they represent lists of strings.
                     #   One parameter may have name groups from "devices", "plans"
@@ -147,60 +148,51 @@ def parameter_annotation_decorator(annotation):
                     },
                 }
 
-                # Parameter that accepts a plan or a list of plans
-                #   (plans must exist in RE Worker namespace,
-                #    reference to the plans will be passed to the plan).
-                "plans_to_run": {
-                    # Text descriptions of parameters are optional.
-                    "description": "Parameter that accepts a plan or a list of plans.",
-                    "annotation": "typing.Union[PlanType1, typing.List[PlanType2]]",
-                    "plans": {
-                        # Here we have two groups of plans. Names of the plans are used
-                        #   as types in 'annotation'. The example of annotation above
-                        #   allows to pass one plan from the group 'PlanType1' or a list of
-                        #   plans from 'PlanType2'.
-                        # The lists may contain regular expressions (start with ``:``).
-                        #   For example, definition for ``PlanType2`` will contain all plans
-                        #   from the list of existing plans that start with ``move_``.
-                        "PlanType1": ("count", "scan", "gridscan"),
-                        "PlanType2": ("more", "plan", "names", ":^move_"),
-                    },
-                },
-
                 "devices": {
                     "description": "Parameter that accepts the list of devices.",
                     "annotation": "typing.List[typing.Union[DeviceType1, DeviceType2]]",
+
                     # Here we provide the list of devices. 'devices' and 'plans' are
-                    #    treated similarly, but it may be useful to distinguish lists of
-                    #    plans and devices on the stage of plan parameter validation.
-                    #    The devices may be listed explicitly by name or using regular
-                    #    expressions. Regular expressions may be specified as a sequence of
-                    #    of simple expressions separated by ``:`` that are applied to the
-                    #    device name and subdevice names (e.g. ``:^stage_:^det:val$ will
-                    #    pick devices similar to ``stage_sim.det2.val``). Adding ``+``
-                    #    after ``:`` will include the devices/subdevices at this level in
-                    #    the list (e.g. ``:+^stage_:^det:val$ adds ``stage_sim`` device
-                    #    to the list, but not ``stage_sim.det2``).
-                    #    Alternatively, a 'full-name' regular expression could be specified
-                    #    (starts with ``:?``). For example ``:?^stage_.*val$`` would pick
-                    #    all devices with names starting with ``stage_`` and ending with
-                    #    ``val`` from the complete tree of existing devices. The search
-                    #    depth may be restricted by adding ``depth`` parameter (e.g.
-                    #    ``:?^stage_.*val$:depth=5`` restricts the search depth to 5).
-                    #    The search tree may also be restricted by specifying expressions
-                    #    for device/subdevice names at upper levels, for example
-                    #    ``:+^stage_:?^det.*val$:depth=4`` will include the device ``stage_sim``
-                    #    (preceding with ``:+``) and all its subdevices starting with ``det``
-                    #    and ending with ``val`` up to the total depth of 5 (level of
-                    #    ``stage_`` + 4). Note, that specifying a 'full-name' expressions
-                    #    is less efficient, since it requires search through the whole
-                    #    device tree. When a sequence of short expressions is specified,
-                    #    search follows only the branches that satisfy the expressions.
-                    #    Regular expressions may be preceded with one the supported keywords:
-                    #    ``__READABLE__``, ``__MOTOR__``, ``__DETECTOR__`` and ``__FLYABLE__``.
-                    #    For example, ``__READABLE__:+^stage_:?^det.*val$:depth=4`` will
-                    #    check if the devices are readable before including them in the list.
-                    #    The following type definitions include examples of all
+                    #    treated similarly, but should be separated into different sections
+                    #    to implement proper parameter validation. The devices may be listed
+                    #    explicitly by name or using patterns based on regular expressions.
+                    #    The list may contain any combination of names and patterns.
+                    #    The patterns are distinguished from names by leading ``:`` at the
+                    #    beginning of each pattern. Patterns may contain multiple regular
+                    #    expressions separated with ``:``: the first expression is applied
+                    #    to the device name, the second expression to subdevices of the
+                    #    device, the third - to subdevices of subdevices etc. For example,
+                    #    the pattern ``:^stage_:^det:val$ would match the devices with names
+                    #    such as ``stage_sim.det2.val``.
+                    #
+                    #    Adding ``-`` before an expression (after ``:``) excludes the matching
+                    #    devices/subdevices from the list (e.g. ``:^stage_:-^det:val$ adds
+                    #    ``stage_sim`` and ``stage_sim.det2.val`` to the list, but not
+                    #    ``stage_sim.det2``).
+                    #
+                    #    A regular expression may be applied to the full name (including
+                    #    subdevice names) or remaining name of the device. An expression
+                    #    could be labelled as 'full-name' by placing ``?`` before it.
+                    #    For example ``:?^stage_.*val$`` would pick all devices with names
+                    #    starting with ``stage_`` and ending with ``val`` from the complete
+                    #    tree of existing devices. The search depth may be restricted by
+                    #    adding ``depth`` parameter (e.g. ``:?^stage_.*val$:depth=5``
+                    #    restricts the search depth to 5).
+                    #
+                    #    The both types of expressions could be mixed in one pattern.
+                    #    The full-name expression must be the last in the pattern and
+                    #    is applied to the remaining part of the name. For example
+                    #    ``:^stage_:?^det.*val$:depth=4`` selects the device ``stage_sim``
+                    #    and all its subdevices starting with ``det`` and ending with ``val``
+                    #    up to the total depth of 5 (depth=4 is set for the full-name expression).
+                    #    Note, that searching devices using full-name expressions is less
+                    #    efficient and should be minimized or avoided if possible.
+                    #
+                    #    Regular expressions may be preceded with one the keywords that
+                    #    defines the type of matching devices: ``__READABLE__``,
+                    #    ``__MOTOR__``, ``__DETECTOR__`` and ``__FLYABLE__``.
+                    #    For example, ``__READABLE__:^stage_:?^det.*val$:depth=4``
+                    #    selects only the devices that are readable.
                     "devices": {
                         "DeviceType1": ("det1", ":^det2$", ":^det:val$", ":?^det.*val$"),
                         "DeviceType2": ("__MOTOR__:?.*:depth=5"),
@@ -210,6 +202,33 @@ def parameter_annotation_decorator(annotation):
                     #   the default value overridden in the decorator. The default
                     #   value in the header is reference to 'det1'.
                     "default": "'det1'",
+                },
+
+                # Parameter that accepts a plan or a list of plans
+                #   (plans must exist in RE Worker namespace,
+                #    reference to the plans will be passed to the plan).
+                "plans_to_run": {
+                    # Text descriptions of parameters are optional.
+                    "description": "Parameter that accepts a plan or a list of plans.",
+                    "annotation": "typing.Union[PlanType1, typing.List[PlanType2]]",
+
+                    # Similarly to lists of name patterns for devices, the lists of
+                    #   patterns for plan may include device names and name patterns
+                    #   based on regular expressions. The patterns always start with
+                    #   ``:`` and may contain only a single regular expressions.
+                    #   The regular expression may be preced with ``+``, ``-`` and ``?``
+                    #   characters (e.g. ``:?^count$), but those characters are ignored
+                    #   by the processing algorithm. ``depth`` can not be used in
+                    #   the plan patterns.
+                    #
+                    # In the following example, two lists of plan names are defined.
+                    #   Names of the plan lists are used as types in 'annotation'.
+                    #   The example of annotation above allows to pass one plan from
+                    #   the group 'PlanType1' or a list of plans from 'PlanType2'.
+                    "plans": {
+                        "PlanType1": (":^count$", "scan", "gridscan"),
+                        "PlanType2": ("more", "plan", "names", ":^move_"),
+                    },
                 },
 
                 "dwell_time": {

@@ -7,7 +7,7 @@ user_groups:
     allowed_devices:
       - null  # Allow all
     forbidden_devices:
-      - ":?^_"  # All devices with names starting with '_'
+      - ":^_:?.*"  # All devices with names starting with '_'
     allowed_functions:
       - null  # Allow all
     forbidden_functions:

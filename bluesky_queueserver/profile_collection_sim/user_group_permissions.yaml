@@ -43,4 +43,4 @@ user_groups:
       - "function_sleep"
       - "clear_buffer"
     forbidden_functions:
-      - ":^_"  # All devices with names starting with '_'
+      - ":^_"  # All functions with names starting with '_'

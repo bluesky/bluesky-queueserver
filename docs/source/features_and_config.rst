@@ -17,9 +17,8 @@ allowed plans and devices for each user group. Plans from the allowed list could
 the queue using API calls such as :ref:`method_queue_item_add` and the names of allowed devices could
 be passed as plan parameters and then automatically converted to actual device objects before plans
 are executed. Additional filters could be defined for each user group that allow/forbid execution of
-functions (see :ref:`method_function_execute`).
-
-TODO: GUIDE/TUTORIAL FOR WRITING ``user_group_permissions.yaml``.
+functions (see :ref:`method_function_execute`). The basic principles of configuring user group
+permissions are outlined in the section :ref:`configuring_user_group_permissions`.
 
 Simple workflows could be implemented using static permissions defined in a YAML file and loaded
 at startup of RE Manager. If the YAML file is changed while RE Manager is running, the permissions
@@ -55,6 +54,95 @@ user data and permissions.) The way RE Manager is handling updated permissions i
   This option is the most appropriate for workflows, where permissions are managed externally and
   uploaded to RE Manager when changed. In this case the disk file may contain some default, simple
   and very restrictive set of permissions used for initialization during the first startup of RE Manager.
+
+.. _configuring_user_group_permissions:
+
+Configuring User Group Permissions
+----------------------------------
+
+Each user group may be assigned permissions. The permission restrict the set of plans that members
+of the group are allowed to execute and a set of devices users may send to plans as parameters.
+The permissions do not restrict plans and devices that could be called from the allowed plans.
+Optionally, permissions may be configured to allow users to execute Python functions defined
+in RE Worker namespace.
+
+User groups names are defined in user permissions dictionary, which could be saved in
+``user_group_permissions.yaml`` file and loaded on startup or uploaded by the client application
+using :ref:`method_permissions_set` API. The dictionary must define at least one user group
+named ``root``. Restrictions defined for the ``root`` are applied to plans and devices accessible
+by any other defined group (root of the permissions tree). Internally the lists of existing
+plans and devices are initially filtered using ``root`` permissions and eliminating 'junk'
+from the lists may reduce overhead when generating more detailed permissions for other groups.
+It is not recommended to assign members to the ``root`` group or submit plans as ``root``
+(currently there are no restrictions that would prevent from doing it).
+
+Permission for each group include lists of allowed and forbidden plans, devices and functions.
+Each lists contains names and/or patterns for filtering of names of device, plan or function
+objects. In order for a device, plan or function to be accessible to users of a group,
+the name of the object must match one of the names or patterns from the 'allowed' list and
+not match any of the names or patterns from the 'forbidden' list. The instructions for writing
+the lists of names and patterns for devices may be found in :ref:`lists_of_device_names` and
+for plans and functions in :ref:`lists_of_plan_names`.
+
+All the lists are optional. If 'allowed' list is not defined, then no objects are allowed.
+The most efficient method to allow all objects is to set the first element of the 'allowed'
+list ``None`` (it may be the only element of the list, all other elements are ignored).
+Missing 'forbidden' list or the list the first element set to ``None`` means that no
+elements are forbidden.
+
+Following is an example of a trivial user permission dictionary (in YAML format), which
+allows all plans and devices for ``admin`` user group ('admin' is an arbitrarily chosen name).
+Restrictions for the ``root`` group forbid access to all plans and devices starting with local
+names (starting with '_'). Note, that those plans and devices can still be used in the plans.
+The ``root`` permissions are propagated to all other groups, which means that no group
+could be configured to access objects with local names. Permissions for an additional user
+group ``test_user`` were configured with sole purpose of demonstrating what types of
+patterns could be included in the lists.
+
+.. code-block::
+
+  user_groups:
+    root:  # The group includes all available plan and devices
+      allowed_plans:
+        - null  # Allow all
+      forbidden_plans:
+        - ":^_"  # All plans with names starting with '_'
+      allowed_devices:
+        - null  # Allow all
+      forbidden_devices:
+        - ":?^_"  # All devices with names starting with '_'
+      allowed_functions:
+        - null  # Allow all
+      forbidden_functions:
+        - ":^_"  # All functions with names starting with '_'
+    admin:  # The group includes beamline staff, includes all or most of the plans and devices
+      allowed_plans:
+        - ":.*"  # Different way to allow all plans.
+      allowed_devices:
+        - ":?.*:depth=5"  # Allow all device and subdevices. Maximum deepth for subdevices is 5.
+      allowed_functions:
+        - "function_sleep"  # Explicitly listed name
+    test_user:  # Some examples of patterns that could be used in lists
+      allowed_plans:
+        - ":^count"  # Use regular expression patterns
+        - ":scan$"
+      forbidden_plans:
+        - ":^adaptive_scan$" # Use regular expression patterns
+        - ":^inner_product"
+      allowed_devices:
+        - ":^det:?.*"  # Use regular expression patterns
+        - ":^motor:?.*"
+        - ":^sim_bundle_A:?.*"
+      forbidden_devices:
+        - ":^det[3-5]$:?.*" # Use regular expression patterns
+        - ":^motor\\d+$:?.*"
+      allowed_functions:
+        - ":element$"
+        - ":elements$"
+        - "function_sleep"  # Function name, not a pattern
+        - "clear_buffer"
+      forbidden_functions:
+        - ":^_"  # All functions with names starting with '_'
 
 
 Remote Monitoring of Console Output

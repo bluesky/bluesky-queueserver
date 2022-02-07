@@ -47,7 +47,7 @@ from bluesky_queueserver.manager.profile_ops import (
     _process_plan,
     validate_plan,
     bind_plan_arguments,
-    _select_allowed_items,
+    _select_allowed_plans,
     load_allowed_plans_and_devices,
     _prepare_plans,
     _prepare_devices,
@@ -62,13 +62,14 @@ from bluesky_queueserver.manager.profile_ops import (
     check_if_function_allowed,
     _validate_user_group_permissions_schema,
     prepare_function,
-    _split_list_element_definition,
+    _split_name_pattern,
     _build_device_name_list,
     _build_plan_name_list,
     _find_and_replace_built_in_types,
     _is_object_name_in_list,
     _get_nspace_object,
     _filter_allowed_plans,
+    _filter_device_tree,
 )
 
 # User name and user group name used throughout most of the tests.
@@ -2255,23 +2256,23 @@ _pf4a_processed = {
         "parameters": {
             "p1": {
                 "annotation": "devices1",
-                "devices": {"devices1": ("some_dev", ":motor$:+motor$:det$")},
+                "devices": {"devices1": ("some_dev", ":-motor$:+motor$:det$")},
             },
             "p2": {
                 "annotation": "devices2",
-                "devices": {"devices2": ("some_dev", "__MOTOR__:motor$:+motor$:det$")},
+                "devices": {"devices2": ("some_dev", "__MOTOR__:-motor$:+motor$:det$")},
             },
             "p3": {
                 "annotation": "devices3",
-                "devices": {"devices3": ("some_dev", "__READABLE__:+motor$:motor$:det$")},
+                "devices": {"devices3": ("some_dev", "__READABLE__:motor$:-motor$:det$")},
             },
             "p4": {
                 "annotation": "devices4",
-                "devices": {"devices4": ("__MOTOR__:motor$:+motor$:det$", "__READABLE__:+motor$:motor$:det$")},
+                "devices": {"devices4": ("__MOTOR__:-motor$:motor$:det$", "__READABLE__:motor$:-motor$:det$")},
             },
             "p5": {
                 "annotation": "devices5",
-                "devices": {"devices5": ("__MOTOR__:motor$:+motor$:det$", "__FLYABLE__:.*")},
+                "devices": {"devices5": ("__MOTOR__:-motor$:motor$:det$", "__FLYABLE__:.*")},
             },
         }
     }
@@ -2690,10 +2691,10 @@ def _pf5h_factory():
     (_pf5b, "name 'Plans1' is not defined'"),
     (_pf5c, "Missing default value for the parameter 'detector' in the plan signature"),
     (_pf5d_factory(), "unsupported type of default value in decorator"),
-    (_pf5e_factory(), r"List item ':\*' contains invalid regular expression '\*'"),
-    (_pf5f_factory(), r"List item ':\*' contains invalid regular expression '\*'"),
-    (_pf5g_factory(), r"'\*dev' in the description '\*dev' contains invalid characters"),
-    (_pf5h_factory(), r"'\*plan' in the description '\*plan' contains invalid characters"),
+    (_pf5e_factory(), r"Name pattern ':\*' contains invalid regular expression '\*'"),
+    (_pf5f_factory(), r"Name pattern ':\*' contains invalid regular expression '\*'"),
+    (_pf5g_factory(), r"Name pattern '\*dev' contains invalid characters"),
+    (_pf5h_factory(), r"Name pattern '\*plan' contains invalid characters"),
 ])
 # fmt: on
 def test_process_plan_5_fail(plan_func, err_msg):
@@ -3150,35 +3151,37 @@ def test_devices_from_nspace():
 # fmt: off
 @pytest.mark.parametrize("element_def, components, uses_re, device_type", [
     # Device/subdevice names
-    ("det1", [("det1", False, False, None)], False, ""),
-    ("det1 ", [("det1", False, False, None)], False, ""),  # Spaces are removed
-    ("det1.val", [("det1", False, False, None), ("val", False, False, None)], False, ""),
-    ("sim_stage.det1.val", [("sim_stage", False, False, None), ("det1", False, False, None),
-     ("val", False, False, None)], False, ""),
+    ("det1", [("det1", True, False, None)], False, ""),
+    ("det1 ", [("det1", True, False, None)], False, ""),  # Spaces are removed
+    ("det1.val", [("det1", True, False, None), ("val", True, False, None)], False, ""),
+    ("sim_stage.det1.val", [("sim_stage", True, False, None), ("det1", True, False, None),
+     ("val", True, False, None)], False, ""),
     # Regular expressions
-    (":^det", [("^det", False, False, None)], True, ""),
-    (":^det:^val$", [("^det", False, False, None), ("^val$", False, False, None)], True, ""),
-    (":+^det:^val$", [("^det", True, False, None), ("^val$", False, False, None)], True, ""),
-    (":+sim_stage:^det:^val$", [("sim_stage", True, False, None), ("^det", False, False, None),
-     ("^val$", False, False, None)], True, ""),
-    ("__READABLE__:.*", [(".*", False, False, None)], True, "__READABLE__"),
-    ("__FLYABLE__:.*", [(".*", False, False, None)], True, "__FLYABLE__"),
-    ("__DETECTOR__:.*:.*", [(".*", False, False, None), (".*", False, False, None)], True, "__DETECTOR__"),
-    ("__MOTOR__:+.*:.*", [(".*", True, False, None), (".*", False, False, None)], True, "__MOTOR__"),
+    (":^det", [("^det", True, False, None)], True, ""),
+    (":^det:^val$", [("^det", True, False, None), ("^val$", True, False, None)], True, ""),
+    (":+^det:+^val$", [("^det", True, False, None), ("^val$", True, False, None)], True, ""),
+    (":-^det:^val$", [("^det", False, False, None), ("^val$", True, False, None)], True, ""),
+    (":-^det:-^val$", [("^det", False, False, None), ("^val$", True, False, None)], True, ""),
+    (":sim_stage:-^det:^val$", [("sim_stage", True, False, None), ("^det", False, False, None),
+     ("^val$", True, False, None)], True, ""),
+    ("__READABLE__:.*", [(".*", True, False, None)], True, "__READABLE__"),
+    ("__FLYABLE__:.*", [(".*", True, False, None)], True, "__FLYABLE__"),
+    ("__DETECTOR__:-.*:.*", [(".*", False, False, None), (".*", True, False, None)], True, "__DETECTOR__"),
+    ("__MOTOR__:.*:.*", [(".*", True, False, None), (".*", True, False, None)], True, "__MOTOR__"),
     # Full-name regular expressions
-    (":?det1", [("det1", False, True, None)], True, ""),
-    (":?^det1$:depth=5", [("^det1$", False, True, 5)], True, ""),
-    (r":?.*\.^val$", [(r".*\.^val$", False, True, None)], True, ""),
-    (r"__READABLE__:?.*\.^val$", [(r".*\.^val$", False, True, None)], True, "__READABLE__"),
-    (":+^det:?^val$", [("^det", True, False, None), ("^val$", False, True, None)], True, ""),
-    (":+^det:?^val$:depth=1", [("^det", True, False, None), ("^val$", False, True, 1)], True, ""),
+    (":?det1", [("det1", True, True, None)], True, ""),
+    (":?^det1$:depth=5", [("^det1$", True, True, 5)], True, ""),
+    (r":?.*\.^val$", [(r".*\.^val$", True, True, None)], True, ""),
+    (r"__READABLE__:?.*\.^val$", [(r".*\.^val$", True, True, None)], True, "__READABLE__"),
+    (":-^det:?^val$", [("^det", False, False, None), ("^val$", True, True, None)], True, ""),
+    (":^det:?^val$:depth=1", [("^det", True, False, None), ("^val$", True, True, 1)], True, ""),
 ])
 # fmt: on
-def test_split_list_element_definition_1(element_def, components, uses_re, device_type):
+def test_split_name_pattern_1(element_def, components, uses_re, device_type):
     """
     ``_split_list_element_definition``: basic tests
     """
-    _components, _uses_re, _device_type = _split_list_element_definition(element_def)
+    _components, _uses_re, _device_type = _split_name_pattern(element_def)
     assert _components == components
     assert _uses_re == uses_re
     assert _device_type == device_type
@@ -3186,11 +3189,11 @@ def test_split_list_element_definition_1(element_def, components, uses_re, devic
 
 # fmt: off
 @pytest.mark.parametrize("element_def, exception_type, msg", [
-    (10, TypeError, "List item 10 has incorrect type"),
-    ("", ValueError, "List item '' is an empty string"),
-    (":", ValueError, "List item ':' contains empty components"),
-    (":^det:", ValueError, "List item ':^det:' contains empty components"),
-    (":^det::val", ValueError, "List item ':^det::val' contains empty components"),
+    (10, TypeError, "Name pattern 10 has incorrect type"),
+    ("", ValueError, "Name pattern '' is an empty string"),
+    (":", ValueError, "Name pattern ':' contains empty components"),
+    (":^det:", ValueError, "Name pattern ':^det:' contains empty components"),
+    (":^det::val", ValueError, "Name pattern ':^det::val' contains empty components"),
     (":*det:val", ValueError, "':*det:val' contains invalid regular expression '*det'"),
     ("__UNSUPPORTED_TYPE__:^det", ValueError, "Device type '__UNSUPPORTED_TYPE__' is not supported."),
     (":?^det:depth=0", ValueError, "Depth (0) must be positive integer greater or equal to 1"),
@@ -3199,19 +3202,19 @@ def test_split_list_element_definition_1(element_def, components, uses_re, devic
     (":?^det:?^val$", ValueError, "'?^det' can be only followed by the depth specification"),
     (":?^det:^val:^val$", ValueError, "'?^det' must be the last"),
     ("det..val", ValueError, "Plan, device or subdevice name in the description 'det..val' is an empty string"),
-    ("det.", ValueError, "Plan, device or subdevice name in the description 'det.' is an empty string"),
-    (".det", ValueError, "Plan, device or subdevice name in the description '.det' is an empty string"),
-    ("d$et", ValueError, "'d$et' in the description 'd$et' contains invalid characters"),
-    ("d$et.val", ValueError, "'d$et' in the description 'd$et.val' contains invalid characters"),
-    ("det.v$al", ValueError, "'v$al' in the description 'det.v$al' contains invalid characters"),
+    ("det.", ValueError, "Name pattern 'det.' contains invalid characters"),
+    (".det", ValueError, "Name pattern '.det' contains invalid characters"),
+    ("d$et", ValueError, "Name pattern 'd$et' contains invalid characters"),
+    ("d$et.val", ValueError, "Name pattern 'd$et.val' contains invalid characters"),
+    ("det.v$al", ValueError, "Name pattern 'det.v$al' contains invalid characters"),
 ])
 # fmt: on
-def test_split_list_element_definition_2_fail(element_def, exception_type, msg):
+def test_split_name_pattern_2_fail(element_def, exception_type, msg):
     """
     ``_split_list_element_definition``: failing cases
     """
     with pytest.raises(exception_type, match=re.escape(msg)):
-        _split_list_element_definition(element_def)
+        _split_name_pattern(element_def)
 
 
 # fmt: off
@@ -3294,7 +3297,7 @@ def test_is_object_name_in_list_1(device_name, in_list, success, error_type, msg
 
 
 # fmt: off
-@pytest.mark.parametrize("element_def, expected_name_list", [
+@pytest.mark.parametrize("name_pattern, expected_name_list", [
     # Device names
     ("da0_motor", ["da0_motor"]),
     ("da0_motor.db0_motor", ["da0_motor.db0_motor"]),
@@ -3303,39 +3306,42 @@ def test_is_object_name_in_list_1(device_name, in_list, success, error_type, msg
     (":.+", ["da0_motor", "da1_det"]),
     (":.*", ["da0_motor", "da1_det"]),
     (":+.*", ["da0_motor", "da1_det"]),
-    (":.+:^db0", ["da0_motor.db0_motor", "da1_det.db0_det"]),
-    (":+.+:^db0", ["da0_motor", "da0_motor.db0_motor", "da1_det", "da1_det.db0_det"]),
-    (":+det$:^db0", ["da1_det", "da1_det.db0_det"]),
-    (":.+:+^db0:^dc", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc0_det", "da0_motor.db0_motor.dc1_det",
+    (":-.*", ["da0_motor", "da1_det"]),  # "-" is ignored
+    (":-.+:^db0", ["da0_motor.db0_motor", "da1_det.db0_det"]),
+    (":.+:^db0", ["da0_motor", "da0_motor.db0_motor", "da1_det", "da1_det.db0_det"]),
+    (":+.+:^db0", ["da0_motor", "da0_motor.db0_motor", "da1_det", "da1_det.db0_det"]),  # "+" is not needed
+    (":det$:^db0", ["da1_det", "da1_det.db0_det"]),
+    (":-.+:^db0:^dc", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc0_det", "da0_motor.db0_motor.dc1_det",
      "da0_motor.db0_motor.dc2_det", "da0_motor.db0_motor.dc3_motor", "da1_det.db0_det"]),
-    ("__MOTOR__:.+:+^db0:^dc", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc3_motor"]),
-    ("__DETECTOR__:.+:+^db0:^dc", ["da0_motor.db0_motor.dc0_det", "da0_motor.db0_motor.dc1_det",
+    ("__MOTOR__:-.+:^db0:^dc", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc3_motor"]),
+    ("__DETECTOR__:-.+:^db0:^dc", ["da0_motor.db0_motor.dc0_det", "da0_motor.db0_motor.dc1_det",
      "da0_motor.db0_motor.dc2_det", "da1_det.db0_det"]),
-    ("__READABLE__:.+:+^(db0)|(db2):^dc", [
+    ("__READABLE__:-.+:^(db0)|(db2):^dc", [
         "da0_motor.db0_motor", "da0_motor.db0_motor.dc0_det", "da0_motor.db0_motor.dc1_det",
         "da0_motor.db0_motor.dc2_det", "da0_motor.db0_motor.dc3_motor", "da1_det.db0_det"]),
-    ("__FLYABLE__:.+:+^(db0)|(db2):^dc", ["da0_motor.db2_flyer"]),
-    ("__FLYABLE__:.+:+^db0:^dc", []),
+    ("__FLYABLE__:-.+:^(db0)|(db2):^dc", ["da0_motor.db2_flyer"]),
+    ("__FLYABLE__:-.+:^db0:^dc", []),
     # Full-name patterns
     (":?motor$", ["da0_motor", "da0_motor.db0_motor", "da0_motor.db0_motor.dc3_motor",
      "da0_motor.db0_motor.dc3_motor.dd1_motor", "da0_motor.db1_det.dc1_motor", "da1_det.db1_motor"]),
     (":?motor$:depth=1", ["da0_motor"]),
     (":?motor$:depth=2", ["da0_motor", "da0_motor.db0_motor", "da1_det.db1_motor"]),
-    (":+^da:?motor$:depth=1", ["da0_motor", "da0_motor.db0_motor", "da1_det", "da1_det.db1_motor"]),
-    (":^da:?motor$:depth=2", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc3_motor",
+    (":^da:?motor$:depth=1", ["da0_motor", "da0_motor.db0_motor", "da1_det", "da1_det.db1_motor"]),
+    (":-^da:?motor$:depth=2", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc3_motor",
      "da0_motor.db1_det.dc1_motor", "da1_det.db1_motor"]),
-    ("__MOTOR__:+^da:?motor$:depth=1", ["da0_motor", "da0_motor.db0_motor", "da1_det.db1_motor"]),
+    (":-^da:?^da:depth=2", []),
+    ("__MOTOR__:^da:?motor$:depth=1", ["da0_motor", "da0_motor.db0_motor", "da1_det.db1_motor"]),
     ("__READABLE__:?.*db0_motor.*:depth=3", [
         "da0_motor.db0_motor", "da0_motor.db0_motor.dc0_det", "da0_motor.db0_motor.dc1_det",
         "da0_motor.db0_motor.dc2_det", "da0_motor.db0_motor.dc3_motor"]),
     ("__MOTOR__:?.*db0_motor.*:depth=3", ["da0_motor.db0_motor", "da0_motor.db0_motor.dc3_motor"]),
 ])
 # fmt: on
-def test_build_device_name_list_1(element_def, expected_name_list):
+def test_build_device_name_list_1(name_pattern, expected_name_list):
     """
     ``_build_device_name_list``: basic tests
     """
-    components, uses_re, device_type = _split_list_element_definition(element_def)
+    components, uses_re, device_type = _split_name_pattern(name_pattern)
     name_list = _build_device_name_list(
         components=components, uses_re=uses_re, device_type=device_type, existing_devices=_allowed_devices_dict_1
     )
@@ -3346,11 +3352,84 @@ def test_build_device_name_list_2_fail():
     """
     ``_build_device_name_list``: failing cases
     """
-    components, uses_re, device_type = _split_list_element_definition("def")
+    components, uses_re, device_type = _split_name_pattern("def")
     with pytest.raises(ValueError, match="Unsupported device type: 'unknown'"):
         _build_device_name_list(
             components=components, uses_re=uses_re, device_type="unknown", existing_devices=_allowed_devices_dict_1
         )
+
+
+# fmt: off
+@pytest.mark.parametrize("allow_patterns, disallow_patterns, expected_name_list", [
+    # Allow all
+    ([None], [None], ['da0_motor', 'da0_motor.db0_motor', 'da0_motor.db0_motor.dc0_det',
+                      'da0_motor.db0_motor.dc1_det', 'da0_motor.db0_motor.dc2_det',
+                      'da0_motor.db0_motor.dc3_motor', 'da0_motor.db0_motor.dc3_motor.dd0_det',
+                      'da0_motor.db0_motor.dc3_motor.dd1_motor', 'da0_motor.db1_det',
+                      'da0_motor.db1_det.dc0_det', 'da0_motor.db1_det.dc1_motor',
+                      'da0_motor.db2_flyer', 'da1_det', 'da1_det.db0_det', 'da1_det.db1_motor']),
+    ([":?.*"], [None], ['da0_motor', 'da0_motor.db0_motor', 'da0_motor.db0_motor.dc0_det',
+                        'da0_motor.db0_motor.dc1_det', 'da0_motor.db0_motor.dc2_det',
+                        'da0_motor.db0_motor.dc3_motor', 'da0_motor.db0_motor.dc3_motor.dd0_det',
+                        'da0_motor.db0_motor.dc3_motor.dd1_motor', 'da0_motor.db1_det',
+                        'da0_motor.db1_det.dc0_det', 'da0_motor.db1_det.dc1_motor',
+                        'da0_motor.db2_flyer', 'da1_det', 'da1_det.db0_det', 'da1_det.db1_motor']),
+    ([":?.*"], [], ['da0_motor', 'da0_motor.db0_motor', 'da0_motor.db0_motor.dc0_det',
+                    'da0_motor.db0_motor.dc1_det', 'da0_motor.db0_motor.dc2_det',
+                    'da0_motor.db0_motor.dc3_motor', 'da0_motor.db0_motor.dc3_motor.dd0_det',
+                    'da0_motor.db0_motor.dc3_motor.dd1_motor', 'da0_motor.db1_det',
+                    'da0_motor.db1_det.dc0_det', 'da0_motor.db1_det.dc1_motor',
+                    'da0_motor.db2_flyer', 'da1_det', 'da1_det.db0_det', 'da1_det.db1_motor']),
+    # Disallow all
+    ([None], [":?.*"], []),
+    ([], [None], []),
+    ([], [], []),
+    # Test different combinations
+    ([":^da1", ":-^da0:^db1"], [None], ['da0_motor.db1_det', 'da1_det']),
+    ([":?.*"], [":^da1", ":-^da0:^db1"],
+     ['da0_motor', 'da0_motor.db0_motor', 'da0_motor.db0_motor.dc0_det',
+      'da0_motor.db0_motor.dc1_det', 'da0_motor.db0_motor.dc2_det',
+      'da0_motor.db0_motor.dc3_motor', 'da0_motor.db0_motor.dc3_motor.dd0_det',
+      'da0_motor.db0_motor.dc3_motor.dd1_motor',
+      'da0_motor.db1_det.dc0_det', 'da0_motor.db1_det.dc1_motor',
+      'da0_motor.db2_flyer', 'da1_det.db0_det', 'da1_det.db1_motor']),
+    ([":-^da1:.*", ":^da0:-^db1:.*"], [None],
+     ['da0_motor', 'da0_motor.db1_det.dc0_det', 'da0_motor.db1_det.dc1_motor',
+      'da1_det.db0_det', 'da1_det.db1_motor']),
+    ([":-^da1:.*", ":^da0:-^db1:.*"], [":-^da0:-^db1:det$"],
+     ['da0_motor', 'da0_motor.db1_det.dc1_motor', 'da1_det.db0_det', 'da1_det.db1_motor']),
+    ([":-^da1:.*", ":^da0:-^db1:.*"], [":^da0:-^db1:det$"],
+     ['da0_motor.db1_det.dc1_motor', 'da1_det.db0_det', 'da1_det.db1_motor']),
+    ([":-^da1:?motor$", ":-^da0:-^db0:?motor$"], [None],
+     ['da0_motor.db0_motor.dc3_motor', 'da0_motor.db0_motor.dc3_motor.dd1_motor', 'da1_det.db1_motor']),
+    ([":-^da1:?motor$", ":-^da0:-^db0:?motor$"], [":^da0:?dd1"],
+     ['da0_motor.db0_motor.dc3_motor', 'da1_det.db1_motor']),
+    ([":-^da1:?motor$", ":-^da0:-^db0:?motor$"], [":^da0:?dd1:depth=2"],
+     ['da0_motor.db0_motor.dc3_motor', 'da0_motor.db0_motor.dc3_motor.dd1_motor', 'da1_det.db1_motor']),
+    ([":-^da1:?motor$", ":-^da0:-^db0:?motor$"], [":^da0:?dd1:depth=3"],
+     ['da0_motor.db0_motor.dc3_motor', 'da1_det.db1_motor']),
+    ([":-^da1:?motor$", ":-^da0:-^db0:?motor$"], [":^da0:?dd1:depth=4"],
+     ['da0_motor.db0_motor.dc3_motor', 'da1_det.db1_motor']),
+    ([":-^da1:?motor$", ":-^da0:?motor$:depth=2"], [None],
+     ['da0_motor.db0_motor', 'da0_motor.db0_motor.dc3_motor',
+      'da0_motor.db1_det.dc1_motor', 'da1_det.db1_motor'])
+])
+# fmt: on
+def test_filter_device_name_list_1(allow_patterns, disallow_patterns, expected_name_list):
+    """
+    ``_filter_device_name_list``: basic tests
+    """
+
+    allowed_devices = _filter_device_tree(
+        item_dict=_allowed_devices_dict_1, allow_patterns=allow_patterns, disallow_patterns=disallow_patterns
+    )
+
+    components, uses_re, device_type = _split_name_pattern(":?.*")
+    name_list = _build_device_name_list(
+        components=components, uses_re=uses_re, device_type=device_type, existing_devices=allowed_devices
+    )
+
+    assert name_list == expected_name_list, pprint.pformat(name_list)
 
 
 _allowed_plans_set_1 = {"count", "count_modified", "mycount", "other_plan"}
@@ -3364,13 +3443,16 @@ _allowed_plans_set_1 = {"count", "count_modified", "mycount", "other_plan"}
     (":^count$", ["count"]),
     (":^count", ["count", "count_modified"]),
     (":count$", ["count", "mycount"]),
+    (":+count$", ["count", "mycount"]),
+    (":-count$", ["count", "mycount"]),
+    (":?count$", ["count", "mycount"]),
 ])
 # fmt: on
 def test_build_plan_name_list_1(plan_def, expected_name_list):
     """
     ``_build_plan_name_list``: basic tests
     """
-    components, uses_re, device_type = _split_list_element_definition(plan_def)
+    components, uses_re, device_type = _split_name_pattern(plan_def)
     name_list = _build_plan_name_list(
         components=components, uses_re=uses_re, device_type=device_type, existing_plans=_allowed_plans_set_1
     )
@@ -3380,17 +3462,16 @@ def test_build_plan_name_list_1(plan_def, expected_name_list):
 # fmt: off
 @pytest.mark.parametrize("plan_def, exception_type, msg", [
     ("abc.def", ValueError, "may contain only one component. Components: ['abc', 'def']"),
-    (":?abc:depth=5", ValueError, "Depth specification can not be part of the element"),
-    ("__READABLE__:abc", ValueError, "Device type can not be included in the plan description: '__READABLE__:'"),
-    (":+abc", ValueError, "Plus sign (+) can not be used in a pattern for a plan name: '+abc'"),
-    (":?abc", ValueError, "Question mark (?) can not be used in a pattern for a plan name: '?abc'"),
+    (":?abc:depth=5", ValueError, "Depth specification can not be part of the name pattern for a plan"),
+    ("__READABLE__:abc", ValueError,
+     "Device type can not be included in the name pattern for a plan: '__READABLE__:'"),
 ])
 # fmt: on
 def test_build_plan_name_list_2_fail(plan_def, exception_type, msg):
     """
     ``_build_plan_name_list``: failing cases
     """
-    components, uses_re, device_type = _split_list_element_definition(plan_def)
+    components, uses_re, device_type = _split_name_pattern(plan_def)
 
     with pytest.raises(exception_type, match=re.escape(msg)):
         _build_plan_name_list(
@@ -4184,7 +4265,7 @@ _prep_func_permissions = {
     "user_groups": {
         "root": {"allowed_functions": [None], "forbidden_functions": [None]},
         "admin": {
-            "allowed_functions": ["^func", "^gen", "^some_object$", "unknown"],
+            "allowed_functions": [":^func", ":^gen", ":^some_object$", "unknown"],
             "forbidden_functions": [None],
         },
     }
@@ -4830,27 +4911,24 @@ def test_load_user_group_permissions_6_fail(tmp_path):
 
 # fmt: off
 @pytest.mark.parametrize("item_dict, allow_patterns, disallow_patterns, result", [
-    ({"abc34": 1, "abcd": 2}, [r"^abc"], [r"^abc\d+$"], {"abcd": 2}),
-    ({"abc34": 1, "abcd": 2}, [r"^abc"], [r"^abc.*$"], {}),
-    ({"abc34": 1, "abcd": 2}, [r"^abc"], [r"^abcde$", r"^abc.*$"], {}),
-    ({"abc34": 1, "abcd": 2}, [r"^abc"], [r"^abcde$", r"^a.2$"], {"abc34": 1, "abcd": 2}),
-    ({"abc34": 1, "abcd": 2}, [r"d$", r"4$"], [r"^abcde$", r"^a.2$"], {"abc34": 1, "abcd": 2}),
-    ({"abc34": 1, "abcd": 2}, [None], [r"^abc\d+$"], {"abcd": 2}),
-    ({"abc34": 1, "abcd": 2}, [r"^abc"], [None], {"abc34": 1, "abcd": 2}),
+    ({"abc34": 1, "abcd": 2}, [r":^abc"], [r":^abc\d+$"], {"abcd": 2}),
+    ({"abc34": 1, "abcd": 2}, [r":^abc"], [r":^abc.*$"], {}),
+    ({"abc34": 1, "abcd": 2}, [r":^abc"], [r":^abcde$", r":^abc.*$"], {}),
+    ({"abc34": 1, "abcd": 2}, [r":^abc"], [r":^abcde$", r":^a.2$"], {"abc34": 1, "abcd": 2}),
+    ({"abc34": 1, "abcd": 2}, [r":d$", r":4$"], [r":^abcde$", r":^a.2$"], {"abc34": 1, "abcd": 2}),
+    ({"abc34": 1, "abcd": 2}, [None], [r":^abc\d+$"], {"abcd": 2}),
+    ({"abc34": 1, "abcd": 2}, [r":^abc"], [None], {"abc34": 1, "abcd": 2}),
     ({"abc34": 1, "abcd": 2}, [None], [None], {"abc34": 1, "abcd": 2}),
     ({"abc34": 1, "abcd": 2}, [], [None], {}),
     ({"abc34": 1, "abcd": 2}, [None], [], {"abc34": 1, "abcd": 2}),
-    ({}, [r"^abc"], [r"^abc\d+$"], {}),
-    # Apply to base names of subdevices
-    ({"abc34.val": 1, "abcd34.tmp": 2}, [r"34$"], [], {"abc34.val": 1, "abcd34.tmp": 2}),
-    ({"abc34.val": 1, "abcd34.tmp": 2}, [r"34$"], [r".*34$"], {}),
+    ({}, [r":^abc"], [r":^abc\d+$"], {}),
 ])
 # fmt: on
-def test_select_allowed_items_1(item_dict, allow_patterns, disallow_patterns, result):
+def test_select_allowed_plans_1(item_dict, allow_patterns, disallow_patterns, result):
     """
-    Tests for ``_select_allowed_items``.
+    Tests for ``_select_allowed_plans``.
     """
-    r = _select_allowed_items(item_dict, allow_patterns, disallow_patterns)
+    r = _select_allowed_plans(item_dict, allow_patterns, disallow_patterns)
     assert r == result
 
 
@@ -4961,11 +5039,11 @@ _user_permissions_clear = """user_groups:
       - null  # Nothing is forbidden
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":.*"  # A different way to allow all
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_devices:
       - null  # Nothing is forbidden
 """
@@ -4975,18 +5053,18 @@ _user_permissions_excluding_junk1 = """user_groups:
     allowed_plans:
       - null  # Allow all
     forbidden_plans:
-      - "^junk_plan$"
+      - ":^junk_plan$"
     allowed_devices:
       - null  # Allow all
     forbidden_devices:
-      - "^junk_device$"
+      - ":+^junk_device$:?.*"
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":.*"  # A different way to allow all
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_devices:
       - null  # Nothing is forbidden
 """
@@ -4994,20 +5072,20 @@ _user_permissions_excluding_junk1 = """user_groups:
 _user_permissions_excluding_junk2 = """user_groups:
   root:  # The group includes all available plan and devices
     allowed_plans:
-      - "^(?!.*junk)"  # Allow all plans that don't contain 'junk' in their names
+      - ":^(?!.*junk)"  # Allow all plans that don't contain 'junk' in their names
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - "^(?!.*junk)"  # Allow all devices that don't contain 'junk' in their names
+      - ":?^(?!.*junk)"  # Allow all devices that don't contain 'junk' in their names
     forbidden_devices:
       - null  # Nothing is forbidden
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":.*"  # A different way to allow all
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_devices:
       - null  # Nothing is forbidden
 """
@@ -5016,20 +5094,20 @@ _user_permissions_excluding_junk2 = """user_groups:
 _user_permissions_excluding_junk3 = """user_groups:
   root:  # The group includes all available plan and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":.*"  # A different way to allow all
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_devices:
       - null  # Nothing is forbidden
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - "^(?!.*junk)"  # Allow all plans that don't contain 'junk' in their names
+      - ":^(?!.*junk)"  # Allow all plans that don't contain 'junk' in their names
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - "^(?!.*junk)"  # Allow all devices that don't contain 'junk' in their names
+      - ":+^(?!.*junk):?.*"  # Allow all devices that don't contain 'junk' in their names
     forbidden_devices:
       - null  # Nothing is forbidden
 """
@@ -5124,11 +5202,11 @@ _user_permissions_incomplete_1 = """user_groups:
       - null  # Nothing is forbidden
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_devices:
       - null  # Nothing is forbidden
 """
@@ -5145,9 +5223,9 @@ _user_permissions_incomplete_2 = """user_groups:
       - null  # Nothing is forbidden
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     allowed_devices:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
 """
 
 _user_permissions_incomplete_3 = """user_groups:
@@ -5175,11 +5253,11 @@ _user_permissions_incomplete_4 = """user_groups:
       - null  # Allow all
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_devices:
       - null  # Nothing is forbidden
 """
@@ -5192,11 +5270,11 @@ _user_permissions_incomplete_5 = """user_groups:
       - null  # Nothing is forbidden
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_devices:
       - null  # Nothing is forbidden
 """
@@ -5327,7 +5405,7 @@ stg_B = SimBundle(name="sim_bundle")  # Used for tests
         },
         "device2": {
             "annotation": "Devices1",
-            "devices": {"Devices1": (":^stg:+^det:A$", ":.*:.+mtrs$:y")}
+            "devices": {"Devices1": (":-^stg:+^det:A$", ":-.*:-.+mtrs$:y")}
         },
         "device3": {
             "annotation": "Devices1",
@@ -5347,11 +5425,11 @@ _user_permissions_subdevices_1 = """user_groups:
       - null  # Everything is allowed
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":.*"  # A different way to allow all
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_devices:
       - null  # Nothing is forbidden
 """
@@ -5364,11 +5442,11 @@ _user_permissions_subdevices_2 = """user_groups:
       - null  # Everything is allowed
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":.*"  # A different way to allow all
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - "g_B$"  # Allow 'stg_B'
+      - ":g_B$:?.*"  # Allow 'stg_B'
     forbidden_devices:
       - null  # Nothing is forbidden
 """
@@ -5381,13 +5459,13 @@ _user_permissions_subdevices_3 = """user_groups:
       - null  # Everything is allowed
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":.*"  # A different way to allow all
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
     forbidden_devices:
-      - "g_B$"  # Block 'stg_B'
+      - ":g_B$:?.*"  # Block 'stg_B'
 """
 
 _user_permissions_subdevices_4 = """user_groups:
@@ -5395,12 +5473,12 @@ _user_permissions_subdevices_4 = """user_groups:
     allowed_plans:
       - null  # Everything is allowed
     allowed_devices:
-      - "g_B$"  # Allow 'stg_B'
+      - ":g_B$:?.*"  # Allow 'stg_B'
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":.*"  # A different way to allow all
     allowed_devices:
-       - ".*"  # A different way to allow all
+       - ":?.*"  # A different way to allow all
 """
 
 _user_permissions_subdevices_5 = """user_groups:
@@ -5410,12 +5488,12 @@ _user_permissions_subdevices_5 = """user_groups:
     allowed_devices:
       - null  # Everything is allowed
     forbidden_devices:
-      - "g_B$"  # Block 'stg_B'
+      - ":g_B$:?.*"  # Block 'stg_B'
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - ".*"  # A different way to allow all
+      - ":.*"  # A different way to allow all
     allowed_devices:
-      - ".*"  # A different way to allow all
+      - ":?.*"  # A different way to allow all
 """
 
 
@@ -5616,21 +5694,21 @@ _func_permissions_dict_4 = {
 _func_permissions_dict_5 = {
     "user_groups": {
         "root": {"allowed_functions": [None]},
-        "admin": {"allowed_functions": [None], "forbidden_functions": [".*"]},
+        "admin": {"allowed_functions": [None], "forbidden_functions": [":.*"]},
     }
 }
 
 _func_permissions_dict_6 = {
     "user_groups": {
         "root": {"allowed_functions": [None]},
-        "admin": {"allowed_functions": ["^tmp", "^test"], "forbidden_functions": ["end$"]},
+        "admin": {"allowed_functions": [":^tmp", ":^test"], "forbidden_functions": [":end$"]},
     }
 }
 
 _func_permissions_dict_7 = {
     "user_groups": {
         "root": {"allowed_functions": [None]},
-        "admin": {"allowed_functions": ["^tmp", "^test"], "forbidden_functions": ["^test"]},
+        "admin": {"allowed_functions": [":^tmp", ":^test"], "forbidden_functions": [":^test"]},
     }
 }
 

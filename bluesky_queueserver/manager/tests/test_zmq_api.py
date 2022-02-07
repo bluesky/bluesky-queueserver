@@ -3341,7 +3341,7 @@ user_groups:
       - null  # Nothing is forbidden
   admin:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
-      - "^count$"  # 'count plan'
+      - ":^count$"  # 'count plan'
     forbidden_plans:
       - null  # Nothing is forbidden
     allowed_devices:
@@ -3366,7 +3366,7 @@ user_groups:
     allowed_plans:
       - null  # A different way to allow all
     forbidden_plans:
-      - "^count$"  # 'count' plan
+      - ":^count$"  # 'count' plan
     allowed_devices:
       - null  # A different way to allow all
     forbidden_devices:
@@ -3487,7 +3487,7 @@ def test_permissions_reload_3(re_manager_pc_copy, allow_count_plan):  # noqa: F8
 _permissions_dict_not_allow_count = {
     "user_groups": {
         "root": {"allowed_plans": [None], "allowed_devices": [None]},
-        "admin": {"allowed_plans": [None], "forbidden_plans": ["^count$"], "allowed_devices": [None]},
+        "admin": {"allowed_plans": [None], "forbidden_plans": [":^count$"], "allowed_devices": [None]},
     }
 }
 

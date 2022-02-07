@@ -771,10 +771,14 @@ Lists of Device and Plan Names
 ++++++++++++++++++++++++++++++
 
 Annotation of a parameter may contain optional ``devices`` and/or ``plans``
-section, which contains definitions of lists of device or plan names accepted
-by the parameter. The names are converted to objects from Run Engine Worker
-namespace and passed to the plan. In the following example, two lists (``Type1``
-and ``Type2``) are defined in the ``devices`` section:
+sections, which contains lists of device or plan names that could be passed
+with the parameter or patterns based on regular expressions used to pick
+matching devices or plans from the list of existing devices or plans.
+The listed or automatically picked names are converted to objects exisiting
+in Run Engine Worker namespace before being passed to the plan. In the
+following example there are two lists (``Type1`` and ``Type2``) defined in
+the ``devices`` section. Names (keys) of the lists are used as types in
+the string that defines the parameter type:
 
 .. code-block:: python
 
@@ -783,17 +787,27 @@ and ``Type2``) are defined in the ``devices`` section:
           "dets": {
               "annotation": "typing.Union[typing.List[Type1]" \
                             "typing.List[Type2]]",
-              "devices": {"Type1": ["det1", "det2", "det3"],
-                          "Type2": ["det1", "det4", "det5"]},
+              # "det1", "det2", "det4" are explicitly stated names
+              # ":det3:?val$", ":^det5$" are patterns
+              "devices": {"Type1": ["det1", "det2", ":det3:?val$"],
+                          "Type2": ["det1", "det4", ":^det5$"]},
           }
       }
   })
   def plan_demo8a(dets, npts: int, delay: float=1.0):
       <code implementing the plan>
 
-The parameters that accept plan names may have similar ``plans`` sections that
-define lists of plans. List names may be used in ``annotation`` section as part
-of parameter type definition.
+If a plan accepts reference to other plans defined in the worker
+namespace, one of the plan parameters may have a similar section
+``plans`` with lists of plan names.
+
+Each list may contain a mix of device name and patterns. The processing
+algorithm is searching for names of existing plans and devices based
+on the patterns and adds them to the lists. After removing Duplicate
+names, the lists are sorted in alphabetical order and saved as part
+of plan representation in the list of existing plans.
+
+.. _lists_of_device_names:
 
 Lists of Device Names
 ~~~~~~~~~~~~~~~~~~~~~
@@ -806,12 +820,14 @@ The elements of lists of device names may include:
   - names of subdevices of devices defined in the global scope of startup script,
     e.g. ``det1.val``, ``sim_stageA.mtrs.y``, etc.
 
-  - regular expressions that define a set of existing devices and subdevices
-    to be added to the list.
+  - patterns based on regular expressions for picking devices and subdevices
+    from the list of existing devices.
 
-The explicitly listed device and subdevice names are always included in the list.
-Regular expressions are used to pick devices and subdevices from the list of
-existing devices:
+The explicitly listed device and subdevice names are added to the parameter
+annotation in the list of existing plans even if such device or plan does
+not exist in the worker environment. When plan represenations are preprocessed
+before being added to a list of allowed plans, the devices/subdevices/plans
+that are not in the list of allowed devices/plans are removed.
 
 .. code-block:: python
 
@@ -821,18 +837,22 @@ existing devices:
   #   devices such as 'd3', 'det3', 'detector3' etc. matching reg. expression 'd.*3'
   "Type3": ["det1", "det1.val", ":d.*3"]
 
-Note, that the semicolon ``:`` is not part of regular expressions. It is used to
-distinguish explicitly listed names and regular expressions. For example, ``"det"``
-is an explicitly listed name of the detector ``det``, while ``":det"`` is
-a regular expression that matches any device name that contains the sequence of
-characters ``"d", "e", "t"``, e.g. ``mydetector``.
+Note, that the semicolon ``:`` is not part of regular expressions and used to
+tell the processing algorithm that the string contains a pattern as opposed to
+a device or subdevice name. For example, ``"det"`` is an explicitly listed name
+of the detector ``det``, while ``":det"`` is a regular expression that matches
+any device name that contains the sequence of characters ``"d", "e", "t"``,
+such as ``mydetector``.
 
-One list item may contain multiple regular expressions separated by ``:``.
-Those expressions are used to select subdevices of a device defined in global
-scope. Looking from left to right, the regular expressions are applied to
-global device names, subdevices of the matching devices, subdevices of matching
-subdevices of matching devices etc. The depth of lookup is defined by the number
-of combined regular expressions:
+A device name pattern may consist of multiple regular expressions separated by
+``:``. The expressions are processed from left to right. The leftmost expression
+is applied to the name of each device in global worker namespace. If the device
+name matches the expression, the device name is added to the list and each
+subdevice is checked using the second expression and matching name is added to
+the list. The process continues until the end of the pattern or 'leaf' devices
+(that have no subdevices) are reached. On each step only the subdevices of
+matching devices are searched. The maximum depth of search is defined by
+the number of expressions in the pattern.
 
 .. code-block:: python
 
@@ -842,14 +862,21 @@ of combined regular expressions:
   #   and '^x$' is applied to subdevices of matching subdevices (all subdevices
   #   named 'x'). As a result, the list may contain the following
   #   devices:
+  #     'sim_stage_A'
+  #     'sim_stage_A.mtrs',
   #     'sim_stage_A.mtrs.x',
+  #     'sim_stage_B'.
+  #     'sim_stage_B.mtrs'.
   #     'sim_stage_B.mtrs.x'.
-  #   The list will not contain 'sim_stage_A', 'sim_stage_A.mtrs', 'sim_stage_B'
-  #      or 'sim_stage_B.mtrs'.
   "Type3": [":^sim:^mt:^x$"]
 
-Devices found at a given depth may be selected by putting ``+`` before the regular
-expressions (``+`` is not part of the regular expression):
+The default behavior of the list generation algorithm is to include in the list
+all matching devices and subdevices found at each level. The algorithm can be
+explicitly instructed to do so by inserting ``+`` (plus sign) before the regular
+expression, i.e. the patterns ``":^det.val$``" and ``"":+^det.val$"`` would
+produce identical results. The default behavior is not always desirable. In order
+to skip adding to the list matching devices found at a given depth, add ``-``
+(minus sign) before the regular expression (``:-``):
 
 .. code-block:: python
 
@@ -858,23 +885,22 @@ expressions (``+`` is not part of the regular expression):
   #   'sim_stage_A.mtrs.x',
   #   'sim_stage_B.mtrs',
   #   'sim_stage_B.mtrs.x'.
-  #   The list will not contain 'sim_stage_A' or 'sim_stage_B'.
-  "Type4": [":^sim:+^mt:^x$"]
+  "Type4": [":-^sim:^mt:^x$"]
 
   # The list will contain devices such as
-  #   'sim_stage_A',
-  #   'sim_stage_A.det1',
-  #   'sim_stage_A.det1.val',
-  #   'sim_stage_B',
-  #   'sim_stage_B.det2',
-  #   'sim_stage_B.det2.val'.
-  "Type5": [":+^sim:+^mt:^x$"]
+  #   'sim_stage_A.mtrs.x',
+  #   'sim_stage_B.mtrs.x'.
+  "Type5": [":-^sim:-^mt:-^x$"]
 
-Regular expressions could be applied to the full subdevice name or the remaining
-part of the subdevice name by putting ``?`` before the regular expression (``?``
-is not part of the regular expression). The full name regular expression may only
-be the last component of the combined expressions and ``+`` can not be used in
-conjunction with ``?``:
+Note, that even though ``-`` is allowed in the last expression of the pattern,
+it does not influence processing of the pattern. The devices matching the last
+expression in the pattern are always inserted in the list.
+
+Regular expressions could be applied to the full device name (such as
+``"sim_stage_A.mtrs.x"``) or right part a full device name (such as ``"mtrs.x"``).
+An expression may be labelled as a full-name expression by putting ``?``
+(question mark) before the regular expression. The full name regular expression
+may only be the last component of the pattern. :
 
 .. code-block:: python
 
@@ -883,7 +909,7 @@ conjunction with ``?``:
   #   'sim_stage_A.val',
   #   'sim_stage_A.det1.val',
   #   'sim_stage_A.detectors.det1.val',
-  "Type6": [":^sim.*val$"]
+  "Type6": [":?^sim.*val$"]
 
   # The list will contain devices such as
   #   'sim_stage_A',
@@ -891,11 +917,13 @@ conjunction with ``?``:
   #   'sim_stage_A.det1_val',
   #   'sim_stage_A.det1.val',
   #   'sim_stage_A.detectors.det1.val',
-  "Type7": [":+^sim_stage_A$:?.*val$"]
+  "Type7": [":^sim_stage_A$:?.*val$"]
 
-Using full name regular expressions is less efficient, since it requires
-searching the full tree of subdevices for matching names. The depth of search
-may be limited by adding ``depth`` parameter (``:?<regex>:depth=N``):
+Note, that ``+`` and ``-`` can not be used in conjunction with ``?``.
+Using full-name expressions is less efficient, since it the algorithm
+is forced to searching the full tree of subdevices for matching names.
+The depth of search may be explicitly limited by adding ``depth``
+parameter (``:?<regex>:depth=N``):
 
 .. code-block:: python
 
@@ -908,29 +936,26 @@ may be limited by adding ``depth`` parameter (``:?<regex>:depth=N``):
   #   since the depth of search is limited to 2 levels.
   "Type8": [":+^sim_stage_A$:?.*val$:depth=2"]
 
-A set of devices selected using regular expression may be restricted to
-certain device types by placing one of the following keywords ``__DETECTOR__``
-(readable, not movable), ``__MOTOR__`` (readable and movable),
-``__READABLE__``, ``__FLYABLE__`` before the expression:
+A set of devices matching a pattern may be restricted to devices of certain
+types by placing one of the type keywords before the patter. The supported
+keywords are ``__DETECTOR__`` (readable, not movable), ``__MOTOR__``
+(readable and movable), ``__READABLE__``, ``__FLYABLE__`` before the expression:
 
 .. code-block:: python
 
   # Select only detectors with names matching the regular expression:
-  "Type9": ["__DETECTORS__:+^sim_stage_A$:?.*:depth=3"]
+  "Type9": ["__DETECTORS__:^sim_stage_A$:?.*:depth=3"]
 
   # Select only motors:
-  "Type10": ["__MOTORS__:+^sim_stage_A$:?.*:depth=3"]
+  "Type10": ["__MOTORS__:^sim_stage_A$:?.*:depth=3"]
 
-A list may contain multiple items with regular expressions and explicitly
-listed device names. Duplicate items that are listed or selected by the
-expressions are removed from the generated list, which is then sorted in
-alphabetical order.
+.. _lists_of_plan_names:
 
 Lists of Plan Names
 ~~~~~~~~~~~~~~~~~~~
 
 Similarly to lists of device names, the lists of plan names may include
-regular expressions used to pick matching names of the existing plans:
+patterns used to pick matching names of the existing plans:
 
 .. code-block:: python
 
@@ -939,9 +964,14 @@ regular expressions used to pick matching names of the existing plans:
   #   with ``_count``, such as ``_count``, ``my_count`` etc.
   "Type11": ["count", ":_count$"]
 
-Plan name lists may contain only single regular expressions. The separators
-``:+`` and ``:?`` have no meaning in plan name lists and can not be used
-in the expressions.
+A plan name pattern may contain only a single regular expression (i.e.
+a pattern may contain only one ``:`` character). The modifiers ``+``, ``-``
+and ``?`` may still be used, but the do not influence processing
+of the plan name patterns (they are allowed to make patterns for plans
+and devices look uniform, but since plan patterns contain only one component
+and this component is the last, the matching plan names are always added
+to the list and the regular expression is always applied to the full name).
+**Device type keywords can not be used in plan name patterns.**
 
 .. _plan_annotation_api:
 

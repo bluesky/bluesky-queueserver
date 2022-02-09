@@ -2,6 +2,78 @@
 Release History
 ===============
 
+v0.0.10 (2022-02-08)
+====================
+
+Fixed
+-----
+
+- A bug that allowed classes defined in the global scope of the startup script and recognized as
+  ``bluesky.protocols.Movable``, ``Readable`` or ``Flyable`` (e.g. ``ophyd.Device``) to be
+  included in the list of existing devices. Only instantiated class objects are currently
+  included in the list.
+
+- A deficiency in the code that loads Python scripts (not startup scripts from the folder
+  as in IPython ``profile_collection``) into the environment that failed to load scripts containing
+  definitions of devices with components.
+
+Added
+-----
+
+- Support for passing subdevice names as values of plan parameters.
+
+- Support for regular expressions in the lists of names defined in ``plans``
+  and ``devices`` sections of ``parameter_annotation_decorator``. Keywords ``__MOTOR__``,
+  ``__DETECTOR__``, ``__READABLE__`` or ``__FLYABLE__`` can be used in conjunction with
+  regular expression to select device of the respective types.
+
+- New boolean parameters of the plan parameter annotation (``convert_plan_names``
+  and ``convert_device_names``) for explicitly enabling/disabling conversion of names
+  of plans and/or devices passed as parameter values. Setting those parameters
+  overrides the default behavior and should be used with caution.
+
+- Support for subdevice names in **'user_group_permissions.yaml'**.
+
+
+Changed
+-------
+
+- The algorithm for processing of user group permissions has changed. The old
+  **'user_group_permissions.yaml'** may no longer work as expected. If the stock
+  **'user_group_permissions.yaml'** is used for the project, replace it with
+  the updated file from the repository. Otherwise update the existing file
+  using following guidelines:
+
+  - If the project uses custom **'user_group_permissions.yaml'**, then insert ``:``
+    before each regular expression in the lists (e.g. change ``"^count"`` to
+    ``":^count"``, ``"^det"`` to ``":^det"`` etc.).
+  - In previous versions, only the lists with regular expressions were supported.
+    Now the lists may include explicitly listed plan, device or subdevice names,
+    such as ``"count"``, ``"det1"``, ``"det1.val"`` (there is no need to use regular
+    expressions such as ``":^count$"`` to allow the plan ``count``).
+  - The supported patterns allow to control which subdevices are included. For example,
+    the pattern ``:^det`` includes all devices with names starting with ``det``,
+    but no subdevices. The pattern ``":^det:?.*"`` selects all subdevices with
+    unlimited depth. Patterns may include the parameter ``depth`` that limits
+    maximum depth for subdevices, for example ``":^det:?.*:depth=2"`` adds
+    subdevices and subdevices of subdevices. See
+    `Configuring User Group Permissions
+    <https://blueskyproject.io/bluesky-queueserver/features_and_config.html#configuring-user-group-permissions>`_
+    for more detailed instructions.
+
+Removed
+-------
+
+- Built-in types ``AllDetectors``, ``AllMotors``, ``AllFlyers`` and ``AllPlans`` can no
+  longer be used in parameter annotations of defined in ``parameter_annotation_decorator``.
+  Use regular expressions in conjunction with keywords ``__MOTOR__``, ``__DETECTOR__``,
+  ``__READABLE__`` or ``__FLYABLE__`` to create lists of devices of respective types.
+  Use built-in types ``__PLAN__``, ``__DEVICE__``, ``__PLAN_OR_DEVICE__`` in parameter
+  annotations to selectively enable conversion of names for all plans and/or
+  devices without creating lists of names. Alternatively, use ``convert_plan_names``
+  or ``convert_device_names`` parameters of the annotation in order to explicitly
+  enable/disable conversion of all plan/device names.
+
 v0.0.9 (2022-01-04)
 ===================
 

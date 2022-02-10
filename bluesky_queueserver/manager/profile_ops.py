@@ -2830,15 +2830,15 @@ def _prepare_devices(devices, *, max_depth=50):
         components = {}
         if depth <= max_depth:
             for comp_name in comps:
-                if hasattr(device, comp_name):
-                    try:
+                try:
+                    if hasattr(device, comp_name):
                         c = getattr(device, comp_name)
                         desc = create_device_description(c, device_name + comp_name, depth=depth + 1)
                         components[comp_name] = desc
-                    except Exception as ex:
-                        logger.warning(
-                            f"Device '%s': component {comp_name!r} can not be processed: %s", device_name, ex
-                        )
+                except Exception as ex:
+                    logger.warning(
+                        f"Device '%s': component {comp_name!r} can not be processed: %s", device_name, ex
+                    )
         if components:
             description["components"] = components
         return description

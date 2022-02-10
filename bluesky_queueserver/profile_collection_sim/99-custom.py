@@ -221,5 +221,3 @@ def count_bundle_test(detectors, num=1, delay=None, *, per_shot=None, md=None):
 
 
 # =======================================================================================
-
-raise Exception("Hello")

@@ -2833,7 +2833,7 @@ def _prepare_devices(devices, *, max_depth=50):
                 for comp_name in comps:
                     if hasattr(device, comp_name):
                         c = getattr(device, comp_name)
-                        desc = create_device_description(c, device_name + comp_name, depth=depth + 1)
+                        desc = create_device_description(c, device_name + "." + comp_name, depth=depth + 1)
                         components[comp_name] = desc
             except Exception as ex:
                 logger.warning(

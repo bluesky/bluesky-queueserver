@@ -4226,6 +4226,120 @@ def test_prepare_plan_2(plan_name, plan, remove_objs, exp_args, exp_kwargs, exp_
             )
 
 
+# fmt: off
+_det_components = {
+    "components": {
+        "Imax": {}, "center": {}, "noise": {},
+        "noise_multiplier": {}, "sigma": {}, "val": {},
+    }
+}
+
+_mtr_components = {
+    "components": {
+        "acceleration": {}, "readback": {}, "setpoint": {},
+        "unused": {}, "velocity": {},
+    }
+}
+
+_stg_components = {
+    "components": {
+        "dets": {
+            "components": {
+                "det_A": copy.deepcopy(_det_components),
+                "det_B": copy.deepcopy(_det_components),
+            }
+        },
+        "mtrs": {
+            "components": {
+                "x": copy.deepcopy(_mtr_components),
+                "y": copy.deepcopy(_mtr_components),
+                "z": copy.deepcopy(_mtr_components),
+            }
+        }
+    }
+}
+
+_all_devices_pd1 = {
+    "_pp_dev1": {},
+    "_pp_dev2": {},
+    "_pp_dev3": {},
+    "_pp_stg_A": copy.deepcopy(_stg_components),
+    "_pp_stg_B": copy.deepcopy(_stg_components),
+}
+
+_stg_components_depth_3 = {  # Used for tests with 'depth==3'
+    "components": {
+        "dets": {
+            "components": {
+                "det_A": {},
+                "det_B": {},
+            }
+        },
+        "mtrs": {
+            "components": {
+                "x": {},
+                "y": {},
+                "z": {},
+            }
+        }
+    }
+}
+
+# fmt on
+
+
+# fmt: off
+@pytest.mark.parametrize("max_depth, expected_devices", [
+    (0, _all_devices_pd1),
+    (None, _all_devices_pd1),
+    (-1, _all_devices_pd1),  # negative number is replaced with 0
+    (1, {
+        "_pp_dev1": {},
+        "_pp_dev2": {},
+        "_pp_dev3": {},
+        "_pp_stg_A": {},
+        "_pp_stg_B": {},
+    }),
+    (2, {
+        "_pp_dev1": {},
+        "_pp_dev2": {},
+        "_pp_dev3": {},
+        "_pp_stg_A": {'components': {'dets': {}, 'mtrs': {}}},
+        "_pp_stg_B": {'components': {'dets': {}, 'mtrs': {}}},
+    }),
+    (3, {
+        "_pp_dev1": {},
+        "_pp_dev2": {},
+        "_pp_dev3": {},
+        "_pp_stg_A": _stg_components_depth_3,
+        "_pp_stg_B": _stg_components_depth_3,
+    }),
+    (4, _all_devices_pd1),
+    (5, _all_devices_pd1),
+])
+# fmt: on
+def test_prepare_devices_1(max_depth, expected_devices):
+    _, devices_in_nspace, _, _ = _gen_environment_pp2()
+
+    params = {}
+    if max_depth is not None:
+        params["max_depth"] = max_depth
+    existing_devices = _prepare_devices(devices_in_nspace, **params)
+
+    def clean_devices(devs):
+        for name in devs.copy():
+            if "components" in devs[name]:
+                clean_devices(devs[name]["components"])
+                dev_new = {"components": devs[name]["components"]}
+            else:
+                dev_new = {}
+            devs[name] = dev_new
+
+    clean_devices(existing_devices)
+
+    assert existing_devices == expected_devices, pprint.pformat(existing_devices)
+
+
 _prep_func_script_1 = """
 def func1():
     return 10

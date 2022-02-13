@@ -2795,7 +2795,7 @@ def _prepare_plans(plans, *, existing_devices):
     }
 
 
-def _prepare_devices(devices, *, max_depth=0, ignore_unaccessible_subdevices=True):
+def _prepare_devices(devices, *, max_depth=0, ignore_all_subdevices_if_one_fails=True):
     """
     Prepare dictionary of existing devices for saving to YAML file.
     ``max_depth`` is the maximum depth for the components. The default value (50)
@@ -2809,7 +2809,7 @@ def _prepare_devices(devices, *, max_depth=0, ignore_unaccessible_subdevices=Tru
     max_depth: int
         Maximum depth for the device search: 0 - infinite depth, 1 - only top level
         devices, 2 - device and subdevices etc.
-    ignore_unaccessible_subdevice: bool
+    ignore_all_subdevices_if_one_fails: bool
         Ignore all components of devices if at least one component (PVs) can not
         be accessed. It saves a lot of time to ignore all components, since
         stale code may contain devices with many components with non-existing PVs
@@ -2858,7 +2858,7 @@ def _prepare_devices(devices, *, max_depth=0, ignore_unaccessible_subdevices=Tru
                         desc = create_device_description(c, device_name + "." + comp_name, depth=depth + 1)
                         components[comp_name] = desc
                 except Exception as ex:
-                    ignore_subdevices = ignore_unaccessible_subdevices
+                    ignore_subdevices = ignore_all_subdevices_if_one_fails
                     logger.warning(
                         f"Device '%s': component {comp_name!r} can not be processed: %s", device_name, ex
                     )

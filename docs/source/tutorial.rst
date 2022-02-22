@@ -85,12 +85,13 @@ The easiest way to test if the Queue Server is running and accessible is to call
   'worker_environment_state': 'closed'}
 
 The server always accepts ``status`` API requests and returns the set of parameters
-that reflects current state of RE Manager. For example, ``manager_state`` parameter indicates
-current state of RE Manager (*"idle"*) and ``worker_environment_exists`` indicates if RE Worker
-environment is open and the server is ready to execute plans (*False*). Timeout occurs
-if the server is not accessible or does not respond in time. The detailed reference to
-RE Manager API could be found in the section :ref:`supported_methods_for_0MQ_API`.
-For example, documentation for the ``status`` API can be found :ref:`here<method_status>`.
+that reflects current state of RE Manager. For example, ``'manager_state': 'idle'``
+indicates current state of RE Manager and ``'worker_environment_exists': False`` indicates
+if RE Worker environment is open and the server is ready to execute plans (currently
+the environment does not exist). Timeout occurs if the server is not accessible or does
+not respond in time. The detailed reference to RE Manager API could be found in
+the section :ref:`supported_methods_for_0MQ_API`. For example, documentation for
+the ``status`` API can be found :ref:`here<method_status>`.
 
 RE Manager application can be stopped at any time by activating pressing ``Ctrl-C``.
 

@@ -45,6 +45,8 @@ arguments.
     ZMQCommSendThreads.close
 
 
+.. _supported_methods_for_0MQ_API:
+
 Supported Methods For ZMQ Communication API
 ===========================================
 

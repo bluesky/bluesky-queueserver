@@ -2795,12 +2795,33 @@ def _prepare_plans(plans, *, existing_devices):
     }
 
 
-def _prepare_devices(devices, *, max_depth=50):
+def _prepare_devices(devices, *, max_depth=0, ignore_all_subdevices_if_one_fails=True):
     """
     Prepare dictionary of existing devices for saving to YAML file.
     ``max_depth`` is the maximum depth for the components. The default value (50)
     is a very large number.
+
+    Parameters
+    ----------
+    devices: dict
+        Dictionary of devices from the namespace (key - device name, value - reference
+        to the device object).
+    max_depth: int
+        Maximum depth for the device search: 0 - infinite depth, 1 - only top level
+        devices, 2 - device and subdevices etc.
+    ignore_all_subdevices_if_one_fails: bool
+        Ignore all components of devices if at least one component (PVs) can not
+        be accessed. It saves a lot of time to ignore all components, since
+        stale code may contain devices with many components with non-existing PVs
+        and respective timeout may amount to substantial waiting time.
+
+    Returns
+    -------
+    dict
+        List of existing devices (tree of devices and subdevices).
     """
+    max_depth = max(0, max_depth)  # must be >= 0
+
     try:
         from bluesky import protocols
     except ImportError:
@@ -2824,21 +2845,32 @@ def _prepare_devices(devices, *, max_depth=50):
             component_names = []
         return component_names
 
-    def create_device_description(device, *, depth=0):
+    def create_device_description(device, device_name, *, depth=0):
         description = get_device_params(device)
         comps = get_device_component_names(device)
         components = {}
-        if depth <= max_depth:
+        if not max_depth or (depth < max_depth - 1):
+            ignore_subdevices = False
             for comp_name in comps:
-                if hasattr(device, comp_name):
-                    c = getattr(device, comp_name)
-                    desc = create_device_description(c, depth=depth + 1)
-                    components[comp_name] = desc
-        if components:
-            description["components"] = components
+                try:
+                    if hasattr(device, comp_name):
+                        c = getattr(device, comp_name)
+                        desc = create_device_description(c, device_name + "." + comp_name, depth=depth + 1)
+                        components[comp_name] = desc
+                except Exception as ex:
+                    ignore_subdevices = ignore_all_subdevices_if_one_fails
+                    logger.warning(
+                        f"Device '%s': component {comp_name!r} can not be processed: %s", device_name, ex
+                    )
+                if ignore_subdevices:
+                    components = {}  # Ignore all components of the subdevice
+                    break
+            if components:
+                description["components"] = components
+
         return description
 
-    return {k: create_device_description(v) for k, v in devices.items()}
+    return {k: create_device_description(v, k) for k, v in devices.items()}
 
 
 def existing_plans_and_devices_from_nspace(*, nspace):

@@ -4226,6 +4226,203 @@ def test_prepare_plan_2(plan_name, plan, remove_objs, exp_args, exp_kwargs, exp_
             )
 
 
+# fmt: off
+_det_components = {
+    "components": {
+        "Imax": {}, "center": {}, "noise": {},
+        "noise_multiplier": {}, "sigma": {}, "val": {},
+    }
+}
+
+_mtr_components = {
+    "components": {
+        "acceleration": {}, "readback": {}, "setpoint": {},
+        "unused": {}, "velocity": {},
+    }
+}
+
+_stg_components = {
+    "components": {
+        "dets": {
+            "components": {
+                "det_A": copy.deepcopy(_det_components),
+                "det_B": copy.deepcopy(_det_components),
+            }
+        },
+        "mtrs": {
+            "components": {
+                "x": copy.deepcopy(_mtr_components),
+                "y": copy.deepcopy(_mtr_components),
+                "z": copy.deepcopy(_mtr_components),
+            }
+        }
+    }
+}
+
+_all_devices_pd1 = {
+    "_pp_dev1": {},
+    "_pp_dev2": {},
+    "_pp_dev3": {},
+    "_pp_stg_A": copy.deepcopy(_stg_components),
+    "_pp_stg_B": copy.deepcopy(_stg_components),
+}
+
+_stg_components_depth_3 = {  # Used for tests with 'depth==3'
+    "components": {
+        "dets": {
+            "components": {
+                "det_A": {},
+                "det_B": {},
+            }
+        },
+        "mtrs": {
+            "components": {
+                "x": {},
+                "y": {},
+                "z": {},
+            }
+        }
+    }
+}
+# fmt on
+
+
+# fmt: off
+@pytest.mark.parametrize("max_depth, expected_devices", [
+    (0, _all_devices_pd1),
+    (None, _all_devices_pd1),
+    (-1, _all_devices_pd1),  # negative number is replaced with 0
+    (1, {
+        "_pp_dev1": {},
+        "_pp_dev2": {},
+        "_pp_dev3": {},
+        "_pp_stg_A": {},
+        "_pp_stg_B": {},
+    }),
+    (2, {
+        "_pp_dev1": {},
+        "_pp_dev2": {},
+        "_pp_dev3": {},
+        "_pp_stg_A": {'components': {'dets': {}, 'mtrs': {}}},
+        "_pp_stg_B": {'components': {'dets': {}, 'mtrs': {}}},
+    }),
+    (3, {
+        "_pp_dev1": {},
+        "_pp_dev2": {},
+        "_pp_dev3": {},
+        "_pp_stg_A": _stg_components_depth_3,
+        "_pp_stg_B": _stg_components_depth_3,
+    }),
+    (4, _all_devices_pd1),
+    (5, _all_devices_pd1),
+])
+# fmt: on
+def test_prepare_devices_1(max_depth, expected_devices):
+    """
+    ``_prepare_devices``: basic tests
+    """
+    _, devices_in_nspace, _, _ = _gen_environment_pp2()
+
+    params = {}
+    if max_depth is not None:
+        params["max_depth"] = max_depth
+    existing_devices = _prepare_devices(devices_in_nspace, **params)
+
+    def clean_devices(devs):
+        for name in devs.copy():
+            if "components" in devs[name]:
+                clean_devices(devs[name]["components"])
+                dev_new = {"components": devs[name]["components"]}
+            else:
+                dev_new = {}
+            devs[name] = dev_new
+
+    clean_devices(existing_devices)
+
+    assert existing_devices == expected_devices, pprint.pformat(existing_devices)
+
+
+def _pp_generate_stage_devs_unaccessible():
+    """
+    Created compound devices that have unaccessible subdevices for testing 'prepare_plan' function.
+    """
+
+    class FailingDev(ophyd.sim.SynAxis):
+        def __init__(self, *args, **kwargs):
+            # The device fails to initialize. Emulates the behavior of a device that tries to access
+            #   PV during initialization and fails. The device should be included with component
+            #   parameter ``lazy=True``.
+            super().__init__(*args, **kwargs)
+            raise Exception("Device is not accessible")
+
+    class SimStage(ophyd.Device):
+        x = ophyd.Component(ophyd.sim.SynAxis, name="x", labels={"motors"})
+        y = ophyd.Component(FailingDev, name="y", lazy=True, labels={"motors"})
+        z = ophyd.Component(ophyd.sim.SynAxis, name="z", labels={"motors"})
+
+        def set(self, x, y, z):
+            """Makes the device Movable"""
+            self.x.set(x)
+            self.y.set(y)
+            self.z.set(z)
+
+    class SimBundle(ophyd.Device):
+        mtrs = ophyd.Component(SimStage, name="mtrs")
+
+    sim_bundle_A = SimBundle(name="sim_bundle_A")
+
+    # Create namespace
+    nspace = {"_pp_dev1": _pp_dev1}
+    nspace.update({"_pp_stg_A": sim_bundle_A})
+
+    devices_in_nspace = devices_from_nspace(nspace)
+
+    return devices_in_nspace
+
+
+# fmt: off
+@pytest.mark.parametrize("max_depth, ignore_all_subdevices_if_one_fails, expected_devices", [
+    (1, False, {"_pp_dev1": {}, "_pp_stg_A": {}}),
+    (1, True, {"_pp_dev1": {}, "_pp_stg_A": {}}),
+    (2, False, {"_pp_dev1": {}, "_pp_stg_A": {"components": {"mtrs": {}}}}),
+    (2, True, {"_pp_dev1": {}, "_pp_stg_A": {"components": {"mtrs": {}}}}),
+    (3, False, {"_pp_dev1": {}, "_pp_stg_A": {"components": {"mtrs": {"components": {"x": {}, "z": {}}}}}}),
+    (3, True, {"_pp_dev1": {}, "_pp_stg_A": {"components": {"mtrs": {}}}}),
+    (None, True, {"_pp_dev1": {}, "_pp_stg_A": {"components": {"mtrs": {}}}}),
+    (4, False, {"_pp_dev1": {}, "_pp_stg_A": {"components": {"mtrs": {"components": {
+        "x": _mtr_components, "z": _mtr_components}}}}}),
+    (4, True, {"_pp_dev1": {}, "_pp_stg_A": {"components": {"mtrs": {}}}}),
+])
+# fmt: on
+def test_prepare_devices_2(max_depth, ignore_all_subdevices_if_one_fails, expected_devices):
+    """
+    ``_prepare_devices``: test options to ignore all subdevices of a device if one subdevice
+    unaccessible.
+    """
+    devices_in_nspace = _pp_generate_stage_devs_unaccessible()
+
+    params = {}
+    if max_depth is not None:
+        params["max_depth"] = max_depth
+    if ignore_all_subdevices_if_one_fails is not None:
+        params["ignore_all_subdevices_if_one_fails"] = ignore_all_subdevices_if_one_fails
+
+    existing_devices = _prepare_devices(devices_in_nspace, **params)
+
+    def clean_devices(devs):
+        for name in devs.copy():
+            if "components" in devs[name]:
+                clean_devices(devs[name]["components"])
+                dev_new = {"components": devs[name]["components"]}
+            else:
+                dev_new = {}
+            devs[name] = dev_new
+
+    clean_devices(existing_devices)
+
+    assert existing_devices == expected_devices, pprint.pformat(existing_devices)
+
+
 _prep_func_script_1 = """
 def func1():
     return 10

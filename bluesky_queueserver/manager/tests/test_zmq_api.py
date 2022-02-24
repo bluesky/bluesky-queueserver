@@ -10,6 +10,8 @@ import json
 import numpy as np
 import yaml
 
+import bluesky_queueserver
+
 from bluesky_queueserver.manager.profile_ops import (
     get_default_startup_dir,
     load_allowed_plans_and_devices,
@@ -47,6 +49,8 @@ from .common import (
     # clear_redis_pool,
 )
 from .common import re_manager, re_manager_pc_copy, re_manager_cmd, db_catalog  # noqa: F401
+
+qserver_version = bluesky_queueserver.__version__
 
 # Plans used in most of the tests: '_plan1' and '_plan2' are quickly executed '_plan3' runs for 5 seconds.
 _plan1 = {"name": "count", "args": [["det1", "det2"]], "item_type": "plan"}
@@ -158,7 +162,7 @@ def test_zmq_api_asyncio_based(re_manager):  # noqa F811
 # fmt: on
 def test_zmq_api_ping_status(re_manager, api_name):  # noqa F811
     resp, _ = zmq_single_request(api_name)
-    assert resp["msg"] == "RE Manager"
+    assert resp["msg"] == f"RE Manager v{qserver_version}"
     assert resp["manager_state"] == "idle"
     assert resp["items_in_queue"] == 0
     assert resp["running_item_uid"] is None

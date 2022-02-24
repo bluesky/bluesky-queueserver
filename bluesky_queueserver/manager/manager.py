@@ -8,6 +8,7 @@ import enum
 import uuid
 import copy
 
+import bluesky_queueserver
 from .comms import PipeJsonRpcSendAsync, CommTimeoutError, validate_zmq_key
 from .profile_ops import (
     load_allowed_plans_and_devices,
@@ -25,6 +26,8 @@ from .task_results import TaskResults
 import logging
 
 logger = logging.getLogger(__name__)
+
+qserver_version = bluesky_queueserver.__version__
 
 
 def _generate_uid():
@@ -1274,6 +1277,7 @@ class RunEngineManager(Process):
         n_items_in_history = await self._plan_queue.get_history_size()
 
         # Prepared output data
+        response_msg = f"RE Manager v{qserver_version}"
         items_in_queue = n_pending_items
         items_in_history = n_items_in_history
         running_item_uid = running_item_info["item_uid"] if running_item_info else None
@@ -1298,7 +1302,7 @@ class RunEngineManager(Process):
         # TODO: consider different levels of verbosity for ping or other command to
         #       retrieve detailed status.
         msg = {
-            "msg": "RE Manager",
+            "msg": response_msg,
             "items_in_queue": items_in_queue,
             "items_in_history": items_in_history,
             "running_item_uid": running_item_uid,

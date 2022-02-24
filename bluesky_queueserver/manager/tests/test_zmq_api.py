@@ -160,7 +160,7 @@ def test_zmq_api_asyncio_based(re_manager):  # noqa F811
 # fmt: off
 @pytest.mark.parametrize("api_name", ["ping", "status"])
 # fmt: on
-def test_zmq_api_ping_status(re_manager, api_name):  # noqa F811
+def test_zmq_api_ping_status_01(re_manager, api_name):  # noqa F811
     resp, _ = zmq_single_request(api_name)
     assert resp["msg"] == f"RE Manager v{qserver_version}"
     assert resp["manager_state"] == "idle"
@@ -182,6 +182,17 @@ def test_zmq_api_ping_status(re_manager, api_name):  # noqa F811
 
     assert isinstance(resp["plan_queue_mode"], dict)
     assert resp["plan_queue_mode"]["loop"] is False
+
+
+# fmt: off
+@pytest.mark.parametrize("api_name", ["ping", "status"])
+# fmt: on
+def test_zmq_api_ping_status_02(re_manager, api_name):  # noqa F811
+    """
+    Check that extra parameters, such as 'reload' are ignored by the API.
+    """
+    resp, _ = zmq_single_request(api_name, params={"reload": True})
+    assert resp["msg"] == f"RE Manager v{qserver_version}"
 
 
 # =======================================================================================

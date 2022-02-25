@@ -1403,7 +1403,8 @@ Description   Upload and execute script in RE Worker namespace. The script may a
               updates the lists of existing and allowed plans and devices if necessary. Changes in
               the lists will be indicated by changed list UIDs. Use *'task_result'* API to check
               if the script was loaded correctly. Note, that if the task fails, the script is
-              still executed to the point where the exception is raised, changing the environment.
+              still executed to the point where the exception is raised and the respective changes
+              to the environment are applied.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **script**: *str*
                   The string that contains the Python script. The rules for the script are the same
@@ -1423,7 +1424,8 @@ Parameters    **script**: *str*
                   (while a plan or another foreground task is running). Generally, it is not
                   recommended to update RE Worker namespace in the background. Background tasks
                   are executed in separate threads and only thread-safe scripts should be uploaded
-                  in the background.
+                  in the background. **Developers of data acquisition workflows and/or user
+                  specific code are responsible for thread safety.**
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -1468,7 +1470,7 @@ Description   Start execution of a function in RE Worker namespace. The function
               with given name and parameters. The function may still fail start (e.g. if the user is
               permitted to execute function with the given name, but the function is not defined
               in the namespace). Use *'task_result'* method with the returned *task_uid* to
-              check the status of the taks and load the result upon completion.
+              check the status of the tasks and load the result upon completion.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **item**: *dict*
                   the dictionary that contains function name and parameters. The structure of
@@ -1487,6 +1489,8 @@ Parameters    **item**: *dict*
                   started and executed while a plan or another foreground task is running.
                   If workflow requires executing background tasks, user code should be analyzed
                   for thread safety to ensure there are no potential threading issues.
+                  **Developers of data acquisition workflows and/or user specific code are
+                  responsible for thread safety.**
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.

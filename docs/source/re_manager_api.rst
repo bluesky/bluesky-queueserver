@@ -228,6 +228,8 @@ Returns       **msg**: *str*
 
                   - **'creating_environment'** - RE Worker environment is in the process of being created.
 
+                  - **'starting_queue'** - preparing to execute the queue.
+
                   - **'executing_queue'** - queue is being executed.
 
                   - **'closing_environment'** - RE Worker environment is in the process of being

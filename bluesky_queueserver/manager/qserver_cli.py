@@ -143,6 +143,7 @@ qserver script upload <path-to-file> background   # ... in the background
 qserver script upload <path-to-file> update-re    # ... allow 'RE' and 'db' to be updated
 
 qserver task result <task-uid>  # Load status or result of a task with the given UID
+qserver task status <task-uid>  # Check status of a task with the given UID
 
 qserver manager stop           # Safely exit RE Manager application
 qserver manager stop safe on   # Safely exit RE Manager application
@@ -890,6 +891,10 @@ def create_msg(params):
         if len(params) != 2:
             raise CommandParameterError(f"Request '{command}' must include at 3 parameters")
         if params[0] == "result":
+            task_uid = str(params[1])
+            method = f"{command}_{params[0]}"
+            prms = {"task_uid": task_uid}
+        elif params[0] == "status":
             task_uid = str(params[1])
             method = f"{command}_{params[0]}"
             prms = {"task_uid": task_uid}

@@ -126,6 +126,7 @@ Run tasks in RE Worker namespace:
 
 - :ref:`method_script_upload`
 - :ref:`method_function_execute`
+- :ref:`method_task_status`
 - :ref:`method_task_result`
 
 Stopping RE Manager (mostly used in testing):
@@ -174,7 +175,7 @@ Description   Returns status of RE Manager.
 Parameters    ---
 ------------  -----------------------------------------------------------------------------------------
 Returns       **msg**: *str*
-                  always returns 'RE Manager'
+                 application name and version, e.g. 'RE Manager v0.0.10'
 
               **items_in_queue**: *int*
                  the number of items in the plan queue
@@ -1500,11 +1501,52 @@ Returns       **success**: *boolean*
                   the assigned *item_uid* is equal to *task_uid*, but it may change in the future.
 
               **task_uid**: *str* or *None*
-                  Task UID can be used to check status of the task and download results once the task
+                  task UID can be used to check status of the task and download results once the task
                   is completed (see *task_result* API). *None* is returned if the request fails.
 ------------  -----------------------------------------------------------------------------------------
 Execution     The method initiates the operation. Monitor *task_results_uid* status field and call
               *task_result* API to check for success.
+============  =========================================================================================
+
+
+.. _method_task_status:
+
+**'task_status'**
+^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'task_status'**
+------------  -----------------------------------------------------------------------------------------
+Description   Returns the status of one or more tasks executed by the worker process. The request
+              must contain one or more valid task UIDs, returned by one of APIs that starts tasks.
+              A single UID may be passed as a string, multiple UIDs must be passed as as a list of
+              strings. If a UID is passed as a string, then the returned status is also a string,
+              if a list of one or more UIDs is passed, then the status is a dictionary that maps
+              task UIDs and their status. The completed tasks are stored at the server at least
+              for the period determined by retention time (currently 120 seconds after completion
+              of the task). The expired results could be automatically deleted at any time and
+              the method will return the task status as *'not_found'*.
+------------  -----------------------------------------------------------------------------------------
+Parameters    **task_uid**: *str* or *list(str)*
+                  Task UID.
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **task_uid**: *str* or *None*
+                  task UID (expected to be the same as the input parameter) or *None* if
+                  the request failed.
+
+              **status**: *str* or *dict*
+                  status of the task(s) or *None* if the request (not task) failed. If **task_uid**
+                  is a string representing single UID, then **status** is a string that may be one
+                  of *'running'*, *'completed'* or *'not_found'*. If **task_uid** is a list of strings,
+                  then *'status'* is a dictionary that maps task UIDs to status of the respective tasks.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 
 
@@ -1531,11 +1573,11 @@ Returns       **success**: *boolean*
                   error message in case of failure, empty string ('') otherwise.
 
               **task_uid**: *str* or *None*
-                  Task UID (expected to be the same as the input parameter) or *None* if
+                  task UID (expected to be the same as the input parameter) or *None* if
                   the request failed.
 
               **status**: *'running'*, *'completed'*, *'not_found'* or *None*
-                  Status of the task or *None* if the request (not task) failed.
+                  status of the task or *None* if the request (not task) failed.
 
               **result**: *dict* or *None*
                   Dictionary containing the information on a running task, results of the completed

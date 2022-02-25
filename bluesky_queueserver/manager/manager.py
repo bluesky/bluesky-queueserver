@@ -8,6 +8,7 @@ import enum
 import uuid
 import copy
 
+import bluesky_queueserver
 from .comms import PipeJsonRpcSendAsync, CommTimeoutError, validate_zmq_key
 from .profile_ops import (
     load_allowed_plans_and_devices,
@@ -25,6 +26,8 @@ from .task_results import TaskResults
 import logging
 
 logger = logging.getLogger(__name__)
+
+qserver_version = bluesky_queueserver.__version__
 
 
 def _generate_uid():
@@ -1274,6 +1277,7 @@ class RunEngineManager(Process):
         n_items_in_history = await self._plan_queue.get_history_size()
 
         # Prepared output data
+        response_msg = f"RE Manager v{qserver_version}"
         items_in_queue = n_pending_items
         items_in_history = n_items_in_history
         running_item_uid = running_item_info["item_uid"] if running_item_info else None
@@ -1298,7 +1302,7 @@ class RunEngineManager(Process):
         # TODO: consider different levels of verbosity for ping or other command to
         #       retrieve detailed status.
         msg = {
-            "msg": "RE Manager",
+            "msg": response_msg,
             "items_in_queue": items_in_queue,
             "items_in_history": items_in_history,
             "running_item_uid": running_item_uid,
@@ -2356,6 +2360,45 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg, "task_uid": task_uid, "status": status, "result": result}
 
+    async def _task_status_handler(self, request):
+        """
+        Returns the status of one or more tasks executed by the worker process. The request must contain
+        one or more valid task UIDs, returned by one of APIs that starts tasks. A single UID is passed
+        as a string, multiple UIDs - as a list of strings. If a UID is passed as a string, then
+        the returned status is also a string, if a list of one or more UIDs is passed, then
+        the status is a dictionary that maps task UIDs and their status.
+
+        Returned parameters: ``success`` and ``msg`` indicate success of the API call and error message in
+        case of API call failure; ``status`` is the status of the tasks (``running``, ``completed``,
+        ``not_found``).
+        """
+        logger.debug("Request the status of one or more tasks executed by RE Worker ...")
+
+        task_uid = None
+
+        try:
+            supported_param_names = ["task_uid"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            task_uid = request.get("task_uid", None)
+            if task_uid is None:
+                raise ValueError("Required 'task_uid' parameter is missing in the API call.")
+
+            if isinstance(task_uid, str):
+                status = (await self._task_results.get_task_info(task_uid=task_uid))[0]
+            elif isinstance(task_uid, list):
+                status = {_: (await self._task_results.get_task_info(task_uid=_))[0] for _ in task_uid}
+            else:
+                raise Exception(
+                    f"'task_uid' must be a string or a list of strings: type(task_uid)={type(task_uid)!r}"
+                )
+            success, msg = True, ""
+
+        except Exception as ex:
+            success, msg, status = False, f"Error: {ex}", None
+
+        return {"success": success, "msg": msg, "task_uid": task_uid, "status": status}
+
     async def _queue_start_handler(self, request):
         """
         Start execution of the loaded queue. Additional runs can be added to the queue while
@@ -2620,6 +2663,7 @@ class RunEngineManager(Process):
             "script_upload": "_script_upload_handler",
             "function_execute": "_function_execute_handler",
             "task_result": "_task_result_handler",
+            "task_status": "_task_status_handler",
             "queue_mode_set": "_queue_mode_set_handler",
             "queue_item_add": "_queue_item_add_handler",
             "queue_item_add_batch": "_queue_item_add_batch_handler",

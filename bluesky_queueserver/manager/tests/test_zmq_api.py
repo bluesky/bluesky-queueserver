@@ -2087,6 +2087,99 @@ def test_zmq_api_script_upload_9_fail(re_manager, test_with_plan):  # noqa: F811
 
 
 # ===========================================================================================
+#                                'task_status' API
+
+
+def test_zmq_api_task_status_1(re_manager):  # noqa: F811
+    """
+    ``task_status``: basic test.
+    """
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    status, _ = zmq_single_request("status")
+    assert status["worker_background_tasks"] == 0
+
+    func_item = {"name": "function_sleep", "item_type": "function", "args": [2.0]}
+    params = {"item": func_item, "run_in_background": True, "user": _user, "user_group": _test_user_group}
+
+    task_uids = []
+    for _ in range(3):
+        resp1, _ = zmq_single_request("function_execute", params=params)
+        assert resp1["success"] is True
+        task_uids.append(resp1["task_uid"])
+
+    assert len(task_uids) == 3
+
+    resp2, _ = zmq_single_request("task_status", params={"task_uid": task_uids[0]})
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+    assert resp2["status"] == "running"
+
+    resp3, _ = zmq_single_request("task_status", params={"task_uid": [task_uids[0]]})
+    assert resp3["success"] is True
+    assert resp3["msg"] == ""
+    assert resp3["status"] == {task_uids[0]: "running"}
+
+    resp4, _ = zmq_single_request("task_status", params={"task_uid": (task_uids[0], task_uids[1])})
+    assert resp4["success"] is True
+    assert resp4["msg"] == ""
+    assert resp4["status"] == {task_uids[0]: "running", task_uids[1]: "running"}
+
+    resp5, _ = zmq_single_request("task_status", params={"task_uid": task_uids})
+    assert resp5["success"] is True
+    assert resp5["msg"] == ""
+    assert resp5["status"] == {_: "running" for _ in task_uids}
+
+    result = wait_for_task_result(10, task_uids[-1])
+    assert result["success"] is True, pprint.pformat(result)
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_task_status_2(re_manager):  # noqa: F811
+    """
+    ``task_status``: some special successfull cases.
+    """
+    resp1, _ = zmq_single_request("task_status", params={"task_uid": "some_uid"})
+    assert resp1["success"] is True
+    assert resp1["msg"] == ""
+    assert resp1["status"] == "not_found"
+
+    resp2, _ = zmq_single_request("task_status", params={"task_uid": ["uid1", "uid2"]})
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+    assert resp2["status"] == {"uid1": "not_found", "uid2": "not_found"}
+
+    resp3, _ = zmq_single_request("task_status", params={"task_uid": ["uid1", "uid1"]})
+    assert resp3["success"] is True
+    assert resp3["msg"] == ""
+    assert resp3["status"] == {"uid1": "not_found"}
+
+
+# fmt: off
+@pytest.mark.parametrize("params, err_msg", [
+    ({}, "Required 'task_uid' parameter is missing in the API call"),
+    ({"some_param": 10}, "API request contains unsupported parameters: 'some_param'"),
+    ({"task_uid": 10}, "'task_uid' must be a string or a list of strings"),
+    ({"task_uid": "uid1", "some_param": 10},
+     "API request contains unsupported parameters: 'some_param'"),
+])
+# fmt: on
+def test_zmq_api_task_status_3_fail(re_manager, params, err_msg):  # noqa: F811
+    """
+    ``task_status``: failing cases.
+    """
+    resp1, _ = zmq_single_request("task_status", params=params)
+    assert resp1["success"] is False
+    assert err_msg in resp1["msg"], pprint.pformat(resp1)
+    assert resp1["status"] is None
+
+
+# ===========================================================================================
 #                             'function_execute' API
 
 

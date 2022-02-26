@@ -1310,9 +1310,9 @@ Description   Request Run Engine to pause currently running plan. The request wi
               is cleared once the pending pause request is processed (the plan is paused or plan
               is completed and the queue is stopped).
 ------------  -----------------------------------------------------------------------------------------
-Parameters    **option**: *'immediate'* or *'deferred'*
+Parameters    **option**: *'immediate'* or *'deferred'* (optional)
                   pause the plan immediately (roll back to the previous checkpoint) or continue
-                  to the next checkpoint.
+                  to the next checkpoint. Default: *'deferred'*.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.

@@ -3812,16 +3812,17 @@ _plan_3steps = {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 3
 
 
 # fmt: off
-@pytest.mark.parametrize("kill_manager, pause_deferred, pause_before_kill", [
-    (False, False, 0),
-    (False, True, 0),
-    (True, False, 0),    # Pausing is completed while the manager is being restarted
-    (True, True, 0),
-    (True, False, 3.0),  # Pausing is completed before the manager is restarted
-    (True, True, 3.0),
+@pytest.mark.parametrize("kill_manager, pause_option, pause_before_kill", [
+    (False, "immediate", 0),
+    (False, "deferred", 0),
+    (False, None, 0),        # None - default (immediate) option
+    (True, "immediate", 0),    # Pausing is completed while the manager is being restarted
+    (True, "deferred", 0),
+    (True, "immediate", 3.0),  # Pausing is completed before the manager is restarted
+    (True, "deferred", 3.0),
 ])
 # fmt: on
-def test_zmq_api_re_pause_1(re_manager, pause_deferred, kill_manager, pause_before_kill):  # noqa: F811
+def test_zmq_api_re_pause_1(re_manager, pause_option, kill_manager, pause_before_kill):  # noqa: F811
     """
     Test the simple case when deferred pause is requested before the last checkpoint so that
     the plan could be paused correctly using deferred and immediate options. Verify that
@@ -3857,10 +3858,11 @@ def test_zmq_api_re_pause_1(re_manager, pause_deferred, kill_manager, pause_befo
     ttime.sleep(0.9)  # ~50% of the first measurement in the plan
     _check_status(0, 0, "executing_queue", "running", "executing_plan", False)
 
-    resp3, _ = zmq_single_request("re_pause", params={"option": ("deferred" if pause_deferred else "immediate")})
+    params = {} if pause_option is None else {"option": pause_option}
+    resp3, _ = zmq_single_request("re_pause", params=params)
     assert resp3["success"] is True, f"resp={resp3}"
 
-    if pause_deferred:
+    if pause_option in ("deferred", None):
         # In case of immediate pause, the state will depend on how fast the request is processed
         _check_status(0, 0, "executing_queue", "running", "executing_plan", True)
 

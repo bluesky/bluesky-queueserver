@@ -372,8 +372,8 @@ Returns       **success**: *boolean*
                   the dictionary that contains information on the existing plans.
                   Dictionary keys are plan names.
 
-              **plans_allowed_uid**: *str* or *None*
-                  UID of the list of allowed plans, *None* if the request fails.
+              **plans_existing_uid**: *str* or *None*
+                  UID of the list of existing plans, *None* if the request fails.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
@@ -399,12 +399,12 @@ Returns       **success**: *boolean*
               **msg**: *str*
                   error message in case of failure, empty string ('') otherwise.
 
-              **devices_allowed**: *dict*
+              **devices_existing**: *dict*
                   the dictionary that contains information on the existing devices.
                   Dictionary keys are device names.
 
-              **devices_allowed_uid**: *str* or *None*
-                  UID of the list of allowed devices, *None* if the request fails
+              **devices_existing_uid**: *str* or *None*
+                  UID of the list of existing devices, *None* if the request fails
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================

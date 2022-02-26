@@ -2453,7 +2453,8 @@ class RunEngineManager(Process):
 
     async def _re_pause_handler(self, request):
         """
-        Pause Run Engine
+        Pause Run Engine. The options of immediate and deferred pause is supported.
+        Deferred pause is used if no option is specified.
         """
         logger.info("Pausing the queue (currently running plan) ...")
 
@@ -2461,7 +2462,7 @@ class RunEngineManager(Process):
             supported_param_names = ["option"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
-            option = request["option"] if "option" in request else None
+            option = request.get("option", "deferred")
             available_options = ("deferred", "immediate")
             if option in available_options:
                 if self._environment_exists:

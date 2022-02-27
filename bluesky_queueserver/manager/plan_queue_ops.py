@@ -869,6 +869,12 @@ class PlanQueueOperations:
             item = self.filter_item_parameters(item)
 
         qsize0 = await self._get_queue_size()
+        if isinstance(pos, int):
+            if (pos == 0) or (pos < -qsize0):
+                pos = "front"
+            elif (pos == -1) or (pos >= qsize0):
+                pos = "back"
+
         if (before_uid is not None) or (after_uid is not None):
             uid = before_uid if before_uid is not None else after_uid
             before = uid == before_uid
@@ -894,13 +900,14 @@ class PlanQueueOperations:
                     qsize = await self._r_pool.linsert(
                         self._name_plan_queue, json.dumps(item_to_displace), json.dumps(item), before=before
                     )
-        elif pos == "back" or (isinstance(pos, int) and pos >= qsize0):
+        elif pos == "back":
             qsize = await self._r_pool.rpush(self._name_plan_queue, json.dumps(item))
-        elif pos == "front" or (isinstance(pos, int) and (pos == 0 or pos <= -qsize0)):
+        elif pos == "front":
             qsize = await self._r_pool.lpush(self._name_plan_queue, json.dumps(item))
         elif isinstance(pos, int):
-            # Put the position in the range
-            item_to_displace = await self._get_item(pos=pos)
+            pos_reference = pos if (pos > 0) else (pos + 1)
+
+            item_to_displace = await self._get_item(pos=pos_reference)
             if item_to_displace:
                 if aioredis_v2:
                     qsize = await self._r_pool.linsert(
@@ -930,13 +937,14 @@ class PlanQueueOperations:
             Item (plan or instruction) represented as a dictionary of parameters
         pos : int, str or None
             Integer that specifies the position index, "front" or "back".
-            If ``pos`` is in the range ``1..qsize-1`` the item is inserted
-            to the specified position and items at positions ``pos..qsize-1``
-            are shifted by one position to the right. If ``-qsize<pos<0`` the
-            item is inserted at the positon counted from the back of the queue
-            (-1 - the last element of the queue). If ``pos>=qsize``,
-            the plan is added to the back of the queue. If ``pos==0`` or
-            ``pos<=-qsize``, the plan is pushed to the front of the queue.
+            If ``pos`` is in the range ``0..qsize`` (qsize counted before the new
+            item is inserted), the item is inserted to the specified position
+            and items at positions ``pos..qsize-1`` are shifted by one position
+            to the right. If ``-qsize<pos<0`` the item is inserted at the positon
+            counted from the back of the queue (-1 - the last element of the queue).
+            If ``pos>qsize`` or ``pos==-1``, the plan is added to the back of
+            the queue. If ``pos==0`` or ``pos<-qsize``, the plan is pushed to
+            the front of the queue.
         before_uid : str or None
             If UID is specified, then the item is inserted before the plan with UID.
             ``before_uid`` has precedence over ``after_uid``.

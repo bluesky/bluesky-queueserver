@@ -602,9 +602,10 @@ def test_queue_mode_set_2_fail(re_manager, plist, exit_code):  # noqa F811
     (2, 2, True),
     (3, 2, True),
     (100, 2, True),
-    (-1, 1, True),
-    (-2, 0, True),
+    (-1, 2, True),
+    (-2, 1, True),
     (-3, 0, True),
+    (-4, 0, True),
     (-100, 0, True),
 ])
 # fmt: on

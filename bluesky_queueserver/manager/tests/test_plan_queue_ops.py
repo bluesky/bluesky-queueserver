@@ -625,17 +625,19 @@ def test_add_item_to_queue_1():
             await add_plan({"name": "e"}, 5, pos=0)  # front
             await add_plan({"name": "f"}, 6, pos=5)  # back (index == queue size)
             await add_plan({"name": "g"}, 7, pos=5)  # previous to last
-            await add_plan({"name": "h"}, 8, pos=-1)  # previous to last
+            await add_plan({"name": "h"}, 8, pos=-1)  # last
             await add_plan({"name": "i"}, 9, pos=3)  # arbitrary index
             await add_plan({"name": "j"}, 10, pos=100)  # back (index some large number)
-            await add_plan({"name": "k"}, 11, pos=-10)  # front (precisely negative queue size)
-            await add_plan({"name": "l"}, 12, pos=-100)  # front (index some large negative number)
+            await add_plan({"name": "k"}, 11, pos=-11)  # front (precisely)
+            await add_plan({"name": "l"}, 12, pos=-11)  # 2nd element
+            await add_plan({"name": "m"}, 13, pos=-100)  # front (index some large negative number)
+            await add_plan({"name": "n"}, 14, pos=-2)  # previous to lasst
 
-            assert await pq.get_queue_size() == 12
+            assert await pq.get_queue_size() == 14
 
             plans, _ = await pq.get_queue()
             name_sequence = [_["name"] for _ in plans]
-            assert name_sequence == ["l", "k", "e", "d", "a", "i", "b", "c", "g", "h", "f", "j"]
+            assert name_sequence == ["m", "k", "l", "e", "d", "a", "i", "b", "c", "g", "f", "h", "n", "j"]
 
             await pq.clear_queue()
 
@@ -761,8 +763,14 @@ def test_add_item_to_queue_4_fail():
     ({"pos": "back"}, "1234", "567", "1234567"),
     ({"pos": 0}, "1234", "567", "5671234"),
     ({"pos": 1}, "1234", "567", "1567234"),
+    ({"pos": 2}, "1234", "567", "1256734"),
+    ({"pos": 4}, "1234", "567", "1234567"),
     ({"pos": 100}, "1234", "567", "1234567"),
-    ({"pos": -1}, "1234", "567", "1235674"),
+    ({"pos": -1}, "1234", "567", "1234567"),
+    ({"pos": -2}, "1234", "567", "1235674"),
+    ({"pos": -3}, "1234", "567", "1256734"),
+    ({"pos": -4}, "1234", "567", "1567234"),
+    ({"pos": -5}, "1234", "567", "5671234"),
     ({"pos": -100}, "1234", "567", "5671234"),
     ({"before_uid": "1"}, "1234", "567", "5671234"),
     ({"before_uid": "2"}, "1234", "567", "1567234"),

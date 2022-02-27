@@ -1407,5 +1407,6 @@ def test_qserver_zmq_keys():
 
     # Generated public key based on private key - success
     _, private_key = generate_new_zmq_key_pair()
+    ttime.sleep(1)  # The pause may fix issues with this test
     print(f"Private key used for the test: '{private_key}'")
     assert subprocess.call(["qserver-zmq-keys", "--zmq-private-key", private_key]) == SUCCESS

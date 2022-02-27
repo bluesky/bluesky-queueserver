@@ -2,6 +2,31 @@
 Release History
 ===============
 
+v0.0.11 (2022-02-27)
+====================
+
+Fixed
+-----
+
+- Fixed handling of negative item indices by ``queue_item_add`` API
+  (``pos=-1`` now adds an item to the back of the queue).
+
+Added
+-----
+
+- New ``task_status`` API. The API may be called for a single task from CLI as
+  ``qserver task status <task-uid>``.
+
+Changed
+-------
+
+- ``status`` API is now returning Queue Server version number as part of ``msg``,
+  e.g. ``"RE Manager v0.0.11"``.
+
+- Extended ``re_pause`` API. Now the ``option`` parameter is optional.
+  The default value is ``"option": "deferred"``.
+
+
 v0.0.10 (2022-02-08)
 ====================
 

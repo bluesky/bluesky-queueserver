@@ -602,9 +602,10 @@ def test_queue_mode_set_2_fail(re_manager, plist, exit_code):  # noqa F811
     (2, 2, True),
     (3, 2, True),
     (100, 2, True),
-    (-1, 1, True),
-    (-2, 0, True),
+    (-1, 2, True),
+    (-2, 1, True),
     (-3, 0, True),
+    (-4, 0, True),
     (-100, 0, True),
 ])
 # fmt: on
@@ -1406,5 +1407,6 @@ def test_qserver_zmq_keys():
 
     # Generated public key based on private key - success
     _, private_key = generate_new_zmq_key_pair()
+    ttime.sleep(1)  # The pause may fix issues with this test
     print(f"Private key used for the test: '{private_key}'")
     assert subprocess.call(["qserver-zmq-keys", "--zmq-private-key", private_key]) == SUCCESS

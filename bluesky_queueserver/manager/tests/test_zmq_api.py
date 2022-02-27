@@ -337,9 +337,10 @@ def test_zmq_api_queue_item_add_1(re_manager):  # noqa F811
     (2, 2, True),
     (3, 2, True),
     (100, 2, True),
-    (-1, 1, True),
-    (-2, 0, True),
+    (-1, 2, True),
+    (-2, 1, True),
     (-3, 0, True),
+    (-4, 0, True),
     (-100, 0, True),
 ])
 # fmt: on
@@ -375,6 +376,7 @@ def test_zmq_api_queue_item_add_2(re_manager, pos, pos_result, success):  # noqa
 
     assert len(resp2["items"]) == (3 if success else 2)
     assert resp2["running_item"] == {}
+    print(f"QUEUE ITEMS: {pprint.pformat(resp2['items'])}")
 
     if success:
         assert resp2["items"][pos_result]["args"] == plan2["args"]
@@ -998,7 +1000,7 @@ def test_zmq_api_queue_item_execute_4_fail(re_manager):  # noqa: F811
     ({"pos": 0}, "1234", "567", "5671234", True, "" * 3),
     ({"pos": 1}, "1234", "567", "1567234", True, "" * 3),
     ({"pos": 100}, "1234", "567", "1234567", True, "" * 3),
-    ({"pos": -1}, "1234", "567", "1235674", True, "" * 3),
+    ({"pos": -1}, "1234", "567", "1234567", True, "" * 3),
     ({"pos": -100}, "1234", "567", "5671234", True, "" * 3),
     ({"before_uid": "1"}, "1234", "567", "5671234", True, "" * 3),
     ({"before_uid": "2"}, "1234", "567", "1567234", True, "" * 3),

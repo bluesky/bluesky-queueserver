@@ -1210,7 +1210,9 @@ class PlanQueueOperations:
                     # This is one case when we need to insert the plan after the 'destination' plan.
                     before = False
                 else:
-                    before = src_index > pos_dest
+                    si = src_index if src_index >= 0 else queue_size + src_index
+                    pi = pos_dest if pos_dest >= 0 else queue_size + pos_dest
+                    before = si > pi
 
         except Exception as ex:
             raise IndexError(f"Destination plan ({dest_txt}) was not found: {str(ex)}.")

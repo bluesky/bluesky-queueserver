@@ -106,7 +106,7 @@ The parameter allows to select between the following modes for updating the list
   devices that could be used during the current session, but it will not be saved to the file.
   The next time Queue Server is started, the original lists of existing plans and devices
   is loaded from disk. :ref:`method_permissions_reload` 0MQ API called with parameter
-  ``reload_plans_devices=True`` will also reload the original list from disk. Restarting
+  ``restore_plans_devices=True`` will also reload the original list from disk. Restarting
   the RE Manager process while the environment is open will not read the list of existing
   plans and devices from disk. This option may be used in workflows with 'static', rarely
   changed startup scripts where it is preferred that the lists of existing plans and devices

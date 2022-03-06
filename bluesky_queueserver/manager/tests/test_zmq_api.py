@@ -3358,16 +3358,16 @@ def test_zmq_api_queue_mode_set_3_loop_mode(re_manager):  # noqa: F811
 #                              Method 'permissions_reload'
 
 # fmt: off
-@pytest.mark.parametrize("reload_plans_devices", [False, True])
+@pytest.mark.parametrize("restore_plans_devices", [False, True])
 # fmt: on
-def test_permissions_reload_1(re_manager_pc_copy, tmp_path, reload_plans_devices):  # noqa: F811
+def test_permissions_reload_1(re_manager_pc_copy, tmp_path, restore_plans_devices):  # noqa: F811
     """
     Comprehensive test for ``permission_reload`` API: create a copy of startup files,
     generate the lists of existing plans and devices, start RE Manager (loads the list
     of existing plans and devices from disk), add a device and a plan to startup scripts,
     generate the new lists of existing plans and devices, call ``permissions_reload``,
     check if the new device and the new plan was added to the lists of allowed plans
-    and devices (if ``reload_plans_devices`` is ``True``, then the device and the plan
+    and devices (if ``restore_plans_devices`` is ``True``, then the device and the plan
     are expected to be in the list).
     """
 
@@ -3405,7 +3405,7 @@ def test_permissions_reload_1(re_manager_pc_copy, tmp_path, reload_plans_devices
     assert "count50" not in plans_allowed
     assert "det50" not in devices_allowed
 
-    resp2, _ = zmq_single_request("permissions_reload", {"reload_plans_devices": reload_plans_devices})
+    resp2, _ = zmq_single_request("permissions_reload", {"restore_plans_devices": restore_plans_devices})
     assert resp2["success"] is True, f"resp={resp2}"
 
     # Check that 'plans_allowed_uid' and 'devices_allowed_uid' changed while permissions were reloaded
@@ -3430,7 +3430,7 @@ def test_permissions_reload_1(re_manager_pc_copy, tmp_path, reload_plans_devices
     assert plans_allowed_uid2 != plans_allowed_uid
     assert devices_allowed_uid2 != devices_allowed_uid
 
-    if reload_plans_devices:
+    if restore_plans_devices:
         assert "count50" in plans_allowed2
         assert "det50" in devices_allowed2
     else:
@@ -3489,7 +3489,7 @@ user_groups:
 # fmt: on
 def test_permissions_reload_2(re_manager_pc_copy, reload_permissions_from_disk):  # noqa: F811
     """
-    Tests for ``permissions_reload`` API: check if parameter ``reload_permissions`` works correctly.
+    Tests for ``permissions_reload`` API: check if parameter ``restore_permissions`` works correctly.
     """
     _, pc_path = re_manager_pc_copy
 
@@ -3502,7 +3502,7 @@ def test_permissions_reload_2(re_manager_pc_copy, reload_permissions_from_disk):
     # Now reload permissions. The new lists of allowed plans and devices must be generated
     params = {}
     if reload_permissions_from_disk in (True, False):
-        params["reload_permissions"] = reload_permissions_from_disk
+        params["restore_permissions"] = reload_permissions_from_disk
 
     resp1, _ = zmq_single_request("permissions_reload", params=params)
     assert resp1["success"] is True, f"resp={resp1}"
@@ -4028,7 +4028,7 @@ def test_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_restart):  # 
     plans_allowed_uid = status["plans_allowed_uid"]
     devices_allowed_uid = status["devices_allowed_uid"]
 
-    resp1, _ = zmq_single_request("permissions_reload", {"reload_plans_devices": True})
+    resp1, _ = zmq_single_request("permissions_reload", {"restore_plans_devices": True})
     assert resp1["success"] is True, f"resp={resp1}"
 
     # Check that 'plans_allowed_uid' and 'devices_allowed_uid' changed while permissions were reloaded

@@ -422,14 +422,14 @@ Description   Reload user group permissions from the default location or the loc
               command line parameters and generate lists of allowed plans and devices based on
               the lists of existing plans and devices. By default, the method will use current lists
               of existing plans and devices stored in memory. Optionally the method can reload the
-              lists from the disk file (see *reload_plans_devices* parameter). The method always
+              lists from the disk file (see *restore_plans_devices* parameter). The method always
               updates UIDs of the lists of allowed plans and devices even if the contents remain
               the same.
 ------------  -----------------------------------------------------------------------------------------
-Parameters    **reload_plans_devices**: *boolean* (optional)
+Parameters    **restore_plans_devices**: *boolean* (optional)
                   reload the lists of existing plans and devices from disk if *True*, otherwise
                   use current lists stored in memory. Default: *False*.
-              **reload_permissions**: *boolean* (optional)
+              **restore_permissions**: *boolean* (optional)
                   reload user group permissions from disk if *True*, otherwise use current permissions.
                   Default: *True*.
 ------------  -----------------------------------------------------------------------------------------

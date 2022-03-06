@@ -823,7 +823,7 @@ def create_msg(params):
             method = f"{command}_{params[0]}"
             if len(params) == 2:
                 if params[1] == "lists":
-                    prms["reload_plans_devices"] = True
+                    prms["restore_plans_devices"] = True
                 else:
                     CommandParameterError(f"Request '{command} {params[0]} {params[1]}' is not supported")
 

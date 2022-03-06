@@ -979,15 +979,15 @@ class RunEngineManager(Process):
             logger.error("Validation of user group permissions loaded from Redis failed: %s", str(ex))
             await self._load_permissions_from_disk()
 
-    def _update_allowed_plans_and_devices(self, reload_plans_devices=False):
+    def _update_allowed_plans_and_devices(self, restore_plans_devices=False):
         """
         Update the lists of allowed plans and devices. UIDs for the lists of allowed plans and device
-        are ALWAYS updated when this function is called. If ``reload_plans_devices`` is ``True``,
+        are ALWAYS updated when this function is called. If ``restore_plans_devices`` is ``True``,
         then the list of existing plans and devices is reloaded from disk.
         """
         path_pd = self._config_dict["existing_plans_and_devices_path"]
         try:
-            if reload_plans_devices:
+            if restore_plans_devices:
                 existing_plans, existing_devices = load_existing_plans_and_devices(path_pd)
                 self._set_existing_plans_and_devices(
                     existing_plans=existing_plans,
@@ -1443,31 +1443,31 @@ class RunEngineManager(Process):
         parameters. UIDs of the lists of allowed plans and devices are always changed if the operation is
         successful even if the contents of the lists remain the same. By default, the function is using
         the current lists of existing plans and devices, which may or may not match the contents of
-        the file on disk. If optional parameter ``reload_plans_devices`` is ``True``, then the list
+        the file on disk. If optional parameter ``restore_plans_devices`` is ``True``, then the list
         of existing plans and devices are loaded from disk file.
         """
         logger.info("Reloading lists of allowed plans and devices ...")
         try:
-            supported_param_names = ["reload_plans_devices", "reload_permissions"]
+            supported_param_names = ["restore_plans_devices", "restore_permissions"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
             # Do not reload the lists of existing plans and devices from disk file by default
-            reload_plans_devices = request.get("reload_plans_devices", False)
-            reload_permissions = request.get("reload_permissions", True)
+            restore_plans_devices = request.get("restore_plans_devices", False)
+            restore_permissions = request.get("restore_permissions", True)
 
-            if reload_permissions and (
+            if restore_permissions and (
                 self._user_group_permissions_reload_option not in ("ON_REQUEST", "ON_STARTUP")
             ):
                 raise RuntimeError(
-                    "Reloading of permissions from disk is not allowed: RE Manager was started with option "
-                    f"user_group_permissions_reload={self._user_group_permissions_reload_option!r}",
+                    "Restoring user group permissions from disk is not allowed: RE Manager was started "
+                    f"with option user_group_permissions_reload={self._user_group_permissions_reload_option!r}",
                 )
 
-            if reload_permissions:
+            if restore_permissions:
                 await self._load_permissions_from_disk()
             else:
                 await self._load_permissions_from_redis()
-            self._update_allowed_plans_and_devices(reload_plans_devices=reload_plans_devices)
+            self._update_allowed_plans_and_devices(restore_plans_devices=restore_plans_devices)
 
             # If environment exists, then tell the worker to reload permissions. This is optional.
             if self._environment_exists:
@@ -2757,7 +2757,7 @@ class RunEngineManager(Process):
             #   devices and plans and the dictionary of user group permissions are going to be empty ({}).
             await self._load_existing_plans_and_devices_from_worker()
             try:
-                self._update_allowed_plans_and_devices(reload_plans_devices=False)
+                self._update_allowed_plans_and_devices(restore_plans_devices=False)
             except Exception as ex:
                 logger.exception("Exception: %s", ex)
 
@@ -2807,7 +2807,7 @@ class RunEngineManager(Process):
             # Load lists of allowed plans and devices
             logger.info("Loading the lists of allowed plans and devices ...")
             try:
-                self._update_allowed_plans_and_devices(reload_plans_devices=True)
+                self._update_allowed_plans_and_devices(restore_plans_devices=True)
             except Exception as ex:
                 logger.exception("Exception: %s", ex)
 

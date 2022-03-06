@@ -238,7 +238,7 @@ def test_cli_update_existing_plans_devices_01(
 
     # Reload the list of existing plans and devices from disk and make sure the new device/plan
     #   is loaded/not loaded depending on the update mode.
-    resp6, _ = zmq_single_request("permissions_reload", params={"reload_plans_devices": True})
+    resp6, _ = zmq_single_request("permissions_reload", params={"restore_plans_devices": True})
     assert resp6["success"] is True
 
     new_plan_added = new_plan_added and update_existing_plans_devices != "NEVER"

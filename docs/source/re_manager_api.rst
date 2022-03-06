@@ -215,6 +215,9 @@ Returns       **msg**: *str*
                  UID for the list of existing devices in RE Worker namespace. Similar to
                  **plans_allowed_uid**.
 
+              **'run_list_uid'** - UID of the list of the active runs. Monitor this UID and
+                  load the updated list of active runs once the UID is changed.
+
               **manager_state**: *str*
                   state of RE Manager. Supported states:
 
@@ -238,11 +241,6 @@ Returns       **msg**: *str*
 
                   - **'destroying_environment'** - RE Worker environment is in the process of being
                     destroyed (emergency).
-
-                  - **'re_state'** - state of Run Engine (see Bluesky documentation).
-
-                  - **'run_list_uid'** - UID of the list of the active runs. Monitor this UID and
-                    load the updated list of active runs once the UID is changed.
 
               **re_state**: *str* or *None*
                   current state of Bluesky Run Engine (see Blue Sky documentation) or *None* if
@@ -422,14 +420,14 @@ Description   Reload user group permissions from the default location or the loc
               command line parameters and generate lists of allowed plans and devices based on
               the lists of existing plans and devices. By default, the method will use current lists
               of existing plans and devices stored in memory. Optionally the method can reload the
-              lists from the disk file (see *reload_plans_devices* parameter). The method always
+              lists from the disk file (see *restore_plans_devices* parameter). The method always
               updates UIDs of the lists of allowed plans and devices even if the contents remain
               the same.
 ------------  -----------------------------------------------------------------------------------------
-Parameters    **reload_plans_devices**: *boolean* (optional)
+Parameters    **restore_plans_devices**: *boolean* (optional)
                   reload the lists of existing plans and devices from disk if *True*, otherwise
                   use current lists stored in memory. Default: *False*.
-              **reload_permissions**: *boolean* (optional)
+              **restore_permissions**: *boolean* (optional)
                   reload user group permissions from disk if *True*, otherwise use current permissions.
                   Default: *True*.
 ------------  -----------------------------------------------------------------------------------------
@@ -726,7 +724,7 @@ Parameters    **item**: *dict*
                   the name of the user group (e.g. 'admin').
 
               **user**: *str*
-                  the name of the user (e.g. 'John Doe'). The name is included in the item metadata
+                  the name of the user (e.g. 'Default User'). The name is included in the item metadata
                   and may be used to identify the user who added the item to the queue. It is not
                   passed to the Run Engine or included in run metadata.
 
@@ -786,7 +784,7 @@ Parameters    **items**: *list*
                   the name of the user group (e.g. 'admin').
 
               **user**: *str*
-                  the name of the user (e.g. 'John Doe'). The name is included in the item metadata
+                  the name of the user (e.g. 'Default User'). The name is included in the item metadata
                   and may be used to identify the user who added the item to the queue. It is not
                   passed to the Run Engine or included in run metadata.
 
@@ -863,7 +861,7 @@ Parameters    **item**: *dict*
                   the name of the user group (e.g. 'admin').
 
               **user**: *str*
-                  the name of the user (e.g. 'John Doe'). The name is included in the item metadata
+                  the name of the user (e.g. 'Default User'). The name is included in the item metadata
                   and may be used to identify the user who added the item to the queue. It is not
                   passed to the Run Engine or included in run metadata.
 
@@ -1141,9 +1139,7 @@ Description   Immediately start execution of the submitted item. The item may be
               in RE Worker environment. Interactive workflows may be used for calibration of
               the instrument, while the queue may be used to run sequences of scheduled experiments.
 
-              Internally the API request adds the submitted item to the front of the queue
-              and immediately attempts to start its execution. The item is removed from the queue
-              almost immediately and never pushed back into the queue. If the item is a plan,
+              The item is not added to the queue or change the existing queue. If the item is a plan,
               the results of execution are added to plan history as usual. The respective history
               item could be accessed to check if the plan was executed successfully.
 
@@ -1159,7 +1155,7 @@ Parameters    **item**: *dict*
                   the name of the user group (e.g. 'admin').
 
               **user**: *str*
-                  the name of the user (e.g. 'John Doe'). The name is included in the item metadata
+                  the name of the user (e.g. 'Default User'). The name is included in the item metadata
                   and may be used to identify the user who added the item to the queue. It is not
                   passed to the Run Engine or included in run metadata.
 ------------  -----------------------------------------------------------------------------------------
@@ -1170,12 +1166,11 @@ Returns       **success**: *boolean*
                   error message in case of failure, empty string ('') otherwise.
 
               **qsize**: *int* or *None*
-                  the number of items in the plan queue after the plan was added if
-                  the operation was successful, *None* otherwise
+                  the number of items in the plan queue, *None* if request fails otherwise.
 
               **item**: *dict* or *None* (optional)
                   the inserted item. The item contains the assigned item UID. In case of error
-                  the item may be returned without modification (with assigned UID). *None* will be
+                  the item may be returned without modification (with assigned UID). *None* is
                   returned if request does not contain item parameters.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
@@ -1481,7 +1476,7 @@ Parameters    **item**: *dict*
                   the name of the user group (e.g. 'admin').
 
               **user**: *str*
-                  the name of the user (e.g. 'John Doe'). The name is included in the item metadata
+                  the name of the user (e.g. 'Default User'). The name is included in the item metadata
                   and may be used to identify the user who submitted the item.
 
               **run_in_background**: *boolean* (optional, default *False*)
@@ -1532,7 +1527,7 @@ Description   Returns the status of one or more tasks executed by the worker pro
               the method will return the task status as *'not_found'*.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **task_uid**: *str* or *list(str)*
-                  Task UID.
+                  Task UID or a list of task UIDs.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -1540,13 +1535,13 @@ Returns       **success**: *boolean*
               **msg**: *str*
                   error message in case of failure, empty string ('') otherwise.
 
-              **task_uid**: *str* or *None*
-                  task UID (expected to be the same as the input parameter) or *None* if
-                  the request failed.
+              **task_uid**: *str*, *list(str)* or *None*
+                  task UID or a list of task UIDs (expected to be the same as the input parameter).
+                  May be *None* if the request fails.
 
               **status**: *str* or *dict*
                   status of the task(s) or *None* if the request (not task) failed. If **task_uid**
-                  is a string representing single UID, then **status** is a string that may be one
+                  is a string representing single UID, then **status** is a string, which is one of
                   of *'running'*, *'completed'* or *'not_found'*. If **task_uid** is a list of strings,
                   then *'status'* is a dictionary that maps task UIDs to status of the respective tasks.
 ------------  -----------------------------------------------------------------------------------------
@@ -1577,8 +1572,8 @@ Returns       **success**: *boolean*
                   error message in case of failure, empty string ('') otherwise.
 
               **task_uid**: *str* or *None*
-                  task UID (expected to be the same as the input parameter) or *None* if
-                  the request failed.
+                  task UID (expected to be the same as the input parameter). May be *None* if
+                  the request fails.
 
               **status**: *'running'*, *'completed'*, *'not_found'* or *None*
                   status of the task or *None* if the request (not task) failed.

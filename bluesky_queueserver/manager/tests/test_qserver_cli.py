@@ -1245,9 +1245,9 @@ def trivial_plan_for_unit_test():
 
 
 # fmt: off
-@pytest.mark.parametrize("reload_plans_devices", [True, False])
+@pytest.mark.parametrize("restore_plans_devices", [True, False])
 # fmt: on
-def test_qserver_permissions_reload_1(re_manager_pc_copy, tmp_path, reload_plans_devices):  # noqa F811
+def test_qserver_permissions_reload_1(re_manager_pc_copy, tmp_path, restore_plans_devices):  # noqa F811
     """
     Tests for ``qserver permissions reload [lists]`` API.
     """
@@ -1266,12 +1266,12 @@ def test_qserver_permissions_reload_1(re_manager_pc_copy, tmp_path, reload_plans
 
     # Reload profile collection
     params = ["permissions", "reload"]
-    if reload_plans_devices:
+    if restore_plans_devices:
         params.append("lists")
     assert subprocess.call(["qserver", *params]) == SUCCESS
 
     # Attempt to add the plan to the queue. It should be successful now.
-    res_expected = SUCCESS if reload_plans_devices else REQ_FAILED
+    res_expected = SUCCESS if restore_plans_devices else REQ_FAILED
     assert subprocess.call(["qserver", "queue", "add", "plan", plan]) == res_expected
 
 

@@ -215,6 +215,9 @@ Returns       **msg**: *str*
                  UID for the list of existing devices in RE Worker namespace. Similar to
                  **plans_allowed_uid**.
 
+              **'run_list_uid'** - UID of the list of the active runs. Monitor this UID and
+                  load the updated list of active runs once the UID is changed.
+
               **manager_state**: *str*
                   state of RE Manager. Supported states:
 
@@ -238,11 +241,6 @@ Returns       **msg**: *str*
 
                   - **'destroying_environment'** - RE Worker environment is in the process of being
                     destroyed (emergency).
-
-                  - **'re_state'** - state of Run Engine (see Bluesky documentation).
-
-                  - **'run_list_uid'** - UID of the list of the active runs. Monitor this UID and
-                    load the updated list of active runs once the UID is changed.
 
               **re_state**: *str* or *None*
                   current state of Bluesky Run Engine (see Blue Sky documentation) or *None* if

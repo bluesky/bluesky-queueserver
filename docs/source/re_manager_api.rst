@@ -724,7 +724,7 @@ Parameters    **item**: *dict*
                   the name of the user group (e.g. 'admin').
 
               **user**: *str*
-                  the name of the user (e.g. 'John Doe'). The name is included in the item metadata
+                  the name of the user (e.g. 'Default User'). The name is included in the item metadata
                   and may be used to identify the user who added the item to the queue. It is not
                   passed to the Run Engine or included in run metadata.
 
@@ -784,7 +784,7 @@ Parameters    **items**: *list*
                   the name of the user group (e.g. 'admin').
 
               **user**: *str*
-                  the name of the user (e.g. 'John Doe'). The name is included in the item metadata
+                  the name of the user (e.g. 'Default User'). The name is included in the item metadata
                   and may be used to identify the user who added the item to the queue. It is not
                   passed to the Run Engine or included in run metadata.
 
@@ -861,7 +861,7 @@ Parameters    **item**: *dict*
                   the name of the user group (e.g. 'admin').
 
               **user**: *str*
-                  the name of the user (e.g. 'John Doe'). The name is included in the item metadata
+                  the name of the user (e.g. 'Default User'). The name is included in the item metadata
                   and may be used to identify the user who added the item to the queue. It is not
                   passed to the Run Engine or included in run metadata.
 
@@ -1157,7 +1157,7 @@ Parameters    **item**: *dict*
                   the name of the user group (e.g. 'admin').
 
               **user**: *str*
-                  the name of the user (e.g. 'John Doe'). The name is included in the item metadata
+                  the name of the user (e.g. 'Default User'). The name is included in the item metadata
                   and may be used to identify the user who added the item to the queue. It is not
                   passed to the Run Engine or included in run metadata.
 ------------  -----------------------------------------------------------------------------------------
@@ -1479,7 +1479,7 @@ Parameters    **item**: *dict*
                   the name of the user group (e.g. 'admin').
 
               **user**: *str*
-                  the name of the user (e.g. 'John Doe'). The name is included in the item metadata
+                  the name of the user (e.g. 'Default User'). The name is included in the item metadata
                   and may be used to identify the user who submitted the item.
 
               **run_in_background**: *boolean* (optional, default *False*)

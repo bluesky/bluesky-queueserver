@@ -1530,7 +1530,7 @@ Description   Returns the status of one or more tasks executed by the worker pro
               the method will return the task status as *'not_found'*.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **task_uid**: *str* or *list(str)*
-                  Task UID.
+                  Task UID or a list of task UIDs.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -1538,13 +1538,13 @@ Returns       **success**: *boolean*
               **msg**: *str*
                   error message in case of failure, empty string ('') otherwise.
 
-              **task_uid**: *str* or *None*
-                  task UID (expected to be the same as the input parameter) or *None* if
-                  the request failed.
+              **task_uid**: *str*, *list(str)* or *None*
+                  task UID or a list of task UIDs (expected to be the same as the input parameter).
+                  May be *None* if the request fails.
 
               **status**: *str* or *dict*
                   status of the task(s) or *None* if the request (not task) failed. If **task_uid**
-                  is a string representing single UID, then **status** is a string that may be one
+                  is a string representing single UID, then **status** is a string, which is one of
                   of *'running'*, *'completed'* or *'not_found'*. If **task_uid** is a list of strings,
                   then *'status'* is a dictionary that maps task UIDs to status of the respective tasks.
 ------------  -----------------------------------------------------------------------------------------
@@ -1575,8 +1575,8 @@ Returns       **success**: *boolean*
                   error message in case of failure, empty string ('') otherwise.
 
               **task_uid**: *str* or *None*
-                  task UID (expected to be the same as the input parameter) or *None* if
-                  the request failed.
+                  task UID (expected to be the same as the input parameter). May be *None* if
+                  the request fails.
 
               **status**: *'running'*, *'completed'*, *'not_found'* or *None*
                   status of the task or *None* if the request (not task) failed.

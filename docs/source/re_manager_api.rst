@@ -1139,9 +1139,7 @@ Description   Immediately start execution of the submitted item. The item may be
               in RE Worker environment. Interactive workflows may be used for calibration of
               the instrument, while the queue may be used to run sequences of scheduled experiments.
 
-              Internally the API request adds the submitted item to the front of the queue
-              and immediately attempts to start its execution. The item is removed from the queue
-              almost immediately and never pushed back into the queue. If the item is a plan,
+              The item is not added to the queue or change the existing queue. If the item is a plan,
               the results of execution are added to plan history as usual. The respective history
               item could be accessed to check if the plan was executed successfully.
 
@@ -1168,12 +1166,11 @@ Returns       **success**: *boolean*
                   error message in case of failure, empty string ('') otherwise.
 
               **qsize**: *int* or *None*
-                  the number of items in the plan queue after the plan was added if
-                  the operation was successful, *None* otherwise
+                  the number of items in the plan queue, *None* if request fails otherwise.
 
               **item**: *dict* or *None* (optional)
                   the inserted item. The item contains the assigned item UID. In case of error
-                  the item may be returned without modification (with assigned UID). *None* will be
+                  the item may be returned without modification (with assigned UID). *None* is
                   returned if request does not contain item parameters.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.

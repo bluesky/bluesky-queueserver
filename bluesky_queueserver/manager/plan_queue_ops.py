@@ -1591,9 +1591,9 @@ class PlanQueueOperations:
             if not immediate_execution:
                 # Pop plan from the front of the queue (it is the same plan as currently loaded)
                 await self._r_pool.lpop(self._name_plan_queue)
-                self._plan_queue_uid = self.new_item_uid()
 
             await self._set_running_item_info(plan)
+            self._plan_queue_uid = self.new_item_uid()
 
         except RuntimeError:
             raise

@@ -2103,7 +2103,7 @@ def test_set_processed_item_as_stopped_2(loop_mode, func):
             assert queue_1 == queue_2
             assert await pq.get_queue_size() == 3
             assert await pq.get_history_size() == 1
-            assert pq.plan_queue_uid == pq_uid2
+            assert pq.plan_queue_uid != pq_uid2
             assert pq.plan_history_uid != ph_uid
 
             def check_plan(p):

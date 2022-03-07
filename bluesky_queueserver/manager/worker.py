@@ -1024,6 +1024,7 @@ class RunEngineWorker(Process):
                         # Documents from each run are routed to an independent
                         #   instance of BestEffortCallback
                         bec = BestEffortCallback()
+                        bec.disable_plots()
                         return [bec], []
 
                     # Subscribe to Best Effort Callback in the way that works with multi-run plans.

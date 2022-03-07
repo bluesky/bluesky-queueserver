@@ -1591,9 +1591,9 @@ class PlanQueueOperations:
             if not immediate_execution:
                 # Pop plan from the front of the queue (it is the same plan as currently loaded)
                 await self._r_pool.lpop(self._name_plan_queue)
-                self._plan_queue_uid = self.new_item_uid()
 
             await self._set_running_item_info(plan)
+            self._plan_queue_uid = self.new_item_uid()
 
         except RuntimeError:
             raise
@@ -1662,6 +1662,7 @@ class PlanQueueOperations:
             await self._clear_running_item_info()
             if not loop_mode and not immediate_execution:
                 self._uid_dict_remove(item["item_uid"])
+            self._plan_queue_uid = self.new_item_uid()
             await self._add_to_history(item_cleaned)
         else:
             item_cleaned = {}
@@ -1711,6 +1712,7 @@ class PlanQueueOperations:
                 item_pushed_to_queue = self.set_new_item_uuid(item_cleaned)
                 self._uid_dict_remove(item["item_uid"])
                 await self._add_item_to_queue(item_pushed_to_queue, pos="front", filter_parameters=False)
+            self._plan_queue_uid = self.new_item_uid()
         else:
             item_cleaned = {}
         return item_cleaned

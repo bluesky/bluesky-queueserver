@@ -185,10 +185,12 @@ Returns       **msg**: *str*
 
               **running_item_uid**: *str* or *None*
                  item UID of the currently running plan or *None* if no plan is currently running.
+                 Monitor **plan_queue_uid** to detect updates of the queue and running item data.
 
               **plan_queue_uid**: *str*
                  plan queue UID, which is updated each time the contents of the queue is changed.
-                 Monitor this parameter to determine when the queue data should be downloaded.
+                 Monitor this parameter to determine when the queue or running item data was
+                 updated at the server (see **queue_get** API).
 
               **plan_history_uid**: *str*
                  plan history UID, which is updated each time the contents of the history is changed.
@@ -1139,9 +1141,11 @@ Description   Immediately start execution of the submitted item. The item may be
               in RE Worker environment. Interactive workflows may be used for calibration of
               the instrument, while the queue may be used to run sequences of scheduled experiments.
 
-              The item is not added to the queue or change the existing queue. If the item is a plan,
-              the results of execution are added to plan history as usual. The respective history
-              item could be accessed to check if the plan was executed successfully.
+              The item is not added to the queue or change the existing queue. The API modifies
+              **plan_queue_uid** status parameter, which is used for monitoring updates of
+              the queue and running items. If the item is a plan, the results of execution
+              are added to plan history as usual. The respective history item could be accessed
+              to check if the plan was executed successfully.
 
               The API **does not start execution of the queue**. Once execution of the submitted
               item is finished, RE Manager is switched to the IDLE state.

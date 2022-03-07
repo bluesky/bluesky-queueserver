@@ -785,6 +785,8 @@ def test_zmq_api_queue_item_execute_1(re_manager):  # noqa: F811
     assert resp2a["items_in_queue"] == 1
     assert resp2a["items_in_history"] == 0
     assert resp2a["worker_environment_state"] == "idle"
+    plan_queue_uid1 = resp2a["plan_queue_uid"]
+    running_item_uid1 = resp2a["running_item_uid"]
 
     # Execute a plan
     params3 = {"item": _plan3, "user": _user, "user_group": _user_group}
@@ -794,13 +796,27 @@ def test_zmq_api_queue_item_execute_1(re_manager):  # noqa: F811
     assert resp3["qsize"] == 1
     assert resp3["item"]["name"] == _plan3["name"]
 
+    # Check status immediately
+    status, _ = zmq_single_request("status")
+    assert status["plan_queue_uid"] != plan_queue_uid1
+    assert status["running_item_uid"] != running_item_uid1
+
     ttime.sleep(1)
     status, _ = zmq_single_request("status")
     assert status["items_in_queue"] == 1
     assert status["items_in_history"] == 0
     assert status["worker_environment_state"] == "executing_plan"
+    assert status["plan_queue_uid"] != plan_queue_uid1
+    assert status["running_item_uid"] != running_item_uid1
+
+    plan_queue_uid2 = status["plan_queue_uid"]
+    running_item_uid2 = status["running_item_uid"]
 
     assert wait_for_condition(time=30, condition=condition_manager_idle)
+
+    status, _ = zmq_single_request("status")
+    assert status["plan_queue_uid"] != plan_queue_uid2
+    assert status["running_item_uid"] != running_item_uid2
 
     # Execute an instruction (STOP instruction - nothing will be done)
     params3a = {"item": _instruction_stop, "user": _user, "user_group": _user_group}

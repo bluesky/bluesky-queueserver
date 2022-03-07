@@ -1650,15 +1650,15 @@ def test_process_next_item_1(func, loop_mode, immediate_execution):
             else:
                 assert False, f"Unknown test case: '{func}'"
 
-            pq_uid = pq.plan_queue_uid
-            queue_1 = await pq.get_queue()
+            pq_uid1 = pq.plan_queue_uid
+            queue_1, _ = await pq.get_queue()
 
             # If the next plan is set as running, it is removed from the queue and
             #   the queue UID is changed. If a plan is set for immediate execution,
             #   then the queue and the queue UID remain unchanged.
             params = {"item": plan4} if immediate_execution else {}
             running_plan = await f(**params)
-            queue_2 = await pq.get_queue()
+            queue_2, _ = await pq.get_queue()
 
             assert running_plan != {}
 
@@ -1666,20 +1666,20 @@ def test_process_next_item_1(func, loop_mode, immediate_execution):
                 assert running_plan["name"] == "d"
                 assert "properties" in running_plan
                 assert running_plan["properties"]["immediate_execution"] is True
-                assert pq.plan_queue_uid == pq_uid
+                assert pq.plan_queue_uid != pq_uid1
                 assert await pq.get_queue_size() == 3
                 assert len(pq._uid_dict) == 3
                 assert queue_1 == queue_2
             else:
                 assert running_plan["name"] == "a"
-                assert pq.plan_queue_uid != pq_uid
+                assert pq.plan_queue_uid != pq_uid1
                 assert await pq.get_queue_size() == 2
                 assert len(pq._uid_dict) == 3
 
             # Apply if a plan is already running
-            pq_uid = pq.plan_queue_uid
+            pq_uid1 = pq.plan_queue_uid
             assert await f() == {}
-            assert pq.plan_queue_uid == pq_uid
+            assert pq.plan_queue_uid == pq_uid1
             assert await pq.get_queue_size() == (3 if immediate_execution else 2)
             assert len(pq._uid_dict) == 3
 
@@ -2087,7 +2087,8 @@ def test_set_processed_item_as_stopped_2(loop_mode, func):
 
             await pq.process_next_item(item=plan4)
 
-            assert pq.plan_queue_uid == pq_uid
+            assert pq.plan_queue_uid != pq_uid
+            pq_uid2 = pq.plan_queue_uid
             assert pq.plan_history_uid == ph_uid
 
             if func == "completed":
@@ -2102,7 +2103,7 @@ def test_set_processed_item_as_stopped_2(loop_mode, func):
             assert queue_1 == queue_2
             assert await pq.get_queue_size() == 3
             assert await pq.get_history_size() == 1
-            assert pq.plan_queue_uid == pq_uid
+            assert pq.plan_queue_uid == pq_uid2
             assert pq.plan_history_uid != ph_uid
 
             def check_plan(p):

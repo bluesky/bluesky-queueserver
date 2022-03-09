@@ -2,6 +2,25 @@
 Release History
 ===============
 
+v0.0.12 (2022-03-08)
+====================
+
+Fixed
+-----
+
+- Bug in handling of negative indices by ``queue_item_move`` and API.
+
+- proper update of ``plan_queue_uid`` by ``queue_item_execute`` API.
+
+Changed
+-------
+
+- Renamed parameters of ``permissions_reload`` API: ``reload_permissions`` is renamed
+  to ``restore_permissions``, ``reload_plans_devices`` is renamed to ``restore_plans_devices``.
+
+- Default BEC: no longer plot with best effort callback (improves performance).
+
+
 v0.0.11 (2022-02-27)
 ====================
 

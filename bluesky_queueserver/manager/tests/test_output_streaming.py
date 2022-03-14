@@ -277,3 +277,52 @@ def test_ReceiveConsoleOutputAsync_1(period, cb_type):
     asyncio.run(testing())
 
     pco.stop()
+
+
+def test_ReceiveConsoleOutputAsync_2():
+    """
+    ``ReceiveConsoleOutputAsync``: test various options to subscribe and unsubscribe
+    """
+
+    zmq_port = 61223  # Arbitrary port
+    zmq_topic = "testing_topic"
+    zmq_subscribe_addr = f"tcp://localhost:{zmq_port}"
+
+    rm = ReceiveConsoleOutputAsync(zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic, timeout=100)
+
+    assert rm._socket_subscribed is False
+
+    # Test 'subscribe()' and 'unsubscribe()'
+    rm.subscribe()
+    assert rm._socket_subscribed is True
+    rm.unsubscribe()
+    assert rm._socket_subscribed is False
+
+    async def testing_1():
+        rm.start()
+        assert rm._socket_subscribed is True
+        rm.stop()
+        await asyncio.sleep(1)
+        assert rm._socket_subscribed is False
+
+    asyncio.run(testing_1())
+
+    async def testing_2():
+        rm.start()
+        assert rm._socket_subscribed is True
+        rm.stop(unsubscribe=False)
+        await asyncio.sleep(1)
+        assert rm._socket_subscribed is True
+        rm.unsubscribe()
+        assert rm._socket_subscribed is False
+
+    asyncio.run(testing_2())
+
+    async def testing_3():
+        with pytest.raises(TimeoutError):
+            await rm.recv()
+        assert rm._socket_subscribed is True
+        rm.unsubscribe()
+        assert rm._socket_subscribed is False
+
+    asyncio.run(testing_3())

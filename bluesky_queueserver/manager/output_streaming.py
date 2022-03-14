@@ -324,6 +324,11 @@ class ReceiveConsoleOutputAsync:
     explicitly awaiting for the ``recv`` function (same as in ``ReceiveConsoleOutput``)
     or setting up a callback function (plain function or coroutine).
 
+    The ``subscribe()`` and ``unsubscribe()`` methods allow to explicitly subscribe and
+    unsubscribe the socket to the topic. The messages published while the socket is unsubscribed
+    are discarded. Calls to ``recv()`` and ``start()`` methods always subscribe the socket,
+    ``stop()`` method unsubscribes the socket unless called with ``unsubscribe=False``.
+
     Explicitly awaiting ``recv`` function:
 
     .. code-block:: python
@@ -349,7 +354,14 @@ class ReceiveConsoleOutputAsync:
                 #   message or after timeout (e.g. check a condition and exit
                 #   the loop once the condition is satisfied).
 
+        # Subscribe to start caching messages. Calling 'recv()' also subscribes the socket.
+        rco.subscribe()
+
         asyncio.run(run_acquisition())
+
+        # Unsubscribe to discard all new messages
+        rco.unsubscribe()
+
 
     Setting up callback function or coroutine (awaitable function):
 
@@ -416,10 +428,32 @@ class ReceiveConsoleOutputAsync:
         self._zmq_topic = zmq_topic
 
         self._socket = None
+        self._socket_subscribed = False
+        self._unsubscribe_when_stopping = False
+
         if self._zmq_subscribe_addr:
             context = zmq.asyncio.Context()
             self._socket = context.socket(zmq.SUB)
             self._socket.connect(self._zmq_subscribe_addr)
+
+    def subscribe(self):
+        """
+        Subscribe socket to the 0MQ topic used for publishing console output.
+        The messages published after subscription could be loaded using ``recv()`` method.
+        The function does nothing if the socket is already subscribed.
+        """
+        if self._socket and not self._socket_subscribed:
+            self._socket.subscribe(self._zmq_topic)
+            self._socket_subscribed = True
+
+    def unsubscribe(self):
+        """
+        Unsubscribe the socket from 0MQ topic. Once the socket is unsubscribed, all published
+        messages are discarded.
+        """
+        if self._socket and self._socket_subscribed:
+            self._socket.unsubscribe(self._zmq_topic)
+            self._socket_subscribed = False
 
     def set_callback(self, cb):
         """
@@ -442,6 +476,7 @@ class ReceiveConsoleOutputAsync:
     async def recv(self, timeout=-1):
         """
         Get the next published message. If timeout expires then ``TimeoutError`` is raised.
+        If the socket is not subscribed to to topic, then subscribes the socket.
 
         Parameters
         ----------
@@ -464,6 +499,9 @@ class ReceiveConsoleOutputAsync:
 
         if (timeout is not None) and (timeout < 0):
             timeout = self._timeout
+
+        # Subscribe the socket to the topic if it is not already subscribed
+        self.subscribe()
 
         if not await self._socket.poll(timeout=timeout):
             raise TimeoutError("No message received during timeout period {timeout} ms")
@@ -490,27 +528,34 @@ class ReceiveConsoleOutputAsync:
         if not self._exit:
             asyncio.ensure_future(self._recv_next_message())
         else:
-            self._socket.unsubscribe(self._zmq_topic)
+            if self._unsubscribe_when_stopping:
+                self.unsubscribe()
             self._is_running = False
 
     def start(self):
         """
         Start collection of messages published by RE Manager. Collection may be started and stopped
         multiple times during a session. Repeated calls to the ``start`` method are ignored.
-        The function MUST be called from the event loop.
+        The function MUST be called from the event loop. The method always subscribes the socket.
         """
         self._exit = False
         if not self._is_running:
             self._is_running = True
-            self._socket.subscribe(self._zmq_topic)
+            self.subscribe()
             asyncio.ensure_future(self._recv_next_message())
 
-    def stop(self):
+    def stop(self, *, unsubscribe=True):
         """
         Stop collection of messages published by RE Manager. Call to ``stop`` method unsubscribes
         the client from 0MQ topic, therefore all the messages published until collection is started
         are ignored. The function MUST be called from the event loop.
+
+        Parameters
+        ----------
+        unsubscribe: boolean (optional)
+            Unsubscribe the socket if ``True`` (default), otherwise leave the socket subscribed.
         """
+        self._unsubscribe_when_stopping = unsubscribe
         self._exit = True
 
     def __del__(self):
@@ -550,6 +595,7 @@ def qserver_console_monitor_cli():
 
     try:
         rco = ReceiveConsoleOutput(zmq_subscribe_addr=zmq_subscribe_addr)
+        rco.subscribe()
         while True:
             try:
                 payload = rco.recv()

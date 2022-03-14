@@ -77,20 +77,22 @@ def test_setup_console_output_redirection_1(sys_stdout_stderr_restore):
 
 
 # fmt: off
-@pytest.mark.parametrize("console_output_on, zmq_publish_on, period, timeout, n_timeouts", [
-    (True, True, 0, None, 0),
-    (True, False, 0, None, 0),
-    (False, True, 0, None, 0),
-    (False, False, 0, None, 0),
-    (True, True, 0.5, None, 0),
-    (True, True, 1.2, None, 3),
-    (True, True, 1.2, 500, 6),  # Timeout is in ms (500 == 0.5 s)
-    (True, True, 0.55, 500, 3),
+@pytest.mark.parametrize("console_output_on, zmq_publish_on, sub, unsub, period, timeout, n_timeouts", [
+    (True, True, False, False, 0, None, 0),
+    (True, False, False, False, 0, None, 0),
+    (False, True, False, False, 0, None, 0),
+    (False, False, False, False, 0, None, 0),
+    (True, True, False, False, 0.5, None, 0),
+    (True, True, False, False, 1.2, None, 3),
+    (True, True, False, False, 1.2, 500, 6),  # Timeout is in ms (500 == 0.5 s)
+    (True, True, False, False, 0.55, 500, 3),
+    (True, True, True, False, 0, None, 0),  # Explicitly subscribe
+    (True, True, True, True, 0, None, 0),   # Explicitly subscribe, then unsubscribe
 ])
 # fmt: on
 # TODO: this test may need to be changed to run more reliably on CI
 @pytest.mark.xfail(reason="Test often fails when run on CI, but expected to pass locally")
-def test_ReceiveConsoleOutput_1(capfd, console_output_on, zmq_publish_on, period, timeout, n_timeouts):
+def test_ReceiveConsoleOutput_1(capfd, console_output_on, zmq_publish_on, sub, unsub, period, timeout, n_timeouts):
     """
     Tests for ``ReceiveConsoleOutput`` and ``PublishConsoleOutput``.
     """
@@ -132,10 +134,22 @@ def test_ReceiveConsoleOutput_1(capfd, console_output_on, zmq_publish_on, period
         def stop(self):
             self._exit = True
 
+        def subscribe(self):
+            self._rco.subscribe()
+
+        def unsubscribe(self):
+            self._rco.unsubscribe()
+
     rm = ReceiveMessages(zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic)
 
     pco.start()
-    rm.start()
+
+    if sub:
+        rm.subscribe()
+    if unsub:
+        rm.unsubscribe()
+    if not sub and not unsub:
+        rm.start()
 
     msgs = ["message-one\n", "message-two\n", "message-three\n"]
     for msg in msgs:
@@ -148,10 +162,14 @@ def test_ReceiveConsoleOutput_1(capfd, console_output_on, zmq_publish_on, period
     # Wait for all message to be received and for the publishing thread to exit.
     ttime.sleep(pco._polling_timeout * 2)
 
+    if sub or unsub:
+        rm.start()
+        ttime.sleep(pco._polling_timeout * 2)
+
     rm.stop()
     rm.join()
 
-    if zmq_publish_on:
+    if zmq_publish_on and not unsub:
         assert len(rm.received_msgs) == 3
         for msg_received, msg in zip(rm.received_msgs, msgs):
             assert isinstance(msg_received["time"], float)

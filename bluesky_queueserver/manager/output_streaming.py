@@ -193,10 +193,14 @@ class ReceiveConsoleOutput:
     The class allows to subscribe to published 0MQ messages and read the messages one by
     one as they arrive. Subscription is performed using the remote 0MQ address and topic.
 
-    The class provides blocking (with timeout) ``recv`` method that waits for the next
+    The class provides blocking (with timeout) ``recv()`` method that waits for the next
     published message. The following example contains the code illustrating using the class.
     In real-world  application the loop will be running in a separate thread and generating
     callbacks on each received message.
+
+    The ``subscribe()`` and ``unsubscribe()`` methods allow to explicitly subscribe and
+    unsubscribe the socket to the topic. The messages published while the socket is unsubscribed
+    are discarded. First call to ``recv()`` method automatically subscribes the socket.
 
     .. code-block:: python
 
@@ -245,16 +249,37 @@ class ReceiveConsoleOutput:
         self._zmq_topic = zmq_topic
 
         self._socket = None
+        self._socket_subscribed = False
+
         if self._zmq_subscribe_addr:
             context = zmq.Context()
             self._socket = context.socket(zmq.SUB)
             self._socket.connect(self._zmq_subscribe_addr)
+
+    def subscribe(self):
+        """
+        Subscribe socket to the 0MQ topic used for publishing console output.
+        The messages published after subscription could be loaded using ``recv()`` method.
+        The function does nothing if the socket is already subscribed.
+        """
+        if self._socket and not self._socket_subscribed:
             self._socket.subscribe(self._zmq_topic)
+            self._socket_subscribed = True
+
+    def unsubscribe(self):
+        """
+        Unsubscribe the socket from 0MQ topic. Once the socket is unsubscribed, all published
+        messages are discarded.
+        """
+        if self._socket and self._socket_subscribed:
+            self._socket.unsubscribe(self._zmq_topic)
+            self._socket_subscribed = False
 
     def recv(self, timeout=-1):
         """
-        Get the next published message. If timeout expires then
-        ``TimeoutError`` is raised.
+        Get the next published message. The function subscribes the socket to 0MQ topic
+        if the socket is not already subscribed. If timeout expires then ``TimeoutError``
+        is raised.
 
         Parameters
         ----------
@@ -277,6 +302,9 @@ class ReceiveConsoleOutput:
 
         if (timeout is not None) and (timeout < 0):
             timeout = self._timeout
+
+        # Subscribe the socket to the topic if it is not already subscribed
+        self.subscribe()
 
         if not self._socket.poll(timeout=timeout):
             raise TimeoutError("No message received during timeout period {timeout} ms")

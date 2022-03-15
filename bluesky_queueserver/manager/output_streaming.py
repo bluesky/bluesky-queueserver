@@ -258,8 +258,8 @@ class ReceiveConsoleOutput:
 
     def subscribe(self):
         """
-        Subscribe socket to the 0MQ topic used for publishing console output.
-        The messages published after subscription could be loaded using ``recv()`` method.
+        Subscribe 0MQ socket to the console output topic. Once the socket is subscribed,
+        the published messages are cached by 0MQ and could be loaded with ``recv()`` method.
         The function does nothing if the socket is already subscribed.
         """
         if self._socket and not self._socket_subscribed:
@@ -268,8 +268,8 @@ class ReceiveConsoleOutput:
 
     def unsubscribe(self):
         """
-        Unsubscribe the socket from 0MQ topic. Once the socket is unsubscribed, all published
-        messages are discarded.
+        Unsubscribe 0MQ socket from the console output topic. Once the socket is unsubscribed,
+        all published messages are discarded.
         """
         if self._socket and self._socket_subscribed:
             self._socket.unsubscribe(self._zmq_topic)
@@ -438,8 +438,8 @@ class ReceiveConsoleOutputAsync:
 
     def subscribe(self):
         """
-        Subscribe socket to the 0MQ topic used for publishing console output.
-        The messages published after subscription could be loaded using ``recv()`` method.
+        Subscribe 0MQ socket to the console output topic. Once the socket is subscribed,
+        the published messages are cached by 0MQ and could be loaded with ``recv()`` method.
         The function does nothing if the socket is already subscribed.
         """
         if self._socket and not self._socket_subscribed:
@@ -448,8 +448,8 @@ class ReceiveConsoleOutputAsync:
 
     def unsubscribe(self):
         """
-        Unsubscribe the socket from 0MQ topic. Once the socket is unsubscribed, all published
-        messages are discarded.
+        Unsubscribe 0MQ socket from the console output topic. Once the socket is unsubscribed,
+        all published messages are discarded.
         """
         if self._socket and self._socket_subscribed:
             self._socket.unsubscribe(self._zmq_topic)

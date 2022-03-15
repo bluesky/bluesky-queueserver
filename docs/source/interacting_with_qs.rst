@@ -28,28 +28,37 @@ format::
 
 ``<timestamp>`` is floating point number (returned by ``time.time()``) and ``<message>`` is a string.
 
-The ``bluesky-queueserver`` package provides convenience API class (``ReceiveConsoleOutput``)
-that allows to subscribe to RE Manager socket and contains ``recv`` method (blocking with timeout)
-for reading published messages. See the docstring for the class for the description of the
-class parameters and code example.
+The ``bluesky-queueserver`` package provides convenience API class (``ReceiveConsoleOutput``) for
+use in synchronous or thread-based applications. The class provides ``subscribe()`` and ``unsubscribe()``
+methods that enable caching of published messages by 0MQ and blocking ``recv()`` method (with timeout)
+for loading published messages. See the class documentation for detailed description of the methods
+and code examples.
 
 .. autosummary::
    :nosignatures:
    :toctree: generated
 
     ReceiveConsoleOutput
+    ReceiveConsoleOutput.subscribe
+    ReceiveConsoleOutput.unsubscribe
     ReceiveConsoleOutput.recv
 
+
 Asyncio-based applications (e.g. HTTP server) may use ``ReceiveConsoleOutputAsync`` API class to
-receive captured console output:
+receive captured console output. The class provides ``subscribe()`` and ``unsubscribe()`` methods
+to explicitly subscribe and unsubscribe 0MQ socket. The class may be used in two modes: polling
+using ``recv()`` method or setting callback function or coroutine with ``set_callback()`` method
+and starting and then stopping acquisition with ``start()`` and ``stop()`` methods.
 
 .. autosummary::
    :nosignatures:
    :toctree: generated
 
     ReceiveConsoleOutputAsync
-    ReceiveConsoleOutputAsync.set_callback
+    ReceiveConsoleOutputAsync.subscribe
+    ReceiveConsoleOutputAsync.unsubscribe
     ReceiveConsoleOutputAsync.recv
+    ReceiveConsoleOutputAsync.set_callback
     ReceiveConsoleOutputAsync.start
     ReceiveConsoleOutputAsync.stop
 

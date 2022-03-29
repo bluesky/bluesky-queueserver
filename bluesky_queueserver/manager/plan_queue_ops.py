@@ -5,6 +5,7 @@ import json
 import uuid
 import logging
 from packaging import version
+import time as ttime
 
 logger = logging.getLogger(__name__)
 
@@ -1503,6 +1504,9 @@ class PlanQueueOperations:
             # "immediate_execution" flag is set internally by the server and should not be exposed to users
             if "immediate_execution" in p:
                 del p["immediate_execution"]
+            # 'time_start' is a temporary parameter and should be removed
+            if "time_start" in p:
+                del p["time_start"]
             if not p:
                 del item["properties"]
         return item
@@ -1592,6 +1596,9 @@ class PlanQueueOperations:
                 # Pop plan from the front of the queue (it is the same plan as currently loaded)
                 await self._r_pool.lpop(self._name_plan_queue)
 
+            # Record start time for the plan
+            plan.setdefault("properties", {})["time_start"] = ttime.time()
+
             await self._set_running_item_info(plan)
             self._plan_queue_uid = self.new_item_uid()
 
@@ -1648,7 +1655,8 @@ class PlanQueueOperations:
         # Note: UID remains in the `self._uid_dict` after this operation
         if await self._is_item_running():
             item = await self._get_running_item_info()
-            immediate_execution = item.get("properties", {}).get("immediate_execution", False)
+            immediate_execution = item["properties"].get("immediate_execution", False)
+            item_time_start = item["properties"]["time_start"]
             item_cleaned = self._clean_item_properties(item)
 
             if loop_mode and not immediate_execution:
@@ -1659,6 +1667,8 @@ class PlanQueueOperations:
             item_cleaned.setdefault("result", {})
             item_cleaned["result"]["exit_status"] = exit_status
             item_cleaned["result"]["run_uids"] = run_uids
+            item_cleaned["result"]["time_start"] = item_time_start
+            item_cleaned["result"]["time_stop"] = ttime.time()
             await self._clear_running_item_info()
             if not loop_mode and not immediate_execution:
                 self._uid_dict_remove(item["item_uid"])
@@ -1698,11 +1708,14 @@ class PlanQueueOperations:
         if await self._is_item_running():
             item = await self._get_running_item_info()
             immediate_execution = item.get("properties", {}).get("immediate_execution", False)
+            item_time_start = item["properties"]["time_start"]
             item_cleaned = self._clean_item_properties(item)
 
             item_cleaned.setdefault("result", {})
             item_cleaned["result"]["exit_status"] = exit_status
             item_cleaned["result"]["run_uids"] = run_uids
+            item_cleaned["result"]["time_start"] = item_time_start
+            item_cleaned["result"]["time_stop"] = ttime.time()
 
             await self._add_to_history(item_cleaned)
             await self._clear_running_item_info()

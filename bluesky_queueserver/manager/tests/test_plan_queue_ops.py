@@ -5,6 +5,7 @@ import copy
 import re
 import pprint
 from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
+import time as ttime
 
 
 errmsg_wrong_plan_type = "Parameter 'item' should be a dictionary"
@@ -527,8 +528,12 @@ def test_get_queue_full_1():
 
             assert queue1 == plans[1:]
             assert queue2 == plans[1:]
-            assert running_item1 == plans[0]
-            assert running_item2 == plans[0]
+            assert {k: v for k, v in running_item1.items() if k != "properties"} == plans[0]
+            assert running_item2 == running_item1
+
+            assert isinstance(running_item1["properties"]["time_start"], float)
+            assert ttime.time() - running_item1["properties"]["time_start"] < 10
+
             assert uid1 == pq_uid
             assert uid2 == pq_uid
 
@@ -1092,7 +1097,7 @@ def test_replace_item_4_failing():
 
             # Set the first item as 'running'
             running_plan = await pq.set_next_item_as_running()
-            assert running_plan == plans_added[0]
+            assert {k: v for k, v in running_plan.items() if k != "properties"} == plans_added[0]
 
             queue, _ = await pq.get_queue()
             running_item_info = await pq.get_running_item_info()
@@ -1856,7 +1861,19 @@ def test_set_processed_item_as_completed_1():
             plans_modified.append(plan)
         return plans_modified
 
+    def check_plan_history(plan_history, plan_history_expected):
+        ph = copy.deepcopy(plan_history)
+        for _ in ph:
+            del _["result"]["time_start"]
+            del _["result"]["time_stop"]
+        assert ph == plan_history_expected
+        for _ in plan_history:
+            assert isinstance(_["result"]["time_start"], float)
+            assert isinstance(_["result"]["time_stop"], float)
+            assert _["result"]["time_start"] < _["result"]["time_stop"]
+
     async def testing():
+
         async with PQ() as pq:
             for plan in plans:
                 await pq.add_item_to_queue(plan)
@@ -1884,7 +1901,7 @@ def test_set_processed_item_as_completed_1():
 
             plan_history, _ = await pq.get_history()
             plan_history_expected = add_status_to_plans(plans[0:1], plans_run_uids[0:1], "completed")
-            assert plan_history == plan_history_expected
+            check_plan_history(plan_history, plan_history_expected)
 
             # Execute the second plan
             await pq.set_next_item_as_running()
@@ -1898,7 +1915,7 @@ def test_set_processed_item_as_completed_1():
 
             plan_history, _ = await pq.get_history()
             plan_history_expected = add_status_to_plans(plans[0:2], plans_run_uids[0:2], "completed")
-            assert plan_history == plan_history_expected
+            check_plan_history(plan_history, plan_history_expected)
 
     asyncio.run(testing())
 
@@ -1950,6 +1967,7 @@ def test_set_processed_item_as_completed_2():
             assert plan["name"] == plans[0]["name"]
             assert plan["result"]["exit_status"] == "completed"
             assert plan["result"]["run_uids"] == plans_run_uids[0]
+            assert plan["result"]["time_stop"] > plan["result"]["time_start"]
 
             # Execute the second plan
             await pq.set_next_item_as_running()
@@ -1963,6 +1981,7 @@ def test_set_processed_item_as_completed_2():
             assert plan["name"] == plans[1]["name"]
             assert plan["result"]["exit_status"] == "completed"
             assert plan["result"]["run_uids"] == plans_run_uids[1]
+            assert plan["result"]["time_stop"] > plan["result"]["time_start"]
 
     asyncio.run(testing())
 
@@ -1992,6 +2011,17 @@ def test_set_processed_item_as_stopped_1():
             plans_modified.append(plan)
         return plans_modified
 
+    def check_plan_history(plan_history, plan_history_expected):
+        ph = copy.deepcopy(plan_history)
+        for _ in ph:
+            del _["result"]["time_start"]
+            del _["result"]["time_stop"]
+        assert ph == plan_history_expected
+        for _ in plan_history:
+            assert isinstance(_["result"]["time_start"], float)
+            assert isinstance(_["result"]["time_stop"], float)
+            assert _["result"]["time_start"] < _["result"]["time_stop"]
+
     async def testing():
         async with PQ() as pq:
             for plan in plans:
@@ -2017,6 +2047,7 @@ def test_set_processed_item_as_stopped_1():
             assert plan["name"] == plans[0]["name"]
             assert plan["result"]["exit_status"] == "stopped"
             assert plan["result"]["run_uids"] == plans_run_uids[0]
+            assert plan["result"]["time_stop"] > plan["result"]["time_start"]
             assert plan["item_uid"] == plans[0]["item_uid"]
 
             # New plan UID is generated when the plan is pushed back into the queue
@@ -2027,7 +2058,7 @@ def test_set_processed_item_as_stopped_1():
 
             plan_history, _ = await pq.get_history()
             plan_history_expected = add_status_to_plans([plans[0]], [plans_run_uids[0]], "stopped")
-            assert plan_history == plan_history_expected
+            check_plan_history(plan_history, plan_history_expected)
 
             # Execute the second plan
             await pq.set_next_item_as_running()
@@ -2038,6 +2069,7 @@ def test_set_processed_item_as_stopped_1():
             assert plan["name"] == plans[0]["name"]
             assert plan["result"]["exit_status"] == "stopped"
             assert plan["result"]["run_uids"] == plans_run_uids[1]
+            assert plan["result"]["time_stop"] > plan["result"]["time_start"]
 
             plan_history, _ = await pq.get_history()
             plan_history_expected = add_status_to_plans(
@@ -2045,7 +2077,7 @@ def test_set_processed_item_as_stopped_1():
             )
             # Plan 0 has different UID after it was inserted in the queue during the 1st attempt
             plan_history_expected[1]["item_uid"] = plan_modified_uid
-            assert plan_history == plan_history_expected
+            check_plan_history(plan_history, plan_history_expected)
 
             # Verify that `_uid_dict` still has correct size. `_uid_dict` should never be accessed directly.
             assert len(pq._uid_dict) == 3
@@ -2110,6 +2142,7 @@ def test_set_processed_item_as_stopped_2(loop_mode, func):
                 assert p["name"] == plan4["name"]
                 assert p["result"]["exit_status"] == func
                 assert p["result"]["run_uids"] == plan4_run_uids
+                assert plan["result"]["time_stop"] > plan["result"]["time_start"]
 
             check_plan(plan)
 

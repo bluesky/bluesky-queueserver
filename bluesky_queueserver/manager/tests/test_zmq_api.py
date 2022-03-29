@@ -8,6 +8,7 @@ import re
 import glob
 import json
 import numpy as np
+import zmq
 import yaml
 
 import bluesky_queueserver
@@ -31,6 +32,7 @@ from ..comms import (
     ZMQCommSendAsync,
     CommTimeoutError,
     generate_new_zmq_key_pair,
+    default_zmq_server_address,
 )
 
 from .common import (
@@ -152,6 +154,48 @@ def test_zmq_api_asyncio_based(re_manager):  # noqa F811
         assert resp3["items_in_history"] == 0
 
     asyncio.run(testing())
+
+
+# =======================================================================================
+#                   Requests with invalid JSON
+
+
+def test_invalid_requests_1(re_manager):  # noqa F811
+    """
+    Test that RE Manager is stable when it receives invalid 0MQ requests.
+    """
+    ctx = zmq.Context()
+    socket = ctx.socket(zmq.REQ)
+    socket.connect(default_zmq_server_address)
+
+    socket.send(b"")  # Not JSON
+    resp = socket.recv_json()
+    assert resp["success"] is False
+    assert "Failed to decode the request: JSON decode error:" in resp["msg"]
+
+    socket.send_string('{"method":')  # Invalid JSON
+    resp = socket.recv_json()
+    assert resp["success"] is False
+    assert "Failed to decode the request: JSON decode error:" in resp["msg"]
+
+    socket.send_string('{"met": "status"}')  # No 'method' key
+    resp = socket.recv_json()
+    assert resp["success"] is False
+    assert "Invalid request format: method is not specified: {'met': 'status'}" in resp["msg"]
+
+    socket.send_string('{"method": "status"}')  # Valid JSON, no optional 'params'
+    resp = socket.recv_json()
+    assert "success" not in resp, str(resp)
+    assert "manager_state" in resp, str(resp)
+    assert resp["manager_state"] == "idle", str(resp)
+
+    socket.send_string('{"method": "status", "params": {}}')  # Valid JSON
+    resp = socket.recv_json()
+    assert "success" not in resp, str(resp)
+    assert "manager_state" in resp, str(resp)
+    assert resp["manager_state"] == "idle", str(resp)
+
+    socket.close()
 
 
 # =======================================================================================

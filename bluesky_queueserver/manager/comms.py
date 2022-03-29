@@ -15,13 +15,15 @@ logger = logging.getLogger(__name__)
 _fixed_public_key = "wt8[6a8eoXFRVL<l2JBbOzs(hcI%kRBIr0Do/eLC"
 _fixed_private_key = "=@e7WwVuz{*eGcnv{AL@x2hmX!z^)wP3vKsQ{S7s"
 
+default_zmq_server_address = "tcp://localhost:60615"
+
 
 class CommTimeoutError(TimeoutError):
     """
     Raised when communication error occurs
     """
 
-    pass
+    ...
 
 
 class CommJsonRpcError(RuntimeError):
@@ -556,7 +558,7 @@ class ZMQCommSendThreads:
         if server_public_key is not None:
             validate_zmq_key(server_public_key)
 
-        zmq_server_address = zmq_server_address or "tcp://localhost:60615"
+        zmq_server_address = zmq_server_address or default_zmq_server_address
         self._server_public_key = server_public_key
 
         self._timeout_receive = timeout_recv  # Timeout for 'recv' operation (ms)
@@ -893,7 +895,7 @@ class ZMQCommSendAsync:
     ):
         self._loop = loop if loop else asyncio.get_event_loop()
 
-        zmq_server_address = zmq_server_address or "tcp://localhost:60615"
+        zmq_server_address = zmq_server_address or default_zmq_server_address
         self._server_public_key = server_public_key
 
         self._timeout_receive = timeout_recv  # Timeout for 'recv' operation (ms)

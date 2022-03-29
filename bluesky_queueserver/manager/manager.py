@@ -2643,8 +2643,6 @@ class RunEngineManager(Process):
         return {"success": success, "msg": msg}
 
     async def _zmq_execute(self, msg):
-        method = msg["method"]
-        params = msg["params"]
         handler_dict = {
             "ping": "_ping_handler",
             "status": "_status_handler",
@@ -2690,23 +2688,43 @@ class RunEngineManager(Process):
         }
 
         try:
+            if isinstance(msg, str):
+                raise Exception(f"Failed to decode the request: {msg}")
+            if not isinstance(msg, dict):
+                raise Exception(f"Incorrect request type: {type(msg)}. Dictionary is expected")
+            if "method" not in msg:
+                raise Exception(f"Invalid request format: method is not specified: {msg!r}")
+            # Check that the request contains no extra keys
+            allowed_keys = ("method", "params")
+            extra_keys = [_ for _ in msg.keys() if _ not in allowed_keys]
+            if extra_keys:
+                raise Exception(f"Request contains unexpected keys {extra_keys}. Allowed keys: {allowed_keys}")
+
+            method = msg["method"]  # Required
+            params = msg.get("params", {})  # Optional
+
             handler_name = handler_dict[method]
             handler = getattr(self, handler_name)
             result = await handler(params)
         except KeyError:
-            result = {"success": False, "msg": f"Unknown method '{method}'"}
+            result = {"success": False, "msg": f"Unknown method {method!r}"}
         except AttributeError:
             result = {
                 "success": False,
-                "msg": f"Handler for the command '{method}' is not implemented",
+                "msg": f"Handler for the command {method!r} is not implemented",
             }
+        except Exception as ex:
+            result = {"success": False, "msg": str(ex)}
         return result
 
     # ======================================================================
     #          Functions that support communication via 0MQ
 
     async def _zmq_receive(self):
-        msg_in = await self._zmq_socket.recv_json()
+        try:
+            msg_in = await self._zmq_socket.recv_json()
+        except Exception as ex:
+            msg_in = f"JSON decode error: {ex}"
         return msg_in
 
     async def _zmq_send(self, msg):

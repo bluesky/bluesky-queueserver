@@ -2,6 +2,27 @@
 Release History
 ===============
 
+v0.0.13 (2022-04-05)
+====================
+
+Added
+-----
+
+- Implementation of ``subscribe()`` and ``unsubscribe()`` methods in ``ReceiveConsoleOutput``
+  and ``ReceiveConsoleOutputAsync`` classes
+
+- ``ReceiveConsoleOutputAsync.stop()`` method now accepts an optional ``unsubscribe`` parameter
+  that controls if 0MQ socket is unsubscribed when the acquisition is stopped. Default is ``True``.
+
+- Timestamps ``time_start`` and ``time_stop`` are now added to ``result`` dictionary of
+  each item in plan history.
+
+Fixed
+-----
+
+- Implemented proper handling of non-JSON or invalid JSON requests.
+
+
 v0.0.12 (2022-03-08)
 ====================
 

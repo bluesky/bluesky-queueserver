@@ -38,6 +38,7 @@ class ConsoleOutputStream(io.TextIOBase):
         Overrides the method of ``io.TextIOBase``.
         """
         s = str(s)
+
         msg = {"time": ttime.time(), "msg": s}
         self._msg_queue.put(msg)
         return len(s)
@@ -69,6 +70,19 @@ def setup_console_output_redirection(msg_queue):
     if msg_queue:
         fobj = ConsoleOutputStream(msg_queue=msg_queue)
         redirect_output_streams(fobj)
+
+        # Disable 'colorama' (used by Bluesky). We don't need it in Queue Server.
+        #   Colorama overrides 'sys.stdout' and interferes with capturing console output.
+        def do_nothing(*args, **kwargs):
+            ...
+
+        try:
+            import colorama
+
+            colorama.init = do_nothing
+            colorama.reinit = do_nothing
+        except Exception:
+            pass
 
 
 _default_zmq_console_topic = "QS_Console"

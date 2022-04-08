@@ -221,3 +221,58 @@ def count_bundle_test(detectors, num=1, delay=None, *, per_shot=None, md=None):
 
 
 # =======================================================================================
+#                Plans for testing visualization of Progress Bars
+
+from bluesky.utils import ProgressBar
+
+
+class StatusPlaceholder:
+    "Just enough to make ProgressBar happy. We will update manually."
+
+    def __init__(self):
+        self.done = False
+
+    def watch(self, _):
+        ...
+
+
+def plan_test_progress_bars(n_progress_bars: int = 1):
+    """
+    Test visualization of progress bars.
+
+    Parameters
+    ----------
+    n_progress_bars: int
+        The number of progress bars to display.
+    """
+    # Display at least one progress bar
+    n_progress_bars = max(n_progress_bars, 1)
+
+    # where the status object computes the fraction
+    st_list = [StatusPlaceholder() for _ in range(n_progress_bars)]
+    pbar = ProgressBar(st_list)
+
+    v_min = 0
+    v_max = 1
+
+    n_pts = 10
+    step = (v_max - v_min) / n_pts
+
+    print(f"TESTING {n_progress_bars} PROGRESS BARS ...\n")
+
+    for n in range(n_pts):
+        yield from bps.sleep(0.5)
+        v = v_min + (n + 1) * step
+        for n_pb in range(n_progress_bars):
+            pbar.update(n_pb, name=f"TEST{n_pb + 1}", current=v, initial=v_min, target=v_max, fraction=n / n_pts)
+
+    for st in st_list:
+        st.done = True
+    for n_pb in range(n_progress_bars):
+        pbar.update(n_pb, name=f"TEST{n_pb + 1}", current=1, initial=0, target=1, fraction=1)
+
+    s = "\n" * n_progress_bars
+    print(f"{s}\nTEST COMPLETED ...")
+
+
+# =======================================================================================

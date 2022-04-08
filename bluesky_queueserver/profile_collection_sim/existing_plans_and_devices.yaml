@@ -2045,6 +2045,20 @@ existing_plans:
       step: '0.01'
     properties:
       is_generator: true
+  plan_test_progress_bars:
+    description: Test visualization of progress bars.
+    name: plan_test_progress_bars
+    parameters:
+    - annotation:
+        type: int
+      default: '1'
+      description: The number of progress bars to display.
+      kind:
+        name: POSITIONAL_OR_KEYWORD
+        value: 1
+      name: n_progress_bars
+    properties:
+      is_generator: true
   ramp_plan:
     description: Take data while ramping one or more positioners.
     module: bluesky.plans

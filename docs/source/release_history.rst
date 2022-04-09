@@ -2,6 +2,15 @@
 Release History
 ===============
 
+v0.0.14 (2022-04-08)
+====================
+
+Fixed
+-----
+
+- Capturing console output with updating progress bars (Python 3.8, 3.9).
+
+
 v0.0.13 (2022-04-05)
 ====================
 

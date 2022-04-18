@@ -1645,7 +1645,7 @@ class PlanQueueOperations:
         async with self._lock:
             return await self._set_next_item_as_running(item=item)
 
-    async def _set_processed_item_as_completed(self, exit_status, run_uids):
+    async def _set_processed_item_as_completed(self, exit_status, run_uids, err_msg):
         """
         See ``self.set_processed_item_as_completed`` method.
         """
@@ -1669,6 +1669,7 @@ class PlanQueueOperations:
             item_cleaned["result"]["run_uids"] = run_uids
             item_cleaned["result"]["time_start"] = item_time_start
             item_cleaned["result"]["time_stop"] = ttime.time()
+            item_cleaned["result"]["msg"] = err_msg
             await self._clear_running_item_info()
             if not loop_mode and not immediate_execution:
                 self._uid_dict_remove(item["item_uid"])
@@ -1678,11 +1679,15 @@ class PlanQueueOperations:
             item_cleaned = {}
         return item_cleaned
 
-    async def set_processed_item_as_completed(self, exit_status, run_uids):
+    async def set_processed_item_as_completed(self, exit_status, run_uids, err_msg):
         """
         Moves currently executed item (plan) to history and sets ``exit_status`` key.
         UID is removed from ``self._uid_dict``, so a copy of the item with
         the same UID may be added to the queue.
+
+        Known ``exit_status`` values: ``"completed"`` and ``"unknown"`` (status
+        information was lost due to restart of RE Manager, assume that the completion
+        was successful and start the next plan).
 
         Parameters
         ----------
@@ -1690,6 +1695,8 @@ class PlanQueueOperations:
             Completion status of the plan.
         run_uids: list(str)
             A list of uids of completed runs.
+        err_msg: str
+            Error message and/or traceback in case of failure.
 
         Returns
         -------
@@ -1698,14 +1705,22 @@ class PlanQueueOperations:
             is currently running, then ``{}`` is returned.
         """
         async with self._lock:
-            return await self._set_processed_item_as_completed(exit_status=exit_status, run_uids=run_uids)
+            return await self._set_processed_item_as_completed(
+                exit_status=exit_status, run_uids=run_uids, err_msg=err_msg
+            )
 
-    async def _set_processed_item_as_stopped(self, exit_status, run_uids):
+    async def _set_processed_item_as_stopped(self, exit_status, run_uids, err_msg):
         """
         See ``self.set_processed_item_as_stopped()`` method.
         """
         # Note: UID is removed from `self._uid_dict`.
-        if await self._is_item_running():
+        if exit_status == "stopped":
+            # Stopped item is considered successful, so it is not pushed back to the beginning
+            #   of the queue, and it is added to the back of the queue in LOOP mode.
+            item_cleaned = await self._set_processed_item_as_completed(
+                exit_status=exit_status, run_uids=run_uids, err_msg=err_msg
+            )
+        elif await self._is_item_running():
             item = await self._get_running_item_info()
             immediate_execution = item.get("properties", {}).get("immediate_execution", False)
             item_time_start = item["properties"]["time_start"]
@@ -1716,26 +1731,31 @@ class PlanQueueOperations:
             item_cleaned["result"]["run_uids"] = run_uids
             item_cleaned["result"]["time_start"] = item_time_start
             item_cleaned["result"]["time_stop"] = ttime.time()
+            item_cleaned["result"]["msg"] = err_msg
 
             await self._add_to_history(item_cleaned)
             await self._clear_running_item_info()
 
             # Generate new UID for the item that is pushed back into the queue.
             if not immediate_execution:
-                item_pushed_to_queue = self.set_new_item_uuid(item_cleaned)
                 self._uid_dict_remove(item["item_uid"])
-                await self._add_item_to_queue(item_pushed_to_queue, pos="front", filter_parameters=False)
+                # "stopped" - successful completion. Do not insert the item back in the queue.
+                if exit_status != "stopped":
+                    item_pushed_to_queue = self.set_new_item_uuid(item_cleaned)
+                    await self._add_item_to_queue(item_pushed_to_queue, pos="front", filter_parameters=False)
             self._plan_queue_uid = self.new_item_uid()
         else:
             item_cleaned = {}
         return item_cleaned
 
-    async def set_processed_item_as_stopped(self, exit_status, run_uids):
+    async def set_processed_item_as_stopped(self, exit_status, run_uids, err_msg):
         """
-        Pushes currently executed item to the beginning of the queue and adds
-        it to history with additional sets ``exit_status`` key.
-        UID is remains in ``self._uid_dict``. New ``item_uid`` is generated for the item
-        that is pushed back into the queue.
+        A stopped plan is considered successfully completed (if ``exit_status=="stopped"``) or
+        failed (otherwise). All items are added to history with respective ``exit_status``.
+        Failed items are pushed to the beginning of the queue. Item UID is removed in ``self._uid_dict``.
+        A new ``item_uid`` is generated for the item that is pushed back into the queue.
+
+        Known ``exit_status`` values: ``"failed"``, ``"stopped"`` (success), ``"aborted"``, ``"halted"``.
 
         Parameters
         ----------
@@ -1743,6 +1763,8 @@ class PlanQueueOperations:
             Completion status of the plan.
         run_uids: list(str)
             A list of uids of completed runs.
+        err_msg: str
+            Error message and/or traceback in case of failure.
 
         Returns
         -------
@@ -1752,7 +1774,9 @@ class PlanQueueOperations:
             will have different ``item_uid`` than the item added to the history.
         """
         async with self._lock:
-            return await self._set_processed_item_as_stopped(exit_status=exit_status, run_uids=run_uids)
+            return await self._set_processed_item_as_stopped(
+                exit_status=exit_status, run_uids=run_uids, err_msg=err_msg
+            )
 
     # =============================================================================================
     #         Methods for saving and retrieving user group permissions.

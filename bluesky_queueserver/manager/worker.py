@@ -46,6 +46,24 @@ class EState(enum.Enum):
     CLOSED = "closed"  # For completeness
 
 
+class PlanExecOption(enum.Enum):
+    NEW = "new"  # New plan
+    RESUME = "resume"  # Resume paused plan
+    STOP = "stop"  # Stop paused plan (successful completion)
+    ABORT = "abort"  # Abort paused plan (failed status)
+    HALT = "halt"  # Halt paused plan (failed status, panicked state of RE)
+
+
+# Expected exit status for supported plan execution options (plans could be paused or fail)
+_plan_exit_status_expected = {
+    PlanExecOption.NEW: "completed",
+    PlanExecOption.RESUME: "completed",
+    PlanExecOption.STOP: "stopped",
+    PlanExecOption.ABORT: "aborted",
+    PlanExecOption.HALT: "halted",
+}
+
+
 class RejectedError(RuntimeError):
     ...
 
@@ -142,7 +160,7 @@ class RunEngineWorker(Process):
 
         self._re_namespace, self._plans_in_nspace, self._devices_in_nspace = {}, {}, {}
 
-    def _execute_plan(self, plan, is_resuming):
+    def _execute_plan(self, plan, plan_exec_option):
         """
         Start Run Engine to execute a plan
 
@@ -151,10 +169,8 @@ class RunEngineWorker(Process):
         plan: function
             Reference to a function that calls Run Engine. Run Engine may be called to execute,
             resume, abort, stop or halt the plan. The function should not accept any arguments.
-        is_resuming: bool
-            A flag indicates if the plan is going to be resumed (executed). It is True if
-            'plan' starts a new plan or resumes paused plan. It is False if paused plan is
-            aborted, stopped or halted.
+        plan_exec_option: PlanExecOption
+            Execution option for the plan. See ``PlanExecOption`` for available options.
         """
         logger.debug("Starting execution of a plan")
         try:
@@ -166,12 +182,12 @@ class RunEngineWorker(Process):
                     "result": result,
                     "err_msg": "",
                 }
-                if is_resuming:
+                if plan_exec_option in (PlanExecOption.NEW, PlanExecOption.RESUME):
                     self._re_report["plan_state"] = "completed"
                     self._running_plan_completed = True
                 else:
                     # Here we don't distinguish between stop/abort/halt
-                    self._re_report["plan_state"] = "stopped"
+                    self._re_report["plan_state"] = _plan_exit_status_expected[plan_exec_option]
                     self._running_plan_completed = True
 
                 # Include RE state
@@ -198,7 +214,7 @@ class RunEngineWorker(Process):
                     # RE crashed. Plan execution can not be resumed. (Environment may have to be restarted.)
                     # TODO: clarify how this situation must be handled. Also additional error handling
                     #       may be required
-                    self._re_report["plan_state"] = "error"
+                    self._re_report["plan_state"] = "failed"
                     self._re_report["success"] = False
                     self._running_plan_completed = True
 
@@ -285,7 +301,7 @@ class RunEngineWorker(Process):
 
             plan = get_plan(str(ex))
 
-        self._execution_queue.put((plan, True))
+        self._execution_queue.put((plan, PlanExecOption.NEW))
 
     def _continue_plan(self, option):
         """
@@ -315,7 +331,7 @@ class RunEngineWorker(Process):
                 if self._RE._state == "panicked":
                     raise RuntimeError(
                         "Run Engine is in the 'panicked' state. "
-                        "You need to recreate the environment before you can run plans."
+                        "The worker environment must be closed and reopened before plans could be executed."
                     )
                 elif self._RE._state != "paused":
                     raise RuntimeError(
@@ -332,8 +348,7 @@ class RunEngineWorker(Process):
             return plan
 
         plan = get_plan(option, available_options)
-        is_resuming = option == "resume"
-        self._execution_queue.put((plan, is_resuming))
+        self._execution_queue.put((plan, PlanExecOption(option)))
 
     def _generate_lists_of_allowed_plans_and_devices(self):
         """
@@ -628,11 +643,11 @@ class RunEngineWorker(Process):
             try:
                 s = msg_list[invalid_state - 1]
             except Exception:
-                s = "UNDETERMINED CONDITION IS PRESENT"  # Shouldn't ever be printed
+                s = "UNKNOWN CONDITION IS DETECTED IN THE WORKER PROCESS"  # Shouldn't ever be printed
             err_msg = (
-                f"Trying to run a plan (start Run Engine) while {s}.\n"
+                f"Attempt to start a plan (Run Engine) while {s}.\n"
                 "This may indicate a serious issue with the plan queue execution mechanism.\n"
-                "Please report the issue to developers."
+                "Please report the issue to developer team."
             )
 
         msg_out = {"status": status, "err_msg": err_msg}
@@ -773,8 +788,8 @@ class RunEngineWorker(Process):
             if self._exit_event.is_set():
                 break
             try:
-                plan, is_resuming = self._execution_queue.get(False)
-                self._execute_plan(plan, is_resuming)
+                plan, plan_exec_option = self._execution_queue.get(False)
+                self._execute_plan(plan, plan_exec_option)
             except queue.Empty:
                 pass
 

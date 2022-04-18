@@ -1844,10 +1844,11 @@ def test_set_processed_item_as_completed_1():
     The function moves currently running plan to history.
     """
 
+    plan_uids = [1, 2, 3]
     plans = [
-        {"item_type": "plan", "item_uid": 1, "name": "a"},
-        {"item_type": "plan", "item_uid": 2, "name": "b"},
-        {"item_type": "plan", "item_uid": 3, "name": "c"},
+        {"item_type": "plan", "item_uid": plan_uids[0], "name": "a"},
+        {"item_type": "plan", "item_uid": plan_uids[1], "name": "b"},
+        {"item_type": "plan", "item_uid": plan_uids[2], "name": "c"},
     ]
     plans_run_uids = [["abc1"], ["abc2", "abc3"], []]
 
@@ -1858,8 +1859,16 @@ def test_set_processed_item_as_completed_1():
             plan.setdefault("result", {})
             plan["result"]["exit_status"] = exit_status
             plan["result"]["run_uids"] = run_uid
+            plan["result"]["msg"] = ""
             plans_modified.append(plan)
         return plans_modified
+
+    def add_msg_to_plan_history(plan_history, run_uids, msg):
+        plan_history = copy.deepcopy(plan_history)
+        for p in plan_history:
+            if p["item_uid"] in run_uids:
+                p["result"]["msg"] = msg
+        return plan_history
 
     def check_plan_history(plan_history, plan_history_expected):
         ph = copy.deepcopy(plan_history)
@@ -1881,7 +1890,9 @@ def test_set_processed_item_as_completed_1():
             # No plan is running
             pq_uid = pq.plan_queue_uid
             ph_uid = pq.plan_history_uid
-            plan = await pq.set_processed_item_as_completed(exit_status="completed", run_uids=plans_run_uids[0])
+            plan = await pq.set_processed_item_as_completed(
+                exit_status="completed", run_uids=plans_run_uids[0], err_msg=""
+            )
             assert plan == {}
             assert pq.plan_queue_uid == pq_uid
             assert pq.plan_history_uid == ph_uid
@@ -1889,7 +1900,9 @@ def test_set_processed_item_as_completed_1():
             # Execute the first plan
             await pq.set_next_item_as_running()
             pq_uid = pq.plan_queue_uid
-            plan = await pq.set_processed_item_as_completed(exit_status="completed", run_uids=plans_run_uids[0])
+            plan = await pq.set_processed_item_as_completed(
+                exit_status="completed", run_uids=plans_run_uids[0], err_msg="Test message"
+            )
             assert pq.plan_queue_uid != pq_uid
             assert pq.plan_history_uid != ph_uid
 
@@ -1901,11 +1914,16 @@ def test_set_processed_item_as_completed_1():
 
             plan_history, _ = await pq.get_history()
             plan_history_expected = add_status_to_plans(plans[0:1], plans_run_uids[0:1], "completed")
+            plan_history_expected = add_msg_to_plan_history(plan_history_expected, [plan_uids[0]], "Test message")
+            print(plan_history)
+            print(plan_history_expected)
             check_plan_history(plan_history, plan_history_expected)
 
             # Execute the second plan
             await pq.set_next_item_as_running()
-            plan = await pq.set_processed_item_as_completed(exit_status="completed", run_uids=plans_run_uids[1])
+            plan = await pq.set_processed_item_as_completed(
+                exit_status="completed", run_uids=plans_run_uids[1], err_msg=""
+            )
 
             assert await pq.get_queue_size() == 1
             assert await pq.get_history_size() == 2
@@ -1915,6 +1933,7 @@ def test_set_processed_item_as_completed_1():
 
             plan_history, _ = await pq.get_history()
             plan_history_expected = add_status_to_plans(plans[0:2], plans_run_uids[0:2], "completed")
+            plan_history_expected = add_msg_to_plan_history(plan_history_expected, [plan_uids[0]], "Test message")
             check_plan_history(plan_history, plan_history_expected)
 
     asyncio.run(testing())
@@ -1926,10 +1945,11 @@ def test_set_processed_item_as_completed_2():
     Similar test as the previous one, but with LOOP mode ENABLED.
     """
 
+    plan_uids = [1, 2, 3]
     plans = [
-        {"item_type": "plan", "item_uid": 1, "name": "a"},
-        {"item_type": "plan", "item_uid": 2, "name": "b"},
-        {"item_type": "plan", "item_uid": 3, "name": "c"},
+        {"item_type": "plan", "item_uid": plan_uids[0], "name": "a"},
+        {"item_type": "plan", "item_uid": plan_uids[1], "name": "b"},
+        {"item_type": "plan", "item_uid": plan_uids[2], "name": "c"},
     ]
     plans_run_uids = [["abc1"], ["abc2", "abc3"], []]
 
@@ -1944,7 +1964,9 @@ def test_set_processed_item_as_completed_2():
             # No plan is running
             pq_uid = pq.plan_queue_uid
             ph_uid = pq.plan_history_uid
-            plan = await pq.set_processed_item_as_completed(exit_status="completed", run_uids=plans_run_uids[0])
+            plan = await pq.set_processed_item_as_completed(
+                exit_status="completed", run_uids=plans_run_uids[0], err_msg=""
+            )
             assert plan == {}
             assert pq.plan_queue_uid == pq_uid
             assert pq.plan_history_uid == ph_uid
@@ -1955,7 +1977,9 @@ def test_set_processed_item_as_completed_2():
             # Execute the first plan
             await pq.set_next_item_as_running()
             pq_uid = pq.plan_queue_uid
-            plan = await pq.set_processed_item_as_completed(exit_status="completed", run_uids=plans_run_uids[0])
+            plan = await pq.set_processed_item_as_completed(
+                exit_status="completed", run_uids=plans_run_uids[0], err_msg=""
+            )
             assert pq.plan_queue_uid != pq_uid
             assert pq.plan_history_uid != ph_uid
 
@@ -1971,7 +1995,9 @@ def test_set_processed_item_as_completed_2():
 
             # Execute the second plan
             await pq.set_next_item_as_running()
-            plan = await pq.set_processed_item_as_completed(exit_status="completed", run_uids=plans_run_uids[1])
+            plan = await pq.set_processed_item_as_completed(
+                exit_status="unknown", run_uids=plans_run_uids[1], err_msg="Unknown exit status"
+            )
 
             queue, _ = await pq.get_queue()
             assert [_["name"] for _ in queue] == ["c", "a", "b"]
@@ -1979,8 +2005,9 @@ def test_set_processed_item_as_completed_2():
             assert await pq.get_queue_size() == 3
             assert await pq.get_history_size() == 2
             assert plan["name"] == plans[1]["name"]
-            assert plan["result"]["exit_status"] == "completed"
+            assert plan["result"]["exit_status"] == "unknown"
             assert plan["result"]["run_uids"] == plans_run_uids[1]
+            assert plan["result"]["msg"] == "Unknown exit status"
             assert plan["result"]["time_stop"] > plan["result"]["time_start"]
 
     asyncio.run(testing())
@@ -1989,27 +2016,43 @@ def test_set_processed_item_as_completed_2():
 def test_set_processed_item_as_stopped_1():
     """
     Test for ``PlanQueueOperations.set_processed_item_as_stopped()`` function.
-    The function pushes running plan back to the queue and saves it in history as well.
+    The function pushes running plan back to the queue unless ``exit_status=="stopped"``
+    and saves it in history as well.
 
-    Typically execution of single-run plans result in no UIDs, but in this test we still assign UIDS
-    to test functionality.
+    Typically execution of single-run plans result in no UIDs, but in this test we still
+    assign UIDs to test functionality.
     """
+    plan_uids = [1, 2, 3]
     plans = [
-        {"item_type": "plan", "item_uid": "1", "name": "a"},
-        {"item_type": "plan", "item_uid": "2", "name": "b"},
-        {"item_type": "plan", "item_uid": "3", "name": "c"},
+        {"item_type": "plan", "item_uid": plan_uids[0], "name": "a"},
+        {"item_type": "plan", "item_uid": plan_uids[1], "name": "b"},
+        {"item_type": "plan", "item_uid": plan_uids[2], "name": "c"},
     ]
     plans_run_uids = [["abc1"], ["abc2", "abc3"], []]
 
     def add_status_to_plans(plans, run_uids, exit_status):
         plans = copy.deepcopy(plans)
+
+        if isinstance(exit_status, list):
+            assert len(exit_status) == len(plans)
+        else:
+            exit_status = [exit_status] * len(plans)
+
         plans_modified = []
-        for plan, run_uid in zip(plans, run_uids):
+        for plan, run_uid, es in zip(plans, run_uids, exit_status):
             plan.setdefault("result", {})
-            plan["result"]["exit_status"] = exit_status
+            plan["result"]["exit_status"] = es
             plan["result"]["run_uids"] = run_uid
+            plan["result"]["msg"] = ""
             plans_modified.append(plan)
         return plans_modified
+
+    def add_msg_to_plan_history(plan_history, run_uids, msg):
+        plan_history = copy.deepcopy(plan_history)
+        for p in plan_history:
+            if p["item_uid"] in run_uids:
+                p["result"]["msg"] = msg
+        return plan_history
 
     def check_plan_history(plan_history, plan_history_expected):
         ph = copy.deepcopy(plan_history)
@@ -2030,23 +2073,29 @@ def test_set_processed_item_as_stopped_1():
             # No plan is running
             pq_uid = pq.plan_queue_uid
             ph_uid = pq.plan_history_uid
-            plan = await pq.set_processed_item_as_stopped(exit_status="stopped", run_uids=plans_run_uids[0])
+            plan = await pq.set_processed_item_as_stopped(
+                exit_status="stopped", run_uids=plans_run_uids[0], err_msg="Test"
+            )
             assert plan == {}
             assert pq.plan_queue_uid == pq_uid
             assert pq.plan_history_uid == ph_uid
 
             # Execute the first plan
             await pq.set_next_item_as_running()
+            running_uid1 = (await pq.get_running_item_info())["item_uid"]
             pq_uid = pq.plan_queue_uid
-            plan = await pq.set_processed_item_as_stopped(exit_status="stopped", run_uids=plans_run_uids[0])
+            plan = await pq.set_processed_item_as_stopped(
+                exit_status="failed", run_uids=plans_run_uids[0], err_msg="Plan failed"
+            )
             assert pq.plan_queue_uid != pq_uid
             assert pq.plan_history_uid != ph_uid
 
             assert await pq.get_queue_size() == 3
             assert await pq.get_history_size() == 1
             assert plan["name"] == plans[0]["name"]
-            assert plan["result"]["exit_status"] == "stopped"
+            assert plan["result"]["exit_status"] == "failed"
             assert plan["result"]["run_uids"] == plans_run_uids[0]
+            assert plan["result"]["msg"] == "Plan failed"
             assert plan["result"]["time_stop"] > plan["result"]["time_start"]
             assert plan["item_uid"] == plans[0]["item_uid"]
 
@@ -2057,30 +2106,37 @@ def test_set_processed_item_as_stopped_1():
             assert plan_modified_uid != plans[0]["item_uid"]
 
             plan_history, _ = await pq.get_history()
-            plan_history_expected = add_status_to_plans([plans[0]], [plans_run_uids[0]], "stopped")
+            plan_history_expected = add_status_to_plans([plans[0]], [plans_run_uids[0]], "failed")
+            plan_history_expected = add_msg_to_plan_history(plan_history_expected, [running_uid1], "Plan failed")
             check_plan_history(plan_history, plan_history_expected)
 
             # Execute the second plan
             await pq.set_next_item_as_running()
-            plan = await pq.set_processed_item_as_stopped(exit_status="stopped", run_uids=plans_run_uids[1])
+            running_uid2 = (await pq.get_running_item_info())["item_uid"]
+            plan = await pq.set_processed_item_as_stopped(
+                exit_status="stopped", run_uids=plans_run_uids[1], err_msg="Plan stopped"
+            )
 
-            assert await pq.get_queue_size() == 3
+            assert await pq.get_queue_size() == 2
             assert await pq.get_history_size() == 2
             assert plan["name"] == plans[0]["name"]
             assert plan["result"]["exit_status"] == "stopped"
             assert plan["result"]["run_uids"] == plans_run_uids[1]
+            assert plan["result"]["msg"] == "Plan stopped"
             assert plan["result"]["time_stop"] > plan["result"]["time_start"]
 
             plan_history, _ = await pq.get_history()
             plan_history_expected = add_status_to_plans(
-                [plans[0].copy(), plans[0].copy()], [plans_run_uids[0], plans_run_uids[1]], "stopped"
+                [plans[0].copy(), plans[0].copy()], [plans_run_uids[0], plans_run_uids[1]], ["failed", "stopped"]
             )
             # Plan 0 has different UID after it was inserted in the queue during the 1st attempt
             plan_history_expected[1]["item_uid"] = plan_modified_uid
+            plan_history_expected = add_msg_to_plan_history(plan_history_expected, [running_uid1], "Plan failed")
+            plan_history_expected = add_msg_to_plan_history(plan_history_expected, [running_uid2], "Plan stopped")
             check_plan_history(plan_history, plan_history_expected)
 
             # Verify that `_uid_dict` still has correct size. `_uid_dict` should never be accessed directly.
-            assert len(pq._uid_dict) == 3
+            assert len(pq._uid_dict) == 2
             # Also it should not contain UIDs of already executed plans.
             for plan in plan_history:
                 assert plan["item_uid"] not in pq._uid_dict
@@ -2089,13 +2145,14 @@ def test_set_processed_item_as_stopped_1():
 
 
 # fmt: off
-@pytest.mark.parametrize("func", ["completed", "stopped"])
+@pytest.mark.parametrize("func", ["completed", "unknown", "failed", "stopped", "aborted", "halted"])
 @pytest.mark.parametrize("loop_mode", [False, True])
+@pytest.mark.parametrize("immediate_execution", [False, True])
 # fmt: on
-def test_set_processed_item_as_stopped_2(loop_mode, func):
+def test_set_processed_item_as_stopped_2(loop_mode, func, immediate_execution):
     """
-    ``set_processed_item_as_completed`` and ``set_processed_item_as_completed`` processing of an item set
-    for immediate execution: basic functionality.
+    ``set_processed_item_as_completed`` and ``set_processed_item_as_stopped`` processing of an item set
+    for normal and immediate execution with/without LOOP mode.
     """
     plans = [
         {"item_type": "plan", "item_uid": 1, "name": "a"},
@@ -2117,31 +2174,45 @@ def test_set_processed_item_as_stopped_2(loop_mode, func):
             ph_uid = pq.plan_history_uid
             queue_1, _ = await pq.get_queue()
 
-            await pq.process_next_item(item=plan4)
+            if immediate_execution:
+                await pq.process_next_item(item=plan4)
+            else:
+                await pq.process_next_item()
 
             assert pq.plan_queue_uid != pq_uid
             pq_uid2 = pq.plan_queue_uid
             assert pq.plan_history_uid == ph_uid
 
-            if func == "completed":
-                plan = await pq.set_processed_item_as_completed(exit_status=func, run_uids=plan4_run_uids)
-            elif func == "stopped":
-                plan = await pq.set_processed_item_as_stopped(exit_status=func, run_uids=plan4_run_uids)
+            err_msg = f"Plan {func}"
+            if func in ("completed", "unknown"):
+                plan = await pq.set_processed_item_as_completed(
+                    exit_status=func, run_uids=plan4_run_uids, err_msg=err_msg
+                )
+            elif func in ("failed", "stopped", "aborted", "halted"):
+                plan = await pq.set_processed_item_as_stopped(
+                    exit_status=func, run_uids=plan4_run_uids, err_msg=err_msg
+                )
             else:
                 assert False, f"Unknown value of parameter 'func': '{func}'"
 
             queue_2, _ = await pq.get_queue()
 
-            assert queue_1 == queue_2
-            assert await pq.get_queue_size() == 3
+            if immediate_execution:
+                assert queue_1 == queue_2
+                assert await pq.get_queue_size() == 3
+            else:
+                assert queue_1 != queue_2
+                qsize = 2 if func in ("completed", "unknown", "stopped") and not loop_mode else 3
+                assert await pq.get_queue_size() == qsize
             assert await pq.get_history_size() == 1
             assert pq.plan_queue_uid != pq_uid2
             assert pq.plan_history_uid != ph_uid
 
             def check_plan(p):
-                assert p["name"] == plan4["name"]
+                assert p["name"] == plan4["name"] if immediate_execution else plans[0]["name"]
                 assert p["result"]["exit_status"] == func
                 assert p["result"]["run_uids"] == plan4_run_uids
+                assert p["result"]["msg"] == err_msg
                 assert plan["result"]["time_stop"] > plan["result"]["time_start"]
 
             check_plan(plan)
@@ -2183,9 +2254,11 @@ def test_set_processed_item_as_stopped_3(loop_mode, func):
             assert await pq.get_history_size() == 0
 
             if func == "completed":
-                plan1 = await pq.set_processed_item_as_completed(exit_status="completed", run_uids=["abc"])
+                plan1 = await pq.set_processed_item_as_completed(
+                    exit_status="completed", run_uids=["abc"], err_msg=""
+                )
             elif func == "stopped":
-                plan1 = await pq.set_processed_item_as_stopped(exit_status="stopped", run_uids=["abc"])
+                plan1 = await pq.set_processed_item_as_stopped(exit_status="stopped", run_uids=["abc"], err_msg="")
             else:
                 raise Exception(f"Unsupported parameter value func={func!r}")
 

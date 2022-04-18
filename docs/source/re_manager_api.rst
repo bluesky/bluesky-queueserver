@@ -519,6 +519,26 @@ Returns       **success**: *boolean*
                   list of items in the plan history, each item is represented by a dictionary of
                   item parameters. Currently the plan history may contain only plans.
 
+                  The dictionary contains a copy of the original item parameters and dictionary with results of
+                  execution (**'result'** key), which contains the following keys:
+
+                  - **exit_status** - exit status of the plan. The values are **'completed'** (the plan execution
+                    is successfully completed), **'failed'** (the plan execution failed; a plan can fail due to
+                    multiple reasons, including internal error of RE Manager; see the error message to determine
+                    the reason of failure), **'stopped'** (the plan was paused, then stopped; the plan is considered
+                    successfully executed), **'abort'** and **'halt'** (the plan was paused, then aborted or halted;
+                    the plan is considered failed), **'unknown'** (the exit status information is lost, e.g. due
+                    to restart of RE Manager process, but plan information still needs to be placed in the history;
+                    this is very unlikely to happen in practice);
+
+                  - **run_uids** - list of UIDs of runs executed by the plan;
+
+                  - **time_start** and **time_stop** - time of start and completion of the plan (not runs),
+                    floating point number returned by *time.time()*.
+
+                  - **msg** - error message and/or trace back in case of plan failure, empty string if no
+                    message is returned.
+
               **plan_history_uid**: *str*
                   current plan history UID.
 ------------  -----------------------------------------------------------------------------------------

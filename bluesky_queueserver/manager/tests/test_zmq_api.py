@@ -4503,7 +4503,7 @@ def test_zmq_api_queue_execution_2(re_manager):  # noqa: F811
     assert wait_for_condition(time=20, condition=condition_manager_paused)
     uid_checker.verify_uid_changes(pq_changed=False, ph_changed=False)
 
-    resp5b, _ = zmq_single_request("re_stop")
+    resp5b, _ = zmq_single_request("re_abort")
     assert resp5b["success"] is True, str(resp5b)
 
     assert wait_for_condition(time=20, condition=condition_manager_idle)

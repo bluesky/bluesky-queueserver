@@ -4094,12 +4094,8 @@ def test_zmq_api_re_pause_3(re_manager, continue_option, loop_mode):  # noqa: F8
     resp4, _ = zmq_single_request("history_get")
     assert resp4["success"] is True
     result = resp4["items"][0]["result"]
-    assert result["exit_status"] == {
-        "re_resume": "completed",
-        "re_stop": "stopped",
-        "re_abort": "aborted",
-        "re_halt": "halted",
-    }[continue_option]
+    result_options = {"re_resume": "completed", "re_stop": "stopped", "re_abort": "aborted", "re_halt": "halted"}
+    assert result["exit_status"] == result_options[continue_option]
     assert result["msg"] == ""
     assert isinstance(result["time_start"], float)
     assert isinstance(result["time_stop"], float)

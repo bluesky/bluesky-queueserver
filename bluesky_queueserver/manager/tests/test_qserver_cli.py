@@ -325,7 +325,7 @@ def test_qserver_re_pause_continue(re_manager, option_pause, option_continue):  
         assert subprocess.call(["qserver", "queue", "start"]) == SUCCESS
 
         # Includes entry related to 1 aborted or halted plan
-        n_history_expected = (2 if option_continue == "stop" else 3)
+        n_history_expected = 2 if option_continue == "stop" else 3
 
     ttime.sleep(1)
 

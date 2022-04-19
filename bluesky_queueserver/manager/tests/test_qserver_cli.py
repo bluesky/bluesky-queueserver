@@ -318,20 +318,21 @@ def test_qserver_re_pause_continue(re_manager, option_pause, option_continue):  
         assert wait_for_condition(time=3, condition=condition_manager_idle)
 
         n_plans, is_plan_running, n_history = get_reduced_state_info()
-        assert n_plans == 2, "Incorrect number of plans in the queue"
+        assert n_plans == (1 if option_continue == "stop" else 2), "Incorrect number of plans in the queue"
         assert is_plan_running is False
         assert n_history == 1
 
         assert subprocess.call(["qserver", "queue", "start"]) == SUCCESS
 
-        n_history_expected = 3  # Includes entry related to 1 stopped plan
+        # Includes entry related to 1 aborted or halted plan
+        n_history_expected = (2 if option_continue == "stop" else 3)
 
     ttime.sleep(1)
 
     n_plans, is_plan_running, n_history = get_reduced_state_info()
-    assert n_plans == 1, "Incorrect number of plans in the queue"
+    assert n_plans == (0 if option_continue == "stop" else 1), "Incorrect number of plans in the queue"
     assert is_plan_running is True
-    assert n_history == n_history_expected - 2
+    assert n_history == n_history_expected - (1 if option_continue == "stop" else 2)
 
     assert wait_for_condition(
         time=60, condition=condition_queue_processing_finished

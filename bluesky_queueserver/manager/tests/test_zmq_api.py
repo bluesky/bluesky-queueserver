@@ -4026,6 +4026,90 @@ def test_zmq_api_re_pause_2(re_manager, n_plans, kill_manager, pause_before_kill
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
+# fmt: off
+@pytest.mark.parametrize("continue_option", ["re_resume", "re_stop", "re_abort", "re_halt"])
+@pytest.mark.parametrize("loop_mode", [False, True])
+# fmt: on
+def test_zmq_api_re_pause_3(re_manager, continue_option, loop_mode):  # noqa: F811
+    """
+    Test all options (resume, stop, abort, halt) to continue of execution of paused plans.
+    """
+
+    def _check_status(n_queue, n_hist, m_state, re_state):
+        resp, _ = zmq_single_request("status")
+        assert resp["items_in_queue"] == n_queue
+        assert resp["items_in_history"] == n_hist
+        assert resp["manager_state"] == m_state
+        assert resp["re_state"] == re_state
+
+    n_plans = 2
+    for _ in range(n_plans):
+        params1 = {"item": _plan_3steps, "user": _user, "user_group": _user_group}
+        resp1, _ = zmq_single_request("queue_item_add", params1)
+        assert resp1["success"] is True, f"resp={resp1}"
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp3, _ = zmq_single_request("queue_mode_set", params={"mode": {"loop": loop_mode}})
+    assert resp3["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    status, _ = zmq_single_request("status")
+    assert status["plan_queue_mode"]["loop"] == loop_mode
+
+    _check_status(n_plans, 0, "idle", "idle")
+
+    resp3, _ = zmq_single_request("queue_start")
+    assert resp3["success"] is True
+
+    ttime.sleep(3)  # ~50% of the 2nd (of 3) measurement of the 1st plan
+    _check_status(n_plans - 1, 0, "executing_queue", "running")
+
+    resp3a, _ = zmq_single_request("re_pause")
+    assert resp3a["success"] is True
+    assert wait_for_condition(time=20, condition=condition_manager_paused)
+
+    _check_status(n_plans - 1, 0, "paused", "paused")
+
+    resp3b, _ = zmq_single_request(continue_option)
+    assert resp3b["success"] is True
+
+    if (continue_option == "re_resume") and loop_mode:
+        resp3c, _ = zmq_single_request("queue_stop")
+        assert resp3c["success"] is True
+
+    assert wait_for_condition(time=30, condition=condition_manager_idle)
+
+    if not loop_mode and (continue_option == "re_resume"):
+        n_queue_expected, n_history_expected = 0, n_plans
+    elif loop_mode or continue_option not in ("re_resume", "re_stop"):
+        n_queue_expected, n_history_expected = n_plans, 1
+    else:
+        n_queue_expected, n_history_expected = n_plans - 1, 1
+
+    _check_status(n_queue_expected, n_history_expected, "idle", "idle")
+
+    resp4, _ = zmq_single_request("history_get")
+    assert resp4["success"] is True
+    result = resp4["items"][0]["result"]
+    assert result["exit_status"] == {
+        "re_resume": "completed",
+        "re_stop": "stopped",
+        "re_abort": "aborted",
+        "re_halt": "halted",
+    }[continue_option]
+    assert result["msg"] == ""
+    assert isinstance(result["time_start"], float)
+    assert isinstance(result["time_stop"], float)
+    assert result["time_start"] < result["time_stop"]
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
 # =======================================================================================
 #                              Method 're_runs'
 

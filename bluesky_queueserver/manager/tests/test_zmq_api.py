@@ -1569,7 +1569,7 @@ def sleep_for_a_few_sec(tt=1):
 # fmt: off
 @pytest.mark.parametrize("run_in_background", [None, False, True])
 # fmt: on
-def test_zmq_api_script_upload_1(re_manager, run_in_background):  # noqa: F811
+def test_zmq_api_script_upload_01(re_manager, run_in_background):  # noqa: F811
     """
     Basic test for ``script_upload`` API: detailed checks of all flag at each transition.
     """
@@ -1715,7 +1715,7 @@ def sleep_for_a_few_sec(tt=1):
     ([_script_to_upload_2a, _script_to_upload_2b], ["dev_test"], ["sleep_for_a_few_sec"]),
 ])
 # fmt: on
-def test_zmq_api_script_upload_2(re_manager, scripts, updated_devs, updated_plans):  # noqa: F811
+def test_zmq_api_script_upload_02(re_manager, scripts, updated_devs, updated_plans):  # noqa: F811
     """
     'script_upload' API: load scripts that contain only devices and only plans separately
     or both. Make sure that the plan and the device are included in the lists of existing
@@ -1808,7 +1808,7 @@ def sleep_for_a_few_sec_3(tt=1):
 # fmt: off
 @pytest.mark.parametrize("use_bg_task", [False, True])
 # fmt: on
-def test_zmq_api_script_upload_3(re_manager, use_bg_task):  # noqa: F811
+def test_zmq_api_script_upload_03(re_manager, use_bg_task):  # noqa: F811
     """
     'script_upload' API: Load two scripts in parallel. Script #1 takes 2 seconds to
     load is foreground or background task. Script #2 is loaded as a background task
@@ -1859,7 +1859,63 @@ def test_zmq_api_script_upload_3(re_manager, use_bg_task):  # noqa: F811
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_script_upload_4(tmp_path, re_manager_cmd):  # noqa: F811
+_script_to_upload_4a = """
+# Trivial plan
+def plan_raise_exception():
+    raise Exception("Testing the failing plan")
+    yield from bps.sleep(1)  # Still need 'yield' so that the plan is detected.
+"""
+
+
+def test_zmq_api_script_upload_04(re_manager):  # noqa: F811
+    """
+    Test ``script_upload`` API: upload and execute failing plan. The script is successfully executed,
+    but plan fails. Check that traceback (in the result section of the plan item in history) includes
+    the correct error message.
+    """
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp2, _ = zmq_single_request("script_upload", params={"script": _script_to_upload_4a})
+    assert resp2["success"] is True, pprint.pformat(resp2)
+    task_uid = resp2["task_uid"]
+    result = wait_for_task_result(10, task_uid)
+    assert result["success"] is True
+
+    params = {
+        "item": {"item_type": "plan", "name": "plan_raise_exception"},
+        "user": _user,
+        "user_group": _user_group,
+    }
+    resp3, _ = zmq_single_request("queue_item_add", params=params)
+    assert resp3["success"] is True, pprint.pformat(resp3)
+
+    status, _ = zmq_single_request("status")
+    assert status["items_in_queue"] == 1
+    assert status["items_in_history"] == 0
+
+    resp4, _ = zmq_single_request("queue_start")
+    assert resp4["success"] is True, pprint.pformat(resp4)
+
+    assert wait_for_condition(time=15, condition=condition_manager_idle)
+
+    status, _ = zmq_single_request("status")
+    assert status["items_in_queue"] == 1
+    assert status["items_in_history"] == 1
+
+    # Test that traceback is included in the error message (items[0]["result"]["msg"] in history).
+    resp5, _ = zmq_single_request("history_get")
+    assert resp5["success"] is True, pprint.pformat(resp5)
+    item = resp5["items"][0]
+    assert "Testing the failing plan" in item["result"]["msg"]
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_script_upload_05(tmp_path, re_manager_cmd):  # noqa: F811
     """
     'script_upload' API: Open the environent with 'empty' startup file and then
     load full collection of built-in startup files using the API. Compare the lists
@@ -1940,7 +1996,7 @@ def test_zmq_api_script_upload_4(tmp_path, re_manager_cmd):  # noqa: F811
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_script_upload_5(tmp_path, re_manager_cmd):  # noqa: F811
+def test_zmq_api_script_upload_06(tmp_path, re_manager_cmd):  # noqa: F811
     """
     'script_upload' API: Check that local imports work.
     """
@@ -1997,7 +2053,7 @@ db_backup = db
 @pytest.mark.parametrize("replace_re", [False, True])
 @pytest.mark.parametrize("replace_db", [False, True])
 # fmt: on
-def test_zmq_api_script_upload_6(re_manager_cmd, update_re_param, replace_re, replace_db):  # noqa: F811
+def test_zmq_api_script_upload_07(re_manager_cmd, update_re_param, replace_re, replace_db):  # noqa: F811
     """
     'script_upload' API: Test that instances 'RE' and 'db' could be replaced in
     the RE Worker namespace. The test does not check if references kept internally by RE Worker
@@ -2049,7 +2105,7 @@ def test_zmq_api_script_upload_6(re_manager_cmd, update_re_param, replace_re, re
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_script_upload_7(re_manager):  # noqa: F811
+def test_zmq_api_script_upload_08(re_manager):  # noqa: F811
     """
     'script_upload' API: Check that the environment can be destroyed while a script is
     being loaded. It could be necessary to destroy the environment to terminate execution
@@ -2092,7 +2148,7 @@ def test_zmq_api_script_upload_7(re_manager):  # noqa: F811
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_script_upload_8_fail(re_manager):  # noqa: F811
+def test_zmq_api_script_upload_09_fail(re_manager):  # noqa: F811
     """
     'script_upload' API: Check if call fails if the environment is not open.
     """
@@ -2104,7 +2160,7 @@ def test_zmq_api_script_upload_8_fail(re_manager):  # noqa: F811
 # fmt: off
 @pytest.mark.parametrize("test_with_plan", [True, False])
 # fmt: on
-def test_zmq_api_script_upload_9_fail(re_manager, test_with_plan):  # noqa: F811
+def test_zmq_api_script_upload_10_fail(re_manager, test_with_plan):  # noqa: F811
     """
     'script_upload' API: Check if script upload request fails if another script or
     a plan is running.
@@ -4026,6 +4082,86 @@ def test_zmq_api_re_pause_2(re_manager, n_plans, kill_manager, pause_before_kill
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
+# fmt: off
+@pytest.mark.parametrize("continue_option", ["re_resume", "re_stop", "re_abort", "re_halt"])
+@pytest.mark.parametrize("loop_mode", [False, True])
+# fmt: on
+def test_zmq_api_re_pause_3(re_manager, continue_option, loop_mode):  # noqa: F811
+    """
+    Test all options (resume, stop, abort, halt) to continue of execution of paused plans.
+    """
+
+    def _check_status(n_queue, n_hist, m_state, re_state):
+        resp, _ = zmq_single_request("status")
+        assert resp["items_in_queue"] == n_queue
+        assert resp["items_in_history"] == n_hist
+        assert resp["manager_state"] == m_state
+        assert resp["re_state"] == re_state
+
+    n_plans = 2
+    for _ in range(n_plans):
+        params1 = {"item": _plan_3steps, "user": _user, "user_group": _user_group}
+        resp1, _ = zmq_single_request("queue_item_add", params1)
+        assert resp1["success"] is True, f"resp={resp1}"
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp3, _ = zmq_single_request("queue_mode_set", params={"mode": {"loop": loop_mode}})
+    assert resp3["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    status, _ = zmq_single_request("status")
+    assert status["plan_queue_mode"]["loop"] == loop_mode
+
+    _check_status(n_plans, 0, "idle", "idle")
+
+    resp3, _ = zmq_single_request("queue_start")
+    assert resp3["success"] is True
+
+    ttime.sleep(3)  # ~50% of the 2nd (of 3) measurement of the 1st plan
+    _check_status(n_plans - 1, 0, "executing_queue", "running")
+
+    resp3a, _ = zmq_single_request("re_pause")
+    assert resp3a["success"] is True
+    assert wait_for_condition(time=20, condition=condition_manager_paused)
+
+    _check_status(n_plans - 1, 0, "paused", "paused")
+
+    resp3b, _ = zmq_single_request(continue_option)
+    assert resp3b["success"] is True
+
+    if (continue_option == "re_resume") and loop_mode:
+        resp3c, _ = zmq_single_request("queue_stop")
+        assert resp3c["success"] is True
+
+    assert wait_for_condition(time=30, condition=condition_manager_idle)
+
+    if not loop_mode and (continue_option == "re_resume"):
+        n_queue_expected, n_history_expected = 0, n_plans
+    elif loop_mode or continue_option not in ("re_resume", "re_stop"):
+        n_queue_expected, n_history_expected = n_plans, 1
+    else:
+        n_queue_expected, n_history_expected = n_plans - 1, 1
+
+    _check_status(n_queue_expected, n_history_expected, "idle", "idle")
+
+    resp4, _ = zmq_single_request("history_get")
+    assert resp4["success"] is True
+    result = resp4["items"][0]["result"]
+    result_options = {"re_resume": "completed", "re_stop": "stopped", "re_abort": "aborted", "re_halt": "halted"}
+    assert result["exit_status"] == result_options[continue_option]
+    assert result["msg"] == ""
+    assert isinstance(result["time_start"], float)
+    assert isinstance(result["time_stop"], float)
+    assert result["time_start"] < result["time_stop"]
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
 # =======================================================================================
 #                              Method 're_runs'
 
@@ -4503,7 +4639,7 @@ def test_zmq_api_queue_execution_2(re_manager):  # noqa: F811
     assert wait_for_condition(time=20, condition=condition_manager_paused)
     uid_checker.verify_uid_changes(pq_changed=False, ph_changed=False)
 
-    resp5b, _ = zmq_single_request("re_stop")
+    resp5b, _ = zmq_single_request("re_abort")
     assert resp5b["success"] is True, str(resp5b)
 
     assert wait_for_condition(time=20, condition=condition_manager_idle)

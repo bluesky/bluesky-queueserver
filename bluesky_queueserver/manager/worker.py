@@ -196,13 +196,13 @@ class RunEngineWorker(Process):
                 # Clear the list of active runs
                 self._active_run_list.clear()
 
-        except BaseException as ex:
+        except BaseException:
             with self._re_report_lock:
 
                 self._re_report = {
                     "action": "plan_exit",
                     "result": "",
-                    "err_msg": str(ex),
+                    "err_msg": traceback.format_exc(),
                 }
 
                 if self._RE._state == "paused":

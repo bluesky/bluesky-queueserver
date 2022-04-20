@@ -3847,8 +3847,47 @@ def test_permissions_set_get_3_fail(re_manager, params, err_msg):  # noqa: F811
 # =======================================================================================
 #                              Method `environment_destroy`
 
+# fmt: off
+@pytest.mark.parametrize("destroy_while_opening, delay", [
+    (False, 0.1),
+    (False, 0),
+    (True, 0),
+])
+# fmt: on
+def test_zmq_api_environment_destroy_01(re_manager, destroy_while_opening, delay):  # noqa: F811
+    """
+    Test for `environment_destroy` API: basic test. Verify that the environment may be
+    destroyed while being opened (manager status ``creating_environment``) and when it is
+    already opened.
+    """
 
-def test_zmq_api_environment_destroy(re_manager):  # noqa: F811
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    if not destroy_while_opening:
+        assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+        status = get_queue_state()
+        assert status["manager_state"] == "idle"
+        assert status["worker_environment_exists"] is True
+    else:
+        ttime.sleep(delay)
+        status = get_queue_state()
+        assert status["manager_state"] == "creating_environment"
+        assert status["worker_environment_exists"] is False
+
+    resp2, _ = zmq_single_request("environment_destroy")
+    assert resp2["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_manager_idle)
+
+    resp6a, _ = zmq_single_request("environment_open")
+    assert resp6a["success"] is True, f"resp={resp6a}"
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp6b, _ = zmq_single_request("environment_close")
+    assert resp6b["success"] is True, f"resp={resp6b}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_environment_destroy_02(re_manager):  # noqa: F811
     """
     Test for `environment_destroy` API. The test also checks if valid values of
     ``re_status`` are returned at for each step.
@@ -3920,6 +3959,15 @@ def test_zmq_api_environment_destroy(re_manager):  # noqa: F811
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_environment_destroy_03_fail(re_manager):  # noqa: F811
+    """
+    Test for `environment_destroy` API: basic test. Failing cases.
+    """
+    resp2, _ = zmq_single_request("environment_destroy")
+    assert resp2["success"] is False
+    assert "RE environment does not exist" in resp2["msg"]
 
 
 # ======================================================================================

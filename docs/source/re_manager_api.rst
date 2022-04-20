@@ -640,6 +640,9 @@ Method        **'environment_destroy'**
 ------------  -----------------------------------------------------------------------------------------
 Description   Initiate the operation of destroying of the existing (unresponsive) RE Worker
               environment. The operation fails if there is no existing environment.
+              The request is accepted by the server if status fields **worker_environment_exists** is
+              *True* or **manager_state** is *'creating_environment'*, otherwise the request is 
+              rejected.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    ---
 ------------  -----------------------------------------------------------------------------------------

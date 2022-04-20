@@ -143,16 +143,13 @@ class RunEngineManager(Process):
         self._heartbeat_generator_task = None  # Task for heartbeat generator
         self._worker_status_task = None  # Task for periodic checks of Worker status
 
-        self._fut_manager_task_completed = None  # Used for multiple purposes
+        # The future is used for opening/closing RE Worker environment. Those task always run separately.
+        self._fut_manager_task_completed = None
 
         # The objects of PipeJsonRpcSendAsync used for communciation with
         #   Watchdog and Worker modules. The object must be instantiated in the loop.
         self._comm_to_watchdog = None
         self._comm_to_worker = None
-
-        # Data on a task executed in the background
-        self._background_task = None  # asyncio.Task
-        self._background_task_status = {"status": "success", "err_msg": ""}
 
         # Note: 'self._config' is a private attribute of 'multiprocessing.Process'. Overriding
         #   this variable may lead to unpredictable and hard to debug issues.
@@ -191,7 +188,7 @@ class RunEngineManager(Process):
     # ======================================================================
     #          Functions that implement functionality of the server
 
-    async def _execute_background_task(self, bckg_fut):
+    async def _execute_background_task(self, bckg_fut, *, background_task_status=None):
         """
         Monitors execution of a task in the background. Catches unhandled exceptions and
         maintains the status of the background task.
@@ -200,6 +197,12 @@ class RunEngineManager(Process):
         ----------
         bckg_task: asyncio.Task
             The task scheduled to execute on the background
+        background_task_status: dict or None (optional)
+            Reference to a dictionary that may be used to monitor the status of the task.
+            Initialize the parameter with an empty dictionary and poll the dictionary for
+            the following keys: ``"task"`` (reference to the task, may be used to cancel
+            the task), ``"status"`` (values ``"running"``, ``"success"``, ``"failed"``)
+            and ``"err_msg"`` (error message or an empty string).
 
         Examples
         --------
@@ -209,21 +212,22 @@ class RunEngineManager(Process):
             # Call in the loop
             asyncio.ensure_future(self._execute_background_task(some_coroutine()))
         """
-        self._background_task_status["status"] = "running"
-        self._background_task_status["err_msg"] = ""
+
+        if background_task_status is None:
+            background_task_status = {}
+        background_task_status.update({"task": None, "status": "running", "err_msg": ""})
 
         try:
-            # 'self._background_task' may be used to cancel the task
-            self._background_task = asyncio.ensure_future(bckg_fut)
-            await self._background_task
-            success, err_msg = self._background_task.result()
+            background_task = asyncio.ensure_future(bckg_fut)
+            background_task_status["task"] = background_task
+            await background_task
+            success, err_msg = background_task.result()
         except Exception as ex:
             success = False
             err_msg = f"Unhandled exception: {str(ex)}"
             logger.exception("Unhandled exception during background task execution: %s", str(ex))
 
-        self._background_task_status["status"] = "success" if success else "failed"
-        self._background_task_status["err_msg"] = err_msg
+        background_task_status.update({"status": "success" if success else "failed", "err_msg": err_msg})
 
     async def _start_re_worker(self):
         """
@@ -292,7 +296,7 @@ class RunEngineManager(Process):
 
     async def _stop_re_worker(self):
         """
-        Initiate closing of RE Worker environment.
+        Initiate closing of the RE Worker environment.
         """
         try:
             if not self._environment_exists:
@@ -318,7 +322,7 @@ class RunEngineManager(Process):
 
     async def _stop_re_worker_task(self):
         """
-        Closing of the RE Worker.
+        Closing the RE Worker environment.
         """
         # Repeat the checks, since it is important for the manager to be in the correct state.
         if not self._environment_exists:
@@ -353,9 +357,11 @@ class RunEngineManager(Process):
         """
         Kill the process in which RE worker is running.
         """
-        if self._environment_exists:
-            accepted = True
-            err_msg = ""
+        if self._environment_exists or (self._manager_state == MState.CREATING_ENVIRONMENT):
+            accepted, err_msg = True, ""
+            # Cancel any operation of opening/closing the environment
+            if self._fut_manager_task_completed and not self._fut_manager_task_completed.done():
+                self._fut_manager_task_completed.set_result(False)
             asyncio.ensure_future(self._execute_background_task(self._kill_re_worker_task()))
         else:
             accepted = False
@@ -457,7 +463,7 @@ class RunEngineManager(Process):
 
                     if self._manager_state == MState.CLOSING_ENVIRONMENT:
                         if ws["environment_state"] == "closing":
-                            self._fut_manager_task_completed.set_result(None)
+                            self._fut_manager_task_completed.set_result(True)
 
                     elif self._manager_state == MState.CREATING_ENVIRONMENT:
                         # If RE Worker environment fails to open, then it switches to 'closing' state.

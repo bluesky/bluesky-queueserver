@@ -1346,7 +1346,7 @@ def test_qserver_secure_1(monkeypatch, re_manager_cmd, test_mode):  # noqa: F811
         # Set server public key (for 'qserver') using environment variable
         monkeypatch.setenv("QSERVER_ZMQ_PUBLIC_KEY", public_key)
         # Set private key for RE manager
-        monkeypatch.setenv("QSERVER_ZMQ_PRIVATE_KEY", private_key)
+        monkeypatch.setenv("QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER", private_key)
         # Set public key used by test helper functions such as 'wait_for_condition'
         set_qserver_zmq_public_key(monkeypatch, server_public_key=public_key)
     else:

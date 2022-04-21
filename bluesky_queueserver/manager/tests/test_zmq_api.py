@@ -4718,7 +4718,7 @@ def test_zmq_api_queue_execution_3(monkeypatch, re_manager_cmd, test_mode):  # n
         pass
     elif test_mode == "ev":
         # Set server private key using environment variable
-        monkeypatch.setenv("QSERVER_ZMQ_PRIVATE_KEY", private_key)
+        monkeypatch.setenv("QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER", private_key)
         set_qserver_zmq_public_key(monkeypatch, server_public_key=public_key)
     else:
         raise RuntimeError(f"Unrecognized test mode '{test_mode}'")

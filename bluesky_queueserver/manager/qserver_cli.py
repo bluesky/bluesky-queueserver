@@ -1068,6 +1068,12 @@ def qserver():
     print(f"Arguments: {args.command}")
 
     try:
+        address = args.address
+        # If the 0MQ server address is not specified, try reading it from the environment variable.
+        address = address or os.environ.get("QSERVER_ZMQ_CONTROL_ADDRESS", None)
+        # If the address is not specified, then use the default address
+        address = address or None
+
         # Read public key from the environment variable, then check if the CLI parameter exists
         zmq_public_key = os.environ.get("QSERVER_ZMQ_PUBLIC_KEY", None)
         zmq_public_key = zmq_public_key if zmq_public_key else None  # Case of key==""
@@ -1083,7 +1089,7 @@ def qserver():
 
         while True:
             msg, msg_err = zmq_single_request(
-                method, params, zmq_server_address=args.address, server_public_key=zmq_public_key
+                method, params, zmq_server_address=address, server_public_key=zmq_public_key
             )
 
             now = datetime.now()

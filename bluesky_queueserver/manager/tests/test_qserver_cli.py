@@ -1398,14 +1398,14 @@ def test_qserver_secure_1(monkeypatch, re_manager_cmd, test_mode):  # noqa: F811
 # fmt: on
 def test_qserver_parameters_1(monkeypatch, re_manager_cmd, test_mode):  # noqa: F811
     """
-    Check that passing server address as a parameter and environment variable works as
-    expected.
+    Check that passing server control address as a parameter --zmq-control-addr and environment variable
+    QSERVER_ZMQ_CONTROL_ADDRESS works as expected.
     """
     address_server = "tcp://*:60621"
     address_client = "tcp://localhost:60621"
     address_client_incorrect = "tcp://localhost:60620"
 
-    params_server = [f"--zmq-server-addr={address_server}"]
+    params_server = [f"--zmq-control-addr={address_server}"]
     params_client = []
     if test_mode == "none":
         # Use default address, communication fails
@@ -1426,7 +1426,7 @@ def test_qserver_parameters_1(monkeypatch, re_manager_cmd, test_mode):  # noqa: 
     elif test_mode == "both_fail":
         # Pass incorrect address as an environment variable (ignored) and correct address as a parameter
         result = COM_ERROR
-        params_client.append(f"---zmq-control-addr={address_client_incorrect}")
+        params_client.append(f"--zmq-control-addr={address_client_incorrect}")
         monkeypatch.setenv("QSERVER_ZMQ_CONTROL_ADDRESS", address_client)
     else:
         raise RuntimeError(f"Unrecognized test mode '{test_mode}'")

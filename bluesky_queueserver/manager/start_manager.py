@@ -478,6 +478,7 @@ def start_manager():
             "Use --zmq-info-addr instead."
         )
     zmq_info_addr = zmq_info_addr or args.zmq_publish_console_addr
+    zmq_info_addr = zmq_info_addr or os.environ.get("QSERVER_ZMQ_INFO_ADDRESS_FOR_SERVER", None)
     zmq_info_addr = zmq_info_addr or default_zmq_info_address_for_server
 
     msg_queue = Queue()

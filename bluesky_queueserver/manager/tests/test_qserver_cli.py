@@ -1398,8 +1398,8 @@ def test_qserver_secure_1(monkeypatch, re_manager_cmd, test_mode):  # noqa: F811
 # fmt: on
 def test_qserver_parameters_1(monkeypatch, re_manager_cmd, test_mode):  # noqa: F811
     """
-    Check that passing server control address as a parameter --zmq-control-addr and environment variable
-    QSERVER_ZMQ_CONTROL_ADDRESS works as expected.
+    Check that passing server control address as a parameter ``--zmq-control-addr`` and
+    environment variable ``QSERVER_ZMQ_CONTROL_ADDRESS`` works as expected.
     """
     address_server = "tcp://*:60621"
     address_client = "tcp://localhost:60621"

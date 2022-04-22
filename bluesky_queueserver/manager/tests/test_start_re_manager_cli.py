@@ -189,7 +189,6 @@ def test_start_re_manager_console_output_2(monkeypatch, re_manager_cmd, test_mod
     else:
         raise RuntimeError(f"Unrecognized test mode '{test_mode}'")
 
-    # Security enabled by setting
     re_manager_cmd(params_server)
 
     # Start monitor (captures messages published to 0MQ)
@@ -208,7 +207,6 @@ def test_start_re_manager_console_output_2(monkeypatch, re_manager_cmd, test_mod
     p_monitor.terminate()
     streamed_stdout, streamed_stderr = p_monitor.communicate()
 
-    status, msg = zmq_single_request("status", zmq_server_address=address_info_client)
     if success:
         assert streamed_stdout != ""
         assert "RE Environment is ready" in streamed_stdout

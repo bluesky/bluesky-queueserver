@@ -20,7 +20,7 @@ def test_console_monitor_cli_parameters_1(monkeypatch, re_manager_cmd, test_mode
     ``--zmq-control-addr`` and environment variable ``QSERVER_ZMQ_INFO_ADDRESS`` works as expected.
     """
     address_info_server = "tcp://*:60621"
-    address_info_client = "tcp://localhost:60621"
+    address_info_client = "tcp://localhost:60622"
     address_info_client_incorrect = "tcp://localhost:60620"
 
     params_server = ["--zmq-publish-console=ON", f"--zmq-info-addr={address_info_server}"]

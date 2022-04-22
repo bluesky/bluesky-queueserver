@@ -161,7 +161,7 @@ def test_start_re_manager_console_output_2(monkeypatch, re_manager_cmd, test_mod
     ``QSERVER_ZMQ_INFO_ADDRESS_FOR_SERVER` are properly handled by ``start-re-manager``.
     """
     address_info_server = "tcp://*:60621"
-    address_info_server_incorrect = "tcp://*:60620"
+    address_info_server_incorrect = "tcp://*:60622"
     address_info_client = "tcp://localhost:60621"
 
     params_server = ["--zmq-publish-console=ON"]

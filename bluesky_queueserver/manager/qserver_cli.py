@@ -1055,12 +1055,13 @@ def qserver():
         nargs="+",
         help="a sequence of keywords and parameters that define the command",
     )
+
     parser.add_argument(
         "--address",
         "-a",
         dest="address",
         action="store",
-        default="tcp://localhost:60615",
+        default=None,
         help="Address of the server, e.g. 'tcp://127.0.0.1:60615' (default: '%(default)s').",
     )
 

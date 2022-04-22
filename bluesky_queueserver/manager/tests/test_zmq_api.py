@@ -32,7 +32,7 @@ from ..comms import (
     ZMQCommSendAsync,
     CommTimeoutError,
     generate_new_zmq_key_pair,
-    default_zmq_server_address,
+    default_zmq_control_address,
 )
 
 from .common import (
@@ -166,7 +166,7 @@ def test_invalid_requests_1(re_manager):  # noqa F811
     """
     ctx = zmq.Context()
     socket = ctx.socket(zmq.REQ)
-    socket.connect(default_zmq_server_address)
+    socket.connect(default_zmq_control_address)
 
     socket.send(b"")  # Not JSON
     resp = socket.recv_json()

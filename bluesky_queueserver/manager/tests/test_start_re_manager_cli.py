@@ -13,6 +13,7 @@ from .common import (
     condition_queue_processing_finished,
     copy_default_profile_collection,
     clear_redis_pool,
+    set_qserver_zmq_address,
 )
 
 from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
@@ -320,3 +321,57 @@ def test_cli_user_group_permissions_reload_01(
         assert user_group_permissions != _permissions_dict_not_allow_count
     else:
         assert user_group_permissions == _permissions_dict_not_allow_count
+
+
+# fmt: off
+@pytest.mark.parametrize("test_mode", ["none", "parameter", "env_var", "both_success", "both_fail"])
+# @pytest.mark.parametrize("test_mode", ["parameter"])
+# fmt: on
+def test_cli_parameters_zmq_server_address_1(monkeypatch, re_manager_cmd, test_mode):  # noqa: F811
+    """
+    Check that passing server address as a parameter and environment variable works as
+    expected.
+    """
+    address_server = "tcp://*:60621"
+    address_server_incorrect = "tcp://*:60620"
+    address_client = "tcp://localhost:60621"
+
+    params_server = []
+    if test_mode == "none":
+        # Use default address, communication fails
+        success = False
+    elif test_mode == "parameter":
+        # Pass the address as a parameter
+        success = True
+        params_server.append(f"--zmq-addr={address_server}")
+        set_qserver_zmq_address(monkeypatch, zmq_server_address=address_server.replace("*", "localhost"))
+    elif test_mode == "env_var":
+        # Pass the address as an environment variable
+        success = True
+        monkeypatch.setenv("QSERVER_ZMQ_CONTROL_ADDRESS_FOR_SERVER", address_server)
+        set_qserver_zmq_address(monkeypatch, zmq_server_address=address_server.replace("*", "localhost"))
+    elif test_mode == "both_success":
+        # Pass the correct address as a parameter and incorrect as environment variable (ignored)
+        success = True
+        params_server.append(f"--zmq-addr={address_server}")
+        monkeypatch.setenv("QSERVER_ZMQ_CONTROL_ADDRESS_FOR_SERVER", address_server_incorrect)
+        set_qserver_zmq_address(monkeypatch, zmq_server_address=address_server.replace("*", "localhost"))
+    elif test_mode == "both_fail":
+        # Pass incorrect address as an environment variable (ignored) and correct address as a parameter
+        success = False
+        params_server.append(f"--zmq-addr={address_server_incorrect}")
+        monkeypatch.setenv("QSERVER_ZMQ_CONTROL_ADDRESS_FOR_SERVER", address_server)
+        set_qserver_zmq_address(monkeypatch, zmq_server_address=address_server_incorrect.replace("*", "localhost"))
+    else:
+        raise RuntimeError(f"Unrecognized test mode '{test_mode}'")
+
+    # Security enabled by setting
+    re_manager_cmd(params_server)
+
+    status, msg = zmq_single_request("status", zmq_server_address=address_client)
+    if success:
+        assert msg == "", (status, msg)
+        assert status["manager_state"] == "idle", (status, msg)
+    else:
+        assert msg != "", (status, msg)
+        assert status is None, (status, msg)

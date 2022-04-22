@@ -7,7 +7,7 @@ from importlib.util import find_spec
 
 from .worker import RunEngineWorker
 from .manager import RunEngineManager
-from .comms import PipeJsonRpcReceive, validate_zmq_key
+from .comms import PipeJsonRpcReceive, validate_zmq_key, default_zmq_control_address_for_server
 from .profile_ops import get_default_startup_dir
 from .output_streaming import PublishConsoleOutput, setup_console_output_redirection
 from .logging_setup import setup_loggers
@@ -224,8 +224,9 @@ def start_manager():
         "--zmq-addr",
         dest="zmq_addr",
         type=str,
-        default="tcp://*:60615",
-        help="The address of ZMQ server (control connection), e.g. 'tcp://*:60615' (default: %(default)s).",
+        default=None,
+        help="The address of ZMQ server (control connection), e.g. 'tcp://*:60615' "
+        f"(default: {default_zmq_control_address_for_server!r}).",
     )
 
     group = parser.add_mutually_exclusive_group()
@@ -620,7 +621,10 @@ def start_manager():
             logger.error("ZMQ private key is improperly formatted: %s", str(ex))
             return 1
 
-    config_manager["zmq_addr"] = args.zmq_addr
+    zmq_addr = args.zmq_addr
+    zmq_addr = zmq_addr or os.environ.get("QSERVER_ZMQ_CONTROL_ADDRESS_FOR_SERVER")
+    zmq_addr = zmq_addr or default_zmq_control_address_for_server
+    config_manager["zmq_addr"] = zmq_addr
     config_manager["zmq_private_key"] = zmq_private_key
 
     redis_addr = args.redis_addr

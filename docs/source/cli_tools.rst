@@ -619,7 +619,7 @@ The console output printed by the monitor is expected to be identical to the out
 RE Manager terminal. The monitor may be run on the same workstation as RE Manager or any computer,
 which can access the workstation running RE Manager over the network. If the address of
 the 0MQ socket is different from default, it can be passed to the monitor application
-as a parameter (``--zmq-subscribe-addr``). RE Manager does not publishing the console output
+as a parameter (``--zmq-info-addr``). RE Manager does not publishing the console output
 to 0MQ socket by default. Publishing can be enabled by starting RE Manager with the parameter
 ``--zmq-publish-console``:
 
@@ -634,14 +634,21 @@ to 0MQ socket by default. Publishing can be enabled by starting RE Manager with 
 .. code-block::
 
     $ qserver-console-monitor -h
-    usage: qserver-console-monitor [-h] [--zmq-subscribe-addr ZMQ_SUBSCRIBE_ADDR]
+    usage: qserver-console-monitor [-h] [--zmq-info-addr ZMQ_INFO_ADDR]
+                                  [--zmq-subscribe-addr ZMQ_SUBSCRIBE_ADDR]
 
     Queue Server Console Monitor:
     CLI tool for remote monitoring of console output published by RE Manager.
-    bluesky-queueserver version 0.0.3.post59.dev0+g32a7a24
+    bluesky-queueserver version 0.0.15
 
     optional arguments:
       -h, --help        show this help message and exit
+      --zmq-info-addr ZMQ_INFO_ADDR
+                        The address of RE Manager socket used for publishing console output.
+                        The parameter overrides the address set using QSERVER_ZMQ_INFO_ADDRESS
+                        environment variable. The default value is used if the address is not
+                        set using the parameter or the environment variable. Address format:
+                        'tcp://127.0.0.1:60625' (default: tcp://localhost:60625).
       --zmq-subscribe-addr ZMQ_SUBSCRIBE_ADDR
-                        The address of ZMQ server to subscribe, e.g. 'tcp://127.0.0.1:60625'
-                        (default: tcp://localhost:60625).
+                        The parameter is deprecated and will be removed. Use --zmq-info-addr
+                        instead.

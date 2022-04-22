@@ -1413,7 +1413,7 @@ def test_qserver_parameters_1(monkeypatch, re_manager_cmd, test_mode):  # noqa: 
     elif test_mode == "parameter":
         # Pass the address as a parameter
         result = SUCCESS
-        params_client.append(f"--address={address_client}")
+        params_client.append(f"--zmq-control-addr={address_client}")
     elif test_mode == "env_var":
         # Pass the address as an environment variable
         result = SUCCESS
@@ -1421,12 +1421,12 @@ def test_qserver_parameters_1(monkeypatch, re_manager_cmd, test_mode):  # noqa: 
     elif test_mode == "both_success":
         # Pass the correct address as a parameter and incorrect as environment variable (ignored)
         result = SUCCESS
-        params_client.append(f"--address={address_client}")
+        params_client.append(f"--zmq-control-addr={address_client}")
         monkeypatch.setenv("QSERVER_ZMQ_CONTROL_ADDRESS", address_client_incorrect)
     elif test_mode == "both_fail":
         # Pass incorrect address as an environment variable (ignored) and correct address as a parameter
         result = COM_ERROR
-        params_client.append(f"--address={address_client_incorrect}")
+        params_client.append(f"---zmq-control-addr={address_client_incorrect}")
         monkeypatch.setenv("QSERVER_ZMQ_CONTROL_ADDRESS", address_client)
     else:
         raise RuntimeError(f"Unrecognized test mode '{test_mode}'")

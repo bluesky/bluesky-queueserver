@@ -136,7 +136,7 @@ RE Manager captures output to ``stdout`` and ``stderr`` produced by itself and
 running plans. The output may be printed to terminal and/or published to
 a 0MQ socket (different socket from the socket used for control communication).
 
-- ``--zmq-publish-console-addr`` allows to set the address for the 0MQ 'PUB' socket.
+- ``--zmq-info-addr`` allows to set the address for the 0MQ 'PUB' socket.
 
 - Setting ``--zmq-publish-console ON`` enables publishing of the collected output to
   0MQ socket.
@@ -187,7 +187,7 @@ Other Configuration Parameters
                             [--verbose | --quiet | --silent]
 
     Start Run Engine (RE) Manager
-    bluesky-queueserver version 0.0.14.post11.dev0+g1bcd80a
+    bluesky-queueserver version 0.0.15
 
     Encryption for ZeroMQ communication server may be enabled by setting the value of
     'QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER' environment variable to a valid private key
@@ -333,11 +333,11 @@ in production. The tool supports most of the Queue Server 0MQ API including subm
 opening and closing of RE Worker environment, starting and stopping the queue, etc.
 Refer to ``qserver`` help for the full list of supported commands.
 
-If RE Manager 0MQ address is different from the default, use the optional ``--address``
-parameter to pass the address to ``qserver``. If encryption is enabled at RE Manager,
-set the environment variable ``QSERVER_ZMQ_PUBLIC_KEY`` to a string representing valid
-public address of the 0MQ server. Use :ref:`qserver_zmq_keys_cli` tool to generate a new
-public/private key pair or generate public key from known server private key.
+If RE Manager 0MQ address is different from the default, use the optional ``--zmq-control-addr``
+parameter or ``QSERVER_ZMQ_CONTROL_ADDRESS`` to pass the address to ``qserver``. If encryption
+is enabled at RE Manager, set the environment variable ``QSERVER_ZMQ_PUBLIC_KEY`` to a string
+representing valid public address of the 0MQ server. Use :ref:`qserver_zmq_keys_cli` tool
+to generate a new public/private key pair or generate public key from known server private key.
 
 `qserver` may used in monitoring mode (``qserver monitor``). In this mode the tool
 periodically requests and displays the status of Queue Server.
@@ -347,19 +347,26 @@ periodically requests and displays the status of Queue Server.
 .. code-block::
 
     $ qserver -h
-    usage: qserver [-h] [--address ADDRESS] command [command ...]
+    usage: qserver [-h] [--zmq-control-addr ZMQ_CONTROL_ADDR] [--address ADDRESS]
+                  command [command ...]
 
     Command-line tool for communicating with RE Monitor.
-    bluesky-queueserver version 0.0.9.
+    bluesky-queueserver version 0.0.15
 
     positional arguments:
       command           a sequence of keywords and parameters that define the command
 
     optional arguments:
       -h, --help        show this help message and exit
-      --address ADDRESS, -a ADDRESS
-                        Address of the server, e.g. 'tcp://127.0.0.1:60615' (default:
-                        'tcp://localhost:60615').
+      --zmq-control-addr ZMQ_CONTROL_ADDR, -a ZMQ_CONTROL_ADDR
+                        Address of the control socket of RE Manager. The parameter overrides
+                        the address set using the environment variable
+                        QSERVER_ZMQ_CONTROL_ADDRESS. The default value is used if the address
+                        is not set using the parameter or the environment variable. Address
+                        format: 'tcp://127.0.0.1:60615' (default: 'tcp://localhost:60615').
+      --address ADDRESS
+                        The parameter is deprecated and will be removed. Use --zmq-control-
+                        addr instead.
 
     If RE Manager is configured to use encrypted ZeroMQ communication channel,
     the encryption must also be enabled before running 'qserver' CLI tool by setting
@@ -478,6 +485,7 @@ periodically requests and displays the status of Queue Server.
     qserver script upload <path-to-file> update-re    # ... allow 'RE' and 'db' to be updated
 
     qserver task result <task-uid>  # Load status or result of a task with the given UID
+    qserver task status <task-uid>  # Check status of a task with the given UID
 
     qserver manager stop           # Safely exit RE Manager application
     qserver manager stop safe on   # Safely exit RE Manager application

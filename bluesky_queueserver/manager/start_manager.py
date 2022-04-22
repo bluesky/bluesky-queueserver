@@ -638,16 +638,13 @@ def start_manager():
 
     # Read private key from the environment variable, then check if the CLI parameter exists
     zmq_private_key = os.environ.get("QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER", None)
-    if zmq_private_key is None:
-        # TODO: remove this block in future releases.
-        if "QSERVER_ZMQ_PRIVATE_KEY" in os.environ:
+    if (zmq_private_key is None) and ("QSERVER_ZMQ_PRIVATE_KEY" in os.environ):
             logger.warning(
                 "Environment variable QSERVER_ZMQ_PRIVATE_KEY is deprecated and will be removed "
                 "in future releases. Use QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER instead"
             )
-        zmq_private_key = os.environ.get("QSERVER_ZMQ_PRIVATE_KEY", None)
-
-    zmq_private_key = zmq_private_key if zmq_private_key else None  # Case of key==""
+    zmq_private_key = zmq_private_key or os.environ.get("QSERVER_ZMQ_PRIVATE_KEY", None)
+    zmq_private_key = zmq_private_key or None  # Case of key==""
     if zmq_private_key is not None:
         try:
             validate_zmq_key(zmq_private_key)

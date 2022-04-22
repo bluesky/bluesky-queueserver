@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 qserver_version = bluesky_queueserver.__version__
 
 
+default_zmq_info_address_for_server = "tcp://*:60625"
+default_zmq_info_address = "tcp://localhost:60625"
+
+
 class ConsoleOutputStream(io.TextIOBase):
     """
     Class that implements writable text file object that collects printed console messages
@@ -133,7 +137,7 @@ class PublishConsoleOutput:
         self._console_output_on = console_output_on
         self._zmq_publish_on = zmq_publish_on
 
-        zmq_publish_addr = zmq_publish_addr or "tcp://*:60625"
+        zmq_publish_addr = zmq_publish_addr or default_zmq_info_address_for_server
 
         self._zmq_publish_addr = zmq_publish_addr
         self._zmq_topic = zmq_topic
@@ -255,7 +259,7 @@ class ReceiveConsoleOutput:
 
         self._timeout = timeout  # Timeout for 'recv' operation (ms)
 
-        zmq_subscribe_addr = zmq_subscribe_addr or "tcp://localhost:60625"
+        zmq_subscribe_addr = zmq_subscribe_addr or default_zmq_info_address
 
         logger.info(f"Subscribing to console output stream from 0MQ address: {zmq_subscribe_addr} ...")
         logger.info(f"Subscribing to 0MQ topic: '{zmq_topic}' ...")

@@ -1405,7 +1405,7 @@ def test_qserver_parameters_1(monkeypatch, re_manager_cmd, test_mode):  # noqa: 
     address_client = "tcp://localhost:60621"
     address_client_incorrect = "tcp://localhost:60620"
 
-    params_server = [f"--zmq-addr={address_server}"]
+    params_server = [f"--zmq-server-addr={address_server}"]
     params_client = []
     if test_mode == "none":
         # Use default address, communication fails

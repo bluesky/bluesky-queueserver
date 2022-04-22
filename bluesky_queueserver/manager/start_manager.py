@@ -9,7 +9,11 @@ from .worker import RunEngineWorker
 from .manager import RunEngineManager
 from .comms import PipeJsonRpcReceive, validate_zmq_key, default_zmq_control_address_for_server
 from .profile_ops import get_default_startup_dir
-from .output_streaming import PublishConsoleOutput, setup_console_output_redirection
+from .output_streaming import (
+    PublishConsoleOutput,
+    setup_console_output_redirection,
+    default_zmq_info_address_for_server,
+)
 from .logging_setup import setup_loggers
 
 from .. import __version__
@@ -221,12 +225,21 @@ def start_manager():
         formatter_class=formatter,
     )
     parser.add_argument(
+        "--zmq-control-addr",
+        dest="zmq_control_addr",
+        type=str,
+        default=None,
+        help="The address of ZMQ server (control connection). The parameter overrides the address defined by "
+        "the environment variable QSERVER_ZMQ_CONTROL_ADDRESS_FOR_SERVER. The default address is used if "
+        "the parameter or the environment variable is not defined. Address format: 'tcp://*:60615' "
+        f"(default: {default_zmq_control_address_for_server!r}).",
+    )
+    parser.add_argument(
         "--zmq-addr",
         dest="zmq_addr",
         type=str,
         default=None,
-        help="The address of ZMQ server (control connection), e.g. 'tcp://*:60615' "
-        f"(default: {default_zmq_control_address_for_server!r}).",
+        help="The parameter is deprecated and will be removed in future releases. Use --zmq-control-addr instead.",
     )
 
     group = parser.add_mutually_exclusive_group()
@@ -379,12 +392,24 @@ def start_manager():
     )
 
     group_console_output.add_argument(
+        "--zmq-info-addr",
+        dest="zmq_info_addr",
+        type=str,
+        default=None,
+        help="The address of ZMQ server socket used for publishing information on the state of RE Manager "
+        "and currently running processes. Currently only the captured STDOUT and STDERR published "
+        "in 'QS_Console' topic. The parameter overrides the address defined by the environment variable "
+        "'QSERVER_ZMQ_INFO_ADDRESS_FOR_SERVER'. The default address is used if the parameter or the environment "
+        " variable is not defined. Address format: 'tcp://*:60625' "
+        f"(default: {default_zmq_info_address_for_server}).",
+    )
+
+    group_console_output.add_argument(
         "--zmq-publish-console-addr",
         dest="zmq_publish_console_addr",
         type=str,
-        default="tcp://*:60625",
-        help="The address of ZMQ server (stdout and stderr publishing), e.g. 'tcp://*:60625' "
-        "(default: %(default)s).",
+        default=None,
+        help="The parameter is deprecated and will be removed in future releases. Use --zmq-info-addr instead.",
     )
 
     group_console_output.add_argument(
@@ -445,7 +470,15 @@ def start_manager():
 
     console_output_on = args.console_output == "ON"
     zmq_publish_console_on = args.zmq_publish_console == "ON"
-    zmq_publish_console_addr = args.zmq_publish_console_addr
+
+    zmq_info_addr = args.zmq_info_addr
+    if args.zmq_publish_console_addr is not None:
+        logger.warning(
+            "Parameter --zmq-publish-console-addr is deprecated and will be removed in future releases. "
+            "Use --zmq-info-addr instead."
+        )
+    zmq_info_addr = zmq_info_addr or args.zmq_publish_console_addr
+    zmq_info_addr = zmq_info_addr or default_zmq_info_address_for_server
 
     msg_queue = Queue()
     setup_console_output_redirection(msg_queue)
@@ -457,7 +490,7 @@ def start_manager():
         msg_queue=msg_queue,
         console_output_on=console_output_on,
         zmq_publish_on=zmq_publish_console_on,
-        zmq_publish_addr=zmq_publish_console_addr,
+        zmq_publish_addr=zmq_info_addr,
     )
 
     if zmq_publish_console_on:
@@ -621,10 +654,16 @@ def start_manager():
             logger.error("ZMQ private key is improperly formatted: %s", str(ex))
             return 1
 
-    zmq_addr = args.zmq_addr
-    zmq_addr = zmq_addr or os.environ.get("QSERVER_ZMQ_CONTROL_ADDRESS_FOR_SERVER")
-    zmq_addr = zmq_addr or default_zmq_control_address_for_server
-    config_manager["zmq_addr"] = zmq_addr
+    zmq_control_addr = args.zmq_control_addr
+    if args.zmq_addr is not None:
+        logger.warning(
+            "Parameter --zmq-addr is deprecated and will be removed in future releases. "
+            "Use --zmq-control-addr instead."
+        )
+    zmq_control_addr = zmq_control_addr or args.zmq_addr
+    zmq_control_addr = zmq_control_addr or os.environ.get("QSERVER_ZMQ_CONTROL_ADDRESS_FOR_SERVER")
+    zmq_control_addr = zmq_control_addr or default_zmq_control_address_for_server
+    config_manager["zmq_addr"] = zmq_control_addr
     config_manager["zmq_private_key"] = zmq_private_key
 
     redis_addr = args.redis_addr

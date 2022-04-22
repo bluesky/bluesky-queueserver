@@ -343,7 +343,7 @@ def test_cli_parameters_zmq_server_address_1(monkeypatch, re_manager_cmd, test_m
     elif test_mode == "parameter":
         # Pass the address as a parameter
         success = True
-        params_server.append(f"--zmq-addr={address_server}")
+        params_server.append(f"--zmq-server-addr={address_server}")
         set_qserver_zmq_address(monkeypatch, zmq_server_address=address_server.replace("*", "localhost"))
     elif test_mode == "env_var":
         # Pass the address as an environment variable
@@ -353,13 +353,13 @@ def test_cli_parameters_zmq_server_address_1(monkeypatch, re_manager_cmd, test_m
     elif test_mode == "both_success":
         # Pass the correct address as a parameter and incorrect as environment variable (ignored)
         success = True
-        params_server.append(f"--zmq-addr={address_server}")
+        params_server.append(f"--zmq-server-addr={address_server}")
         monkeypatch.setenv("QSERVER_ZMQ_CONTROL_ADDRESS_FOR_SERVER", address_server_incorrect)
         set_qserver_zmq_address(monkeypatch, zmq_server_address=address_server.replace("*", "localhost"))
     elif test_mode == "both_fail":
         # Pass incorrect address as an environment variable (ignored) and correct address as a parameter
         success = False
-        params_server.append(f"--zmq-addr={address_server_incorrect}")
+        params_server.append(f"--zmq-server-addr={address_server_incorrect}")
         monkeypatch.setenv("QSERVER_ZMQ_CONTROL_ADDRESS_FOR_SERVER", address_server)
         set_qserver_zmq_address(monkeypatch, zmq_server_address=address_server_incorrect.replace("*", "localhost"))
     else:

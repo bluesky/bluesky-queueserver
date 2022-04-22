@@ -3,6 +3,7 @@ import asyncio
 import inspect
 import io
 import json
+import os
 import sys
 import time as ttime
 import threading
@@ -14,6 +15,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 qserver_version = bluesky_queueserver.__version__
+
+
+default_zmq_info_address_for_server = "tcp://*:60625"
+default_zmq_info_address = "tcp://localhost:60625"
 
 
 class ConsoleOutputStream(io.TextIOBase):
@@ -133,7 +138,7 @@ class PublishConsoleOutput:
         self._console_output_on = console_output_on
         self._zmq_publish_on = zmq_publish_on
 
-        zmq_publish_addr = zmq_publish_addr or "tcp://*:60625"
+        zmq_publish_addr = zmq_publish_addr or default_zmq_info_address_for_server
 
         self._zmq_publish_addr = zmq_publish_addr
         self._zmq_topic = zmq_topic
@@ -255,7 +260,7 @@ class ReceiveConsoleOutput:
 
         self._timeout = timeout  # Timeout for 'recv' operation (ms)
 
-        zmq_subscribe_addr = zmq_subscribe_addr or "tcp://localhost:60625"
+        zmq_subscribe_addr = zmq_subscribe_addr or default_zmq_info_address
 
         logger.info(f"Subscribing to console output stream from 0MQ address: {zmq_subscribe_addr} ...")
         logger.info(f"Subscribing to 0MQ topic: '{zmq_topic}' ...")
@@ -597,18 +602,36 @@ def qserver_console_monitor_cli():
         formatter_class=formatter,
     )
     parser.add_argument(
+        "--zmq-info-addr",
+        dest="zmq_info_addr",
+        type=str,
+        default=None,
+        help="The address of RE Manager socket used for publishing console output. The parameter overrides "
+        "the address set using QSERVER_ZMQ_INFO_ADDRESS environment variable. The default value is used "
+        "if the address is not set using the parameter or the environment variable. Address format: "
+        f"'tcp://127.0.0.1:60625' (default: {default_zmq_info_address}).",
+    )
+    parser.add_argument(
         "--zmq-subscribe-addr",
         dest="zmq_subscribe_addr",
         type=str,
-        default="tcp://localhost:60625",
-        help="The address of ZMQ server to subscribe, e.g. 'tcp://127.0.0.1:60625' (default: %(default)s).",
+        default=None,
+        help="The parameter is deprecated and will be removed. Use --zmq-info-addr instead.",
     )
 
     args = parser.parse_args()
-    zmq_subscribe_addr = args.zmq_subscribe_addr
+
+    zmq_info_addr = args.zmq_info_addr
+    if args.zmq_subscribe_addr is not None:
+        logger.warning(
+            "The parameter --zmq-subscribe-addr is deprecated and will be removed. Use --zmq-info-addr instead."
+        )
+    zmq_info_addr = zmq_info_addr or args.zmq_subscribe_addr
+    zmq_info_addr = zmq_info_addr or os.environ.get("QSERVER_ZMQ_INFO_ADDRESS", None)
+    zmq_info_addr = zmq_info_addr or default_zmq_info_address
 
     try:
-        rco = ReceiveConsoleOutput(zmq_subscribe_addr=zmq_subscribe_addr)
+        rco = ReceiveConsoleOutput(zmq_subscribe_addr=zmq_info_addr)
         rco.subscribe()
         while True:
             try:

@@ -9,7 +9,13 @@ import os
 import yaml
 
 import bluesky_queueserver
-from .comms import zmq_single_request, validate_zmq_key, generate_zmq_public_key, generate_new_zmq_key_pair
+from .comms import (
+    zmq_single_request,
+    validate_zmq_key,
+    generate_zmq_public_key,
+    generate_new_zmq_key_pair,
+    default_zmq_control_address,
+)
 
 import logging
 
@@ -1055,19 +1061,42 @@ def qserver():
         nargs="+",
         help="a sequence of keywords and parameters that define the command",
     )
+
+    parser.add_argument(
+        "--zmq-control-addr",
+        "-a",
+        dest="zmq_control_addr",
+        action="store",
+        default=None,
+        help="Address of the control socket of RE Manager. The parameter overrides the address set using "
+        "the environment variable QSERVER_ZMQ_CONTROL_ADDRESS. The default value is used if the address is not "
+        "set using the parameter or the environment variable. Address format: 'tcp://127.0.0.1:60615' "
+        f"(default: {default_zmq_control_address!r}).",
+    )
+
     parser.add_argument(
         "--address",
-        "-a",
         dest="address",
         action="store",
-        default="tcp://localhost:60615",
-        help="Address of the server, e.g. 'tcp://127.0.0.1:60615' (default: '%(default)s').",
+        default=None,
+        help="The parameter is deprecated and will be removed. Use --zmq-control-addr instead.",
     )
 
     args = parser.parse_args()
     print(f"Arguments: {args.command}")
 
     try:
+        address = args.zmq_control_addr
+        if args.address is not None:
+            logger.warning(
+                "The parameter --address is deprecated and will be removed. Use --zmq-control-addr instead."
+            )
+        address = address or args.address
+        # If the 0MQ server address is not specified, try reading it from the environment variable.
+        address = address or os.environ.get("QSERVER_ZMQ_CONTROL_ADDRESS", None)
+        # If the address is not specified, then use the default address
+        address = address or default_zmq_control_address
+
         # Read public key from the environment variable, then check if the CLI parameter exists
         zmq_public_key = os.environ.get("QSERVER_ZMQ_PUBLIC_KEY", None)
         zmq_public_key = zmq_public_key if zmq_public_key else None  # Case of key==""
@@ -1083,7 +1112,7 @@ def qserver():
 
         while True:
             msg, msg_err = zmq_single_request(
-                method, params, zmq_server_address=args.address, server_public_key=zmq_public_key
+                method, params, zmq_server_address=address, server_public_key=zmq_public_key
             )
 
             now = datetime.now()

@@ -32,7 +32,7 @@ from ..comms import (
     ZMQCommSendAsync,
     CommTimeoutError,
     generate_new_zmq_key_pair,
-    default_zmq_server_address,
+    default_zmq_control_address,
 )
 
 from .common import (
@@ -166,7 +166,7 @@ def test_invalid_requests_1(re_manager):  # noqa F811
     """
     ctx = zmq.Context()
     socket = ctx.socket(zmq.REQ)
-    socket.connect(default_zmq_server_address)
+    socket.connect(default_zmq_control_address)
 
     socket.send(b"")  # Not JSON
     resp = socket.recv_json()
@@ -4718,7 +4718,7 @@ def test_zmq_api_queue_execution_3(monkeypatch, re_manager_cmd, test_mode):  # n
         pass
     elif test_mode == "ev":
         # Set server private key using environment variable
-        monkeypatch.setenv("QSERVER_ZMQ_PRIVATE_KEY", private_key)
+        monkeypatch.setenv("QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER", private_key)
         set_qserver_zmq_public_key(monkeypatch, server_public_key=public_key)
     else:
         raise RuntimeError(f"Unrecognized test mode '{test_mode}'")

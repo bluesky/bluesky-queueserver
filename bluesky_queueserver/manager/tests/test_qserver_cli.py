@@ -22,6 +22,7 @@ from .common import (
     append_code_to_last_startup_file,
     set_qserver_zmq_public_key,
     zmq_single_request,
+    set_qserver_zmq_address,
 )
 
 from .common import re_manager, re_manager_pc_copy, re_manager_cmd  # noqa: F401
@@ -1346,7 +1347,7 @@ def test_qserver_secure_1(monkeypatch, re_manager_cmd, test_mode):  # noqa: F811
         # Set server public key (for 'qserver') using environment variable
         monkeypatch.setenv("QSERVER_ZMQ_PUBLIC_KEY", public_key)
         # Set private key for RE manager
-        monkeypatch.setenv("QSERVER_ZMQ_PRIVATE_KEY", private_key)
+        monkeypatch.setenv("QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER", private_key)
         # Set public key used by test helper functions such as 'wait_for_condition'
         set_qserver_zmq_public_key(monkeypatch, server_public_key=public_key)
     else:
@@ -1390,6 +1391,52 @@ def test_qserver_secure_1(monkeypatch, re_manager_cmd, test_mode):  # noqa: F811
     assert wait_for_condition(
         time=5, condition=condition_environment_closed
     ), "Timeout while waiting for environment to be closed"
+
+
+# fmt: off
+@pytest.mark.parametrize("test_mode", ["none", "parameter", "env_var", "both_success", "both_fail"])
+# fmt: on
+def test_qserver_parameters_1(monkeypatch, re_manager_cmd, test_mode):  # noqa: F811
+    """
+    Check that passing server control address as a parameter ``--zmq-control-addr`` and
+    environment variable ``QSERVER_ZMQ_CONTROL_ADDRESS`` works as expected.
+    """
+    address_server = "tcp://*:60621"
+    address_client = "tcp://localhost:60621"
+    address_client_incorrect = "tcp://localhost:60620"
+
+    params_server = [f"--zmq-control-addr={address_server}"]
+    params_client = []
+    if test_mode == "none":
+        # Use default address, communication fails
+        result = COM_ERROR
+    elif test_mode == "parameter":
+        # Pass the address as a parameter
+        result = SUCCESS
+        params_client.append(f"--zmq-control-addr={address_client}")
+    elif test_mode == "env_var":
+        # Pass the address as an environment variable
+        result = SUCCESS
+        monkeypatch.setenv("QSERVER_ZMQ_CONTROL_ADDRESS", address_client)
+    elif test_mode == "both_success":
+        # Pass the correct address as a parameter and incorrect as environment variable (ignored)
+        result = SUCCESS
+        params_client.append(f"--zmq-control-addr={address_client}")
+        monkeypatch.setenv("QSERVER_ZMQ_CONTROL_ADDRESS", address_client_incorrect)
+    elif test_mode == "both_fail":
+        # Pass incorrect address as an environment variable (ignored) and correct address as a parameter
+        result = COM_ERROR
+        params_client.append(f"--zmq-control-addr={address_client_incorrect}")
+        monkeypatch.setenv("QSERVER_ZMQ_CONTROL_ADDRESS", address_client)
+    else:
+        raise RuntimeError(f"Unrecognized test mode '{test_mode}'")
+
+    set_qserver_zmq_address(monkeypatch, zmq_server_address=address_client)
+
+    # Security enabled by setting
+    re_manager_cmd(params_server)
+
+    assert subprocess.call(["qserver", "status"] + params_client) == result
 
 
 # ================================================================================

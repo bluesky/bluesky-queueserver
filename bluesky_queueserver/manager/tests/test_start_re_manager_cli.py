@@ -427,7 +427,6 @@ def test_cli_parameters_zmq_server_address_1(monkeypatch, re_manager_cmd, test_m
     else:
         raise RuntimeError(f"Unrecognized test mode '{test_mode}'")
 
-    # Security enabled by setting
     re_manager_cmd(params_server)
 
     status, msg = zmq_single_request("status", zmq_server_address=address_client)

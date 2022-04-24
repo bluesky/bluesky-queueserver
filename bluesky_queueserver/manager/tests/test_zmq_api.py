@@ -31,7 +31,7 @@ from ..comms import (
     ZMQCommSendThreads,
     ZMQCommSendAsync,
     CommTimeoutError,
-    generate_new_zmq_key_pair,
+    generate_zmq_keys,
     default_zmq_control_address,
 )
 
@@ -4711,7 +4711,7 @@ def test_zmq_api_queue_execution_3(monkeypatch, re_manager_cmd, test_mode):  # n
     Test operation of RE Manager and 0MQ API with enabled encryption. Test options to
     set the server (RE Manager) private key using the environment variable.
     """
-    public_key, private_key = generate_new_zmq_key_pair()
+    public_key, private_key = generate_zmq_keys()
 
     if test_mode == "none":
         # No encryption

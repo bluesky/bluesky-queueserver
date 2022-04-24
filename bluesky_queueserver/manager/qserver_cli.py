@@ -13,7 +13,7 @@ from .comms import (
     zmq_single_request,
     validate_zmq_key,
     generate_zmq_public_key,
-    generate_new_zmq_key_pair,
+    generate_zmq_keys,
     default_zmq_control_address,
 )
 
@@ -1181,7 +1181,7 @@ def qserver_zmq_keys():
             public_key = generate_zmq_public_key(private_key)
             msg = "Private key generated based on provided private key."
         else:
-            public_key, private_key = generate_new_zmq_key_pair()
+            public_key, private_key = generate_zmq_keys()
             msg = "New public-private key pair."
 
         print("====================================================================================")

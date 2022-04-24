@@ -185,7 +185,7 @@ def clear_qserver_zmq_address(mpatch):
     mpatch.delenv(_name_ev_zmq_address)
 
 
-def zmq_secure_request(method, params=None, *, zmq_server_address=None):
+def zmq_secure_request(method, params=None, *, zmq_server_address=None, server_public_key=None):
     """
     Wrapper for 'zmq_single_request'. Verifies if environment variable holding server public key is set
     and passes the key to 'zmq_single_request' . Simplifies writing tests that use RE Manager in secure mode.
@@ -195,15 +195,30 @@ def zmq_secure_request(method, params=None, *, zmq_server_address=None):
     The function also verifies if the environment variable holding ZMQ server address is set, and
     passes the address to ``zmq_single_request``. If ``zmq_server_address`` is passed as a parameter, then
     the environment variable is ignored (at least in current implementation).
+
+    Parameters
+    ----------
+    method: str
+        Name of the method called in RE Manager
+    params: dict or None
+        Dictionary of parameters (payload of the message). If ``None`` then
+        the message is sent with empty payload: ``params = {}``.
+    zmq_server_address: str or None
+        Address of the ZMQ control socket of RE Manager. An address from the environment variable or
+        the default address is used if the value is ``None``.
+    server_public_key: str or None
+        Server public key (z85-encoded 40 character string). The Valid public key from the server
+        public/private key pair must be passed if encryption is enabled at the 0MQ server side.
+        Communication requests will time out if the key is invalid. Exception will be raised if
+        the key is improperly formatted. The key from the environment or is used if the environment
+        variable is set, otherwise the encryption is disabled.
+
     """
-    server_public_key = None
+    # Use the key from env. variable if 'server_public_key' is None
+    server_public_key = server_public_key or os.environ.get(_name_ev_public_key, None)
 
-    if _name_ev_public_key in os.environ:
-        server_public_key = os.environ[_name_ev_public_key]
-
-    # Use the address passed in environment variable only if the parameter 'zmq_server_address' is None
-    if (_name_ev_zmq_address in os.environ) and (zmq_server_address is None):
-        zmq_server_address = os.environ[_name_ev_zmq_address]
+    # Use the address from env. variable if 'zmq_server_address' is None
+    zmq_server_address = zmq_server_address or os.environ.get(_name_ev_zmq_address, None)
 
     return zmq_single_request(
         method=method, params=params, zmq_server_address=zmq_server_address, server_public_key=server_public_key

@@ -1050,6 +1050,9 @@ def zmq_single_request(method, params=None, *, zmq_server_address=None, server_p
     params: dict or None
         Dictionary of parameters (payload of the message). If ``None`` then
         the message is sent with empty payload: ``params = {}``.
+    zmq_server_address: str or None
+        Address of the ZMQ control socket of RE Manager. Default address is used if the
+        value is ``None``.
     server_public_key: str or None
         Server public key (z85-encoded 40 character string). The Valid public key from the server
         public/private key pair must be passed if encryption is enabled at the 0MQ server side.

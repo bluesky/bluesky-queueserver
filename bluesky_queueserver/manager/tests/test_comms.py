@@ -13,7 +13,7 @@ from bluesky_queueserver.manager.comms import (
     CommJsonRpcError,
     ZMQCommSendThreads,
     ZMQCommSendAsync,
-    generate_new_zmq_key_pair,
+    generate_zmq_keys,
     generate_zmq_public_key,
     validate_zmq_key,
 )
@@ -676,9 +676,9 @@ def test_PipeJsonRpcSendAsync_7_fail():
 
 def test_generate_zmq_keys():
     """
-    Functions ``generate_new_zmq_key_pair()``, ``generate_zmq_public_key()`` and ``validate_zmq_key()``.
+    Functions ``generate_zmq_keys()``, ``generate_zmq_public_key()`` and ``validate_zmq_key()``.
     """
-    key_public, key_private = generate_new_zmq_key_pair()
+    key_public, key_private = generate_zmq_keys()
     assert isinstance(key_public, str)
     assert len(key_public) == 40
     assert isinstance(key_private, str)
@@ -715,7 +715,7 @@ def test_validate_zmq_key(key):
 def _gen_server_keys(*, encryption_enabled):
     """Generate server keys and a set of kwargs."""
     if encryption_enabled:
-        public_key, private_key = generate_new_zmq_key_pair()
+        public_key, private_key = generate_zmq_keys()
         server_kwargs = {"private_key": private_key}
     else:
         public_key, private_key = None, None

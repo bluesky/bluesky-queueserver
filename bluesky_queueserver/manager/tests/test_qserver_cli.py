@@ -5,7 +5,7 @@ import os
 import yaml
 
 from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
-from bluesky_queueserver.manager.comms import generate_new_zmq_key_pair
+from bluesky_queueserver.manager.comms import generate_zmq_keys
 
 from .common import (
     patch_first_startup_file,
@@ -1339,7 +1339,7 @@ def test_qserver_secure_1(monkeypatch, re_manager_cmd, test_mode):  # noqa: F811
     Test operation of `qserver` CLI tool with enabled encryption. Test options to
     set the private key used by `qserver` using the environment variable.
     """
-    public_key, private_key = generate_new_zmq_key_pair()
+    public_key, private_key = generate_zmq_keys()
 
     if test_mode == "none":
         pass
@@ -1454,6 +1454,6 @@ def test_qserver_zmq_keys():
     assert subprocess.call(["qserver-zmq-keys", "--zmq-private-key", "abc"]) == EXCEPTION_OCCURRED
 
     # Generated public key based on private key - success
-    _, private_key = generate_new_zmq_key_pair()
+    _, private_key = generate_zmq_keys()
     print(f"Private key used for the test: '{private_key}'")
     assert subprocess.call(["qserver-zmq-keys", f"--zmq-private-key={private_key}"]) == SUCCESS

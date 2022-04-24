@@ -431,7 +431,7 @@ class PipeJsonRpcSendAsync:
 #                      Generation and validation of ZMQ key pairs
 
 
-def generate_new_zmq_key_pair():
+def generate_zmq_keys():
     """
     Generates new public-private key pair for ZMQ encryption.
 

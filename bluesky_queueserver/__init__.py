@@ -7,7 +7,7 @@ from .manager.comms import (  # noqa: E402, F401
     ZMQCommSendAsync,
     ZMQCommSendThreads,
     CommTimeoutError,
-    generate_new_zmq_key_pair as generate_zmq_keys,
+    generate_zmq_keys,
     generate_zmq_public_key,
     validate_zmq_key,
 )

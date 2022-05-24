@@ -406,6 +406,36 @@ def test_load_profile_collection_6(tmp_path, monkeypatch):
     _verify_happi_namespace(nspace)
 
 
+code_script__file__1 = """
+file_name1 = __file__
+"""
+
+code_script__file__2 = """
+file_name2 = __file__
+"""
+
+
+def test_load_profile_collection_7(tmp_path):
+    """
+    ``load_profile_collection``: test that the ``__file__`` variable is patched
+    """
+
+    pc_path = os.path.join(tmp_path, "profile_collection")
+    pc_fln_1 = os.path.join(pc_path, "startup_script_1.py")
+    pc_fln_2 = os.path.join(pc_path, "startup_script_2.py")
+    os.makedirs(pc_path, exist_ok=True)
+
+    with open(pc_fln_1, "w") as f:
+        f.writelines(code_script__file__1)
+    with open(pc_fln_2, "w") as f:
+        f.writelines(code_script__file__2)
+
+    nspace = load_profile_collection(pc_path)
+
+    assert nspace["file_name1"] == pc_fln_1
+    assert nspace["file_name2"] == pc_fln_2
+
+
 _startup_script_1 = """
 from ophyd.sim import det1, det2
 from bluesky.plans import count

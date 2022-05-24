@@ -417,7 +417,7 @@ file_name2 = __file__
 
 def test_load_profile_collection_7(tmp_path):
     """
-    ``load_profile_collection``: test that the ``__file__`` variable is patched
+    ``load_profile_collection``: test that the ``__file__`` is patched
     """
 
     pc_path = os.path.join(tmp_path, "profile_collection")

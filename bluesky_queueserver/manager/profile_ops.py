@@ -146,6 +146,15 @@ def _patch_profile(file_name):
         for lp in patch2_lines:
             stream.write(prefix + lp + "\n")
 
+    def patch__file__(stream, file_name):
+        """
+        Patch ``__file__`` for the current file with ``file_name`` so that
+        the path to the original file name and location could be accessed by
+        the user script.
+        """
+        patch_line = " " * 4 + f"__file__ = '{file_name}'\n"
+        stream.write(patch_line)
+
     def get_prefix(s):
         # Returns the sequence of spaces and tabs at the beginning of the code line
         prefix = ""
@@ -161,6 +170,7 @@ def _patch_profile(file_name):
         fln_out.writelines(_patch1)
         if patch_first:
             apply_patch2(fln_out, "")
+        patch__file__(fln_out, file_name)
         for line in code:
             fln_out.write(" " * 4 + line)
             if is_get_ipython_in_line(line) == GetIPythonUsed.IMPORTED:

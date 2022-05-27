@@ -4453,6 +4453,70 @@ def test_prepare_devices_2(max_depth, ignore_all_subdevices_if_one_fails, expect
     assert existing_devices == expected_devices, pprint.pformat(existing_devices)
 
 
+def _pp_generate_env_with_areadetector():
+    """
+    Generate environment that contains area detector
+    """
+
+    class SimStage(ophyd.Device):
+        x = ophyd.Component(ophyd.sim.SynAxis, name="x", labels={"motors"})
+        y = ophyd.Component(ophyd.sim.SynAxis, name="y", lazy=True, labels={"motors"})
+        z = ophyd.Component(ophyd.sim.SynAxis, name="z", labels={"motors"})
+
+        def set(self, x, y, z):
+            """Makes the device Movable"""
+            self.x.set(x)
+            self.y.set(y)
+            self.z.set(z)
+
+    class SimBundle(ophyd.Device):
+        mtrs = ophyd.Component(SimStage, name="mtrs")
+
+    sim_bundle_A = SimBundle(name="sim_bundle_A")
+
+    ad = ophyd.areadetector.ADBase(name="ad")
+
+    # Create namespace
+    nspace = {"_pp_dev1": _pp_dev1}
+    nspace.update({"_pp_stg_A": sim_bundle_A})
+    nspace.update({"ad": ad})
+
+    devices_in_nspace = devices_from_nspace(nspace)
+
+    return devices_in_nspace
+
+
+# fmt: off
+@pytest.mark.parametrize("expand_areadetectors", [False, True, None])
+# fmt: on
+def test_prepare_devices_3(expand_areadetectors):
+    """
+    ``_prepare_devices``: test that components of the areadetectors are not included in the list
+    by default. Also test that the parameter ``expand_areadetectors`` controls whether
+    the components are included.
+    """
+    devices_in_nspace = _pp_generate_env_with_areadetector()
+
+    params = {}
+    if expand_areadetectors is not None:
+        params["expand_areadetectors"] = expand_areadetectors
+    existing_devices = _prepare_devices(devices_in_nspace, **params)
+
+    assert "_pp_dev1" in existing_devices
+    assert "components" not in existing_devices["_pp_dev1"]
+
+    assert "_pp_stg_A" in existing_devices
+    assert "components" in existing_devices["_pp_stg_A"]
+    assert existing_devices["_pp_stg_A"]["components"]
+
+    assert "ad" in existing_devices
+    if expand_areadetectors:
+        assert "components" in existing_devices["ad"]
+        assert existing_devices["ad"]["components"]
+    else:
+        assert "components" not in existing_devices["ad"]
+
+
 _prep_func_script_1 = """
 def func1():
     return 10

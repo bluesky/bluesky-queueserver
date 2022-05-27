@@ -1,12 +1,10 @@
 import ast
 import os
 import glob
-import runpy
 import inspect
 from collections.abc import Iterable
 import pkg_resources
 import yaml
-import tempfile
 import re
 import sys
 import pprint
@@ -20,6 +18,7 @@ import argparse
 import importlib
 import numbers
 from numpydoc.docscrape import NumpyDocString
+import traceback
 
 import logging
 import bluesky_queueserver
@@ -37,8 +36,153 @@ def get_default_startup_dir():
     return pc_path
 
 
-_patch1 = """
+# _patch1 = """
 
+# import sys
+# import logging
+# from bluesky_queueserver.manager.profile_tools import global_user_namespace
+# logger_patch = logging.Logger(__name__)
+
+# global_user_namespace.set_user_namespace(user_ns=locals(), use_ipython=False)
+
+# try:
+#     pass  # Prevent errors when patching an empty file
+
+# """
+
+# _patch2 = """
+
+#     class IPDummy:
+#         def __init__(self, user_ns):
+#             self.user_ns = user_ns
+
+#             # May be this should be some meaningful logger (used by 'configure_bluesky_logging')
+#             self.log = logging.Logger('ipython_patch')
+
+
+#     def get_ipython_patch():
+#         ip_dummy = IPDummy(global_user_namespace.user_ns)
+#         return ip_dummy
+
+#     get_ipython = get_ipython_patch
+
+# """
+
+# _patch3 = """
+
+# except BaseException as ex:
+#     # Save exception data
+#     __plan_exc_info = sys.exc_info()
+
+# """
+
+
+# def _patch_profile(file_name):
+#     """
+#     Patch the profile (.py file from a beamline profile collection).
+#     Patching includes placing the code in the file in ``try..except..` block
+#     and inserting patch for ``get_ipython()`` function after the line
+#     ``from IPython import get_python``.
+
+#     The patched file is saved to the temporary file ``qserver/profile_temp.py``
+#     in standard directory for the temporary files. For Linux it is ``/tmp``.
+#     It is assumed that files in profile collection are processed one by one, so
+#     overwriting the same temporary file is a good way to eliminate resource leaks.
+
+#     Parameters
+#     ----------
+#     file_name: str
+#         full path to the patched file.
+
+#     Returns
+#     -------
+#     str
+#         full path to the patched temporary file.
+#     """
+
+#     # On Linux the temporary .py file will be always '/tmp/qserver/profile_temp.py'
+#     #   On other systems the file will be placed in appropriate location, but
+#     #   it will always be the same file.
+#     tmp_dir = os.path.join(tempfile.gettempdir(), "qserver")
+#     os.makedirs(tmp_dir, exist_ok=True)
+#     tmp_fln = os.path.join(tmp_dir, "profile_temp.py")
+
+#     with open(file_name, "r") as fln_in:
+#         code = fln_in.readlines()
+
+#     class GetIPythonUsed(enum.Enum):
+#         NOT_PRESENT = 0
+#         IMPORTED = 1
+#         CALLED = 2
+
+#     def is_get_ipython_in_line(line):
+#         """Check if ``get_ipython()`` is imported or called in the line"""
+#         # It is assumed that commenting is done using #
+#         result = GetIPythonUsed.NOT_PRESENT
+#         if re.search(r"^[^#]*IPython[^#]+get_ipython", line):
+#             result = GetIPythonUsed.IMPORTED
+#         elif re.search(r"^[^#]*get_ipython", line):
+#             result = GetIPythonUsed.CALLED
+#         return result
+
+#     def patch_before_first_line(code):
+#         """
+#         Determine if the code file needs to be patched before the first line.
+#         The file should be patched if ``get_ipython`` is called before it is imported.
+#         Otherwise it should be patched each time it is imported
+#         """
+#         for line in code:
+#             is_get_ipython = is_get_ipython_in_line(line)
+#             if is_get_ipython == GetIPythonUsed.IMPORTED:
+#                 return False
+#             elif is_get_ipython == GetIPythonUsed.CALLED:
+#                 return True
+#         # 'get_ipython()' was not found.Don't patch the file.
+#         return False
+
+#     def apply_patch2(stream, prefix):
+#         patch2_lines = _patch2.split("\n")
+#         for lp in patch2_lines:
+#             stream.write(prefix + lp + "\n")
+
+#     def patch__file__(stream, file_name):
+#         """
+#         Patch ``__file__`` for the current file with ``file_name`` so that
+#         the path to the original file name and location could be accessed by
+#         the user script.
+#         """
+#         patch_line = " " * 4 + f"__file__ = '{file_name}'\n"
+#         stream.write(patch_line)
+
+#     def get_prefix(s):
+#         # Returns the sequence of spaces and tabs at the beginning of the code line
+#         prefix = ""
+#         while s and (s[0] == " " or s[0] == "\t"):
+#             prefix += s[0]
+#             s = s[1:]
+#         return prefix
+
+#     patch_first = patch_before_first_line(code)
+
+#     with open(tmp_fln, "w") as fln_out:
+#         # insert 'try ..'
+#         fln_out.writelines(_patch1)
+#         if patch_first:
+#             apply_patch2(fln_out, "")
+#         patch__file__(fln_out, file_name)
+#         for line in code:
+#             fln_out.write(" " * 4 + line)
+#             if is_get_ipython_in_line(line) == GetIPythonUsed.IMPORTED:
+#                 # Keep the same indentation as in the preceding line
+#                 prefix = get_prefix(line)
+#                 apply_patch2(fln_out, prefix)
+#         # insert 'except ..'
+#         fln_out.writelines(_patch3)
+
+#     return tmp_fln
+
+
+_startup_script_patch = """
 import sys
 import logging
 from bluesky_queueserver.manager.profile_tools import global_user_namespace
@@ -46,141 +190,19 @@ logger_patch = logging.Logger(__name__)
 
 global_user_namespace.set_user_namespace(user_ns=locals(), use_ipython=False)
 
-try:
-    pass  # Prevent errors when patching an empty file
+class IPDummy:
+    def __init__(self, user_ns):
+        self.user_ns = user_ns
 
+        # May be this should be some meaningful logger (used by 'configure_bluesky_logging')
+        self.log = logging.Logger('ipython_patch')
+
+def get_ipython_patch():
+    ip_dummy = IPDummy(global_user_namespace.user_ns)
+    return ip_dummy
+
+get_ipython = get_ipython_patch
 """
-
-_patch2 = """
-
-    class IPDummy:
-        def __init__(self, user_ns):
-            self.user_ns = user_ns
-
-            # May be this should be some meaningful logger (used by 'configure_bluesky_logging')
-            self.log = logging.Logger('ipython_patch')
-
-
-    def get_ipython_patch():
-        ip_dummy = IPDummy(global_user_namespace.user_ns)
-        return ip_dummy
-
-    get_ipython = get_ipython_patch
-
-"""
-
-_patch3 = """
-
-except BaseException as ex:
-    # Save exception data
-    __plan_exc_info = sys.exc_info()
-
-"""
-
-
-def _patch_profile(file_name):
-    """
-    Patch the profile (.py file from a beamline profile collection).
-    Patching includes placing the code in the file in ``try..except..` block
-    and inserting patch for ``get_ipython()`` function after the line
-    ``from IPython import get_python``.
-
-    The patched file is saved to the temporary file ``qserver/profile_temp.py``
-    in standard directory for the temporary files. For Linux it is ``/tmp``.
-    It is assumed that files in profile collection are processed one by one, so
-    overwriting the same temporary file is a good way to eliminate resource leaks.
-
-    Parameters
-    ----------
-    file_name: str
-        full path to the patched file.
-
-    Returns
-    -------
-    str
-        full path to the patched temporary file.
-    """
-
-    # On Linux the temporary .py file will be always '/tmp/qserver/profile_temp.py'
-    #   On other systems the file will be placed in appropriate location, but
-    #   it will always be the same file.
-    tmp_dir = os.path.join(tempfile.gettempdir(), "qserver")
-    os.makedirs(tmp_dir, exist_ok=True)
-    tmp_fln = os.path.join(tmp_dir, "profile_temp.py")
-
-    with open(file_name, "r") as fln_in:
-        code = fln_in.readlines()
-
-    class GetIPythonUsed(enum.Enum):
-        NOT_PRESENT = 0
-        IMPORTED = 1
-        CALLED = 2
-
-    def is_get_ipython_in_line(line):
-        """Check if ``get_ipython()`` is imported or called in the line"""
-        # It is assumed that commenting is done using #
-        result = GetIPythonUsed.NOT_PRESENT
-        if re.search(r"^[^#]*IPython[^#]+get_ipython", line):
-            result = GetIPythonUsed.IMPORTED
-        elif re.search(r"^[^#]*get_ipython", line):
-            result = GetIPythonUsed.CALLED
-        return result
-
-    def patch_before_first_line(code):
-        """
-        Determine if the code file needs to be patched before the first line.
-        The file should be patched if ``get_ipython`` is called before it is imported.
-        Otherwise it should be patched each time it is imported
-        """
-        for line in code:
-            is_get_ipython = is_get_ipython_in_line(line)
-            if is_get_ipython == GetIPythonUsed.IMPORTED:
-                return False
-            elif is_get_ipython == GetIPythonUsed.CALLED:
-                return True
-        # 'get_ipython()' was not found.Don't patch the file.
-        return False
-
-    def apply_patch2(stream, prefix):
-        patch2_lines = _patch2.split("\n")
-        for lp in patch2_lines:
-            stream.write(prefix + lp + "\n")
-
-    def patch__file__(stream, file_name):
-        """
-        Patch ``__file__`` for the current file with ``file_name`` so that
-        the path to the original file name and location could be accessed by
-        the user script.
-        """
-        patch_line = " " * 4 + f"__file__ = '{file_name}'\n"
-        stream.write(patch_line)
-
-    def get_prefix(s):
-        # Returns the sequence of spaces and tabs at the beginning of the code line
-        prefix = ""
-        while s and (s[0] == " " or s[0] == "\t"):
-            prefix += s[0]
-            s = s[1:]
-        return prefix
-
-    patch_first = patch_before_first_line(code)
-
-    with open(tmp_fln, "w") as fln_out:
-        # insert 'try ..'
-        fln_out.writelines(_patch1)
-        if patch_first:
-            apply_patch2(fln_out, "")
-        patch__file__(fln_out, file_name)
-        for line in code:
-            fln_out.write(" " * 4 + line)
-            if is_get_ipython_in_line(line) == GetIPythonUsed.IMPORTED:
-                # Keep the same indentation as in the preceding line
-                prefix = get_prefix(line)
-                apply_patch2(fln_out, prefix)
-        # insert 'except ..'
-        fln_out.writelines(_patch3)
-
-    return tmp_fln
 
 
 # Discard RE and db from the profile namespace (if they exist).
@@ -191,6 +213,28 @@ def _discard_re_from_nspace(nspace, *, keep_re=False):
     if not keep_re:
         nspace.pop("RE", None)
         nspace.pop("db", None)
+
+
+def _patch_script_code(code_str):
+    """
+    Patch script code represented as a single text string:
+    detect lines that import ``get_ipython`` from ``IPython`` and
+    set ``get_ipython=get_ipython_patch`` after each import.
+    """
+
+    def is_get_ipython_imported_in_line(line):
+        """Check if ``get_ipython()`` is imported in the line"""
+        # It is assumed that commenting is done using #
+        return bool(re.search(r"^[^#]*IPython[^#]+get_ipython", line))
+
+    s_list = code_str.splitlines()
+    for n in range(len(s_list)):
+        line = s_list[n]
+        if is_get_ipython_imported_in_line(line):
+            line += "; get_ipython = get_ipython_patch"
+            s_list[n] = line
+
+    return "\n".join(s_list)
 
 
 def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
@@ -249,17 +293,36 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
     else:
         path_is_set = False
 
-    # Load the files into the namespace 'nspace'.
     try:
-        nspace = {}
-        for file in file_list:
-            logger.info(f"Loading startup file '{file}' ...")
-            fln_tmp = _patch_profile(file) if patch_profiles else file
-            nspace = runpy.run_path(fln_tmp, nspace)
 
-            if "__plan_exc_info" in nspace:
-                exc_info = nspace["__plan_exc_info"]
-                raise exc_info[1].with_traceback(exc_info[2])
+        # Load the files into the namespace 'nspace'.
+        nspace = {}
+
+        if patch_profiles:
+            exec(_startup_script_patch, nspace, nspace)
+        for file in file_list:
+
+            try:
+                logger.info(f"Loading startup file {file!r} ...")
+
+                # Set '__file__' variable
+                patch = f"__file__ = '{file}'; __name__ = 'startup_script'\n"
+                exec(patch, nspace, nspace)
+
+                if not os.path.isfile(file):
+                    raise IOError(f"Startup file {file!r} was not found")
+                code_str = _patch_script_code(open(file).read())
+                code = compile(code_str, file, "exec")
+                exec(code, nspace, nspace)
+
+            except BaseException:
+                ex_str = traceback.format_exception(*sys.exc_info())
+                ex_str = "".join(ex_str)
+                raise StartupLoadingError(f"Error encountered while executing script at {file!r}:\n{ex_str}")
+
+            finally:
+                patch = "del __file__; del __name__\n"
+                exec(patch, nspace, nspace)
 
         _discard_re_from_nspace(nspace, keep_re=keep_re)
 

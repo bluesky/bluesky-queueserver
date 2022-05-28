@@ -340,7 +340,7 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
                 raise ScriptLoadingError(msg, ex_str) from ex
 
             finally:
-                patch = "del __file__; del __name__\n"
+                patch = "del __file__\n"  # Do not delete '__name__'
                 exec(patch, nspace, nspace)
 
         _discard_re_from_nspace(nspace, keep_re=keep_re)
@@ -445,7 +445,7 @@ def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True
 
     finally:
 
-        patch = "del __file__; del __name__\n"
+        patch = "del __file__\n"  # Do not delete '__name__'
         exec(patch, nspace, nspace)
 
         if enable_local_imports:
@@ -580,6 +580,7 @@ def load_script_into_existing_nspace(
     ------
     Exceptions may be raised by the ``exec`` function.
     """
+    global _n_running_scripts
 
     importlib.invalidate_caches()
 
@@ -603,9 +604,8 @@ def load_script_into_existing_nspace(
             object_backup["db"] = nspace["db"]
 
     try:
-
         # Set '__name__' variables. NOTE: '__file__' variable is undefined (difference!!!)
-        patch = "__name__ = 'startup_script'\n"
+        patch = f"__name__ = 'startup_script'\n"
         exec(patch, nspace, nspace)
 
         # A script may be partially loaded into the environment in case it fails.
@@ -620,10 +620,6 @@ def load_script_into_existing_nspace(
         raise ScriptLoadingError(msg, ex_str) from ex
 
     finally:
-
-        patch = "del __name__\n"
-        exec(patch, nspace, nspace)
-
         if not update_re:
             # Remove references for 'RE' and 'db' from the namespace
             nspace.pop("RE", None)

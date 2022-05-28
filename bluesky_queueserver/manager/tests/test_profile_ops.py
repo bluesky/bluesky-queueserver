@@ -51,7 +51,6 @@ from bluesky_queueserver.manager.profile_ops import (
     load_allowed_plans_and_devices,
     _prepare_plans,
     _prepare_devices,
-    StartupLoadingError,
     ScriptLoadingError,
     _process_annotation,
     _decode_parameter_types_and_defaults,
@@ -86,7 +85,7 @@ def test_get_default_startup_dir():
     assert os.path.exists(pc_path), "Directory with default profile collection deos not exist."
 
 
-def test_load_profile_collection_1():
+def test_load_profile_collection_01():
     """
     Loading default profile collection
     """
@@ -95,7 +94,7 @@ def test_load_profile_collection_1():
     assert len(nspace) > 0, "Failed to load the profile collection"
 
 
-def test_load_profile_collection_2(tmp_path):
+def test_load_profile_collection_02(tmp_path):
     """
     Loading a copy of the default profile collection
     """
@@ -200,7 +199,7 @@ raise Exception("Manually raised exception.")
 
 ])
 # fmt: on
-def test_load_profile_collection_3(tmp_path, local_imports, additional_code, success, errmsg):
+def test_load_profile_collection_03(tmp_path, local_imports, additional_code, success, errmsg):
     """
     Loading a copy of the default profile collection
     """
@@ -224,7 +223,7 @@ def test_load_profile_collection_3(tmp_path, local_imports, additional_code, suc
             load_profile_collection(pc_path)
 
 
-def test_load_profile_collection_4_fail(tmp_path):
+def test_load_profile_collection_04_fail(tmp_path):
     """
     Failing cases
     """
@@ -246,7 +245,7 @@ def test_load_profile_collection_4_fail(tmp_path):
 
 
 @pytest.mark.parametrize("keep_re", [True, False])
-def test_load_profile_collection_5(tmp_path, keep_re):
+def test_load_profile_collection_05(tmp_path, keep_re):
     """
     Loading a copy of the default profile collection
     """
@@ -388,7 +387,7 @@ def _verify_happi_namespace(nspace):
     assert "simple_sample_plan_1" in nspace
 
 
-def test_load_profile_collection_6(tmp_path, monkeypatch):
+def test_load_profile_collection_06(tmp_path, monkeypatch):
     """
     Load profile collection: instantiation of devices using Happi.
     """
@@ -408,14 +407,16 @@ def test_load_profile_collection_6(tmp_path, monkeypatch):
 
 code_script__file__1 = """
 file_name1 = __file__
+mod_name1 = __name__
 """
 
 code_script__file__2 = """
 file_name2 = __file__
+mod_name2 = __name__
 """
 
 
-def test_load_profile_collection_7(tmp_path):
+def test_load_profile_collection_07(tmp_path):
     """
     ``load_profile_collection``: test that the ``__file__`` is patched
     """
@@ -434,6 +435,75 @@ def test_load_profile_collection_7(tmp_path):
 
     assert nspace["file_name1"] == pc_fln_1
     assert nspace["file_name2"] == pc_fln_2
+    assert nspace["mod_name1"] == "startup_script"
+    assert nspace["mod_name2"] == "startup_script"
+
+    assert "__file__" not in nspace
+    assert nspace["__name__"] == "startup_script"
+
+
+code_script_test8_1 = """
+def func1():
+    return func2()
+"""
+
+code_script_test8_2 = """
+def func2():
+    return "success"
+"""
+
+
+def test_load_profile_collection_08(tmp_path):
+    """
+    ``load_profile_collection``: test that the function (object) definitions from
+    files that are loaded later in the sequence are accessible from functions defined
+    in the previously loaded files.
+    """
+
+    pc_path = os.path.join(tmp_path, "profile_collection")
+    pc_fln_1 = os.path.join(pc_path, "startup_script_1.py")
+    pc_fln_2 = os.path.join(pc_path, "startup_script_2.py")
+    os.makedirs(pc_path, exist_ok=True)
+
+    with open(pc_fln_1, "w") as f:
+        f.writelines(code_script_test8_1)
+    with open(pc_fln_2, "w") as f:
+        f.writelines(code_script_test8_2)
+
+    nspace = load_profile_collection(pc_path)
+
+    assert "func1" in nspace
+    assert "func2" in nspace
+    assert nspace["func1"]() == "success"
+
+
+code_script_test9_1 = """
+raise ValueError("Testing exceptions")
+"""
+
+
+def test_load_profile_collection_09(tmp_path):
+    """
+    ``load_profile_collection``: test processing exceptions
+    """
+
+    pc_path = os.path.join(tmp_path, "profile_collection")
+    pc_fln_1 = os.path.join(pc_path, "startup_script_1.py")
+    os.makedirs(pc_path, exist_ok=True)
+
+    with open(pc_fln_1, "w") as f:
+        f.writelines(code_script_test9_1)
+
+    try:
+        load_profile_collection(pc_path)
+        assert False, "Exception was not raised"
+    except ScriptLoadingError as ex:
+        msg = str(ex)
+        tb = ex.tb
+    assert re.search("Error while executing script.*startup_script_1.py.*Testing exceptions", msg), msg
+    assert tb.startswith("Traceback"), tb
+    assert "ValueError: Testing exceptions" in tb, tb
+    assert tb.endswith(msg), tb
 
 
 _startup_script_1 = """
@@ -608,7 +678,7 @@ def test_load_startup_script_2(tmp_path, keep_re, enable_local_imports, reset_sy
             assert "db" not in nspace, pprint.pformat(nspace)
     else:
         # Expected to fail if local imports are not enaabled
-        with pytest.raises(StartupLoadingError):
+        with pytest.raises(ScriptLoadingError):
             load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
 
     # Reload the same script, but replace the code in the module (emulate the process of code editing).
@@ -623,7 +693,7 @@ def test_load_startup_script_2(tmp_path, keep_re, enable_local_imports, reset_sy
 
     else:
         # Expected to fail if local imports are not enaabled
-        with pytest.raises(StartupLoadingError):
+        with pytest.raises(ScriptLoadingError):
             load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
 
     # Load different script (same name, but different path). The script imports module with the same name
@@ -652,7 +722,7 @@ def test_load_startup_script_2(tmp_path, keep_re, enable_local_imports, reset_sy
         assert "db" not in nspace, pprint.pformat(nspace)
     else:
         # Expected to fail if local imports are not enaabled
-        with pytest.raises(StartupLoadingError):
+        with pytest.raises(ScriptLoadingError):
             load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
 
 
@@ -727,7 +797,63 @@ def test_load_startup_script_4(tmp_path, keep_re, enable_local_imports, reset_sy
     assert "db" not in nspace, pprint.pformat(nspace)
 
 
-def test_load_startup_script_5(tmp_path, monkeypatch):
+code_script_startup_test5_1 = """
+file_name1 = __file__
+mod_name1 = __name__
+"""
+
+
+def test_load_startup_script_5(tmp_path, reset_sys_modules):  # noqa: F811
+    """
+    ``load_startup_script``: test that the ``__file__`` is patched
+    """
+
+    pc_path = os.path.join(tmp_path, "startup_scripts")
+    script_path = os.path.join(pc_path, "startup_script_1.py")
+    os.makedirs(pc_path, exist_ok=True)
+
+    with open(script_path, "w") as f:
+        f.writelines(code_script_startup_test5_1)
+
+    nspace = load_startup_script(script_path)
+
+    assert nspace["file_name1"] == script_path
+    assert nspace["mod_name1"] == "startup_script"
+
+    assert "__file__" not in nspace
+    assert nspace["__name__"] == "startup_script"
+
+
+code_script_startup_test6_1 = """
+raise ValueError("Testing exceptions")
+"""
+
+
+def test_load_startup_script_6(tmp_path, reset_sys_modules):  # noqa: F811
+    """
+    ``load_startup_script``: test processing exceptions
+    """
+
+    pc_path = os.path.join(tmp_path, "startup_scripts")
+    script_path = os.path.join(pc_path, "startup_script_1.py")
+    os.makedirs(pc_path, exist_ok=True)
+
+    with open(script_path, "w") as f:
+        f.writelines(code_script_startup_test6_1)
+
+    try:
+        load_startup_script(script_path)
+        assert False, "Exception was not raised"
+    except ScriptLoadingError as ex:
+        msg = str(ex)
+        tb = ex.tb
+    assert re.search("Error while executing script.*startup_script_1.py.*Testing exceptions", msg), msg
+    assert tb.startswith("Traceback"), tb
+    assert "ValueError: Testing exceptions" in tb, tb
+    assert tb.endswith(msg), tb
+
+
+def test_load_startup_script_7(tmp_path, monkeypatch):
     """
     Load startup script: instantiation of devices using Happi.
     """
@@ -761,7 +887,7 @@ def test_extract_script_root_path_1(params, result):
 @pytest.mark.parametrize("update_re", [False, True])
 @pytest.mark.parametrize("scripts", [(_startup_script_1,), (_startup_script_1, _startup_script_2)])
 # fmt: on
-def test_load_script_into_existing_nspace_1(scripts, update_re):
+def test_load_script_into_existing_nspace_01(scripts, update_re):
     """
     Basic test for ``load_script_into_existing_nspace``.
     """
@@ -789,7 +915,7 @@ def test_load_script_into_existing_nspace_1(scripts, update_re):
 @pytest.mark.parametrize("update_re", [True, False])
 @pytest.mark.parametrize("enable_local_imports", [True, False])
 # fmt: on
-def test_load_script_into_existing_nspace_2(
+def test_load_script_into_existing_nspace_02(
     tmp_path, update_re, enable_local_imports, reset_sys_modules  # noqa: F811
 ):
     """
@@ -929,7 +1055,7 @@ def test_load_script_into_existing_nspace_2(
             )
 
 
-def test_load_script_into_existing_nspace_3():  # noqa: F811
+def test_load_script_into_existing_nspace_03():  # noqa: F811
     """
     Test for ``load_script_into_existing_nspace``. Verifies if variables defined in global and
     local scope in the script are handled correctly.
@@ -964,7 +1090,7 @@ def func():
     (_startup_script_failing_2, IndentationError, "unexpected indent"),
 ])
 # fmt: on
-def test_load_script_into_existing_nspace_4(script, ex_type, error_msg):  # noqa: F811
+def test_load_script_into_existing_nspace_04(script, ex_type, error_msg):  # noqa: F811
     """
     Test for ``load_script_into_existing_nspace``. Errors in executed script.
     """
@@ -976,7 +1102,7 @@ def test_load_script_into_existing_nspace_4(script, ex_type, error_msg):  # noqa
         load_script_into_existing_nspace(script=script, nspace=nspace)
 
 
-def test_load_script_into_existing_nspace_5():  # noqa: F811
+def test_load_script_into_existing_nspace_05():  # noqa: F811
     """
     Test for ``load_script_into_existing_nspace``. Errors in executed script.
     """
@@ -1005,7 +1131,7 @@ def get_a():
 """
 
 
-def test_load_script_into_existing_nspace_6():  # noqa: F811
+def test_load_script_into_existing_nspace_06():  # noqa: F811
     """
     Test for ``load_script_into_existing_nspace``. Modify global variable from function
     and externally. This test is mostly to make sure the environment works as expected.
@@ -1025,7 +1151,7 @@ def test_load_script_into_existing_nspace_6():  # noqa: F811
     assert nspace["get_a"]() == 100
 
 
-def test_load_script_into_existing_nspace_7():  # noqa: F811
+def test_load_script_into_existing_nspace_07():  # noqa: F811
     """
     Test for ``load_script_into_existing_nspace``. Modify global variable from function.
     """
@@ -1043,7 +1169,7 @@ def test_load_script_into_existing_nspace_7():  # noqa: F811
 # fmt: off
 @pytest.mark.parametrize("update_re", [False, True])
 # fmt: on
-def test_load_script_into_existing_nspace_8(update_re):  # noqa: F811
+def test_load_script_into_existing_nspace_08(update_re):  # noqa: F811
     """
     Test for ``load_script_into_existing_nspace``. Modify global variable from function.
     """
@@ -1067,7 +1193,7 @@ def test_load_script_into_existing_nspace_8(update_re):  # noqa: F811
         assert nspace["db"]
 
 
-def test_load_script_into_existing_nspace_9():  # noqa: F811
+def test_load_script_into_existing_nspace_09():  # noqa: F811
     """
     Load script with more sophisticated use of imported types.
     """
@@ -1078,6 +1204,51 @@ def test_load_script_into_existing_nspace_9():  # noqa: F811
 
     assert "SimStage" in nspace
     assert "sim_stage" in nspace
+
+
+code_script_upload_test10_1 = """
+# '__file__' should not be defined
+assert "__file__" not in globals()
+mod_name1 = __name__
+"""
+
+
+def test_load_script_into_existing_nspace_10(tmp_path, reset_sys_modules):  # noqa: F811
+    """
+    ``load_script_into_existing_nspace``: test that the ``__file__`` is patched
+    """
+
+    nspace = {}
+    load_script_into_existing_nspace(script=code_script_upload_test10_1, nspace=nspace)
+
+    assert nspace["mod_name1"] == "startup_script"
+
+    assert "__file__" not in nspace
+    assert nspace["__name__"] == "startup_script"
+
+
+code_script_upload_test11_1 = """
+raise ValueError("Testing exceptions")
+"""
+
+
+def test_load_script_into_existing_nspace_11(tmp_path, reset_sys_modules):  # noqa: F811
+    """
+    ``load_script_into_existing_nspace``: test processing exceptions
+    """
+
+    nspace = {}
+
+    try:
+        load_script_into_existing_nspace(script=code_script_upload_test11_1, nspace=nspace)
+        assert False, "Exception was not raised"
+    except ScriptLoadingError as ex:
+        msg = str(ex)
+        tb = ex.tb
+    assert re.search("Failed to execute stript: Testing exceptions", msg), msg
+    assert tb.startswith("Traceback"), tb
+    assert "ValueError: Testing exceptions" in tb, tb
+    assert tb.endswith(msg), tb
 
 
 @pytest.mark.parametrize("keep_re", [True, False])
@@ -1169,7 +1340,40 @@ def test_load_startup_module_2(tmp_path, monkeypatch, reset_sys_modules):  # noq
     assert "sim_stage" in nspace, pprint.pformat(nspace)
 
 
+code_script_module_test3_1 = """
+raise ValueError("Testing exceptions")
+"""
+
+
 def test_load_startup_module_3(tmp_path, monkeypatch, reset_sys_modules):  # noqa: F811
+    """
+    ``load_startup_module``: test processing exceptions
+    """
+
+    pc_path = os.path.join(tmp_path, "startup_scripts")
+    script_path = os.path.join(pc_path, "startup_script_1.py")
+    os.makedirs(pc_path, exist_ok=True)
+
+    with open(script_path, "w") as f:
+        f.writelines(code_script_module_test3_1)
+
+    # Temporarily add module to the search path
+    sys_path = sys.path
+    monkeypatch.setattr(sys, "path", [str(tmp_path)] + sys_path)
+
+    try:
+        load_startup_module("startup_scripts.startup_script_1")
+        assert False, "Exception was not raised"
+    except ScriptLoadingError as ex:
+        msg = str(ex)
+        tb = ex.tb
+    assert re.search("Error while loading module 'startup_scripts.startup_script_1': Testing exceptions", msg), msg
+    assert tb.startswith("Traceback"), tb
+    assert "ValueError: Testing exceptions" in tb, tb
+    assert tb.endswith(msg), tb
+
+
+def test_load_startup_module_4(tmp_path, monkeypatch, reset_sys_modules):  # noqa: F811
     """
     Load startup module: instantiation of devices using Happi.
     """

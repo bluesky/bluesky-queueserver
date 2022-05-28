@@ -1,12 +1,10 @@
 import ast
 import os
 import glob
-import runpy
 import inspect
 from collections.abc import Iterable
 import pkg_resources
 import yaml
-import tempfile
 import re
 import sys
 import pprint
@@ -20,12 +18,30 @@ import argparse
 import importlib
 import numbers
 from numpydoc.docscrape import NumpyDocString
+import traceback
 
 import logging
 import bluesky_queueserver
 
 logger = logging.getLogger(__name__)
 qserver_version = bluesky_queueserver.__version__
+
+
+class ScriptLoadingError(Exception):
+    def __init__(self, msg, tb):
+        super().__init__(msg)
+        self._tb = tb
+
+    @property
+    def tb(self):
+        """
+        Returns the full traceback (string) that is passed as a second parameter.
+        The traceback is expected to be fully prepared so that it could be saved
+        or passed to consumer over the network. Capturing traceback in the function
+        executing the script is reducing references to Queue Server code, which
+        is generic and unimportant for debugging startup scripts.
+        """
+        return self._tb
 
 
 def get_default_startup_dir():
@@ -37,8 +53,7 @@ def get_default_startup_dir():
     return pc_path
 
 
-_patch1 = """
-
+_startup_script_patch = """
 import sys
 import logging
 from bluesky_queueserver.manager.profile_tools import global_user_namespace
@@ -46,141 +61,19 @@ logger_patch = logging.Logger(__name__)
 
 global_user_namespace.set_user_namespace(user_ns=locals(), use_ipython=False)
 
-try:
-    pass  # Prevent errors when patching an empty file
+class IPDummy:
+    def __init__(self, user_ns):
+        self.user_ns = user_ns
 
+        # May be this should be some meaningful logger (used by 'configure_bluesky_logging')
+        self.log = logging.Logger('ipython_patch')
+
+def get_ipython_patch():
+    ip_dummy = IPDummy(global_user_namespace.user_ns)
+    return ip_dummy
+
+get_ipython = get_ipython_patch
 """
-
-_patch2 = """
-
-    class IPDummy:
-        def __init__(self, user_ns):
-            self.user_ns = user_ns
-
-            # May be this should be some meaningful logger (used by 'configure_bluesky_logging')
-            self.log = logging.Logger('ipython_patch')
-
-
-    def get_ipython_patch():
-        ip_dummy = IPDummy(global_user_namespace.user_ns)
-        return ip_dummy
-
-    get_ipython = get_ipython_patch
-
-"""
-
-_patch3 = """
-
-except BaseException as ex:
-    # Save exception data
-    __plan_exc_info = sys.exc_info()
-
-"""
-
-
-def _patch_profile(file_name):
-    """
-    Patch the profile (.py file from a beamline profile collection).
-    Patching includes placing the code in the file in ``try..except..` block
-    and inserting patch for ``get_ipython()`` function after the line
-    ``from IPython import get_python``.
-
-    The patched file is saved to the temporary file ``qserver/profile_temp.py``
-    in standard directory for the temporary files. For Linux it is ``/tmp``.
-    It is assumed that files in profile collection are processed one by one, so
-    overwriting the same temporary file is a good way to eliminate resource leaks.
-
-    Parameters
-    ----------
-    file_name: str
-        full path to the patched file.
-
-    Returns
-    -------
-    str
-        full path to the patched temporary file.
-    """
-
-    # On Linux the temporary .py file will be always '/tmp/qserver/profile_temp.py'
-    #   On other systems the file will be placed in appropriate location, but
-    #   it will always be the same file.
-    tmp_dir = os.path.join(tempfile.gettempdir(), "qserver")
-    os.makedirs(tmp_dir, exist_ok=True)
-    tmp_fln = os.path.join(tmp_dir, "profile_temp.py")
-
-    with open(file_name, "r") as fln_in:
-        code = fln_in.readlines()
-
-    class GetIPythonUsed(enum.Enum):
-        NOT_PRESENT = 0
-        IMPORTED = 1
-        CALLED = 2
-
-    def is_get_ipython_in_line(line):
-        """Check if ``get_ipython()`` is imported or called in the line"""
-        # It is assumed that commenting is done using #
-        result = GetIPythonUsed.NOT_PRESENT
-        if re.search(r"^[^#]*IPython[^#]+get_ipython", line):
-            result = GetIPythonUsed.IMPORTED
-        elif re.search(r"^[^#]*get_ipython", line):
-            result = GetIPythonUsed.CALLED
-        return result
-
-    def patch_before_first_line(code):
-        """
-        Determine if the code file needs to be patched before the first line.
-        The file should be patched if ``get_ipython`` is called before it is imported.
-        Otherwise it should be patched each time it is imported
-        """
-        for line in code:
-            is_get_ipython = is_get_ipython_in_line(line)
-            if is_get_ipython == GetIPythonUsed.IMPORTED:
-                return False
-            elif is_get_ipython == GetIPythonUsed.CALLED:
-                return True
-        # 'get_ipython()' was not found.Don't patch the file.
-        return False
-
-    def apply_patch2(stream, prefix):
-        patch2_lines = _patch2.split("\n")
-        for lp in patch2_lines:
-            stream.write(prefix + lp + "\n")
-
-    def patch__file__(stream, file_name):
-        """
-        Patch ``__file__`` for the current file with ``file_name`` so that
-        the path to the original file name and location could be accessed by
-        the user script.
-        """
-        patch_line = " " * 4 + f"__file__ = '{file_name}'\n"
-        stream.write(patch_line)
-
-    def get_prefix(s):
-        # Returns the sequence of spaces and tabs at the beginning of the code line
-        prefix = ""
-        while s and (s[0] == " " or s[0] == "\t"):
-            prefix += s[0]
-            s = s[1:]
-        return prefix
-
-    patch_first = patch_before_first_line(code)
-
-    with open(tmp_fln, "w") as fln_out:
-        # insert 'try ..'
-        fln_out.writelines(_patch1)
-        if patch_first:
-            apply_patch2(fln_out, "")
-        patch__file__(fln_out, file_name)
-        for line in code:
-            fln_out.write(" " * 4 + line)
-            if is_get_ipython_in_line(line) == GetIPythonUsed.IMPORTED:
-                # Keep the same indentation as in the preceding line
-                prefix = get_prefix(line)
-                apply_patch2(fln_out, prefix)
-        # insert 'except ..'
-        fln_out.writelines(_patch3)
-
-    return tmp_fln
 
 
 # Discard RE and db from the profile namespace (if they exist).
@@ -191,6 +84,28 @@ def _discard_re_from_nspace(nspace, *, keep_re=False):
     if not keep_re:
         nspace.pop("RE", None)
         nspace.pop("db", None)
+
+
+def _patch_script_code(code_str):
+    """
+    Patch script code represented as a single text string:
+    detect lines that import ``get_ipython`` from ``IPython`` and
+    set ``get_ipython=get_ipython_patch`` after each import.
+    """
+
+    def is_get_ipython_imported_in_line(line):
+        """Check if ``get_ipython()`` is imported in the line"""
+        # It is assumed that commenting is done using #
+        return bool(re.search(r"^[^#]*IPython[^#]+get_ipython", line))
+
+    s_list = code_str.splitlines()
+    for n in range(len(s_list)):
+        line = s_list[n]
+        if is_get_ipython_imported_in_line(line):
+            line += "; get_ipython = get_ipython_patch"
+            s_list[n] = line
+
+    return "\n".join(s_list)
 
 
 def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
@@ -249,17 +164,38 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
     else:
         path_is_set = False
 
-    # Load the files into the namespace 'nspace'.
     try:
-        nspace = {}
-        for file in file_list:
-            logger.info(f"Loading startup file '{file}' ...")
-            fln_tmp = _patch_profile(file) if patch_profiles else file
-            nspace = runpy.run_path(fln_tmp, nspace)
 
-            if "__plan_exc_info" in nspace:
-                exc_info = nspace["__plan_exc_info"]
-                raise exc_info[1].with_traceback(exc_info[2])
+        # Load the files into the namespace 'nspace'.
+        nspace = {}
+
+        if patch_profiles:
+            exec(_startup_script_patch, nspace, nspace)
+        for file in file_list:
+
+            try:
+                logger.info(f"Loading startup file {file!r} ...")
+
+                # Set '__file__' and '__name__' variables
+                patch = f"__file__ = '{file}'; __name__ = 'startup_script'\n"
+                exec(patch, nspace, nspace)
+
+                if not os.path.isfile(file):
+                    raise IOError(f"Startup file {file!r} was not found")
+                code_str = _patch_script_code(open(file).read())
+                code = compile(code_str, file, "exec")
+                exec(code, nspace, nspace)
+
+            except BaseException as ex:
+                # Capture traceback and send it as a message
+                msg = f"Error while executing script {file!r}: {ex}"
+                ex_str = traceback.format_exception(*sys.exc_info())
+                ex_str = "".join(ex_str) + "\n" + msg
+                raise ScriptLoadingError(msg, ex_str) from ex
+
+            finally:
+                patch = "del __file__\n"  # Do not delete '__name__'
+                exec(patch, nspace, nspace)
 
         _discard_re_from_nspace(nspace, keep_re=keep_re)
 
@@ -292,20 +228,21 @@ def load_startup_module(module_name, *, keep_re=False):
     """
     importlib.invalidate_caches()
 
-    _module = importlib.import_module(module_name)
-    nspace = _module.__dict__
+    try:
+
+        _module = importlib.import_module(module_name)
+        nspace = _module.__dict__
+
+    except BaseException as ex:
+        # Capture traceback and send it as a message
+        msg = f"Error while loading module {module_name!r}: {ex}"
+        ex_str = traceback.format_exception(*sys.exc_info())
+        ex_str = "".join(ex_str) + "\n" + msg
+        raise ScriptLoadingError(msg, ex_str) from ex
 
     _discard_re_from_nspace(nspace, keep_re=keep_re)
 
     return nspace
-
-
-class StartupLoadingError(Exception):
-    ...
-
-
-class ScriptLoadingError(Exception):
-    ...
 
 
 def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True):
@@ -343,19 +280,35 @@ def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True
 
     try:
         nspace = {}
-        exec(open(script_path).read(), nspace, nspace)
+        if not os.path.isfile(script_path):
+            raise IOError(f"Startup file {script_path!r} was not found")
+
+        # Set '__file__' and '__name__' variables
+        patch = f"__file__ = '{script_path}'; __name__ = 'startup_script'\n"
+        exec(patch, nspace, nspace)
+
+        code = compile(open(script_path).read(), script_path, "exec")
+        exec(code, nspace, nspace)
 
     except BaseException as ex:
-        raise StartupLoadingError(f"Error encountered executing startup script at '{script_path}'") from ex
+        # Capture traceback and send it as a message
+        msg = f"Error while executing script {script_path!r}: {ex}"
+        ex_str = traceback.format_exception(*sys.exc_info())
+        ex_str = "".join(ex_str) + "\n" + msg
+        raise ScriptLoadingError(msg, ex_str) from ex
 
     finally:
+
+        patch = "del __file__\n"  # Do not delete '__name__'
+        exec(patch, nspace, nspace)
+
         if enable_local_imports:
             # Delete data on all modules that were loaded by the script.
             # We don't need them anymore. Modules will be reloaded from disk if
             #   the script is executed again.
             for key in list(sys.modules.keys()):
                 if key not in sm_keys:
-                    print(f"Deleting the key '{key}'")
+                    # print(f"Deleting the key '{key}'")
                     del sys.modules[key]
 
             sys.path.remove(p)
@@ -481,6 +434,7 @@ def load_script_into_existing_nspace(
     ------
     Exceptions may be raised by the ``exec`` function.
     """
+    global _n_running_scripts
 
     importlib.invalidate_caches()
 
@@ -504,12 +458,20 @@ def load_script_into_existing_nspace(
             object_backup["db"] = nspace["db"]
 
     try:
+        # Set '__name__' variables. NOTE: '__file__' variable is undefined (difference!!!)
+        patch = "__name__ = 'startup_script'\n"
+        exec(patch, nspace, nspace)
+
         # A script may be partially loaded into the environment in case it fails.
         #   This is 'realistic' behavior, similar to what happens in IPython.
         exec(script, nspace, nspace)
 
-    except Exception as ex:
-        raise ScriptLoadingError(f"Failed to load stript: {ex}") from ex
+    except BaseException as ex:
+        # Capture traceback and send it as a message
+        msg = f"Failed to execute stript: {ex}"
+        ex_str = traceback.format_exception(*sys.exc_info())
+        ex_str = "".join(ex_str) + "\n" + msg
+        raise ScriptLoadingError(msg, ex_str) from ex
 
     finally:
         if not update_re:
@@ -3036,7 +2998,7 @@ def gen_list_of_plans_and_devices(
         )
 
     except Exception as ex:
-        raise RuntimeError(f"Failed to create the list of plans and devices: {str(ex)}")
+        raise RuntimeError(f"Failed to create the list of plans and devices: {str(ex)}") from ex
 
     finally:
         clear_re_worker_active()

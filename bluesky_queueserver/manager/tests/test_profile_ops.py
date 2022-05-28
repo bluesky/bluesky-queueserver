@@ -887,7 +887,7 @@ def test_extract_script_root_path_1(params, result):
 @pytest.mark.parametrize("update_re", [False, True])
 @pytest.mark.parametrize("scripts", [(_startup_script_1,), (_startup_script_1, _startup_script_2)])
 # fmt: on
-def test_load_script_into_existing_nspace_1(scripts, update_re):
+def test_load_script_into_existing_nspace_01(scripts, update_re):
     """
     Basic test for ``load_script_into_existing_nspace``.
     """
@@ -915,7 +915,7 @@ def test_load_script_into_existing_nspace_1(scripts, update_re):
 @pytest.mark.parametrize("update_re", [True, False])
 @pytest.mark.parametrize("enable_local_imports", [True, False])
 # fmt: on
-def test_load_script_into_existing_nspace_2(
+def test_load_script_into_existing_nspace_02(
     tmp_path, update_re, enable_local_imports, reset_sys_modules  # noqa: F811
 ):
     """
@@ -1055,7 +1055,7 @@ def test_load_script_into_existing_nspace_2(
             )
 
 
-def test_load_script_into_existing_nspace_3():  # noqa: F811
+def test_load_script_into_existing_nspace_03():  # noqa: F811
     """
     Test for ``load_script_into_existing_nspace``. Verifies if variables defined in global and
     local scope in the script are handled correctly.
@@ -1090,7 +1090,7 @@ def func():
     (_startup_script_failing_2, IndentationError, "unexpected indent"),
 ])
 # fmt: on
-def test_load_script_into_existing_nspace_4(script, ex_type, error_msg):  # noqa: F811
+def test_load_script_into_existing_nspace_04(script, ex_type, error_msg):  # noqa: F811
     """
     Test for ``load_script_into_existing_nspace``. Errors in executed script.
     """
@@ -1102,7 +1102,7 @@ def test_load_script_into_existing_nspace_4(script, ex_type, error_msg):  # noqa
         load_script_into_existing_nspace(script=script, nspace=nspace)
 
 
-def test_load_script_into_existing_nspace_5():  # noqa: F811
+def test_load_script_into_existing_nspace_05():  # noqa: F811
     """
     Test for ``load_script_into_existing_nspace``. Errors in executed script.
     """
@@ -1131,7 +1131,7 @@ def get_a():
 """
 
 
-def test_load_script_into_existing_nspace_6():  # noqa: F811
+def test_load_script_into_existing_nspace_06():  # noqa: F811
     """
     Test for ``load_script_into_existing_nspace``. Modify global variable from function
     and externally. This test is mostly to make sure the environment works as expected.
@@ -1151,7 +1151,7 @@ def test_load_script_into_existing_nspace_6():  # noqa: F811
     assert nspace["get_a"]() == 100
 
 
-def test_load_script_into_existing_nspace_7():  # noqa: F811
+def test_load_script_into_existing_nspace_07():  # noqa: F811
     """
     Test for ``load_script_into_existing_nspace``. Modify global variable from function.
     """
@@ -1169,7 +1169,7 @@ def test_load_script_into_existing_nspace_7():  # noqa: F811
 # fmt: off
 @pytest.mark.parametrize("update_re", [False, True])
 # fmt: on
-def test_load_script_into_existing_nspace_8(update_re):  # noqa: F811
+def test_load_script_into_existing_nspace_08(update_re):  # noqa: F811
     """
     Test for ``load_script_into_existing_nspace``. Modify global variable from function.
     """
@@ -1193,7 +1193,7 @@ def test_load_script_into_existing_nspace_8(update_re):  # noqa: F811
         assert nspace["db"]
 
 
-def test_load_script_into_existing_nspace_9():  # noqa: F811
+def test_load_script_into_existing_nspace_09():  # noqa: F811
     """
     Load script with more sophisticated use of imported types.
     """
@@ -1204,6 +1204,51 @@ def test_load_script_into_existing_nspace_9():  # noqa: F811
 
     assert "SimStage" in nspace
     assert "sim_stage" in nspace
+
+
+code_script_upload_test10_1 = """
+# '__file__' should not be defined
+assert "__file__" not in globals()
+mod_name1 = __name__
+"""
+
+
+def test_load_script_into_existing_nspace_10(tmp_path, reset_sys_modules):  # noqa: F811
+    """
+    ``load_script_into_existing_nspace``: test that the ``__file__`` is patched
+    """
+
+    nspace = {}
+    load_script_into_existing_nspace(script=code_script_upload_test10_1, nspace=nspace)
+
+    assert nspace["mod_name1"] == "startup_script"
+
+    assert "__file__" not in nspace
+    assert nspace["__name__"] == "startup_script"
+
+
+code_script_upload_test11_1 = """
+raise ValueError("Testing exceptions")
+"""
+
+
+def test_load_script_into_existing_nspace_11(tmp_path, reset_sys_modules):  # noqa: F811
+    """
+    ``load_script_into_existing_nspace``: test processing exceptions
+    """
+
+    nspace = {}
+
+    try:
+        load_script_into_existing_nspace(script=code_script_upload_test11_1, nspace=nspace)
+        assert False, "Exception was not raised"
+    except ScriptLoadingError as ex:
+        msg = str(ex)
+        tb = ex.tb
+    assert re.search("Failed to execute stript: Testing exceptions", msg), msg
+    assert tb.startswith("Traceback"), tb
+    assert "ValueError: Testing exceptions" in tb, tb
+    assert tb.endswith(msg), tb
 
 
 @pytest.mark.parametrize("keep_re", [True, False])

@@ -468,7 +468,7 @@ def load_script_into_existing_nspace(
 
     except BaseException as ex:
         # Capture traceback and send it as a message
-        msg = f"Failed to load stript: {ex}"
+        msg = f"Failed to execute stript: {ex}"
         ex_str = traceback.format_exception(*sys.exc_info())
         ex_str = "".join(ex_str) + "\n" + msg
         raise ScriptLoadingError(msg, ex_str) from ex

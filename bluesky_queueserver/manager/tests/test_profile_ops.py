@@ -85,7 +85,7 @@ def test_get_default_startup_dir():
     assert os.path.exists(pc_path), "Directory with default profile collection deos not exist."
 
 
-def test_load_profile_collection_1():
+def test_load_profile_collection_01():
     """
     Loading default profile collection
     """
@@ -94,7 +94,7 @@ def test_load_profile_collection_1():
     assert len(nspace) > 0, "Failed to load the profile collection"
 
 
-def test_load_profile_collection_2(tmp_path):
+def test_load_profile_collection_02(tmp_path):
     """
     Loading a copy of the default profile collection
     """
@@ -199,7 +199,7 @@ raise Exception("Manually raised exception.")
 
 ])
 # fmt: on
-def test_load_profile_collection_3(tmp_path, local_imports, additional_code, success, errmsg):
+def test_load_profile_collection_03(tmp_path, local_imports, additional_code, success, errmsg):
     """
     Loading a copy of the default profile collection
     """
@@ -223,7 +223,7 @@ def test_load_profile_collection_3(tmp_path, local_imports, additional_code, suc
             load_profile_collection(pc_path)
 
 
-def test_load_profile_collection_4_fail(tmp_path):
+def test_load_profile_collection_04_fail(tmp_path):
     """
     Failing cases
     """
@@ -245,7 +245,7 @@ def test_load_profile_collection_4_fail(tmp_path):
 
 
 @pytest.mark.parametrize("keep_re", [True, False])
-def test_load_profile_collection_5(tmp_path, keep_re):
+def test_load_profile_collection_05(tmp_path, keep_re):
     """
     Loading a copy of the default profile collection
     """
@@ -387,7 +387,7 @@ def _verify_happi_namespace(nspace):
     assert "simple_sample_plan_1" in nspace
 
 
-def test_load_profile_collection_6(tmp_path, monkeypatch):
+def test_load_profile_collection_06(tmp_path, monkeypatch):
     """
     Load profile collection: instantiation of devices using Happi.
     """
@@ -416,7 +416,7 @@ mod_name2 = __name__
 """
 
 
-def test_load_profile_collection_7(tmp_path):
+def test_load_profile_collection_07(tmp_path):
     """
     ``load_profile_collection``: test that the ``__file__`` is patched
     """
@@ -453,9 +453,11 @@ def func2():
 """
 
 
-def test_load_profile_collection_8(tmp_path):
+def test_load_profile_collection_08(tmp_path):
     """
-    ``load_profile_collection``: test that the ``__file__`` is patched
+    ``load_profile_collection``: test that the function (object) definitions from
+    files that are loaded later in the sequence are accessible from functions defined
+    in the previously loaded files.
     """
 
     pc_path = os.path.join(tmp_path, "profile_collection")
@@ -480,7 +482,7 @@ raise ValueError("Testing exceptions")
 """
 
 
-def test_load_profile_collection_9(tmp_path):
+def test_load_profile_collection_09(tmp_path):
     """
     ``load_profile_collection``: test processing exceptions
     """
@@ -795,7 +797,63 @@ def test_load_startup_script_4(tmp_path, keep_re, enable_local_imports, reset_sy
     assert "db" not in nspace, pprint.pformat(nspace)
 
 
-def test_load_startup_script_5(tmp_path, monkeypatch):
+code_script_startup_test5_1 = """
+file_name1 = __file__
+mod_name1 = __name__
+"""
+
+
+def test_load_startup_script_5(tmp_path, reset_sys_modules):  # noqa: F811
+    """
+    ``load_startup_script``: test that the ``__file__`` is patched
+    """
+
+    pc_path = os.path.join(tmp_path, "startup_scripts")
+    script_path = os.path.join(pc_path, "startup_script_1.py")
+    os.makedirs(pc_path, exist_ok=True)
+
+    with open(script_path, "w") as f:
+        f.writelines(code_script_startup_test5_1)
+
+    nspace = load_startup_script(script_path)
+
+    assert nspace["file_name1"] == script_path
+    assert nspace["mod_name1"] == "startup_script"
+
+    assert "__file__" not in nspace
+    assert nspace["__name__"] == "startup_script"
+
+
+code_script_startup_test6_1 = """
+raise ValueError("Testing exceptions")
+"""
+
+
+def test_load_startup_script_6(tmp_path, reset_sys_modules):  # noqa: F811
+    """
+    ``load_startup_script``: test processing exceptions
+    """
+
+    pc_path = os.path.join(tmp_path, "startup_scripts")
+    script_path = os.path.join(pc_path, "startup_script_1.py")
+    os.makedirs(pc_path, exist_ok=True)
+
+    with open(script_path, "w") as f:
+        f.writelines(code_script_startup_test6_1)
+
+    try:
+        load_startup_script(script_path)
+        assert False, "Exception was not raised"
+    except ScriptLoadingError as ex:
+        msg = str(ex)
+        tb = ex.tb
+    assert re.search("Error while executing script.*startup_script_1.py.*Testing exceptions", msg), msg
+    assert tb.startswith("Traceback"), tb
+    assert "ValueError: Testing exceptions" in tb, tb
+    assert tb.endswith(msg), tb
+
+
+def test_load_startup_script_7(tmp_path, monkeypatch):
     """
     Load startup script: instantiation of devices using Happi.
     """
@@ -1237,7 +1295,40 @@ def test_load_startup_module_2(tmp_path, monkeypatch, reset_sys_modules):  # noq
     assert "sim_stage" in nspace, pprint.pformat(nspace)
 
 
+code_script_module_test3_1 = """
+raise ValueError("Testing exceptions")
+"""
+
+
 def test_load_startup_module_3(tmp_path, monkeypatch, reset_sys_modules):  # noqa: F811
+    """
+    ``load_startup_module``: test processing exceptions
+    """
+
+    pc_path = os.path.join(tmp_path, "startup_scripts")
+    script_path = os.path.join(pc_path, "startup_script_1.py")
+    os.makedirs(pc_path, exist_ok=True)
+
+    with open(script_path, "w") as f:
+        f.writelines(code_script_module_test3_1)
+
+    # Temporarily add module to the search path
+    sys_path = sys.path
+    monkeypatch.setattr(sys, "path", [str(tmp_path)] + sys_path)
+
+    try:
+        load_startup_module("startup_scripts.startup_script_1")
+        assert False, "Exception was not raised"
+    except ScriptLoadingError as ex:
+        msg = str(ex)
+        tb = ex.tb
+    assert re.search("Error while loading module 'startup_scripts.startup_script_1': Testing exceptions", msg), msg
+    assert tb.startswith("Traceback"), tb
+    assert "ValueError: Testing exceptions" in tb, tb
+    assert tb.endswith(msg), tb
+
+
+def test_load_startup_module_4(tmp_path, monkeypatch, reset_sys_modules):  # noqa: F811
     """
     Load startup module: instantiation of devices using Happi.
     """

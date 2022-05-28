@@ -381,7 +381,7 @@ def load_startup_module(module_name, *, keep_re=False):
 
     except BaseException as ex:
         # Capture traceback and send it as a message
-        msg = f"Error encountered while loading module {module_name!r}: {ex}"
+        msg = f"Error while loading module {module_name!r}: {ex}"
         ex_str = traceback.format_exception(*sys.exc_info())
         ex_str = "".join(ex_str) + "\n" + msg
         raise ScriptLoadingError(msg, ex_str) from ex

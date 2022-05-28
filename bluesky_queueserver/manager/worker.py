@@ -842,8 +842,15 @@ class RunEngineWorker(Process):
 
                         success, msg = True, ""
                     except Exception as ex:
-                        logger.exception("Error occurred while executing the function ('%s'): %s", name, str(ex))
-                        return_value = traceback.format_exc()
+                        s = f"Error occurred while executing {name!r}"
+                        if hasattr(ex, "tb"):  # ScriptLoadingError
+                            tb = str(ex.tb)
+                            logger.error("%s:\n%s\n", s, str(ex.tb))
+                        else:
+                            tb = traceback.format_exc()
+                            logger.exception("%s: %s.", s, str(ex))
+
+                        return_value = tb
                         success, msg = False, f"Exception: {str(ex)}"
                     finally:
                         if not run_in_background:
@@ -1002,10 +1009,11 @@ class RunEngineWorker(Process):
             logger.info("Startup code loading was completed")
 
         except Exception as ex:
-            logger.exception(
-                "Failed to start RE Worker environment. Error while loading startup code: %s.",
-                str(ex),
-            )
+            s = "Failed to start RE Worker environment. Error while loading startup code"
+            if hasattr(ex, "tb"):  # ScriptLoadingError
+                logger.error("%s:\n%s\n", s, str(ex.tb))
+            else:
+                logger.exception("%s: %s.", s, str(ex))
             success = False
 
         if success:

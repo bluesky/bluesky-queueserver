@@ -51,7 +51,6 @@ from bluesky_queueserver.manager.profile_ops import (
     load_allowed_plans_and_devices,
     _prepare_plans,
     _prepare_devices,
-    StartupLoadingError,
     ScriptLoadingError,
     _process_annotation,
     _decode_parameter_types_and_defaults,
@@ -608,7 +607,7 @@ def test_load_startup_script_2(tmp_path, keep_re, enable_local_imports, reset_sy
             assert "db" not in nspace, pprint.pformat(nspace)
     else:
         # Expected to fail if local imports are not enaabled
-        with pytest.raises(StartupLoadingError):
+        with pytest.raises(ScriptLoadingError):
             load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
 
     # Reload the same script, but replace the code in the module (emulate the process of code editing).
@@ -623,7 +622,7 @@ def test_load_startup_script_2(tmp_path, keep_re, enable_local_imports, reset_sy
 
     else:
         # Expected to fail if local imports are not enaabled
-        with pytest.raises(StartupLoadingError):
+        with pytest.raises(ScriptLoadingError):
             load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
 
     # Load different script (same name, but different path). The script imports module with the same name
@@ -652,7 +651,7 @@ def test_load_startup_script_2(tmp_path, keep_re, enable_local_imports, reset_sy
         assert "db" not in nspace, pprint.pformat(nspace)
     else:
         # Expected to fail if local imports are not enaabled
-        with pytest.raises(StartupLoadingError):
+        with pytest.raises(ScriptLoadingError):
             load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
 
 

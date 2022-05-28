@@ -27,6 +27,23 @@ logger = logging.getLogger(__name__)
 qserver_version = bluesky_queueserver.__version__
 
 
+class ScriptLoadingError(Exception):
+    def __init__(self, msg, tb):
+        super().__init__(msg)
+        self._tb = tb
+
+    @property
+    def tb(self):
+        """
+        Returns the full traceback (string) that is passed as a second parameter.
+        The traceback is expected to be fully prepared so that it could be saved
+        or passed to consumer over the network. Capturing traceback in the function
+        executing the script is reducing references to Queue Server code, which
+        is generic and unimportant for debugging startup scripts.
+        """
+        return self._tb
+
+
 def get_default_startup_dir():
     """
     Returns the path to the default profile collection that is distributed with the package.
@@ -305,7 +322,7 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
             try:
                 logger.info(f"Loading startup file {file!r} ...")
 
-                # Set '__file__' variable
+                # Set '__file__' and '__name__' variables
                 patch = f"__file__ = '{file}'; __name__ = 'startup_script'\n"
                 exec(patch, nspace, nspace)
 
@@ -315,10 +332,12 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
                 code = compile(code_str, file, "exec")
                 exec(code, nspace, nspace)
 
-            except BaseException:
+            except BaseException as ex:
+                # Capture traceback and send it as a message
+                msg = f"Error encountered while executing script at {file!r}: {ex}"
                 ex_str = traceback.format_exception(*sys.exc_info())
-                ex_str = "".join(ex_str)
-                raise StartupLoadingError(f"Error encountered while executing script at {file!r}:\n{ex_str}")
+                ex_str = "".join(ex_str) + "\n" + msg
+                raise ScriptLoadingError(msg, ex_str) from ex
 
             finally:
                 patch = "del __file__; del __name__\n"
@@ -355,20 +374,21 @@ def load_startup_module(module_name, *, keep_re=False):
     """
     importlib.invalidate_caches()
 
-    _module = importlib.import_module(module_name)
-    nspace = _module.__dict__
+    try:
+
+        _module = importlib.import_module(module_name)
+        nspace = _module.__dict__
+
+    except BaseException as ex:
+        # Capture traceback and send it as a message
+        msg = f"Error encountered while loading module {module_name!r}: {ex}"
+        ex_str = traceback.format_exception(*sys.exc_info())
+        ex_str = "".join(ex_str) + "\n" + msg
+        raise ScriptLoadingError(msg, ex_str) from ex
 
     _discard_re_from_nspace(nspace, keep_re=keep_re)
 
     return nspace
-
-
-class StartupLoadingError(Exception):
-    ...
-
-
-class ScriptLoadingError(Exception):
-    ...
 
 
 def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True):
@@ -406,19 +426,35 @@ def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True
 
     try:
         nspace = {}
-        exec(open(script_path).read(), nspace, nspace)
+        if not os.path.isfile(script_path):
+            raise IOError(f"Startup file {script_path!r} was not found")
+
+        # Set '__file__' and '__name__' variables
+        patch = f"__file__ = '{script_path}'; __name__ = 'startup_script'\n"
+        exec(patch, nspace, nspace)
+
+        code = compile(open(script_path).read(), script_path, "exec")
+        exec(code, nspace, nspace)
 
     except BaseException as ex:
-        raise StartupLoadingError(f"Error encountered executing startup script at '{script_path}'") from ex
+        # Capture traceback and send it as a message
+        msg = f"Error encountered while executing script at {script_path!r}: {ex}"
+        ex_str = traceback.format_exception(*sys.exc_info())
+        ex_str = "".join(ex_str) + "\n" + msg
+        raise ScriptLoadingError(msg, ex_str) from ex
 
     finally:
+
+        patch = "del __file__; del __name__\n"
+        exec(patch, nspace, nspace)
+
         if enable_local_imports:
             # Delete data on all modules that were loaded by the script.
             # We don't need them anymore. Modules will be reloaded from disk if
             #   the script is executed again.
             for key in list(sys.modules.keys()):
                 if key not in sm_keys:
-                    print(f"Deleting the key '{key}'")
+                    # print(f"Deleting the key '{key}'")
                     del sys.modules[key]
 
             sys.path.remove(p)
@@ -567,14 +603,27 @@ def load_script_into_existing_nspace(
             object_backup["db"] = nspace["db"]
 
     try:
+
+        # Set '__name__' variables. NOTE: '__file__' variable is undefined (difference!!!)
+        patch = "__name__ = 'startup_script'\n"
+        exec(patch, nspace, nspace)
+
         # A script may be partially loaded into the environment in case it fails.
         #   This is 'realistic' behavior, similar to what happens in IPython.
         exec(script, nspace, nspace)
 
-    except Exception as ex:
-        raise ScriptLoadingError(f"Failed to load stript: {ex}") from ex
+    except BaseException as ex:
+        # Capture traceback and send it as a message
+        msg = f"Failed to load stript: {ex}"
+        ex_str = traceback.format_exception(*sys.exc_info())
+        ex_str = "".join(ex_str) + "\n" + msg
+        raise ScriptLoadingError(msg, ex_str) from ex
 
     finally:
+
+        patch = "del __name__\n"
+        exec(patch, nspace, nspace)
+
         if not update_re:
             # Remove references for 'RE' and 'db' from the namespace
             nspace.pop("RE", None)
@@ -3099,7 +3148,7 @@ def gen_list_of_plans_and_devices(
         )
 
     except Exception as ex:
-        raise RuntimeError(f"Failed to create the list of plans and devices: {str(ex)}")
+        raise RuntimeError(f"Failed to create the list of plans and devices: {str(ex)}") from ex
 
     finally:
         clear_re_worker_active()

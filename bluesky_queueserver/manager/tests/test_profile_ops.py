@@ -407,10 +407,12 @@ def test_load_profile_collection_6(tmp_path, monkeypatch):
 
 code_script__file__1 = """
 file_name1 = __file__
+mod_name1 = __name__
 """
 
 code_script__file__2 = """
 file_name2 = __file__
+mod_name2 = __name__
 """
 
 
@@ -433,6 +435,73 @@ def test_load_profile_collection_7(tmp_path):
 
     assert nspace["file_name1"] == pc_fln_1
     assert nspace["file_name2"] == pc_fln_2
+    assert nspace["mod_name1"] == "startup_script"
+    assert nspace["mod_name2"] == "startup_script"
+
+    assert "__file__" not in nspace
+    assert nspace["__name__"] == "startup_script"
+
+
+code_script_test8_1 = """
+def func1():
+    return func2()
+"""
+
+code_script_test8_2 = """
+def func2():
+    return "success"
+"""
+
+
+def test_load_profile_collection_8(tmp_path):
+    """
+    ``load_profile_collection``: test that the ``__file__`` is patched
+    """
+
+    pc_path = os.path.join(tmp_path, "profile_collection")
+    pc_fln_1 = os.path.join(pc_path, "startup_script_1.py")
+    pc_fln_2 = os.path.join(pc_path, "startup_script_2.py")
+    os.makedirs(pc_path, exist_ok=True)
+
+    with open(pc_fln_1, "w") as f:
+        f.writelines(code_script_test8_1)
+    with open(pc_fln_2, "w") as f:
+        f.writelines(code_script_test8_2)
+
+    nspace = load_profile_collection(pc_path)
+
+    assert "func1" in nspace
+    assert "func2" in nspace
+    assert nspace["func1"]() == "success"
+
+
+code_script_test9_1 = """
+raise ValueError("Testing exceptions")
+"""
+
+
+def test_load_profile_collection_9(tmp_path):
+    """
+    ``load_profile_collection``: test processing exceptions
+    """
+
+    pc_path = os.path.join(tmp_path, "profile_collection")
+    pc_fln_1 = os.path.join(pc_path, "startup_script_1.py")
+    os.makedirs(pc_path, exist_ok=True)
+
+    with open(pc_fln_1, "w") as f:
+        f.writelines(code_script_test9_1)
+
+    try:
+        load_profile_collection(pc_path)
+        assert False, "Exception was not raised"
+    except ScriptLoadingError as ex:
+        msg = str(ex)
+        tb = ex.tb
+    assert re.search("Error while executing script.*startup_script_1.py.*Testing exceptions", msg), msg
+    assert tb.startswith("Traceback"), tb
+    assert "ValueError: Testing exceptions" in tb, tb
+    assert tb.endswith(msg), tb
 
 
 _startup_script_1 = """

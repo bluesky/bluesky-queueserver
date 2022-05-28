@@ -334,7 +334,7 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
 
             except BaseException as ex:
                 # Capture traceback and send it as a message
-                msg = f"Error encountered while executing script at {file!r}: {ex}"
+                msg = f"Error while executing script {file!r}: {ex}"
                 ex_str = traceback.format_exception(*sys.exc_info())
                 ex_str = "".join(ex_str) + "\n" + msg
                 raise ScriptLoadingError(msg, ex_str) from ex
@@ -438,7 +438,7 @@ def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True
 
     except BaseException as ex:
         # Capture traceback and send it as a message
-        msg = f"Error encountered while executing script at {script_path!r}: {ex}"
+        msg = f"Error while executing script {script_path!r}: {ex}"
         ex_str = traceback.format_exception(*sys.exc_info())
         ex_str = "".join(ex_str) + "\n" + msg
         raise ScriptLoadingError(msg, ex_str) from ex
@@ -605,7 +605,7 @@ def load_script_into_existing_nspace(
 
     try:
         # Set '__name__' variables. NOTE: '__file__' variable is undefined (difference!!!)
-        patch = f"__name__ = 'startup_script'\n"
+        patch = "__name__ = 'startup_script'\n"
         exec(patch, nspace, nspace)
 
         # A script may be partially loaded into the environment in case it fails.

@@ -18,7 +18,6 @@ import argparse
 import importlib
 import numbers
 from numpydoc.docscrape import NumpyDocString
-import re
 import traceback
 
 import logging

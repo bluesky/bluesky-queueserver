@@ -18,6 +18,7 @@ import argparse
 import importlib
 import numbers
 from numpydoc.docscrape import NumpyDocString
+import re
 import traceback
 
 import logging
@@ -102,8 +103,14 @@ def _patch_script_code(code_str):
     for n in range(len(s_list)):
         line = s_list[n]
         if is_get_ipython_imported_in_line(line):
-            line += "; get_ipython = get_ipython_patch"
-            s_list[n] = line
+            # The line may have comments. The patch should be inserted before the comment.
+            line_split = re.split("#", line)
+            # Do not patch empty lines that have only comments
+            if line_split[0]:
+                line = line_split[0] + "; get_ipython = get_ipython_patch"
+                if len(line_split) > 1:
+                    line += "  #" + "#".join(line_split[1:])
+                s_list[n] = line
 
     return "\n".join(s_list)
 

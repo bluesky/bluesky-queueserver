@@ -2800,7 +2800,7 @@ def test_zmq_api_function_execute_8_fail(re_manager):  # noqa: F811
     assert result["success"] is False, pprint.pformat(result)
     msg = "Function 'non_existing_element' is not found in the worker namespace"
     assert msg in result["msg"]
-    assert "not found in the worker namespace" in result["return_value"]
+    assert msg in result["traceback"]
 
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"

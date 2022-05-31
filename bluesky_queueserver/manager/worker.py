@@ -846,18 +846,17 @@ class RunEngineWorker(Process):
                         except Exception as ex_json:
                             raise ValueError(f"Task result can not be serialized as JSON: {ex_json}") from ex_json
 
-                        success, msg = True, ""
+                        success, err_msg, err_tb = True, "", ""
                     except Exception as ex:
                         s = f"Error occurred while executing {name!r}"
+                        err_msg = f"{s}: {str(ex)}"
                         if hasattr(ex, "tb"):  # ScriptLoadingError
-                            tb = str(ex.tb)
-                            logger.error("%s:\n%s\n", s, str(ex.tb))
+                            err_tb = str(ex.tb)
                         else:
-                            tb = traceback.format_exc()
-                            logger.exception("%s: %s.", s, str(ex))
+                            err_tb = traceback.format_exc()
+                        logger.error("%s:\n%s\n", err_msg, err_tb)
 
-                        return_value = tb
-                        success, msg = False, f"Exception: {str(ex)}"
+                        return_value, success = None, False
                     finally:
                         if not run_in_background:
                             self._env_state = EState.IDLE
@@ -869,7 +868,8 @@ class RunEngineWorker(Process):
                         task_res = {
                             "task_uid": task_uid,
                             "success": success,
-                            "msg": msg,
+                            "msg": err_msg,
+                            "traceback": err_tb,
                             "return_value": return_value,
                             "time_start": time_start,
                             "time_stop": ttime.time(),

@@ -1652,6 +1652,7 @@ def test_zmq_api_script_upload_01(re_manager, run_in_background):  # noqa: F811
     assert result["task_uid"] == task_uid
     assert result["success"] is True
     assert result["msg"] == ""
+    assert result["traceback"] == ""
     assert result["return_value"] is None
 
     # Check that the new plan and the new device are in the new list of available plans and devices
@@ -1924,7 +1925,65 @@ def test_zmq_api_script_upload_04(re_manager):  # noqa: F811
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_script_upload_05(tmp_path, re_manager_cmd):  # noqa: F811
+_script_to_upload_5a = """
+# The script fails to load and generates an exception
+def func1():
+    try:
+        func2()
+    except Exception as ex:
+        raise Exception("Exception in func1") from ex
+
+def func2():
+    raise Exception("Exception in func2")
+
+func1()
+"""
+
+
+def test_zmq_api_script_upload_05(re_manager):  # noqa: F811
+    """
+    Test ``script_upload`` API: upload the script that fails to execute. Verify that
+    ``msg`` and ``traceback`` contain correct information.
+    """
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp2, _ = zmq_single_request("script_upload", params={"script": _script_to_upload_5a})
+    assert resp2["success"] is True, pprint.pformat(resp2)
+    task_uid = resp2["task_uid"]
+
+    def check_result(result):
+        assert isinstance(result, dict)
+        assert isinstance(result["time_start"], float)
+        assert isinstance(result["time_stop"], float)
+        assert result["task_uid"] == task_uid
+        assert result["success"] is False, pprint.pformat(result)
+        assert isinstance(result["msg"], str)
+        assert "Exception in func1" in result["msg"]
+        assert "Exception in func2" not in result["msg"]
+        assert isinstance(result["traceback"], str)
+        assert "Exception in func1" in result["traceback"]
+        assert "Exception in func2" in result["traceback"]
+        assert result["return_value"] is None
+
+    result = wait_for_task_result(10, task_uid)
+    check_result(result)
+
+    resp4, _ = zmq_single_request("task_result", params={"task_uid": task_uid})
+    assert resp4["success"] is True
+    assert resp4["msg"] == ""
+    assert resp4["task_uid"] == task_uid
+    assert resp4["status"] == "completed"
+    result = resp4["result"]
+    check_result(result)
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_script_upload_06(tmp_path, re_manager_cmd):  # noqa: F811
     """
     'script_upload' API: Open the environent with 'empty' startup file and then
     load full collection of built-in startup files using the API. Compare the lists
@@ -2005,7 +2064,7 @@ def test_zmq_api_script_upload_05(tmp_path, re_manager_cmd):  # noqa: F811
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_script_upload_06(tmp_path, re_manager_cmd):  # noqa: F811
+def test_zmq_api_script_upload_07(tmp_path, re_manager_cmd):  # noqa: F811
     """
     'script_upload' API: Check that local imports work.
     """
@@ -2062,7 +2121,7 @@ db_backup = db
 @pytest.mark.parametrize("replace_re", [False, True])
 @pytest.mark.parametrize("replace_db", [False, True])
 # fmt: on
-def test_zmq_api_script_upload_07(re_manager_cmd, update_re_param, replace_re, replace_db):  # noqa: F811
+def test_zmq_api_script_upload_08(re_manager_cmd, update_re_param, replace_re, replace_db):  # noqa: F811
     """
     'script_upload' API: Test that instances 'RE' and 'db' could be replaced in
     the RE Worker namespace. The test does not check if references kept internally by RE Worker
@@ -2114,7 +2173,7 @@ def test_zmq_api_script_upload_07(re_manager_cmd, update_re_param, replace_re, r
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_script_upload_08(re_manager):  # noqa: F811
+def test_zmq_api_script_upload_09(re_manager):  # noqa: F811
     """
     'script_upload' API: Check that the environment can be destroyed while a script is
     being loaded. It could be necessary to destroy the environment to terminate execution
@@ -2157,7 +2216,7 @@ def test_zmq_api_script_upload_08(re_manager):  # noqa: F811
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_script_upload_09_fail(re_manager):  # noqa: F811
+def test_zmq_api_script_upload_10_fail(re_manager):  # noqa: F811
     """
     'script_upload' API: Check if call fails if the environment is not open.
     """
@@ -2169,7 +2228,7 @@ def test_zmq_api_script_upload_09_fail(re_manager):  # noqa: F811
 # fmt: off
 @pytest.mark.parametrize("test_with_plan", [True, False])
 # fmt: on
-def test_zmq_api_script_upload_10_fail(re_manager, test_with_plan):  # noqa: F811
+def test_zmq_api_script_upload_11_fail(re_manager, test_with_plan):  # noqa: F811
     """
     'script_upload' API: Check if script upload request fails if another script or
     a plan is running.

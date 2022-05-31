@@ -226,6 +226,7 @@ class RunEngineWorker(Process):
 
                     # Clear the list of active runs (don't clean the list for the paused plan).
                     self._active_run_list.clear()
+                    logger.error("The plan failed: %s", self._re_report["err_msg"])
 
                 # Include RE state
                 self._re_report["re_state"] = str(self._RE._state)

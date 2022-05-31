@@ -1915,10 +1915,13 @@ def test_zmq_api_script_upload_04(re_manager):  # noqa: F811
     resp5, _ = zmq_single_request("history_get")
     assert resp5["success"] is True, pprint.pformat(resp5)
     item = resp5["items"][0]
+    assert isinstance(item["result"]["msg"], str)
     assert "Testing the failing plan" in item["result"]["msg"]  # Only the message
     assert "Exception raised in failed subplan" not in item["result"]["msg"]
+    assert isinstance(item["result"]["traceback"], str)
     assert "Testing the failing plan" in item["result"]["traceback"]  # Full traceback
     assert "Exception raised in failed subplan" in item["result"]["traceback"]
+    assert item["result"]["traceback"].startswith("Traceback")
 
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
@@ -1965,6 +1968,7 @@ def test_zmq_api_script_upload_05(re_manager):  # noqa: F811
         assert isinstance(result["traceback"], str)
         assert "Exception in func1" in result["traceback"]
         assert "Exception in func2" in result["traceback"]
+        assert result["traceback"].startswith("Traceback")
         assert result["return_value"] is None
 
     result = wait_for_task_result(10, task_uid)
@@ -2418,6 +2422,16 @@ def test_zmq_api_function_execute_1(re_manager, run_in_background, wait_for_idle
     assert status["worker_environment_state"] == ("idle" if run_in_background else "executing_task")
     assert status["manager_state"] == ("idle" if run_in_background else "executing_task")
 
+    def check_result(result):
+        assert isinstance(result, dict)
+        assert isinstance(result["time_start"], float)
+        assert isinstance(result["time_stop"], float)
+        assert result["task_uid"] == task_uid
+        assert result["success"] is True, pprint.pformat(result)
+        assert result["msg"] == ""
+        assert result["traceback"] == ""
+        assert result["return_value"] == {"success": True, "time": 1.0}
+
     if wait_for_idle:
         # Check that RE Manager state is managed correctly, i.e. we can wait for
         #   manager state to switch to idle. This only makes sense when function is
@@ -2425,11 +2439,13 @@ def test_zmq_api_function_execute_1(re_manager, run_in_background, wait_for_idle
         assert wait_for_condition(time=10, condition=condition_manager_idle)
         resp2, _ = zmq_single_request("task_result", params={"task_uid": task_uid})
         assert resp2["success"] is True, pprint.pformat(resp2)
-        assert resp2["result"]["success"] is True, pprint.pformat(resp2["result"])
+        check_result(resp2["result"])
+        # assert resp2["result"]["success"] is True, pprint.pformat(resp2["result"])
     else:
         # Just wait for the result to be ready.
         result = wait_for_task_result(10, task_uid)
-        assert result["success"] is True, pprint.pformat(result)
+        check_result(result)
+        # assert result["success"] is True, pprint.pformat(result)
 
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
@@ -2662,7 +2678,12 @@ def test_zmq_api_function_execute_5(
         if success_rcv:
             assert result["return_value"] == return_value
         else:
-            assert msg in result["return_value"]
+            assert result["return_value"] is None
+            assert isinstance(result["traceback"], str)
+            assert msg in result["msg"]
+            assert isinstance(result["traceback"], str)
+            assert msg in result["traceback"]
+            assert result["traceback"].startswith("Traceback")
 
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"

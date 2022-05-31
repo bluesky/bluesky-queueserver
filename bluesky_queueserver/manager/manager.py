@@ -391,7 +391,7 @@ class RunEngineManager(Process):
 
         # If a plan is running, it needs to be pushed back into the queue
         await self._plan_queue.set_processed_item_as_stopped(
-            exit_status="failed", run_uids=[], err_msg="RE Worker environment was destroyed"
+            exit_status="failed", run_uids=[], err_msg="RE Worker environment was destroyed", err_tb=""
         )
 
         err_msg = "" if success else "Failed to properly destroy RE Worker environment."
@@ -496,6 +496,7 @@ class RunEngineManager(Process):
                 exit_status="failed",
                 run_uids=[],
                 err_msg="Internal RE Manager error occurred. Report the error to the development team",
+                err_tb="",
             )
             self._manager_state = MState.IDLE
             self._re_pause_pending = False
@@ -504,6 +505,7 @@ class RunEngineManager(Process):
             success = plan_report["success"]
             result = plan_report["result"]
             err_msg = plan_report["err_msg"]
+            err_tb = plan_report["traceback"]
 
             msg_display = result if result else err_msg
             logger.debug(
@@ -523,13 +525,13 @@ class RunEngineManager(Process):
                 # execution of the queue is stopped. It can be restarted later (failed or
                 # interrupted plan will still be in the queue.
                 await self._plan_queue.set_processed_item_as_completed(
-                    exit_status=plan_state, run_uids=result, err_msg=err_msg
+                    exit_status=plan_state, run_uids=result, err_msg=err_msg, err_tb=err_tb
                 )
                 await self._start_plan_task(stop_queue=bool(immediate_execution))
             elif plan_state in ("failed", "stopped", "aborted", "halted"):
                 # Paused plan was stopped/aborted/halted
                 await self._plan_queue.set_processed_item_as_stopped(
-                    exit_status=plan_state, run_uids=result, err_msg=err_msg
+                    exit_status=plan_state, run_uids=result, err_msg=err_msg, err_tb=err_tb
                 )
                 self._manager_state = MState.IDLE
                 self._re_pause_pending = False
@@ -770,7 +772,7 @@ class RunEngineManager(Process):
                 success, err_msg = await self._worker_command_run_plan(plan_info)
                 if not success:
                     await self._plan_queue.set_processed_item_as_stopped(
-                        exit_status="failed", run_uids=[], err_msg=err_msg
+                        exit_status="failed", run_uids=[], err_msg=err_msg, err_tb=""
                     )
                     self._manager_state = MState.IDLE
                     logger.error(
@@ -2855,6 +2857,7 @@ class RunEngineManager(Process):
                 exit_status="unknown",
                 run_uids=[],
                 err_msg="Plan exit status was lost due to restart of the RE Manager process",
+                err_tb="",
             )
 
         logger.info("Starting ZeroMQ server ...")

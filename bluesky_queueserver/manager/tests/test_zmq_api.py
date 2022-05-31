@@ -1652,6 +1652,7 @@ def test_zmq_api_script_upload_01(re_manager, run_in_background):  # noqa: F811
     assert result["task_uid"] == task_uid
     assert result["success"] is True
     assert result["msg"] == ""
+    assert result["traceback"] == ""
     assert result["return_value"] is None
 
     # Check that the new plan and the new device are in the new list of available plans and devices
@@ -1862,8 +1863,14 @@ def test_zmq_api_script_upload_03(re_manager, use_bg_task):  # noqa: F811
 _script_to_upload_4a = """
 # Trivial plan
 def plan_raise_exception():
-    raise Exception("Testing the failing plan")
-    yield from bps.sleep(1)  # Still need 'yield' so that the plan is detected.
+    try:
+        yield from subplan_raise_exception()
+    except Exception as ex:
+        raise Exception("Testing the failing plan") from ex
+
+def subplan_raise_exception():
+    yield from bps.sleep(0.1)  # Still need 'yield' so that the plan is detected.
+    raise Exception("Exception raised in failed subplan")
 """
 
 
@@ -1908,14 +1915,79 @@ def test_zmq_api_script_upload_04(re_manager):  # noqa: F811
     resp5, _ = zmq_single_request("history_get")
     assert resp5["success"] is True, pprint.pformat(resp5)
     item = resp5["items"][0]
-    assert "Testing the failing plan" in item["result"]["msg"]
+    assert isinstance(item["result"]["msg"], str)
+    assert "Testing the failing plan" in item["result"]["msg"]  # Only the message
+    assert "Exception raised in failed subplan" not in item["result"]["msg"]
+    assert isinstance(item["result"]["traceback"], str)
+    assert "Testing the failing plan" in item["result"]["traceback"]  # Full traceback
+    assert "Exception raised in failed subplan" in item["result"]["traceback"]
+    assert item["result"]["traceback"].startswith("Traceback")
 
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_script_upload_05(tmp_path, re_manager_cmd):  # noqa: F811
+_script_to_upload_5a = """
+# The script fails to load and generates an exception
+def func1():
+    try:
+        func2()
+    except Exception as ex:
+        raise Exception("Exception in func1") from ex
+
+def func2():
+    raise Exception("Exception in func2")
+
+func1()
+"""
+
+
+def test_zmq_api_script_upload_05(re_manager):  # noqa: F811
+    """
+    Test ``script_upload`` API: upload the script that fails to execute. Verify that
+    ``msg`` and ``traceback`` contain correct information.
+    """
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp2, _ = zmq_single_request("script_upload", params={"script": _script_to_upload_5a})
+    assert resp2["success"] is True, pprint.pformat(resp2)
+    task_uid = resp2["task_uid"]
+
+    def check_result(result):
+        assert isinstance(result, dict)
+        assert isinstance(result["time_start"], float)
+        assert isinstance(result["time_stop"], float)
+        assert result["task_uid"] == task_uid
+        assert result["success"] is False, pprint.pformat(result)
+        assert isinstance(result["msg"], str)
+        assert "Exception in func1" in result["msg"]
+        assert "Exception in func2" not in result["msg"]
+        assert isinstance(result["traceback"], str)
+        assert "Exception in func1" in result["traceback"]
+        assert "Exception in func2" in result["traceback"]
+        assert result["traceback"].startswith("Traceback")
+        assert result["return_value"] is None
+
+    result = wait_for_task_result(10, task_uid)
+    check_result(result)
+
+    resp4, _ = zmq_single_request("task_result", params={"task_uid": task_uid})
+    assert resp4["success"] is True
+    assert resp4["msg"] == ""
+    assert resp4["task_uid"] == task_uid
+    assert resp4["status"] == "completed"
+    result = resp4["result"]
+    check_result(result)
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_script_upload_06(tmp_path, re_manager_cmd):  # noqa: F811
     """
     'script_upload' API: Open the environent with 'empty' startup file and then
     load full collection of built-in startup files using the API. Compare the lists
@@ -1996,7 +2068,7 @@ def test_zmq_api_script_upload_05(tmp_path, re_manager_cmd):  # noqa: F811
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_script_upload_06(tmp_path, re_manager_cmd):  # noqa: F811
+def test_zmq_api_script_upload_07(tmp_path, re_manager_cmd):  # noqa: F811
     """
     'script_upload' API: Check that local imports work.
     """
@@ -2053,7 +2125,7 @@ db_backup = db
 @pytest.mark.parametrize("replace_re", [False, True])
 @pytest.mark.parametrize("replace_db", [False, True])
 # fmt: on
-def test_zmq_api_script_upload_07(re_manager_cmd, update_re_param, replace_re, replace_db):  # noqa: F811
+def test_zmq_api_script_upload_08(re_manager_cmd, update_re_param, replace_re, replace_db):  # noqa: F811
     """
     'script_upload' API: Test that instances 'RE' and 'db' could be replaced in
     the RE Worker namespace. The test does not check if references kept internally by RE Worker
@@ -2105,7 +2177,7 @@ def test_zmq_api_script_upload_07(re_manager_cmd, update_re_param, replace_re, r
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_script_upload_08(re_manager):  # noqa: F811
+def test_zmq_api_script_upload_09(re_manager):  # noqa: F811
     """
     'script_upload' API: Check that the environment can be destroyed while a script is
     being loaded. It could be necessary to destroy the environment to terminate execution
@@ -2148,7 +2220,7 @@ def test_zmq_api_script_upload_08(re_manager):  # noqa: F811
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_script_upload_09_fail(re_manager):  # noqa: F811
+def test_zmq_api_script_upload_10_fail(re_manager):  # noqa: F811
     """
     'script_upload' API: Check if call fails if the environment is not open.
     """
@@ -2160,7 +2232,7 @@ def test_zmq_api_script_upload_09_fail(re_manager):  # noqa: F811
 # fmt: off
 @pytest.mark.parametrize("test_with_plan", [True, False])
 # fmt: on
-def test_zmq_api_script_upload_10_fail(re_manager, test_with_plan):  # noqa: F811
+def test_zmq_api_script_upload_11_fail(re_manager, test_with_plan):  # noqa: F811
     """
     'script_upload' API: Check if script upload request fails if another script or
     a plan is running.
@@ -2350,6 +2422,16 @@ def test_zmq_api_function_execute_1(re_manager, run_in_background, wait_for_idle
     assert status["worker_environment_state"] == ("idle" if run_in_background else "executing_task")
     assert status["manager_state"] == ("idle" if run_in_background else "executing_task")
 
+    def check_result(result):
+        assert isinstance(result, dict)
+        assert isinstance(result["time_start"], float)
+        assert isinstance(result["time_stop"], float)
+        assert result["task_uid"] == task_uid
+        assert result["success"] is True, pprint.pformat(result)
+        assert result["msg"] == ""
+        assert result["traceback"] == ""
+        assert result["return_value"] == {"success": True, "time": 1.0}
+
     if wait_for_idle:
         # Check that RE Manager state is managed correctly, i.e. we can wait for
         #   manager state to switch to idle. This only makes sense when function is
@@ -2357,11 +2439,13 @@ def test_zmq_api_function_execute_1(re_manager, run_in_background, wait_for_idle
         assert wait_for_condition(time=10, condition=condition_manager_idle)
         resp2, _ = zmq_single_request("task_result", params={"task_uid": task_uid})
         assert resp2["success"] is True, pprint.pformat(resp2)
-        assert resp2["result"]["success"] is True, pprint.pformat(resp2["result"])
+        check_result(resp2["result"])
+        # assert resp2["result"]["success"] is True, pprint.pformat(resp2["result"])
     else:
         # Just wait for the result to be ready.
         result = wait_for_task_result(10, task_uid)
-        assert result["success"] is True, pprint.pformat(result)
+        check_result(result)
+        # assert result["success"] is True, pprint.pformat(result)
 
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
@@ -2594,7 +2678,12 @@ def test_zmq_api_function_execute_5(
         if success_rcv:
             assert result["return_value"] == return_value
         else:
-            assert msg in result["return_value"]
+            assert result["return_value"] is None
+            assert isinstance(result["traceback"], str)
+            assert msg in result["msg"]
+            assert isinstance(result["traceback"], str)
+            assert msg in result["traceback"]
+            assert result["traceback"].startswith("Traceback")
 
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
@@ -2711,7 +2800,7 @@ def test_zmq_api_function_execute_8_fail(re_manager):  # noqa: F811
     assert result["success"] is False, pprint.pformat(result)
     msg = "Function 'non_existing_element' is not found in the worker namespace"
     assert msg in result["msg"]
-    assert "not found in the worker namespace" in result["return_value"]
+    assert msg in result["traceback"]
 
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
@@ -4201,6 +4290,7 @@ def test_zmq_api_re_pause_3(re_manager, continue_option, loop_mode):  # noqa: F8
     result_options = {"re_resume": "completed", "re_stop": "stopped", "re_abort": "aborted", "re_halt": "halted"}
     assert result["exit_status"] == result_options[continue_option]
     assert result["msg"] == ""
+    assert result["traceback"] == ""
     assert isinstance(result["time_start"], float)
     assert isinstance(result["time_stop"], float)
     assert result["time_start"] < result["time_stop"]

@@ -536,8 +536,9 @@ Returns       **success**: *boolean*
                   - **time_start** and **time_stop** - time of start and completion of the plan (not runs),
                     floating point number returned by *time.time()*.
 
-                  - **msg** - error message and/or trace back in case of plan failure, empty string if no
-                    message is returned.
+                  - **msg** - error message if the plan failed, empty string otherwise.
+
+                  - **traceback** - full traceback if the plan failed, empty string otherwise.
 
               **plan_history_uid**: *str*
                   current plan history UID.
@@ -641,7 +642,7 @@ Method        **'environment_destroy'**
 Description   Initiate the operation of destroying of the existing (unresponsive) RE Worker
               environment. The operation fails if there is no existing environment.
               The request is accepted by the server if status fields **worker_environment_exists** is
-              *True* or **manager_state** is *'creating_environment'*, otherwise the request is 
+              *True* or **manager_state** is *'creating_environment'*, otherwise the request is
               rejected.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    ---
@@ -1483,9 +1484,10 @@ Description   Start execution of a function in RE Worker namespace. The function
 
               The method allows to pass parameters (*args* and *kwargs*) to the function. Once the task
               is completed, the results of the function execution, including the return value, can be
-              loaded using *task_result* method. If the task fails, the return value is a string
-              with full traceback of the raised exception. The data types of parameters and return
-              values must be JSON serializable. The task fails if the return value can not be serialized.
+              loaded using *task_result* method. If the task fails, the return value is *None* and
+              the error message and traceback are included in the result. The data types of
+              parameters and return values must be JSON serializable. The task fails if the return
+              value can not be serialized.
 
               The method only **initiates** execution of the function. If the request is successful
               (*success=True*), the server starts the task, which attempts to execute the function
@@ -1613,9 +1615,10 @@ Returns       **success**: *boolean*
                   - **'running'** - Keys: *'task_uid'*, *'start_time'* and *'run_in_background'*.
 
                   - **'completed'** - Keys: *'task_uid'*, *'success'* (*True*/*False*),
-                    *'msg'* (error message), *'return_value'* (value returned by the function
-                    or a string with full traceback if the task failed), *'time_start'* and
-                    *'time_stop'*.
+                    *'msg'* (short error message, empty string if execution was successful),
+                    *'traceback'* (full traceback in case of error, empty string otherwise),
+                    *'return_value'* (value returned by the task, e.g. by the executed function,
+                    *None* if the task failed), *'time_start'* and *'time_stop'*.
 
                   - **'not_found'** - Empty dictionary.
 ------------  -----------------------------------------------------------------------------------------

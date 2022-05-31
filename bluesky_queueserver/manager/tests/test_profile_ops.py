@@ -157,6 +157,26 @@ if True:
 
 """, True, ""),
 
+    # Patching an a statement with acomment
+    ("""
+\n
+from IPython import get_ipython  # Some comment
+get_ipython().user_ns
+
+from IPython import get_ipython# Some comment
+get_ipython().user_ns
+if True:
+    # No comment
+    from IPython import get_ipython  #
+    get_ipython().user_ns
+
+    from IPython import get_ipython# Some comment
+    get_ipython().user_ns
+
+    from IPython import get_ipython# Some comment # Another comment
+    get_ipython().user_ns
+""", True, ""),
+
     # Patched as expected ('get_ipython()' is not imported)
     ("""
 \n

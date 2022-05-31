@@ -1645,7 +1645,7 @@ class PlanQueueOperations:
         async with self._lock:
             return await self._set_next_item_as_running(item=item)
 
-    async def _set_processed_item_as_completed(self, exit_status, run_uids, err_msg):
+    async def _set_processed_item_as_completed(self, *, exit_status, run_uids, err_msg, err_tb):
         """
         See ``self.set_processed_item_as_completed`` method.
         """
@@ -1670,6 +1670,7 @@ class PlanQueueOperations:
             item_cleaned["result"]["time_start"] = item_time_start
             item_cleaned["result"]["time_stop"] = ttime.time()
             item_cleaned["result"]["msg"] = err_msg
+            item_cleaned["result"]["traceback"] = err_tb
             await self._clear_running_item_info()
             if not loop_mode and not immediate_execution:
                 self._uid_dict_remove(item["item_uid"])
@@ -1679,7 +1680,7 @@ class PlanQueueOperations:
             item_cleaned = {}
         return item_cleaned
 
-    async def set_processed_item_as_completed(self, exit_status, run_uids, err_msg):
+    async def set_processed_item_as_completed(self, *, exit_status, run_uids, err_msg, err_tb):
         """
         Moves currently executed item (plan) to history and sets ``exit_status`` key.
         UID is removed from ``self._uid_dict``, so a copy of the item with
@@ -1696,7 +1697,9 @@ class PlanQueueOperations:
         run_uids: list(str)
             A list of uids of completed runs.
         err_msg: str
-            Error message and/or traceback in case of failure.
+            Error message in case of failure.
+        err_tb: str
+            Traceback in case of failure.
 
         Returns
         -------
@@ -1706,10 +1709,10 @@ class PlanQueueOperations:
         """
         async with self._lock:
             return await self._set_processed_item_as_completed(
-                exit_status=exit_status, run_uids=run_uids, err_msg=err_msg
+                exit_status=exit_status, run_uids=run_uids, err_msg=err_msg, err_tb=err_tb
             )
 
-    async def _set_processed_item_as_stopped(self, exit_status, run_uids, err_msg):
+    async def _set_processed_item_as_stopped(self, *, exit_status, run_uids, err_msg, err_tb):
         """
         See ``self.set_processed_item_as_stopped()`` method.
         """
@@ -1718,7 +1721,7 @@ class PlanQueueOperations:
             # Stopped item is considered successful, so it is not pushed back to the beginning
             #   of the queue, and it is added to the back of the queue in LOOP mode.
             item_cleaned = await self._set_processed_item_as_completed(
-                exit_status=exit_status, run_uids=run_uids, err_msg=err_msg
+                exit_status=exit_status, run_uids=run_uids, err_msg=err_msg, err_tb=err_tb
             )
         elif await self._is_item_running():
             item = await self._get_running_item_info()
@@ -1732,6 +1735,7 @@ class PlanQueueOperations:
             item_cleaned["result"]["time_start"] = item_time_start
             item_cleaned["result"]["time_stop"] = ttime.time()
             item_cleaned["result"]["msg"] = err_msg
+            item_cleaned["result"]["traceback"] = err_tb
 
             await self._add_to_history(item_cleaned)
             await self._clear_running_item_info()
@@ -1748,7 +1752,7 @@ class PlanQueueOperations:
             item_cleaned = {}
         return item_cleaned
 
-    async def set_processed_item_as_stopped(self, exit_status, run_uids, err_msg):
+    async def set_processed_item_as_stopped(self, *, exit_status, run_uids, err_msg, err_tb):
         """
         A stopped plan is considered successfully completed (if ``exit_status=="stopped"``) or
         failed (otherwise). All items are added to history with respective ``exit_status``.
@@ -1764,7 +1768,9 @@ class PlanQueueOperations:
         run_uids: list(str)
             A list of uids of completed runs.
         err_msg: str
-            Error message and/or traceback in case of failure.
+            Error message in case of failure.
+        err_tb: str
+            Traceback in case of failure.
 
         Returns
         -------
@@ -1775,7 +1781,7 @@ class PlanQueueOperations:
         """
         async with self._lock:
             return await self._set_processed_item_as_stopped(
-                exit_status=exit_status, run_uids=run_uids, err_msg=err_msg
+                exit_status=exit_status, run_uids=run_uids, err_msg=err_msg, err_tb=err_tb
             )
 
     # =============================================================================================

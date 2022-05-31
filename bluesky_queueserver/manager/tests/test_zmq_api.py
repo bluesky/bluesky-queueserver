@@ -1862,8 +1862,14 @@ def test_zmq_api_script_upload_03(re_manager, use_bg_task):  # noqa: F811
 _script_to_upload_4a = """
 # Trivial plan
 def plan_raise_exception():
-    raise Exception("Testing the failing plan")
-    yield from bps.sleep(1)  # Still need 'yield' so that the plan is detected.
+    try:
+        yield from subplan_raise_exception()
+    except Exception as ex:
+        raise Exception("Testing the failing plan") from ex
+
+def subplan_raise_exception():
+    yield from bps.sleep(0.1)  # Still need 'yield' so that the plan is detected.
+    raise Exception("Exception raised in failed subplan")
 """
 
 
@@ -1908,7 +1914,10 @@ def test_zmq_api_script_upload_04(re_manager):  # noqa: F811
     resp5, _ = zmq_single_request("history_get")
     assert resp5["success"] is True, pprint.pformat(resp5)
     item = resp5["items"][0]
-    assert "Testing the failing plan" in item["result"]["msg"]
+    assert "Testing the failing plan" in item["result"]["msg"]  # Only the message
+    assert "Exception raised in failed subplan" not in item["result"]["msg"]
+    assert "Testing the failing plan" in item["result"]["traceback"]  # Full traceback
+    assert "Exception raised in failed subplan" in item["result"]["traceback"]
 
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
@@ -4201,6 +4210,7 @@ def test_zmq_api_re_pause_3(re_manager, continue_option, loop_mode):  # noqa: F8
     result_options = {"re_resume": "completed", "re_stop": "stopped", "re_abort": "aborted", "re_halt": "halted"}
     assert result["exit_status"] == result_options[continue_option]
     assert result["msg"] == ""
+    assert result["traceback"] == ""
     assert isinstance(result["time_start"], float)
     assert isinstance(result["time_stop"], float)
     assert result["time_start"] < result["time_stop"]

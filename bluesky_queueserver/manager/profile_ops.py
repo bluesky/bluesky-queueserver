@@ -1037,7 +1037,7 @@ def _split_name_pattern(name_pattern):
         components = list(zip(components, components_include, components_full_re, components_depth))
 
     else:
-        if not re.search(r"^[_a-zA-Z][_a-zA-Z0-9\.]*[_a-zA-Z0-9]$", name_pattern):
+        if not re.search(r"^[_a-zA-Z]([_a-zA-Z0-9\.]*[_a-zA-Z0-9])?$", name_pattern):
             raise ValueError(
                 f"Name pattern {name_pattern!r} contains invalid characters. "
                 "The pattern could be a valid regular expression, but it is not labeled with ':' (e.g. ':^det$')"

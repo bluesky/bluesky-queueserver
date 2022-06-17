@@ -3408,6 +3408,7 @@ def test_devices_from_nspace():
     ("det1", [("det1", True, False, None)], False, ""),
     ("det1 ", [("det1", True, False, None)], False, ""),  # Spaces are removed
     ("det1.val", [("det1", True, False, None), ("val", True, False, None)], False, ""),
+    ("d", [("d", True, False, None)], False, ""),
     ("sim_stage.det1.val", [("sim_stage", True, False, None), ("det1", True, False, None),
      ("val", True, False, None)], False, ""),
     # Regular expressions

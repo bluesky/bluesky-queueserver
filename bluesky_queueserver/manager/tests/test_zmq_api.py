@@ -636,6 +636,7 @@ def unannotated_plan(p):
     raise Exception(f"Passed object: {p!r} Type={type(p)}")
 """
 
+
 # fmt: off
 @pytest.mark.parametrize("value, err_msg", [
     ("abc", "'abc' Type=<class 'str'>"),
@@ -690,7 +691,6 @@ def test_zmq_api_queue_item_add_06(re_manager, value, err_msg):  # noqa: F811
     resp5, _ = zmq_single_request("environment_close")
     assert resp5["success"] is True
     assert wait_for_condition(time=5, condition=condition_environment_closed)
-
 
 
 def test_zmq_api_queue_item_add_07(re_manager):  # noqa: F811

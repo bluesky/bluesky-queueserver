@@ -643,6 +643,7 @@ def unannotated_plan(p):
     ("a", "'a' Type=<class 'str'>"),
     ("a-b-c", "'a-b-c' Type=<class 'str'>"),
     (":^a.*", "':^a.*' Type=<class 'str'>"),
+    (50, "50 Type=<class 'int'>"),  # An integer
     ("det", "Type=<class 'ophyd.sim.SynGauss'>"),  # Existing detector
     ("motor", "Type=<class 'ophyd.sim.SynAxis'>"),  # Existing motor
     ("count", "Type=<class 'function'>"),  # Existing motor

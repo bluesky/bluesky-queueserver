@@ -1037,7 +1037,7 @@ def _split_name_pattern(name_pattern):
         components = list(zip(components, components_include, components_full_re, components_depth))
 
     else:
-        if not re.search(r"^[_a-zA-Z][_a-zA-Z0-9\.]*[_a-zA-Z0-9]$", name_pattern):
+        if not re.search(r"^[_a-zA-Z]([_a-zA-Z0-9\.]*[_a-zA-Z0-9])?$", name_pattern):
             raise ValueError(
                 f"Name pattern {name_pattern!r} contains invalid characters. "
                 "The pattern could be a valid regular expression, but it is not labeled with ':' (e.g. ':^det$')"
@@ -1076,33 +1076,41 @@ def _is_object_name_in_list(object_name, *, allowed_objects):
     Returns
     -------
     bool
-        ``True`` if device was found in the list, ``False`` otherwise.
+        ``True`` if device was found in the list, ``False`` if the device is not in the list or
+        the ``object_name`` is not a valid name for the object.
     """
 
-    components, uses_re, _ = _split_name_pattern(object_name)
-    if uses_re:
-        raise ValueError(f"Device name {object_name!r} can not contain regular expressions")
-
-    components = [_[0] for _ in components]  # We use only the 1st element
-
-    if not components:
-        raise ValueError(f"Device name {object_name!r} contains no components")
-
-    root = None
-    if components[0] in allowed_objects:
-        root = allowed_objects[components[0]]
-        object_in_list = not root.get("excluded", False)
-    else:
+    try:
+        components, uses_re, _ = _split_name_pattern(object_name)
+        object_in_list = True
+    except (TypeError, ValueError):
         object_in_list = False
 
-    if root:
-        for c in components[1:]:
-            if ("components" in root) and (c in root["components"]):
-                root = root["components"][c]
-                object_in_list = not root.get("excluded", False)
-            else:
-                object_in_list = False
-                break
+    if object_in_list and uses_re:
+        object_in_list = False
+
+    if object_in_list:
+        components = [_[0] for _ in components]  # We use only the 1st element
+        if not components:
+            object_in_list = False
+
+    # The object name is valid, so search for the object in the list
+    if object_in_list:
+        root = None
+        if components[0] in allowed_objects:
+            root = allowed_objects[components[0]]
+            object_in_list = not root.get("excluded", False)
+        else:
+            object_in_list = False
+
+        if root:
+            for c in components[1:]:
+                if ("components" in root) and (c in root["components"]):
+                    root = root["components"][c]
+                    object_in_list = not root.get("excluded", False)
+                else:
+                    object_in_list = False
+                    break
 
     return object_in_list
 

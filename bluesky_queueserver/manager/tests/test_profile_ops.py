@@ -3408,6 +3408,7 @@ def test_devices_from_nspace():
     ("det1", [("det1", True, False, None)], False, ""),
     ("det1 ", [("det1", True, False, None)], False, ""),  # Spaces are removed
     ("det1.val", [("det1", True, False, None), ("val", True, False, None)], False, ""),
+    ("d", [("d", True, False, None)], False, ""),
     ("sim_stage.det1.val", [("sim_stage", True, False, None), ("det1", True, False, None),
      ("val", True, False, None)], False, ""),
     # Regular expressions
@@ -3524,30 +3525,27 @@ _allowed_devices_dict_1 = {
 
 
 # fmt: off
-@pytest.mark.parametrize("device_name, in_list, success, error_type, msg", [
-    ("da0_motor", True, True, None, ""),
-    ("not_exist", False, True, None, ""),
-    ("da0_motor.db0_motor", True, True, None, ""),
-    ("da0_motor.db0_motor.dc3_motor.dd1_motor", True, True, None, ""),
-    ("da0_motor.not_exist.dc3_motor.dd1_motor", False, True, None, ""),
-    ("da0_motor.db0_motor.not_exist.dd1_motor", False, True, None, ""),
-    ("da0_motor.db0_motor.dc3_motor.not_exist", False, True, None, ""),
-    ("da2_det", False, True, None, ""),  # excluded
-    ("da0_motor.db0_motor.dc4_motor", False, True, None, ""),  # excluded
-    (":da0_motor", True, False, ValueError,
-     "Device name ':da0_motor' can not contain regular expressions"),
+@pytest.mark.parametrize("device_name, in_list", [
+    ("da0_motor", True),
+    ("not_exist", False),
+    ("da0_motor.db0_motor", True),
+    ("da0_motor.db0_motor.dc3_motor.dd1_motor", True),
+    ("da0_motor.not_exist.dc3_motor.dd1_motor", False),
+    ("da0_motor.db0_motor.not_exist.dd1_motor", False),
+    ("da0_motor.db0_motor.dc3_motor.not_exist", False),
+    ("da2_det", False),  # excluded
+    ("da0_motor.db0_motor.dc4_motor", False),  # excluded
+    (":da0_motor", False),  # Regular expression
+    (50, False),  # Incorrect type
+    ("invalid-name", False),  # Name contains invalid characters
 ])
 # fmt: on
-def test_is_object_name_in_list_1(device_name, in_list, success, error_type, msg):
+def test_is_object_name_in_list_1(device_name, in_list):
     """
     ``_is_object_name_in_list``: basic test (test on devices, but expected to work on plans)
     """
-    if success:
-        res = _is_object_name_in_list(device_name, allowed_objects=_allowed_devices_dict_1)
-        assert res == in_list
-    else:
-        with pytest.raises(error_type, match=msg):
-            _is_object_name_in_list(device_name, allowed_objects=_allowed_devices_dict_1)
+    res = _is_object_name_in_list(device_name, allowed_objects=_allowed_devices_dict_1)
+    assert res == in_list
 
 
 # fmt: off
@@ -4396,6 +4394,12 @@ def _gen_environment_pp2():
          [("one", "two")], {}, {}, False, "value is not a valid enumeration member"),
 
         # Plan has no custom annotation. All strings must be converted to objects whenever possible.
+        ("plan1", {"user_group": "admin", "args": ["a", ":a*", "a-b-c"]}, [],
+         ["a", ":a*", "a-b-c"], {}, {}, True, ""),
+        ("plan7", {"user_group": "admin", "args": ["_pp_dev3", "_pp_dev3"]}, [],
+         [_pp_dev3, "_pp_dev3"], {}, {}, True, ""),
+        ("plan7", {"user_group": "admin", "args": [":_pp_dev3", "_pp_dev3"]}, [],
+         [":_pp_dev3", "_pp_dev3"], {}, {}, True, ""),
         ("plan7", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3"], "_pp_dev2"]}, [],
          [[_pp_dev1, _pp_dev3], "_pp_dev2"], {}, {}, True, ""),
         ("plan7", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3", "some_str"], "_pp_dev2"]}, [],

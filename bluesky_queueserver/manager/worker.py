@@ -299,14 +299,18 @@ class RunEngineWorker(Process):
             # 'is_resuming' is true (we start a new plan that is supposedly runs to completion
             #   as opposed to aborting/stopping/halting a plan)
         except Exception as ex:
+            logger.exception(ex)
+
             # We want the exception to be raised in the main thread (plan execution)
-            def get_plan(err_msg):
+            def get_plan(ex):
                 def plan():
-                    raise Exception(err_msg)
+                    raise RuntimeError(
+                        "Error occurred while processing plan parameters or starting the plan"
+                    ) from ex
 
-                return plan()
+                return plan
 
-            plan = get_plan(str(ex))
+            plan = get_plan(ex)
 
         self._execution_queue.put((plan, PlanExecOption.NEW))
 

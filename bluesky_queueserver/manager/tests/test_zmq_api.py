@@ -343,7 +343,7 @@ def test_zmq_api_environment_open_close_3(re_manager):  # noqa F811
 #                             Method 'queue_item_add'
 
 
-def test_zmq_api_queue_item_add_1(re_manager):  # noqa F811
+def test_zmq_api_queue_item_add_01(re_manager):  # noqa F811
     """
     Basic test for `queue_item_add` method.
     """
@@ -388,7 +388,7 @@ def test_zmq_api_queue_item_add_1(re_manager):  # noqa F811
     (-100, 0, True),
 ])
 # fmt: on
-def test_zmq_api_queue_item_add_2(re_manager, pos, pos_result, success):  # noqa F811
+def test_zmq_api_queue_item_add_02(re_manager, pos, pos_result, success):  # noqa F811
 
     plan1 = {"name": "count", "args": [["det1"]], "item_type": "plan"}
     plan2 = {"name": "count", "args": [["det1", "det2"]], "item_type": "plan"}
@@ -426,7 +426,7 @@ def test_zmq_api_queue_item_add_2(re_manager, pos, pos_result, success):  # noqa
         assert resp2["items"][pos_result]["args"] == plan2["args"]
 
 
-def test_zmq_api_queue_item_add_3(re_manager):  # noqa F811
+def test_zmq_api_queue_item_add_03(re_manager):  # noqa F811
     plan1 = {"name": "count", "args": [["det1"]], "item_type": "plan"}
     plan2 = {"name": "count", "args": [["det1", "det2"]], "item_type": "plan"}
     plan3 = {"name": "count", "args": [["det2"]], "item_type": "plan"}
@@ -480,7 +480,7 @@ def test_zmq_api_queue_item_add_3(re_manager):  # noqa F811
     assert "Ambiguous parameters" in resp2["msg"]
 
 
-def test_zmq_api_queue_item_add_4(re_manager):  # noqa F811
+def test_zmq_api_queue_item_add_04(re_manager):  # noqa F811
     """
     Try inserting plans before and after the running plan
     """
@@ -589,7 +589,7 @@ def test_zmq_api_queue_item_add_4(re_manager):  # noqa F811
      _test_user_group, False, False, "Failed to add an item: Plan validation failed"),
 ])
 # fmt: on
-def test_zmq_api_queue_item_add_5(re_manager, plan_to_add, ugroup, success_submit, success_run, msg):  # noqa F811
+def test_zmq_api_queue_item_add_05(re_manager, plan_to_add, ugroup, success_submit, success_run, msg):  # noqa F811
     """
     Check if subdevice names could be passed to plans
     """
@@ -616,9 +616,7 @@ def test_zmq_api_queue_item_add_5(re_manager, plan_to_add, ugroup, success_submi
         resp2, _ = zmq_single_request("queue_start")
         assert resp2["success"] is True
 
-        assert wait_for_condition(
-            time=10, condition=condition_manager_idle
-        ), "Timeout while waiting for environment to be opened"
+        assert wait_for_condition(time=10, condition=condition_manager_idle)
 
         state = get_queue_state()
         assert state["items_in_queue"] == (0 if success_run else 1)
@@ -630,7 +628,72 @@ def test_zmq_api_queue_item_add_5(re_manager, plan_to_add, ugroup, success_submi
         assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_queue_item_add_6(re_manager):  # noqa: F811
+_script_queue_item_add_06_a = """
+def unannotated_plan(p):
+    # This plan always fails. Error message should return printed object that was passed
+    #   to the plan for execution.
+    yield from bps.sleep(0.01)
+    raise Exception(f"Passed object: {p!r} Type={type(p)}")
+"""
+
+# fmt: off
+@pytest.mark.parametrize("value, err_msg", [
+    ("abc", "'abc' Type=<class 'str'>"),
+    ("a", "'a' Type=<class 'str'>"),
+    ("a-b-c", "'a-b-c' Type=<class 'str'>"),
+    (":^a.*", "':^a.*' Type=<class 'str'>"),
+    ("det", "Type=<class 'ophyd.sim.SynGauss'>"),  # Existing detector
+    ("motor", "Type=<class 'ophyd.sim.SynAxis'>"),  # Existing motor
+    ("count", "Type=<class 'function'>"),  # Existing motor
+])
+# fmt: on
+def test_zmq_api_queue_item_add_06(re_manager, value, err_msg):  # noqa: F811
+    """
+    Check that arbitrary strings may be passed as unannotated parameter. The existing plans
+    and devices are converted to objects
+    """
+
+    # Open the environment
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp2, _ = zmq_single_request("script_upload", params={"script": _script_queue_item_add_06_a})
+    assert resp2["success"] is True
+    assert wait_for_condition(time=3, condition=condition_manager_idle)
+
+    plan_to_add = {"item_type": "plan", "name": "unannotated_plan", "args": [value]}
+    params = {"item": plan_to_add, "user": _user, "user_group": _user_group}
+    resp3, _ = zmq_single_request("queue_item_add", params=params)
+    assert resp3["success"] is True, resp3
+
+    state = get_queue_state()
+    assert state["items_in_queue"] == 1
+    assert state["items_in_history"] == 0
+
+    resp4, _ = zmq_single_request("queue_start")
+    assert resp4["success"] is True
+    assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+    state = get_queue_state()
+    assert state["items_in_queue"] == 1
+    assert state["items_in_history"] == 1
+
+    resp5, _ = zmq_single_request("history_get")
+    history = resp5["items"]
+    last_plan = history[-1]
+
+    assert last_plan["result"]["exit_status"] == "failed", pprint.pformat(last_plan)
+    assert err_msg in last_plan["result"]["msg"], pprint.pformat(last_plan)
+
+    # Close the environment
+    resp5, _ = zmq_single_request("environment_close")
+    assert resp5["success"] is True
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+
+def test_zmq_api_queue_item_add_07(re_manager):  # noqa: F811
     """
     Make sure that the new plan UID is generated when the plan is added
     """
@@ -646,7 +709,7 @@ def test_zmq_api_queue_item_add_6(re_manager):  # noqa: F811
     assert resp1["item"]["item_uid"] != plan1["item_uid"]
 
 
-def test_zmq_api_queue_item_add_7(re_manager):  # noqa: F811
+def test_zmq_api_queue_item_add_08(re_manager):  # noqa: F811
     """
     Add instruction ('queue_stop') to the queue.
     """
@@ -682,7 +745,7 @@ def test_zmq_api_queue_item_add_7(re_manager):  # noqa: F811
     ([{"test_key": 10}, {"test_key": 20}], {"test_key": 10}),
 ])
 # fmt: on
-def test_zmq_api_queue_item_add_8(db_catalog, re_manager_cmd, meta_param, meta_saved):  # noqa: F811
+def test_zmq_api_queue_item_add_09(db_catalog, re_manager_cmd, meta_param, meta_saved):  # noqa: F811
     """
     Add plan with metadata.
     """
@@ -731,7 +794,7 @@ def test_zmq_api_queue_item_add_8(db_catalog, re_manager_cmd, meta_param, meta_s
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_queue_item_add_9_fail(re_manager):  # noqa F811
+def test_zmq_api_queue_item_add_10_fail(re_manager):  # noqa F811
 
     # Unknown plan name
     plan1 = {"name": "count_test", "args": [["det1", "det2"]], "item_type": "plan"}

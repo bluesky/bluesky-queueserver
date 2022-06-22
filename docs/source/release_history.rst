@@ -2,6 +2,75 @@
 Release History
 ===============
 
+v0.0.15 (2022-06-22)
+====================
+
+Added
+-----
+
+- Plan results (in plan history) now include error message (`msg` key), which contains error message or
+  full traceback in case of failing plan.
+
+- Support for `environment_destroy` API in `creating_environment` RE Manager state. Now the requests
+  to destroy environment are accepted when `status["worker_environment_exists"] is True` or
+  `status["manager_state"] == "creating_environment"`.
+
+- API functions `generate_zmq_keys`, `generate_zmq_public_key`, `validate_zmq_key` can now be imported
+  directly from `bluesky_queueserver`
+
+- Patching of IPython-style startup scripts: `__file__` variable now returns the path to the original unpatched script.
+
+Fixed
+-----
+
+- Capturing console output with updating progress bars (Python 3.8, 3.9).
+
+- A bug in the code for management of exceptions that occur during preparation of plans for execution.
+
+- A bug that prevented single character device/plan names to be properly handled by the code that
+  converts device/plan names to the respective objects.
+
+Changed
+-------
+
+- The plan `exit_status` (in plan history) now takes values `completed`, `failed`, `stopped`, `aborted`,
+  `halted`, `unknown`.
+
+- The `stopped` plans (`re_stop` API) are considered successful and no longer pushed back in the queue.
+  The `stopped` plans are inserted in the back of the queue in LOOP mode.
+
+- Standard names for parameters for CLI tools: `--zmq-control-addr` is used to pass address of RE Manager
+  control socket and `--zmq-info-addr` is used to pass the address of RE Manager information socket
+  (currently used for publishing console output). Old parameter names are deprecated, but still supported.
+
+- Standard names for environment variables: `QSERVER_ZMQ_CONTROL_ADDRESS_FOR_SERVER`,
+  `QSERVER_ZMQ_CONTROL_ADDRESS`, `QSERVER_ZMQ_INFO_ADDRESS_FOR_SERVER`, `QSERVER_ZMQ_INFO_ADDRESS`
+  are used to pass control and information socket address to the server (`start-re-manager`) and clients
+  (`qserver`, `qserver-console-monitor`). An address passed as a parameter overrides the address passed as
+  environment variable. Old environment variable names are deprecated, but still supported.
+
+- Changed name of the environment variable used to pass the private encryption key to `start-re-manager`
+  to `QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER`. (`QSERVER_ZMQ_PRIVATE_KEY` is still supported, but deprecated.)
+  Public key is still passed to `qserver` using `QSERVER_ZMQ_PUBLIC_KEY`.
+
+- The components of Area Detectors are no longer included in the list of available devices.
+
+- Improved handling of IPython-style startup scripts.
+
+- Minor change in representation of plan execution results in items of the plan history.
+  If plan execution fails, the `msg` parameter contains a brief message that identify the error
+  (may not be helpful) and `traceback` parameter contains full traceback. The parameters are empty strings
+  in case the plan succeeds.
+
+- Similar change to representation of task execution results returned by `task_result` API. Now `return_value`
+  is `None` in case the task fails and `msg` and `traceback` contain brief error message and traceback
+  of the raised exception.
+
+- Improved default handling of strings in the parameter processing code. Now any string (any combination
+  of characters) can be passed with a parameter, which does not have type annotation. The strings that
+  match one of the allowed device or plan names are going to be converted to the respective objects.
+
+
 v0.0.14 (2022-04-08)
 ====================
 

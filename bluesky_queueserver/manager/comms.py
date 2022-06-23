@@ -399,6 +399,7 @@ class PipeJsonRpcSendAsync:
                 else:
                     # Accept the message. Otherwise wait for timeout
                     self._fut_comm.set_result(response)
+                    self._expected_msg_id = None
             else:
                 # Missing ID: ignore the message
                 logger.error("Received response with missing message ID: %s", pprint.pformat(response))

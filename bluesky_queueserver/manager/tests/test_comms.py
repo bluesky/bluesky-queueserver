@@ -1,6 +1,7 @@
 import pytest
 import time as ttime
 import json
+import logging
 import multiprocessing
 import threading
 import asyncio
@@ -9,6 +10,7 @@ import zmq
 from bluesky_queueserver.manager.comms import (
     PipeJsonRpcReceive,
     PipeJsonRpcSendAsync,
+    JSONRPCResponseManager,
     CommTimeoutError,
     CommJsonRpcError,
     ZMQCommSendThreads,
@@ -576,7 +578,7 @@ def test_PipeJsonRpcSendAsync_4():
 
 def test_PipeJsonRpcSendAsync_5():
     """
-    Specia test case.
+    Special test case.
     Two messages: the first message times out, the second message is send before the response
     from the first message is received. Verify that the result returned in response to the
     second message is received. (We discard the result of the message that is timed out.)
@@ -614,7 +616,58 @@ def test_PipeJsonRpcSendAsync_5():
     pc.stop()
 
 
-def test_PipeJsonRpcSendAsync_6_fail():
+class _PipeJsonRpcReceiveTest(PipeJsonRpcReceive):
+    """
+    Object that responds to a single request with multiple duplicates of the message.
+    The test emulates possible issues with the process receiving messages.
+    """
+
+    def _conn_received(self, msg):
+        response = JSONRPCResponseManager.handle(msg, self._dispatcher)
+        if response:
+            response = response.json
+            self._conn.send(response)  # Send the response 3 times !!!
+            self._conn.send(response)
+            self._conn.send(response)
+
+
+def test_PipeJsonRpcSendAsync_6(caplog):
+    """
+    Special test case.
+    The receiving process responds with multiple replies (3) to a single request. Check that
+    only one (the first) message is processed and the following messages are ignored.
+    """
+
+    caplog.set_level(logging.INFO)
+
+    def method_handler1():
+        return 39
+
+    conn1, conn2 = multiprocessing.Pipe()
+    pc = _PipeJsonRpcReceiveTest(conn=conn2, name="comm-server")
+    pc.add_method(method_handler1, "method1")
+    pc.start()
+
+    async def send_messages():
+        p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client")
+        p_send.start()
+
+        result = await p_send.send_msg("method1", timeout=0.5)
+        assert result == 39, "Incorrect result received"
+
+        await asyncio.sleep(1)  # Wait until additional messages are sent and received
+
+        p_send.stop()
+
+    asyncio.run(send_messages())
+    pc.stop()
+
+    txt = "Unsolicited message received"
+    assert txt in caplog.text
+    assert caplog.text.count(txt) == 2, caplog.text
+
+
+def test_PipeJsonRpcSendAsync_7_fail():
     """
     Exception raised inside the method.
     """
@@ -642,7 +695,7 @@ def test_PipeJsonRpcSendAsync_6_fail():
     pc.stop()
 
 
-def test_PipeJsonRpcSendAsync_7_fail():
+def test_PipeJsonRpcSendAsync_8_fail():
     """
     Method not found (other `json-rpc` errors will raise the same exception).
     """

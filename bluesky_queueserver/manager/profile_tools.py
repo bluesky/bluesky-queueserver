@@ -281,7 +281,7 @@ def load_devices_from_happi(device_names, *, namespace, **kwargs):
                 # `r.metadata` contains expanded metadata (it is probably not used, but it
                 #   is a good idea to change it as well for consistency. We don't touch `_id`.
                 # The modified data is not expected to be saved to the database.
-                setattr(r._device, "name", name_ns)
+                setattr(r._item, "name", name_ns)
                 r.metadata["name"] = name_ns
             # Instantiate the object
             results.append(r)

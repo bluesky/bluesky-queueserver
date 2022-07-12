@@ -147,6 +147,8 @@ Example of JSON specification of a function ("args" and "kwargs" are optional):
 qserver script upload <path-to-file>              # Upload a script to RE Worker environment
 qserver script upload <path-to-file> background   # ... in the background
 qserver script upload <path-to-file> update-re    # ... allow 'RE' and 'db' to be updated
+qserver script upload <path-to-file> keep-lists   # ... leave lists of allowed and existing plans and devices
+                                                  #   unchanged (saves processing time)
 
 qserver task result <task-uid>  # Load status or result of a task with the given UID
 qserver task status <task-uid>  # Check status of a task with the given UID
@@ -874,7 +876,8 @@ def create_msg(params):
 
             run_in_background = False
             update_re = False
-            allowed_values = ("background", "update-re")
+            update_lists = True
+            allowed_values = ("background", "update-re", "keep-lists")
 
             for p in params[2:]:
                 if p not in allowed_values:
@@ -885,9 +888,16 @@ def create_msg(params):
                     run_in_background = True
                 elif p == "update-re":
                     update_re = True
+                elif p == "keep-lists":
+                    update_lists = False
 
             method = f"{command}_{params[0]}"
-            prms = {"script": script, "run_in_background": run_in_background, "update_re": update_re}
+            prms = {
+                "script": script,
+                "run_in_background": run_in_background,
+                "update_re": update_re,
+                "update_lists": update_lists,
+            }
 
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")

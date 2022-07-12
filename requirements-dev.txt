@@ -4,7 +4,7 @@ black
 codecov
 coverage
 flake8
-happi
+happi>=1.14.0
 pytest
 pytest-xprocess
 sphinx

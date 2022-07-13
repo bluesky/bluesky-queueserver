@@ -860,7 +860,7 @@ class RunEngineManager(Process):
 
         return success, err_msg
 
-    async def _environment_upload_script(self, *, script, update_re, run_in_background):
+    async def _environment_upload_script(self, *, script, update_lists, update_re, run_in_background):
         """
         Upload Python script to RE Worker environment. The script is then executed into
         the worker namespace. The API call only inititiates the process of loading the
@@ -881,7 +881,10 @@ class RunEngineManager(Process):
                 if not run_in_background:
                     self._manager_state = MState.EXECUTING_TASK
                 success, err_msg, task_uid = await self._worker_command_load_script(
-                    script=script, update_re=update_re, run_in_background=run_in_background
+                    script=script,
+                    update_lists=update_lists,
+                    update_re=update_re,
+                    run_in_background=run_in_background,
                 )
                 if not run_in_background:
                     self._running_task_uid = task_uid
@@ -1140,11 +1143,16 @@ class RunEngineManager(Process):
             success, err_msg = None, "Timeout occurred"
         return success, err_msg
 
-    async def _worker_command_load_script(self, *, script, update_re, run_in_background):
+    async def _worker_command_load_script(self, *, script, update_lists, update_re, run_in_background):
         try:
             response = await self._comm_to_worker.send_msg(
                 "command_load_script",
-                params={"script": script, "update_re": update_re, "run_in_background": run_in_background},
+                params={
+                    "script": script,
+                    "update_lists": update_lists,
+                    "update_re": update_re,
+                    "run_in_background": run_in_background,
+                },
             )
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
@@ -2269,18 +2277,20 @@ class RunEngineManager(Process):
 
     async def _script_upload_handler(self, request):
         """
-        Upload script to RE worker environment. If ``update_re==False`` (default), the Run Engine (``RE``)
-        and Data Broker (``db``) objects are not updated in RE worker namespace even if they are
-        defined (or redefined) in the uploaded script. If ``run_in_background==False`` (default), then
-        the request is rejected unless RE Manager and RE Worker environment are in IDLE state, otherwise
-        the script will be loaded in a separate thread (not recommended in most practical cases).
+        Upload script to RE worker environment. If ``update_lists==True`` (default), then lists
+        of existing and available plans and devices are updated after the execution of the script.
+        If ``update_re==False`` (default), the Run Engine (``RE``) and Data Broker (``db``) objects
+        are not updated in RE worker namespace even if they are defined (or redefined) in the uploaded script.
+        If ``run_in_background==False`` (default), then the request is rejected unless RE Manager and
+        RE Worker environment are in IDLE state, otherwise the script will be loaded in a separate thread
+        (not recommended in most practical cases).
 
         The API call only inititiates the process of loading the script and return success if the request
         is accepted and the task can be started. Success does not mean that the script is successfully loaded.
         """
         logger.info("Uploading script to RE environment ...")
         try:
-            supported_param_names = ["script", "update_re", "run_in_background"]
+            supported_param_names = ["script", "update_lists", "update_re", "run_in_background"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
             script = request.get("script", None)
@@ -2289,11 +2299,12 @@ class RunEngineManager(Process):
             if not isinstance(script, str):
                 raise TypeError("Type of the 'script' parameter in API call is incorrect.")
 
+            update_lists = request.get("update_lists", True)
             update_re = request.get("update_re", False)
             run_in_background = request.get("run_in_background", False)
 
             success, msg, task_uid = await self._environment_upload_script(
-                script=script, update_re=update_re, run_in_background=run_in_background
+                script=script, update_lists=update_lists, update_re=update_re, run_in_background=run_in_background
             )
 
         except Exception as ex:

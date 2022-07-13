@@ -1112,8 +1112,9 @@ def count_modified(detectors, num=1, delay=None):
 # fmt: off
 @pytest.mark.parametrize("run_in_background", [False, True])
 @pytest.mark.parametrize("update_re", [False, True])
+@pytest.mark.parametrize("update_lists", [False, True])
 # fmt: on
-def test_script_upload_1(re_manager, tmp_path, run_in_background, update_re):  # noqa: F811
+def test_script_upload_1(re_manager, tmp_path, run_in_background, update_lists, update_re):  # noqa: F811
     """
     Tests for 'qserver script upload'. The uploaded script does not change RE, so the tests
     simply checks if 'update-re' parameter is accepted.
@@ -1129,6 +1130,8 @@ def test_script_upload_1(re_manager, tmp_path, run_in_background, update_re):  #
         params.append("background")
     if update_re:
         params.append("update-re")
+    if not update_lists:
+        params.append("keep-lists")
 
     # Call is expected to fail (environment is not open)
     assert subprocess.call(params) == REQ_FAILED
@@ -1155,7 +1158,10 @@ def test_script_upload_1(re_manager, tmp_path, run_in_background, update_re):  #
     # Check that 'count_modified' function was loaded into the environment
     resp2, _ = zmq_single_request("plans_existing")
     assert resp2["success"] is True
-    assert "count_modified" in resp2["plans_existing"]
+    if update_lists:
+        assert "count_modified" in resp2["plans_existing"]
+    else:
+        assert "count_modified" not in resp2["plans_existing"]
 
     assert subprocess.call(["qserver", "environment", "close"]) == SUCCESS
     assert wait_for_condition(time=5, condition=condition_environment_closed)

@@ -1632,8 +1632,9 @@ def sleep_for_a_few_sec(tt=1):
 
 # fmt: off
 @pytest.mark.parametrize("run_in_background", [None, False, True])
+@pytest.mark.parametrize("update_lists", [None, False, True])
 # fmt: on
-def test_zmq_api_script_upload_01(re_manager, run_in_background):  # noqa: F811
+def test_zmq_api_script_upload_01(re_manager, update_lists, run_in_background):  # noqa: F811
     """
     Basic test for ``script_upload`` API: detailed checks of all flag at each transition.
     """
@@ -1658,6 +1659,11 @@ def test_zmq_api_script_upload_01(re_manager, run_in_background):  # noqa: F811
         params.update({"run_in_background": run_in_background})
     else:
         run_in_background = False
+    if update_lists is not None:
+        params.update({"update_lists": update_lists})
+    else:
+        update_lists = True
+
     print(f"Parameters for 'script_upload': {params}")
 
     resp2, _ = zmq_single_request("script_upload", params=params)
@@ -1694,15 +1700,21 @@ def test_zmq_api_script_upload_01(re_manager, run_in_background):  # noqa: F811
 
     status, _ = zmq_single_request("status")
     assert status["task_results_uid"] != task_results_uid
-    assert status["plans_allowed_uid"] != plans_allowed_uid
-    assert status["devices_allowed_uid"] != devices_allowed_uid
-    assert status["plans_existing_uid"] != plans_existing_uid
-    assert status["devices_existing_uid"] != devices_existing_uid
     assert status["manager_state"] == "idle"
     assert status["worker_environment_state"] == "idle"
     assert status["items_in_queue"] == 0
     assert status["items_in_history"] == 0
     assert status["worker_background_tasks"] == 0
+    if update_lists:
+        assert status["plans_allowed_uid"] != plans_allowed_uid
+        assert status["devices_allowed_uid"] != devices_allowed_uid
+        assert status["plans_existing_uid"] != plans_existing_uid
+        assert status["devices_existing_uid"] != devices_existing_uid
+    else:
+        assert status["plans_allowed_uid"] == plans_allowed_uid
+        assert status["devices_allowed_uid"] == devices_allowed_uid
+        assert status["plans_existing_uid"] == plans_existing_uid
+        assert status["devices_existing_uid"] == devices_existing_uid
 
     resp4, _ = zmq_single_request("task_result", params={"task_uid": task_uid})
     assert resp4["success"] is True
@@ -1719,37 +1731,46 @@ def test_zmq_api_script_upload_01(re_manager, run_in_background):  # noqa: F811
     assert result["traceback"] == ""
     assert result["return_value"] is None
 
+    def check_item_in_list(name, obj_list, in_list):
+        if in_list:
+            assert name in obj_list
+        else:
+            assert name not in obj_list
+
     # Check that the new plan and the new device are in the new list of available plans and devices
     resp5a, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
     assert resp5a["success"] is True, resp5a
-    assert "sleep_for_a_few_sec" in resp5a["plans_allowed"]
+    check_item_in_list("sleep_for_a_few_sec", resp5a["plans_allowed"], update_lists)
 
     resp5b, _ = zmq_single_request("devices_allowed", params={"user_group": _user_group})
     assert resp5b["success"] is True, resp5b
-    assert "dev_test" in resp5b["devices_allowed"]
+    check_item_in_list("dev_test", resp5b["devices_allowed"], update_lists)
 
     resp5c, _ = zmq_single_request("plans_existing")
     assert resp5c["success"] is True, resp5c
-    assert "sleep_for_a_few_sec" in resp5c["plans_existing"]
+    check_item_in_list("sleep_for_a_few_sec", resp5c["plans_existing"], update_lists)
 
     resp5d, _ = zmq_single_request("devices_existing")
     assert resp5d["success"] is True, resp5d
-    assert "dev_test" in resp5d["devices_existing"]
+    check_item_in_list("dev_test", resp5d["devices_existing"], update_lists)
 
     # Add plan to queue
     _p6 = {"name": "sleep_for_a_few_sec", "kwargs": {"tt": 1.5}, "item_type": "plan"}
     params6 = {"item": _p6, "user": _user, "user_group": _user_group}
     resp6, _ = zmq_single_request("queue_item_add", params6)
-    assert resp6["success"] is True, f"resp={resp6}"
+    if update_lists:
+        assert resp6["success"] is True, f"resp={resp6}"
 
-    resp7, _ = zmq_single_request("queue_start")
-    assert resp7["success"] is True
+        resp7, _ = zmq_single_request("queue_start")
+        assert resp7["success"] is True
 
-    assert wait_for_condition(time=5, condition=condition_manager_idle)
+        assert wait_for_condition(time=5, condition=condition_manager_idle)
 
-    status, _ = zmq_single_request("status")
-    assert status["items_in_queue"] == 0
-    assert status["items_in_history"] == 1
+        status, _ = zmq_single_request("status")
+        assert status["items_in_queue"] == 0
+        assert status["items_in_history"] == 1
+    else:
+        assert resp6["success"] is False, f"resp={resp6}"
 
     # Close the environment
     resp6, _ = zmq_single_request("environment_close")
@@ -2007,7 +2028,10 @@ func1()
 """
 
 
-def test_zmq_api_script_upload_05(re_manager):  # noqa: F811
+# fmt: off
+@pytest.mark.parametrize("update_lists", [True, False])
+# fmt: on
+def test_zmq_api_script_upload_05(re_manager, update_lists):  # noqa: F811
     """
     Test ``script_upload`` API: upload the script that fails to execute. Verify that
     ``msg`` and ``traceback`` contain correct information.
@@ -2016,7 +2040,13 @@ def test_zmq_api_script_upload_05(re_manager):  # noqa: F811
     assert resp1["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-    resp2, _ = zmq_single_request("script_upload", params={"script": _script_to_upload_5a})
+    params = {"script": _script_to_upload_5a}
+    if update_lists is not None:
+        params.update({"update_lists": update_lists})
+    else:
+        update_lists = True
+
+    resp2, _ = zmq_single_request("script_upload", params=params)
     assert resp2["success"] is True, pprint.pformat(resp2)
     task_uid = resp2["task_uid"]
 
@@ -2185,11 +2215,14 @@ db_backup = db
 
 
 # fmt: off
+@pytest.mark.parametrize("update_lists", [True, False])
 @pytest.mark.parametrize("update_re_param", [False, True])
 @pytest.mark.parametrize("replace_re", [False, True])
 @pytest.mark.parametrize("replace_db", [False, True])
 # fmt: on
-def test_zmq_api_script_upload_08(re_manager_cmd, update_re_param, replace_re, replace_db):  # noqa: F811
+def test_zmq_api_script_upload_08(
+    re_manager_cmd, update_lists, update_re_param, replace_re, replace_db  # noqa: F811
+):
     """
     'script_upload' API: Test that instances 'RE' and 'db' could be replaced in
     the RE Worker namespace. The test does not check if references kept internally by RE Worker
@@ -2203,8 +2236,14 @@ def test_zmq_api_script_upload_08(re_manager_cmd, update_re_param, replace_re, r
     assert resp1["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
+    params = {"script": _script_save_instances_re_db}
+    if update_lists is not None:
+        params.update({"update_lists": update_lists})
+    else:
+        update_lists = True
+
     # Upload script that saves instances of 'RE' and 'db' in the namespace
-    resp2, _ = zmq_single_request("script_upload", params={"script": _script_save_instances_re_db})
+    resp2, _ = zmq_single_request("script_upload", params=params)
     result = wait_for_task_result(10, resp2["task_uid"])
     assert result["success"] is True, pprint.pformat(result)
 

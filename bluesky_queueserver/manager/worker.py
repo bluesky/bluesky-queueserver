@@ -821,6 +821,57 @@ class RunEngineWorker(Process):
             except queue.Empty:
                 pass
 
+    def _thread_func_wrapper(
+        self, *, name, task_uid, time_start, target, target_args, target_kwargs, run_in_background
+    ):
+        def thread_func():
+            # This is the function executed in a separate thread
+            try:
+                if self._RE:
+                    asyncio.set_event_loop(self._RE.loop)
+
+                return_value = target(*target_args, **target_kwargs)
+
+                # Attempt to serialize the result to JSON. The result can not be sent to the client
+                #   if it can not be serialized, so it is better for the function to fail here so that
+                #   proper error message could be sent to the client.
+                try:
+                    json.dumps(return_value)  # The result of the conversion is intentionally discarded
+                except Exception as ex_json:
+                    raise ValueError(f"Task result can not be serialized as JSON: {ex_json}") from ex_json
+
+                success, err_msg, err_tb = True, "", ""
+            except Exception as ex:
+                s = f"Error occurred while executing {name!r}"
+                err_msg = f"{s}: {str(ex)}"
+                if hasattr(ex, "tb"):  # ScriptLoadingError
+                    err_tb = str(ex.tb)
+                else:
+                    err_tb = traceback.format_exc()
+                logger.error("%s:\n%s\n", err_msg, err_tb)
+
+                return_value, success = None, False
+            finally:
+                if not run_in_background:
+                    self._env_state = EState.IDLE
+                    self._running_task_uid = None
+                else:
+                    self._background_tasks_num = max(self._background_tasks_num - 1, 0)
+
+            with self._completed_tasks_lock:
+                task_res = {
+                    "task_uid": task_uid,
+                    "success": success,
+                    "msg": err_msg,
+                    "traceback": err_tb,
+                    "return_value": return_value,
+                    "time_start": time_start,
+                    "time_stop": ttime.time(),
+                }
+                self._completed_tasks.append(task_res)
+
+        return thread_func
+
     def _run_in_separate_thread(
         self, *, name, target, run_in_background=True, args=None, kwargs=None, task_uid=None
     ):
@@ -854,58 +905,17 @@ class RunEngineWorker(Process):
             task_uid_short = task_uid.split("-")[-1]
             thread_name = f"BS QServer - {name} {task_uid_short} "
 
-            def thread_func_wrapper(*, task_uid, time_start):
-                def thread_func():
-                    # This is the function executed in a separate thread
-                    try:
-                        # if self._RE:
-                        #     asyncio.set_event_loop(self._RE.loop)
-
-                        return_value = target(*args, **kwargs)
-
-                        # Attempt to serialize the result to JSON. The result can not be sent to the client
-                        #   if it can not be serialized, so it is better for the function to fail here so that
-                        #   proper error message could be sent to the client.
-                        try:
-                            json.dumps(return_value)  # The result of the conversion is intentionally discarded
-                        except Exception as ex_json:
-                            raise ValueError(f"Task result can not be serialized as JSON: {ex_json}") from ex_json
-
-                        success, err_msg, err_tb = True, "", ""
-                    except Exception as ex:
-                        s = f"Error occurred while executing {name!r}"
-                        err_msg = f"{s}: {str(ex)}"
-                        if hasattr(ex, "tb"):  # ScriptLoadingError
-                            err_tb = str(ex.tb)
-                        else:
-                            err_tb = traceback.format_exc()
-                        logger.error("%s:\n%s\n", err_msg, err_tb)
-
-                        return_value, success = None, False
-                    finally:
-                        if not run_in_background:
-                            self._env_state = EState.IDLE
-                            self._running_task_uid = None
-                        else:
-                            self._background_tasks_num = max(self._background_tasks_num - 1, 0)
-
-                    with self._completed_tasks_lock:
-                        task_res = {
-                            "task_uid": task_uid,
-                            "success": success,
-                            "msg": err_msg,
-                            "traceback": err_tb,
-                            "return_value": return_value,
-                            "time_start": time_start,
-                            "time_stop": ttime.time(),
-                        }
-                        self._completed_tasks.append(task_res)
-
-                return thread_func
-
-            th = threading.Thread(
-                target=thread_func_wrapper(task_uid=task_uid, time_start=time_start), name=thread_name, daemon=True
+            target_func = self._thread_func_wrapper(
+                name=name,
+                task_uid=task_uid,
+                time_start=time_start,
+                target=target,
+                target_args=args,
+                target_kwargs=kwargs,
+                run_in_background=run_in_background,
             )
+
+            th = threading.Thread(target=target_func, name=thread_name, daemon=True)
 
             if not run_in_background:
                 self._env_state = EState.EXECUTING_TASK

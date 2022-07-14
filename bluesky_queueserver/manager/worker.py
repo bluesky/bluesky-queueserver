@@ -126,7 +126,7 @@ class RunEngineWorker(Process):
         self._re_report_lock = None  # threading.Lock
 
         # Class that supports communication over the pipe
-        self._comm_to_manager = PipeJsonRpcReceive(conn=self._conn, name="RE Worker-Manager Comm")
+        self._comm_to_manager = None
 
         self._db = None
 
@@ -160,7 +160,7 @@ class RunEngineWorker(Process):
 
         self._re_namespace, self._plans_in_nspace, self._devices_in_nspace = {}, {}, {}
 
-    def _execute_plan(self, plan, plan_exec_option):
+    def _execute_plan(self, parameters, plan_exec_option):
         """
         Start Run Engine to execute a plan
 
@@ -174,7 +174,20 @@ class RunEngineWorker(Process):
         """
         logger.debug("Starting execution of a plan")
         try:
-            result = plan()
+            plan_continue_options = (
+                PlanExecOption.RESUME,
+                PlanExecOption.STOP,
+                PlanExecOption.HALT,
+                PlanExecOption.ABORT,
+            )
+            if plan_exec_option == PlanExecOption.NEW:
+                func = self._format_new_plan(parameters)
+            elif plan_exec_option in plan_continue_options:
+                func = self._format_continued_plan(parameters)
+            else:
+                raise RuntimeError(f"Unsupported plan execution option: {plan_exec_option!r}")
+
+            result = func()
             with self._re_report_lock:
                 self._re_report = {
                     "action": "plan_exit",
@@ -234,32 +247,11 @@ class RunEngineWorker(Process):
         self._env_state = EState.IDLE
         logger.debug("Plan execution is completed or interrupted")
 
-    def _load_new_plan(self, plan_info):
+    def _format_new_plan(self, parameters):
         """
-        Loads a new plan into `self._execution_queue`. The plan plan name and
-        device names are represented as strings. Parsing of the plan in this
-        function replaces string representation with references.
-
-        Parameters
-        ----------
-        plan_name: str
-            name of the plan, represented as a string
-        plan_args: list
-            plan args, devices are represented as strings
-        plan_kwargs: dict
-            plan kwargs
+        Generate the function that starts execution of a plan based on plan parameters.
         """
-        if self._env_state != EState.IDLE:
-            raise RejectedError(
-                f"Attempted to start a plan in '{self._env_state.value}' environment state. Accepted state: 'idle'"
-            )
-
-        # Save reference to the currently executed plan
-        self._running_plan_info = plan_info
-        self._running_plan_completed = False
-        self._env_state = EState.EXECUTING_PLAN
-
-        logger.info("Starting a plan '%s'.", plan_info["name"])
+        plan_info = parameters
 
         try:
             with self._allowed_items_lock:
@@ -278,41 +270,76 @@ class RunEngineWorker(Process):
             plan_kwargs_parsed = plan_parsed["kwargs"]
             plan_meta_parsed = plan_parsed["meta"]
 
-            def get_plan(plan_func, plan_args, plan_kwargs, plan_meta):
-                def plan():
-                    if self._RE._state == "panicked":
-                        raise RuntimeError(
-                            "Run Engine is in the 'panicked' state. The environment must be "
-                            "closed and opened again before plans could be executed."
-                        )
-                    elif self._RE._state != "idle":
-                        raise RuntimeError(
-                            f"Run Engine is in '{self._RE._state}' state. Stop or finish any running plan."
-                        )
-                    else:
-                        result = self._RE(plan_func(*plan_args, **plan_kwargs), **plan_meta)
-                    return result
+            if self._RE._state == "panicked":
+                raise RuntimeError(
+                    "Run Engine is in the 'panicked' state. The environment must be "
+                    "closed and opened again before plans could be executed."
+                )
+            elif self._RE._state != "idle":
+                raise RuntimeError(f"Run Engine is in '{self._RE._state}' state. Stop or finish any running plan.")
 
-                return plan
+            def get_start_plan_func(plan_func, plan_args, plan_kwargs, plan_meta):
+                def start_plan_func():
+                    return self._RE(plan_func(*plan_args, **plan_kwargs), **plan_meta)
 
-            plan = get_plan(plan_func, plan_args_parsed, plan_kwargs_parsed, plan_meta_parsed)
-            # 'is_resuming' is true (we start a new plan that is supposedly runs to completion
-            #   as opposed to aborting/stopping/halting a plan)
+                return start_plan_func
+
+            return get_start_plan_func(plan_func, plan_args_parsed, plan_kwargs_parsed, plan_meta_parsed)
+
         except Exception as ex:
             logger.exception(ex)
+            raise RuntimeError(
+                f"Error occurred while processing plan parameters or starting the plan: {ex}"
+            ) from ex
 
-            # We want the exception to be raised in the main thread (plan execution)
-            def get_plan(ex):
-                def plan():
-                    raise RuntimeError(
-                        "Error occurred while processing plan parameters or starting the plan"
-                    ) from ex
+    def _format_continued_plan(self, parameters):
+        """
+        Generate a function that resumes/aborts/stops/halts execution of a paused plan.
+        """
+        option = parameters["option"]
+        available_options = ("resume", "abort", "stop", "halt")
 
-                return plan
+        if self._RE._state == "panicked":
+            raise RuntimeError(
+                "Run Engine is in the 'panicked' state. "
+                "The worker environment must be closed and reopened before plans could be executed."
+            )
+        elif self._RE._state != "paused":
+            raise RuntimeError(f"Run Engine is in '{self._RE._state}' state. Only 'paused' plan can be continued.")
+        elif option not in available_options:
+            raise RuntimeError(f"Option '{option}' is not supported. Supported options: {available_options}")
 
-            plan = get_plan(ex)
+        def get_continued_plan_func(option):
+            def continued_plan_func():
+                return getattr(self._RE, option)()
 
-        self._execution_queue.put((plan, PlanExecOption.NEW))
+            return continued_plan_func
+
+        return get_continued_plan_func(option)
+
+    def _load_new_plan(self, plan_info):
+        """
+        Loads a new plan into `self._execution_queue`. The plan plan name and
+        device names are represented as strings. Parsing of the plan in this
+        function replaces string representation with references.
+
+        Parameters
+        ----------
+        plan_info: dict
+            Dictionary with plan parameters
+        """
+        if self._env_state != EState.IDLE:
+            raise RejectedError(
+                f"Attempted to start a plan in '{self._env_state.value}' environment state. Accepted state: 'idle'"
+            )
+
+        # Save reference to the currently executed plan
+        self._running_plan_info = plan_info
+        self._running_plan_completed = False
+        self._env_state = EState.EXECUTING_PLAN
+
+        logger.info("Starting a plan '%s'.", plan_info["name"])
+        self._execution_queue.put((plan_info, PlanExecOption.NEW))
 
     def _continue_plan(self, option):
         """
@@ -324,42 +351,21 @@ class RunEngineWorker(Process):
             Option on how to proceed with previously paused plan. The values are
             "resume", "abort", "stop", "halt".
         """
+        available_options = ("resume", "abort", "stop", "halt")
+
+        if option not in available_options:
+            raise RuntimeError(f"Option '{option}' is not supported. Supported options: {available_options}")
+
         if self._env_state != EState.IDLE:
             raise RejectedError(
-                f"Attempted to start a plan in '{self._env_state.value}' environment state. "
+                f"Attempted to {option} a plan in '{self._env_state.value}' environment state. "
                 f"Accepted state: '{EState.IDLE.value}'"
             )
 
         self._env_state = EState.EXECUTING_PLAN
 
         logger.info("Continue plan execution with the option '%s'", option)
-
-        available_options = ("resume", "abort", "stop", "halt")
-
-        # We are not parsing 'kwargs' at this time
-        def get_plan(option, available_options):
-            def plan():
-                if self._RE._state == "panicked":
-                    raise RuntimeError(
-                        "Run Engine is in the 'panicked' state. "
-                        "The worker environment must be closed and reopened before plans could be executed."
-                    )
-                elif self._RE._state != "paused":
-                    raise RuntimeError(
-                        f"Run Engine is in '{self._RE._state}' state. Only 'paused' plan can be continued."
-                    )
-                elif option not in available_options:
-                    raise RuntimeError(
-                        f"Option '{option}' is not supported. Supported options: {available_options}"
-                    )
-                else:
-                    result = getattr(self._RE, option)()
-                return result
-
-            return plan
-
-        plan = get_plan(option, available_options)
-        self._execution_queue.put((plan, PlanExecOption(option)))
+        self._execution_queue.put(({"option": option}, PlanExecOption(option)))
 
     def _generate_lists_of_allowed_plans_and_devices(self):
         """
@@ -810,8 +816,8 @@ class RunEngineWorker(Process):
             if self._exit_event.is_set():
                 break
             try:
-                plan, plan_exec_option = self._execution_queue.get(False)
-                self._execute_plan(plan, plan_exec_option)
+                parameters, plan_exec_option = self._execution_queue.get(False)
+                self._execute_plan(parameters, plan_exec_option)
             except queue.Empty:
                 pass
 
@@ -852,6 +858,9 @@ class RunEngineWorker(Process):
                 def thread_func():
                     # This is the function executed in a separate thread
                     try:
+                        # if self._RE:
+                        #     asyncio.set_event_loop(self._RE.loop)
+
                         return_value = target(*args, **kwargs)
 
                         # Attempt to serialize the result to JSON. The result can not be sent to the client
@@ -948,6 +957,9 @@ class RunEngineWorker(Process):
 
         self._active_run_list = RunList()  # Initialization should be done before communication is enabled.
 
+        # Class that supports communication over the pipe
+        self._comm_to_manager = PipeJsonRpcReceive(conn=self._conn, name="RE Worker-Manager Comm")
+
         self._comm_to_manager.add_method(self._request_state_handler, "request_state")
         self._comm_to_manager.add_method(self._request_plan_report_handler, "request_plan_report")
         self._comm_to_manager.add_method(self._request_run_list_handler, "request_run_list")
@@ -986,7 +998,7 @@ class RunEngineWorker(Process):
         # TODO: TC - Do you think that the following code may be included in RE.__init__()
         #   (for Python 3.8 and above)
         # Setting the default event loop is needed to make the code work with Python 3.8.
-        loop = get_bluesky_event_loop()
+        loop = get_bluesky_event_loop() or asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
         try:

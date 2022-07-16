@@ -35,6 +35,9 @@ from .profile_ops import (
 
 logger = logging.getLogger(__name__)
 
+# Change the variable to change the default behavior
+DEFAULT_RUN_FOREGROUND_TASKS_IN_SEPARATE_THREADS = False
+
 
 # State of the worker environment
 class EState(enum.Enum):
@@ -46,21 +49,22 @@ class EState(enum.Enum):
     CLOSED = "closed"  # For completeness
 
 
-class PlanExecOption(enum.Enum):
+class ExecOption(enum.Enum):
     NEW = "new"  # New plan
     RESUME = "resume"  # Resume paused plan
     STOP = "stop"  # Stop paused plan (successful completion)
     ABORT = "abort"  # Abort paused plan (failed status)
     HALT = "halt"  # Halt paused plan (failed status, panicked state of RE)
+    TASK = "task"  # Execute task (a function, not a plan)
 
 
 # Expected exit status for supported plan execution options (plans could be paused or fail)
 _plan_exit_status_expected = {
-    PlanExecOption.NEW: "completed",
-    PlanExecOption.RESUME: "completed",
-    PlanExecOption.STOP: "stopped",
-    PlanExecOption.ABORT: "aborted",
-    PlanExecOption.HALT: "halted",
+    ExecOption.NEW: "completed",
+    ExecOption.RESUME: "completed",
+    ExecOption.STOP: "stopped",
+    ExecOption.ABORT: "aborted",
+    ExecOption.HALT: "halted",
 }
 
 
@@ -160,32 +164,43 @@ class RunEngineWorker(Process):
 
         self._re_namespace, self._plans_in_nspace, self._devices_in_nspace = {}, {}, {}
 
-    def _execute_plan(self, parameters, plan_exec_option):
+    def _execute_plan_or_task(self, parameters, exec_option):
         """
-        Start Run Engine to execute a plan
+        Execute a plan or a task pulled from ``self._execution_queue``. Note, that the queue
+        is used exclusively to pass data between threads and may contain at most 1 element.
+        This is not a plan queue. The function is expected to run in the main thread.
+        """
+        if exec_option == ExecOption.TASK:
+            self._execute_task(parameters, exec_option)
+        else:
+            self._execute_plan(parameters, exec_option)
+
+    def _execute_plan(self, parameters, exec_option):
+        """
+        Execute a plan. The function is expected to run in the main thread.
 
         Parameters
         ----------
-        plan: function
-            Reference to a function that calls Run Engine. Run Engine may be called to execute,
-            resume, abort, stop or halt the plan. The function should not accept any arguments.
-        plan_exec_option: PlanExecOption
-            Execution option for the plan. See ``PlanExecOption`` for available options.
+        parameters: dict
+            A dictionary with plan parameters
+        exec_option: ExecOption
+            Execution option for the plan. See ``ExecOption`` for available options.
         """
         logger.debug("Starting execution of a plan")
         try:
             plan_continue_options = (
-                PlanExecOption.RESUME,
-                PlanExecOption.STOP,
-                PlanExecOption.HALT,
-                PlanExecOption.ABORT,
+                ExecOption.RESUME,
+                ExecOption.STOP,
+                ExecOption.HALT,
+                ExecOption.ABORT,
             )
-            if plan_exec_option == PlanExecOption.NEW:
-                func = self._format_new_plan(parameters)
-            elif plan_exec_option in plan_continue_options:
-                func = self._format_continued_plan(parameters)
+
+            if exec_option == ExecOption.NEW:
+                func = self._generate_new_plan(parameters)
+            elif exec_option in plan_continue_options:
+                func = self._generate_continued_plan(parameters)
             else:
-                raise RuntimeError(f"Unsupported plan execution option: {plan_exec_option!r}")
+                raise RuntimeError(f"Unsupported plan execution option: {exec_option!r}")
 
             result = func()
             with self._re_report_lock:
@@ -196,12 +211,12 @@ class RunEngineWorker(Process):
                     "err_msg": "",
                     "traceback": "",
                 }
-                if plan_exec_option in (PlanExecOption.NEW, PlanExecOption.RESUME):
+                if exec_option in (ExecOption.NEW, ExecOption.RESUME):
                     self._re_report["plan_state"] = "completed"
                     self._running_plan_completed = True
                 else:
                     # Here we don't distinguish between stop/abort/halt
-                    self._re_report["plan_state"] = _plan_exit_status_expected[plan_exec_option]
+                    self._re_report["plan_state"] = _plan_exit_status_expected[exec_option]
                     self._running_plan_completed = True
 
                 # Include RE state
@@ -247,7 +262,35 @@ class RunEngineWorker(Process):
         self._env_state = EState.IDLE
         logger.debug("Plan execution is completed or interrupted")
 
-    def _format_new_plan(self, parameters):
+    def _execute_task(self, parameters, exec_option):
+        """
+        Execute a task (a function). The function is expected to run in the main thread.
+
+        Parameters
+        ----------
+        parameters: dict
+            A dictionary with parameters used to generate a function
+        exec_option: ExecOption
+            Execution option for the plan. Only the value ``ExecOption.TASK`` is accepted.
+        """
+        logger.debug("Starting execution of a task in main thread ...")
+        try:
+            if exec_option == ExecOption.TASK:
+                func = self._generate_task_func(parameters)
+            else:
+                raise RuntimeError(f"Unsupported option for executing a task: {exec_option!r}")
+
+            # The function 'func' is self-sufficient: it is responsible for catching and processing
+            #   exceptions and handling execution results.
+            func()
+
+        except Exception as ex:
+            # The exception was raised while preparing the function for execution.
+            logger.exception(f"Failed to execute task in main thread: {ex}")
+        else:
+            logger.debug("Task execution is completed.")
+
+    def _generate_new_plan(self, parameters):
         """
         Generate the function that starts execution of a plan based on plan parameters.
         """
@@ -292,7 +335,7 @@ class RunEngineWorker(Process):
                 f"Error occurred while processing plan parameters or starting the plan: {ex}"
             ) from ex
 
-    def _format_continued_plan(self, parameters):
+    def _generate_continued_plan(self, parameters):
         """
         Generate a function that resumes/aborts/stops/halts execution of a paused plan.
         """
@@ -317,7 +360,71 @@ class RunEngineWorker(Process):
 
         return get_continued_plan_func(option)
 
-    def _load_new_plan(self, plan_info):
+    def _generate_task_func(self, parameters):
+        """
+        Generate function for execution of a task (target function). The function is
+        performing all necessary steps to complete execution of the task and report
+        the results and could be executed in main or background thread.
+        """
+        name = parameters["name"]
+        task_uid = parameters["task_uid"]
+        time_start = parameters["time_start"]
+        target = parameters["target"]
+        target_args = parameters["target_args"]
+        target_kwargs = parameters["target_kwargs"]
+        run_in_background = parameters["run_in_background"]
+        run_in_separate_thread = parameters["run_in_separate_thread"]
+
+        def task_func():
+            # This is the function executed in a separate thread
+            try:
+                # Use set Run Engine event loop as a current loop for this thread
+                if (run_in_background or run_in_separate_thread) and self._RE:
+                    asyncio.set_event_loop(self._RE.loop)
+
+                return_value = target(*target_args, **target_kwargs)
+
+                # Attempt to serialize the result to JSON. The result can not be sent to the client
+                #   if it can not be serialized, so it is better for the function to fail here so that
+                #   proper error message could be sent to the client.
+                try:
+                    json.dumps(return_value)  # The result of the conversion is intentionally discarded
+                except Exception as ex_json:
+                    raise ValueError(f"Task result can not be serialized as JSON: {ex_json}") from ex_json
+
+                success, err_msg, err_tb = True, "", ""
+            except Exception as ex:
+                s = f"Error occurred while executing {name!r}"
+                err_msg = f"{s}: {str(ex)}"
+                if hasattr(ex, "tb"):  # ScriptLoadingError
+                    err_tb = str(ex.tb)
+                else:
+                    err_tb = traceback.format_exc()
+                logger.error("%s:\n%s\n", err_msg, err_tb)
+
+                return_value, success = None, False
+            finally:
+                if not run_in_background:
+                    self._env_state = EState.IDLE
+                    self._running_task_uid = None
+                else:
+                    self._background_tasks_num = max(self._background_tasks_num - 1, 0)
+
+            with self._completed_tasks_lock:
+                task_res = {
+                    "task_uid": task_uid,
+                    "success": success,
+                    "msg": err_msg,
+                    "traceback": err_tb,
+                    "return_value": return_value,
+                    "time_start": time_start,
+                    "time_stop": ttime.time(),
+                }
+                self._completed_tasks.append(task_res)
+
+        return task_func
+
+    def _start_new_plan(self, plan_info):
         """
         Loads a new plan into `self._execution_queue`. The plan plan name and
         device names are represented as strings. Parsing of the plan in this
@@ -339,7 +446,7 @@ class RunEngineWorker(Process):
         self._env_state = EState.EXECUTING_PLAN
 
         logger.info("Starting a plan '%s'.", plan_info["name"])
-        self._execution_queue.put((plan_info, PlanExecOption.NEW))
+        self._execution_queue.put((plan_info, ExecOption.NEW))
 
     def _continue_plan(self, option):
         """
@@ -365,7 +472,108 @@ class RunEngineWorker(Process):
         self._env_state = EState.EXECUTING_PLAN
 
         logger.info("Continue plan execution with the option '%s'", option)
-        self._execution_queue.put(({"option": option}, PlanExecOption(option)))
+        self._execution_queue.put(({"option": option}, ExecOption(option)))
+
+    def _start_task(
+        self,
+        *,
+        name,
+        target,
+        target_args=None,
+        target_kwargs=None,
+        run_in_background=True,
+        run_in_separate_thread=DEFAULT_RUN_FOREGROUND_TASKS_IN_SEPARATE_THREADS,
+        task_uid=None,
+    ):
+        """
+        Run ``target`` (any callable) in the main thread or a separate daemon thread. The callable
+        is passed arguments ``target_args`` and ``target_kwargs``. The function returns once
+        the generated function is passed to the main thread, started in a background thead or fails
+        to start. The function is not waiting for the execution result.
+
+        Parameters
+        ----------
+        name: str
+            The name used in background thread name and error messages.
+        target: callable
+            Callable (function or method) to execute.
+        target_args: list
+            List of target args (passed to ``target``).
+        target_kwargs: dict
+            Dictionary of target kwargs (passed to ``target``).
+        run_in_background: boolean
+            Run as a background task (in a background thread) if ``True``, run as a foreground
+            task otherwise. The foreground task may be run in a separate thread or in the main
+            thread depending on ``run_in_separate_thread`` parameter.
+        run_in_separate_thread: boolean
+            Run a foreground task in a separate thread if ``True`` or in the main thread otherwise.
+            Background tasks are always run in a separate background thread.
+        task_uid: str or None
+            UID of the task. If ``None``, then the new UID is generated.
+        """
+        target_args, target_kwargs = target_args or [], target_kwargs or {}
+        status, msg = "accepted", ""
+
+        task_uid = task_uid or str(uuid.uuid4())
+        time_start = ttime.time()
+        logger.debug(f"Starting task {name!r}. Task UID: {task_uid!r}.")
+
+        try:
+            # Verify that the environment is ready
+            acceptable_states = (EState.IDLE, EState.EXECUTING_PLAN, EState.EXECUTING_TASK)
+            if self._env_state not in acceptable_states:
+                raise RejectedError(
+                    f"Incorrect environment state: '{self._env_state.value}'. "
+                    f"Acceptable states: {[_.value for _ in acceptable_states]}"
+                )
+            # Verify that the environment is idle (no plans or tasks are executed)
+            if not run_in_background and (self._env_state != EState.IDLE):
+                raise RejectedError(
+                    f"Incorrect environment state: '{self._env_state.value}'. Acceptable state: 'idle'"
+                )
+
+            task_uid_short = task_uid.split("-")[-1]
+            thread_name = f"BS QServer - {name} {task_uid_short} "
+
+            parameters = {
+                "name": name,
+                "task_uid": task_uid,
+                "time_start": time_start,
+                "target": target,
+                "target_args": target_args,
+                "target_kwargs": target_kwargs,
+                "run_in_background": run_in_background,
+                "run_in_separate_thread": run_in_separate_thread,
+            }
+            # Generate the target function even if it is not used here to validate parameters
+            #   (if it is executed in the main thread), because this is the right place to fail.
+            target_func = self._generate_task_func(parameters)
+
+            if run_in_background:
+                self._background_tasks_num += 1
+            else:
+                self._env_state = EState.EXECUTING_TASK
+                self._running_task_uid = task_uid
+
+            if run_in_background or run_in_separate_thread:
+                th = threading.Thread(target=target_func, name=thread_name, daemon=True)
+                th.start()
+            else:
+                self._execution_queue.put((parameters, ExecOption.TASK))
+
+        except RejectedError as ex:
+            status, msg = "rejected", f"Task {name!r} was rejected by RE Worker process: {ex}"
+        except Exception as ex:
+            status, msg = "error", f"Error occurred while to starting the task {name!r}: {ex}"
+
+        logger.debug(
+            f"Completing the request to start the task {name!r} ({task_uid!r}): status={status!r} msg={msg!r}."
+        )
+
+        # Payload contains information that may be useful for tracking the execution of the task.
+        payload = {"task_uid": task_uid, "time_start": time_start, "run_in_background": run_in_background}
+
+        return status, msg, task_uid, payload
 
     def _generate_lists_of_allowed_plans_and_devices(self):
         """
@@ -653,7 +861,7 @@ class RunEngineWorker(Process):
         if not invalid_state:  # == 0
             try:
                 # Value is a dictionary with plan parameters
-                self._load_new_plan(plan_info=plan_info)
+                self._start_new_plan(plan_info=plan_info)
                 status = "accepted"
             except RejectedError as ex:
                 status = "rejected"
@@ -759,7 +967,7 @@ class RunEngineWorker(Process):
         does not mean that the operation was successful.
         """
         self._user_group_permissions = user_group_permissions
-        status, err_msg, task_uid, payload = self._run_in_separate_thread(
+        status, err_msg, task_uid, payload = self._start_task(
             name="Reload Permissions",
             target=self._generate_lists_of_allowed_plans_and_devices,
             run_in_background=True,
@@ -773,10 +981,10 @@ class RunEngineWorker(Process):
         The task could be started in the background (when a plan or another foreground task
         is running), but it is not recommended.
         """
-        status, err_msg, task_uid, payload = self._run_in_separate_thread(
+        status, err_msg, task_uid, payload = self._start_task(
             name="Load script",
             target=self._load_script_into_environment,
-            kwargs={"script": script, "update_lists": update_lists, "update_re": update_re},
+            target_kwargs={"script": script, "update_lists": update_lists, "update_re": update_re},
             run_in_background=run_in_background,
         )
         msg_out = {"status": status, "err_msg": err_msg, "task_uid": task_uid, "payload": payload}
@@ -790,10 +998,10 @@ class RunEngineWorker(Process):
         # Reuse item UID as task UID
         task_uid = func_info.get("item_uid", None)
 
-        status, err_msg, task_uid, payload = self._run_in_separate_thread(
+        status, err_msg, task_uid, payload = self._start_task(
             name="Execute function",
             target=self._execute_function_in_environment,
-            kwargs={"func_info": func_info},
+            target_kwargs={"func_info": func_info},
             run_in_background=run_in_background,
             task_uid=task_uid,
         )
@@ -817,127 +1025,9 @@ class RunEngineWorker(Process):
                 break
             try:
                 parameters, plan_exec_option = self._execution_queue.get(False)
-                self._execute_plan(parameters, plan_exec_option)
+                self._execute_plan_or_task(parameters, plan_exec_option)
             except queue.Empty:
                 pass
-
-    def _thread_func_wrapper(
-        self, *, name, task_uid, time_start, target, target_args, target_kwargs, run_in_background
-    ):
-        def thread_func():
-            # This is the function executed in a separate thread
-            try:
-                if self._RE:
-                    asyncio.set_event_loop(self._RE.loop)
-
-                return_value = target(*target_args, **target_kwargs)
-
-                # Attempt to serialize the result to JSON. The result can not be sent to the client
-                #   if it can not be serialized, so it is better for the function to fail here so that
-                #   proper error message could be sent to the client.
-                try:
-                    json.dumps(return_value)  # The result of the conversion is intentionally discarded
-                except Exception as ex_json:
-                    raise ValueError(f"Task result can not be serialized as JSON: {ex_json}") from ex_json
-
-                success, err_msg, err_tb = True, "", ""
-            except Exception as ex:
-                s = f"Error occurred while executing {name!r}"
-                err_msg = f"{s}: {str(ex)}"
-                if hasattr(ex, "tb"):  # ScriptLoadingError
-                    err_tb = str(ex.tb)
-                else:
-                    err_tb = traceback.format_exc()
-                logger.error("%s:\n%s\n", err_msg, err_tb)
-
-                return_value, success = None, False
-            finally:
-                if not run_in_background:
-                    self._env_state = EState.IDLE
-                    self._running_task_uid = None
-                else:
-                    self._background_tasks_num = max(self._background_tasks_num - 1, 0)
-
-            with self._completed_tasks_lock:
-                task_res = {
-                    "task_uid": task_uid,
-                    "success": success,
-                    "msg": err_msg,
-                    "traceback": err_tb,
-                    "return_value": return_value,
-                    "time_start": time_start,
-                    "time_stop": ttime.time(),
-                }
-                self._completed_tasks.append(task_res)
-
-        return thread_func
-
-    def _run_in_separate_thread(
-        self, *, name, target, run_in_background=True, args=None, kwargs=None, task_uid=None
-    ):
-        """
-        Run ``target`` (any callable) in a separate daemon thread. The callable is passed arguments ``args``
-        and ``kwargs`` and ``name`` is used to generate thread name and in error messages. The function
-        returns once the thead is started without waiting for the result. The function will generate
-        a new task UID if it is not passed as a parameter
-        """
-        args, kwargs = args or [], kwargs or {}
-        status, msg = "accepted", ""
-
-        task_uid = task_uid or str(uuid.uuid4())
-        time_start = ttime.time()
-        logger.debug(f"Starting task {name!r}. Task UID: {task_uid!r}.")
-
-        try:
-            # Verify that the environment is ready
-            acceptable_states = (EState.IDLE, EState.EXECUTING_PLAN, EState.EXECUTING_TASK)
-            if self._env_state not in acceptable_states:
-                raise RejectedError(
-                    f"Incorrect environment state: '{self._env_state.value}'. "
-                    f"Acceptable states: {[_.value for _ in acceptable_states]}"
-                )
-            # Verify that the environment is idle (no plans or tasks are executed)
-            if not run_in_background and (self._env_state != EState.IDLE):
-                raise RejectedError(
-                    f"Incorrect environment state: '{self._env_state.value}'. Acceptable state: 'idle'"
-                )
-
-            task_uid_short = task_uid.split("-")[-1]
-            thread_name = f"BS QServer - {name} {task_uid_short} "
-
-            target_func = self._thread_func_wrapper(
-                name=name,
-                task_uid=task_uid,
-                time_start=time_start,
-                target=target,
-                target_args=args,
-                target_kwargs=kwargs,
-                run_in_background=run_in_background,
-            )
-
-            th = threading.Thread(target=target_func, name=thread_name, daemon=True)
-
-            if not run_in_background:
-                self._env_state = EState.EXECUTING_TASK
-                self._running_task_uid = task_uid
-            else:
-                self._background_tasks_num += 1
-
-            th.start()
-
-        except RejectedError as ex:
-            status, msg = "rejected", f"Task {name!r} was rejected by RE Worker process: {ex}"
-        except Exception as ex:
-            status, msg = "error", f"Error occurred while to starting the task {name!r}: {ex}"
-
-        logger.debug(
-            f"Completing the request to start the task {name!r} ({task_uid!r}): status={status!r} msg={msg!r}."
-        )
-
-        # Payload contains information that may be useful for tracking the execution of the task.
-        payload = {"task_uid": task_uid, "time_start": time_start, "run_in_background": run_in_background}
-
-        return status, msg, task_uid, payload
 
     # ------------------------------------------------------------
 

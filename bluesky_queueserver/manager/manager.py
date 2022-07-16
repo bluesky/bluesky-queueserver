@@ -822,11 +822,18 @@ class RunEngineManager(Process):
         Pause execution of a running plan. Run Engine must be in 'running' state in order for
         the request to pause to be accepted by RE Worker.
         """
-        success, err_msg = await self._worker_command_pause_plan(option)
-        if not success:
-            logger.error("Failed to pause the running plan: %s", err_msg)
+        if self._manager_state != MState.EXECUTING_QUEUE:
+            success = False
+            err_msg = f"RE Manager is not executing the queue: current state is '{self._manager_state.value}'"
+        elif not self._environment_exists:
+            success = False
+            err_msg = "Environment does not exist."
         else:
-            self._manager_state = MState.EXECUTING_QUEUE
+            success, err_msg = await self._worker_command_pause_plan(option)
+
+        if not success:
+            logger.error("Failed to pause Run Engine: %s", err_msg)
+
         return success, err_msg
 
     async def _continue_run_engine(self, *, option):

@@ -2616,6 +2616,39 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg, "run_list": run_list, "run_list_uid": run_list_uid}
 
+    async def _lock_handler(self, request):
+        success, msg = True, ""
+
+        try:
+            supported_param_names = ["lock_key", "note", "environment", "queue", "user"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg}
+
+    async def _lock_info_handler(self, request):
+        success, msg = True, ""
+
+        try:
+            supported_param_names = ["lock_key"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg}
+
+    async def _unlock_handler(self, request):
+        success, msg = True, ""
+
+        try:
+            supported_param_names = ["lock_key"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg}
+
     async def _manager_stop_handler(self, request):
         """
         Stop RE Manager in orderly way. The method may be called with option
@@ -2721,6 +2754,9 @@ class RunEngineManager(Process):
             "re_abort": "_re_abort_handler",
             "re_halt": "_re_halt_handler",
             "re_runs": "_re_runs_handler",
+            "lock": "_lock_handler",
+            "lock_info": "_lock_info_handler",
+            "unlock": "_unlock_handler",
             "manager_stop": "_manager_stop_handler",
             "manager_kill": "_manager_kill_handler",
         }

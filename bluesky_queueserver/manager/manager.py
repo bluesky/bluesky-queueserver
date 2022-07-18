@@ -2867,6 +2867,8 @@ class RunEngineManager(Process):
             if "lock_key" not in request:
                 raise ValueError("Request contains no lock key: 'lock_key' parameter is required")
             lock_key = request["lock_key"]
+            if not isinstance(lock_key, str) or not lock_key:
+                raise ValueError(f"Lock key must be a non-empty string: lock_key = {lock_key!r}")
 
             if not self._lock_info.is_set():
                 lock_info = self._format_lock_info()

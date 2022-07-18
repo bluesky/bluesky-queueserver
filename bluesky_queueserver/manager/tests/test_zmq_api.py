@@ -4806,6 +4806,25 @@ def test_zmq_api_lock_3_fail(re_manager, params, success, msg):  # noqa: F811
         assert msg in resp1["msg"]
 
 
+# fmt: off
+@pytest.mark.parametrize("params, success, msg", [
+    ({}, False, "Request contains no lock key"),
+    ({"lock_key": None}, False, "Lock key must be a non-empty string"),
+    ({"lock_key": "proper-key"}, True, ""),
+])
+# fmt: on
+def test_zmq_api_unlock_1_fail(re_manager, params, success, msg):  # noqa: F811
+    """
+    ``unlock`` API: failing cases
+    """
+    resp1, _ = zmq_single_request("unlock", params=params)
+    assert resp1["success"] is success, f"resp={resp1}"
+    if success:
+        assert msg == ""
+    else:
+        assert msg in resp1["msg"]
+
+
 # =======================================================================================
 #            Tests that involve restarting the manager process
 

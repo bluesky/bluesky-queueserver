@@ -670,6 +670,9 @@ def start_manager():
         return 1
     config_manager["redis_addr"] = redis_addr
 
+    lock_key_emergency = os.environ.get("QSERVER_EMERGENCY_LOCK_KEY_FOR_SERVER", None)
+    config_manager["lock_key_emergency"] = lock_key_emergency
+
     wp = WatchdogProcess(
         config_worker=config_worker, config_manager=config_manager, msg_queue=msg_queue, log_level=log_level
     )

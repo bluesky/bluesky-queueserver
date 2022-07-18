@@ -10,6 +10,7 @@ import json
 import numpy as np
 import zmq
 import yaml
+from datetime import datetime
 
 import bluesky_queueserver
 
@@ -226,6 +227,11 @@ def test_zmq_api_ping_status_01(re_manager, api_name):  # noqa F811
 
     assert isinstance(resp["plan_queue_mode"], dict)
     assert resp["plan_queue_mode"]["loop"] is False
+
+    assert isinstance(resp["lock_info_uid"], str)
+    assert isinstance(resp["lock"], dict)
+    assert resp["lock"]["environment"] is False
+    assert resp["lock"]["queue"] is False
 
 
 # fmt: off
@@ -4448,7 +4454,7 @@ def multirun_plan_nested():
 # fmt: off
 @pytest.mark.parametrize("test_with_manager_restart", [False, True])
 # fmt: on
-def test_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_restart):  # noqa: F811
+def test_zmq_api_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_restart):  # noqa: F811
     """
     Relatively complicated test for ``re_runs`` ZMQ API with multirun test. The same test
     is run with and without manager restart (API ``manager_kill``). Additionally
@@ -4607,6 +4613,199 @@ def test_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_restart):  # 
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
+# fmt: off
+@pytest.mark.parametrize("em_lock_code", [False, True])
+# fmt: on
+def test_zmq_api_lock_1(monkeypatch, re_manager_cmd, em_lock_code):  # noqa: F811
+    """
+    ``lock``, ``lock_info``, ``unlock``: basic functionality
+    """
+    if em_lock_code:
+        monkeypatch.setenv("QSERVER_EMERGENCY_LOCK_KEY_FOR_SERVER", "emergency-lock-key")
+
+    re_manager_cmd([])
+
+    def check_lock_info(lock_info, env, queue, user, time, note, em_lock_key):
+        assert lock_info["environment"] == env
+        assert lock_info["queue"] == queue
+        assert lock_info["user"] == user
+        if (time is not None) and (time < 0):
+            t = ttime.time()
+            assert t - 20 < lock_info["time"] <= t
+        else:
+            assert lock_info["time"] == time
+        if (lock_info["time"] is not None) and (lock_info["time"] > 0):
+            t_str = datetime.fromtimestamp(lock_info["time"]).strftime("%m/%d/%Y %H:%M:%S")
+        else:
+            t_str = ""
+        assert lock_info["time_str"] == t_str
+        assert lock_info["note"] == note
+        assert lock_info["emergency_lock_key_is_set"] == em_lock_key
+        assert isinstance(lock_info["uid"], str)
+
+    def check_status(environment, queue, uid):
+        status = get_queue_state()
+        assert status["lock"]["environment"] == environment
+        assert status["lock"]["queue"] == queue
+        if uid:
+            assert status["lock_info_uid"] == uid
+
+    check_status(False, False, None)
+
+    # Initially RE Manager is unlocked
+    resp1, _ = zmq_single_request("lock_info")
+    assert resp1["success"] is True, f"resp={resp1}"
+    check_lock_info(resp1["lock_info"], False, False, None, None, None, em_lock_code)
+
+    # Unlocking unlocked RE Manager always succeeds. The request does nothing.
+    resp2, _ = zmq_single_request("unlock", params={"lock_key": "some_key"})
+    assert resp2["success"] is True, f"resp={resp2}"
+    check_lock_info(resp2["lock_info"], False, False, None, None, None, em_lock_code)
+    assert resp2["lock_info"]["uid"] == resp1["lock_info"]["uid"]
+
+    check_status(False, False, resp1["lock_info"]["uid"])
+
+    # Lock the environment (minimum required number of parameters)
+    params = {"environment": True, "user": _user, "lock_key": "valid-lock-key"}
+    resp3, _ = zmq_single_request("lock", params=params)
+    assert resp3["success"] is True, f"resp={resp3}"
+    assert resp3["lock_info"]["uid"] != resp2["lock_info"]["uid"]
+    check_lock_info(resp3["lock_info"], True, False, _user, -1, None, em_lock_code)
+
+    resp3a, _ = zmq_single_request("lock_info")
+    assert resp3a["success"] is True, f"resp={resp3a}"
+    assert resp3a["lock_info"] == resp3["lock_info"]
+
+    check_status(True, False, resp3["lock_info"]["uid"])
+
+    # Lock the environment and the queue
+    params = {"environment": True, "queue": True, "user": _user}
+    params.update({"note": "Some note", "lock_key": "valid-lock-key"})
+    resp4, _ = zmq_single_request("lock", params=params)
+    assert resp4["success"] is True, f"resp={resp4}"
+    assert resp4["lock_info"]["uid"] != resp3["lock_info"]["uid"]
+    check_lock_info(resp4["lock_info"], True, True, _user, -1, "Some note", em_lock_code)
+
+    resp4a, _ = zmq_single_request("lock_info")
+    assert resp4a["success"] is True, f"resp={resp4a}"
+    assert resp4a["lock_info"] == resp4["lock_info"]
+
+    check_status(True, True, resp4["lock_info"]["uid"])
+
+    # Deactivate 'environment' lock
+    params = {"queue": True, "user": _user}
+    params.update({"note": "Another note", "lock_key": "valid-lock-key"})
+    resp5, _ = zmq_single_request("lock", params=params)
+    assert resp5["success"] is True, f"resp={resp5}"
+    assert resp5["lock_info"]["uid"] != resp4["lock_info"]["uid"]
+    check_lock_info(resp5["lock_info"], False, True, _user, -1, "Another note", em_lock_code)
+
+    resp5a, _ = zmq_single_request("lock_info")
+    assert resp5a["success"] is True, f"resp={resp5a}"
+    assert resp5a["lock_info"] == resp5["lock_info"]
+
+    check_status(False, True, resp5["lock_info"]["uid"])
+
+    # Unlock RE Manager
+    params = {"lock_key": "valid-lock-key"}
+    resp6, _ = zmq_single_request("unlock", params=params)
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert resp6["lock_info"]["uid"] != resp5["lock_info"]["uid"]
+    check_lock_info(resp6["lock_info"], False, False, None, None, None, em_lock_code)
+
+    check_status(False, False, resp6["lock_info"]["uid"])
+
+
+# fmt: off
+@pytest.mark.parametrize("unlock_with_em_key", [False, True])
+@pytest.mark.parametrize("set_em_key", [False, True])
+# fmt: on
+def test_zmq_api_lock_2(monkeypatch, re_manager_cmd, set_em_key, unlock_with_em_key):  # noqa: F811
+    """
+    ``lock``, ``lock_info``, ``unlock``: lock and unlock RE Manager using different keys
+    """
+    em_key = "emergency-lock-key"
+    if set_em_key:
+        monkeypatch.setenv("QSERVER_EMERGENCY_LOCK_KEY_FOR_SERVER", em_key)
+
+    re_manager_cmd([])
+
+    custom_key = "custom-key"
+
+    # Lock RE Manager
+    params = {"environment": True, "lock_key": custom_key, "user": _user}
+    resp1, _ = zmq_single_request("lock", params=params)
+    assert resp1["success"] is True, f"resp={resp1}"
+
+    # Verify an invalid key
+    resp2, _ = zmq_single_request("lock_info", params={"lock_key": "invalid-key"})
+    assert resp2["success"] is False, f"resp={resp2}"
+    assert "Invalid lock key" in resp2["msg"]
+
+    # Verify the custom key
+    resp2a, _ = zmq_single_request("lock_info", params={"lock_key": custom_key})
+    assert resp2a["success"] is True, f"resp={resp2a}"
+    assert resp2a["msg"] == ""
+
+    assert resp2a["lock_info"] == resp2["lock_info"]
+
+    # Verify the emergency key. Emergency key does not pass verification
+    #   (used only to unlock RE Manager)
+    resp3, _ = zmq_single_request("lock_info", params={"lock_key": em_key})
+    assert resp3["success"] is False, f"resp={resp3}"
+    assert resp3["lock_info"] == resp2["lock_info"]
+
+    # Unlock RE Manager with an invalid key
+    resp4, _ = zmq_single_request("unlock", params={"lock_key": "invalid-key"})
+    assert resp4["success"] is False, f"resp={resp4}"
+    assert "Invalid lock key" in resp4["msg"]
+
+    # Unlock RE Manager with a valid key
+    key = em_key if unlock_with_em_key else custom_key
+    success = not unlock_with_em_key or set_em_key
+    resp5, _ = zmq_single_request("unlock", params={"lock_key": key})
+    assert resp5["success"] is success, f"resp={resp5}"
+    if success:
+        assert resp5["msg"] == ""
+    else:
+        assert "Invalid lock key" in resp5["msg"]
+
+
+# fmt: off
+@pytest.mark.parametrize("params, success, msg", [
+    # No option ('environment' or 'queue') is selected
+    ({"lock_key": "custom-key", "user": _user}, False, "environment and/or queue must be selected"),
+    ({"environment": False, "queue": False, "lock_key": "custom-key", "user": _user},
+     False, "environment and/or queue must be selected"),
+    # User name is not specified
+    ({"environment": True, "lock_key": "custom-key"}, False, "User name is not specified"),
+    ({"environment": True, "lock_key": "custom-key", "user": None},
+     False, "User name must be a non-empty string"),
+    ({"environment": True, "lock_key": "custom-key", "user": ""},
+     False, "User name must be a non-empty string"),
+    # No lock key
+    ({"environment": True, "user": _user}, False, "Lock key is not specified"),
+    ({"environment": True, "user": _user, "lock_key": None}, False, "Lock key must be a non-empty string"),
+    ({"environment": True, "user": _user, "lock_key": ""}, False, "Lock key must be a non-empty string"),
+    # Setting 'note'
+    ({"environment": True, "lock_key": "custom-key", "user": _user, "note": "some_note"}, True, ""),
+    ({"environment": True, "lock_key": "custom-key", "user": _user, "note": None}, True, ""),
+    ({"environment": True, "lock_key": "custom-key", "user": _user, "note": 10},
+     False, "Note must be a string or None"),
+])
+# fmt: on
+def test_zmq_api_lock_3_fail(re_manager, params, success, msg):  # noqa: F811
+    """
+    ``lock`` API: failing cases
+    """
+    resp1, _ = zmq_single_request("lock", params=params)
+    assert resp1["success"] is success, f"resp={resp1}"
+    if success:
+        assert msg == ""
+    else:
+        assert msg in resp1["msg"]
+
+
 # =======================================================================================
 #            Tests that involve restarting the manager process
 
@@ -4699,6 +4898,9 @@ def test_zmq_api_unsupported_parameters(re_manager):  # noqa: F811
         "re_runs",
         "manager_stop",
         "manager_kill",
+        "lock",
+        "lock_info",
+        "unlock",
     )
     unsupported_param = {"unsupported_param": 10}
 

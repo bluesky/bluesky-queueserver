@@ -1817,6 +1817,9 @@ class PlanQueueOperations:
         ugp_json = await self._r_pool.get(self._name_user_group_permissions)
         return json.loads(ugp_json) if ugp_json else None
 
+    # =============================================================================================
+    #         Methods for saving and retrieving lock info.
+
     async def lock_info_clear(self):
         """
         Clear lock info saved in Redis.

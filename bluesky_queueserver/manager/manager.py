@@ -58,11 +58,31 @@ class MState(enum.Enum):
 
 class LockInfo:
     def __init__(self):
+        self._lock_key_emergency = None
         self.clear()
+
+    def set_emergency_lock_key(self, lock_key):
+        """
+        Emergency lock key may be ``None`` (not set) or non-empty string.
+        """
+        if isinstance(lock_key, type(None)) or (isinstance(lock_key, str) and lock_key):
+            self._lock_key_emergency = lock_key
+        else:
+            raise ValueError(f"Invalid emergency lock key: {lock_key!r}")
+
+    @property
+    def lock_key_emergency(self):
+        """
+        Readable property that returns the emergency lock key.
+        """
+        return self._lock_key_emergency
 
     @property
     def time_str(self):
-        return datetime.fromtimestamp(self.time).strftime("%m/%d/%Y %H:%M:%S")
+        if self.time:
+            return datetime.fromtimestamp(self.time).strftime("%m/%d/%Y %H:%M:%S")
+        else:
+            return ""
 
     def is_set(self):
         return self.environment or self.queue
@@ -83,6 +103,7 @@ class LockInfo:
         self.note = note
         self.user_name = user_name
         self.time = ttime.time()
+        self.uid = _generate_uid()
 
     def clear(self):
         """
@@ -94,12 +115,19 @@ class LockInfo:
         self.note = None
         self.time = None
         self.user_name = None
+        self.uid = _generate_uid()
 
-    def check_lock_key(self, lock_key):
+    def check_lock_key(self, lock_key, *, use_emergency_key=False):
         """
         Returns ``True`` if RE Manager is not locked (any key is valid) or if the key matches.
+        Optionally check match with the emergency lock key if the key is set.
         """
-        return not self.is_set() or (self.lock_key == lock_key)
+        k = self.lock_key
+        key_valid = not self.is_set() or (lock_key == k)
+        if not key_valid and use_emergency_key:
+            ek = self.lock_key_emergency
+            key_valid = ek and (lock_key == ek)
+        return key_valid
 
     def to_str(self):
         """
@@ -108,6 +136,7 @@ class LockInfo:
         s = f"RE Manager is locked by {self.user_name} at {self.time_str}\n"
         s += f"Environment is locked: {self.environment}\n"
         s += f"Queue is locked:       {self.queue}\n"
+        s += f"Emergency lock key:    {'set' if self.lock_key_emergency else 'not set'}\n"
         s += f"Note: {self.note or '---'}"
         return s
 
@@ -115,7 +144,7 @@ class LockInfo:
         """
         Load lock info from dictionary.
         """
-        keys_required = {"environment", "queue", "lock_key", "note", "user", "time"}
+        keys_required = {"environment", "queue", "lock_key", "note", "user", "time", "uid"}
         keys = set(lock_info_dict.keys())
         keys_missing = keys_required - keys
         if keys_missing:
@@ -127,6 +156,7 @@ class LockInfo:
             self.note = lock_info_dict["note"]
             self.user_name = lock_info_dict["user"]
             self.time = lock_info_dict["time"]
+            self.uid = lock_info_dict["uid"]
 
     def to_dict(self):
         """
@@ -139,6 +169,7 @@ class LockInfo:
             "note": self.note,
             "user": self.user_name,
             "time": self.time,
+            "uid": self.uid,
         }
 
 
@@ -189,6 +220,7 @@ class RunEngineManager(Process):
         self._number_of_restarts = number_of_restarts
 
         self._lock_info = LockInfo()  # Lock/unlock environment and/or queue
+        self._lock_info.set_emergency_lock_key(config["lock_key_emergency"])
 
         # The following attributes hold the state of the system
         self._manager_stopping = False  # Set True to exit manager (by _manager_stop_handler)
@@ -1119,16 +1151,16 @@ class RunEngineManager(Process):
                 f"Error occurred while loading lists of allowed plans and devices from '{path_pd}': {str(ex)}"
             )
 
-    def _save_lock_info_to_redis(self):
+    async def _save_lock_info_to_redis(self):
         try:
             lock_info = self._lock_info.to_dict()
-            self._plan_queue.lock_info_save(lock_info)
+            await self._plan_queue.lock_info_save(lock_info)
         except Exception as ex:
             raise Exception(f"Error occurred while saving lock info to Redis: {ex}") from ex
 
-    def _load_lock_info_from_redis(self):
+    async def _load_lock_info_from_redis(self):
         try:
-            lock_info = self._plan_queue.lock_info_retrieve()
+            lock_info = await self._plan_queue.lock_info_retrieve()
             if lock_info:  # The lock info may or may not be saved to Redis.
                 self._lock_info.from_dict(lock_info)
         except Exception as ex:
@@ -1436,6 +1468,9 @@ class RunEngineManager(Process):
         plans_allowed_uid = self._allowed_plans_uid
         plan_queue_mode = self._plan_queue.plan_queue_mode
         task_results_uid = self._task_results.task_results_uid
+        lock_info_uid = self._lock_info.uid
+        locked_environment = self._lock_info.environment
+        locked_queue = self._lock_info.queue
         # worker_state_info = self._worker_state_info
 
         # TODO: consider different levels of verbosity for ping or other command to
@@ -1463,6 +1498,8 @@ class RunEngineManager(Process):
             "plans_allowed_uid": plans_allowed_uid,
             "plan_queue_mode": plan_queue_mode,
             "task_results_uid": task_results_uid,
+            "lock_info_uid": lock_info_uid,
+            "lock": {"environment": locked_environment, "queue": locked_queue},
             # "worker_state_info": worker_state_info
         }
         return msg
@@ -2720,8 +2757,44 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg, "run_list": run_list, "run_list_uid": run_list_uid}
 
+    def _lock_key_invalid_msg(self):
+        return f"Invalid lock key: \n{self._lock_info.to_str()}"
+
+    def _format_lock_info(self):
+        return {
+            "environment": self._lock_info.environment,
+            "queue": self._lock_info.queue,
+            "user": self._lock_info.user_name,
+            "time": self._lock_info.time,
+            "time_str": self._lock_info.time_str,
+            "note": self._lock_info.note,
+            "emergency_lock_key_is_set": bool(self._lock_info.lock_key_emergency),
+            "uid": self._lock_info.uid,
+        }
+
     async def _lock_handler(self, request):
-        success, msg = True, ""
+        """
+        ``lock`` API. Lock RE Manager with the key provided by the client. The API
+        provides options to lock the environment, the queue or both. The client
+        must select at least one of the options by setting ``True``the parameters
+        ``environment`` and ``queue``. If no option is selected, then the API call
+        fails.
+
+        The client must provide and keep the ``lock_key``. The key is a non-empty
+        string used to unlock RE Manager later. The client may still call API that modify
+        the locked environment or the queue by passing the valid ``lock_key`` as a parameter.
+        The respective API calls without a valid ``lock_key`` parameter will fail until
+        RE Manager is unlocked with ``unlock`` API. RE Manager supports the emergency
+        lock key (set using  ``QSERVER_EMERGENCY_LOCK_KEY_FOR_SERVER`` environment variable),
+        which could be used to unlock RE Manager if the lock key is lost. The emergency lock
+        key is not accepted by any API other than ``unlock``.
+
+        The client must provide the name of the user (``user``) locking RE Manager.
+        Optionally, the client may provide ``note``, which is an arbitrary text
+        describing the reason why RE Manager is locked. User name and the note are returned
+        as part of ``lock_info`` and included in error messages.
+        """
+        success, msg, lock_info = True, "", {}
 
         try:
             supported_param_names = ["lock_key", "note", "environment", "queue", "user"]
@@ -2746,24 +2819,22 @@ class RunEngineManager(Process):
             if not isinstance(note, (str, type(None))):
                 raise ValueError("Note must be a string or None: note = {note!r}")
 
-            environment = request.get("environment", True)
+            environment = request.get("environment", False)
             queue = request.get("queue", False)
 
             if self._lock_info.check_lock_key(lock_key):
                 self._lock_info.set(
                     environment=environment, queue=queue, lock_key=lock_key, note=note, user_name=user_name
                 )
-                self._save_lock_info_to_redis(self._lock_info.to_dict())
+                lock_info = self._format_lock_info()
+                self._save_lock_info_to_redis()
             else:
                 raise ValueError(f"RE Manager was locked with a different key: \n{self._lock_info.to_str()}")
 
         except Exception as ex:
             success, msg = False, f"Error: {ex}"
 
-        return {"success": success, "msg": msg}
-
-    def _lock_key_invalid_msg(self):
-        return f"Invalid lock key: \n{self._lock_info.as_str()}"
+        return {"success": success, "msg": msg, "lock_info": lock_info}
 
     async def _lock_info_handler(self, request):
         success, msg, lock_info = True, "", {}
@@ -2772,17 +2843,9 @@ class RunEngineManager(Process):
             supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
-            lock_info = {
-                "environment": self._lock_info.environment,
-                "queue": self._lock_info.queue,
-                "user": self._lock_info.user_name,
-                "time": self._lock_info.time,
-                "time_str": self._lock_info.time_str,
-                "note": self._lock_info.note,
-            }
-
+            lock_info = self._format_lock_info()
             lock_key = request.get("lock_key", None)
-            if (lock_key is not None) and self._lock_info.check_lock_key(lock_key):
+            if (lock_key is not None) and not self._lock_info.check_lock_key(lock_key):
                 raise ValueError(self._lock_key_invalid_msg())
 
         except Exception as ex:
@@ -2791,22 +2854,34 @@ class RunEngineManager(Process):
         return {"success": success, "msg": msg, "lock_info": lock_info}
 
     async def _unlock_handler(self, request):
-        success, msg = True, ""
+        """
+        RE Manager may be unlocked with the emergency key. The emergency lock key is not accepted
+        by any other API.
+        """
+        success, msg, lock_info = True, "", {}
 
         try:
             supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
-            lock_key = request.get("lock_key", None)
-            if self._lock_info.check_lock_key(lock_key):
+            if "lock_key" not in request:
+                raise ValueError("Request contains no lock key: 'lock_key' parameter is required")
+            lock_key = request["lock_key"]
+
+            if not self._lock_info.is_set():
+                lock_info = self._format_lock_info()
+            elif self._lock_info.check_lock_key(lock_key, use_emergency_key=True):
                 self._lock_info.clear()
+                lock_info = self._format_lock_info()
+                self._save_lock_info_to_redis()
             else:
+                lock_info = self._format_lock_info()
                 raise ValueError(self._lock_key_invalid_msg())
 
         except Exception as ex:
             success, msg = False, f"Error: {ex}"
 
-        return {"success": success, "msg": msg}
+        return {"success": success, "msg": msg, "lock_info": lock_info}
 
     async def _manager_stop_handler(self, request):
         """

@@ -29,6 +29,7 @@ class PQ:
         # Clear any pool entries
         await self._pq.delete_pool_entries()
         await self._pq.user_group_permissions_clear()
+        await self._pq.lock_info_clear()
         return self._pq
 
     async def __aexit__(self, exc_t, exc_v, exc_tb):
@@ -38,6 +39,7 @@ class PQ:
         # Don't leave any test entries in the pool
         await self._pq.delete_pool_entries()
         await self._pq.user_group_permissions_clear()
+        await self._pq.lock_info_clear()
 
 
 # fmt: off
@@ -2322,5 +2324,30 @@ def test_user_group_permissions_1():
 
             await pq.user_group_permissions_clear()
             assert await pq.user_group_permissions_retrieve() is None
+
+    asyncio.run(testing())
+
+
+# ==============================================================================================
+#                           Saving and retrieving lock info
+def test_lock_info_1():
+    """
+    Test for saving and retrieving and clearing user group permissions, which are backed up in Redis.
+    """
+    lock_info_1 = {"environment": False, "queue": True, "lock_key": "abcde"}
+    lock_info_2 = {"environment": True, "queue": False, "lock_key": "fghijk"}
+
+    async def testing():
+        async with PQ() as pq:
+            assert await pq.lock_info_retrieve() is None
+
+            await pq.lock_info_save(lock_info_1)
+            assert await pq.lock_info_retrieve() == lock_info_1
+
+            await pq.lock_info_save(lock_info_2)
+            assert await pq.lock_info_retrieve() == lock_info_2
+
+            await pq.lock_info_clear()
+            assert await pq.lock_info_retrieve() is None
 
     asyncio.run(testing())

@@ -1624,8 +1624,10 @@ class RunEngineManager(Process):
         """
         logger.info("Reloading lists of allowed plans and devices ...")
         try:
-            supported_param_names = ["restore_plans_devices", "restore_permissions"]
+            supported_param_names = ["restore_plans_devices", "restore_permissions", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             # Do not reload the lists of existing plans and devices from disk file by default
             restore_plans_devices = request.get("restore_plans_devices", False)
@@ -1660,8 +1662,10 @@ class RunEngineManager(Process):
     async def _permissions_set_handler(self, request):
         logger.info("Request to set user group permission ...")
         try:
-            supported_param_names = ["user_group_permissions"]
+            supported_param_names = ["user_group_permissions", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             if "user_group_permissions" not in request:
                 raise KeyError("Parameter 'user_group_permissions' is missing")
@@ -1904,8 +1908,10 @@ class RunEngineManager(Process):
 
         success, msg = True, ""
         try:
-            supported_param_names = ["mode"]
+            supported_param_names = ["mode", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             if "mode" not in request:
                 raise Exception(f"Parameter 'mode' is not found in request {request}")
@@ -1945,8 +1951,10 @@ class RunEngineManager(Process):
         item_type, item, qsize, msg = None, None, None, ""
 
         try:
-            supported_param_names = ["user_group", "user", "item", "pos", "before_uid", "after_uid"]
+            supported_param_names = ["user_group", "user", "item", "pos", "before_uid", "after_uid", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             item, item_type, _success, _msg = self._get_item_from_request(request=request)
             if not _success:
@@ -2008,8 +2016,10 @@ class RunEngineManager(Process):
         success, msg, item_list, results, qsize = True, "", [], [], None
 
         try:
-            supported_param_names = ["user_group", "user", "items", "pos", "before_uid", "after_uid"]
+            supported_param_names = ["user_group", "user", "items", "pos", "before_uid", "after_uid", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             # Prepare items
             if "items" not in request:
@@ -2096,8 +2106,10 @@ class RunEngineManager(Process):
         success, msg, qsize, item, item_type = True, "", 0, None, None
 
         try:
-            supported_param_names = ["user_group", "user", "item", "replace"]
+            supported_param_names = ["user_group", "user", "item", "replace", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             item, item_type, _success, _msg = self._get_item_from_request(request=request)
             if not _success:
@@ -2159,8 +2171,10 @@ class RunEngineManager(Process):
         logger.info("Removing item from the queue ...")
         item, qsize, msg = {}, None, ""
         try:
-            supported_param_names = ["pos", "uid"]
+            supported_param_names = ["pos", "uid", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             pos = request.get("pos", None)
             uid = request.get("uid", None)
@@ -2184,8 +2198,10 @@ class RunEngineManager(Process):
         logger.info("Removing a batch of items from the queue ...")
         items, qsize, msg = [], None, ""
         try:
-            supported_param_names = ["uids", "ignore_missing"]
+            supported_param_names = ["uids", "ignore_missing", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             uids = request.get("uids", None)
             ignore_missing = request.get("ignore_missing", True)
@@ -2214,8 +2230,10 @@ class RunEngineManager(Process):
         logger.info("Moving a queue item ...")
         item, qsize, msg = {}, None, ""
         try:
-            supported_param_names = ["pos", "uid", "pos_dest", "before_uid", "after_uid"]
+            supported_param_names = ["pos", "uid", "pos_dest", "before_uid", "after_uid", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             pos = request.get("pos", None)
             uid = request.get("uid", None)
@@ -2250,8 +2268,10 @@ class RunEngineManager(Process):
         logger.info("Moving a batch of queue items ...")
         items, qsize, msg = [], None, ""
         try:
-            supported_param_names = ["uids", "pos_dest", "before_uid", "after_uid", "reorder"]
+            supported_param_names = ["uids", "pos_dest", "before_uid", "after_uid", "reorder", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             uids = request.get("uids", None)
             pos_dest = request.get("pos_dest", None)
@@ -2302,8 +2322,10 @@ class RunEngineManager(Process):
         item_type, item, qsize, msg = None, None, None, ""
 
         try:
-            supported_param_names = ["item", "user_group", "user"]
+            supported_param_names = ["item", "user_group", "user", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             item, item_type, _success, _msg = self._get_item_from_request(request=request)
             if not _success:
@@ -2334,8 +2356,10 @@ class RunEngineManager(Process):
         """
         logger.info("Clearing the queue ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             await self._plan_queue.clear_queue()
             success, msg = True, ""
@@ -2366,8 +2390,10 @@ class RunEngineManager(Process):
         """
         logger.info("Clearing the plan execution history ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             await self._plan_queue.clear_history()
             success, msg = True, ""
@@ -2382,8 +2408,10 @@ class RunEngineManager(Process):
         """
         logger.info("Opening the new RE environment ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             success, msg = await self._start_re_worker()
         except Exception as ex:
@@ -2398,8 +2426,10 @@ class RunEngineManager(Process):
         """
         logger.info("Closing existing RE environment ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             success, msg = await self._stop_re_worker()
         except Exception as ex:
@@ -2414,8 +2444,10 @@ class RunEngineManager(Process):
         """
         logger.info("Destroying current RE environment ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             success, msg = await self._kill_re_worker()
         except Exception as ex:
@@ -2438,8 +2470,10 @@ class RunEngineManager(Process):
         """
         logger.info("Uploading script to RE environment ...")
         try:
-            supported_param_names = ["script", "update_lists", "update_re", "run_in_background"]
+            supported_param_names = ["script", "update_lists", "update_re", "run_in_background", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             script = request.get("script", None)
             if script is None:
@@ -2482,8 +2516,10 @@ class RunEngineManager(Process):
         """
         logger.debug("Starting execution of a function in RE Worker namespace ...")
         try:
-            supported_param_names = ["item", "user_group", "user", "run_in_background"]
+            supported_param_names = ["item", "user_group", "user", "run_in_background", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             item, item_type, _success, _msg = self._get_item_from_request(
                 request=request, supported_item_types=("function",)
@@ -2585,8 +2621,10 @@ class RunEngineManager(Process):
         """
         logger.info("Starting queue processing ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             success, msg = await self._start_plan()
         except Exception as ex:
@@ -2604,8 +2642,10 @@ class RunEngineManager(Process):
         """
         logger.info("Activating 'stop queue' sequence ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             success, msg = self._queue_stop_activate()
         except Exception as ex:
@@ -2621,8 +2661,10 @@ class RunEngineManager(Process):
         """
         logger.info("Deactivating 'stop queue' sequence ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             success, msg = self._queue_stop_deactivate()
         except Exception as ex:
@@ -2638,8 +2680,10 @@ class RunEngineManager(Process):
         logger.info("Pausing the queue (currently running plan) ...")
 
         try:
-            supported_param_names = ["option"]
+            supported_param_names = ["option", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             option = request.get("option", "deferred")
             available_options = ("deferred", "immediate")
@@ -2670,8 +2714,10 @@ class RunEngineManager(Process):
         logger.info("Resuming paused plan ...")
 
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             success, msg = await self._continue_run_engine(option="resume")
         except Exception as ex:
@@ -2685,8 +2731,10 @@ class RunEngineManager(Process):
         """
         logger.info("Stopping paused plan ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             success, msg = await self._continue_run_engine(option="stop")
         except Exception as ex:
@@ -2700,8 +2748,10 @@ class RunEngineManager(Process):
         """
         logger.info("Aborting paused plan ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             success, msg = await self._continue_run_engine(option="abort")
         except Exception as ex:
@@ -2715,8 +2765,10 @@ class RunEngineManager(Process):
         """
         logger.info("Halting paused plan ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             success, msg = await self._continue_run_engine(option="halt")
         except Exception as ex:
@@ -2758,9 +2810,35 @@ class RunEngineManager(Process):
         return {"success": success, "msg": msg, "run_list": run_list, "run_list_uid": run_list_uid}
 
     def _lock_key_invalid_msg(self):
+        """
+        Format error message, which reports an invalid lock key.
+        """
         return f"Invalid lock key: \n{self._lock_info.to_str()}"
 
+    def _validate_lock_key(self, lock_key, *, check_environment=False, check_queue=False):
+        """
+        Validate the lock key if the environment and/or queue are locked. The choice
+        of ``check_environment`` and ``check_queue`` depend on whether an API is locked
+        by ``environment`` or ``queue`` option.
+        """
+        # Decide if the API is locked
+        locked = check_environment and self._lock_info.environment
+        locked = locked or (check_queue and self._lock_info.queue)
+
+        if lock_key is None:
+            if locked:
+                raise ValueError(self._lock_key_invalid_msg())
+        elif isinstance(lock_key, str):
+            if locked:
+                if not self._lock_info.check_lock_key(lock_key):
+                    raise ValueError(self._lock_key_invalid_msg())
+        else:
+            raise ValueError(f"Lock key must be a non-empty string or None: lock_key = {lock_key!r}")
+
     def _format_lock_info(self):
+        """
+        Format lock info as a dictionary, which is returned as ``lock_info`` by multiple API.
+        """
         return {
             "environment": self._lock_info.environment,
             "queue": self._lock_info.queue,
@@ -2837,6 +2915,15 @@ class RunEngineManager(Process):
         return {"success": success, "msg": msg, "lock_info": lock_info}
 
     async def _lock_info_handler(self, request):
+        """
+        Return information on the status of RE Manager lock. Optionally, it can validate the lock key.
+        If the value of the optional parameter ``lock_key`` has a string value and RE Manager is locked,
+        then the function verifies if the string matches current lock key used to lock the manager.
+        The API call succeeds (``'success': True``) if the keys match and fails otherwise. If ``lock_key``
+        is missing or ``None``, then the API call always succeeds. The API call always succeeds if
+        RE Manager is unlocked. The function does not match ``lock_key`` with the emergency lock key,
+        which is used only to unlock RE Manager if the lock key is lost.
+        """
         success, msg, lock_info = True, "", {}
 
         try:
@@ -2845,8 +2932,8 @@ class RunEngineManager(Process):
 
             lock_info = self._format_lock_info()
             lock_key = request.get("lock_key", None)
-            if (lock_key is not None) and not self._lock_info.check_lock_key(lock_key):
-                raise ValueError(self._lock_key_invalid_msg())
+            if lock_key is not None:
+                self._validate_lock_key(lock_key, check_environment=True, check_queue=True)
 
         except Exception as ex:
             success, msg = False, f"Error: {ex}"
@@ -2855,8 +2942,10 @@ class RunEngineManager(Process):
 
     async def _unlock_handler(self, request):
         """
-        RE Manager may be unlocked with the emergency key. The emergency lock key is not accepted
-        by any other API.
+        Unlock RE Manager using ``lock_key``. The ``lock_key`` must match the key used to lock
+        the environment and/or the queue. Optionally, RE Manager may be unlocked with
+        the emergency lock key (set using  ``QSERVER_EMERGENCY_LOCK_KEY_FOR_SERVER`` environment
+        variable).
         """
         success, msg, lock_info = True, "", {}
 

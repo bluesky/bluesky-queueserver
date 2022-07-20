@@ -4772,6 +4772,60 @@ def test_zmq_api_lock_2(monkeypatch, re_manager_cmd, set_em_key, unlock_with_em_
 
 
 # fmt: off
+@pytest.mark.parametrize("lock_options", [
+    {"environment": True},
+    {"queue": True},
+    {"environment": True, "queue": True},
+])
+@pytest.mark.parametrize("test_option", [
+    None,
+    "kill",
+    "restart"
+])
+# fmt: on
+def test_zmq_api_lock_3(re_manager_cmd, lock_options, test_option):  # noqa: F811
+    """
+    ``lock`` API: verify, that lock presists when RE Manager is restarted.
+    """
+    manager = re_manager_cmd([])
+
+    custom_key = "custom-key"
+
+    # Lock RE Manager
+    params = {**lock_options, "lock_key": custom_key, "user": _user}
+    resp1, _ = zmq_single_request("lock", params=params)
+    assert resp1["success"] is True, f"resp={resp1}"
+    assert resp1["msg"] == "", f"resp={resp1}"
+
+    lock_info = resp1["lock_info"]
+    params = {k: lock_info[k] for k in lock_options}
+    assert params == lock_options
+
+    if test_option == "kill":
+        zmq_single_request("manager_kill")
+        ttime.sleep(6)
+        assert wait_for_condition(10, condition=condition_manager_idle)
+    elif test_option == "restart":
+        manager.stop_manager(cleanup=False)
+        manager.start_manager(cleanup=False)
+        assert wait_for_condition(10, condition=condition_manager_idle)
+    elif test_option is None:
+        pass
+    else:
+        assert False, f"Unknown test option: {test_option}"
+
+    resp3, _ = zmq_single_request("lock_info")
+    assert resp3["success"] is True
+    assert resp3["msg"] == ""
+    assert resp3["lock_info"] == lock_info
+
+    # Unlock RE Manager with an invalid key
+    resp4, _ = zmq_single_request("unlock", params={"lock_key": custom_key})
+    assert resp4["success"] is True, f"resp={resp4}"
+    assert resp4["msg"] == "", f"resp={resp4}"
+
+
+# fmt: off
 @pytest.mark.parametrize("params, success, msg", [
     # No option ('environment' or 'queue') is selected
     ({"lock_key": "custom-key", "user": _user}, False, "environment and/or queue must be selected"),
@@ -4794,7 +4848,7 @@ def test_zmq_api_lock_2(monkeypatch, re_manager_cmd, set_em_key, unlock_with_em_
      False, "Note must be a string or None"),
 ])
 # fmt: on
-def test_zmq_api_lock_3_fail(re_manager, params, success, msg):  # noqa: F811
+def test_zmq_api_lock_4_fail(re_manager, params, success, msg):  # noqa: F811
     """
     ``lock`` API: failing cases
     """
@@ -4813,7 +4867,7 @@ def test_zmq_api_lock_3_fail(re_manager, params, success, msg):  # noqa: F811
     ({"lock_key": "proper-key"}, True, ""),
 ])
 # fmt: on
-def test_zmq_api_unlock_1_fail(re_manager, params, success, msg):  # noqa: F811
+def test_zmq_api_lock_5_fail(re_manager, params, success, msg):  # noqa: F811
     """
     ``unlock`` API: failing cases
     """
@@ -4823,6 +4877,106 @@ def test_zmq_api_unlock_1_fail(re_manager, params, success, msg):  # noqa: F811
         assert msg == ""
     else:
         assert msg in resp1["msg"]
+
+
+# fmt: off
+@pytest.mark.parametrize("unlock", [False, True])
+@pytest.mark.parametrize("lock_options, is_locked", [
+    ({}, False),
+    ({"environment": True}, False),
+    ({"queue": True}, True),  # Queue is locked
+    ({"environment": True, "queue": True}, True),  # Queue is locked
+])
+# fmt: on
+def test_zmq_api_lock_6(re_manager, lock_options, is_locked, unlock):  # noqa: F811
+    """
+    ``lock`` API: check that the appropriate API are locked while the queue is locked
+    """
+    custom_key = "custom-key"
+    unlock_params = {"lock_key": custom_key} if unlock else {}
+
+    # Add 4 plans to the queue
+    params = {"items": [_plan1, _plan2, _plan3, _plan4], "user": _user, "user_group": _user_group}
+    resp0, _ = zmq_single_request("queue_item_add_batch", params=params)
+    assert resp0["success"] is True
+
+    def check_reply(reply):
+        success = not is_locked or unlock
+        assert reply["success"] is success, f"resp={reply}"
+        if success:
+            assert reply["msg"] == "", f"resp={reply}"
+        else:
+            assert "Invalid lock key" in reply["msg"], f"resp={reply}"
+
+    if lock_options:
+        params = {**lock_options, "lock_key": custom_key, "user": _user}
+        resp1, _ = zmq_single_request("lock", params=params)
+        assert resp1["success"] is True, f"resp={resp1}"
+
+    # API for uploading permissions
+    resp2, _ = zmq_single_request("permissions_reload", params={**unlock_params})
+    check_reply(resp2)
+
+    resp3, _ = zmq_single_request("permissions_get")
+    permissions = resp3["user_group_permissions"]
+
+    params = {"user_group_permissions": permissions, **unlock_params}
+    resp4, _ = zmq_single_request("permissions_set", params=params)
+    check_reply(resp4)
+
+    # Setting queue mode
+    params = {"mode": {"loop": False}, **unlock_params}
+    resp5, _ = zmq_single_request("queue_mode_set", params=params)
+    check_reply(resp5)
+
+    # Adding items to the queue
+    params = {"item": _plan1, "user": _user, "user_group": _user_group, **unlock_params}
+    resp6, _ = zmq_single_request("queue_item_add", params=params)
+    check_reply(resp6)
+
+    params = {"items": [_plan2, _plan3, _plan4], "user": _user, "user_group": _user_group, **unlock_params}
+    resp7, _ = zmq_single_request("queue_item_add_batch", params=params)
+    check_reply(resp7)
+
+    # Read the plan queue
+    resp8, _ = zmq_single_request("queue_get")
+    assert resp8["success"] is True
+    plan_queue = resp8["items"]
+    assert len(plan_queue) >= 4  # It must contain at least 4 plans
+
+    # Updating a queue item
+    plan = plan_queue[0]
+    params = {"item": plan, "user": _user, "user_group": _user_group, **unlock_params}
+    resp9, _ = zmq_single_request("queue_item_update", params=params)
+    check_reply(resp9)
+
+    # Move queue items
+    params = {"pos": 0, "pos_dest": 1, **unlock_params}
+    resp10, _ = zmq_single_request("queue_item_move", params=params)
+    check_reply(resp10)
+
+    uids = [_["item_uid"] for _ in plan_queue[2:4]]
+    params = {"uids": uids, "pos_dest": "front", **unlock_params}
+    resp11, _ = zmq_single_request("queue_item_move_batch", params=params)
+    check_reply(resp11)
+
+    # Remove queue items
+    params = {"pos": 3, **unlock_params}
+    resp12, _ = zmq_single_request("queue_item_remove", params=params)
+    check_reply(resp12)
+
+    params = {"uids": uids, **unlock_params}
+    resp13, _ = zmq_single_request("queue_item_remove_batch", params=params)
+    check_reply(resp13)
+
+    # Clearing the history and the queue
+    resp14, _ = zmq_single_request("history_clear", params={**unlock_params})
+    check_reply(resp14)
+    resp15, _ = zmq_single_request("queue_clear", params={**unlock_params})
+    check_reply(resp15)
+
+    resp99, _ = zmq_single_request("unlock", params={"lock_key": custom_key})
+    assert resp99["success"] is True, f"resp={resp99}"
 
 
 # =======================================================================================

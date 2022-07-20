@@ -1153,6 +1153,7 @@ class RunEngineManager(Process):
 
     async def _save_lock_info_to_redis(self):
         try:
+            logger.debug("Saving lock info to Redis ...")
             lock_info = self._lock_info.to_dict()
             await self._plan_queue.lock_info_save(lock_info)
         except Exception as ex:
@@ -1160,6 +1161,7 @@ class RunEngineManager(Process):
 
     async def _load_lock_info_from_redis(self):
         try:
+            logger.debug("Loading lock info from Redis ...")
             lock_info = await self._plan_queue.lock_info_retrieve()
             if lock_info:  # The lock info may or may not be saved to Redis.
                 self._lock_info.from_dict(lock_info)
@@ -2905,7 +2907,7 @@ class RunEngineManager(Process):
                     environment=environment, queue=queue, lock_key=lock_key, note=note, user_name=user_name
                 )
                 lock_info = self._format_lock_info()
-                self._save_lock_info_to_redis()
+                await self._save_lock_info_to_redis()
             else:
                 raise ValueError(f"RE Manager was locked with a different key: \n{self._lock_info.to_str()}")
 
@@ -2964,7 +2966,7 @@ class RunEngineManager(Process):
             elif self._lock_info.check_lock_key(lock_key, use_emergency_key=True):
                 self._lock_info.clear()
                 lock_info = self._format_lock_info()
-                self._save_lock_info_to_redis()
+                await self._save_lock_info_to_redis()
             else:
                 lock_info = self._format_lock_info()
                 raise ValueError(self._lock_key_invalid_msg())

@@ -927,7 +927,7 @@ class RunEngineManager(Process):
         return success, err_msg
 
     def _queue_stop_activate(self):
-        if self._manager_state != MState.EXECUTING_QUEUE:
+        if self._manager_state not in (MState.EXECUTING_QUEUE, MState.STARTING_QUEUE):
             msg = f"Failed to pause the queue. Queue is not running. Manager state: {self._manager_state}"
             return False, msg
         else:
@@ -2517,6 +2517,8 @@ class RunEngineManager(Process):
         the task and load the result.
         """
         logger.debug("Starting execution of a function in RE Worker namespace ...")
+
+        item = None
         try:
             supported_param_names = ["item", "user_group", "user", "run_in_background", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)

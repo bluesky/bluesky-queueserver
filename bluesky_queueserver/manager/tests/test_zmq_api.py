@@ -4979,6 +4979,107 @@ def test_zmq_api_lock_6(re_manager, lock_options, is_locked, unlock):  # noqa: F
     assert resp99["success"] is True, f"resp={resp99}"
 
 
+# fmt: off
+@pytest.mark.parametrize("unlock", [False, True])
+@pytest.mark.parametrize("lock_options, is_locked", [
+    ({}, False),
+    ({"queue": True}, False),
+    ({"environment": True}, True),  # Environment is locked
+    ({"environment": True, "queue": True}, True),  # Environment is locked
+])
+# fmt: on
+def test_zmq_api_lock_7(re_manager, lock_options, is_locked, unlock):  # noqa: F811
+    """
+    ``lock`` API: check that the appropriate API are locked while the environment is locked.
+    This test will work propery only if the key is validated before the state of the manager
+    is checked, which is how APIs are implemented.
+    """
+    custom_key = "custom-key"
+    unlock_params = {"lock_key": custom_key} if unlock else {}
+
+    def check_reply(reply):
+        success = not is_locked or unlock
+        assert reply["success"] is success, f"resp={reply}"
+        if success:
+            assert reply["msg"] == "", f"resp={reply}"
+        else:
+            assert "Invalid lock key" in reply["msg"], f"resp={reply}"
+
+    if lock_options:
+        params = {**lock_options, "lock_key": custom_key, "user": _user}
+        resp1, _ = zmq_single_request("lock", params=params)
+        assert resp1["success"] is True, f"resp={resp1}"
+
+    # Open and destroy the environment
+    resp2, _ = zmq_single_request("environment_open", params={**unlock_params})
+    check_reply(resp2)
+    cond = condition_environment_created if not is_locked or unlock else condition_manager_idle
+    assert wait_for_condition(20, condition=cond)
+
+    resp3, _ = zmq_single_request("environment_destroy", params={**unlock_params})
+    # resp3, _ = zmq_single_request("environment_close", params={**unlock_params})
+    check_reply(resp3)
+    assert wait_for_condition(20, condition=condition_environment_closed)
+
+    # Open the environment again
+    resp4, _ = zmq_single_request("environment_open", params={**unlock_params})
+    check_reply(resp4)
+    cond = condition_environment_created if not is_locked or unlock else condition_manager_idle
+    assert wait_for_condition(20, condition=cond)
+
+    for api_to_test in ("re_resume", "re_stop", "re_abort", "re_halt"):
+        # Always add the plan (not part of the test, but necessary for the test to complete)
+        params = {"item": _plan3, "user": _user, "user_group": _user_group, "lock_key": custom_key}
+        resp5, _ = zmq_single_request("queue_item_add", params=params)
+        assert resp5["success"] is True
+
+        resp6, _ = zmq_single_request("queue_start", params=unlock_params)
+        check_reply(resp6)
+
+        resp7, _ = zmq_single_request("queue_stop", params=unlock_params)
+        check_reply(resp7)
+
+        resp8, _ = zmq_single_request("queue_stop_cancel", params=unlock_params)
+        check_reply(resp8)
+
+        ttime.sleep(1)
+
+        resp9, _ = zmq_single_request("re_pause", params=unlock_params)
+        check_reply(resp9)
+
+        cond = condition_manager_paused if not is_locked or unlock else condition_manager_idle
+        assert wait_for_condition(20, condition=cond)
+
+        resp10, _ = zmq_single_request(api_to_test, params=unlock_params)
+        check_reply(resp10)
+
+        assert wait_for_condition(20, condition=condition_manager_idle)
+
+    params = {"item": _plan1, "user": _user, "user_group": _user_group, **unlock_params}
+    resp11, _ = zmq_single_request("queue_item_execute", params=params)
+    check_reply(resp11)
+    assert wait_for_condition(20, condition=condition_manager_idle)
+
+    params = {"script": "", **unlock_params}
+    resp12, _ = zmq_single_request("script_upload", params=params)
+    check_reply(resp12)
+    assert wait_for_condition(20, condition=condition_manager_idle)
+
+    func_item = {"name": "function_sleep", "args": [0.5], "item_type": "function"}
+    params = {"item": func_item, "user": _user, "user_group": _user_group, **unlock_params}
+    resp13, _ = zmq_single_request("function_execute", params=params)
+    check_reply(resp13)
+    assert wait_for_condition(20, condition=condition_manager_idle)
+
+    # Close the environment
+    resp98, _ = zmq_single_request("environment_close", params={**unlock_params})
+    check_reply(resp98)
+    assert wait_for_condition(20, condition=condition_environment_closed)
+
+    resp99, _ = zmq_single_request("unlock", params={"lock_key": custom_key})
+    assert resp99["success"] is True, f"resp={resp99}"
+
+
 # =======================================================================================
 #            Tests that involve restarting the manager process
 

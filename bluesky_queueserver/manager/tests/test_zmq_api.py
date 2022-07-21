@@ -5036,6 +5036,10 @@ def test_zmq_api_lock_7(re_manager, lock_options, is_locked, unlock):  # noqa: F
         resp6, _ = zmq_single_request("queue_start", params=unlock_params)
         check_reply(resp6)
 
+        # Wait until the queue starts. Otherwise 'queue_stop' may stop the queue
+        #   before execution of the first plan is started and the test will fail
+        ttime.sleep(0.5)
+
         resp7, _ = zmq_single_request("queue_stop", params=unlock_params)
         check_reply(resp7)
 

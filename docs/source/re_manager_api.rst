@@ -1662,37 +1662,60 @@ Method        **'lock'**
 ------------  -----------------------------------------------------------------------------------------
 Description   Lock RE Manager with the provided lock key to prevent other clients from modifying
               the environment, starting plans or tasks or editing the queue. The lock is not intended
-              for access control and affects only APIs that modify the state of RE Manager. The
-              read-only APIs are not affected, therefore all monitoring client applications
-              remain functional after the lock is applied. Applying the lock does not influence
-              internal operation of the manager, e.g. running queue will continue running and has
-              to be explicitly stopped if needed.
+              for access control. The read-only API are not affected by the lock, therefore all monitoring 
+              client applications are expected to remain functional after the lock is applied. The lock 
+              does not influence internal operation of the manager, e.g. the running queue will continue 
+              running and has to be explicitly stopped if needed.
 
               Each lockable API has an optional ``lock_key`` parameter. Passing a valid lock key
-              (used to lock RE Manager) to the API allows to control RE Manager even if it is locked.
-              This allows beamline scientists to lock RE Manager before entering the hutch to change
-              samples or make adjustments and then safely run a series of calibration or testing
-              plans without interference from automated agents or remote users (unless the users are
-              provided with the lock key).
+              (used to lock RE Manager) with the API requests allows to control RE Manager while it is 
+              locked. This supports the scenarios when a beamline scientists locks RE Manager with 
+              a unique code before entering the hutch to change samples or make adjustments and then 
+              safely runs a series of calibration or testing plans without interference from automated 
+              agents or remote users. A remote operators may still control locked RE Manager if 
+              the beamline scientists provides them with the lock key.
 
               The API parameters allow to choose between locking **environment**, **queue** or both.
-              Locking the environment affects the following API: **environment_open**,
-              **environment_close**, **environment_destroy**, **queue_start**, **queue_stop**,
-              **queue_stop_cancel**, **queue_item_execute**, **re_pause**, **re_resume**, **re_stop**,
-              **re_abort**, **re_halt**, **script_upload**, **function_execute**.
-              Locking the queue affects the following API: **queue_mode_set**, **queue_item_add**,
-              **queue_item_add_batch**, **queue_item_update**, **queue_item_remove**,
-              **queue_item_remove_batch**, **queue_item_move**, **queue_item_move_batch**,
-              **queue_clear**, **history_clear**, **permissions_reload**, **permissions_set**.
+              Locking **the environment** affects the following API: 
+
+              - **environment_open**
+              - **environment_close** 
+              - **environment_destroy**
+              - **queue_start** 
+              - **queue_stop**
+              - **queue_stop_cancel** 
+              - **queue_item_execute**
+              - **re_pause** 
+              - **re_resume**
+              - **re_stop**
+              - **re_abort** 
+              - **re_halt** 
+              - **script_upload** 
+              - **function_execute**
+
+              Locking **the queue** affects the following API: 
+              
+              - **queue_mode_set** 
+              - **queue_item_add**
+              - **queue_item_add_batch** 
+              - **queue_item_update** 
+              - **queue_item_remove**
+              - **queue_item_remove_batch** 
+              - **queue_item_move** 
+              - **queue_item_move_batch**
+              - **queue_clear** 
+              - **history_clear** 
+              - **permissions_reload** 
+              - **permissions_set**
 
               The additional parameters include the name of the user (**user**, required) who locked
               RE Manager and the message to other users (**note**, optional) which may explain
               the reason why the manager is locked. The user name and the note is returned by
               **lock_info** API and included in the *'Invalid lock key'* error messages.
 
-              RE Manager supports an emergency lock key (set using
-              ``QSERVER_EMERGENCY_LOCK_KEY_FOR_SERVER`` environment variable). The emergency key
-              is used to unlock RE Manager if the lock key is lost. The emergency lock key is
+              An emergency lock key may be optionally set using
+              ``QSERVER_EMERGENCY_LOCK_KEY_FOR_SERVER`` environment variable. The emergency key
+              could be used to unlock RE Manager if the lock key is lost. The emergency lock key is
               accepted only by the **unlock** API.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **lock_key**: *str*
@@ -1762,46 +1785,29 @@ Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 Method        **'lock_info'**
 ------------  -----------------------------------------------------------------------------------------
-Description   Lock RE Manager with the provided lock key to prevent other clients from modifying
+Description   Load the lock status of RE Manager and optionally validate the lock key. Monitor 
+              *lock_info_uid* field of RE Manager status (see documentation for the **status** API) 
+              to detect changes in lock status and download the lock status only when the UID changes.
 ------------  -----------------------------------------------------------------------------------------
-Parameters    **lock_key**: *str*
-                  The lock key is an arbitrary non-empty string. Users/clients are expected to keep
-                  the key used to lock RE Manager and use it to unlock the manager or make API requests.
-                  If the lock key is lost by accident, then RE Manager may be unlocked using the
-                  emergency lock key.
-
+Parameters    **lock_key**: *str* or *None* (optional, default: *None*)
+                  The parameter is used to validate the lock key (not the emergency lock key, see
+                  the documentation for **lock** API). If the lock key is a string that matches 
+                  the key used to lock RE Manager, then the request succeeds. If no lock key is passed
+                  with the request, the lock key is *None* or RE Manager is not locked, then no validation 
+                  is performed and the request always succeeds. The request fails if RE Manager is 
+                  locked and *lock_key* is not valid.                 
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
-                  indicates if the request was processed successfully.
+                  indicates if the request was processed successfully. The request succeeds if RE Manager 
+                  is unlocked or the *lock_key* parameter is not specified or *None*. If *lock_key* is 
+                  a string, then the request succeeds if the key is valid and fails otherwise.
 
               **msg**: *str*
                   error message in case of failure, empty string ('') otherwise.
 
               **lock_info**: *dict*
-                  Dictionary containing the information on the status of the lock. The dictionary
-                  is also returned by **lock_info** API and includes the following fields:
-
-                  - **'environment'** (*boolean*) - indicates if the RE Worker environment is locked.
-
-                  - **'queue'** (*boolean*) - indicates if the queue is locked.
-
-                  - **'user'** (*str* or *None*) - the name of the user who locked RE Manager,
-                    *None* if the lock is not set.
-
-                  - **'note'** (*str* or *None*) - the text note left by the user who locked RE Manager,
-                    *None* if the lock is not set.
-
-                  - **'time'** (*float* or *None*) - timestamp (time when RE Manager was locked),
-                    *None* if the lock is not set.
-
-                  - **'time_str'** (*str*) - human-readable representation of the timestamp,
-                    empty string if the lock is not set.
-
-                  - **'emergency_lock_key_is_set'** (*boolean*) - indicates if the optional emergency
-                    lock key is set.
-
-                  - **'uid'** (*str*) - *lock_info* UID (also returned in RE Manager status).
-
+                  Dictionary containing the information on the status of the lock. See the documentation
+                  on **lock** API for the detailed description.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
@@ -1815,14 +1821,12 @@ Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 Method        **'unlock'**
 ------------  -----------------------------------------------------------------------------------------
-Description   Lock RE Manager with the provided lock key to prevent other clients from modifying
+Description   Unlock RE Manager with the lock key used to lock the manager or the emergency lock
+              key. See the documentation for **lock** API for more details. 
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **lock_key**: *str*
-                  The lock key is an arbitrary non-empty string. Users/clients are expected to keep
-                  the key used to lock RE Manager and use it to unlock the manager or make API requests.
-                  If the lock key is lost by accident, then RE Manager may be unlocked using the
-                  emergency lock key.
-
+                  The lock key must match the key used to lock RE Manager (with **lock** API) or
+                  the emergency lock key.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -1831,30 +1835,8 @@ Returns       **success**: *boolean*
                   error message in case of failure, empty string ('') otherwise.
 
               **lock_info**: *dict*
-                  Dictionary containing the information on the status of the lock. The dictionary
-                  is also returned by **lock_info** API and includes the following fields:
-
-                  - **'environment'** (*boolean*) - indicates if the RE Worker environment is locked.
-
-                  - **'queue'** (*boolean*) - indicates if the queue is locked.
-
-                  - **'user'** (*str* or *None*) - the name of the user who locked RE Manager,
-                    *None* if the lock is not set.
-
-                  - **'note'** (*str* or *None*) - the text note left by the user who locked RE Manager,
-                    *None* if the lock is not set.
-
-                  - **'time'** (*float* or *None*) - timestamp (time when RE Manager was locked),
-                    *None* if the lock is not set.
-
-                  - **'time_str'** (*str*) - human-readable representation of the timestamp,
-                    empty string if the lock is not set.
-
-                  - **'emergency_lock_key_is_set'** (*boolean*) - indicates if the optional emergency
-                    lock key is set.
-
-                  - **'uid'** (*str*) - *lock_info* UID (also returned in RE Manager status).
-
+                  Dictionary containing the updated information on the lock status after the request 
+                  is processed. See the documentation on **lock** API for the detailed description.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================

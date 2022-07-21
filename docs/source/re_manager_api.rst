@@ -448,9 +448,14 @@ Description   Reload user group permissions from the default location or the loc
 Parameters    **restore_plans_devices**: *boolean* (optional)
                   reload the lists of existing plans and devices from disk if *True*, otherwise
                   use current lists stored in memory. Default: *False*.
+
               **restore_permissions**: *boolean* (optional)
                   reload user group permissions from disk if *True*, otherwise use current permissions.
                   Default: *True*.
+
+              **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the queue** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -503,6 +508,10 @@ Description   Uploads the dictionary of user group permissions. If the uploaded 
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **user_group_permissions**: *dict*
                   dictionary, which contains user group permissions.
+
+              **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the queue** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -578,7 +587,9 @@ Description   Clear the contents of the plan history.
 
               *The request always succeeds*.
 ------------  -----------------------------------------------------------------------------------------
-Parameters    ---
+Parameters    **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the queue** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -604,7 +615,9 @@ Description   Initiate the creation of a new RE Worker environment. The request 
               the environment, close the existing environment first by sending 'environment_close'
               request. To destroy 'frozen' environment, use 'environment_destroy' method.
 ------------  -----------------------------------------------------------------------------------------
-Parameters    ---
+Parameters    **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the environment** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -633,7 +646,9 @@ Description   Initiate the operation of closing the existing RE Worker environme
               is no existing environment or if RE Manager is not in 'idle' state. Use
               'environment_destroy' method to close a non-responsive RE Worker environment.
 ------------  -----------------------------------------------------------------------------------------
-Parameters    ---
+Parameters    **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the environment** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -664,7 +679,9 @@ Description   Initiate the operation of destroying of the existing (unresponsive
               *True* or **manager_state** is *'creating_environment'*, otherwise the request is
               rejected.
 ------------  -----------------------------------------------------------------------------------------
-Parameters    ---
+Parameters    **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the environment** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -700,6 +717,10 @@ Description   Sets parameters that define the mode of plan queue execution. The 
 Parameters    **mode**: *dict* or *str*
                   the dictionary of queue mode parameters or *'default'* string. Supported keys of
                   the dictionary: *'loop'* (*boolean*).
+
+              **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the queue** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -782,6 +803,10 @@ Parameters    **item**: *dict*
               **before_uid**, **after_uid**: *str* (optional)
                   insert the item before or after the item with the given item UID.
 
+              **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the queue** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
+
               *Parameters 'pos', 'before_uid' and 'after_uid' are mutually exclusive.*
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
@@ -842,6 +867,10 @@ Parameters    **items**: *list*
 
               **before_uid**, **after_uid**: *str* (optional)
                   insert the batch of items before or after the item with the given item UID.
+
+              **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the queue** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
 
               *Parameters 'pos', 'before_uid' and 'after_uid' are mutually exclusive.*
 ------------  -----------------------------------------------------------------------------------------
@@ -913,6 +942,10 @@ Parameters    **item**: *dict*
               **replace**: *boolean* (optional)
                   replace the updated item UID with the new random UID (True) or keep the original
                   UID (False). Default value is (False).
+
+              **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the queue** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -989,6 +1022,10 @@ Parameters    **pos**: *int*, *'front'* or *'back'* (optional)
               **uid**: *str* (optional)
                   uid of the requested item.
 
+              **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the queue** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
+
               *Parameters 'pos' and 'uid' are mutually exclusive.*
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
@@ -1033,6 +1070,10 @@ Parameters    **uids**: *list(str)* (*required*)
                   items or some of the batch items are not found in the queue. If *'True'* (default),
                   then the method attempts to remove all items in the batch and ignores missing items.
                   The method returns the list of items that were removed from the queue.
+
+              **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the queue** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -1074,6 +1115,10 @@ Parameters    **pos**: *int*, *'front'* or *'back'*
               **before_uid**, **after_uid**: *str*
                   UID of an existing item in the queue. The selected item will be moved
                   before or after this item.
+
+              **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the queue** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
 
               *Parameters 'pos' and 'uid' are mutually exclusive, but at least one of them must
               be specified.*
@@ -1140,6 +1185,10 @@ Parameters    **uids**: *list(str)* (*required*)
                   Arranged moved items in the order of UIDs in the *'uids'* list
                   (*False*) or according to the original item positions in the queue (*True*).
 
+              **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the queue** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
+
               *Parameters 'pos_dest', 'before_uid' and 'after_uid' are mutually exclusive,
               but at least one of them must be specified.*
 ------------  -----------------------------------------------------------------------------------------
@@ -1205,6 +1254,10 @@ Parameters    **item**: *dict*
                   the name of the user (e.g. 'Default User'). The name is included in the item metadata
                   and may be used to identify the user who added the item to the queue. It is not
                   passed to the Run Engine or included in run metadata.
+
+              **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the environment** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -1236,7 +1289,9 @@ Description   Remove all items from the plan queue. The currently running plan d
               the queue and is not affected by this operation. If the plan fails or its execution
               is stopped, it will be pushed to the beginning of the queue.
 ------------  -----------------------------------------------------------------------------------------
-Parameters    ---
+Parameters    **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the queue** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -1260,7 +1315,9 @@ Description   Start execution of the queue. The operation succeeds only if RE Ma
               'idle' state and RE Worker environment exists. This operation only initiates
               the process of starting the execution of the queue.
 ------------  -----------------------------------------------------------------------------------------
-Parameters    ---
+Parameters    **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the environment** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -1292,7 +1349,9 @@ Description   Request RE Manager to stop execution of the queue after completion
               ('manager_state' status field has value 'executing_queue'). The 'queue_stop_pending'
               status field can be used at any time to verify if the request is pending.
 ------------  -----------------------------------------------------------------------------------------
-Parameters    ---
+Parameters    **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the environment** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -1317,7 +1376,9 @@ Description   Cancel the pending request to stop execution of the queue after th
 
               *The request always succeeds*.
 ------------  -----------------------------------------------------------------------------------------
-Parameters    ---
+Parameters    **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the environment** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -1355,6 +1416,10 @@ Description   Request Run Engine to pause currently running plan. The request wi
 Parameters    **option**: *'immediate'* or *'deferred'* (optional)
                   pause the plan immediately (roll back to the previous checkpoint) or continue
                   to the next checkpoint. Default: *'deferred'*.
+
+              **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the environment** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -1385,6 +1450,10 @@ Returns       **success**: *boolean*
 
               **msg**: *str*
                   error message in case of failure, empty string ('') otherwise.
+
+              **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the environment** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
 ------------  -----------------------------------------------------------------------------------------
 Execution     The request only initiates the operation. Wait until the plan is paused by monitoring
               'manager_state' status field (expected value is 'executing_queue' if execution is
@@ -1475,6 +1544,10 @@ Parameters    **script**: *str*
                   are executed in separate threads and only thread-safe scripts should be uploaded
                   in the background. **Developers of data acquisition workflows and/or user
                   specific code are responsible for thread safety.**
+
+              **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the environment** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -1541,6 +1614,10 @@ Parameters    **item**: *dict*
                   for thread safety to ensure there are no potential threading issues.
                   **Developers of data acquisition workflows and/or user specific code are
                   responsible for thread safety.**
+
+              **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the environment** is locked and no valid key is submitted 
+                  with the request. See documentation on :ref:`method_lock` API for more details.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -1667,7 +1744,7 @@ Description   Lock RE Manager with the provided lock key to prevent other client
               does not influence internal operation of the manager, e.g. the running queue will continue 
               running and has to be explicitly stopped if needed.
 
-              Each lockable API has an optional ``lock_key`` parameter. Passing a valid lock key
+              Each lockable API has an optional parameter **'lock_key'**. Passing a valid lock key
               (used to lock RE Manager) with the API requests allows to control RE Manager while it is 
               locked. This supports the scenarios when a beamline scientists locks RE Manager with 
               a unique code before entering the hutch to change samples or make adjustments and then 
@@ -1675,38 +1752,38 @@ Description   Lock RE Manager with the provided lock key to prevent other client
               agents or remote users. A remote operators may still control locked RE Manager if 
               the beamline scientists provides them with the lock key.
 
-              The API parameters allow to choose between locking **environment**, **queue** or both.
-              Locking **the environment** affects the following API: 
+              The API parameters allow to choose between locking the **environment**, the **queue** or both.
+              Locking the **environment** affects the following API: 
 
-              - **environment_open**
-              - **environment_close** 
-              - **environment_destroy**
-              - **queue_start** 
-              - **queue_stop**
-              - **queue_stop_cancel** 
-              - **queue_item_execute**
-              - **re_pause** 
-              - **re_resume**
-              - **re_stop**
-              - **re_abort** 
-              - **re_halt** 
-              - **script_upload** 
-              - **function_execute**
+              - :ref:`method_environment_open`
+              - :ref:`method_environment_close` 
+              - :ref:`method_environment_destroy`
+              - :ref:`method_queue_start`
+              - :ref:`method_queue_stop`
+              - :ref:`method_queue_stop_cancel` 
+              - :ref:`method_queue_item_execute`
+              - :ref:`method_re_pause` 
+              - :ref:`'re_resume' <method_re_resume_stop_abort_halt>`
+              - :ref:`'re_stop' <method_re_resume_stop_abort_halt>`
+              - :ref:`'re_abort' <method_re_resume_stop_abort_halt>` 
+              - :ref:`'re_halt' <method_re_resume_stop_abort_halt>` 
+              - :ref:`method_script_upload` 
+              - :ref:`method_function_execute`
 
-              Locking **the queue** affects the following API: 
+              Locking the **queue** affects the following API: 
               
-              - **queue_mode_set** 
-              - **queue_item_add**
-              - **queue_item_add_batch** 
-              - **queue_item_update** 
-              - **queue_item_remove**
-              - **queue_item_remove_batch** 
-              - **queue_item_move** 
-              - **queue_item_move_batch**
-              - **queue_clear** 
-              - **history_clear** 
-              - **permissions_reload** 
-              - **permissions_set**
+              - :ref:`method_queue_mode_set` 
+              - :ref:`method_queue_item_add`
+              - :ref:`method_queue_item_add_batch` 
+              - :ref:`method_queue_item_update` 
+              - :ref:`method_queue_item_remove`
+              - :ref:`method_queue_item_remove_batch` 
+              - :ref:`method_queue_item_move` 
+              - :ref:`method_queue_item_move_batch`
+              - :ref:`method_queue_clear` 
+              - :ref:`method_history_clear` 
+              - :ref:`method_permissions_reload` 
+              - :ref:`method_permissions_set`
 
               The additional parameters include the name of the user (**user**, required) who locked
               RE Manager and the message to other users (**note**, optional) which may explain
@@ -1717,6 +1794,11 @@ Description   Lock RE Manager with the provided lock key to prevent other client
               ``QSERVER_EMERGENCY_LOCK_KEY_FOR_SERVER`` environment variable. The emergency key
               could be used to unlock RE Manager if the lock key is lost. The emergency lock key is
               accepted only by the **unlock** API.
+
+              .. note:: 
+                
+                Restarting RE Manager does not change the lock status. The manager has to be unlocked
+                using the valid lock key or the emergency lock key.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **lock_key**: *str*
                   The lock key is an arbitrary non-empty string. Users/clients are expected to keep
@@ -1786,12 +1868,12 @@ Execution     Immediate: no follow-up requests are required.
 Method        **'lock_info'**
 ------------  -----------------------------------------------------------------------------------------
 Description   Load the lock status of RE Manager and optionally validate the lock key. Monitor 
-              *lock_info_uid* field of RE Manager status (see documentation for the **status** API) 
-              to detect changes in lock status and download the lock status only when the UID changes.
+              *lock_info_uid* field of RE Manager status (see documentation for the :ref:`method_status` 
+              API) to detect changes in lock status and download the lock status only when the UID changes.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **lock_key**: *str* or *None* (optional, default: *None*)
                   The parameter is used to validate the lock key (not the emergency lock key, see
-                  the documentation for **lock** API). If the lock key is a string that matches 
+                  the documentation for :ref:`method_lock` API). If the lock key is a string that matches 
                   the key used to lock RE Manager, then the request succeeds. If no lock key is passed
                   with the request, the lock key is *None* or RE Manager is not locked, then no validation 
                   is performed and the request always succeeds. The request fails if RE Manager is 
@@ -1807,7 +1889,7 @@ Returns       **success**: *boolean*
 
               **lock_info**: *dict*
                   Dictionary containing the information on the status of the lock. See the documentation
-                  on **lock** API for the detailed description.
+                  on :ref:`method_lock` API for the detailed description.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
@@ -1822,11 +1904,11 @@ Execution     Immediate: no follow-up requests are required.
 Method        **'unlock'**
 ------------  -----------------------------------------------------------------------------------------
 Description   Unlock RE Manager with the lock key used to lock the manager or the emergency lock
-              key. See the documentation for **lock** API for more details. 
+              key. See the documentation for :ref:`method_lock` API for more details. 
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **lock_key**: *str*
-                  The lock key must match the key used to lock RE Manager (with **lock** API) or
-                  the emergency lock key.
+                  The lock key must match the key used to lock RE Manager (with :ref:`method_lock` API) 
+                  or the emergency lock key.
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -1836,7 +1918,8 @@ Returns       **success**: *boolean*
 
               **lock_info**: *dict*
                   Dictionary containing the updated information on the lock status after the request 
-                  is processed. See the documentation on **lock** API for the detailed description.
+                  is processed. See the documentation on :ref:`method_lock` API for the detailed 
+                  description.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================

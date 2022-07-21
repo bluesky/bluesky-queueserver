@@ -920,6 +920,11 @@ Alternatively, ``qserver-list-plans-devices`` may be started from the ``~/qs_sta
   $ cd ~/qs_startup
   $ qserver-list-plans-devices --startup-dir .
 
+.. _locking_re_manager_tutorial:
+
+Locking RE Manager
+------------------
+
 .. _remote_monitoring_tutorial:
 
 Remote Monitoring of RE Manager Console Output

@@ -1463,3 +1463,64 @@ def test_qserver_zmq_keys():
     _, private_key = generate_zmq_keys()
     print(f"Private key used for the test: '{private_key}'")
     assert subprocess.call(["qserver-zmq-keys", f"--zmq-private-key={private_key}"]) == SUCCESS
+
+
+# ==================================================================================
+#                             qserver-lock
+
+
+def test_qserver_lock_01(re_manager):  # noqa: F811
+    def check_state(environment, queue):
+        status = get_queue_state()
+        assert status["lock"]["environment"] == environment
+        assert status["lock"]["queue"] == queue
+
+    lock_key = "custom_lock_key"
+
+    # Test different options
+    check_state(False, False)
+    assert subprocess.call(["qserver", "-k", lock_key, "lock", "environment"]) == SUCCESS
+    check_state(True, False)
+    assert subprocess.call(["qserver", "-k", lock_key, "lock", "queue"]) == SUCCESS
+    check_state(False, True)
+    assert subprocess.call(["qserver", "-k", lock_key, "lock", "all", "Note ..."]) == SUCCESS
+    check_state(True, True)
+
+    # Failing calls
+    assert subprocess.call(["qserver", "-k", "invalid_key", "lock", "all"]) == REQ_FAILED
+    assert subprocess.call(["qserver", "lock", "environment"]) == REQ_FAILED
+    assert subprocess.call(["qserver", "-k", lock_key, "lock"]) == PARAM_ERROR
+    assert subprocess.call(["qserver", "-k", lock_key, "lock", "environment", "queue"]) == PARAM_ERROR
+    assert subprocess.call(["qserver", "-k", lock_key, "lock", "something"]) == PARAM_ERROR
+    params = ["qserver", "-k", lock_key, "lock", "environment", "Note ...", "extra_param"]
+    assert subprocess.call(params) == PARAM_ERROR
+
+    check_state(True, True)
+
+    # Load 'lock_info'
+    assert subprocess.call(["qserver", "lock", "info"]) == SUCCESS
+    # Load 'lock_info' and validate the key
+    assert subprocess.call(["qserver", "-k", lock_key, "lock", "info"]) == SUCCESS
+    # Load 'lock_info' and validate the key - invalid key
+    assert subprocess.call(["qserver", "-k", "invalid-key", "lock", "info"]) == REQ_FAILED
+
+    # Open/close the environment
+    assert subprocess.call(["qserver", "environment", "open"]) == REQ_FAILED
+    assert subprocess.call(["qserver", "-k", "invalid-key", "environment", "open"]) == REQ_FAILED
+
+    assert subprocess.call(["qserver", "-k", lock_key, "environment", "open"]) == SUCCESS
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+    assert subprocess.call(["qserver", "-k", lock_key, "environment", "close"]) == SUCCESS
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_closed)
+
+    # Add a plan
+    plan_1 = "{'name':'count', 'args':[['det1', 'det2']]}"
+    assert subprocess.call(["qserver", "queue", "add", "plan", plan_1]) == REQ_FAILED
+    assert subprocess.call(["qserver", "-k", "invalid-key", "queue", "add", "plan", plan_1]) == REQ_FAILED
+    assert subprocess.call(["qserver", "-k", lock_key, "queue", "add", "plan", plan_1]) == SUCCESS
+
+    assert subprocess.call(["qserver", "unlock"]) == REQ_FAILED
+    assert subprocess.call(["qserver", "-k", "invalid-key", "unlock"]) == REQ_FAILED
+    assert subprocess.call(["qserver", "-k", lock_key, "unlock", "invalid_param"]) == PARAM_ERROR
+    assert subprocess.call(["qserver", "-k", lock_key, "unlock"]) == SUCCESS
+    check_state(False, False)

@@ -1051,7 +1051,9 @@ def create_msg(params, *, lock_key):
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
 
     elif command == "lock":
-        if params[0] == "info":
+        if len(params) == 0:
+            raise CommandParameterError("Command {command!r} requires at least one parameter.")
+        elif params[0] == "info":
             if len(params) != 1:
                 raise CommandParameterError(
                     f"Too many parameters (only one expected): {format_list_as_command(params)}"
@@ -1071,7 +1073,7 @@ def create_msg(params, *, lock_key):
             method = "lock"
             if params[0] in ("environment", "all"):
                 prms["environment"] = True
-            if params[0] == ("queue", "all"):
+            if params[0] in ("queue", "all"):
                 prms["queue"] = True
             if len(params) == 2:
                 prms["note"] = params[1]

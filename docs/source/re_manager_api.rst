@@ -1754,6 +1754,112 @@ Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 
 
+.. _method_lock_info:
+
+**'lock_info'**
+^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'lock_info'**
+------------  -----------------------------------------------------------------------------------------
+Description   Lock RE Manager with the provided lock key to prevent other clients from modifying
+------------  -----------------------------------------------------------------------------------------
+Parameters    **lock_key**: *str*
+                  The lock key is an arbitrary non-empty string. Users/clients are expected to keep
+                  the key used to lock RE Manager and use it to unlock the manager or make API requests.
+                  If the lock key is lost by accident, then RE Manager may be unlocked using the
+                  emergency lock key.
+
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **lock_info**: *dict*
+                  Dictionary containing the information on the status of the lock. The dictionary
+                  is also returned by **lock_info** API and includes the following fields:
+
+                  - **'environment'** (*boolean*) - indicates if the RE Worker environment is locked.
+
+                  - **'queue'** (*boolean*) - indicates if the queue is locked.
+
+                  - **'user'** (*str* or *None*) - the name of the user who locked RE Manager,
+                    *None* if the lock is not set.
+
+                  - **'note'** (*str* or *None*) - the text note left by the user who locked RE Manager,
+                    *None* if the lock is not set.
+
+                  - **'time'** (*float* or *None*) - timestamp (time when RE Manager was locked),
+                    *None* if the lock is not set.
+
+                  - **'time_str'** (*str*) - human-readable representation of the timestamp,
+                    empty string if the lock is not set.
+
+                  - **'emergency_lock_key_is_set'** (*boolean*) - indicates if the optional emergency
+                    lock key is set.
+
+                  - **'uid'** (*str*) - *lock_info* UID (also returned in RE Manager status).
+
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+
+.. _method_unlock:
+
+**'unlock'**
+^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'unlock'**
+------------  -----------------------------------------------------------------------------------------
+Description   Lock RE Manager with the provided lock key to prevent other clients from modifying
+------------  -----------------------------------------------------------------------------------------
+Parameters    **lock_key**: *str*
+                  The lock key is an arbitrary non-empty string. Users/clients are expected to keep
+                  the key used to lock RE Manager and use it to unlock the manager or make API requests.
+                  If the lock key is lost by accident, then RE Manager may be unlocked using the
+                  emergency lock key.
+
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **lock_info**: *dict*
+                  Dictionary containing the information on the status of the lock. The dictionary
+                  is also returned by **lock_info** API and includes the following fields:
+
+                  - **'environment'** (*boolean*) - indicates if the RE Worker environment is locked.
+
+                  - **'queue'** (*boolean*) - indicates if the queue is locked.
+
+                  - **'user'** (*str* or *None*) - the name of the user who locked RE Manager,
+                    *None* if the lock is not set.
+
+                  - **'note'** (*str* or *None*) - the text note left by the user who locked RE Manager,
+                    *None* if the lock is not set.
+
+                  - **'time'** (*float* or *None*) - timestamp (time when RE Manager was locked),
+                    *None* if the lock is not set.
+
+                  - **'time_str'** (*str*) - human-readable representation of the timestamp,
+                    empty string if the lock is not set.
+
+                  - **'emergency_lock_key_is_set'** (*boolean*) - indicates if the optional emergency
+                    lock key is set.
+
+                  - **'uid'** (*str*) - *lock_info* UID (also returned in RE Manager status).
+
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+
 
 .. _method_manager_stop:
 

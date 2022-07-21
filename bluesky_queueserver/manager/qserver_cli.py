@@ -153,6 +153,16 @@ qserver script upload <path-to-file> keep-lists   # ... leave lists of allowed a
 qserver task result <task-uid>  # Load status or result of a task with the given UID
 qserver task status <task-uid>  # Check status of a task with the given UID
 
+qserver lock environment  -k 90g94                   # Lock the environment
+qserver lock environment "Locked for 1 hr" -k 90g94  # Add a text note
+qserver lock queue -k 90g94                          # Lock the queue
+qserver lock all -k 90g94                            # Lock environment and the queue
+
+qserver lock info                        # Load lock status
+qserver lock info -k 90g94               # Load lock status and validate the key
+
+qserver unlock -k 90g94                  # Unlock RE Manager
+
 qserver manager stop           # Safely exit RE Manager application
 qserver manager stop safe on   # Safely exit RE Manager application
 qserver manager stop safe off  # Force RE Manager application to stop
@@ -514,7 +524,7 @@ def msg_function_execute(params, *, cmd_opt):
     return method, prms
 
 
-def msg_queue_item(params):
+def msg_queue_item(params, *, lock_key):
     """
     Generate outgoing message for `queue item` command. The supported options are ``get``,
     ``move`` and ``remove``.
@@ -594,6 +604,10 @@ def msg_queue_item(params):
 
     method = f"{command}_{params[0]}_{params[1]}"
     prms = addr_param
+
+    if p_item_type in ("remove", "move"):
+        if lock_key:
+            prms["lock_key"] = lock_key
 
     return method, prms
 
@@ -735,22 +749,25 @@ def msg_re_pause(params):
     return method, prms
 
 
-def create_msg(params):
+def create_msg(params, *, lock_key):
     """
     Create outgoing message based on command-line arguments.
 
     Parameters
     ----------
-    params : list
+    params: list
         List of parameters (positional arguments) supplied via command line.
+
+    lock_key: str or None
+        Lock key
 
     Returns
     -------
-    method : str
+    method: str
         The name of the method.
-    prms : dict
+    prms: dict
         The dictionary of method parameters.
-    monitoring_mode : bool
+    monitoring_mode: bool
         Indicates if monitoring mode is enabled.
 
     Raises
@@ -797,6 +814,8 @@ def create_msg(params):
         supported_params = ("open", "close", "destroy")
         if params[0] in supported_params:
             method = f"{command}_{params[0]}"
+            if lock_key:
+                prms["lock_key"] = lock_key
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
 
@@ -832,6 +851,8 @@ def create_msg(params):
             if len(params) == 2:
                 if params[1] == "lists":
                     prms["restore_plans_devices"] = True
+                    if lock_key:
+                        prms["lock_key"] = lock_key
                 else:
                     CommandParameterError(f"Request '{command} {params[0]} {params[1]}' is not supported")
 
@@ -855,6 +876,8 @@ def create_msg(params):
                     f"Request '{command}': failed to read the user group permissions from file '{file_name}': {ex}"
                 )
             prms["user_group_permissions"] = permissions_dict
+            if lock_key:
+                prms["lock_key"] = lock_key
 
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
@@ -897,6 +920,7 @@ def create_msg(params):
                 "run_in_background": run_in_background,
                 "update_re": update_re,
                 "update_lists": update_lists,
+                "lock_key": lock_key,
             }
 
         else:
@@ -923,6 +947,8 @@ def create_msg(params):
             raise CommandParameterError(f"Request '{command}' must include at least one parameter")
         if params[0] == "execute":
             method, prms = msg_function_execute(params, cmd_opt=params[0])
+            if lock_key:
+                prms["lock_key"] = lock_key
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
 
@@ -934,20 +960,29 @@ def create_msg(params):
         if params[0] in supported_params:
             if params[0] in ("add", "update", "replace", "execute"):
                 method, prms = msg_queue_add_update(params, cmd_opt=params[0])
+                if lock_key:
+                    prms["lock_key"] = lock_key
 
             elif params[0] in ("get", "clear", "start"):
                 if len(params) != 1:
                     raise CommandParameterError(f"Request '{command} {params[0]}' must include only one parameter")
                 method, prms = f"{command}_{params[0]}", {}
+                if params[0] in ("clear", "start"):
+                    if lock_key:
+                        prms["lock_key"] = lock_key
 
             elif params[0] == "stop":
                 method, prms = msg_queue_stop(params)
+                if lock_key:
+                    prms["lock_key"] = lock_key
 
             elif params[0] == "item":
-                method, prms = msg_queue_item(params)
+                method, prms = msg_queue_item(params, lock_key=lock_key)
 
             elif params[0] == "mode":
                 method, prms = msg_queue_mode(params)
+                if lock_key:
+                    prms["lock_key"] = lock_key
 
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
@@ -971,6 +1006,10 @@ def create_msg(params):
                     )
             else:
                 method, prms = f"{command}_{params[0]}", {}
+
+            if lock_key:
+                prms["lock_key"] = lock_key
+
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
 
@@ -980,6 +1019,9 @@ def create_msg(params):
         supported_params = ("get", "clear")
         if params[0] in supported_params:
             method, prms = f"{command}_{params[0]}", {}
+            if params[0] == "clear":
+                if lock_key:
+                    prms["lock_key"] = lock_key
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
 
@@ -1007,6 +1049,46 @@ def create_msg(params):
                 )
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
+
+    elif command == "lock":
+        if params[0] == "info":
+            if len(params) != 1:
+                raise CommandParameterError(
+                    f"Too many parameters (only one expected): {format_list_as_command(params)}"
+                )
+            method = "lock_info"
+            if lock_key:
+                prms["lock_key"] = lock_key
+        elif params[0] in ("environment", "queue", "all"):
+            if len(params) > 2:
+                raise CommandParameterError(
+                    f"Too many parameters (1 or 2 are expected): {format_list_as_command(params)}"
+                )
+            if (len(params) == 2) and (params[1] in ("environment", "queue", "all")):
+                raise CommandParameterError(
+                    f"Unsupported combination of parameters:  {format_list_as_command(params)}"
+                )
+            method = "lock"
+            if params[0] in ("environment", "all"):
+                prms["environment"] = True
+            if params[0] == ("queue", "all"):
+                prms["queue"] = True
+            if len(params) == 2:
+                prms["note"] = params[1]
+            if lock_key:
+                prms["lock_key"] = lock_key
+            prms["user"] = default_user
+        else:
+            raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
+
+    elif command == "unlock":
+        if len(params) != 0:
+            raise CommandParameterError(
+                f"The command accepts no extra parameters: {format_list_as_command(params)}"
+            )
+        method = "unlock"
+        if lock_key:
+            prms["lock_key"] = lock_key
 
     else:
         raise CommandParameterError(f"Unrecognized command '{command}'")
@@ -1092,6 +1174,16 @@ def qserver():
         help="The parameter is deprecated and will be removed. Use --zmq-control-addr instead.",
     )
 
+    parser.add_argument(
+        "--lock-key",
+        "-k",
+        dest="lock_key",
+        action="store",
+        default=None,
+        help="Lock key. The key is an arbitrary string is used to lock and unlock RE Manager "
+        "('lock' and 'unlock' API) and control the manager when the environment or the queue is locked.",
+    )
+
     args = parser.parse_args()
     print(f"Arguments: {args.command}")
 
@@ -1107,6 +1199,13 @@ def qserver():
         # If the address is not specified, then use the default address
         address = address or default_zmq_control_address
 
+        lock_key = args.lock_key
+        if lock_key is not None:
+            if not isinstance(lock_key, str) or not lock_key:
+                raise CommandParameterError(
+                    f"Lock key must be a non-empty string: submitted lock key is {lock_key!r}"
+                )
+
         # Read public key from the environment variable, then check if the CLI parameter exists
         zmq_public_key = os.environ.get("QSERVER_ZMQ_PUBLIC_KEY", None)
         zmq_public_key = zmq_public_key if zmq_public_key else None  # Case of key==""
@@ -1116,7 +1215,7 @@ def qserver():
             except Exception as ex:
                 raise CommandParameterError(f"ZMQ public key is improperly formatted: {ex}")
 
-        method, params, monitoring_mode = create_msg(args.command)
+        method, params, monitoring_mode = create_msg(args.command, lock_key=lock_key)
         if monitoring_mode:
             print("Running QServer monitor. Press Ctrl-C to exit ...")
 

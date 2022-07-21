@@ -2876,6 +2876,7 @@ class RunEngineManager(Process):
         describing the reason why RE Manager is locked. User name and the note are returned
         as part of ``lock_info`` and included in error messages.
         """
+        logger.info("Processing request to lock RE Manager ...")
         success, msg, lock_info = True, "", {}
 
         try:
@@ -2910,10 +2911,15 @@ class RunEngineManager(Process):
                 )
                 lock_info = self._format_lock_info()
                 await self._save_lock_info_to_redis()
+                logger.info(
+                    f"RE Manager was locked by the user {user_name!r}: environment={environment} "
+                    f"queue={queue}. Note: {note}."
+                )
             else:
                 raise ValueError(f"RE Manager was locked with a different key: \n{self._lock_info.to_str()}")
 
         except Exception as ex:
+            logger.info(f"Failed to lock RE Manager: {ex}")
             success, msg = False, f"Error: {ex}"
 
         return {"success": success, "msg": msg, "lock_info": lock_info}
@@ -2951,6 +2957,7 @@ class RunEngineManager(Process):
         the emergency lock key (set using  ``QSERVER_EMERGENCY_LOCK_KEY_FOR_SERVER`` environment
         variable).
         """
+        logger.info("Processing request to unlock RE Manager ...")
         success, msg, lock_info = True, "", {}
 
         try:
@@ -2965,10 +2972,12 @@ class RunEngineManager(Process):
 
             if not self._lock_info.is_set():
                 lock_info = self._format_lock_info()
+                logger.info("RE Manager is already unlocked. No action is required.")
             elif self._lock_info.check_lock_key(lock_key, use_emergency_key=True):
                 self._lock_info.clear()
                 lock_info = self._format_lock_info()
                 await self._save_lock_info_to_redis()
+                logger.info("RE Manager is successfully unlocked.")
             else:
                 lock_info = self._format_lock_info()
                 raise ValueError(self._lock_key_invalid_msg())

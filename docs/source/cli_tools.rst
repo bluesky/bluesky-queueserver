@@ -351,7 +351,7 @@ periodically requests and displays the status of Queue Server.
                   command [command ...]
 
     Command-line tool for communicating with RE Monitor.
-    bluesky-queueserver version 0.0.15
+    bluesky-queueserver version 0.0.16
 
     positional arguments:
       command           a sequence of keywords and parameters that define the command
@@ -486,6 +486,16 @@ periodically requests and displays the status of Queue Server.
 
     qserver task result <task-uid>  # Load status or result of a task with the given UID
     qserver task status <task-uid>  # Check status of a task with the given UID
+
+    qserver lock environment  -k 90g94                   # Lock the environment
+    qserver lock environment "Locked for 1 hr" -k 90g94  # Add a text note
+    qserver lock queue -k 90g94                          # Lock the queue
+    qserver lock all -k 90g94                            # Lock environment and the queue
+
+    qserver lock info                        # Load lock status
+    qserver lock info -k 90g94               # Load lock status and validate the key
+
+    qserver unlock -k 90g94                  # Unlock RE Manager
 
     qserver manager stop           # Safely exit RE Manager application
     qserver manager stop safe on   # Safely exit RE Manager application
@@ -652,3 +662,36 @@ to 0MQ socket by default. Publishing can be enabled by starting RE Manager with 
       --zmq-subscribe-addr ZMQ_SUBSCRIBE_ADDR
                         The parameter is deprecated and will be removed. Use --zmq-info-addr
                         instead.
+
+
+.. _qserver_clear_lock_cli:
+
+qserver-clear-lock
+------------------
+
+``qserver-clear-lock`` allows to clear RE Manager lock stored in Redis. The manager lock
+is not cleared by restarting the manager: it must be explicitly cleared using
+a valid lock key (used to lock the manager) or an emergency lock key (optional).
+If the key is lost and the emergency lock key is not set or known, then the lock
+could be cleared by running ``qserver-clear-lock`` and restarting RE Manager application
+or service. The utility needs access to Redis server used by RE Manager. If Redis
+address is different from default, the correct address must be passed using the parameter
+``--redis-addr``.
+
+.. code-block::
+
+  $ qserver-clear-lock -h
+  usage: qserver-clear-lock [-h] [--redis-addr REDIS_ADDR]
+
+  Bluesky-QServer: Clear RE Manager lock.
+  bluesky-queueserver version 0.0.16.
+
+  Recover locked RE Manager if the lock key is lost. The utility requires access to Redis
+  used by RE Manager. Provide the address of Redis service using '--redis-addr' parameter.
+  Restart the RE Manager service after clearing the lock.
+
+  optional arguments:
+    -h, --help        show this help message and exit
+    --redis-addr REDIS_ADDR
+                      The address of Redis server, e.g. 'localhost', '127.0.0.1',
+                      'localhost:6379' (default: localhost).

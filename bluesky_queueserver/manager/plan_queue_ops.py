@@ -78,6 +78,7 @@ class PlanQueueOperations:
         #   The class contains only the functions for saving and retrieving the data, which is
         #   not used by other functions of the class.
         self._name_user_group_permissions = "user_group_permissions"
+        self._name_lock_info = "lock_info"
 
         # The list of allowed item parameters used for parameter filtering. Filtering operation
         #   involves removing all parameters that are not in the list.
@@ -1815,3 +1816,35 @@ class PlanQueueOperations:
         """
         ugp_json = await self._r_pool.get(self._name_user_group_permissions)
         return json.loads(ugp_json) if ugp_json else None
+
+    # =============================================================================================
+    #         Methods for saving and retrieving lock info.
+
+    async def lock_info_clear(self):
+        """
+        Clear lock info saved in Redis.
+        """
+        await self._r_pool.delete(self._name_lock_info)
+
+    async def lock_info_save(self, lock_info):
+        """
+        Save lock info to Redis.
+
+        Parameters
+        ----------
+        lock_info: dict
+            A dictionary containing lock info.
+        """
+        await self._r_pool.set(self._name_lock_info, json.dumps(lock_info))
+
+    async def lock_info_retrieve(self):
+        """
+        Retreive saved lock info.
+
+        Returns
+        -------
+        dict or None
+            Returns dictionary with saved lock info or ``None`` if no lock info is saved.
+        """
+        lock_info_json = await self._r_pool.get(self._name_lock_info)
+        return json.loads(lock_info_json) if lock_info_json else None

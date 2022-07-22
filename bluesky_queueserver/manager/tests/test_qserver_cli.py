@@ -1445,6 +1445,108 @@ def test_qserver_parameters_1(monkeypatch, re_manager_cmd, test_mode):  # noqa: 
     assert subprocess.call(["qserver", "status"] + params_client) == result
 
 
+def test_qserver_lock_01(re_manager):  # noqa: F811
+    def check_state(environment, queue):
+        status = get_queue_state()
+        assert status["lock"]["environment"] == environment
+        assert status["lock"]["queue"] == queue
+
+    lock_key = "custom_lock_key"
+
+    # Test different options
+    check_state(False, False)
+    assert subprocess.call(["qserver", "-k", lock_key, "lock", "environment"]) == SUCCESS
+    check_state(True, False)
+    assert subprocess.call(["qserver", "-k", lock_key, "lock", "queue"]) == SUCCESS
+    check_state(False, True)
+    assert subprocess.call(["qserver", "-k", lock_key, "lock", "all", "Note ..."]) == SUCCESS
+    check_state(True, True)
+
+    # Failing calls
+    assert subprocess.call(["qserver", "-k", "invalid_key", "lock", "all"]) == REQ_FAILED
+    assert subprocess.call(["qserver", "lock", "environment"]) == REQ_FAILED
+    assert subprocess.call(["qserver", "-k", lock_key, "lock"]) == PARAM_ERROR
+    assert subprocess.call(["qserver", "-k", lock_key, "lock", "environment", "queue"]) == PARAM_ERROR
+    assert subprocess.call(["qserver", "-k", lock_key, "lock", "something"]) == PARAM_ERROR
+    params = ["qserver", "-k", lock_key, "lock", "environment", "Note ...", "extra_param"]
+    assert subprocess.call(params) == PARAM_ERROR
+
+    check_state(True, True)
+
+    # Load 'lock_info'
+    assert subprocess.call(["qserver", "lock", "info"]) == SUCCESS
+    # Load 'lock_info' and validate the key
+    assert subprocess.call(["qserver", "-k", lock_key, "lock", "info"]) == SUCCESS
+    # Load 'lock_info' and validate the key - invalid key
+    assert subprocess.call(["qserver", "-k", "invalid-key", "lock", "info"]) == REQ_FAILED
+
+    # Open/close the environment
+    assert subprocess.call(["qserver", "environment", "open"]) == REQ_FAILED
+    assert subprocess.call(["qserver", "-k", "invalid-key", "environment", "open"]) == REQ_FAILED
+
+    assert subprocess.call(["qserver", "-k", lock_key, "environment", "open"]) == SUCCESS
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+    assert subprocess.call(["qserver", "-k", lock_key, "environment", "close"]) == SUCCESS
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_closed)
+
+    # Add a plan
+    plan_1 = "{'name':'count', 'args':[['det1', 'det2']]}"
+    assert subprocess.call(["qserver", "queue", "add", "plan", plan_1]) == REQ_FAILED
+    assert subprocess.call(["qserver", "-k", "invalid-key", "queue", "add", "plan", plan_1]) == REQ_FAILED
+    assert subprocess.call(["qserver", "-k", lock_key, "queue", "add", "plan", plan_1]) == SUCCESS
+
+    assert subprocess.call(["qserver", "unlock"]) == REQ_FAILED
+    assert subprocess.call(["qserver", "-k", "invalid-key", "unlock"]) == REQ_FAILED
+    assert subprocess.call(["qserver", "-k", lock_key, "unlock", "invalid_param"]) == PARAM_ERROR
+    assert subprocess.call(["qserver", "-k", lock_key, "unlock"]) == SUCCESS
+    check_state(False, False)
+
+
+# ==================================================================================
+#                             qserver-clear-lock
+
+
+def test_qserver_clear_lock_01(re_manager_cmd):  # noqa: F811
+    """
+    Basic test for ``qserver-clear-lock`` utility.
+    """
+
+    def check_state(environment, queue):
+        status = get_queue_state()
+        assert status["lock"]["environment"] == environment
+        assert status["lock"]["queue"] == queue
+
+    manager = re_manager_cmd()
+
+    # Lock the environment
+    assert subprocess.call(["qserver", "-k", "some-lock-key", "lock", "environment"]) == SUCCESS
+    check_state(True, False)
+
+    # Clear the lock in Redis
+    assert subprocess.call(["qserver-clear-lock"]) == 0
+    check_state(True, False)
+
+    # Restart the manager
+    manager.stop_manager(cleanup=False)
+    manager.start_manager(cleanup=False)
+
+    check_state(False, False)
+
+    # Now try to clear the lock repeatedly.
+    assert subprocess.call(["qserver-clear-lock"]) == 0
+    assert subprocess.call(["qserver-clear-lock"]) == 0
+    check_state(False, False)
+
+    # Pass the Redis address (correct address, same as default)
+    assert subprocess.call(["qserver-clear-lock", "--redis-addr", "localhost"]) == 0
+
+    # Invalid address (incorrect port). The call fails.
+    assert subprocess.call(["qserver-clear-lock", "--redis-addr", "localhost:9999"]) == 1
+
+    # Unknown parameter
+    assert subprocess.call(["qserver-clear-lock", "--unknown-param", "value"]) == 2
+
+
 # ================================================================================
 #                            qserver-zmq-keys
 

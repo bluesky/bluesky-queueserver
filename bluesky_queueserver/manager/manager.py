@@ -7,6 +7,7 @@ import pprint
 import enum
 import uuid
 import copy
+from datetime import datetime
 
 import bluesky_queueserver
 from .comms import PipeJsonRpcSendAsync, CommTimeoutError, validate_zmq_key
@@ -55,6 +56,123 @@ class MState(enum.Enum):
     DESTROYING_ENVIRONMENT = "destroying_environment"
 
 
+class LockInfo:
+    def __init__(self):
+        self._lock_key_emergency = None
+        self.clear()
+
+    def set_emergency_lock_key(self, lock_key):
+        """
+        Emergency lock key may be ``None`` (not set) or non-empty string.
+        """
+        if isinstance(lock_key, type(None)) or (isinstance(lock_key, str) and lock_key):
+            self._lock_key_emergency = lock_key
+        else:
+            raise ValueError(f"Invalid emergency lock key: {lock_key!r}")
+
+    @property
+    def lock_key_emergency(self):
+        """
+        Readable property that returns the emergency lock key.
+        """
+        return self._lock_key_emergency
+
+    @property
+    def time_str(self):
+        if self.time:
+            return datetime.fromtimestamp(self.time).strftime("%m/%d/%Y %H:%M:%S")
+        else:
+            return ""
+
+    def is_set(self):
+        return self.environment or self.queue
+
+    def set(self, *, environment, queue, lock_key, note, user_name):
+        """
+        Set the lock. The values of ``environment`` and/or ``queue`` must be ``True``.
+        ``note`` may be a string or ``None``.
+        """
+        if not environment and not queue:
+            raise ValueError(
+                "Invalid option: environment and/or queue must be selected: "
+                f"environment={environment} queue={queue}"
+            )
+        self.environment = environment
+        self.queue = queue
+        self.lock_key = lock_key
+        self.note = note
+        self.user_name = user_name
+        self.time = ttime.time()
+        self.uid = _generate_uid()
+
+    def clear(self):
+        """
+        Clear the lock (lock info). This unlocks RE Manager.
+        """
+        self.environment = False
+        self.queue = False
+        self.lock_key = None
+        self.note = None
+        self.time = None
+        self.user_name = None
+        self.uid = _generate_uid()
+
+    def check_lock_key(self, lock_key, *, use_emergency_key=False):
+        """
+        Returns ``True`` if RE Manager is not locked (any key is valid) or if the key matches.
+        Optionally check match with the emergency lock key if the key is set.
+        """
+        k = self.lock_key
+        key_valid = not self.is_set() or (lock_key == k)
+        if not key_valid and use_emergency_key:
+            ek = self.lock_key_emergency
+            key_valid = ek and (lock_key == ek)
+        return key_valid
+
+    def to_str(self):
+        """
+        Format information as a text. The lock key is intentionally not printed!
+        """
+        s = f"RE Manager is locked by {self.user_name} at {self.time_str}\n"
+        s += f"Environment is locked: {self.environment}\n"
+        s += f"Queue is locked:       {self.queue}\n"
+        s += f"Emergency lock key:    {'set' if self.lock_key_emergency else 'not set'}\n"
+        s += f"Note: {self.note or '---'}"
+        return s
+
+    def from_dict(self, lock_info_dict):
+        """
+        Load lock info from dictionary.
+        """
+        keys_required = {"environment", "queue", "lock_key", "note", "user", "time", "uid"}
+        keys = set(lock_info_dict.keys())
+        keys_missing = keys_required - keys
+        if keys_missing:
+            raise KeyError(f"Failed to load lock info from a dictionary: keys {list(keys_missing)} are missing")
+        else:
+            self.environment = lock_info_dict["environment"]
+            self.queue = lock_info_dict["queue"]
+            self.lock_key = lock_info_dict["lock_key"]
+            self.note = lock_info_dict["note"]
+            self.user_name = lock_info_dict["user"]
+            self.time = lock_info_dict["time"]
+            self.uid = lock_info_dict["uid"]
+
+    def to_dict(self):
+        """
+        Represent lock info as a dictionary.
+        """
+        return {
+            "environment": self.environment,
+            "queue": self.queue,
+            "lock_key": self.lock_key,
+            "note": self.note,
+            "user": self.user_name,
+            "time": self.time,
+            "uid": self.uid,
+        }
+
+
 class RunEngineManager(Process):
     """
     The class implementing Run Engine Worker thread.
@@ -100,6 +218,9 @@ class RunEngineManager(Process):
         # The number of time RE Manager was started (including the first attempt to start it).
         #   Numbering starts from 1.
         self._number_of_restarts = number_of_restarts
+
+        self._lock_info = LockInfo()  # Lock/unlock environment and/or queue
+        self._lock_info.set_emergency_lock_key(config["lock_key_emergency"])
 
         # The following attributes hold the state of the system
         self._manager_stopping = False  # Set True to exit manager (by _manager_stop_handler)
@@ -806,7 +927,7 @@ class RunEngineManager(Process):
         return success, err_msg
 
     def _queue_stop_activate(self):
-        if self._manager_state != MState.EXECUTING_QUEUE:
+        if self._manager_state not in (MState.EXECUTING_QUEUE, MState.STARTING_QUEUE):
             msg = f"Failed to pause the queue. Queue is not running. Manager state: {self._manager_state}"
             return False, msg
         else:
@@ -1029,6 +1150,23 @@ class RunEngineManager(Process):
             raise Exception(
                 f"Error occurred while loading lists of allowed plans and devices from '{path_pd}': {str(ex)}"
             )
+
+    async def _save_lock_info_to_redis(self):
+        try:
+            logger.debug("Saving lock info to Redis ...")
+            lock_info = self._lock_info.to_dict()
+            await self._plan_queue.lock_info_save(lock_info)
+        except Exception as ex:
+            raise Exception(f"Error occurred while saving lock info to Redis: {ex}") from ex
+
+    async def _load_lock_info_from_redis(self):
+        try:
+            logger.debug("Loading lock info from Redis ...")
+            lock_info = await self._plan_queue.lock_info_retrieve()
+            if lock_info:  # The lock info may or may not be saved to Redis.
+                self._lock_info.from_dict(lock_info)
+        except Exception as ex:
+            raise Exception(f"Error occurred while loading lock info from Redis: {ex}") from ex
 
     # ===============================================================================
     #         Functions that send commands/request data from Worker process
@@ -1332,6 +1470,9 @@ class RunEngineManager(Process):
         plans_allowed_uid = self._allowed_plans_uid
         plan_queue_mode = self._plan_queue.plan_queue_mode
         task_results_uid = self._task_results.task_results_uid
+        lock_info_uid = self._lock_info.uid
+        locked_environment = self._lock_info.environment
+        locked_queue = self._lock_info.queue
         # worker_state_info = self._worker_state_info
 
         # TODO: consider different levels of verbosity for ping or other command to
@@ -1359,6 +1500,8 @@ class RunEngineManager(Process):
             "plans_allowed_uid": plans_allowed_uid,
             "plan_queue_mode": plan_queue_mode,
             "task_results_uid": task_results_uid,
+            "lock_info_uid": lock_info_uid,
+            "lock": {"environment": locked_environment, "queue": locked_queue},
             # "worker_state_info": worker_state_info
         }
         return msg
@@ -1483,8 +1626,10 @@ class RunEngineManager(Process):
         """
         logger.info("Reloading lists of allowed plans and devices ...")
         try:
-            supported_param_names = ["restore_plans_devices", "restore_permissions"]
+            supported_param_names = ["restore_plans_devices", "restore_permissions", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             # Do not reload the lists of existing plans and devices from disk file by default
             restore_plans_devices = request.get("restore_plans_devices", False)
@@ -1519,8 +1664,10 @@ class RunEngineManager(Process):
     async def _permissions_set_handler(self, request):
         logger.info("Request to set user group permission ...")
         try:
-            supported_param_names = ["user_group_permissions"]
+            supported_param_names = ["user_group_permissions", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             if "user_group_permissions" not in request:
                 raise KeyError("Parameter 'user_group_permissions' is missing")
@@ -1763,8 +1910,10 @@ class RunEngineManager(Process):
 
         success, msg = True, ""
         try:
-            supported_param_names = ["mode"]
+            supported_param_names = ["mode", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             if "mode" not in request:
                 raise Exception(f"Parameter 'mode' is not found in request {request}")
@@ -1804,8 +1953,10 @@ class RunEngineManager(Process):
         item_type, item, qsize, msg = None, None, None, ""
 
         try:
-            supported_param_names = ["user_group", "user", "item", "pos", "before_uid", "after_uid"]
+            supported_param_names = ["user_group", "user", "item", "pos", "before_uid", "after_uid", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             item, item_type, _success, _msg = self._get_item_from_request(request=request)
             if not _success:
@@ -1867,8 +2018,10 @@ class RunEngineManager(Process):
         success, msg, item_list, results, qsize = True, "", [], [], None
 
         try:
-            supported_param_names = ["user_group", "user", "items", "pos", "before_uid", "after_uid"]
+            supported_param_names = ["user_group", "user", "items", "pos", "before_uid", "after_uid", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             # Prepare items
             if "items" not in request:
@@ -1955,8 +2108,10 @@ class RunEngineManager(Process):
         success, msg, qsize, item, item_type = True, "", 0, None, None
 
         try:
-            supported_param_names = ["user_group", "user", "item", "replace"]
+            supported_param_names = ["user_group", "user", "item", "replace", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             item, item_type, _success, _msg = self._get_item_from_request(request=request)
             if not _success:
@@ -2018,8 +2173,10 @@ class RunEngineManager(Process):
         logger.info("Removing item from the queue ...")
         item, qsize, msg = {}, None, ""
         try:
-            supported_param_names = ["pos", "uid"]
+            supported_param_names = ["pos", "uid", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             pos = request.get("pos", None)
             uid = request.get("uid", None)
@@ -2043,8 +2200,10 @@ class RunEngineManager(Process):
         logger.info("Removing a batch of items from the queue ...")
         items, qsize, msg = [], None, ""
         try:
-            supported_param_names = ["uids", "ignore_missing"]
+            supported_param_names = ["uids", "ignore_missing", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             uids = request.get("uids", None)
             ignore_missing = request.get("ignore_missing", True)
@@ -2073,8 +2232,10 @@ class RunEngineManager(Process):
         logger.info("Moving a queue item ...")
         item, qsize, msg = {}, None, ""
         try:
-            supported_param_names = ["pos", "uid", "pos_dest", "before_uid", "after_uid"]
+            supported_param_names = ["pos", "uid", "pos_dest", "before_uid", "after_uid", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             pos = request.get("pos", None)
             uid = request.get("uid", None)
@@ -2109,8 +2270,10 @@ class RunEngineManager(Process):
         logger.info("Moving a batch of queue items ...")
         items, qsize, msg = [], None, ""
         try:
-            supported_param_names = ["uids", "pos_dest", "before_uid", "after_uid", "reorder"]
+            supported_param_names = ["uids", "pos_dest", "before_uid", "after_uid", "reorder", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             uids = request.get("uids", None)
             pos_dest = request.get("pos_dest", None)
@@ -2161,8 +2324,10 @@ class RunEngineManager(Process):
         item_type, item, qsize, msg = None, None, None, ""
 
         try:
-            supported_param_names = ["item", "user_group", "user"]
+            supported_param_names = ["item", "user_group", "user", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             item, item_type, _success, _msg = self._get_item_from_request(request=request)
             if not _success:
@@ -2193,8 +2358,10 @@ class RunEngineManager(Process):
         """
         logger.info("Clearing the queue ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             await self._plan_queue.clear_queue()
             success, msg = True, ""
@@ -2225,8 +2392,10 @@ class RunEngineManager(Process):
         """
         logger.info("Clearing the plan execution history ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             await self._plan_queue.clear_history()
             success, msg = True, ""
@@ -2241,8 +2410,10 @@ class RunEngineManager(Process):
         """
         logger.info("Opening the new RE environment ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             success, msg = await self._start_re_worker()
         except Exception as ex:
@@ -2257,8 +2428,10 @@ class RunEngineManager(Process):
         """
         logger.info("Closing existing RE environment ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             success, msg = await self._stop_re_worker()
         except Exception as ex:
@@ -2273,8 +2446,10 @@ class RunEngineManager(Process):
         """
         logger.info("Destroying current RE environment ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             success, msg = await self._kill_re_worker()
         except Exception as ex:
@@ -2297,8 +2472,10 @@ class RunEngineManager(Process):
         """
         logger.info("Uploading script to RE environment ...")
         try:
-            supported_param_names = ["script", "update_lists", "update_re", "run_in_background"]
+            supported_param_names = ["script", "update_lists", "update_re", "run_in_background", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             script = request.get("script", None)
             if script is None:
@@ -2340,9 +2517,13 @@ class RunEngineManager(Process):
         the task and load the result.
         """
         logger.debug("Starting execution of a function in RE Worker namespace ...")
+
+        item = None
         try:
-            supported_param_names = ["item", "user_group", "user", "run_in_background"]
+            supported_param_names = ["item", "user_group", "user", "run_in_background", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             item, item_type, _success, _msg = self._get_item_from_request(
                 request=request, supported_item_types=("function",)
@@ -2444,8 +2625,10 @@ class RunEngineManager(Process):
         """
         logger.info("Starting queue processing ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             success, msg = await self._start_plan()
         except Exception as ex:
@@ -2463,8 +2646,10 @@ class RunEngineManager(Process):
         """
         logger.info("Activating 'stop queue' sequence ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             success, msg = self._queue_stop_activate()
         except Exception as ex:
@@ -2480,8 +2665,10 @@ class RunEngineManager(Process):
         """
         logger.info("Deactivating 'stop queue' sequence ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             success, msg = self._queue_stop_deactivate()
         except Exception as ex:
@@ -2497,8 +2684,10 @@ class RunEngineManager(Process):
         logger.info("Pausing the queue (currently running plan) ...")
 
         try:
-            supported_param_names = ["option"]
+            supported_param_names = ["option", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             option = request.get("option", "deferred")
             available_options = ("deferred", "immediate")
@@ -2529,8 +2718,10 @@ class RunEngineManager(Process):
         logger.info("Resuming paused plan ...")
 
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             success, msg = await self._continue_run_engine(option="resume")
         except Exception as ex:
@@ -2544,8 +2735,10 @@ class RunEngineManager(Process):
         """
         logger.info("Stopping paused plan ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             success, msg = await self._continue_run_engine(option="stop")
         except Exception as ex:
@@ -2559,8 +2752,10 @@ class RunEngineManager(Process):
         """
         logger.info("Aborting paused plan ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             success, msg = await self._continue_run_engine(option="abort")
         except Exception as ex:
@@ -2574,8 +2769,10 @@ class RunEngineManager(Process):
         """
         logger.info("Halting paused plan ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             success, msg = await self._continue_run_engine(option="halt")
         except Exception as ex:
@@ -2615,6 +2812,180 @@ class RunEngineManager(Process):
             success, msg = False, f"Error: {ex}"
 
         return {"success": success, "msg": msg, "run_list": run_list, "run_list_uid": run_list_uid}
+
+    def _lock_key_invalid_msg(self):
+        """
+        Format error message, which reports an invalid lock key.
+        """
+        return f"Invalid lock key: \n{self._lock_info.to_str()}"
+
+    def _validate_lock_key(self, lock_key, *, check_environment=False, check_queue=False):
+        """
+        Validate the lock key if the environment and/or queue are locked. The choice
+        of ``check_environment`` and ``check_queue`` depend on whether an API is locked
+        by ``environment`` or ``queue`` option.
+        """
+        # Decide if the API is locked
+        locked = check_environment and self._lock_info.environment
+        locked = locked or (check_queue and self._lock_info.queue)
+
+        if lock_key is None:
+            if locked:
+                raise ValueError(self._lock_key_invalid_msg())
+        elif isinstance(lock_key, str):
+            if locked:
+                if not self._lock_info.check_lock_key(lock_key):
+                    raise ValueError(self._lock_key_invalid_msg())
+        else:
+            raise ValueError(f"Lock key must be a non-empty string or None: lock_key = {lock_key!r}")
+
+    def _format_lock_info(self):
+        """
+        Format lock info as a dictionary, which is returned as ``lock_info`` by multiple API.
+        """
+        return {
+            "environment": self._lock_info.environment,
+            "queue": self._lock_info.queue,
+            "user": self._lock_info.user_name,
+            "time": self._lock_info.time,
+            "time_str": self._lock_info.time_str,
+            "note": self._lock_info.note,
+            "emergency_lock_key_is_set": bool(self._lock_info.lock_key_emergency),
+            "uid": self._lock_info.uid,
+        }
+
+    async def _lock_handler(self, request):
+        """
+        ``lock`` API. Lock RE Manager with the key provided by the client. The API
+        provides options to lock the environment, the queue or both. The client
+        must select at least one of the options by setting ``True``the parameters
+        ``environment`` and ``queue``. If no option is selected, then the API call
+        fails.
+
+        The client must provide and keep the ``lock_key``. The key is a non-empty
+        string used to unlock RE Manager later. The client may still call API that modify
+        the locked environment or the queue by passing the valid ``lock_key`` as a parameter.
+        The respective API calls without a valid ``lock_key`` parameter will fail until
+        RE Manager is unlocked with ``unlock`` API. RE Manager supports the emergency
+        lock key (set using  ``QSERVER_EMERGENCY_LOCK_KEY_FOR_SERVER`` environment variable),
+        which could be used to unlock RE Manager if the lock key is lost. The emergency lock
+        key is not accepted by any API other than ``unlock``.
+
+        The client must provide the name of the user (``user``) locking RE Manager.
+        Optionally, the client may provide ``note``, which is an arbitrary text
+        describing the reason why RE Manager is locked. User name and the note are returned
+        as part of ``lock_info`` and included in error messages.
+        """
+        logger.info("Processing request to lock RE Manager ...")
+        success, msg, lock_info = True, "", {}
+
+        try:
+            supported_param_names = ["lock_key", "note", "environment", "queue", "user"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            # Validate 'user'
+            if "user" not in request:
+                raise ValueError("User name is not specified: 'user' is a required parameter")
+            user_name = request["user"]
+            if not isinstance(user_name, str) or not user_name:
+                raise ValueError(f"User name must be a non-empty string: user = {user_name!r}")
+
+            # Validate 'lock_key'
+            if "lock_key" not in request:
+                raise ValueError("Lock key is not specified: 'lock_key' is a required parameter")
+            lock_key = request["lock_key"]
+            if not isinstance(lock_key, str) or not lock_key:
+                raise ValueError(f"Lock key must be a non-empty string: lock_key = {lock_key!r}")
+
+            # Validate 'note'
+            note = request.get("note", None)
+            if not isinstance(note, (str, type(None))):
+                raise ValueError("Note must be a string or None: note = {note!r}")
+
+            environment = request.get("environment", False)
+            queue = request.get("queue", False)
+
+            if self._lock_info.check_lock_key(lock_key):
+                self._lock_info.set(
+                    environment=environment, queue=queue, lock_key=lock_key, note=note, user_name=user_name
+                )
+                lock_info = self._format_lock_info()
+                await self._save_lock_info_to_redis()
+                logger.info(
+                    f"RE Manager was locked by the user {user_name!r}: environment={environment} "
+                    f"queue={queue}. Note: {note}."
+                )
+            else:
+                raise ValueError(f"RE Manager was locked with a different key: \n{self._lock_info.to_str()}")
+
+        except Exception as ex:
+            logger.info(f"Failed to lock RE Manager: {ex}")
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg, "lock_info": lock_info}
+
+    async def _lock_info_handler(self, request):
+        """
+        Return information on the status of RE Manager lock. Optionally, it can validate the lock key.
+        If the value of the optional parameter ``lock_key`` has a string value and RE Manager is locked,
+        then the function verifies if the string matches current lock key used to lock the manager.
+        The API call succeeds (``'success': True``) if the keys match and fails otherwise. If ``lock_key``
+        is missing or ``None``, then the API call always succeeds. The API call always succeeds if
+        RE Manager is unlocked. The function does not match ``lock_key`` with the emergency lock key,
+        which is used only to unlock RE Manager if the lock key is lost.
+        """
+        success, msg, lock_info = True, "", {}
+
+        try:
+            supported_param_names = ["lock_key"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            lock_info = self._format_lock_info()
+            lock_key = request.get("lock_key", None)
+            if lock_key is not None:
+                self._validate_lock_key(lock_key, check_environment=True, check_queue=True)
+
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg, "lock_info": lock_info}
+
+    async def _unlock_handler(self, request):
+        """
+        Unlock RE Manager using ``lock_key``. The ``lock_key`` must match the key used to lock
+        the environment and/or the queue. Optionally, RE Manager may be unlocked with
+        the emergency lock key (set using  ``QSERVER_EMERGENCY_LOCK_KEY_FOR_SERVER`` environment
+        variable).
+        """
+        logger.info("Processing request to unlock RE Manager ...")
+        success, msg, lock_info = True, "", {}
+
+        try:
+            supported_param_names = ["lock_key"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            if "lock_key" not in request:
+                raise ValueError("Request contains no lock key: 'lock_key' parameter is required")
+            lock_key = request["lock_key"]
+            if not isinstance(lock_key, str) or not lock_key:
+                raise ValueError(f"Lock key must be a non-empty string: lock_key = {lock_key!r}")
+
+            if not self._lock_info.is_set():
+                lock_info = self._format_lock_info()
+                logger.info("RE Manager is already unlocked. No action is required.")
+            elif self._lock_info.check_lock_key(lock_key, use_emergency_key=True):
+                self._lock_info.clear()
+                lock_info = self._format_lock_info()
+                await self._save_lock_info_to_redis()
+                logger.info("RE Manager is successfully unlocked.")
+            else:
+                lock_info = self._format_lock_info()
+                raise ValueError(self._lock_key_invalid_msg())
+
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg, "lock_info": lock_info}
 
     async def _manager_stop_handler(self, request):
         """
@@ -2721,6 +3092,9 @@ class RunEngineManager(Process):
             "re_abort": "_re_abort_handler",
             "re_halt": "_re_halt_handler",
             "re_runs": "_re_runs_handler",
+            "lock": "_lock_handler",
+            "lock_info": "_lock_info_handler",
+            "unlock": "_unlock_handler",
             "manager_stop": "_manager_stop_handler",
             "manager_kill": "_manager_kill_handler",
         }
@@ -2800,6 +3174,12 @@ class RunEngineManager(Process):
         else:
             logger.debug("Loading user permissions from Redis ...")
             await self._load_permissions_from_redis()
+
+        # Load lock info from Redis if possible
+        try:
+            await self._load_lock_info_from_redis()
+        except Exception as ex:
+            logger.exception(ex)
 
         # Set the environment state based on whether the worker process is alive (request Watchdog)
         self._environment_exists = await self._is_worker_alive()

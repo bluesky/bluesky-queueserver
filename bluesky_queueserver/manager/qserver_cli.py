@@ -7,6 +7,7 @@ import argparse
 import enum
 import os
 import yaml
+import asyncio
 
 import bluesky_queueserver
 from .comms import (
@@ -16,6 +17,8 @@ from .comms import (
     generate_zmq_keys,
     default_zmq_control_address,
 )
+
+from .plan_queue_ops import PlanQueueOperations
 
 import logging
 
@@ -1307,3 +1310,56 @@ def qserver_zmq_keys():
         return QServerExitCodes.EXCEPTION_OCCURRED.value
 
     return QServerExitCodes.SUCCESS.value
+
+
+def qserver_clear_lock():
+
+    logging.basicConfig(level=logging.WARNING)
+    logging.getLogger("bluesky_queueserver").setLevel("INFO")
+
+    def formatter(prog):
+        # Set maximum width such that printed help mostly fits in the RTD theme code block (documentation).
+        return argparse.RawDescriptionHelpFormatter(prog, max_help_position=20, width=90)
+
+    parser = argparse.ArgumentParser(
+        description="Bluesky-QServer: Clear RE Manager lock.\n"
+        f"bluesky-queueserver version {qserver_version}.\n\n"
+        "Recover locked RE Manager if the lock key is lost. The utility requires access to Redis\n"
+        "used by RE Manager. Provide the address of Redis service using '--redis-addr' parameter.\n"
+        "Restart the RE Manager service after clearing the lock.\n",
+        formatter_class=formatter,
+    )
+
+    parser.add_argument(
+        "--redis-addr",
+        dest="redis_addr",
+        type=str,
+        default="localhost",
+        help="The address of Redis server, e.g. 'localhost', '127.0.0.1', 'localhost:6379' "
+        "(default: %(default)s). ",
+    )
+
+    args = parser.parse_args()
+
+    exit_code = 0
+
+    async def remove_lock():
+        nonlocal exit_code
+        try:
+            pq = PlanQueueOperations(redis_host=args.redis_addr)
+            await pq.start()
+            lock_info = await pq.lock_info_retrieve()
+            if lock_info is not None:
+                print(f"Detected lock info:\n{pprint.pformat(lock_info)}")
+                print("Clearing the lock ...")
+                await pq.lock_info_clear()
+                print("RE Manager lock was cleared. Restart RE Manager service to unlock the manager!")
+            else:
+                print("No lock was detected.")
+        except Exception as ex:
+            exit_code = 1
+            logger.error(f"Failed to clear RE Manager lock: {ex}")
+
+    asyncio.run(remove_lock())
+
+    return exit_code

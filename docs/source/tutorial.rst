@@ -1004,6 +1004,43 @@ To unlock the manager run ``qserver unlock`` with the valid lock key::
   'msg': '',
   'success': True}
 
+The lock status is stored in Redis and persists between sessions, i.e. restarting RE Manager
+does not clear the lock. If the key is lost, then the manager can be unlocked using
+an optional emergency lock key::
+
+  # Start RE Manager with the emergency lock key
+  QSERVER_EMERGENCY_LOCK_KEY_FOR_SERVER=emlockkey start-re-manager
+
+  # Lock the environment
+  $ qserver --lock-key key-to-forget lock environment
+
+  # Assume that the key is lost. Unlock the manager with the emergency key.
+  $ qserver --lock-key emlockkey unlock
+
+  # Check lock status. The manager should be unlocked.
+  $ qserver lock info
+
+If the emergency key is not set, then the lock can be
+cleared by running :ref:`qserver_clear_lock_cli` CLI tool and then restarting RE Manager
+service or application. The tool requires access to Redis server used by RE Manager.
+The following steps illustrate the procedure::
+
+  # Start RE Manager.
+
+  # Lock the environment
+  $ qserver --lock-key key-to-forget lock environment
+
+  # Check lock status
+  $ qserver lock info
+
+  # Assume that the key is lost. Clear the lock in Redis. Pass '--redis-addr' if needed.
+  qserver-clear-lock
+
+  # Stop and restart RE Manager application.
+
+  # Check lock status. The manager should be unlocked.
+  $ qserver lock info
+
 API used in this tutorial: :ref:`method_lock`, :ref:`method_lock_info`, :ref:`method_unlock`,
 :ref:`method_status`, :ref:`method_environment_open`, :ref:`method_environment_close`.
 

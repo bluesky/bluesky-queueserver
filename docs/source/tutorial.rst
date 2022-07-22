@@ -812,6 +812,202 @@ commands are ::
 
 API used in this tutorial: :ref:`method_status`, :ref:`method_re_pause`, :ref:`method_re_resume_stop_abort_halt`.
 
+.. _locking_re_manager_tutorial:
+
+Locking RE Manager
+------------------
+
+RE Manager can be temporarily locked by a user using a 'secret' key. The user is expected to
+remember (or keep) the key and unlock the manager when safe. The user may choose to
+lock the worker environment and/or the queue which prevents other users
+to change the state of environment (start the queue, run plans, upload scripts etc.) or
+the queue (add, edit or reorder plans in the queue etc.) unless they are provided with the key.
+For more detailed description see :ref:`locking_re_manager`.
+
+Start RE Manager using instructions given in :ref:`tutorial_starting_queue_server`.
+
+Check the status of RE Manager::
+
+  $ qserver status
+  Arguments: ['status']
+  08:40:21 - MESSAGE:
+  { ...
+  'lock': {'environment': False, 'queue': False},
+  'lock_info_uid': '8a9a76c3-8e27-4084-8bf9-6b6b39d0fdc9',
+  ... }
+
+The ``lock`` parameter indicates if the environment and the queue are locked, ``lock_info_uid``
+is updated each time the lock status is changed and intended for use by monitoring client
+applications.
+
+Load the lock status::
+
+  $ qserver lock info
+  Arguments: ['lock', 'info']
+  08:47:34 - MESSAGE:
+  {'lock_info': {'emergency_lock_key_is_set': False,
+                'environment': False,
+                'note': None,
+                'queue': False,
+                'time': None,
+                'time_str': '',
+                'uid': '8a9a76c3-8e27-4084-8bf9-6b6b39d0fdc9',
+                'user': None},
+  'msg': '',
+  'success': True}
+
+When the manager is locked, the status includes the name of the user (``user``) who applied
+the lock, time (``time``, ``time_str``) when the lock was applied and optional note (``note``)
+for other users of the system, explaining the reason why the lock was applied.
+The parameter ``emergency_lock_key_is_set`` (``False``) indicates that the emergency key is
+not set and the manager can be unlocked only only with the key used to lock it.
+
+Lock the environment with a note::
+
+  $ qserver --lock-key userlockkey lock environment "The environment is locked. Do not unlock environment!"
+  Arguments: ['lock', 'environment', 'The environment is locked. Do not unlock environment!']
+  09:02:17 - MESSAGE:
+  {'lock_info': {'emergency_lock_key_is_set': False,
+                'environment': True,
+                'note': 'The environment is locked. Do not unlock environment!',
+                'queue': False,
+                'time': 1658494937.2947958,
+                'time_str': '07/22/2022 09:02:17',
+                'uid': '14425949-74e3-4a46-9e6d-8ea9123ea760',
+                'user': 'qserver-cli'},
+  'msg': '',
+  'success': True}
+
+The lock key can be aribtrarily selected by the user who locks the manager (in this example the key is
+``userlockkey``). The parameters ``user``, ``time``, ``time_str`` and ``note`` are properly set
+now and the parameter ``environment`` is ``True``.
+
+``qserver lock info`` may be used to validate the lock key. The call always succeeds if called
+without the lock key. If the manager is locked, then the included key is validated and
+the call succeeds only if the key is valid. Try validating an invalid key::
+
+  $ qserver --lock-key someinvalidkey lock info
+  Arguments: ['lock', 'info']
+  09:58:38 - MESSAGE:
+  {'lock_info': {'emergency_lock_key_is_set': False,
+                'environment': True,
+                'note': 'The environment is locked. Do not unlock environment!',
+                'queue': False,
+                'time': 1658494937.2947958,
+                'time_str': '07/22/2022 09:02:17',
+                'uid': '14425949-74e3-4a46-9e6d-8ea9123ea760',
+                'user': 'qserver-cli'},
+  'msg': 'Error: Invalid lock key: \n'
+          'RE Manager is locked by qserver-cli at 07/22/2022 09:02:17\n'
+          'Environment is locked: True\n'
+          'Queue is locked:       False\n'
+          'Emergency lock key:    not set\n'
+          'Note: The environment is locked. Do not unlock environment!',
+  'success': False}
+
+The call fails (``'success': False``) and the error message indicates that the lock key is invalid.
+Try validating the valid key::
+
+  $ qserver --lock-key userlockkey lock info
+  Arguments: ['lock', 'info']
+  10:00:42 - MESSAGE:
+  {'lock_info': {'emergency_lock_key_is_set': False,
+                'environment': True,
+                'note': 'The environment is locked. Do not unlock environment!',
+                'queue': False,
+                'time': 1658494937.2947958,
+                'time_str': '07/22/2022 09:02:17',
+                'uid': '14425949-74e3-4a46-9e6d-8ea9123ea760',
+                'user': 'qserver-cli'},
+  'msg': '',
+  'success': True}
+
+Since the environment is locked, all operations that change the state of environment, such as
+opening and closing the environment, starting the queue etc., can be executed only if a valid
+lock key is included in the call. Try opening the environment without the lock key::
+
+  $ qserver environment open
+  Arguments: ['environment', 'open']
+  10:05:29 - MESSAGE:
+  {'msg': 'Error: Invalid lock key: \n'
+          'RE Manager is locked by qserver-cli at 07/22/2022 09:02:17\n'
+          'Environment is locked: True\n'
+          'Queue is locked:       False\n'
+          'Emergency lock key:    not set\n'
+          'Note: The environment is locked. Do not unlock environment!',
+  'success': False}
+
+Now try opening the environment with the lock key::
+
+  $ qserver --lock-key userlockkey environment open
+  Arguments: ['environment', 'open']
+  10:06:11 - MESSAGE:
+  {'msg': '', 'success': True}
+
+The operation succeeded. Now close the environment with the lock key::
+
+  $ qserver --lock-key userlockkey environment close
+  Arguments: ['environment', 'close']
+  10:07:39 - MESSAGE:
+  {'msg': '', 'success': True}
+
+``qserver lock`` also allows to lock the queue (blocks access to queue operations)
+or both the environment and the queue. Try to lock the queue (optionally add the note)::
+
+  $ qserver --lock-key userlockkey lock queue
+  Arguments: ['lock', 'queue']
+  11:38:52 - MESSAGE:
+  {'lock_info': {'emergency_lock_key_is_set': False,
+                'environment': False,
+                'note': None,
+                'queue': True,
+                'time': 1658504332.600997,
+                'time_str': '07/22/2022 11:38:52',
+                'uid': 'fb68edde-2b81-4afa-87fe-ca823d1462c0',
+                'user': 'qserver-cli'},
+  'msg': '',
+  'success': True}
+
+and add plans to the queue with and without the ``--lock-key`` parameter, then
+lock the environment and the queue::
+
+  $ qserver --lock-key userlockkey lock all
+  Arguments: ['lock', 'all']
+  11:39:36 - MESSAGE:
+  {'lock_info': {'emergency_lock_key_is_set': False,
+                'environment': True,
+                'note': None,
+                'queue': True,
+                'time': 1658504376.2635381,
+                'time_str': '07/22/2022 11:39:36',
+                'uid': '3fe32305-885b-4e02-b7dd-84ee0055ea1c',
+                'user': 'qserver-cli'},
+  'msg': '',
+  'success': True}
+
+The lock may be applied repeatedly to the locked manager to change the lock options as long as
+the valid lock key is passed. The lock key can not be changed without unlocking the manager.
+
+To unlock the manager run ``qserver unlock`` with the valid lock key::
+
+  $ qserver --lock-key userlockkey unlock
+  Arguments: ['unlock']
+  11:29:52 - MESSAGE:
+  {'lock_info': {'emergency_lock_key_is_set': False,
+                'environment': False,
+                'note': None,
+                'queue': False,
+                'time': None,
+                'time_str': '',
+                'uid': '5b11f439-b297-449e-b7e8-c96fd264460c',
+                'user': None},
+  'msg': '',
+  'success': True}
+
+API used in this tutorial: :ref:`method_lock`, :ref:`method_lock_info`, :ref:`method_unlock`,
+:ref:`method_status`, :ref:`method_environment_open`, :ref:`method_environment_close`.
+
+
 .. _tutorial_running_custom_startup_code:
 
 Running RE Manager with Custom Startup Code
@@ -920,10 +1116,6 @@ Alternatively, ``qserver-list-plans-devices`` may be started from the ``~/qs_sta
   $ cd ~/qs_startup
   $ qserver-list-plans-devices --startup-dir .
 
-.. _locking_re_manager_tutorial:
-
-Locking RE Manager
-------------------
 
 .. _remote_monitoring_tutorial:
 

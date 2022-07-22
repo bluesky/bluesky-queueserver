@@ -1445,30 +1445,6 @@ def test_qserver_parameters_1(monkeypatch, re_manager_cmd, test_mode):  # noqa: 
     assert subprocess.call(["qserver", "status"] + params_client) == result
 
 
-# ================================================================================
-#                            qserver-zmq-keys
-
-
-def test_qserver_zmq_keys():
-    """
-    Test for ``qserver-zmq-keys`` CLI
-    """
-    # Generate key pair
-    assert subprocess.call(["qserver-zmq-keys"]) == SUCCESS
-
-    # Generated public key based on private key - invalid key (exception)
-    assert subprocess.call(["qserver-zmq-keys", "--zmq-private-key", "abc"]) == EXCEPTION_OCCURRED
-
-    # Generated public key based on private key - success
-    _, private_key = generate_zmq_keys()
-    print(f"Private key used for the test: '{private_key}'")
-    assert subprocess.call(["qserver-zmq-keys", f"--zmq-private-key={private_key}"]) == SUCCESS
-
-
-# ==================================================================================
-#                             qserver-lock
-
-
 def test_qserver_lock_01(re_manager):  # noqa: F811
     def check_state(environment, queue):
         status = get_queue_state()
@@ -1524,3 +1500,68 @@ def test_qserver_lock_01(re_manager):  # noqa: F811
     assert subprocess.call(["qserver", "-k", lock_key, "unlock", "invalid_param"]) == PARAM_ERROR
     assert subprocess.call(["qserver", "-k", lock_key, "unlock"]) == SUCCESS
     check_state(False, False)
+
+
+# ==================================================================================
+#                             qserver-clear-lock
+
+
+def test_qserver_clear_lock_01(re_manager_cmd):  # noqa: F811
+    """
+    Basic test for ``qserver-clear-lock`` utility.
+    """
+
+    def check_state(environment, queue):
+        status = get_queue_state()
+        assert status["lock"]["environment"] == environment
+        assert status["lock"]["queue"] == queue
+
+    manager = re_manager_cmd()
+
+    # Lock the environment
+    assert subprocess.call(["qserver", "-k", "some-lock-key", "lock", "environment"]) == SUCCESS
+    check_state(True, False)
+
+    # Clear the lock in Redis
+    assert subprocess.call(["qserver-clear-lock"]) == 0
+    check_state(True, False)
+
+    # Restart the manager
+    manager.stop_manager(cleanup=False)
+    manager.start_manager(cleanup=False)
+
+    check_state(False, False)
+
+    # Now try to clear the lock repeatedly.
+    assert subprocess.call(["qserver-clear-lock"]) == 0
+    assert subprocess.call(["qserver-clear-lock"]) == 0
+    check_state(False, False)
+
+    # Pass the Redis address (correct address, same as default)
+    assert subprocess.call(["qserver-clear-lock", "--redis-addr", "localhost"]) == 0
+
+    # Invalid address (incorrect port). The call fails.
+    assert subprocess.call(["qserver-clear-lock", "--redis-addr", "localhost:9999"]) == 1
+
+    # Unknown parameter
+    assert subprocess.call(["qserver-clear-lock", "--unknown-param", "value"]) == 2
+
+
+# ================================================================================
+#                            qserver-zmq-keys
+
+
+def test_qserver_zmq_keys():
+    """
+    Test for ``qserver-zmq-keys`` CLI
+    """
+    # Generate key pair
+    assert subprocess.call(["qserver-zmq-keys"]) == SUCCESS
+
+    # Generated public key based on private key - invalid key (exception)
+    assert subprocess.call(["qserver-zmq-keys", "--zmq-private-key", "abc"]) == EXCEPTION_OCCURRED
+
+    # Generated public key based on private key - success
+    _, private_key = generate_zmq_keys()
+    print(f"Private key used for the test: '{private_key}'")
+    assert subprocess.call(["qserver-zmq-keys", f"--zmq-private-key={private_key}"]) == SUCCESS

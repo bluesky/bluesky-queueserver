@@ -2851,7 +2851,6 @@ class RunEngineManager(Process):
             "time_str": self._lock_info.time_str,
             "note": self._lock_info.note,
             "emergency_lock_key_is_set": bool(self._lock_info.lock_key_emergency),
-            "uid": self._lock_info.uid,
         }
 
     async def _lock_handler(self, request):
@@ -2877,7 +2876,7 @@ class RunEngineManager(Process):
         as part of ``lock_info`` and included in error messages.
         """
         logger.info("Processing request to lock RE Manager ...")
-        success, msg, lock_info = True, "", {}
+        success, msg, lock_info, lock_info_uid = True, "", {}, None
 
         try:
             supported_param_names = ["lock_key", "note", "environment", "queue", "user"]
@@ -2910,6 +2909,8 @@ class RunEngineManager(Process):
                     environment=environment, queue=queue, lock_key=lock_key, note=note, user_name=user_name
                 )
                 lock_info = self._format_lock_info()
+                lock_info_uid = self._lock_info.uid
+
                 await self._save_lock_info_to_redis()
                 logger.info(
                     f"RE Manager was locked by the user {user_name!r}: environment={environment} "
@@ -2922,7 +2923,7 @@ class RunEngineManager(Process):
             logger.info(f"Failed to lock RE Manager: {ex}")
             success, msg = False, f"Error: {ex}"
 
-        return {"success": success, "msg": msg, "lock_info": lock_info}
+        return {"success": success, "msg": msg, "lock_info": lock_info, "lock_info_uid": lock_info_uid}
 
     async def _lock_info_handler(self, request):
         """
@@ -2934,13 +2935,15 @@ class RunEngineManager(Process):
         RE Manager is unlocked. The function does not match ``lock_key`` with the emergency lock key,
         which is used only to unlock RE Manager if the lock key is lost.
         """
-        success, msg, lock_info = True, "", {}
+        success, msg, lock_info, lock_info_uid = True, "", {}, None
 
         try:
             supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
             lock_info = self._format_lock_info()
+            lock_info_uid = self._lock_info.uid
+
             lock_key = request.get("lock_key", None)
             if lock_key is not None:
                 self._validate_lock_key(lock_key, check_environment=True, check_queue=True)
@@ -2948,7 +2951,7 @@ class RunEngineManager(Process):
         except Exception as ex:
             success, msg = False, f"Error: {ex}"
 
-        return {"success": success, "msg": msg, "lock_info": lock_info}
+        return {"success": success, "msg": msg, "lock_info": lock_info, "lock_info_uid": lock_info_uid}
 
     async def _unlock_handler(self, request):
         """
@@ -2958,7 +2961,7 @@ class RunEngineManager(Process):
         variable).
         """
         logger.info("Processing request to unlock RE Manager ...")
-        success, msg, lock_info = True, "", {}
+        success, msg, lock_info, lock_info_uid = True, "", {}, None
 
         try:
             supported_param_names = ["lock_key"]
@@ -2972,20 +2975,23 @@ class RunEngineManager(Process):
 
             if not self._lock_info.is_set():
                 lock_info = self._format_lock_info()
+                lock_info_uid = self._lock_info.uid
                 logger.info("RE Manager is already unlocked. No action is required.")
             elif self._lock_info.check_lock_key(lock_key, use_emergency_key=True):
                 self._lock_info.clear()
                 lock_info = self._format_lock_info()
+                lock_info_uid = self._lock_info.uid
                 await self._save_lock_info_to_redis()
                 logger.info("RE Manager is successfully unlocked.")
             else:
                 lock_info = self._format_lock_info()
+                lock_info_uid = self._lock_info.uid
                 raise ValueError(self._lock_key_invalid_msg())
 
         except Exception as ex:
             success, msg = False, f"Error: {ex}"
 
-        return {"success": success, "msg": msg, "lock_info": lock_info}
+        return {"success": success, "msg": msg, "lock_info": lock_info, "lock_info_uid": lock_info_uid}
 
     async def _manager_stop_handler(self, request):
         """

@@ -833,7 +833,7 @@ Check the status of RE Manager::
   08:40:21 - MESSAGE:
   { ...
   'lock': {'environment': False, 'queue': False},
-  'lock_info_uid': '8a9a76c3-8e27-4084-8bf9-6b6b39d0fdc9',
+  'lock_info_uid': '5a992925-3c86-420f-b338-576eeb8778d3',
   ... }
 
 The ``lock`` parameter indicates if the environment and the queue are locked, ``lock_info_uid``
@@ -844,15 +844,15 @@ Load the lock status::
 
   $ qserver lock info
   Arguments: ['lock', 'info']
-  08:47:34 - MESSAGE:
+  12:02:41 - MESSAGE:
   {'lock_info': {'emergency_lock_key_is_set': False,
                 'environment': False,
                 'note': None,
                 'queue': False,
                 'time': None,
                 'time_str': '',
-                'uid': '8a9a76c3-8e27-4084-8bf9-6b6b39d0fdc9',
                 'user': None},
+  'lock_info_uid': '5a992925-3c86-420f-b338-576eeb8778d3',
   'msg': '',
   'success': True}
 
@@ -866,15 +866,15 @@ Lock the environment with a note::
 
   $ qserver --lock-key userlockkey lock environment "The environment is locked. Do not unlock environment!"
   Arguments: ['lock', 'environment', 'The environment is locked. Do not unlock environment!']
-  09:02:17 - MESSAGE:
+  12:03:40 - MESSAGE:
   {'lock_info': {'emergency_lock_key_is_set': False,
                 'environment': True,
                 'note': 'The environment is locked. Do not unlock environment!',
                 'queue': False,
-                'time': 1658494937.2947958,
-                'time_str': '07/22/2022 09:02:17',
-                'uid': '14425949-74e3-4a46-9e6d-8ea9123ea760',
+                'time': 1658765020.0658383,
+                'time_str': '07/25/2022 12:03:40',
                 'user': 'qserver-cli'},
+  'lock_info_uid': '05c2127b-5569-411a-8212-debf7149390b',
   'msg': '',
   'success': True}
 
@@ -888,17 +888,17 @@ the call succeeds only if the key is valid. Try validating an invalid key::
 
   $ qserver --lock-key someinvalidkey lock info
   Arguments: ['lock', 'info']
-  09:58:38 - MESSAGE:
+  12:04:14 - MESSAGE:
   {'lock_info': {'emergency_lock_key_is_set': False,
                 'environment': True,
                 'note': 'The environment is locked. Do not unlock environment!',
                 'queue': False,
-                'time': 1658494937.2947958,
-                'time_str': '07/22/2022 09:02:17',
-                'uid': '14425949-74e3-4a46-9e6d-8ea9123ea760',
+                'time': 1658765020.0658383,
+                'time_str': '07/25/2022 12:03:40',
                 'user': 'qserver-cli'},
+  'lock_info_uid': '05c2127b-5569-411a-8212-debf7149390b',
   'msg': 'Error: Invalid lock key: \n'
-          'RE Manager is locked by qserver-cli at 07/22/2022 09:02:17\n'
+          'RE Manager is locked by qserver-cli at 07/25/2022 12:03:40\n'
           'Environment is locked: True\n'
           'Queue is locked:       False\n'
           'Emergency lock key:    not set\n'
@@ -910,15 +910,15 @@ Try validating the valid key::
 
   $ qserver --lock-key userlockkey lock info
   Arguments: ['lock', 'info']
-  10:00:42 - MESSAGE:
+  12:04:41 - MESSAGE:
   {'lock_info': {'emergency_lock_key_is_set': False,
                 'environment': True,
                 'note': 'The environment is locked. Do not unlock environment!',
                 'queue': False,
-                'time': 1658494937.2947958,
-                'time_str': '07/22/2022 09:02:17',
-                'uid': '14425949-74e3-4a46-9e6d-8ea9123ea760',
+                'time': 1658765020.0658383,
+                'time_str': '07/25/2022 12:03:40',
                 'user': 'qserver-cli'},
+  'lock_info_uid': '05c2127b-5569-411a-8212-debf7149390b',
   'msg': '',
   'success': True}
 
@@ -928,9 +928,9 @@ lock key is included in the call. Try opening the environment without the lock k
 
   $ qserver environment open
   Arguments: ['environment', 'open']
-  10:05:29 - MESSAGE:
+  12:05:14 - MESSAGE:
   {'msg': 'Error: Invalid lock key: \n'
-          'RE Manager is locked by qserver-cli at 07/22/2022 09:02:17\n'
+          'RE Manager is locked by qserver-cli at 07/25/2022 12:03:40\n'
           'Environment is locked: True\n'
           'Queue is locked:       False\n'
           'Emergency lock key:    not set\n'
@@ -941,14 +941,14 @@ Now try opening the environment with the lock key::
 
   $ qserver --lock-key userlockkey environment open
   Arguments: ['environment', 'open']
-  10:06:11 - MESSAGE:
+  12:05:44 - MESSAGE:
   {'msg': '', 'success': True}
 
 The operation succeeded. Now close the environment with the lock key::
 
   $ qserver --lock-key userlockkey environment close
   Arguments: ['environment', 'close']
-  10:07:39 - MESSAGE:
+  12:06:09 - MESSAGE:
   {'msg': '', 'success': True}
 
 ``qserver lock`` also allows to lock the queue (blocks access to queue operations)
@@ -956,15 +956,15 @@ or both the environment and the queue. Try to lock the queue (optionally add the
 
   $ qserver --lock-key userlockkey lock queue
   Arguments: ['lock', 'queue']
-  11:38:52 - MESSAGE:
+  12:06:34 - MESSAGE:
   {'lock_info': {'emergency_lock_key_is_set': False,
                 'environment': False,
                 'note': None,
                 'queue': True,
-                'time': 1658504332.600997,
-                'time_str': '07/22/2022 11:38:52',
-                'uid': 'fb68edde-2b81-4afa-87fe-ca823d1462c0',
+                'time': 1658765194.4385393,
+                'time_str': '07/25/2022 12:06:34',
                 'user': 'qserver-cli'},
+  'lock_info_uid': '6af981eb-0690-4110-839f-8e315649ef40',
   'msg': '',
   'success': True}
 
@@ -973,15 +973,15 @@ lock the environment and the queue::
 
   $ qserver --lock-key userlockkey lock all
   Arguments: ['lock', 'all']
-  11:39:36 - MESSAGE:
+  12:06:55 - MESSAGE:
   {'lock_info': {'emergency_lock_key_is_set': False,
                 'environment': True,
                 'note': None,
                 'queue': True,
-                'time': 1658504376.2635381,
-                'time_str': '07/22/2022 11:39:36',
-                'uid': '3fe32305-885b-4e02-b7dd-84ee0055ea1c',
+                'time': 1658765215.8313878,
+                'time_str': '07/25/2022 12:06:55',
                 'user': 'qserver-cli'},
+  'lock_info_uid': 'bd84f374-8b05-46d8-bbd9-e61a0c599b15',
   'msg': '',
   'success': True}
 
@@ -992,15 +992,15 @@ To unlock the manager run ``qserver unlock`` with the valid lock key::
 
   $ qserver --lock-key userlockkey unlock
   Arguments: ['unlock']
-  11:29:52 - MESSAGE:
+  12:07:24 - MESSAGE:
   {'lock_info': {'emergency_lock_key_is_set': False,
                 'environment': False,
                 'note': None,
                 'queue': False,
                 'time': None,
                 'time_str': '',
-                'uid': '5b11f439-b297-449e-b7e8-c96fd264460c',
                 'user': None},
+  'lock_info_uid': '6d3e834d-eccd-44be-87b1-db3b8557bfcb',
   'msg': '',
   'success': True}
 

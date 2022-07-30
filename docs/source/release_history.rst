@@ -2,6 +2,35 @@
 Release History
 ===============
 
+v0.0.16 (2022-07-30)
+====================
+
+Added
+-----
+
+- New parameter ``update_lists`` added to ``script_upload`` API. The parameter accepts boolean value
+  (``True`` by default) and allows to disable update of lists of existing and allowed plans and
+  devices after execution of the script. The parameter allows to improve efficiency of execution
+  of scripts that do not add or modify plans and devices in RE worker namespace. Update of
+  the lists may be disabled from CLI as ``qserver script upload <path-to-file> keep-lists``.
+
+- New ``lock``, ``unlock`` and ``lock_info`` API. The API are accessible from CLI using ``qserver lock``
+  and ``qserver unlock`` commands.
+
+- ``qserver-clear-lock`` CLI tool for unlocking RE Manager if the lock key is lost and the emergency
+  lock key is not set or unknown.
+
+Fixed
+-----
+
+- Support for ``happi v1.14.0``.
+
+Changed
+-------
+
+- Foreground tasks (started using ``script_upload`` and ``function_execute`` API) are now executed
+  in the main thread of RE Worker.
+
 v0.0.15 (2022-06-24)
 ====================
 

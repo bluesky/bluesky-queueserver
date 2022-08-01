@@ -1,6 +1,6 @@
-===============
-Basic Tutorials
-===============
+=========
+Tutorials
+=========
 
 The purpose of the tutorials in this section is to explore basic features of the Queue Server.
 The tutorials also contain brief explanations of Queue Server features and API
@@ -22,13 +22,30 @@ to almost every low level API (except batch queue operations). Use ``qserver -h`
 to display brief help and full set of options or read the manual at :ref:`qserver_cli`.
 
 In production systems, users are more likely to interact with RE Manager
-using custom GUI applications or IPython API (currently under development),
-but ``qserver`` may still be a convenient tool for exploring or demonstrating
+using custom GUI applications or
+`Bluesky Queue Server API <https://blueskyproject.io/bluesky-queueserver-api>`_ running
+in IPython, but ``qserver`` may still be a convenient tool for exploring or demonstrating
 Queue Server features or testing and debugging deployed systems.
 The instructions on how to interact with RE Manager using ``qserver`` tool are
-also applicable to low level 0MQ API, which could be used in Python programs.
+also also useful for understanding
+:ref:`the low-level 0MQ API<run_engine_manager_api>` or higher-level 0MQ/HTTP
+`Bluesky Queue Server API <https://blueskyproject.io/bluesky-queueserver-api>`_,
+which could be used for development of Python applications.
 Lists of used 0MQ API with links to documentation are included at the end of
 each tutorial.
+
+The following tutorials are available:
+
+- :ref:`tutorial_starting_queue_server`
+- :ref:`tutorial_opening_closing_re_worker_environment`
+- :ref:`tutorial_adding_queue_items`
+- :ref:`tutorial_starting_stopping_queue`
+- :ref:`tutorial_iteracting_with_run_engine`
+- :ref:`tutorial_locking_re_manager`
+- :ref:`tutorial_running_custom_startup_code`
+- :ref:`tutorial_manual_gen_list_of_plans_devices`
+- :ref:`tutorial_remote_monitoring`
+
 
 .. _tutorial_starting_queue_server:
 
@@ -54,7 +71,7 @@ full set of supported parameters. More detailed description may be found in
 The console output of RE Manager contains logging messages of the server and Bluesky and
 text output of the executed plans (such as Live Tables). RE Manager may be configured
 to publish console output to 0MQ socket so that it could be streamed to other
-applications (see :ref:`remote_monitoring_tutorial`). Production deployments
+applications (see :ref:`tutorial_remote_monitoring`). Production deployments
 of the Queue Server are likely to run RE Manager as a service,
 but starting it as an console application is very simple and recommended for tutorials,
 demonstrations and software development and testing.
@@ -812,7 +829,7 @@ commands are ::
 
 API used in this tutorial: :ref:`method_status`, :ref:`method_re_pause`, :ref:`method_re_resume_stop_abort_halt`.
 
-.. _locking_re_manager_tutorial:
+.. _tutorial_locking_re_manager:
 
 Locking RE Manager
 ------------------
@@ -1154,7 +1171,7 @@ Alternatively, ``qserver-list-plans-devices`` may be started from the ``~/qs_sta
   $ qserver-list-plans-devices --startup-dir .
 
 
-.. _remote_monitoring_tutorial:
+.. _tutorial_remote_monitoring:
 
 Remote Monitoring of RE Manager Console Output
 ----------------------------------------------

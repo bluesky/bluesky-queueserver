@@ -196,7 +196,7 @@ API for controlling and monitoring lock status of the manager:
   which indicates if the environment and/or the queue are currently locked.
 
 The operations of locking and unlocking RE Manager using CLI tool could be found in the tutorial
-:ref:`locking_re_manager_tutorial`.
+:ref:`tutorial_locking_re_manager`.
 
 .. note::
 
@@ -211,7 +211,7 @@ Remote Monitoring of Console Output
 RE Manager is capable of capturing and publishing console output to 0MQ socket.
 0MQ publishing is disabled by default and must be enabled using ``--zmq-publish``
 parameter of ``start-re-manager``. A simple monitoring application (``qserver-console-monitor``)
-allows to visualize the published output. See :ref:`remote_monitoring_tutorial` for a brief
+allows to visualize the published output. See :ref:`tutorial_remote_monitoring` for a brief
 tutorial.
 
 ``bluesky_queueserver`` package provides ``ReceiveConsoleOutput`` and ``ReceiveConsoleOutputAsync``

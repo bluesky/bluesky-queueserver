@@ -2,6 +2,15 @@
 Command-Line Tools
 ==================
 
+The CLI tools are installed with the *bluesky-queueserver* package:
+
+- :ref:`start_re_manager_cli` - start RE Manager.
+- :ref:`qserver_cli` - communicate with RE Manager over 0MQ.
+- :ref:`qserver_list_plans_devices_cli` - generate list of existing plans and devices, validate startup code.
+- :ref:`qserver_zmq_keys_cli` - generate key pair for encryption of 0MQ control channel.
+- :ref:`qserver_console_monitor_cli` - simple monitor of RE Manager console output.
+- :ref:`qserver_clear_lock_cli` - unlock RE Manager if the lock key is lost.
+
 .. _start_re_manager_cli:
 
 start-re-manager

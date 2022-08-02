@@ -841,7 +841,7 @@ Executing Plans
 
 RE Manager allows to start immediate execution of a submitted plan without placing it in a queue.
 The plan may be submitted for execution only if the manager is idle, otherwise the API request fails
-and the plan is discarded. As regular plans from the queue, the plan accepted for execution appears 
+and the plan is discarded. As regular plans from the queue, the plan accepted for execution appears
 in the plan history upon completion, but it is never inserted in the queue (e.g. in case of failure
 or if the queue is in the loop mode).
 
@@ -851,17 +851,17 @@ Open the environment::
 
   $ qserver environment open
   Arguments: ['environment', 'open']
-  15:02:06 - MESSAGE: 
+  15:02:06 - MESSAGE:
   {'msg': '', 'success': True}
 
 Check the status of RE Manager::
 
   $ qserver status
   Arguments: ['status']
-  15:02:48 - MESSAGE: 
+  15:02:48 - MESSAGE:
   { ...
   'manager_state': 'idle',
-    ... 
+    ...
   're_state': 'idle',
     ... }
 
@@ -871,7 +871,7 @@ Now start the same ``count`` plan used in previous tutorials. Plan execution wil
 
   $ qserver queue execute plan '{"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}'
   Arguments: ['queue', 'execute', 'plan', '{"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}']
-  15:05:38 - MESSAGE: 
+  15:05:38 - MESSAGE:
   {'item': {'args': [['det1', 'det2']],
             'item_type': 'plan',
             'item_uid': '8848ffde-bb83-4b60-b2d1-a4d2c12ce340',
@@ -883,12 +883,12 @@ Now start the same ``count`` plan used in previous tutorials. Plan execution wil
   'qsize': 0,
   'success': True}
 
-Check the last item in the plan history to make sure the plan was completed successfully. Compare ``item_uid`` of the plan accepted 
+Check the last item in the plan history to make sure the plan was completed successfully. Compare ``item_uid`` of the plan accepted
 for execution with ``item_uid`` of the plan in history::
 
   $ qserver history get
   Arguments: ['history', 'get']
-  15:07:47 - MESSAGE: 
+  15:07:47 - MESSAGE:
   {'items': [{'args': [['det1', 'det2']],
               'item_type': 'plan',
               'item_uid': '8848ffde-bb83-4b60-b2d1-a4d2c12ce340',
@@ -914,16 +914,159 @@ API used in this tutorial: :ref:`method_status`, :ref:`method_queue_item_execute
 Executing Functions
 -------------------
 
-RE Manager provides an API, which allows to start execution of functions in RE Worker process. 
-The function must be defined in RE Worker namespace (e.g. loaded as a result of execution of startup code) 
+RE Manager provides an API, which allows to start execution of functions in RE Worker process.
+The function must be defined in RE Worker namespace (e.g. loaded as a result of execution of startup code)
 and added to user group permissions (see :ref:`configuring_user_group_permissions`). The *task UID* returned
 by the API may be used to monitor the status of the task and return the results once the task is completed.
-Functions may be executed in the forground (main thread of RE Worker process), which requires that RE Manager is in
-``idle`` state, or in the background thread.
+Functions may be executed in the forground (main thread of RE Worker process), which requires that
+RE Manager is in ``idle`` state, or in the background thread.
+
+The demo startup code loaded by RE Manager by default defines function ``function_sleep`` that
+accepts a single parameter which defines sleep time and returns a dictionary containing
+success flag (always ``True``) and the time passed as the parameter. The default permissions
+for the demo are defined so that the ``admin`` user is allowed to call this function.
+The function is convenient for demonstration and testing, because it allows to set the time
+of function execution and see the time when the function starts and finishes by looking
+at the console output:
+
+.. code-block:: python
+
+  # Implementation of 'function_sleep' from the demo startup code
+
+  def function_sleep(time):
+      """
+      Sleep for a given number of seconds.
+      """
+      print("******** Starting execution of the function 'function_sleep' **************")
+      print(f"*******************   Waiting for {time} seconds **************************")
+      ttime.sleep(time)
+      print("******** Finished execution of the function 'function_sleep' **************")
+
+      return {"success": True, "time": time}
 
 
 Start RE Manager, open the environment and verify that RE Manager is in ``idle`` state. Use the same steps
 as in :ref:`tutorial_executing_plans`.
+
+Start execution of the function. Long delay (60 seconds) allows sufficient time to experiment::
+
+  $ qserver function execute '{"name": "function_sleep", "args": [60], "kwargs": {}}'
+  Arguments: ['function', 'execute', '{"name": "function_sleep", "args": [60], "kwargs": {}}']
+  18:42:29 - MESSAGE:
+  {'item': {'args': [60],
+            'item_uid': '6d23469a-94c3-4d4f-ad5a-dda4861515c7',
+            'kwargs': {},
+            'name': 'function_sleep',
+            'user': 'qserver-cli',
+            'user_group': 'admin'},
+  'msg': '',
+  'success': True,
+  'task_uid': '6d23469a-94c3-4d4f-ad5a-dda4861515c7'}
+
+The function is now running as a foreground task. Check the status of RE Manager.
+Note, that ``manager_state`` and ``worker_environment_state`` is set as ``'executing_task'``
+and the number of background tasks running in the worker environment is 0::
+
+  $ qserver status
+  Arguments: ['status']
+  18:42:33 - MESSAGE:
+  { ...
+  'manager_state': 'executing_task',
+    ...
+  'worker_background_tasks': 0,
+    ...
+  'worker_environment_state': 'executing_task'}
+
+Check the status of the task, which is now returned as ``'running'``::
+
+  $ qserver task status '6d23469a-94c3-4d4f-ad5a-dda4861515c7'
+  Arguments: ['task', 'status', '6d23469a-94c3-4d4f-ad5a-dda4861515c7']
+  18:42:44 - MESSAGE:
+  {'msg': '',
+  'status': 'running',
+  'success': True,
+  'task_uid': '6d23469a-94c3-4d4f-ad5a-dda4861515c7'}
+
+Look at the console output of RE Manager and wait until function exits. Check task status again.
+It is now changed to ``'completed'``::
+
+  $ qserver task status '6d23469a-94c3-4d4f-ad5a-dda4861515c7'
+  Arguments: ['task', 'status', '6d23469a-94c3-4d4f-ad5a-dda4861515c7']
+  18:43:33 - MESSAGE:
+  {'msg': '',
+  'status': 'completed',
+  'success': True,
+  'task_uid': '6d23469a-94c3-4d4f-ad5a-dda4861515c7'}
+
+Now load the result of task execution. The ``return_value`` field represents the value
+returned by the function and must be serializable to JSON::
+
+  $ qserver task result '6d23469a-94c3-4d4f-ad5a-dda4861515c7'
+  Arguments: ['task', 'result', '6d23469a-94c3-4d4f-ad5a-dda4861515c7']
+  18:43:43 - MESSAGE:
+  {'msg': '',
+  'result': {'msg': '',
+              'return_value': {'success': True, 'time': 60},
+              'success': True,
+              'task_uid': '6d23469a-94c3-4d4f-ad5a-dda4861515c7',
+              'time_start': 1659480149.1098506,
+              'time_stop': 1659480209.2685587,
+              'traceback': ''},
+  'status': 'completed',
+  'success': True,
+  'task_uid': '6d23469a-94c3-4d4f-ad5a-dda4861515c7'}
+
+Now start the same function as a background task::
+
+  $ qserver function execute '{"name": "function_sleep", "args": [60], "kwargs": {}}' background
+
+and check the status::
+
+  $ qserver status
+  Arguments: ['status']
+  18:56:21 - MESSAGE:
+  { ...
+  'manager_state': 'idle',
+  ...
+  'worker_background_tasks': 1,
+  ...
+  'worker_environment_state': 'idle'}
+
+The status of the manager and the environment is now ``'idle'`` and the number of background tasks is 1.
+The task status can be monitored using task UID as in the first example. Start the function again without
+waiting for the first instance of the function to complete::
+
+  $ qserver function execute '{"name": "function_sleep", "args": [60], "kwargs": {}}' background
+
+and check the status. The number of background tasks is now 2::
+
+  $ qserver status
+  Arguments: ['status']
+  18:56:45 - MESSAGE:
+  { ...
+  'manager_state': 'idle',
+    ...
+  'worker_background_tasks': 2,
+    ...
+  'worker_environment_state': 'idle'}
+
+The manager and environment state is ``'idle'``, which means that users are free to run plans or foreground
+tasks without waiting for the background tasks to complete. Background tasks can also be started while
+plans or forground tasks are running. Try running the function as a foreground task. Also try running
+a plan while the function is running. Also try running one or multiple copies of the function while
+a plan or a foreground task is running.
+
+.. note::
+
+  Task results are stored at the server for a limited time and then deleted. Currently the expiration time
+  is 2 minutes after completion of the task, but could be parametrized in the future.
+
+.. note::
+
+  Background tasks are executed in background threads. It is responsibility of software or workflow developer
+  to ensure thread safety. Foreground tasks could be executed in the main thread one at a time and do not
+  require thread safety.
+
 
 .. _tutorial_uploading_scripts:
 

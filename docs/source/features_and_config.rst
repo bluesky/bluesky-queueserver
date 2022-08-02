@@ -2,7 +2,7 @@
 Features and Configuration
 ==========================
 
-Documentation is coming soon ...
+.. _managing_user_group_permissions:
 
 Managing User Group Permissions
 -------------------------------
@@ -204,6 +204,7 @@ The operations of locking and unlocking RE Manager using CLI tool could be found
   For example, if the server is executing the queue, the queue will continue running after
   the manager is locked until it runs out of plans or stopped.
 
+.. _remote_monitoring_of_console_output:
 
 Remote Monitoring of Console Output
 -----------------------------------

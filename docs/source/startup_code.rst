@@ -1,3 +1,5 @@
+.. _organizing_bluesky_startup_code:
+
 ===============================
 Organizing Bluesky Startup Code
 ===============================

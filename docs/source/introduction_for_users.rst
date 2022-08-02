@@ -8,8 +8,9 @@ What is Bluesky Queue Server?
 Bluesky Queue Server is a set of tools that provide alternative method for executing
 `Bluesky <https://blueskyproject.io/bluesky>`_ plans. The Queue Server includes the core
 `bluesky-queueserver <https://github.com/bluesky/bluesky-queueserver>`_ package and
-`bluesky-queueserver-api <https://github.com/bluesky/bluesky-queueserver-api>`_ and
-`bluesky-httpserver <https://github.com/bluesky/bluesky-httpserver>`_ packages that implement
+`bluesky-queueserver-api <https://github.com/bluesky/bluesky-queueserver-api>`_, 
+`bluesky-httpserver <https://github.com/bluesky/bluesky-httpserver>`_ and 
+`bluesky-widgets <https://github.com/bluesky/bluesky-widgets>`_ packages that implement
 additional functionality. Traditionally Bluesky was used interactively
 from IPython environment as demonstrated in
 `Bluesky tutorials <https://blueskyproject.io/bluesky/tutorial.html>`_.
@@ -66,11 +67,83 @@ for controlling RE Manager over 0MQ. The application may be useful for testing
 RE Manager, troubleshooting issues and simple demos. The :ref:`tutorials <tutorials_queue_server>`
 explore the features of the Queue Server using *qserver* CLI tool.
 
+The *bluesky-widgets* package contains implementations of reusable Qt widgets for controlling RE Manager and 
+manipulating the queue and ready to use *queue-monitor* GUI application based on the widgets.  
+
 Features of Bluesky Queue Server
 --------------------------------
 
-Integration of Bluesky Queue Server in Data Acquisition system
+The core component of the Queue Server is Run Engine (RE) Manager, which supports the following features:
+
+- Run Engine (RE) Worker environment, which could be opened/closed/destroyed via API requests. The Bluesky startup code
+  is loaded as the environment is opened. The RE Worker process is closed/killed as the environment is closed/destroyed.
+
+- Support for startup code represented in IPython format (a startup directory with alphabetically ordered code files), 
+  as a Python script or a module.
+
+- Fully editable queue of plans and instructions. The API support for adding/replacing/moving/removing individual 
+  queue items and batches of items. The instructions are executed by RE Manager and control execution of the queue. 
+  Only one instruction (`queue_stop`) is currently supported.
+
+- API for controlling execution of the queue (:ref:`start <method_queue_start>`/:ref:`stop <method_queue_stop>` 
+  the queue) and the plans (:ref:`pause <method_re_pause>`/:ref:`resume/stop/abort/halt <method_re_resume_stop_abort_halt>`).
+
+- API for monitoring of status of RE Manager, Worker and Run Engine (see :ref:`method_status`)
+
+- Locking access to API for controlling RE Worker environment and/or the plan queue (see :ref:`locking_re_manager`).
+
+- Submit and immediately start execution of a plan (see :ref:`method_queue_item_execute`).
+
+- Execute a function defined in RE Worker namespace (see :ref:`method_function_execute`).
+
+- Uploading and executing Python scripts, which may define new or modify existing devices, plans or functions 
+  (see :ref:`method_script_upload`).
+
+- Restricting user access to plans and devices. Users may be assigned to groups and each group may restricted in which plans
+  users may submit to the queue and which devices users may pass with plan parameters (see :ref:`managing_user_group_permissions` 
+  and :ref:`configuring_user_group_permissions`).
+
+- Annotations for Bluesky plans (see :ref:`annotating_bluesky_plans`).
+
+- Validation of submitted queue items (see :ref:`validation_of_queue_items`).
+
+- Remote monitoring of RE Manager console output (see :ref:`remote_monitoring_of_console_output`).
+
+- Encryption of 0MQ control communication channel (fixed public-private key pair).
+
+- Functions for writing startup code compatible with interactive IPython workflow 
+  (see :ref:`organizing_bluesky_startup_code`).
+
+- *qserver* CLI tool for controlling RE Manager (intended for simple operations, system evaluation and demos, see
+  :ref:`qserver_cli`).
+
+
+
+Integration of Bluesky Queue Server in Data Acquisition System
 --------------------------------------------------------------
+
+This section illustrates the role of the Queue Server in generic Data Acquisition system. The system collects
+small data and scan metadata in the form of Bluesky documents to MongoDB (directly or via Kafka) and large data files
+from detectors to the File Store. Data acquistion is controlled by local and/or remote clients.
 
 .. image:: images/qserver-diagram.png
     :alt: Diagram of Bluesky Queue Server
+
+The Queue Server (started as Run Engine Manager application or service) is running two processes: RE Manager process
+and RE Worker process. RE Manager process is responsible for maintaining and controlling the plan queue and 
+0MQ communication with clients. The process is expected to be running for the duration of the session, but it
+can be restarted without closing the application or disrupting queue execution in case of failure. 
+RE Worker process is created as the worker environment is opened and closed/killed when the environment is 
+closed/destroyed. Operations of opening, closing and destroying the environment are controlled using the API 
+and may be performed as often as necessary for the workflow. The Worker process is used to run the Bluesky code.
+
+The queue is stored outside RE Manager (in Redis) and persists between restarts. The local clients (with access to
+the local network) communicate with the Queue Server using 0MQ API. Remote clients connect to HTTP server and
+use REST API to control the Queue Server. The HTTP Server must be able to reach RE Manager over the local network.
+All the clients are able to subscribe and remotely monitor the console output of RE Manager.
+
+The Bluesky stack, including Bluesky and Ophyd, is running in RE Worker process. The startup code is loaded into RE Worker
+namespace as the environment is opened, beamline-specific set of devices, plans and functions become available in
+RE Worker namespace and could be started by clients using control API. As the plans are executed, the Ophyd code 
+communicates with EPICS IOCs (to control hardware) over the network and Bluesky code generates documents that are 
+saved into MongoDB and/or published to Kafka depending on the Run Engine subscriptions.

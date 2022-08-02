@@ -1,3 +1,5 @@
+.. _annotating_bluesky_plans:
+
 ========================
 Annotating Bluesky Plans
 ========================

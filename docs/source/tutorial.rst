@@ -1,3 +1,5 @@
+.. _tutorials_queue_server:
+
 =========
 Tutorials
 =========

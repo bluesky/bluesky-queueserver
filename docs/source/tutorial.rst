@@ -43,6 +43,9 @@ The following tutorials are available:
 - :ref:`tutorial_adding_queue_items`
 - :ref:`tutorial_starting_stopping_queue`
 - :ref:`tutorial_iteracting_with_run_engine`
+- :ref:`tutorial_executing_plans`
+- :ref:`tutorial_executing_functions`
+- :ref:`tutorial_uploading_scripts`
 - :ref:`tutorial_locking_re_manager`
 - :ref:`tutorial_running_custom_startup_code`
 - :ref:`tutorial_manual_gen_list_of_plans_devices`
@@ -830,6 +833,103 @@ commands are ::
   $ qserver re halt
 
 API used in this tutorial: :ref:`method_status`, :ref:`method_re_pause`, :ref:`method_re_resume_stop_abort_halt`.
+
+.. _tutorial_executing_plans:
+
+Executing Plans
+---------------
+
+RE Manager allows to start immediate execution of a submitted plan without placing it in a queue.
+The plan may be submitted for execution only if the manager is idle, otherwise the API request fails
+and the plan is discarded. As regular plans from the queue, the plan accepted for execution appears 
+in the plan history upon completion, but it is never inserted in the queue (e.g. in case of failure
+or if the queue is in the loop mode).
+
+Start RE Manager using instructions given in :ref:`tutorial_starting_queue_server`.
+
+Open the environment::
+
+  $ qserver environment open
+  Arguments: ['environment', 'open']
+  15:02:06 - MESSAGE: 
+  {'msg': '', 'success': True}
+
+Check the status of RE Manager::
+
+  $ qserver status
+  Arguments: ['status']
+  15:02:48 - MESSAGE: 
+  { ...
+  'manager_state': 'idle',
+    ... 
+  're_state': 'idle',
+    ... }
+
+The state of RE Manager and Run Engine is ``idle``, which means that the plan will be accepted.
+
+Now start the same ``count`` plan used in previous tutorials. Plan execution will start immediately::
+
+  $ qserver queue execute plan '{"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}'
+  Arguments: ['queue', 'execute', 'plan', '{"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}']
+  15:05:38 - MESSAGE: 
+  {'item': {'args': [['det1', 'det2']],
+            'item_type': 'plan',
+            'item_uid': '8848ffde-bb83-4b60-b2d1-a4d2c12ce340',
+            'kwargs': {'delay': 1, 'num': 10},
+            'name': 'count',
+            'user': 'qserver-cli',
+            'user_group': 'admin'},
+  'msg': '',
+  'qsize': 0,
+  'success': True}
+
+Check the last item in the plan history to make sure the plan was completed successfully. Compare ``item_uid`` of the plan accepted 
+for execution with ``item_uid`` of the plan in history::
+
+  $ qserver history get
+  Arguments: ['history', 'get']
+  15:07:47 - MESSAGE: 
+  {'items': [{'args': [['det1', 'det2']],
+              'item_type': 'plan',
+              'item_uid': '8848ffde-bb83-4b60-b2d1-a4d2c12ce340',
+              'kwargs': {'delay': 1, 'num': 10},
+              'name': 'count',
+              'result': {'exit_status': 'completed',
+                        'msg': '',
+                        'run_uids': ['e0592906-2028-4ab5-8148-cefe234d96a7'],
+                        'time_start': 1659467138.782897,
+                        'time_stop': 1659467149.3967063,
+                        'traceback': ''},
+              'user': 'qserver-cli',
+              'user_group': 'admin'}],
+  'msg': '',
+  'plan_history_uid': 'bfe5b3c7-3689-4f7c-ba31-89e23c7c0555',
+  'success': True}
+
+API used in this tutorial: :ref:`method_status`, :ref:`method_queue_item_execute`, :ref:`method_queue_get`.
+
+
+.. _tutorial_executing_functions:
+
+Executing Functions
+-------------------
+
+RE Manager provides an API, which allows to start execution of functions in RE Worker process. 
+The function must be defined in RE Worker namespace (e.g. loaded as a result of execution of startup code) 
+and added to user group permissions (see :ref:`configuring_user_group_permissions`). The *task UID* returned
+by the API may be used to monitor the status of the task and return the results once the task is completed.
+Functions may be executed in the forground (main thread of RE Worker process), which requires that RE Manager is in
+``idle`` state, or in the background thread.
+
+
+Start RE Manager, open the environment and verify that RE Manager is in ``idle`` state. Use the same steps
+as in :ref:`tutorial_executing_plans`.
+
+.. _tutorial_uploading_scripts:
+
+Uploading scripts
+-----------------
+
 
 .. _tutorial_locking_re_manager:
 

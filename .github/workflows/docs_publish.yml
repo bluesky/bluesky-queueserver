@@ -26,6 +26,10 @@ jobs:
       run: |
         sudo apt install redis
 
+        # Versioneer uses the most recent git tag to generate __version__, which appears
+        # in the published documentation.
+        git fetch --tags
+
         # These packages are installed in the base environment but may be older
         # versions. Explicitly upgrade them because they often create
         # installation problems if out of date.

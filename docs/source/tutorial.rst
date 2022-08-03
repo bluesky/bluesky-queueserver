@@ -1,6 +1,8 @@
-===============
-Basic Tutorials
-===============
+.. _tutorials_queue_server:
+
+=========
+Tutorials
+=========
 
 The purpose of the tutorials in this section is to explore basic features of the Queue Server.
 The tutorials also contain brief explanations of Queue Server features and API
@@ -22,13 +24,34 @@ to almost every low level API (except batch queue operations). Use ``qserver -h`
 to display brief help and full set of options or read the manual at :ref:`qserver_cli`.
 
 In production systems, users are more likely to interact with RE Manager
-using custom GUI applications or IPython API (currently under development),
-but ``qserver`` may still be a convenient tool for exploring or demonstrating
+using custom GUI applications or
+`Bluesky Queue Server API <https://blueskyproject.io/bluesky-queueserver-api>`_ running
+in IPython, but ``qserver`` may still be a convenient tool for exploring or demonstrating
 Queue Server features or testing and debugging deployed systems.
 The instructions on how to interact with RE Manager using ``qserver`` tool are
-also applicable to low level 0MQ API, which could be used in Python programs.
+also also useful for understanding
+:ref:`the low-level 0MQ API<run_engine_manager_api>` or higher-level 0MQ/HTTP
+`Bluesky Queue Server API <https://blueskyproject.io/bluesky-queueserver-api>`_,
+which could be used for development of Python applications.
 Lists of used 0MQ API with links to documentation are included at the end of
 each tutorial.
+
+The following tutorials are available:
+
+- :ref:`tutorial_starting_queue_server`
+- :ref:`tutorial_opening_closing_re_worker_environment`
+- :ref:`tutorial_adding_queue_items`
+- :ref:`tutorial_starting_stopping_queue`
+- :ref:`tutorial_iteracting_with_run_engine`
+- :ref:`tutorial_executing_plans`
+- :ref:`tutorial_executing_functions`
+- :ref:`tutorial_uploading_scripts`
+- :ref:`tutorial_locking_re_manager`
+- :ref:`tutorial_changing_user_group_permissions`
+- :ref:`tutorial_running_custom_startup_code`
+- :ref:`tutorial_manual_gen_list_of_plans_devices`
+- :ref:`tutorial_remote_monitoring`
+
 
 .. _tutorial_starting_queue_server:
 
@@ -54,7 +77,7 @@ full set of supported parameters. More detailed description may be found in
 The console output of RE Manager contains logging messages of the server and Bluesky and
 text output of the executed plans (such as Live Tables). RE Manager may be configured
 to publish console output to 0MQ socket so that it could be streamed to other
-applications (see :ref:`remote_monitoring_tutorial`). Production deployments
+applications (see :ref:`tutorial_remote_monitoring`). Production deployments
 of the Queue Server are likely to run RE Manager as a service,
 but starting it as an console application is very simple and recommended for tutorials,
 demonstrations and software development and testing.
@@ -812,7 +835,395 @@ commands are ::
 
 API used in this tutorial: :ref:`method_status`, :ref:`method_re_pause`, :ref:`method_re_resume_stop_abort_halt`.
 
-.. _locking_re_manager_tutorial:
+.. _tutorial_executing_plans:
+
+Executing Plans
+---------------
+
+RE Manager allows to start immediate execution of a submitted plan without placing it in a queue.
+The plan may be submitted for execution only if the manager is idle, otherwise the API request fails
+and the plan is discarded. As regular plans from the queue, the plan accepted for execution appears
+in the plan history upon completion, but it is never inserted in the queue (e.g. in case of failure
+or if the queue is in the loop mode).
+
+Start RE Manager using instructions given in :ref:`tutorial_starting_queue_server`.
+
+Open the environment::
+
+  $ qserver environment open
+  Arguments: ['environment', 'open']
+  15:02:06 - MESSAGE:
+  {'msg': '', 'success': True}
+
+Check the status of RE Manager::
+
+  $ qserver status
+  Arguments: ['status']
+  15:02:48 - MESSAGE:
+  { ...
+  'manager_state': 'idle',
+    ...
+  're_state': 'idle',
+    ... }
+
+The state of RE Manager and Run Engine is ``idle``, which means that the plan will be accepted.
+
+Now start the same ``count`` plan used in previous tutorials. Plan execution will start immediately::
+
+  $ qserver queue execute plan '{"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}'
+  Arguments: ['queue', 'execute', 'plan', '{"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}']
+  15:05:38 - MESSAGE:
+  {'item': {'args': [['det1', 'det2']],
+            'item_type': 'plan',
+            'item_uid': '8848ffde-bb83-4b60-b2d1-a4d2c12ce340',
+            'kwargs': {'delay': 1, 'num': 10},
+            'name': 'count',
+            'user': 'qserver-cli',
+            'user_group': 'admin'},
+  'msg': '',
+  'qsize': 0,
+  'success': True}
+
+Check the last item in the plan history to make sure the plan was completed successfully. Compare ``item_uid`` of the plan accepted
+for execution with ``item_uid`` of the plan in history::
+
+  $ qserver history get
+  Arguments: ['history', 'get']
+  15:07:47 - MESSAGE:
+  {'items': [{'args': [['det1', 'det2']],
+              'item_type': 'plan',
+              'item_uid': '8848ffde-bb83-4b60-b2d1-a4d2c12ce340',
+              'kwargs': {'delay': 1, 'num': 10},
+              'name': 'count',
+              'result': {'exit_status': 'completed',
+                        'msg': '',
+                        'run_uids': ['e0592906-2028-4ab5-8148-cefe234d96a7'],
+                        'time_start': 1659467138.782897,
+                        'time_stop': 1659467149.3967063,
+                        'traceback': ''},
+              'user': 'qserver-cli',
+              'user_group': 'admin'}],
+  'msg': '',
+  'plan_history_uid': 'bfe5b3c7-3689-4f7c-ba31-89e23c7c0555',
+  'success': True}
+
+API used in this tutorial: :ref:`method_status`, :ref:`method_queue_item_execute`, :ref:`method_queue_get`.
+
+
+.. _tutorial_executing_functions:
+
+Executing Functions
+-------------------
+
+RE Manager provides an API, which allows to start execution of functions in RE Worker process.
+The function must be defined in RE Worker namespace (e.g. loaded as a result of execution of startup code)
+and added to user group permissions (see :ref:`configuring_user_group_permissions`). The *task UID* returned
+by the API may be used to monitor the status of the task and return the results once the task is completed.
+Functions may be executed in the forground (main thread of RE Worker process), which requires that
+RE Manager is in ``idle`` state, or in the background thread.
+
+The demo startup code loaded by RE Manager by default defines function ``function_sleep`` that
+accepts a single parameter which defines sleep time and returns a dictionary containing
+success flag (always ``True``) and the time passed as the parameter. The default permissions
+for the demo are defined so that the ``admin`` user is allowed to call this function.
+The function is convenient for demonstration and testing, because it allows to set the time
+of function execution and see the time when the function starts and finishes by looking
+at the console output:
+
+.. code-block:: python
+
+  # Implementation of 'function_sleep' from the demo startup code
+
+  def function_sleep(time):
+      """
+      Sleep for a given number of seconds.
+      """
+      print("******** Starting execution of the function 'function_sleep' **************")
+      print(f"*******************   Waiting for {time} seconds **************************")
+      ttime.sleep(time)
+      print("******** Finished execution of the function 'function_sleep' **************")
+
+      return {"success": True, "time": time}
+
+
+Start RE Manager, open the environment and verify that RE Manager is in ``idle`` state. Use the same steps
+as in :ref:`tutorial_executing_plans`.
+
+Start execution of the function. Long delay (60 seconds) allows sufficient time to experiment::
+
+  $ qserver function execute '{"name": "function_sleep", "args": [60], "kwargs": {}}'
+  Arguments: ['function', 'execute', '{"name": "function_sleep", "args": [60], "kwargs": {}}']
+  18:42:29 - MESSAGE:
+  {'item': {'args': [60],
+            'item_uid': '6d23469a-94c3-4d4f-ad5a-dda4861515c7',
+            'kwargs': {},
+            'name': 'function_sleep',
+            'user': 'qserver-cli',
+            'user_group': 'admin'},
+  'msg': '',
+  'success': True,
+  'task_uid': '6d23469a-94c3-4d4f-ad5a-dda4861515c7'}
+
+The function is now running as a foreground task. Check the status of RE Manager.
+Note, that ``manager_state`` and ``worker_environment_state`` is set as ``'executing_task'``
+and the number of background tasks running in the worker environment is 0::
+
+  $ qserver status
+  Arguments: ['status']
+  18:42:33 - MESSAGE:
+  { ...
+  'manager_state': 'executing_task',
+    ...
+  'worker_background_tasks': 0,
+    ...
+  'worker_environment_state': 'executing_task'}
+
+Check the status of the task, which is now returned as ``'running'``::
+
+  $ qserver task status '6d23469a-94c3-4d4f-ad5a-dda4861515c7'
+  Arguments: ['task', 'status', '6d23469a-94c3-4d4f-ad5a-dda4861515c7']
+  18:42:44 - MESSAGE:
+  {'msg': '',
+  'status': 'running',
+  'success': True,
+  'task_uid': '6d23469a-94c3-4d4f-ad5a-dda4861515c7'}
+
+Look at the console output of RE Manager and wait until function exits. Check task status again.
+It is now changed to ``'completed'``::
+
+  $ qserver task status '6d23469a-94c3-4d4f-ad5a-dda4861515c7'
+  Arguments: ['task', 'status', '6d23469a-94c3-4d4f-ad5a-dda4861515c7']
+  18:43:33 - MESSAGE:
+  {'msg': '',
+  'status': 'completed',
+  'success': True,
+  'task_uid': '6d23469a-94c3-4d4f-ad5a-dda4861515c7'}
+
+Now load the result of task execution. The ``return_value`` field represents the value
+returned by the function and must be serializable to JSON::
+
+  $ qserver task result '6d23469a-94c3-4d4f-ad5a-dda4861515c7'
+  Arguments: ['task', 'result', '6d23469a-94c3-4d4f-ad5a-dda4861515c7']
+  18:43:43 - MESSAGE:
+  {'msg': '',
+  'result': {'msg': '',
+              'return_value': {'success': True, 'time': 60},
+              'success': True,
+              'task_uid': '6d23469a-94c3-4d4f-ad5a-dda4861515c7',
+              'time_start': 1659480149.1098506,
+              'time_stop': 1659480209.2685587,
+              'traceback': ''},
+  'status': 'completed',
+  'success': True,
+  'task_uid': '6d23469a-94c3-4d4f-ad5a-dda4861515c7'}
+
+Now start the same function as a background task::
+
+  $ qserver function execute '{"name": "function_sleep", "args": [60], "kwargs": {}}' background
+
+and check the status::
+
+  $ qserver status
+  Arguments: ['status']
+  18:56:21 - MESSAGE:
+  { ...
+  'manager_state': 'idle',
+  ...
+  'worker_background_tasks': 1,
+  ...
+  'worker_environment_state': 'idle'}
+
+The status of the manager and the environment is now ``'idle'`` and the number of background tasks is 1.
+The task status can be monitored using task UID as in the first example. Start the function again without
+waiting for the first instance of the function to complete::
+
+  $ qserver function execute '{"name": "function_sleep", "args": [60], "kwargs": {}}' background
+
+and check the status. The number of background tasks is now 2::
+
+  $ qserver status
+  Arguments: ['status']
+  18:56:45 - MESSAGE:
+  { ...
+  'manager_state': 'idle',
+    ...
+  'worker_background_tasks': 2,
+    ...
+  'worker_environment_state': 'idle'}
+
+The manager and environment state is ``'idle'``, which means that users are free to run plans or foreground
+tasks without waiting for the background tasks to complete. Background tasks can also be started while
+plans or forground tasks are running. Try running the function as a foreground task. Also try running
+a plan while the function is running. Also try running one or multiple copies of the function while
+a plan or a foreground task is running.
+
+.. note::
+
+  Task results are stored at the server for a limited time and then deleted. Currently the expiration time
+  is 2 minutes after completion of the task, but could be parametrized in the future.
+
+.. note::
+
+  Background tasks are executed in background threads. It is responsibility of software or workflow developer
+  to ensure thread safety. Foreground tasks could be executed in the main thread one at a time and do not
+  require thread safety.
+
+API used in this tutorial: :ref:`method_function_execute`, :ref:`method_status`, :ref:`method_task_status`,
+:ref:`method_task_result`.
+
+
+.. _tutorial_uploading_scripts:
+
+Uploading scripts
+-----------------
+
+RE Manager provides users with ability to upload and execute Python scripts in the worker namespace.
+The :ref:`method_script_upload` API accepts the script represented as string, which is uploaded
+to RE Manager over 0MQ, passed to the worker environment and executed. Similarly to
+:ref:`method_function_execute` explored in :ref:`tutorial_executing_functions`, the script is
+executed as a task and ``task_uid`` returned by the API may be used to monitor the task status
+and download results, which tell if the script was completed successfully and include the error message
+and the traceback in case of failure.
+
+The script may contain arbitrary Python code, which is executed in the worker environment. The code
+has full access to the worker namespace and may modify, replace or create new objects, including
+functions, devices and plans. For example, an uploaded script may contain code for a new plan, which
+becomes available in the worker namespace or modified code for an existing plan, which replaces
+the plan in the namespace. By default, the lists of existing and allowed plans and devices are updated
+after execution of each script. The new plans and devices become immediately available to users
+who have appropriate permissions (see :ref:`configuring_user_group_permissions`).
+
+The variables ``RE`` and ``db`` are reserved for instances of Bluesky Run Engine and Data Broker.
+By default, ``RE`` or ``db`` objects are not going to be replaced in the worker namespace
+even if the script contains the respective code (scripts are free to use those objects).
+This restriction is implemented to accidental changes to the namespace, which will cause
+RE Manager to fail. In order to allow the script to replace ``RE`` and ``db``, call the API
+with ``update_re=True``. If the uploaded script does not contain new or modified plans or
+devices, then there is no need to update the respective lists and the operation may be performed
+more efficiently if the ``update_lists=False``.
+
+The ``qserver script upload`` CLI tool supports all the functionality of the :ref:`method_script_upload` API.
+Instead of string representation of the script, it accepts a path to the script file as a parameter.
+Let's create a simple script file (e.g. 'test_script.py`) in the current directory::
+
+  # Add a simple plan
+  def count_test(detectors, *, num=1, delay=1):
+      yield from count(detectors, num=num, delay=delay)
+
+  # Wait for some time to emulate the script with longer execution time
+  ttime.sleep(30)
+
+The script adds a new plan ``count_test`` to the environment and then waits for 30 seconds to
+emulate long execution time. Start RE Manager, open the environment and verify that RE Manager is
+in ``idle`` state. Use the same steps as in :ref:`tutorial_executing_plans`.
+Then check that the plan is not in the list of allowed plans::
+
+  $ qserver allowed plans
+  Arguments: ['allowed', 'plans']
+  12:26:55 - MESSAGE:
+  {'msg': '',
+  'plans_allowed': {'adaptive_scan': '{...}',
+                    'count': '{...}',
+                    'count_bundle_test': '{...}',
+                    'fly': '{...}',
+                    ...},
+  'plans_allowed_uid': 'ad1963db-d561-441d-a4c3-f94ee2780a61',
+  'success': True}
+
+Upload script to RE Manager::
+
+  $ qserver script upload test_script.py
+  Arguments: ['script', 'upload', 'test_script.py']
+  12:29:59 - MESSAGE:
+  {'msg': '', 'success': True, 'task_uid': '1234adbc-b181-4003-b5fb-9d72ab0f7fc2'}
+
+While the script is running, check RE Manager status. The manager and environment
+status is now returned as ``'executing_task'``::
+
+  $ qserver status
+  Arguments: ['status']
+  12:30:04 - MESSAGE:
+  { ...
+  'manager_state': 'executing_task',
+    ...
+  'worker_environment_state': 'executing_task'}
+
+Make sure that the task is running by checking the task status (using task UID)::
+
+  $ qserver task status '1234adbc-b181-4003-b5fb-9d72ab0f7fc2'
+  Arguments: ['task', 'status', '1234adbc-b181-4003-b5fb-9d72ab0f7fc2']
+  12:30:16 - MESSAGE:
+  {'msg': '',
+  'status': 'running',
+  'success': True,
+  'task_uid': '1234adbc-b181-4003-b5fb-9d72ab0f7fc2'}
+
+Wait until script execution is finished. Check the status again::
+
+  $ qserver task status '1234adbc-b181-4003-b5fb-9d72ab0f7fc2'
+  Arguments: ['task', 'status', '1234adbc-b181-4003-b5fb-9d72ab0f7fc2']
+  12:30:43 - MESSAGE:
+  {'msg': '',
+  'status': 'completed',
+  'success': True,
+  'task_uid': '1234adbc-b181-4003-b5fb-9d72ab0f7fc2'}
+
+View the results of task execution. The return value is always ``None``, because the script
+does not return any value. Check that ``success`` is ``True`` and error message and
+traceback are empty strings::
+
+  $ qserver task result '1234adbc-b181-4003-b5fb-9d72ab0f7fc2'
+  Arguments: ['task', 'result', '1234adbc-b181-4003-b5fb-9d72ab0f7fc2']
+  12:30:54 - MESSAGE:
+  {'msg': '',
+  'result': {'msg': '',
+              'return_value': None,
+              'success': True,
+              'task_uid': '1234adbc-b181-4003-b5fb-9d72ab0f7fc2',
+              'time_start': 1659544199.5750947,
+              'time_stop': 1659544229.7251163,
+              'traceback': ''},
+  'status': 'completed',
+  'success': True,
+  'task_uid': '1234adbc-b181-4003-b5fb-9d72ab0f7fc2'}
+
+Load the list of allowed plans and verify that ``count_test`` is in the list::
+
+  $ qserver allowed plans
+  Arguments: ['allowed', 'plans']
+  12:40:18 - MESSAGE:
+  {'msg': '',
+  'plans_allowed': {'adaptive_scan': '{...}',
+                    'count': '{...}',
+                    'count_bundle_test': '{...}',
+                    'count_test': '{...}',
+                    'fly': '{...}',
+                    ...},
+  'plans_allowed_uid': 'e3a1a276-f081-450a-87d7-e17101e83deb',
+  'success': True}
+
+Now the plan ``count_test`` can be placed in the queue and executed by RE Manager.
+
+.. note::
+
+  Task results are stored at the server for a limited time and then deleted. Currently the expiration time
+  is 2 minutes after completion of the task, but could be parametrized in the future.
+
+.. note::
+
+  Similarly to functions, scripts could be executed as foreground tasks (default, executed
+  in main thread) or background tasks (executed in background thread). It is responsibility
+  of software or workflow developer to ensure thread safety. Though executing foreground
+  tasks is thread safe, users should be mindful about how the executed code affects the state
+  of the worker environment and the manager. For example, a script that executes a plan
+  can be successfully run as a foreground task, bypassing all mechanisms for queue management,
+  but it is not advised to do so.
+
+API used in this tutorial: :ref:`method_script_upload`, :ref:`method_status`,
+:ref:`method_plans_allowed`, :ref:`method_task_status`, :ref:`method_task_result`.
+
+
+.. _tutorial_locking_re_manager:
 
 Locking RE Manager
 ------------------
@@ -1045,6 +1456,127 @@ API used in this tutorial: :ref:`method_lock`, :ref:`method_lock_info`, :ref:`me
 :ref:`method_status`, :ref:`method_environment_open`, :ref:`method_environment_close`.
 
 
+.. _tutorial_changing_user_group_permissions:
+
+Changing User Group Permissions
+-------------------------------
+
+RE manager provides :ref:`method_permissions_get` and :ref:`method_permissions_set` API that allow
+clients to download and upload user group permissions. The Python API operate with permissions
+represented as a dictionary, which could be downloaded, changed and then uploaded to the manager.
+Once the dictionary with permissions are uploaded, the lists of allowed plans and devices are
+updated by the manager to reflect new permissions. The *qserver* CLI implementation of the API
+are not as flexible: ``qserver permissions get`` loads and prints the dictionary of permissions
+and ``qserver permissions set`` is accepting the path to YAML file that contains new user group
+permissions, so a simple load-change-upload operation currently can not be performed easily via CLI.
+
+Start RE Manager using instructions given in :ref:`tutorial_starting_queue_server`.
+
+Load and check the list of allowed plans. Make sure that ``grid_scan`` is in the list::
+
+  $ qserver allowed plans
+  Arguments: ['allowed', 'plans']
+  13:43:41 - MESSAGE:
+  {'msg': '',
+  'plans_allowed': { ...
+                    'fly': '{...}'
+                    'grid_scan': '{...}',
+                    'inner_product_scan': '{...}',
+                    ... },
+  'plans_allowed_uid': '68753b90-7716-4ce6-b273-b2b8e3646123',
+  'success': True}
+
+Load and inspect permissions for the *admin* user group: users are allowed to execute all
+plans (see :ref:`configuring_user_group_permissions`)::
+
+  $ qserver permissions get
+  Arguments: ['permissions', 'get']
+  13:47:20 - MESSAGE:
+  {'msg': '',
+  'success': True,
+  'user_group_permissions': {'user_groups': {'admin': {'allowed_devices': [':?.*:depth=5'],
+                                                        'allowed_functions': ['function_sleep'],
+                                                        'allowed_plans': [':.*'],
+                                                        'forbidden_devices': [None],
+                                                        'forbidden_plans': [None]},
+                                              ...
+                                            }
+                            }
+
+
+Let's create a YAML file (e.g. 'new_permissions.yaml') with modified user group permissions,
+which forbid users from adding ``grid_scan`` plan to the queue (*root* user group, which defines
+permissions that are applied to all other groups, must always exist in the dictionary of permissions)::
+
+  user_groups:
+    root:  # The group includes all available plan and devices
+      allowed_plans:
+        - null  # Allow all
+      forbidden_plans:
+        - ":^_"  # All plans with names starting with '_'
+      allowed_devices:
+        - null  # Allow all
+      forbidden_devices:
+        - ":^_:?.*"  # All devices with names starting with '_'
+      allowed_functions:
+        - null  # Allow all
+      forbidden_functions:
+        - ":^_"  # All functions with names starting with '_'
+    admin:  # The group includes beamline staff, includes all or most of the plans and devices
+      allowed_plans:
+        - ":.*"  # Different way to allow all plans.
+      forbidden_plans:
+        - "grid_scan"
+      allowed_devices:
+        - ":?.*:depth=5"  # Allow all device and subdevices. Maximum deepth for subdevices is 5.
+      forbidden_devices:
+        - null  # Nothing is forbidden
+      allowed_functions:
+        - "function_sleep"  # Explicitly listed name
+
+Upload permissions to RE Manager::
+
+  $ qserver permissions set new_permissions.yaml
+  Arguments: ['permissions', 'set', 'new_permissions.yaml']
+  13:57:31 - MESSAGE:
+  {'msg': '', 'success': True}
+
+Load the permission again to verify that they are modified::
+
+  $ qserver permissions get
+  Arguments: ['permissions', 'get']
+  13:57:40 - MESSAGE:
+  {'msg': '',
+  'success': True,
+  'user_group_permissions': {'user_groups': {'admin': {'allowed_devices': [':?.*:depth=5'],
+                                                        'allowed_functions': ['function_sleep'],
+                                                        'allowed_plans': [':.*'],
+                                                        'forbidden_devices': [None],
+                                                        'forbidden_plans': ['grid_scan']},
+                                              'root': {'allowed_devices': [None],
+                                                      'allowed_functions': [None],
+                                                      'allowed_plans': [None],
+                                                      'forbidden_devices': [':^_:?.*'],
+                                                      'forbidden_functions': [':^_'],
+                                                      'forbidden_plans': [':^_']}}}}
+
+Check that ``grid_scan`` is not in the updated list of allowed plans::
+
+  $ qserver allowed plans
+  Arguments: ['allowed', 'plans']
+  13:58:59 - MESSAGE:
+  {'msg': '',
+  'plans_allowed': { ...
+                    'fly': '{...}',
+                    'inner_product_scan': '{...}',
+                     ... },
+  'plans_allowed_uid': '2c983eec-a7cb-4fd2-bc9a-ad4503c3bf9e',
+  'success': True}
+
+API used in this tutorial: :ref:`method_permissions_get`, :ref:`method_permissions_set`,
+:ref:`method_plans_allowed`.
+
+
 .. _tutorial_running_custom_startup_code:
 
 Running RE Manager with Custom Startup Code
@@ -1154,7 +1686,7 @@ Alternatively, ``qserver-list-plans-devices`` may be started from the ``~/qs_sta
   $ qserver-list-plans-devices --startup-dir .
 
 
-.. _remote_monitoring_tutorial:
+.. _tutorial_remote_monitoring:
 
 Remote Monitoring of RE Manager Console Output
 ----------------------------------------------

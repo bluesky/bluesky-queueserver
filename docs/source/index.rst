@@ -13,6 +13,7 @@ Bluesky-QueueServer Documentation
    installation
    tutorial
    release_history
+   Source Code on GitHub <https://github.com/bluesky/bluesky-queueserver>
 
 .. toctree::
    :maxdepth: 1

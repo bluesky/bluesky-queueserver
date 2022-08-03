@@ -47,6 +47,7 @@ The following tutorials are available:
 - :ref:`tutorial_executing_functions`
 - :ref:`tutorial_uploading_scripts`
 - :ref:`tutorial_locking_re_manager`
+- :ref:`tutorial_changing_user_group_permissions`
 - :ref:`tutorial_running_custom_startup_code`
 - :ref:`tutorial_manual_gen_list_of_plans_devices`
 - :ref:`tutorial_remote_monitoring`
@@ -1453,6 +1454,127 @@ The following steps illustrate the procedure::
 
 API used in this tutorial: :ref:`method_lock`, :ref:`method_lock_info`, :ref:`method_unlock`,
 :ref:`method_status`, :ref:`method_environment_open`, :ref:`method_environment_close`.
+
+
+.. _tutorial_changing_user_group_permissions:
+
+Changing User Group Permissions
+-------------------------------
+
+RE manager provides :ref:`method_permissions_get` and :ref:`method_permissions_set` API that allow
+clients to download and upload user group permissions. The Python API operate with permissions
+represented as a dictionary, which could be downloaded, changed and then uploaded to the manager.
+Once the dictionary with permissions are uploaded, the lists of allowed plans and devices are
+updated by the manager to reflect new permissions. The *qserver* CLI implementation of the API
+are not as flexible: ``qserver permissions get`` loads and prints the dictionary of permissions
+and ``qserver permissions set`` is accepting the path to YAML file that contains new user group
+permissions, so a simple load-change-upload operation currently can not be performed easily via CLI.
+
+Start RE Manager using instructions given in :ref:`tutorial_starting_queue_server`.
+
+Load and check the list of allowed plans. Make sure that ``grid_scan`` is in the list::
+
+  $ qserver allowed plans
+  Arguments: ['allowed', 'plans']
+  13:43:41 - MESSAGE:
+  {'msg': '',
+  'plans_allowed': { ...
+                    'fly': '{...}'
+                    'grid_scan': '{...}',
+                    'inner_product_scan': '{...}',
+                    ... },
+  'plans_allowed_uid': '68753b90-7716-4ce6-b273-b2b8e3646123',
+  'success': True}
+
+Load and inspect permissions for the *admin* user group: users are allowed to execute all
+plans (see :ref:`configuring_user_group_permissions`)::
+
+  $ qserver permissions get
+  Arguments: ['permissions', 'get']
+  13:47:20 - MESSAGE:
+  {'msg': '',
+  'success': True,
+  'user_group_permissions': {'user_groups': {'admin': {'allowed_devices': [':?.*:depth=5'],
+                                                        'allowed_functions': ['function_sleep'],
+                                                        'allowed_plans': [':.*'],
+                                                        'forbidden_devices': [None],
+                                                        'forbidden_plans': [None]},
+                                              ...
+                                            }
+                            }
+
+
+Let's create a YAML file (e.g. 'new_permissions.yaml') with modified user group permissions,
+which forbid users from adding ``grid_scan`` plan to the queue (*root* user group, which defines
+permissions that are applied to all other groups, must always exist in the dictionary of permissions)::
+
+  user_groups:
+    root:  # The group includes all available plan and devices
+      allowed_plans:
+        - null  # Allow all
+      forbidden_plans:
+        - ":^_"  # All plans with names starting with '_'
+      allowed_devices:
+        - null  # Allow all
+      forbidden_devices:
+        - ":^_:?.*"  # All devices with names starting with '_'
+      allowed_functions:
+        - null  # Allow all
+      forbidden_functions:
+        - ":^_"  # All functions with names starting with '_'
+    admin:  # The group includes beamline staff, includes all or most of the plans and devices
+      allowed_plans:
+        - ":.*"  # Different way to allow all plans.
+      forbidden_plans:
+        - "grid_scan"
+      allowed_devices:
+        - ":?.*:depth=5"  # Allow all device and subdevices. Maximum deepth for subdevices is 5.
+      forbidden_devices:
+        - null  # Nothing is forbidden
+      allowed_functions:
+        - "function_sleep"  # Explicitly listed name
+
+Upload permissions to RE Manager::
+
+  $ qserver permissions set new_permissions.yaml
+  Arguments: ['permissions', 'set', 'new_permissions.yaml']
+  13:57:31 - MESSAGE:
+  {'msg': '', 'success': True}
+
+Load the permission again to verify that they are modified::
+
+  $ qserver permissions get
+  Arguments: ['permissions', 'get']
+  13:57:40 - MESSAGE:
+  {'msg': '',
+  'success': True,
+  'user_group_permissions': {'user_groups': {'admin': {'allowed_devices': [':?.*:depth=5'],
+                                                        'allowed_functions': ['function_sleep'],
+                                                        'allowed_plans': [':.*'],
+                                                        'forbidden_devices': [None],
+                                                        'forbidden_plans': ['grid_scan']},
+                                              'root': {'allowed_devices': [None],
+                                                      'allowed_functions': [None],
+                                                      'allowed_plans': [None],
+                                                      'forbidden_devices': [':^_:?.*'],
+                                                      'forbidden_functions': [':^_'],
+                                                      'forbidden_plans': [':^_']}}}}
+
+Check that ``grid_scan`` is not in the updated list of allowed plans::
+
+  $ qserver allowed plans
+  Arguments: ['allowed', 'plans']
+  13:58:59 - MESSAGE:
+  {'msg': '',
+  'plans_allowed': { ...
+                    'fly': '{...}',
+                    'inner_product_scan': '{...}',
+                     ... },
+  'plans_allowed_uid': '2c983eec-a7cb-4fd2-bc9a-ad4503c3bf9e',
+  'success': True}
+
+API used in this tutorial: :ref:`method_permissions_get`, :ref:`method_permissions_set`,
+:ref:`method_plans_allowed`.
 
 
 .. _tutorial_running_custom_startup_code:

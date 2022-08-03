@@ -1067,11 +1067,159 @@ a plan or a foreground task is running.
   to ensure thread safety. Foreground tasks could be executed in the main thread one at a time and do not
   require thread safety.
 
+API used in this tutorial: :ref:`method_function_execute`, :ref:`method_status`, :ref:`method_task_status`,
+:ref:`method_task_result`.
+
 
 .. _tutorial_uploading_scripts:
 
 Uploading scripts
 -----------------
+
+RE Manager provides users with ability to upload and execute Python scripts in the worker namespace.
+The :ref:`method_script_upload` API accepts the script represented as string, which is uploaded
+to RE Manager over 0MQ, passed to the worker environment and executed. Similarly to
+:ref:`method_function_execute` explored in :ref:`tutorial_executing_functions`, the script is
+executed as a task and ``task_uid`` returned by the API may be used to monitor the task status
+and download results, which tell if the script was completed successfully and include the error message
+and the traceback in case of failure.
+
+The script may contain arbitrary Python code, which is executed in the worker environment. The code
+has full access to the worker namespace and may modify, replace or create new objects, including
+functions, devices and plans. For example, an uploaded script may contain code for a new plan, which
+becomes available in the worker namespace or modified code for an existing plan, which replaces
+the plan in the namespace. By default, the lists of existing and allowed plans and devices are updated
+after execution of each script. The new plans and devices become immediately available to users
+who have appropriate permissions (see :ref:`configuring_user_group_permissions`).
+
+The variables ``RE`` and ``db`` are reserved for instances of Bluesky Run Engine and Data Broker.
+By default, ``RE`` or ``db`` objects are not going to be replaced in the worker namespace
+even if the script contains the respective code (scripts are free to use those objects).
+This restriction is implemented to accidental changes to the namespace, which will cause
+RE Manager to fail. In order to allow the script to replace ``RE`` and ``db``, call the API
+with ``update_re=True``. If the uploaded script does not contain new or modified plans or
+devices, then there is no need to update the respective lists and the operation may be performed
+more efficiently if the ``update_lists=False``.
+
+The ``qserver script upload`` CLI tool supports all the functionality of the :ref:`method_script_upload` API.
+Instead of string representation of the script, it accepts a path to the script file as a parameter.
+Let's create a simple script file (e.g. 'test_script.py`) in the current directory::
+
+  # Add a simple plan
+  def count_test(detectors, *, num=1, delay=1):
+      yield from count(detectors, num=num, delay=delay)
+
+  # Wait for some time to emulate the script with longer execution time
+  ttime.sleep(30)
+
+The script adds a new plan ``count_test`` to the environment and then waits for 30 seconds to
+emulate long execution time. Start RE Manager, open the environment and verify that RE Manager is
+in ``idle`` state. Use the same steps as in :ref:`tutorial_executing_plans`.
+Then check that the plan is not in the list of allowed plans::
+
+  $ qserver allowed plans
+  Arguments: ['allowed', 'plans']
+  12:26:55 - MESSAGE:
+  {'msg': '',
+  'plans_allowed': {'adaptive_scan': '{...}',
+                    'count': '{...}',
+                    'count_bundle_test': '{...}',
+                    'fly': '{...}',
+                    ...},
+  'plans_allowed_uid': 'ad1963db-d561-441d-a4c3-f94ee2780a61',
+  'success': True}
+
+Upload script to RE Manager::
+
+  $ qserver script upload test_script.py
+  Arguments: ['script', 'upload', 'test_script.py']
+  12:29:59 - MESSAGE:
+  {'msg': '', 'success': True, 'task_uid': '1234adbc-b181-4003-b5fb-9d72ab0f7fc2'}
+
+While the script is running, check RE Manager status. The manager and environment
+status is now returned as ``'executing_task'``::
+
+  $ qserver status
+  Arguments: ['status']
+  12:30:04 - MESSAGE:
+  { ...
+  'manager_state': 'executing_task',
+    ...
+  'worker_environment_state': 'executing_task'}
+
+Make sure that the task is running by checking the task status (using task UID)::
+
+  $ qserver task status '1234adbc-b181-4003-b5fb-9d72ab0f7fc2'
+  Arguments: ['task', 'status', '1234adbc-b181-4003-b5fb-9d72ab0f7fc2']
+  12:30:16 - MESSAGE:
+  {'msg': '',
+  'status': 'running',
+  'success': True,
+  'task_uid': '1234adbc-b181-4003-b5fb-9d72ab0f7fc2'}
+
+Wait until script execution is finished. Check the status again::
+
+  $ qserver task status '1234adbc-b181-4003-b5fb-9d72ab0f7fc2'
+  Arguments: ['task', 'status', '1234adbc-b181-4003-b5fb-9d72ab0f7fc2']
+  12:30:43 - MESSAGE:
+  {'msg': '',
+  'status': 'completed',
+  'success': True,
+  'task_uid': '1234adbc-b181-4003-b5fb-9d72ab0f7fc2'}
+
+View the results of task execution. The return value is always ``None``, because the script
+does not return any value. Check that ``success`` is ``True`` and error message and
+traceback are empty strings::
+
+  $ qserver task result '1234adbc-b181-4003-b5fb-9d72ab0f7fc2'
+  Arguments: ['task', 'result', '1234adbc-b181-4003-b5fb-9d72ab0f7fc2']
+  12:30:54 - MESSAGE:
+  {'msg': '',
+  'result': {'msg': '',
+              'return_value': None,
+              'success': True,
+              'task_uid': '1234adbc-b181-4003-b5fb-9d72ab0f7fc2',
+              'time_start': 1659544199.5750947,
+              'time_stop': 1659544229.7251163,
+              'traceback': ''},
+  'status': 'completed',
+  'success': True,
+  'task_uid': '1234adbc-b181-4003-b5fb-9d72ab0f7fc2'}
+
+Load the list of allowed plans and verify that ``count_test`` is in the list::
+
+  $ qserver allowed plans
+  Arguments: ['allowed', 'plans']
+  12:40:18 - MESSAGE:
+  {'msg': '',
+  'plans_allowed': {'adaptive_scan': '{...}',
+                    'count': '{...}',
+                    'count_bundle_test': '{...}',
+                    'count_test': '{...}',
+                    'fly': '{...}',
+                    ...},
+  'plans_allowed_uid': 'e3a1a276-f081-450a-87d7-e17101e83deb',
+  'success': True}
+
+Now the plan ``count_test`` can be placed in the queue and executed by RE Manager.
+
+.. note::
+
+  Task results are stored at the server for a limited time and then deleted. Currently the expiration time
+  is 2 minutes after completion of the task, but could be parametrized in the future.
+
+.. note::
+
+  Similarly to functions, scripts could be executed as foreground tasks (default, executed
+  in main thread) or background tasks (executed in background thread). It is responsibility
+  of software or workflow developer to ensure thread safety. Though executing foreground
+  tasks is thread safe, users should be mindful about how the executed code affects the state
+  of the worker environment and the manager. For example, a script that executes a plan
+  can be successfully run as a foreground task, bypassing all mechanisms for queue management,
+  but it is not advised to do so.
+
+API used in this tutorial: :ref:`method_script_upload`, :ref:`method_status`,
+:ref:`method_plans_allowed`, :ref:`method_task_status`, :ref:`method_task_result`.
 
 
 .. _tutorial_locking_re_manager:

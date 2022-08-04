@@ -5,6 +5,59 @@ Using the Queue Server
 Starting and Stopping Run Engine Manager
 ----------------------------------------
 
+The core component of the Queue Server is the Run Engine manager, which could be started as an application
+or a service. Running RE Manager as an application is easy and recommended for evaluation, testing and demos.
+Production systems more likely to run RE Manager as a service.
+
+Running RE Manager as an Application
+************************************
+
+Starting RE Manager as an application is demonstrated in tutorials :ref:`tutorial_starting_queue_server` and 
+:ref:`tutorial_starting_queue_server` and includes activating the Conda environment with installed Queue Server
+and running :ref:`start_re_manager_cli` with appropriate set of parameters. Activating some options may also
+require environment variables to be set before ``start-re-manager`` is started.
+
+RE Manager is started with the default set of options by typing ::
+
+  $ start-re-manager
+
+in the command prompt. The default options are sufficient for most demos, which are based on the simulated 
+startup code distributed with the package. If a demo involves remote monitoring of console output, 
+then activate publishing of console output to 0MQ socket by using ``--zmq-publish-console``::
+
+  $ start-re-manager --zmq-publish-console ON
+
+The manager could be configured to load custom startup code by setting the path to the directory with 
+code files::
+
+  $ start-re-manager --zmq-publish-console ON --startup-dir <path-to-directory-with-files>
+
+RE Manager automaticaly creates instances of Bluesky Run Engine (``RE``) and Data Broker (``db``).
+Production scripts typically create custom instances ``RE`` and ``db``. In this case, RE Manager
+must be called with the option ``--keep-re`` to prevent RE Manager from overriding ``RE`` and ``db``::
+
+  $ start-re-manager --zmq-publish-console ON --startup-dir <path-to-directory-with-files> --keep-re
+
+This is the minimum configuration of RE Manager sufficient for practical use of Queue Server for experimental
+control. Configuring RE Manager for a production system may require additiona settings. See :ref:`start_re_manager_cli` 
+for detailed description of parameters.
+
+Run Engine manager running as an application may be closed by pressing Ctrl-C in the terminal. 
+
+Running RE Manager as a Service
+*******************************
+
+
+
+Closing RE Manager using API
+****************************
+
+RE Manager can be stopped programmatically by sending :ref:`method_manager_stop` API request. The API parameter
+allows to select whether the operation is performed in *safe* mode (API request is rejected if RE Manager is
+not *idle*) or to disable safe mode (RE Manager is closed even if it is performing an operation, e.g. a plan
+is running). The API is mostly intended for automated system testing and should not be exposed to general users 
+through client applications. 
+
 Opening and Closing the Worker Environment
 ------------------------------------------
 

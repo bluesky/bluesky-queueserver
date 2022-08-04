@@ -182,10 +182,17 @@ The alternative way to stop the queue is to add ``'queue_stop'`` instruction to 
 the queue. RE Manager pops the instruction from the queue and stops the execution. The queue execution may 
 be resumed at any time starting from the following item.
 
-Stopping the queue immediately requires to interact with Run Engine by pausing the currently running plan Using
+Execution of the currently running plan can be interrupted using :ref:`method_re_pause` API request.
+The API allows to request deferred (the plan runs until the next checkpoint) or immediate pause.
+See `Interruptions <https://blueskyproject.io/bluesky/state-machine.html>`_ sections of Bluesky documentation
+for more details. The paused plan may be :ref:`resumed, stopped, aborted or halted <method_re_resume_stop_abort_halt>`.
+Note, that stopped plan is considered successfully completed, while aborted and halted plans are considered
+failed. 
+
+Interrupting the current plan allows to stop the queue immediately: the plan may be paused by sending
 :ref:`method_re_pause` API request (this will pause the execution of the plan, which may be sufficient to resolve
 some technical difficulties) and then stop using :ref:`'re_stop' <method_re_resume_stop_abort_halt>` 
-or abort using :ref:`'re_abort' <method_re_resume_stop_abort_halt>` API (the latter API returns the plan to 
+or abort using :ref:`'re_abort' <method_re_resume_stop_abort_halt>` API (the latter API pushes the plan to 
 the top of the queue).
 
 The queue can operate with enabled/disabled *LOOP* mode (see :ref:`method_queue_mode_set`). If the *LOOP* mode

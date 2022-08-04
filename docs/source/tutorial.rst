@@ -1214,7 +1214,7 @@ Now the plan ``count_test`` can be placed in the queue and executed by RE Manage
   Similarly to functions, scripts could be executed as foreground tasks (default, executed
   in main thread) or background tasks (executed in background thread). It is responsibility
   of software or workflow developer to ensure thread safety. Though executing foreground
-  tasks is thread safe, users should be mindful about how the executed code affects the state
+  tasks is thread safe, users should consider how the executed code affects the state
   of the worker environment and the manager. For example, a script that executes a plan
   can be successfully run as a foreground task, bypassing all mechanisms for queue management,
   but it is not advised to do so.

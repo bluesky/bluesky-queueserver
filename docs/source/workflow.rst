@@ -47,9 +47,9 @@ Run Engine manager running as an application may be closed by pressing Ctrl-C in
 Running RE Manager as a Service
 *******************************
 
-The following example demonstrates how to start RE Manager as a service from local user account.
-The manager is started in the most basic configuration. Change the configuration by setting
-by setting environment variables and additional parameters of ``start-re-manager`` as needed.
+The following example demonstrates how to start RE Manager as a user service, which does not
+require root access. The manager is started in the most basic configuration. Change the configuration 
+by setting by setting environment variables and additional parameters of ``start-re-manager`` as needed.
 Setting up the service requires two files: service configuration file and the script that starts
 RE Manager. Replace ``<user-name>`` in file paths and the script files with the correct user name.
 It is also assumed that the Queue Server is installed in *bs-qserver* environment using *miniconda3*.
@@ -101,6 +101,25 @@ through client applications.
 
 Opening and Closing the Worker Environment
 ------------------------------------------
+
+The RE Worker environment must be opened before starting the queue, executing plans, functions or uploading script.
+The operation of opening the environment consists of creating a separate process (Worker process) and loading
+startup code. Once startup code is loaded, RE Manager updates the lists of existing and allowed devices and plans
+based on the contents of the Worker namespace. The process of opening the environment is initiated by sending 
+:ref:`method_environment_open` API request and if the request is accepted, then waiting for the process to complete.
+
+The contents of the environment may be changed remotely by uploading and executing scripts using 
+:ref:`method_script_upload` API, which allows to add, remove or modify objects in the worker namespace.
+The changes introduced by uploaded scripts are lost once the environment is closed.
+
+Similarly to opening the environment, the operation of closing or destroying the environment is initiated by sending 
+:ref:`method_environment_close` or :ref:`method_environment_destroy` API requests and waiting for operation to 
+complete. The :ref:`method_environment_close` API is intended for use during normal operation. The environment
+can be closed only if RE Manager is idle, i.e. no plans or tasks are currently executed. The operation of destroying
+the environment allows to recover RE Manager in case the environment is stuck (e.g. executing an infinite loop)
+by killing the worker process. The operation is unsafe and should be used only as a last resort.
+
+See the tutorial :ref:`tutorial_opening_closing_re_worker_environment`.
 
 Managing the Plan Queue
 -----------------------

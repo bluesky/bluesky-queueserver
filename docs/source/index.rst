@@ -20,8 +20,8 @@ Bluesky-QueueServer Documentation
    :caption: User's Guide
 
    introduction_for_users
-   features_and_config
    workflow
+   features_and_config
    startup_code
    ipython
    item_validation
@@ -34,6 +34,17 @@ Bluesky-QueueServer Documentation
 
    interacting_with_qs
    re_manager_api
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Related Projects
+
+   Bluesky Queueserver API <https://blueskyproject.io/bluesky-queueserver-api>
+   Bluesky HTTP Server <https://blueskyproject.io/bluesky-httpserver>
+   Bluesky Widgets <https://blueskyproject.io/bluesky-widgets>
+   Bluesky <https://blueskyproject.io/bluesky>
+   Ophyd <https://blueskyproject.io/ophyd>
+   Data Broker <https://blueskyproject.io/databroker>
 
 .. warning::
 

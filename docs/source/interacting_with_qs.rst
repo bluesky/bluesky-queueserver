@@ -4,8 +4,6 @@ Interacting with Queue Server
 
 .. currentmodule:: bluesky_queueserver
 
-Documentation is coming soon ...
-
 .. _subscribing_to_console_output:
 
 Subscribing to Published Console Output

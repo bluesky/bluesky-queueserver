@@ -89,6 +89,11 @@ Stopping the service::
 
   `$ systemctl --user stop queue-server
 
+The Run Manager is configured not to print any console output, but instead to publish console output to
+0MQ socket. See the section :ref:`remote_monitoring_of_console_output` and the tutorial 
+:ref:`tutorial_remote_monitoring` for the instructions on how to view the console output remotely. 
+The illustrated procedure can be modified to satisfy practical operational needs.
+
 
 Closing RE Manager using API
 ****************************

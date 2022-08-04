@@ -48,7 +48,7 @@ Running RE Manager as a Service
 *******************************
 
 The following example demonstrates how to start RE Manager as a user service, which does not
-require root access. The manager is started in the most basic configuration. Change the configuration 
+require root access. The manager is started in the most basic configuration. Change the configuration
 by setting by setting environment variables and additional parameters of ``start-re-manager`` as needed.
 Setting up the service requires two files: service configuration file and the script that starts
 RE Manager. Replace ``<user-name>`` in file paths and the script files with the correct user name.
@@ -90,8 +90,8 @@ Stopping the service::
   `$ systemctl --user stop queue-server
 
 The Run Manager is configured not to print any console output, but instead to publish console output to
-0MQ socket. See the section :ref:`remote_monitoring_of_console_output` and the tutorial 
-:ref:`tutorial_remote_monitoring` for the instructions on how to view the console output remotely. 
+0MQ socket. See the section :ref:`remote_monitoring_of_console_output` and the tutorial
+:ref:`tutorial_remote_monitoring` for the instructions on how to view the console output remotely.
 The illustrated procedure can be modified to satisfy practical operational needs.
 
 
@@ -110,15 +110,15 @@ Opening and Closing RE Worker Environment
 The RE Worker environment must be opened before starting the queue, executing plans, functions or uploading script.
 The operation of opening the environment consists of creating a separate process (Worker process) and loading
 startup code. Once startup code is loaded, RE Manager updates the lists of existing and allowed devices and plans
-based on the contents of the Worker namespace. The process of opening the environment is initiated by sending 
+based on the contents of the Worker namespace. The process of opening the environment is initiated by sending
 :ref:`method_environment_open` API request and if the request is accepted, then waiting for the process to complete.
 
-The contents of the environment may be changed remotely by uploading and executing scripts using 
+The contents of the environment may be changed remotely by uploading and executing scripts using
 :ref:`method_script_upload` API, which allows to add, remove or modify objects in the worker namespace.
 The changes introduced by uploaded scripts are lost once the environment is closed.
 
-Similarly to opening the environment, the operation of closing or destroying the environment is initiated by sending 
-:ref:`method_environment_close` or :ref:`method_environment_destroy` API requests and waiting for operation to 
+Similarly to opening the environment, the operation of closing or destroying the environment is initiated by sending
+:ref:`method_environment_close` or :ref:`method_environment_destroy` API requests and waiting for operation to
 complete. The :ref:`method_environment_close` API is intended for use during normal operation. The environment
 can be closed only if RE Manager is idle, i.e. no plans or tasks are currently executed. The operation of destroying
 the environment allows to recover RE Manager in case the environment is stuck (e.g. executing an infinite loop)
@@ -129,33 +129,33 @@ See the tutorial :ref:`tutorial_opening_closing_re_worker_environment`.
 Managing the Plan Queue
 -----------------------
 
-RE Manager supports operations on the queue allowing clients to add, move, remove and replace queue items. 
-All queue operations may be executed at any time. The contents of the queue may be loaded using 
+RE Manager supports operations on the queue allowing clients to add, move, remove and replace queue items.
+All queue operations may be executed at any time. The contents of the queue may be loaded using
 :ref:`method_queue_get` API, which returns the list queue items (*items*) and the currently running item
-(*running_item*) if the queue is running. The running item is not considered part of the queue and can 
+(*running_item*) if the queue is running. The running item is not considered part of the queue and can
 not be used in most of the queue operations.
 
 The queue supports two types of items: plans (Bluesky plans executed in the worker environment)
-and instructions. The instructions are used to control the queue. Currently only one instruction 
+and instructions. The instructions are used to control the queue. Currently only one instruction
 (``'queue_stop'``) instruction is supported.
 
 The operations of adding (:ref:`method_queue_item_add`), moving (:ref:`method_queue_item_move`) and removing
-(:ref:`method_queue_item_remove`) items have batch equivalents :ref:`method_queue_item_add_batch`, 
+(:ref:`method_queue_item_remove`) items have batch equivalents :ref:`method_queue_item_add_batch`,
 :ref:`method_queue_item_move_batch` and :ref:`method_queue_item_remove_batch`. The batch operations accept lists
-of items instead of single items and guaranteed to perform atomic operations on the queue. 
+of items instead of single items and guaranteed to perform atomic operations on the queue.
 
-Queue operations allow multiple modes of addressing queue items. Items may be addressed using item position 
+Queue operations allow multiple modes of addressing queue items. Items may be addressed using item position
 (parameter ``pos``), which could be positive or negative index of the item or a string literal (``'front'``
-or ``'back'``). While using ``pos='front'`` or ``pos='back'`` to insert or move items to the front or back of 
+or ``'back'``). While using ``pos='front'`` or ``pos='back'`` to insert or move items to the front or back of
 the queue is guaranteed to produce the expected result, using indexes is reliable only if the queue is not
-running (negative indexes should work reliably if the queue is running) and no other clients are in 
+running (negative indexes should work reliably if the queue is running) and no other clients are in
 the process of modifying the queue. Another mode of addressing is using item UID to uniquiely identify
 the queue items. Queue operations allow to select items by UID and insert items before or after items with
 a given UID (parameters ``uid``, ``before_uid`` and ``after_uid``). Batch operations accept lists of
 item UIDs (parameter ``uids``) to select and possibly reorder lists of existing items.
 
 The queue may be cleared at any time using :ref:`method_queue_clear` API. If the queue is running, clearing
-the queue does not affect currently running item or the state of the queue: if no new items are added 
+the queue does not affect currently running item or the state of the queue: if no new items are added
 by the time the currently running plan is completed, then the queue is automatically stopped.
 
 See the full list of API in :ref:`supported_methods_for_0MQ_API` and tutorial :ref:`tutorial_adding_queue_items`.
@@ -163,7 +163,7 @@ See the full list of API in :ref:`supported_methods_for_0MQ_API` and tutorial :r
 Managing the Plan History
 -------------------------
 
-Plan history contains a list of completed plans along with the results of execution (start and stop time, 
+Plan history contains a list of completed plans along with the results of execution (start and stop time,
 completion status, error message and traceback in case of failure). The plan history may be loaded using
 :ref:`method_history_get` API and cleared using :ref:`method_history_clear` API. Plan history is not designed
 to grow indefinitely and should be periodically cleared in order to avoid performance issues.
@@ -175,11 +175,11 @@ The plan queue can be started using :ref:`method_queue_start` if RE Worker envir
 the API request fails. The queue stops automatically once it runs out of plans. Users may request RE Manager
 to stop the queue by sending :ref:`method_queue_stop` API request. Once RE Manager receives the request,
 it waits until the currently executed plan is completed and then stops the queue. The pending request
-to stop the queue is reflected in RE Manager status (*queue_stop_pending*) and may be cancelled at any time 
+to stop the queue is reflected in RE Manager status (*queue_stop_pending*) and may be cancelled at any time
 while the queue is still running by sending :ref:`method_queue_stop_cancel` request.
 
-The alternative way to stop the queue is to add ``'queue_stop'`` instruction to the desired position in 
-the queue. RE Manager pops the instruction from the queue and stops the execution. The queue execution may 
+The alternative way to stop the queue is to add ``'queue_stop'`` instruction to the desired position in
+the queue. RE Manager pops the instruction from the queue and stops the execution. The queue execution may
 be resumed at any time starting from the following item.
 
 Execution of the currently running plan can be interrupted using :ref:`method_re_pause` API request.
@@ -187,29 +187,44 @@ The API allows to request deferred (the plan runs until the next checkpoint) or 
 See `Interruptions <https://blueskyproject.io/bluesky/state-machine.html>`_ sections of Bluesky documentation
 for more details. The paused plan may be :ref:`resumed, stopped, aborted or halted <method_re_resume_stop_abort_halt>`.
 Note, that stopped plan is considered successfully completed, while aborted and halted plans are considered
-failed. 
+failed.
 
 Interrupting the current plan allows to stop the queue immediately: the plan may be paused by sending
 :ref:`method_re_pause` API request (this will pause the execution of the plan, which may be sufficient to resolve
-some technical difficulties) and then stop using :ref:`'re_stop' <method_re_resume_stop_abort_halt>` 
-or abort using :ref:`'re_abort' <method_re_resume_stop_abort_halt>` API (the latter API pushes the plan to 
+some technical difficulties) and then stop using :ref:`'re_stop' <method_re_resume_stop_abort_halt>`
+or abort using :ref:`'re_abort' <method_re_resume_stop_abort_halt>` API (the latter API pushes the plan to
 the top of the queue).
 
 The queue can operate with enabled/disabled *LOOP* mode (see :ref:`method_queue_mode_set`). If the *LOOP* mode
 is disabled (normal mode), the items are popped from the front of the queue and executed by in the Worker
-(plans) or the manager (instructions). The successfully completed plans (including stopped plans) are 
-permanently removed from the queue and added to plan history upon completion. If a plan fails, is aborted 
-and or halted, it is pushed to the front of the queue and  added to the history along with execution results 
-(error message and traceback) and the queue execution is automatically stopped. The operation is slightly 
-different if the *LOOP* mode is enabled: successfully executed (or stopped) plans and instructions are 
-added to the back of the queue, allowing client to infinitely repeate a sequence of plans. The stopped plans 
+(plans) or the manager (instructions). The successfully completed plans (including stopped plans) are
+permanently removed from the queue and added to plan history upon completion. If a plan fails, is aborted
+and or halted, it is pushed to the front of the queue and  added to the history along with execution results
+(error message and traceback) and the queue execution is automatically stopped. The operation is slightly
+different if the *LOOP* mode is enabled: successfully executed (or stopped) plans and instructions are
+added to the back of the queue, allowing client to infinitely repeate a sequence of plans. The stopped plans
 are treated as successful in both modes, except that stopping a plan also stops execution of the queue.
 
-See the tutorial :ref:`tutorial_starting_stopping_queue`.
+See the tutorials :ref:`tutorial_starting_stopping_queue` and :ref:`tutorial_iteracting_with_run_engine.
 
-Interacting with the Worker Environment
----------------------------------------
+Executing Single Plans
+----------------------
 
+See the tutorial :ref:`tutorial_executing_plans`.
+
+Executing Functions
+-------------------
+
+See the tutorial :ref:`tutorial_executing_functions`.
+
+Uploading Scripts
+-----------------
+
+See the tutorial :ref:`tutorial_uploading_scripts`.
+
+
+Monitoring of RE Manager status
+-------------------------------
 
 .. _locking_re_manager:
 

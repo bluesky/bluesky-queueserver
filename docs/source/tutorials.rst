@@ -837,8 +837,8 @@ API used in this tutorial: :ref:`method_status`, :ref:`method_re_pause`, :ref:`m
 
 .. _tutorial_executing_plans:
 
-Executing Plans
----------------
+Executing Single Plans
+----------------------
 
 RE Manager allows to start immediate execution of a submitted plan without placing it in a queue.
 The plan may be submitted for execution only if the manager is idle, otherwise the API request fails

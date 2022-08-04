@@ -171,16 +171,34 @@ to grow indefinitely and should be periodically cleared in order to avoid perfor
 Controlling Execution of the Queue and the Plans
 ------------------------------------------------
 
-The queue can operate with enabled/disabled *LOOP* mode (see :ref:`method_queue_mode_set`). If the *LOOP* mode
-is disabled (normal mode), the items are popped from the front of the queue and executed by in the Worker. 
-The successfully completed plans (including stopped plans) are permanently removed from the queue and added 
-to plan history upon completion. If a plan fails, is aborted and or halted, it is pushed to the front 
-of the queue and  added to the history along with execution results (error message and traceback) and the 
-queue execution is automatically stopped. The operation is slightly different if the *LOOP* mode is enabled:
-successfully executed (or stopped) plans are added to the back of the queue, allowing client to infinitely 
-repeate a sequence of plans. The stopped plans are treated as successful in both modes, except that
-stopping a plan also stops execution of the queue.
+The plan queue can be started using :ref:`method_queue_start` if RE Worker environment is open, otherwise
+the API request fails. The queue stops automatically once it runs out of plans. Users may request RE Manager
+to stop the queue by sending :ref:`method_queue_stop` API request. Once RE Manager receives the request,
+it waits until the currently executed plan is completed and then stops the queue. The pending request
+to stop the queue is reflected in RE Manager status (*queue_stop_pending*) and may be cancelled at any time 
+while the queue is still running by sending :ref:`method_queue_stop_cancel` request.
 
+The alternative way to stop the queue is to add ``'queue_stop'`` instruction to the desired position in 
+the queue. RE Manager pops the instruction from the queue and stops the execution. The queue execution may 
+be resumed at any time starting from the following item.
+
+Stopping the queue immediately requires to interact with Run Engine by pausing the currently running plan Using
+:ref:`method_re_pause` API request (this will pause the execution of the plan, which may be sufficient to resolve
+some technical difficulties) and then stop using :ref:`'re_stop' <method_re_resume_stop_abort_halt>` 
+or abort using :ref:`'re_abort' <method_re_resume_stop_abort_halt>` API (the latter API returns the plan to 
+the top of the queue).
+
+The queue can operate with enabled/disabled *LOOP* mode (see :ref:`method_queue_mode_set`). If the *LOOP* mode
+is disabled (normal mode), the items are popped from the front of the queue and executed by in the Worker
+(plans) or the manager (instructions). The successfully completed plans (including stopped plans) are 
+permanently removed from the queue and added to plan history upon completion. If a plan fails, is aborted 
+and or halted, it is pushed to the front of the queue and  added to the history along with execution results 
+(error message and traceback) and the queue execution is automatically stopped. The operation is slightly 
+different if the *LOOP* mode is enabled: successfully executed (or stopped) plans and instructions are 
+added to the back of the queue, allowing client to infinitely repeate a sequence of plans. The stopped plans 
+are treated as successful in both modes, except that stopping a plan also stops execution of the queue.
+
+See the tutorial :ref:`tutorial_starting_stopping_queue`.
 
 Interacting with the Worker Environment
 ---------------------------------------

@@ -99,8 +99,8 @@ not *idle*) or to disable safe mode (RE Manager is closed even if it is performi
 is running). The API is mostly intended for automated system testing and should not be exposed to general users
 through client applications.
 
-Opening and Closing the Worker Environment
-------------------------------------------
+Opening and Closing RE Worker Environment
+-----------------------------------------
 
 The RE Worker environment must be opened before starting the queue, executing plans, functions or uploading script.
 The operation of opening the environment consists of creating a separate process (Worker process) and loading
@@ -124,8 +124,58 @@ See the tutorial :ref:`tutorial_opening_closing_re_worker_environment`.
 Managing the Plan Queue
 -----------------------
 
+RE Manager supports operations on the queue allowing clients to add, move, remove and replace queue items. 
+All queue operations may be executed at any time. The contents of the queue may be loaded using 
+:ref:`method_queue_get` API, which returns the list queue items (*items*) and the currently running item
+(*running_item*) if the queue is running. The running item is not considered part of the queue and can 
+not be used in most of the queue operations.
+
+The queue supports two types of items: plans (Bluesky plans executed in the worker environment)
+and instructions. The instructions are used to control the queue. Currently only one instruction 
+(``'queue_stop'``) instruction is supported.
+
+The operations of adding (:ref:`method_queue_item_add`), moving (:ref:`method_queue_item_move`) and removing
+(:ref:`method_queue_item_remove`) items have batch equivalents :ref:`method_queue_item_add_batch`, 
+:ref:`method_queue_item_move_batch` and :ref:`method_queue_item_remove_batch`. The batch operations accept lists
+of items instead of single items and guaranteed to perform atomic operations on the queue. 
+
+Queue operations allow multiple modes of addressing queue items. Items may be addressed using item position 
+(parameter ``pos``), which could be positive or negative index of the item or a string literal (``'front'``
+or ``'back'``). While using ``pos='front'`` or ``pos='back'`` to insert or move items to the front or back of 
+the queue is guaranteed to produce the expected result, using indexes is reliable only if the queue is not
+running (negative indexes should work reliably if the queue is running) and no other clients are in 
+the process of modifying the queue. Another mode of addressing is using item UID to uniquiely identify
+the queue items. Queue operations allow to select items by UID and insert items before or after items with
+a given UID (parameters ``uid``, ``before_uid`` and ``after_uid``). Batch operations accept lists of
+item UIDs (parameter ``uids``) to select and possibly reorder lists of existing items.
+
+The queue may be cleared at any time using :ref:`method_queue_clear` API. If the queue is running, clearing
+the queue does not affect currently running item or the state of the queue: if no new items are added 
+by the time the currently running plan is completed, then the queue is automatically stopped.
+
+See the full list of API in :ref:`supported_methods_for_0MQ_API` and tutorial :ref:`tutorial_adding_queue_items`.
+
+Managing the Plan History
+-------------------------
+
+Plan history contains a list of completed plans along with the results of execution (start and stop time, 
+completion status, error message and traceback in case of failure). The plan history may be loaded using
+:ref:`method_history_get` API and cleared using :ref:`method_history_clear` API. Plan history is not designed
+to grow indefinitely and should be periodically cleared in order to avoid performance issues.
+
 Controlling Execution of the Queue and the Plans
 ------------------------------------------------
+
+The queue can operate with enabled/disabled *LOOP* mode (see :ref:`method_queue_mode_set`). If the *LOOP* mode
+is disabled (normal mode), the items are popped from the front of the queue and executed by in the Worker. 
+The successfully completed plans (including stopped plans) are permanently removed from the queue and added 
+to plan history upon completion. If a plan fails, is aborted and or halted, it is pushed to the front 
+of the queue and  added to the history along with execution results (error message and traceback) and the 
+queue execution is automatically stopped. The operation is slightly different if the *LOOP* mode is enabled:
+successfully executed (or stopped) plans are added to the back of the queue, allowing client to infinitely 
+repeate a sequence of plans. The stopped plans are treated as successful in both modes, except that
+stopping a plan also stops execution of the queue.
+
 
 Interacting with the Worker Environment
 ---------------------------------------

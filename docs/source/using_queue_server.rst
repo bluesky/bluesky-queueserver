@@ -9,6 +9,8 @@ The core component of the Queue Server is the Run Engine manager, which could be
 or a service. Running RE Manager as an application is easy and recommended for evaluation, testing and demos.
 Production systems more likely to run RE Manager as a service.
 
+.. _running_re_manager_as_application:
+
 Running RE Manager as an Application
 ************************************
 
@@ -205,22 +207,109 @@ different if the *LOOP* mode is enabled: successfully executed (or stopped) plan
 added to the back of the queue, allowing client to infinitely repeate a sequence of plans. The stopped plans
 are treated as successful in both modes, except that stopping a plan also stops execution of the queue.
 
-See the tutorials :ref:`tutorial_starting_stopping_queue` and :ref:`tutorial_iteracting_with_run_engine.
+See the tutorials :ref:`tutorial_starting_stopping_queue` and :ref:`tutorial_iteracting_with_run_engine`.
 
-Executing Single Plans
-----------------------
+.. _immediate_execution_of_plans:
 
-See the tutorial :ref:`tutorial_executing_plans`.
+Immediate Execution of Plans
+----------------------------
+
+RE Manager allows to execute plans without placing them in the queue. Plans can be submitted for
+immediate execution using :ref:`method_queue_item_execute` API. The requests are accepted only if
+RE Manager is in the idle state, otherwise the request is rejected and the plan is discarded.
+Once the request is validated and accepted, the plan is passed to RE Worker for immediate
+execution. Similarly to items from the queue, the plan is assigned item UID and can be tracked
+using the same API. Upon completion, the plan is added to history along with the results of
+execution. The plan is never added to the queue, even if it fails or the queue is in the loop
+mode. If the queue contains other plans, its contents remain unchanged. Submitting a plan
+for immediate execution does not start execution of the existing queue.
+
+See the tutorial :ref:`tutorial_immediate_execution_of_plans`.
+
+.. _executing_functions:
 
 Executing Functions
 -------------------
 
+RE Manager allows to start execution functions in RE Worker environment. The requests to start
+execution of functions could be submitted by clients using :ref:`method_function_execute` API,
+which accepts function name and parameters in the format used for queue item. Clients may
+access only functions that exist in RE Worker namespace (e.g. defined in startup script or
+an uploaded script) and allowed by user group permissions (see :ref:`configuring_user_group_permissions`).
+The functions may access all objects in the namespace and used to change states of the objects
+or read the states of the objects and return the results to the client. While it is possible
+to corrupt the environment by running arbitrary code, permissions may be used to allow
+users access only to one or several carefully designed functions or block access to any functions
+(default), and the system may remain safe.
+
+Once the API request is accepted by RE Manager, the task is assigned UID (``task_uid``), which
+is returned as one of the API response parameters. The task UID allows to track execution
+of the task using :ref:`method_task_status` and :ref:`method_task_result` API. Once function
+execution is completed, the task contains the return value of the function (in case of success)
+and error message and traceback (in case of failure).
+
+Functions may be started as foreground and background tasks. See :ref:`running_tasks` for details
+on running and monitoring tasks.
+
 See the tutorial :ref:`tutorial_executing_functions`.
+
+.. _uploading_scripts:
 
 Uploading Scripts
 -----------------
 
+RE Manager provides users with ability to upload and execute Python scripts in the worker namespace.
+The :ref:`method_script_upload` API accepts the script represented as string, which is uploaded
+to RE Manager over 0MQ, passed to the worker environment and executed. The script is
+executed as a task and ``task_uid`` returned by the API may be used to monitor the task status
+and download results, indicating if the script was completed successfully and containing
+the error message and the traceback in case of failure.
+
+The script may contain arbitrary Python code, which is executed in the worker environment. The code
+has full access to the worker namespace and may modify, replace or create new objects, including
+functions, devices and plans. For example, an uploaded script may contain code for a new plan, which
+becomes available in the worker namespace or modified code for an existing plan, which replaces
+the plan in the namespace. By default, the lists of existing and allowed plans and devices are updated
+after execution of each script. The new plans and devices become immediately available to users
+who have appropriate permissions (see :ref:`configuring_user_group_permissions`).
+
+The variables ``RE`` and ``db`` are reserved for instances of Bluesky Run Engine and Data Broker.
+By default, the existing ``RE`` or ``db`` objects are not replaced in the worker namespace
+even if the script contains the respective code (scripts are free to use those objects).
+This restriction is implemented to prevent accidental changes to the namespace, which may cause
+RE Manager to fail. In order to allow the script to replace ``RE`` and ``db``, call the API
+with ``update_re=True``. If the uploaded script does not contain new or modified plans or
+devices, then there is no need to update the respective lists and the operation may be performed
+more efficiently if the ``update_lists=False``.
+
+Scripts may be executed as foreground and background tasks. See :ref:`running_tasks` for details
+on running and monitoring tasks.
+
+.. note::
+
+  The scripts may contain arbitrary code. Users and developers should carefully consider
+  what code is executed in the worker namespace and how it affects the state of the worker
+  environment. For example, a script that executes a plan can be successfully started and
+  completed as a foreground task, bypassing all mechanisms for queue management, but it is
+  not advised to do so.
+
 See the tutorial :ref:`tutorial_uploading_scripts`.
+
+.. _running_tasks:
+
+Running Tasks
+-------------
+
+.. note::
+
+  Task results are stored at the server for a limited time and then deleted. Currently the expiration time
+  is 2 minutes after completion of the task, but could be parametrized in the future.
+
+.. note::
+
+  Background tasks are executed in background threads. It is responsibility of software or workflow developer
+  to ensure thread safety. Foreground tasks could be executed in the main thread one at a time and do not
+  introduce risks associated with thread safety.
 
 
 Monitoring of RE Manager status

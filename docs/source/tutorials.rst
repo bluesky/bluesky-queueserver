@@ -43,7 +43,7 @@ The following tutorials are available:
 - :ref:`tutorial_adding_queue_items`
 - :ref:`tutorial_starting_stopping_queue`
 - :ref:`tutorial_iteracting_with_run_engine`
-- :ref:`tutorial_executing_plans`
+- :ref:`tutorial_immediate_execution_of_plans`
 - :ref:`tutorial_executing_functions`
 - :ref:`tutorial_uploading_scripts`
 - :ref:`tutorial_locking_re_manager`
@@ -835,16 +835,14 @@ commands are ::
 
 API used in this tutorial: :ref:`method_status`, :ref:`method_re_pause`, :ref:`method_re_resume_stop_abort_halt`.
 
-.. _tutorial_executing_plans:
+.. _tutorial_immediate_execution_of_plans:
 
-Executing Single Plans
-----------------------
+Immediate Execution of Plans
+----------------------------
 
-RE Manager allows to start immediate execution of a submitted plan without placing it in a queue.
-The plan may be submitted for execution only if the manager is idle, otherwise the API request fails
-and the plan is discarded. As regular plans from the queue, the plan accepted for execution appears
-in the plan history upon completion, but it is never inserted in the queue (e.g. in case of failure
-or if the queue is in the loop mode).
+RE Manager allows to submit single plans for immediate execution without placing them in the queue
+or changing contents of the queue (see :ref:`immediate_execution_of_plans`). This tutorial demonstrates
+how to submit a single plan and retrieve the results of its execution.
 
 Start RE Manager using instructions given in :ref:`tutorial_starting_queue_server`.
 
@@ -915,16 +913,10 @@ API used in this tutorial: :ref:`method_status`, :ref:`method_queue_item_execute
 Executing Functions
 -------------------
 
-RE Manager provides an API, which allows to start execution of functions in RE Worker process.
-The function must be defined in RE Worker namespace (e.g. loaded as a result of execution of startup code)
-and added to user group permissions (see :ref:`configuring_user_group_permissions`). The *task UID* returned
-by the API may be used to monitor the status of the task and return the results once the task is completed.
-Functions may be executed in the forground (main thread of RE Worker process), which requires that
-RE Manager is in ``idle`` state, or in the background thread.
-
-The demo startup code loaded by RE Manager by default defines function ``function_sleep`` that
-accepts a single parameter which defines sleep time and returns a dictionary containing
-success flag (always ``True``) and the time passed as the parameter. The default permissions
+RE Manager allows to initiate execution functions in RE Worker process (see :ref:`executing_functions`).
+The demo startup code loaded by RE Manager by default defines function ``function_sleep``, which
+accepts a single parameter defining execution time of the function and returns a dictionary containing
+success flag (always ``True``) and the time value passed as the parameter. The default permissions
 for the demo are defined so that the ``admin`` user is allowed to call this function.
 The function is convenient for demonstration and testing, because it allows to set the time
 of function execution and see the time when the function starts and finishes by looking
@@ -947,7 +939,7 @@ at the console output:
 
 
 Start RE Manager, open the environment and verify that RE Manager is in ``idle`` state. Use the same steps
-as in :ref:`tutorial_executing_plans`.
+as in :ref:`tutorial_immediate_execution_of_plans`.
 
 Start execution of the function. Long delay (60 seconds) allows sufficient time to experiment::
 
@@ -1057,17 +1049,6 @@ plans or forground tasks are running. Try running the function as a foreground t
 a plan while the function is running. Also try running one or multiple copies of the function while
 a plan or a foreground task is running.
 
-.. note::
-
-  Task results are stored at the server for a limited time and then deleted. Currently the expiration time
-  is 2 minutes after completion of the task, but could be parametrized in the future.
-
-.. note::
-
-  Background tasks are executed in background threads. It is responsibility of software or workflow developer
-  to ensure thread safety. Foreground tasks could be executed in the main thread one at a time and do not
-  require thread safety.
-
 API used in this tutorial: :ref:`method_function_execute`, :ref:`method_status`, :ref:`method_task_status`,
 :ref:`method_task_result`.
 
@@ -1078,29 +1059,7 @@ Uploading scripts
 -----------------
 
 RE Manager provides users with ability to upload and execute Python scripts in the worker namespace.
-The :ref:`method_script_upload` API accepts the script represented as string, which is uploaded
-to RE Manager over 0MQ, passed to the worker environment and executed. Similarly to
-:ref:`method_function_execute` explored in :ref:`tutorial_executing_functions`, the script is
-executed as a task and ``task_uid`` returned by the API may be used to monitor the task status
-and download results, which tell if the script was completed successfully and include the error message
-and the traceback in case of failure.
-
-The script may contain arbitrary Python code, which is executed in the worker environment. The code
-has full access to the worker namespace and may modify, replace or create new objects, including
-functions, devices and plans. For example, an uploaded script may contain code for a new plan, which
-becomes available in the worker namespace or modified code for an existing plan, which replaces
-the plan in the namespace. By default, the lists of existing and allowed plans and devices are updated
-after execution of each script. The new plans and devices become immediately available to users
-who have appropriate permissions (see :ref:`configuring_user_group_permissions`).
-
-The variables ``RE`` and ``db`` are reserved for instances of Bluesky Run Engine and Data Broker.
-By default, ``RE`` or ``db`` objects are not going to be replaced in the worker namespace
-even if the script contains the respective code (scripts are free to use those objects).
-This restriction is implemented to accidental changes to the namespace, which will cause
-RE Manager to fail. In order to allow the script to replace ``RE`` and ``db``, call the API
-with ``update_re=True``. If the uploaded script does not contain new or modified plans or
-devices, then there is no need to update the respective lists and the operation may be performed
-more efficiently if the ``update_lists=False``.
+See notes in section :ref:`uploading_scripts` for more detailed description.
 
 The ``qserver script upload`` CLI tool supports all the functionality of the :ref:`method_script_upload` API.
 Instead of string representation of the script, it accepts a path to the script file as a parameter.
@@ -1115,7 +1074,7 @@ Let's create a simple script file (e.g. 'test_script.py`) in the current directo
 
 The script adds a new plan ``count_test`` to the environment and then waits for 30 seconds to
 emulate long execution time. Start RE Manager, open the environment and verify that RE Manager is
-in ``idle`` state. Use the same steps as in :ref:`tutorial_executing_plans`.
+in ``idle`` state. Use the same steps as in :ref:`tutorial_immediate_execution_of_plans`.
 Then check that the plan is not in the list of allowed plans::
 
   $ qserver allowed plans
@@ -1203,21 +1162,6 @@ Load the list of allowed plans and verify that ``count_test`` is in the list::
   'success': True}
 
 Now the plan ``count_test`` can be placed in the queue and executed by RE Manager.
-
-.. note::
-
-  Task results are stored at the server for a limited time and then deleted. Currently the expiration time
-  is 2 minutes after completion of the task, but could be parametrized in the future.
-
-.. note::
-
-  Similarly to functions, scripts could be executed as foreground tasks (default, executed
-  in main thread) or background tasks (executed in background thread). It is responsibility
-  of software or workflow developer to ensure thread safety. Though executing foreground
-  tasks is thread safe, users should consider how the executed code affects the state
-  of the worker environment and the manager. For example, a script that executes a plan
-  can be successfully run as a foreground task, bypassing all mechanisms for queue management,
-  but it is not advised to do so.
 
 API used in this tutorial: :ref:`method_script_upload`, :ref:`method_status`,
 :ref:`method_plans_allowed`, :ref:`method_task_status`, :ref:`method_task_result`.

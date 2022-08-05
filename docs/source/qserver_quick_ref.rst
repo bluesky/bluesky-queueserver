@@ -1,63 +1,37 @@
-===================
-bluesky-queueserver
-===================
+*qserver* : Quick Introduction
+==============================
 
-.. image:: https://img.shields.io/pypi/v/bluesky-queueserver.svg
-        :target: https://pypi.python.org/pypi/bluesky-queueserver
-
-.. image:: https://img.shields.io/codecov/c/github/bluesky/bluesky-queueserver
-        :target: https://codecov.io/gh/bluesky/bluesky-queueserve
-
-
-Server for queueing plans
-
-* Free software: 3-clause BSD license
-* `Installation instructions <https://bluesky.github.io/bluesky-queueserver/installation.html>`_.
-* `Brief description of the project <https://bluesky.github.io/bluesky-queueserver/introduction_for_users.html>`_.
-* `Full documentation <https://bluesky.github.io/bluesky-queueserver>`_.
-* `Python API <https://bluesky.github.io/bluesky-queueserver-api>`_.
-* `HTTP Server <https://bluesky.github.io/bluesky-httpserver>`_.
-
-In some cases the program may crash and leave some sockets open. This may prevent the Manager from
-restarting. To close the sockets (we are interested in sockets on ports 60615 and 60610), find
-PIDs of the processes::
-
-  $ netstat -ltnp
-
-and then kill the processes::
-
-  $ kill -9 <pid>
-
-
-Installation
-------------
-(see documentation at https://blueskyproject.io/bluesky-queueserver)
 
 .. note::
+    The released versions of Queue Server are considered stable and rarely crash. Developers
+    that are working on the code are very likely experience the server crashing so that
+    0MQ socket remains open and the server can not be easily restarted. The crash may happen
+    during interactive experiments with the server or while running unit tests.
+    To close the sockets (we are interested in sockets on ports 60615 and 60610), find
+    PIDs of the respective processes::
 
-  The Web (HTTP) server is no longer part of Queue Server project. The code was moved to the
-  separate repository https://github.com/bluesky/bluesky-httpserver.
+    $ netstat -ltnp
+
+    and then kill the processes::
+
+    $ kill -9 <pid>
+
 
 Starting QueueServer
 --------------------
 
 Running the demo requires two shells: the first to run Queue Server (RE Manager) and the second shell
-to communicate with the manager using `qserver` CLI tool.
+to communicate with the manager using `qserver` CLI tool. See the notes
+:ref:`running_re_manager_as_application` and tutorial :ref:`tutorial_starting_queue_server`
+for more information
 
-In the first shell start RE Manager::
 
-  start-re-manager
+Interacting with RE Manager using *qserver* CLI tool
+----------------------------------------------------
 
-RE Manager supports a number of command line options. Use 'start-re-manager -h' to view
-the available options.
-
-RE Manager is controlled by sending message over 0MQ. The `qserver` CLI tool allows to interact with
-RE Manager and supports most of the API. To display available options use ::
+Run *qserver* with option `-h` to dislay the available options::
 
   qserver -h
-
-Interacting with RE Manager using 'qserver' CLI tool
-----------------------------------------------------
 
 The most basic request is 'ping' intended to fetch some response from RE Manager::
 

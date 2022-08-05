@@ -11,7 +11,7 @@ Bluesky-QueueServer Documentation
    :maxdepth: 1
 
    installation
-   tutorial
+   tutorials
    release_history
    Source Code on GitHub <https://github.com/bluesky/bluesky-queueserver>
 
@@ -27,6 +27,7 @@ Bluesky-QueueServer Documentation
    item_validation
    plan_annotation
    cli_tools
+   qserver_quick_ref
 
 .. toctree::
    :maxdepth: 1
@@ -45,8 +46,3 @@ Bluesky-QueueServer Documentation
    Bluesky <https://blueskyproject.io/bluesky>
    Ophyd <https://blueskyproject.io/ophyd>
    Data Broker <https://blueskyproject.io/databroker>
-
-.. warning::
-
-   This is currently under rapid development, the API may change at
-   any time.

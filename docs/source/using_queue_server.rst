@@ -300,6 +300,87 @@ See the tutorial :ref:`tutorial_uploading_scripts`.
 Running Tasks
 -------------
 
+Tasks are used for remote monitoring of execution of functions and scripts in RE Worker
+namespace. Each task is assigned a UID (*task_uid*), which is returned by the API starting
+the task and can be used to monitor status of the task and load the results after completion.
+For example, :ref:`method_function_execute` API call starting execution of
+a function ``function_sleep`` (defined in the demo startup code) returns ::
+
+  {'item': {'args': [30],
+            'item_uid': '21ecccbe-df52-4478-a42b-3a94b4f54fcd',
+            'kwargs': {},
+            'name': 'function_sleep',
+            'user': 'qserver-cli',
+            'user_group': 'admin'},
+  'msg': '',
+  'success': True,
+  'task_uid': '21ecccbe-df52-4478-a42b-3a94b4f54fcd'}
+
+Calling :ref:`method_task_status` and :ref:`method_task_result` with task UID
+``21ecccbe-df52-4478-a42b-3a94b4f54fcd`` returns information on current status of the task
+and the result of task execution after the task is completed::
+
+  # Status returned while the task is still running
+  {'msg': '',
+  'status': 'running',
+  'success': True,
+  'task_uid': '21ecccbe-df52-4478-a42b-3a94b4f54fcd'}
+
+  # Result returned while the task is still running
+  {'msg': '',
+  'result': {'run_in_background': False,
+              'task_uid': '21ecccbe-df52-4478-a42b-3a94b4f54fcd',
+              'time_start': 1659709083.4135385},
+  'status': 'running',
+  'success': True,
+  'task_uid': '21ecccbe-df52-4478-a42b-3a94b4f54fcd'}
+
+  # Status returned after the task is completed
+  {'msg': '',
+  'status': 'completed',
+  'success': True,
+  'task_uid': '21ecccbe-df52-4478-a42b-3a94b4f54fcd'}
+
+  # Result returned after the task is completed
+  {'msg': '',
+  'result': {'msg': '',
+              'return_value': {'success': True, 'time': 30},
+              'success': True,
+              'task_uid': '21ecccbe-df52-4478-a42b-3a94b4f54fcd',
+              'time_start': 1659709083.4135385,
+              'time_stop': 1659709113.4742212,
+              'traceback': ''},
+  'status': 'completed',
+  'success': True,
+  'task_uid': '21ecccbe-df52-4478-a42b-3a94b4f54fcd'}
+
+The ``return_value`` is the return value of the function (always ``None`` for a script),
+``msg`` and ``traceback`` are the strings representing the error message and full
+traceback in case the task fails.
+
+Functions and scripts may be executed as foreground and background tasks. Foreground
+tasks are executed in the main thread of RE Worker process. Foreground tasks could be
+started only if RE Manager is *idle*, i.e. no other foreground tasks or plans are
+running. As foreground task is started, RE Manager state is changed to ``'executing_task'``,
+which blocks other foreground tasks or plans from being started. Background tasks are
+executed in separate background threads, could be started at any time and do not
+block execution of foreground tasks or plans. Any reasonable number of background
+tasks could be running at any time. The number of background tasks is returned
+as a parameter of RE Manager :ref:`method_status`::
+
+  { ...
+  'task_results_uid': '846b6dd3-d9c2-4a12-bd03-b82580b8f742',
+    ...
+  'worker_background_tasks': 0,
+    ... }
+
+The parameter *'task_results_uid'* is updated each time a new task is started or task
+execution is completed. An application waiting for completion of one or more tasks
+can wait for the UID to change and then check the status of each task. Considering
+that applications are likely to monitor the manager status for other purposes,
+monitoring *'task_results_uid'* may be more efficient than continuously polling status
+of each task.
+
 .. note::
 
   Task results are stored at the server for a limited time and then deleted. Currently the expiration time

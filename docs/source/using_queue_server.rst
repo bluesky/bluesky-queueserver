@@ -106,6 +106,49 @@ not *idle*) or to disable safe mode (RE Manager is closed even if it is performi
 is running). The API is mostly intended for automated system testing and should not be exposed to general users
 through client applications.
 
+Monitoring of Status of RE Manager
+----------------------------------
+
+Status of RE Manager may be loaded at any time using :ref:`method_status` API. The API returns
+a dictionary with status parameters::
+
+  {'devices_allowed_uid': '0639bc7a-15c1-4bc2-bfeb-41f58a08a8b9',
+  'devices_existing_uid': '2fe9df70-5f0f-4c17-bb7b-cda8a0aa80b0',
+  'items_in_history': 0,
+  'items_in_queue': 0,
+  'lock': {'environment': False, 'queue': False},
+  'lock_info_uid': '2b438226-f715-4ed3-a057-400a42717bb0',
+  'manager_state': 'idle',
+  'msg': 'RE Manager v0.0.16.post28.dev0+ge2491ae',
+  'pause_pending': False,
+  'plan_history_uid': '5894c896-b2ea-42c1-9dd0-f4faaa52cb39',
+  'plan_queue_mode': {'loop': False},
+  'plan_queue_uid': '5589b7ac-01b9-4f51-a7f2-8e883c352053',
+  'plans_allowed_uid': '835a998a-e01e-439f-bb3a-b65817904f7a',
+  'plans_existing_uid': '609ec025-2552-4e06-aa54-5e9ae7b7ed2c',
+  'queue_stop_pending': False,
+  're_state': 'idle',
+  'run_list_uid': '0b088775-1cc3-46de-9563-b83e04c0e243',
+  'running_item_uid': None,
+  'task_results_uid': '846b6dd3-d9c2-4a12-bd03-b82580b8f742',
+  'worker_background_tasks': 0,
+  'worker_environment_exists': True,
+  'worker_environment_state': 'idle'}
+
+The parameter *msg* contains the version information on currently running RE Manager. The states
+of RE Manager and Run Engine are returned using parameters *manager_state* and *re_state*.
+The latter represents true state of Run Engine that is is propagated from RE Worker environment
+(there could be some short delay before the state is updated). The boolean parameter
+*worker_environment_exists* is ``True`` if the environment is opened and ``False`` otherwise.
+
+Parameters with names ending with *'_uid'* (such as *plan_queue_uid*) contain UIDs of the respective
+objects that are changed each time the objects are updated. For example, *plan_queue_uid* is changed
+each time the queue is updated either in response to API request from a client or due to internal
+processes. Tracking changes in UIDs and downloading the respective objects only when the UIDs
+change is more efficient than continuously polling the objects themselves.
+
+See documentation on :ref:`method_status` API for detailed description of the status parameters.
+
 Opening and Closing RE Worker Environment
 -----------------------------------------
 
@@ -392,9 +435,8 @@ of each task.
   to ensure thread safety. Foreground tasks could be executed in the main thread one at a time and do not
   introduce risks associated with thread safety.
 
+See the tutorials :ref:`tutorial_executing_functions` and :ref:`tutorial_uploading_scripts`.
 
-Monitoring of RE Manager status
--------------------------------
 
 .. _locking_re_manager:
 

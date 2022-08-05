@@ -6,8 +6,6 @@ Organizing Bluesky Startup Code
 
 .. currentmodule:: bluesky_queueserver
 
-Documentation is coming soon ...
-
 .. _detecting_if_code_executed_by_re_worker:
 
 Detecting if the Code is Executed by RE Worker

@@ -12,7 +12,7 @@ bluesky-queueserver
   .. image:: https://img.shields.io/codecov/c/github/bluesky/bluesky-queueserver
           :target: https://codecov.io/gh/bluesky/bluesky-queueserve
 
-Server for queueing plans
+Server for managing and executing Bluesky plans.
 
 * Free software: 3-clause BSD license
 * `Installation instructions <https://bluesky.github.io/bluesky-queueserver/installation.html>`_.

@@ -15,5 +15,5 @@ Server for queueing plans
 * `Installation instructions <https://bluesky.github.io/bluesky-queueserver/installation.html>`_.
 * `Brief description of the project <https://bluesky.github.io/bluesky-queueserver/introduction_for_users.html>`_.
 * `Full documentation <https://bluesky.github.io/bluesky-queueserver>`_.
-* `*bluesky-queueserver-api*: Python API for Queue Server <https://bluesky.github.io/bluesky-queueserver-api>`_.
-* `*bluesky-httpserver*: HTTP Server providing REST API for Queue Server <https://bluesky.github.io/bluesky-httpserver>`_.
+* `'bluesky-queueserver-api': Python API for Queue Server <https://bluesky.github.io/bluesky-queueserver-api>`_.
+* `'bluesky-httpserver': HTTP Server providing REST API for Queue Server <https://bluesky.github.io/bluesky-httpserver>`_.

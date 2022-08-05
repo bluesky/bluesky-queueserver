@@ -5,9 +5,11 @@ bluesky-queueserver
 .. image:: https://img.shields.io/pypi/v/bluesky-queueserver.svg
         :target: https://pypi.python.org/pypi/bluesky-queueserver
 
+.. image:: https://img.shields.io/conda/vn/conda-forge/bluesky-queueserver
+        :target: https://anaconda.org/conda-forge/bluesky-queueserver
+
 # .. image:: https://img.shields.io/codecov/c/github/bluesky/bluesky-queueserver
 #         :target: https://codecov.io/gh/bluesky/bluesky-queueserve
-
 
 Server for queueing plans
 

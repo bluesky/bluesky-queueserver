@@ -12,7 +12,7 @@ bluesky-queueserver
   .. image:: https://img.shields.io/codecov/c/github/bluesky/bluesky-queueserver
           :target: https://codecov.io/gh/bluesky/bluesky-queueserver
 
-.. image:: https://img.shields.io/github/commits-since/NSLS-II/bluesky-queueserver/latest/main
+.. image:: https://img.shields.io/github/commits-since/bluesky/bluesky-queueserver/latest
         :target: https://github.com/bluesky/bluesky-queueserver
 
 .. image:: https://img.shields.io/pypi/dm/bluesky-queueserver?label=PyPI%20downloads

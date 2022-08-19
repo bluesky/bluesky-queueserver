@@ -10,7 +10,17 @@ bluesky-queueserver
 
 ..
   .. image:: https://img.shields.io/codecov/c/github/bluesky/bluesky-queueserver
-          :target: https://codecov.io/gh/bluesky/bluesky-queueserve
+          :target: https://codecov.io/gh/bluesky/bluesky-queueserver
+
+.. image:: https://img.shields.io/github/commits-since/bluesky/bluesky-queueserver/latest
+        :target: https://github.com/bluesky/bluesky-queueserver
+
+.. image:: https://img.shields.io/pypi/dm/bluesky-queueserver?label=PyPI%20downloads
+        :target: https://pypi.python.org/pypi/bluesky-queueserver
+
+.. image:: https://img.shields.io/conda/dn/conda-forge/bluesky-queueserver?label=Conda-Forge%20downloads
+        :target: https://anaconda.org/conda-forge/bluesky-queueserver
+
 
 Server for managing and executing Bluesky plans.
 

@@ -2543,12 +2543,15 @@ def _process_plan(plan, *, existing_devices, existing_plans):
         """
         ns = {"typing": typing, "NoneType": type(None)}
 
-        if hasattr(annotation, "__name__"):
-            # This should take care of the Python base types such as 'int', 'float' etc.
+        # This will work for generic types like 'typing.List[int]'
+        a_str = f"{annotation!r}"
+        # The following takes care of Python base types, such as 'int', 'float'
+        #   expressed as "<class 'int'>", but have valid '__name__' attribute
+        #   containing type name, such as "int".
+        if hasattr(annotation, "__name__") and re.search("^<.*>$", a_str):
+            # Note, that starting with Python 3.10 parameter annotation always have
+            #   '__name__', which is meaningless for types other than base types.
             a_str = annotation.__name__
-        else:
-            # This will work for generic types like 'typing.List[int]'
-            a_str = f"{annotation!r}"
 
         # Verify if the type could be recreated by evaluating the string during validation.
         try:

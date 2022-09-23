@@ -536,10 +536,7 @@ def devices_from_nspace(nspace):
         Dictionary that maps device names to device objects.
     """
 
-    try:
-        from bluesky import protocols
-    except ImportError:
-        import bluesky_queueserver.manager._protocols as protocols
+    from bluesky import protocols
 
     devices = {}
     for name, obj in nspace.items():
@@ -2812,11 +2809,7 @@ def _prepare_devices(devices, *, max_depth=0, ignore_all_subdevices_if_one_fails
     """
     max_depth = max(0, max_depth)  # must be >= 0
 
-    try:
-        from bluesky import protocols
-    except ImportError:
-        import bluesky_queueserver.manager._protocols as protocols
-
+    from bluesky import protocols
     from ophyd.areadetector import ADBase
 
     def get_device_params(device):

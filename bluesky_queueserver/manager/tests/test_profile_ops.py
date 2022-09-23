@@ -15,11 +15,7 @@ import shutil
 import time as ttime
 
 
-try:
-    from bluesky import protocols
-except ImportError:
-    import bluesky_queueserver.manager._protocols as protocols
-
+from bluesky import protocols
 import ophyd
 import ophyd.sim
 

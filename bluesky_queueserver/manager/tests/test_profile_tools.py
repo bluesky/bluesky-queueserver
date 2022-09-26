@@ -21,11 +21,10 @@ from .common import (
     condition_manager_idle,
     copy_default_profile_collection,
     patch_first_startup_file,
+    _user,
+    _user_group,
 )
 from .common import re_manager_cmd  # noqa: F401
-
-# User name and user group name used throughout most of the tests.
-_user, _user_group = "Testing Script", "admin"
 
 
 def create_local_imports_files(tmp_path):
@@ -390,7 +389,7 @@ _user_groups_text = r"""user_groups:
       - null  # Allow all
     forbidden_devices:
       - null  # Nothing is forbidden
-  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+  primary:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
       - null  # Allow all
     forbidden_plans:

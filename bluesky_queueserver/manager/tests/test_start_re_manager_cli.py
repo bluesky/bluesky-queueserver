@@ -14,6 +14,8 @@ from .common import (
     copy_default_profile_collection,
     clear_redis_pool,
     set_qserver_zmq_address,
+    _user,
+    _user_group,
 )
 
 from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
@@ -25,8 +27,6 @@ _plan2 = {"name": "scan", "args": [["det1", "det2"], "motor", -1, 1, 10], "item_
 _plan3 = {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 5, "delay": 1}, "item_type": "plan"}
 _instruction_stop = {"name": "queue_stop", "item_type": "instruction"}
 
-# User name and user group name used throughout most of the tests.
-_user, _user_group = "Testing Script", "admin"
 
 timeout_env_open = 10
 
@@ -314,7 +314,7 @@ def test_cli_update_existing_plans_devices_01(
 _permissions_dict_not_allow_count = {
     "user_groups": {
         "root": {"allowed_plans": [None], "allowed_devices": [None]},
-        "admin": {"allowed_plans": [None], "forbidden_plans": ["^count$"], "allowed_devices": [None]},
+        "primary": {"allowed_plans": [None], "forbidden_plans": ["^count$"], "allowed_devices": [None]},
     }
 }
 

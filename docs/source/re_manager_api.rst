@@ -318,7 +318,7 @@ Description   Returns a dictionary that contains information on the allowed plan
               server only when the UID is changed.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **user_group**: *str*
-                  the name of the user group (e.g. 'admin').
+                  the name of the user group (e.g. 'primary').
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -350,7 +350,7 @@ Description   Returns a dictionary that contains information on the allowed devi
               server only when the UID is changed.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **user_group**: *str*
-                  the name of the user group (e.g. 'admin').
+                  the name of the user group (e.g. 'primary').
 ------------  -----------------------------------------------------------------------------------------
 Returns       **success**: *boolean*
                   indicates if the request was processed successfully.
@@ -789,7 +789,7 @@ Parameters    **item**: *dict*
                   supported item types are 'plan' and 'instruction'.
 
               **user_group**: *str*
-                  the name of the user group (e.g. 'admin').
+                  the name of the user group (e.g. 'primary').
 
               **user**: *str*
                   the name of the user (e.g. 'Default User'). The name is included in the item metadata
@@ -853,7 +853,7 @@ Parameters    **items**: *list*
                   An empty item list will also be accepted.
 
               **user_group**: *str*
-                  the name of the user group (e.g. 'admin').
+                  the name of the user group (e.g. 'primary').
 
               **user**: *str*
                   the name of the user (e.g. 'Default User'). The name is included in the item metadata
@@ -934,7 +934,7 @@ Parameters    **item**: *dict*
                   supported item types are 'plan' and 'instruction'.
 
               **user_group**: *str*
-                  the name of the user group (e.g. 'admin').
+                  the name of the user group (e.g. 'primary').
 
               **user**: *str*
                   the name of the user (e.g. 'Default User'). The name is included in the item metadata
@@ -1250,7 +1250,7 @@ Parameters    **item**: *dict*
                   supported item types are 'plan' and 'instruction'.
 
               **user_group**: *str*
-                  the name of the user group (e.g. 'admin').
+                  the name of the user group (e.g. 'primary').
 
               **user**: *str*
                   the name of the user (e.g. 'Default User'). The name is included in the item metadata
@@ -1603,7 +1603,7 @@ Parameters    **item**: *dict*
                   except that *item_type* is *'function'*.
 
               **user_group**: *str*
-                  the name of the user group (e.g. 'admin').
+                  the name of the user group (e.g. 'primary').
 
               **user**: *str*
                   the name of the user (e.g. 'Default User'). The name is included in the item metadata

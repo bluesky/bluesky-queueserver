@@ -9,10 +9,9 @@ from .common import (
     condition_environment_created,
     condition_manager_idle,
     condition_environment_closed,
+    _user,
+    _user_group,
 )
-
-# User name and user group name used throughout most of the tests.
-_user, _user_group = "Testing Script", "admin"
 
 
 @pytest.mark.xfail(reason="For some reason the test fails when run on CI, but expected to pass locally")

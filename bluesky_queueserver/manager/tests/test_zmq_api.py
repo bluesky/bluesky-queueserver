@@ -49,6 +49,8 @@ from .common import (
     append_code_to_last_startup_file,
     set_qserver_zmq_public_key,
     copy_default_profile_collection,
+    _user,
+    _user_group,
     # clear_redis_pool,
 )
 from .common import re_manager, re_manager_pc_copy, re_manager_cmd, db_catalog  # noqa: F401
@@ -63,7 +65,7 @@ _plan4 = {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "de
 _instruction_stop = {"name": "queue_stop", "item_type": "instruction"}
 
 # User name and user group name used throughout most of the tests.
-_user, _user_group, _test_user_group = "Testing Script", "admin", "test_user"
+_test_user_group = "test_user"
 
 _existing_plans_and_devices_fln = "existing_plans_and_devices.yaml"
 _user_group_permissions_fln = "user_group_permissions.yaml"
@@ -3763,7 +3765,7 @@ user_groups:
       - null  # Allow all
     forbidden_devices:
       - null  # Nothing is forbidden
-  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+  primary:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
       - ":^count$"  # 'count plan'
     forbidden_plans:
@@ -3786,7 +3788,7 @@ user_groups:
       - null  # Allow all
     forbidden_devices:
       - null  # Nothing is forbidden
-  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+  primary:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
       - null  # A different way to allow all
     forbidden_plans:
@@ -3911,14 +3913,14 @@ def test_permissions_reload_3(re_manager_pc_copy, allow_count_plan):  # noqa: F8
 _permissions_dict_not_allow_count = {
     "user_groups": {
         "root": {"allowed_plans": [None], "allowed_devices": [None]},
-        "admin": {"allowed_plans": [None], "forbidden_plans": [":^count$"], "allowed_devices": [None]},
+        "primary": {"allowed_plans": [None], "forbidden_plans": [":^count$"], "allowed_devices": [None]},
     }
 }
 
 _permissions_dict_allow_all = {
     "user_groups": {
         "root": {"allowed_plans": [None], "allowed_devices": [None]},
-        "admin": {"allowed_plans": [None], "allowed_devices": [None]},
+        "primary": {"allowed_plans": [None], "allowed_devices": [None]},
     }
 }
 
@@ -3937,7 +3939,7 @@ def test_permissions_set_get_1(re_manager, restart_manager):  # noqa: F811
     status = get_queue_state()
     plans_allowed_uid_1 = status["plans_allowed_uid"]
 
-    resp1, _ = zmq_single_request("plans_allowed", params={"user_group": "admin"})
+    resp1, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
     assert resp1["success"] is True
     assert "count" in resp1["plans_allowed"]
 
@@ -3956,7 +3958,7 @@ def test_permissions_set_get_1(re_manager, restart_manager):  # noqa: F811
     plans_allowed_uid2 = status["plans_allowed_uid"]
     assert plans_allowed_uid2 != plans_allowed_uid_1
 
-    resp3, _ = zmq_single_request("plans_allowed", params={"user_group": "admin"})
+    resp3, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
     assert resp3["success"] is True
     print(f"plans: {list(resp3['plans_allowed'].keys())}")
 
@@ -3987,10 +3989,10 @@ def test_permissions_set_get_2(re_manager):  # noqa: F811
     plans_allowed_uid_1 = status["plans_allowed_uid"]
     devices_allowed_uid_1 = status["devices_allowed_uid"]
 
-    resp2a, _ = zmq_single_request("plans_allowed", params={"user_group": "admin"})
+    resp2a, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
     assert resp2a["success"] is True
     plans_allowed_1 = resp2a["plans_allowed"]
-    resp2b, _ = zmq_single_request("devices_allowed", params={"user_group": "admin"})
+    resp2b, _ = zmq_single_request("devices_allowed", params={"user_group": _user_group})
     assert resp2b["success"] is True
     devices_allowed_1 = resp2b["devices_allowed"]
 
@@ -4007,10 +4009,10 @@ def test_permissions_set_get_2(re_manager):  # noqa: F811
     plans_allowed_uid_2 = status["plans_allowed_uid"]
     devices_allowed_uid_2 = status["devices_allowed_uid"]
 
-    resp4a, _ = zmq_single_request("plans_allowed", params={"user_group": "admin"})
+    resp4a, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
     assert resp4a["success"] is True
     plans_allowed_2 = resp4a["plans_allowed"]
-    resp4b, _ = zmq_single_request("devices_allowed", params={"user_group": "admin"})
+    resp4b, _ = zmq_single_request("devices_allowed", params={"user_group": _user_group})
     assert resp4b["success"] is True
     devices_allowed_2 = resp4b["devices_allowed"]
 

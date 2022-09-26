@@ -19,7 +19,7 @@ from bluesky import protocols
 import ophyd
 import ophyd.sim
 
-from .common import copy_default_profile_collection, patch_first_startup_file, append_code_to_last_startup_file
+from .common import copy_default_profile_collection, patch_first_startup_file, append_code_to_last_startup_file, _user, _user_group
 
 from .common import reset_sys_modules  # noqa: F401
 
@@ -67,8 +67,6 @@ from bluesky_queueserver.manager.profile_ops import (
     _filter_device_tree,
 )
 
-# User name and user group name used throughout most of the tests.
-_user, _user_group = "Testing Script", "admin"
 
 python_version = sys.version_info  # Can be compare to tuples (such as 'python_version >= (3, 9)')
 
@@ -4123,7 +4121,7 @@ def _gen_environment_pp2():
     existing_plans = _prepare_plans(plans_in_nspace, existing_devices=existing_devices)
     allowed_plans, allowed_devices = {}, {}
     allowed_plans["root"], allowed_devices["root"] = existing_plans.copy(), existing_devices.copy()
-    allowed_plans["admin"], allowed_devices["admin"] = existing_plans.copy(), existing_devices.copy()
+    allowed_plans[_user_group], allowed_devices[_user_group] = existing_plans.copy(), existing_devices.copy()
 
     return plans_in_nspace, devices_in_nspace, allowed_plans, allowed_devices
 
@@ -4133,279 +4131,279 @@ def _gen_environment_pp2():
     "plan_name, plan, remove_objs, exp_args, exp_kwargs, exp_meta, success, err_msg",
     [
         # Passing simple set of parameters as args, kwargs or combination. No default values.
-        ("plan1", {"user_group": "admin", "args": [3, 4, 5]}, [],
+        ("plan1", {"user_group": _user_group, "args": [3, 4, 5]}, [],
          [3, 4, 5], {}, {}, True, ""),
-        ("plan1", {"user_group": "admin", "args": [3, 4], "kwargs": {"c": 5}}, [],
+        ("plan1", {"user_group": _user_group, "args": [3, 4], "kwargs": {"c": 5}}, [],
          [3, 4, 5], {}, {}, True, ""),
-        ("plan1", {"user_group": "admin", "args": [3, 4], "kwargs": {"b": 5}}, [],
+        ("plan1", {"user_group": _user_group, "args": [3, 4], "kwargs": {"b": 5}}, [],
          [3, 4, 5], {}, {}, False, "Plan validation failed: multiple values for argument 'b'"),
-        ("plan1", {"user_group": "admin", "args": [3, 4, 5], "meta": {"p1": 10, "p2": "abc"}}, [],
+        ("plan1", {"user_group": _user_group, "args": [3, 4, 5], "meta": {"p1": 10, "p2": "abc"}}, [],
          [3, 4, 5], {}, {"p1": 10, "p2": "abc"}, True, ""),
-        ("plan1", {"user_group": "admin", "args": [3, 4, 5], "meta": [{"p1": 10}, {"p2": "abc"}]}, [],
+        ("plan1", {"user_group": _user_group, "args": [3, 4, 5], "meta": [{"p1": 10}, {"p2": "abc"}]}, [],
          [3, 4, 5], {}, {"p1": 10, "p2": "abc"}, True, ""),
-        ("plan1", {"user_group": "admin", "args": [3, 4, 5], "meta": [{"p1": 10}, {"p1": 5, "p2": "abc"}]}, [],
+        ("plan1", {"user_group": _user_group, "args": [3, 4, 5], "meta": [{"p1": 10}, {"p1": 5, "p2": "abc"}]}, [],
          [3, 4, 5], {}, {"p1": 10, "p2": "abc"}, True, ""),
 
         # Passing simple set of parameters as args and kwargs with default values.
-        ("plan2", {"user_group": "admin"}, [],
+        ("plan2", {"user_group": _user_group}, [],
          [], {}, {}, True, ""),
-        ("plan2", {"user_group": "admin", "args": [3, 2.6]}, [],
+        ("plan2", {"user_group": _user_group, "args": [3, 2.6]}, [],
          [3, 2.6], {}, {}, True, ""),
-        ("plan2", {"user_group": "admin", "args": [2.6, 3]}, [],
+        ("plan2", {"user_group": _user_group, "args": [2.6, 3]}, [],
          [2.6, 3], {}, {}, False, " Incorrect parameter type: key='a', value='2.6'"),
-        ("plan2", {"user_group": "admin", "kwargs": {"b": 9.9, "s": "def"}}, [],
+        ("plan2", {"user_group": _user_group, "kwargs": {"b": 9.9, "s": "def"}}, [],
          [], {"b": 9.9, "s": "def"}, {}, True, ""),
 
         # Plan with parameters of numerical type. Parameter types and default values are specified
         #   in 'parameter_annotation_decorator'.
-        ("plan3", {"user_group": "admin"}, [],
+        ("plan3", {"user_group": _user_group}, [],
          [], {'a': 0.5, 'b': 5, 's': 50}, {}, True, ""),
-        ("plan3", {"user_group": "admin", "args": [2.8]}, [],
+        ("plan3", {"user_group": _user_group, "args": [2.8]}, [],
          [2.8], {'b': 5, 's': 50}, {}, True, ""),
-        ("plan3", {"user_group": "admin", "args": [2.8], "kwargs": {"a": 2.8}}, [],
+        ("plan3", {"user_group": _user_group, "args": [2.8], "kwargs": {"a": 2.8}}, [],
          [2.8], {'b': 5, 's': 50}, {}, False, "multiple values for argument 'a'"),
-        ("plan3", {"user_group": "admin", "args": [], "kwargs": {"b": 30}}, [],
+        ("plan3", {"user_group": _user_group, "args": [], "kwargs": {"b": 30}}, [],
          [], {'a': 0.5, 'b': 30, 's': 50}, {}, True, ""),
-        ("plan3", {"user_group": "admin", "args": [], "kwargs": {"b": 2.8}}, [],
+        ("plan3", {"user_group": _user_group, "args": [], "kwargs": {"b": 2.8}}, [],
          [], {'a': 0.5, 'b': 2.8, 's': 50}, {}, False, "Incorrect parameter type: key='b', value='2.8'"),
 
         # Plan with a single parameter, which is a list of detector. The list of detector names (enum)
         #   and default value (list of detectors) is specified in 'parameter_annotation_decorator'.
         #   Test if the detector names are properly converted to objects when passed as args, kwargs
         #   or if the default value is used (function is called without an argument).
-        ("plan4", {"user_group": "admin"}, [],
+        ("plan4", {"user_group": _user_group}, [],
          [], {"detectors": [_pp_dev2, _pp_dev3]}, {}, True, ""),
-        ("plan4", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3"]]}, [],
+        ("plan4", {"user_group": _user_group, "args": [["_pp_dev1", "_pp_dev3"]]}, [],
          [[_pp_dev1, _pp_dev3]], {}, {}, True, ""),
-        ("plan4", {"user_group": "admin", "kwargs": {"detectors": ["_pp_dev1", "_pp_dev3"]}}, [],
+        ("plan4", {"user_group": _user_group, "kwargs": {"detectors": ["_pp_dev1", "_pp_dev3"]}}, [],
          [[_pp_dev1, _pp_dev3]], {}, {}, True, ""),
-        ("plan4", {"user_group": "admin", "kwargs": {"detectors": ["nonexisting_dev", "_pp_dev3"]}}, [],
+        ("plan4", {"user_group": _user_group, "kwargs": {"detectors": ["nonexisting_dev", "_pp_dev3"]}}, [],
          [[_pp_dev1, _pp_dev3]], {}, {}, False, "value is not a valid enumeration member"),
 
         # Passing subdevice names to plans. Parameter annotation contains fixed lists of device names,
         #   so the passed devices should be converted to objects or parameter validation should fail
-        ("plan4a", {"user_group": "admin"}, [],
+        ("plan4a", {"user_group": _user_group}, [],
          [], {"detectors": [_pp_stg_A.mtrs, _pp_stg_A.mtrs.y]}, {}, True, ""),
         # If some of the default values are not in the list of allowed devices, they are still passed
         #   to the plan, but not converted to the device objects
-        ("plan4a", {"user_group": "admin"}, ["_pp_stg_A.mtrs"],  # Remove '_pp_stg_A' from the list
+        ("plan4a", {"user_group": _user_group}, ["_pp_stg_A.mtrs"],  # Remove '_pp_stg_A' from the list
          [], {"detectors": ["_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}, {}, True, ""),
-        ("plan4a", {"user_group": "admin"}, ["_pp_stg_A", True],  # Set '_pp_stg_A' as excluded
+        ("plan4a", {"user_group": _user_group}, ["_pp_stg_A", True],  # Set '_pp_stg_A' as excluded
          [], {"detectors": [_pp_stg_A.mtrs, _pp_stg_A.mtrs.y]}, {}, True, ""),
-        ("plan4a", {"user_group": "admin"}, ["_pp_stg_A.mtrs", True],  # Set '_pp_stg_A.mtrs' as excluded
+        ("plan4a", {"user_group": _user_group}, ["_pp_stg_A.mtrs", True],  # Set '_pp_stg_A.mtrs' as excluded
          [], {"detectors": ["_pp_stg_A.mtrs", _pp_stg_A.mtrs.y]}, {}, True, ""),
         # Passing a list of devices as args
-        ("plan4a", {"user_group": "admin", "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, [],
+        ("plan4a", {"user_group": _user_group, "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, [],
          [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
         # Passing a list of devices as kwargs
-        ("plan4a", {"user_group": "admin",
+        ("plan4a", {"user_group": _user_group,
          "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, [],
          [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
         # Passing a list of devices as args, remove a device from the list, or set a device as excluded
-        ("plan4a", {"user_group": "admin",
+        ("plan4a", {"user_group": _user_group,
          "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A"],
          [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, False, "Validation of plan parameters failed"),
-        ("plan4a", {"user_group": "admin",
+        ("plan4a", {"user_group": _user_group,
          "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A", True],
          [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, False, "Validation of plan parameters failed"),
-        ("plan4a", {"user_group": "admin",
+        ("plan4a", {"user_group": _user_group,
          "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A.mtrs.y", True],
          [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, False, "Validation of plan parameters failed"),
         # Passing a list of devices as kwargs, remove a device from the list, or set a device as excluded
-        ("plan4a", {"user_group": "admin",
+        ("plan4a", {"user_group": _user_group,
          "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A"],
          [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, False, "Validation of plan parameters failed"),
-        ("plan4a", {"user_group": "admin",
+        ("plan4a", {"user_group": _user_group,
          "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A", True],
          [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, False, "Validation of plan parameters failed"),
-        ("plan4a", {"user_group": "admin",
+        ("plan4a", {"user_group": _user_group,
          "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A.mtrs.y", True],
          [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, False, "Validation of plan parameters failed"),
 
         # Passing subdevice names to plans. Parameter contains '__DEVICE__' built-in type in the annotation.
         # Processing of detault types is employing a different mechanism, so the tests should be repeated even
         #   if they work differently.
-        ("plan4b", {"user_group": "admin"}, [],
+        ("plan4b", {"user_group": _user_group}, [],
          [], {"detectors": [_pp_stg_A.mtrs, _pp_stg_A.mtrs.y]}, {}, True, ""),
         # If some of the default values are not in the list of allowed devices, they are still passed
         #   to the plan, but not converted to the device objects
-        ("plan4b", {"user_group": "admin"}, ["_pp_stg_A.mtrs"],  # Remove '_pp_stg_A' from the list
+        ("plan4b", {"user_group": _user_group}, ["_pp_stg_A.mtrs"],  # Remove '_pp_stg_A' from the list
          [], {"detectors": ["_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}, {}, True, ""),
-        ("plan4b", {"user_group": "admin"}, ["_pp_stg_A", True],  # Set '_pp_stg_A' as excluded
+        ("plan4b", {"user_group": _user_group}, ["_pp_stg_A", True],  # Set '_pp_stg_A' as excluded
          [], {"detectors": [_pp_stg_A.mtrs, _pp_stg_A.mtrs.y]}, {}, True, ""),
-        ("plan4b", {"user_group": "admin"}, ["_pp_stg_A.mtrs", True],  # Set '_pp_stg_A.mtrs' as excluded
+        ("plan4b", {"user_group": _user_group}, ["_pp_stg_A.mtrs", True],  # Set '_pp_stg_A.mtrs' as excluded
          [], {"detectors": ["_pp_stg_A.mtrs", _pp_stg_A.mtrs.y]}, {}, True, ""),
         # Passing a list of devices as args
-        ("plan4b", {"user_group": "admin", "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, [],
+        ("plan4b", {"user_group": _user_group, "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, [],
          [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
         # Passing a list of devices as kwargs
-        ("plan4b", {"user_group": "admin",
+        ("plan4b", {"user_group": _user_group,
          "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, [],
          [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
         # Passing a list of devices as args, remove a device from the list, or set a device as excluded
-        ("plan4b", {"user_group": "admin",
+        ("plan4b", {"user_group": _user_group,
          "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A"],
          [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
-        ("plan4b", {"user_group": "admin",
+        ("plan4b", {"user_group": _user_group,
          "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A", True],
          [["_pp_stg_A", _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
-        ("plan4b", {"user_group": "admin",
+        ("plan4b", {"user_group": _user_group,
          "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A.mtrs.y", True],
          [[_pp_stg_A, _pp_stg_A.mtrs, "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
         # Passing a list of devices as kwargs, remove a device from the list, or set a device as excluded
-        ("plan4b", {"user_group": "admin",
+        ("plan4b", {"user_group": _user_group,
          "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A"],
          [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
-        ("plan4b", {"user_group": "admin",
+        ("plan4b", {"user_group": _user_group,
          "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A", True],
          [["_pp_stg_A", _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
-        ("plan4b", {"user_group": "admin",
+        ("plan4b", {"user_group": _user_group,
          "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A.mtrs.y", True],
          [[_pp_stg_A, _pp_stg_A.mtrs, "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
 
         # Passing subdevice names to plans. Use "convert_device_name": True to enable conversion
         # Processing is employing a different mechanism, so the tests should be repeated even
         #   if they work differently.
-        ("plan4c", {"user_group": "admin"}, [],
+        ("plan4c", {"user_group": _user_group}, [],
          [], {"detectors": [_pp_stg_A.mtrs, _pp_stg_A.mtrs.y]}, {}, True, ""),
         # If some of the default values are not in the list of allowed devices, they are still passed
         #   to the plan, but not converted to the device objects
-        ("plan4c", {"user_group": "admin"}, ["_pp_stg_A.mtrs"],  # Remove '_pp_stg_A' from the list
+        ("plan4c", {"user_group": _user_group}, ["_pp_stg_A.mtrs"],  # Remove '_pp_stg_A' from the list
          [], {"detectors": ["_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}, {}, True, ""),
-        ("plan4c", {"user_group": "admin"}, ["_pp_stg_A", True],  # Set '_pp_stg_A' as excluded
+        ("plan4c", {"user_group": _user_group}, ["_pp_stg_A", True],  # Set '_pp_stg_A' as excluded
          [], {"detectors": [_pp_stg_A.mtrs, _pp_stg_A.mtrs.y]}, {}, True, ""),
-        ("plan4c", {"user_group": "admin"}, ["_pp_stg_A.mtrs", True],  # Set '_pp_stg_A.mtrs' as excluded
+        ("plan4c", {"user_group": _user_group}, ["_pp_stg_A.mtrs", True],  # Set '_pp_stg_A.mtrs' as excluded
          [], {"detectors": ["_pp_stg_A.mtrs", _pp_stg_A.mtrs.y]}, {}, True, ""),
         # Passing a list of devices as args
-        ("plan4c", {"user_group": "admin", "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, [],
+        ("plan4c", {"user_group": _user_group, "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, [],
          [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
         # Passing a list of devices as kwargs
-        ("plan4c", {"user_group": "admin",
+        ("plan4c", {"user_group": _user_group,
          "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, [],
          [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
         # Passing a list of devices as args, remove a device from the list, or set a device as excluded
-        ("plan4c", {"user_group": "admin",
+        ("plan4c", {"user_group": _user_group,
          "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A"],
          [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
-        ("plan4c", {"user_group": "admin",
+        ("plan4c", {"user_group": _user_group,
          "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A", True],
          [["_pp_stg_A", _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
-        ("plan4c", {"user_group": "admin",
+        ("plan4c", {"user_group": _user_group,
          "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, ["_pp_stg_A.mtrs.y", True],
          [[_pp_stg_A, _pp_stg_A.mtrs, "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
         # Passing a list of devices as kwargs, remove a device from the list, or set a device as excluded
-        ("plan4c", {"user_group": "admin",
+        ("plan4c", {"user_group": _user_group,
          "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A"],
          [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
-        ("plan4c", {"user_group": "admin",
+        ("plan4c", {"user_group": _user_group,
          "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A", True],
          [["_pp_stg_A", _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
-        ("plan4c", {"user_group": "admin",
+        ("plan4c", {"user_group": _user_group,
          "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, ["_pp_stg_A.mtrs.y", True],
          [[_pp_stg_A, _pp_stg_A.mtrs, "_pp_stg_A.mtrs.y"]], {}, {}, True, ""),
 
         # Passing subdevice names to plans. Parameter contains '__PLAN_OR_DEVICE__' built-in type
         #   in the annotation. The mechanism is similar to the one used with '__PLAN__" type, so
         #   just run a few tests to see if it works.
-        ("plan4d", {"user_group": "admin"}, [],
+        ("plan4d", {"user_group": _user_group}, [],
          [], {"detectors": [_pp_stg_A.mtrs, _pp_stg_A.mtrs.y]}, {}, True, ""),
         # Passing a list of devices as args
-        ("plan4d", {"user_group": "admin", "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, [],
+        ("plan4d", {"user_group": _user_group, "args": [["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]]}, [],
          [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
         # Passing a list of devices as kwargs
-        ("plan4d", {"user_group": "admin",
+        ("plan4d", {"user_group": _user_group,
          "kwargs": {"detectors": ["_pp_stg_A", "_pp_stg_A.mtrs", "_pp_stg_A.mtrs.y"]}}, [],
          [[_pp_stg_A, _pp_stg_A.mtrs, _pp_stg_A.mtrs.y]], {}, {}, True, ""),
 
 
 
         # Check if a plan name passed as arg, kwarg or using default value is properly converted to an object.
-        ("plan5", {"user_group": "admin"}, [],
+        ("plan5", {"user_group": _user_group}, [],
          [], {"plan_to_execute": _pp_p2}, {}, True, ""),
-        ("plan5", {"user_group": "admin", "args": ["_pp_p3"]}, [],
+        ("plan5", {"user_group": _user_group, "args": ["_pp_p3"]}, [],
          [_pp_p3], {}, {}, True, ""),
-        ("plan5", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, [],
+        ("plan5", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}}, [],
          [_pp_p3], {}, {}, True, ""),
-        ("plan5", {"user_group": "admin", "args": ["nonexisting_plan"]}, [],
+        ("plan5", {"user_group": _user_group, "args": ["nonexisting_plan"]}, [],
          [_pp_p3], {}, {}, False, "value is not a valid enumeration member"),
         # Remove plan from the list of allowed plans
-        ("plan5", {"user_group": "admin"}, ["_pp_p2"],
+        ("plan5", {"user_group": _user_group}, ["_pp_p2"],
          [], {"plan_to_execute": "_pp_p2"}, {}, True, ""),
-        ("plan5", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3"],  # remove
+        ("plan5", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3"],  # remove
          [_pp_p3], {}, {}, False, "Validation of plan parameters failed"),
-        ("plan5", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3", True],  # exclude
+        ("plan5", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3", True],  # exclude
          [_pp_p3], {}, {}, False, "Validation of plan parameters failed"),
 
         # Passing plan names. Parameter contains '__PLAN__' built-in type in the annotation.
-        ("plan5b", {"user_group": "admin"}, [],
+        ("plan5b", {"user_group": _user_group}, [],
          [], {"plan_to_execute": _pp_p2}, {}, True, ""),
-        ("plan5b", {"user_group": "admin", "args": ["_pp_p3"]}, [],
+        ("plan5b", {"user_group": _user_group, "args": ["_pp_p3"]}, [],
          [_pp_p3], {}, {}, True, ""),
-        ("plan5b", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, [],
+        ("plan5b", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}}, [],
          [_pp_p3], {}, {}, True, ""),
-        ("plan5b", {"user_group": "admin"}, ["_pp_p2"],
+        ("plan5b", {"user_group": _user_group}, ["_pp_p2"],
          [], {"plan_to_execute": "_pp_p2"}, {}, True, ""),
-        ("plan5b", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3"],  # remove
+        ("plan5b", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3"],  # remove
          ["_pp_p3"], {}, {}, True, ""),
-        ("plan5b", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3", True],  # exclude
+        ("plan5b", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3", True],  # exclude
          ["_pp_p3"], {}, {}, True, ""),
 
         # Passing plan names. Use Parameter 'convert_plan_names'.
-        ("plan5c", {"user_group": "admin"}, [],
+        ("plan5c", {"user_group": _user_group}, [],
          [], {"plan_to_execute": _pp_p2}, {}, True, ""),
-        ("plan5c", {"user_group": "admin", "args": ["_pp_p3"]}, [],
+        ("plan5c", {"user_group": _user_group, "args": ["_pp_p3"]}, [],
          [_pp_p3], {}, {}, True, ""),
-        ("plan5c", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, [],
+        ("plan5c", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}}, [],
          [_pp_p3], {}, {}, True, ""),
-        ("plan5c", {"user_group": "admin"}, ["_pp_p2"],
+        ("plan5c", {"user_group": _user_group}, ["_pp_p2"],
          [], {"plan_to_execute": "_pp_p2"}, {}, True, ""),
-        ("plan5c", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3"],  # remove
+        ("plan5c", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3"],  # remove
          ["_pp_p3"], {}, {}, True, ""),
-        ("plan5c", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3", True],  # exclude
+        ("plan5c", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3", True],  # exclude
          ["_pp_p3"], {}, {}, True, ""),
 
         # Passing plan names. Parameter contains '__PLAN_OR_DEVICE__' built-in type in the annotation.
-        ("plan5d", {"user_group": "admin"}, [],
+        ("plan5d", {"user_group": _user_group}, [],
          [], {"plan_to_execute": _pp_p2}, {}, True, ""),
-        ("plan5d", {"user_group": "admin", "args": ["_pp_p3"]}, [],
+        ("plan5d", {"user_group": _user_group, "args": ["_pp_p3"]}, [],
          [_pp_p3], {}, {}, True, ""),
-        ("plan5d", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, [],
+        ("plan5d", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}}, [],
          [_pp_p3], {}, {}, True, ""),
-        ("plan5d", {"user_group": "admin"}, ["_pp_p2"],
+        ("plan5d", {"user_group": _user_group}, ["_pp_p2"],
          [], {"plan_to_execute": "_pp_p2"}, {}, True, ""),
-        ("plan5d", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3"],  # remove
+        ("plan5d", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3"],  # remove
          ["_pp_p3"], {}, {}, True, ""),
-        ("plan5d", {"user_group": "admin", "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3", True],  # exclude
+        ("plan5d", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3", True],  # exclude
          ["_pp_p3"], {}, {}, True, ""),
 
 
         # Pass values of custom enum type. The values are not converted to objects.
-        ("plan6", {"user_group": "admin"}, [],
+        ("plan6", {"user_group": _user_group}, [],
          [], {"strings": ["one", "three"]}, {}, True, ""),
-        ("plan6", {"user_group": "admin", "args": [["one", "two"]]}, [],
+        ("plan6", {"user_group": _user_group, "args": [["one", "two"]]}, [],
          [["one", "two"]], {}, {}, True, ""),
-        ("plan6", {"user_group": "admin", "args": [("one", "two")]}, [],
+        ("plan6", {"user_group": _user_group, "args": [("one", "two")]}, [],
          [("one", "two")], {}, {}, True, ""),
-        ("plan6", {"user_group": "admin", "args": [("one", "nonexisting")]}, [],
+        ("plan6", {"user_group": _user_group, "args": [("one", "nonexisting")]}, [],
          [("one", "two")], {}, {}, False, "value is not a valid enumeration member"),
 
         # Plan has no custom annotation. All strings must be converted to objects whenever possible.
-        ("plan1", {"user_group": "admin", "args": ["a", ":a*", "a-b-c"]}, [],
+        ("plan1", {"user_group": _user_group, "args": ["a", ":a*", "a-b-c"]}, [],
          ["a", ":a*", "a-b-c"], {}, {}, True, ""),
-        ("plan7", {"user_group": "admin", "args": ["_pp_dev3", "_pp_dev3"]}, [],
+        ("plan7", {"user_group": _user_group, "args": ["_pp_dev3", "_pp_dev3"]}, [],
          [_pp_dev3, "_pp_dev3"], {}, {}, True, ""),
-        ("plan7", {"user_group": "admin", "args": [":_pp_dev3", "_pp_dev3"]}, [],
+        ("plan7", {"user_group": _user_group, "args": [":_pp_dev3", "_pp_dev3"]}, [],
          [":_pp_dev3", "_pp_dev3"], {}, {}, True, ""),
-        ("plan7", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3"], "_pp_dev2"]}, [],
+        ("plan7", {"user_group": _user_group, "args": [["_pp_dev1", "_pp_dev3"], "_pp_dev2"]}, [],
          [[_pp_dev1, _pp_dev3], "_pp_dev2"], {}, {}, True, ""),
-        ("plan7", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3", "some_str"], "_pp_dev2"]}, [],
+        ("plan7", {"user_group": _user_group, "args": [["_pp_dev1", "_pp_dev3", "some_str"], "_pp_dev2"]}, [],
          [[_pp_dev1, _pp_dev3, "some_str"], "_pp_dev2"], {}, {}, True, ""),
-        ("plan7", {"user_group": "admin", "args": [["_pp_dev1", "_pp_dev3", "some_str"], 50]}, [],
+        ("plan7", {"user_group": _user_group, "args": [["_pp_dev1", "_pp_dev3", "some_str"], 50]}, [],
          [[_pp_dev1, _pp_dev3, "some_str"], "_pp_dev2"], {}, {}, False,
          "Incorrect parameter type: key='b', value='50'"),
 
         # General failing cases
-        ("nonexisting_plan", {"user_group": "admin"}, [],
+        ("nonexisting_plan", {"user_group": _user_group}, [],
          [], {}, {}, False, "Plan 'nonexisting_plan' is not in the list of allowed plans"),
         ("plan2", {"user_group": "nonexisting_group"}, [],
          [], {}, {}, False,
@@ -4431,7 +4429,7 @@ def test_prepare_plan_2(plan_name, plan, remove_objs, exp_args, exp_kwargs, exp_
             print(f"Set the following objects as excluded: {remove_objs}")
             # Exclude individual nodes. Assume that the device is in the list.
             components = obj_name.split(".")
-            for allowed_objs in (allowed_plans["admin"], allowed_devices["admin"]):
+            for allowed_objs in (allowed_plans[_user_group], allowed_devices[_user_group]):
                 try:
                     root = allowed_objs[components[0]]
                     for c in components[1:]:
@@ -4443,12 +4441,12 @@ def test_prepare_plan_2(plan_name, plan, remove_objs, exp_args, exp_kwargs, exp_
         else:
             # Remove elements from the list based on the root name for the device
             print(f"Removing object {obj_name.split('.')[0]!r}")
-            allowed_plans["admin"].pop(obj_name.split(".")[0], None)
-            allowed_devices["admin"].pop(obj_name.split(".")[0], None)
+            allowed_plans[_user_group].pop(obj_name.split(".")[0], None)
+            allowed_devices[_user_group].pop(obj_name.split(".")[0], None)
 
     # assert False, list(allowed_plans.keys())
-    allowed_plans["admin"] = _filter_allowed_plans(
-        allowed_plans=allowed_plans["admin"], allowed_devices=allowed_devices["admin"]
+    allowed_plans[_user_group] = _filter_allowed_plans(
+        allowed_plans=allowed_plans[_user_group], allowed_devices=allowed_devices[_user_group]
     )
     # assert False, allowed_plans["plan4a"]
 
@@ -4779,7 +4777,7 @@ some_object = "some string"
 _prep_func_permissions = {
     "user_groups": {
         "root": {"allowed_functions": [None], "forbidden_functions": [None]},
-        "admin": {
+        _user_group: {
             "allowed_functions": [":^func", ":^gen", ":^some_object$", "unknown"],
             "forbidden_functions": [None],
         },
@@ -4789,17 +4787,17 @@ _prep_func_permissions = {
 
 # fmt: off
 @pytest.mark.parametrize("func_info, result", [
-    ({"name": "func1", "user_group": "admin"}, 10),
-    ({"name": "func2", "user_group": "admin"}, 32),
-    ({"name": "func2", "args": [5], "user_group": "admin"}, 35),
-    ({"name": "func2", "kwargs": {"p1": 50}, "user_group": "admin"}, 72),
-    ({"name": "func2", "args": [3], "kwargs": {"p1": 50}, "user_group": "admin"}, 73),
-    ({"name": "func2", "kwargs": {"p0": 4, "p1": 50}, "user_group": "admin"}, 74),
-    ({"name": "func3", "user_group": "admin"}, "A"),
-    ({"name": "func4", "user_group": "admin"}, "f"),
-    ({"name": "func5", "user_group": "admin"}, "fs"),
-    ({"name": "func6", "user_group": "admin"}, "fc"),
-    ({"name": "not_allowed_func", "user_group": "admin"}, None),  # No checks for permissions
+    ({"name": "func1", "user_group": _user_group}, 10),
+    ({"name": "func2", "user_group": _user_group}, 32),
+    ({"name": "func2", "args": [5], "user_group": _user_group}, 35),
+    ({"name": "func2", "kwargs": {"p1": 50}, "user_group": _user_group}, 72),
+    ({"name": "func2", "args": [3], "kwargs": {"p1": 50}, "user_group": _user_group}, 73),
+    ({"name": "func2", "kwargs": {"p0": 4, "p1": 50}, "user_group": _user_group}, 74),
+    ({"name": "func3", "user_group": _user_group}, "A"),
+    ({"name": "func4", "user_group": _user_group}, "f"),
+    ({"name": "func5", "user_group": _user_group}, "fs"),
+    ({"name": "func6", "user_group": _user_group}, "fc"),
+    ({"name": "not_allowed_func", "user_group": _user_group}, None),  # No checks for permissions
 ])
 # fmt: on
 def test_prepare_function_1(func_info, result):
@@ -4819,14 +4817,14 @@ def test_prepare_function_1(func_info, result):
 
 # fmt: off
 @pytest.mark.parametrize("func_info, except_type, msg", [
-    ({"user_group": "admin"}, RuntimeError, "No function name is specified"),
+    ({"user_group": _user_group}, RuntimeError, "No function name is specified"),
     ({"name": "func1"}, RuntimeError, "No user group is specified"),
-    ({"name": "unknown", "user_group": "admin"}, RuntimeError, "Function 'unknown' is not found"),
-    ({"name": "some_object", "user_group": "admin"}, RuntimeError, "is not callable"),
-    ({"name": "gen1", "user_group": "admin"}, RuntimeError, "is a generator function"),
+    ({"name": "unknown", "user_group": _user_group}, RuntimeError, "Function 'unknown' is not found"),
+    ({"name": "some_object", "user_group": _user_group}, RuntimeError, "is not callable"),
+    ({"name": "gen1", "user_group": _user_group}, RuntimeError, "is a generator function"),
     ({"name": "func1", "user_group": "unknown"},
      KeyError, "No permissions are defined for user group 'unknown'"),
-    ({"name": "not_allowed_func", "user_group": "admin"},
+    ({"name": "not_allowed_func", "user_group": _user_group},
      RuntimeError, "Function 'not_allowed_func' is not allowed"),
 ])
 # fmt: on
@@ -5255,7 +5253,7 @@ _user_groups_text = r"""user_groups:
       - null  # Allow all
     forbidden_functions:
       - null  # Nothing is forbidden
-  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+  primary:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
       - ".*"  # A different way to allow all
     forbidden_plans:
@@ -5302,7 +5300,7 @@ _user_groups_dict = {
             "allowed_functions": [None],
             "forbidden_functions": [None],
         },
-        "admin": {
+        _user_group: {
             "allowed_plans": [".*"],
             "forbidden_plans": [None],
             "allowed_devices": [".*"],
@@ -5494,17 +5492,17 @@ def test_load_allowed_plans_and_devices_1(
     check_dict(allowed_devices["root"])
 
     if all_users:
-        assert "admin" in allowed_plans
-        assert "admin" in allowed_devices
-        check_dict(allowed_plans["admin"])
-        check_dict(allowed_devices["admin"])
+        assert _user_group in allowed_plans
+        assert _user_group in allowed_devices
+        check_dict(allowed_plans[_user_group])
+        check_dict(allowed_devices[_user_group])
         assert "test_user" in allowed_plans
         assert "test_user" in allowed_devices
         check_dict(allowed_plans["test_user"])
         check_dict(allowed_devices["test_user"])
     else:
-        assert "admin" not in allowed_plans
-        assert "admin" not in allowed_devices
+        assert _user_group not in allowed_plans
+        assert _user_group not in allowed_devices
         assert "test_user" not in allowed_plans
         assert "test_user" not in allowed_devices
 
@@ -5552,7 +5550,7 @@ _user_permissions_clear = """user_groups:
       - null  # Allow all
     forbidden_devices:
       - null  # Nothing is forbidden
-  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+  primary:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
       - ":.*"  # A different way to allow all
     forbidden_plans:
@@ -5573,7 +5571,7 @@ _user_permissions_excluding_junk1 = """user_groups:
       - null  # Allow all
     forbidden_devices:
       - ":+^junk_device$:?.*"
-  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+  primary:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
       - ":.*"  # A different way to allow all
     forbidden_plans:
@@ -5594,7 +5592,7 @@ _user_permissions_excluding_junk2 = """user_groups:
       - ":?^(?!.*junk)"  # Allow all devices that don't contain 'junk' in their names
     forbidden_devices:
       - null  # Nothing is forbidden
-  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+  primary:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
       - ":.*"  # A different way to allow all
     forbidden_plans:
@@ -5605,7 +5603,7 @@ _user_permissions_excluding_junk2 = """user_groups:
       - null  # Nothing is forbidden
 """
 
-# Restrictions only on 'admin'
+# Restrictions only on 'primary'
 _user_permissions_excluding_junk3 = """user_groups:
   root:  # The group includes all available plan and devices
     allowed_plans:
@@ -5616,7 +5614,7 @@ _user_permissions_excluding_junk3 = """user_groups:
       - ":?.*"  # A different way to allow all
     forbidden_devices:
       - null  # Nothing is forbidden
-  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+  primary:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
       - ":^(?!.*junk)"  # Allow all plans that don't contain 'junk' in their names
     forbidden_plans:
@@ -5630,7 +5628,7 @@ _user_permissions_excluding_junk3 = """user_groups:
 
 # fmt: off
 @pytest.mark.parametrize("pass_permissions_as_parameter", [False, True])
-@pytest.mark.parametrize("permissions_str, items_are_removed, only_admin", [
+@pytest.mark.parametrize("permissions_str, items_are_removed, only_primary", [
     (_user_permissions_clear, False, False),
     (_user_permissions_excluding_junk1, True, False),
     (_user_permissions_excluding_junk2, True, False),
@@ -5638,7 +5636,7 @@ _user_permissions_excluding_junk3 = """user_groups:
 ])
 # fmt: on
 def test_load_allowed_plans_and_devices_2(
-    tmp_path, permissions_str, items_are_removed, only_admin, pass_permissions_as_parameter
+    tmp_path, permissions_str, items_are_removed, only_primary, pass_permissions_as_parameter
 ):
     """
     Tests if filtering settings for the "root" group are also applied to other groups.
@@ -5646,7 +5644,7 @@ def test_load_allowed_plans_and_devices_2(
     plans. Additionally check if the plans and devices were removed from the parameter
     descriptions.
 
-    Parameter 'only_admin' - permissions are applied only to the 'admin' user
+    Parameter 'only_primary' - permissions are applied only to the 'primary' user
     """
     pc_path = copy_default_profile_collection(tmp_path)
     create_local_imports_dirs(pc_path)
@@ -5674,30 +5672,30 @@ def test_load_allowed_plans_and_devices_2(
         )
 
     if items_are_removed:
-        if only_admin:
+        if only_primary:
             assert "junk_device" in allowed_devices["root"]
         else:
             assert "junk_device" not in allowed_devices["root"]
-        assert "junk_device" not in allowed_devices["admin"]
-        if only_admin:
+        assert "junk_device" not in allowed_devices[_user_group]
+        if only_primary:
             assert "junk_plan" in allowed_plans["root"]
         else:
             assert "junk_plan" not in allowed_plans["root"]
-        assert "junk_plan" not in allowed_plans["admin"]
+        assert "junk_plan" not in allowed_plans[_user_group]
     else:
         assert "junk_device" in allowed_devices["root"]
-        assert "junk_device" in allowed_devices["admin"]
+        assert "junk_device" in allowed_devices[_user_group]
         assert "junk_plan" in allowed_plans["root"]
-        assert "junk_plan" in allowed_plans["admin"]
+        assert "junk_plan" in allowed_plans[_user_group]
 
     # Make sure that the 'junk' devices are removed from the description of 'plan_check_filtering'
-    # for user in ("root", "admin"):
-    for user in ("admin",):
+    # for user in ("root", _user_group):
+    for user in (_user_group,):
         params = allowed_plans[user]["plan_check_filtering"]["parameters"]
         devs = params[0]["annotation"]["devices"]["Devices"]
         plans = params[1]["annotation"]["plans"]["Plans"]
-        test_case = f"only_admin = {only_admin} user = '{user}'"
-        if items_are_removed and not (only_admin and user == "root"):
+        test_case = f"only_primary = {only_primary} user = '{user}'"
+        if items_are_removed and not (only_primary and user == "root"):
             assert devs == ["det1", "det2"], test_case
             assert plans == ["count", "scan"], test_case
         else:
@@ -5715,7 +5713,7 @@ _user_permissions_incomplete_1 = """user_groups:
       - null  # Allow all
     forbidden_devices:
       - null  # Nothing is forbidden
-  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+  primary:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
       - ":?.*"  # A different way to allow all
     forbidden_plans:
@@ -5736,7 +5734,7 @@ _user_permissions_incomplete_2 = """user_groups:
       - null  # Allow all
     forbidden_devices:
       - null  # Nothing is forbidden
-  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+  primary:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
       - ":?.*"  # A different way to allow all
     allowed_devices:
@@ -5753,7 +5751,7 @@ _user_permissions_incomplete_3 = """user_groups:
       - null  # Allow all
     forbidden_devices:
       - null  # Nothing is forbidden
-  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+  primary:  # The group includes beamline staff, includes all or most of the plans and devices
     forbidden_plans:
       - null  # Nothing is forbidden
     forbidden_devices:
@@ -5766,7 +5764,7 @@ _user_permissions_incomplete_4 = """user_groups:
       - null  # Allow all
     allowed_devices:
       - null  # Allow all
-  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+  primary:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
       - ":?.*"  # A different way to allow all
     forbidden_plans:
@@ -5783,7 +5781,7 @@ _user_permissions_incomplete_5 = """user_groups:
       - null  # Nothing is forbidden
     forbidden_devices:
       - null  # Nothing is forbidden
-  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+  primary:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
       - ":?.*"  # A different way to allow all
     forbidden_plans:
@@ -5797,7 +5795,7 @@ _user_permissions_incomplete_5 = """user_groups:
 
 # fmt: off
 @pytest.mark.parametrize("pass_permissions_as_parameter", [False, True])
-@pytest.mark.parametrize("permissions_str, root_empty, admin_empty", [
+@pytest.mark.parametrize("permissions_str, root_empty, primary_empty", [
     (_user_permissions_incomplete_1, False, False),
     (_user_permissions_incomplete_2, False, False),
     (_user_permissions_incomplete_3, False, True),
@@ -5806,15 +5804,13 @@ _user_permissions_incomplete_5 = """user_groups:
 ])
 # fmt: on
 def test_load_allowed_plans_and_devices_3(
-    tmp_path, permissions_str, root_empty, admin_empty, pass_permissions_as_parameter
+    tmp_path, permissions_str, root_empty, primary_empty, pass_permissions_as_parameter
 ):
     """
     Tests if filtering settings for the "root" group are also applied to other groups.
     The purpose of the "root" group is to filter junk from the list of existing devices and
     plans. Additionally check if the plans and devices were removed from the parameter
     descriptions.
-
-    Parameter 'only_admin' - permissions are applied only to the 'admin' user
     """
     pc_path = copy_default_profile_collection(tmp_path)
     create_local_imports_dirs(pc_path)
@@ -5846,8 +5842,8 @@ def test_load_allowed_plans_and_devices_3(
 
     assert isinstance(allowed_plans["root"], dict)
     assert isinstance(allowed_devices["root"], dict)
-    assert isinstance(allowed_plans["admin"], dict)
-    assert isinstance(allowed_devices["admin"], dict)
+    assert isinstance(allowed_plans[_user_group], dict)
+    assert isinstance(allowed_devices[_user_group], dict)
 
     if root_empty:
         assert len(allowed_plans["root"]) == 0
@@ -5856,12 +5852,12 @@ def test_load_allowed_plans_and_devices_3(
         assert len(allowed_plans["root"]) > 0
         assert len(allowed_devices["root"]) > 0
 
-    if admin_empty:
-        assert len(allowed_plans["admin"]) == 0
-        assert len(allowed_devices["admin"]) == 0
+    if primary_empty:
+        assert len(allowed_plans[_user_group]) == 0
+        assert len(allowed_devices[_user_group]) == 0
     else:
-        assert len(allowed_plans["admin"]) > 0
-        assert len(allowed_devices["admin"]) > 0
+        assert len(allowed_plans[_user_group]) > 0
+        assert len(allowed_devices[_user_group]) > 0
 
 
 _patch_plan_with_subdevices = """
@@ -5938,7 +5934,7 @@ _user_permissions_subdevices_1 = """user_groups:
       - null  # Everything is allowed
     allowed_devices:
       - null  # Everything is allowed
-  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+  primary:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
       - ":.*"  # A different way to allow all
     forbidden_plans:
@@ -5955,7 +5951,7 @@ _user_permissions_subdevices_2 = """user_groups:
       - null  # Everything is allowed
     allowed_devices:
       - null  # Everything is allowed
-  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+  primary:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
       - ":.*"  # A different way to allow all
     forbidden_plans:
@@ -5972,7 +5968,7 @@ _user_permissions_subdevices_3 = """user_groups:
       - null  # Everything is allowed
     allowed_devices:
       - null  # Everything is allowed
-  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+  primary:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
       - ":.*"  # A different way to allow all
     forbidden_plans:
@@ -5989,7 +5985,7 @@ _user_permissions_subdevices_4 = """user_groups:
       - null  # Everything is allowed
     allowed_devices:
       - ":g_B$:?.*"  # Allow 'stg_B'
-  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+  primary:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
       - ":.*"  # A different way to allow all
     allowed_devices:
@@ -6004,7 +6000,7 @@ _user_permissions_subdevices_5 = """user_groups:
       - null  # Everything is allowed
     forbidden_devices:
       - ":g_B$:?.*"  # Block 'stg_B'
-  admin:  # The group includes beamline staff, includes all or most of the plans and devices
+  primary:  # The group includes beamline staff, includes all or most of the plans and devices
     allowed_plans:
       - ":.*"  # A different way to allow all
     allowed_devices:
@@ -6019,7 +6015,7 @@ _user_permissions_subdevices_5 = """user_groups:
      ["stg_A", "stg_A.dets", "stg_B.dets.det_A"],
      ["stg_A.dets", "stg_A.dets.det_A", "stg_B.dets", "stg_B.dets.det_A"],
      ["stg_A.mtrs.z", "stg_B.mtrs.z"]),
-    # Filtering of lists for the 'admin' user
+    # Filtering of lists for the 'primary' user
     (_user_permissions_subdevices_2,
      ["stg_B.dets.det_A"],
      ["stg_B.dets", "stg_B.dets.det_A"],
@@ -6071,9 +6067,9 @@ def test_load_allowed_plans_and_devices_4(
             path_existing_plans_and_devices=plans_and_devices_fln,
             path_user_group_permissions=permissions_fln,
         )
-    assert "plan_with_subdevices" in allowed_plans["admin"], list(allowed_plans.keys())
+    assert "plan_with_subdevices" in allowed_plans[_user_group], list(allowed_plans.keys())
 
-    params = allowed_plans["admin"]["plan_with_subdevices"]["parameters"]
+    params = allowed_plans[_user_group]["plan_with_subdevices"]["parameters"]
     assert params[0]["name"] == "device1"
     assert params[0]["annotation"]["type"] == "Devices1"
     assert params[0]["annotation"]["devices"]["Devices1"] == dev1
@@ -6157,8 +6153,8 @@ def test_load_allowed_plans_and_devices_5(tmp_path, option):
             assert d
 
     def check_all_user_dicts(allowed, is_empty):
-        assert "admin" in allowed
-        check_dict(allowed["admin"], is_empty)
+        assert _user_group in allowed
+        check_dict(allowed[_user_group], is_empty)
         assert "test_user" in allowed
         check_dict(allowed["test_user"], is_empty)
 
@@ -6181,49 +6177,49 @@ def test_load_allowed_plans_and_devices_5(tmp_path, option):
 _func_permissions_dict_1 = {
     "user_groups": {
         "root": {"allowed_functions": [None], "forbidden_functions": [None]},
-        "admin": {"allowed_functions": [None], "forbidden_functions": [None]},
+        _user_group: {"allowed_functions": [None], "forbidden_functions": [None]},
     }
 }
 
 _func_permissions_dict_2 = {
     "user_groups": {
         "root": {"allowed_functions": [], "forbidden_functions": [None]},
-        "admin": {"allowed_functions": [None], "forbidden_functions": [None]},
+        _user_group: {"allowed_functions": [None], "forbidden_functions": [None]},
     }
 }
 
 _func_permissions_dict_3 = {
     "user_groups": {
         "root": {"allowed_functions": [None], "forbidden_functions": [None]},
-        "admin": {"allowed_functions": [], "forbidden_functions": []},
+        _user_group: {"allowed_functions": [], "forbidden_functions": []},
     }
 }
 
 _func_permissions_dict_4 = {
     "user_groups": {
         "root": {"allowed_functions": [None], "forbidden_functions": [None]},
-        "admin": {},
+        _user_group: {},
     }
 }
 
 _func_permissions_dict_5 = {
     "user_groups": {
         "root": {"allowed_functions": [None]},
-        "admin": {"allowed_functions": [None], "forbidden_functions": [":.*"]},
+        _user_group: {"allowed_functions": [None], "forbidden_functions": [":.*"]},
     }
 }
 
 _func_permissions_dict_6 = {
     "user_groups": {
         "root": {"allowed_functions": [None]},
-        "admin": {"allowed_functions": [":^tmp", ":^test"], "forbidden_functions": [":end$"]},
+        _user_group: {"allowed_functions": [":^tmp", ":^test"], "forbidden_functions": [":end$"]},
     }
 }
 
 _func_permissions_dict_7 = {
     "user_groups": {
         "root": {"allowed_functions": [None]},
-        "admin": {"allowed_functions": [":^tmp", ":^test"], "forbidden_functions": [":^test"]},
+        _user_group: {"allowed_functions": [":^tmp", ":^test"], "forbidden_functions": [":^test"]},
     }
 }
 
@@ -6231,15 +6227,15 @@ _func_permissions_dict_7 = {
 # fmt: off
 @pytest.mark.parametrize("permissions_dict, func_name, group, accepted", [
     (_func_permissions_dict_1, "test_func", "root", True),
-    (_func_permissions_dict_1, "test_func", "admin", True),
+    (_func_permissions_dict_1, "test_func", _user_group, True),
     (_func_permissions_dict_2, "test_func", "root", False),
-    (_func_permissions_dict_2, "test_func", "admin", False),
+    (_func_permissions_dict_2, "test_func", _user_group, False),
     (_func_permissions_dict_3, "test_func", "root", True),
-    (_func_permissions_dict_3, "test_func", "admin", False),
-    (_func_permissions_dict_4, "test_func", "admin", False),
-    (_func_permissions_dict_5, "test_func", "admin", False),
-    (_func_permissions_dict_6, "test_func", "admin", True),
-    (_func_permissions_dict_7, "test_func", "admin", False),
+    (_func_permissions_dict_3, "test_func", _user_group, False),
+    (_func_permissions_dict_4, "test_func", _user_group, False),
+    (_func_permissions_dict_5, "test_func", _user_group, False),
+    (_func_permissions_dict_6, "test_func", _user_group, True),
+    (_func_permissions_dict_7, "test_func", _user_group, False),
 ])
 # fmt: on
 def test_check_if_function_allowed_1(permissions_dict, func_name, group, accepted):
@@ -6260,7 +6256,7 @@ _func_permissions_dict_fail_2 = {
 
 _func_permissions_dict_fail_3 = {
     "user_groups": {
-        "admin": {"allowed_functions": [None]},
+        _user_group: {"allowed_functions": [None]},
     }
 }
 
@@ -6268,13 +6264,13 @@ _func_permissions_dict_fail_3 = {
 # fmt: off
 @pytest.mark.parametrize("permissions_dict, except_type, msg", [
     (_func_permissions_dict_fail_1, KeyError, "does not contain 'user_groups' key"),
-    (_func_permissions_dict_fail_2, KeyError, "No permissions are defined for user group 'admin'"),
+    (_func_permissions_dict_fail_2, KeyError, "No permissions are defined for user group 'primary'"),
     (_func_permissions_dict_fail_3, KeyError, "No permissions are defined for user group 'root'"),
 ])
 # fmt: on
 def test_check_if_function_allowed_2(permissions_dict, except_type, msg):
     with pytest.raises(except_type, match=msg):
-        check_if_function_allowed("some_name", group_name="admin", user_group_permissions=permissions_dict)
+        check_if_function_allowed("some_name", group_name=_user_group, user_group_permissions=permissions_dict)
 
 
 # fmt: off

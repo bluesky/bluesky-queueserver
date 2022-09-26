@@ -320,7 +320,7 @@ Now let's add the plan ``count([det1, det2], num=10, delay=2)`` to the queue::
             'kwargs': {'delay': 1, 'num': 10},
             'name': 'count',
             'user': 'qserver-cli',
-            'user_group': 'admin'},
+            'user_group': 'primary'},
   'msg': '',
   'qsize': 1,
   'success': True}
@@ -342,7 +342,7 @@ shows the new size of the plan queue. Verify the queue size and load the updated
               'kwargs': {'delay': 1, 'num': 10},
               'name': 'count',
               'user': 'qserver-cli',
-              'user_group': 'admin'}],
+              'user_group': 'primary'}],
   'msg': '',
   'plan_queue_uid': 'dfad1d60-abd9-4bd9-895c-10b7c2dc8897',
   'running_item': {},
@@ -358,7 +358,7 @@ The items are added to the back of the queue by default. Let's add another plan
             'item_uid': '17e45208-b8d7-4545-9bd6-d6aa7263adc9',
             'name': 'scan',
             'user': 'qserver-cli',
-            'user_group': 'admin'},
+            'user_group': 'primary'},
   'msg': '',
   'qsize': 2,
   'success': True}
@@ -374,13 +374,13 @@ is added to the back of the queue::
               'kwargs': {'delay': 1, 'num': 10},
               'name': 'count',
               'user': 'qserver-cli',
-              'user_group': 'admin'},
+              'user_group': 'primary'},
             {'args': [['det1', 'det2'], 'motor', -1, 1, 10],
               'item_type': 'plan',
               'item_uid': '17e45208-b8d7-4545-9bd6-d6aa7263adc9',
               'name': 'scan',
               'user': 'qserver-cli',
-              'user_group': 'admin'}],
+              'user_group': 'primary'}],
   'msg': '',
   'plan_queue_uid': '29d6b8fe-7100-4bdc-b348-845cc2728d1b',
   'running_item': {},
@@ -396,7 +396,7 @@ For example a plan may be inserted to the front of the queue::
             'item_uid': '3a6ae812-5d59-4f05-bfad-67e4f8a798e2',
             'name': 'scan',
             'user': 'qserver-cli',
-            'user_group': 'admin'},
+            'user_group': 'primary'},
   'msg': '',
   'qsize': 3,
   'success': True}
@@ -410,20 +410,20 @@ Verify that the new plan was inserted to the front of the queue::
                 'item_uid': '3a6ae812-5d59-4f05-bfad-67e4f8a798e2',
                 'name': 'scan',
                 'user': 'qserver-cli',
-                'user_group': 'admin'},
+                'user_group': 'primary'},
               {'args': [['det1', 'det2']],
                 'item_type': 'plan',
                 'item_uid': 'af4169c0-1d9c-4412-ad0b-5a232e1b13e7',
                 'kwargs': {'delay': 1, 'num': 10},
                 'name': 'count',
                 'user': 'qserver-cli',
-                'user_group': 'admin'},
+                'user_group': 'primary'},
               {'args': [['det1', 'det2'], 'motor', -1, 1, 10],
                 'item_type': 'plan',
                 'item_uid': '17e45208-b8d7-4545-9bd6-d6aa7263adc9',
                 'name': 'scan',
                 'user': 'qserver-cli',
-                'user_group': 'admin'}],
+                'user_group': 'primary'}],
     'msg': '',
     'plan_queue_uid': 'ba87dce1-c598-4a4a-a801-3e145e9b4365',
     'running_item': {},
@@ -442,7 +442,7 @@ in the queue::
             'item_uid': 'e2fcb2b6-a968-4e36-a345-47416b3814b0',
             'name': 'queue_stop',
             'user': 'qserver-cli',
-            'user_group': 'admin'},
+            'user_group': 'primary'},
   'msg': '',
   'qsize': 4,
   'success': True}
@@ -454,25 +454,25 @@ in the queue::
               'item_uid': '3a6ae812-5d59-4f05-bfad-67e4f8a798e2',
               'name': 'scan',
               'user': 'qserver-cli',
-              'user_group': 'admin'},
+              'user_group': 'primary'},
             {'item_type': 'instruction',
               'item_uid': 'e2fcb2b6-a968-4e36-a345-47416b3814b0',
               'name': 'queue_stop',
               'user': 'qserver-cli',
-              'user_group': 'admin'},
+              'user_group': 'primary'},
             {'args': [['det1', 'det2']],
               'item_type': 'plan',
               'item_uid': 'af4169c0-1d9c-4412-ad0b-5a232e1b13e7',
               'kwargs': {'delay': 1, 'num': 10},
               'name': 'count',
               'user': 'qserver-cli',
-              'user_group': 'admin'},
+              'user_group': 'primary'},
             {'args': [['det1', 'det2'], 'motor', -1, 1, 10],
               'item_type': 'plan',
               'item_uid': '17e45208-b8d7-4545-9bd6-d6aa7263adc9',
               'name': 'scan',
               'user': 'qserver-cli',
-              'user_group': 'admin'}],
+              'user_group': 'primary'}],
   'msg': '',
   'plan_queue_uid': 'bc66304a-2cd3-430a-acae-1b2152b60dba',
   'running_item': {},
@@ -512,21 +512,21 @@ execution time about 60 seconds::
               'kwargs': {'delay': 2, 'num': 10},
               'name': 'count',
               'user': 'qserver-cli',
-              'user_group': 'admin'},
+              'user_group': 'primary'},
             {'args': [['det1', 'det2']],
               'item_type': 'plan',
               'item_uid': '7426b43b-102f-42f1-a43e-2c3f2b9009a7',
               'kwargs': {'delay': 2, 'num': 10},
               'name': 'count',
               'user': 'qserver-cli',
-              'user_group': 'admin'},
+              'user_group': 'primary'},
             {'args': [['det1', 'det2']],
               'item_type': 'plan',
               'item_uid': '859760ef-51ad-4861-832c-b113b008fa3e',
               'kwargs': {'delay': 2, 'num': 10},
               'name': 'count',
               'user': 'qserver-cli',
-              'user_group': 'admin'}],
+              'user_group': 'primary'}],
   'msg': '',
   'plan_queue_uid': 'a20c74fe-0888-4e61-9a37-4fbc9697fe3d',
   'running_item': {},
@@ -571,14 +571,14 @@ and ``items`` is a list of the plans remaining in the queue::
               'kwargs': {'delay': 2, 'num': 10},
               'name': 'count',
               'user': 'qserver-cli',
-              'user_group': 'admin'},
+              'user_group': 'primary'},
             {'args': [['det1', 'det2']],
               'item_type': 'plan',
               'item_uid': '859760ef-51ad-4861-832c-b113b008fa3e',
               'kwargs': {'delay': 2, 'num': 10},
               'name': 'count',
               'user': 'qserver-cli',
-              'user_group': 'admin'}],
+              'user_group': 'primary'}],
   'msg': '',
   'plan_queue_uid': '4948d6ba-586c-4a70-a1f9-f933124c1e58',
   'running_item': {'args': [['det1', 'det2']],
@@ -587,7 +587,7 @@ and ``items`` is a list of the plans remaining in the queue::
                     'kwargs': {'delay': 2, 'num': 10},
                     'name': 'count',
                     'user': 'qserver-cli',
-                    'user_group': 'admin'},
+                    'user_group': 'primary'},
   'success': True}
 
 Once all plans are completed, verify RE Manager status to make sure that
@@ -877,7 +877,7 @@ Now start the same ``count`` plan used in previous tutorials. Plan execution wil
             'kwargs': {'delay': 1, 'num': 10},
             'name': 'count',
             'user': 'qserver-cli',
-            'user_group': 'admin'},
+            'user_group': 'primary'},
   'msg': '',
   'qsize': 0,
   'success': True}
@@ -900,7 +900,7 @@ for execution with ``item_uid`` of the plan in history::
                         'time_stop': 1659467149.3967063,
                         'traceback': ''},
               'user': 'qserver-cli',
-              'user_group': 'admin'}],
+              'user_group': 'primary'}],
   'msg': '',
   'plan_history_uid': 'bfe5b3c7-3689-4f7c-ba31-89e23c7c0555',
   'success': True}
@@ -917,7 +917,7 @@ RE Manager allows to initiate execution functions in RE Worker process (see :ref
 The demo startup code loaded by RE Manager by default defines function ``function_sleep``, which
 accepts a single parameter defining execution time of the function and returns a dictionary containing
 success flag (always ``True``) and the time value passed as the parameter. The default permissions
-for the demo are defined so that the ``admin`` user is allowed to call this function.
+for the demo are defined so that the ``primary`` user is allowed to call this function.
 The function is convenient for demonstration and testing, because it allows to set the time
 of function execution and see the time when the function starts and finishes by looking
 at the console output:
@@ -951,7 +951,7 @@ Start execution of the function. Long delay (60 seconds) allows sufficient time 
             'kwargs': {},
             'name': 'function_sleep',
             'user': 'qserver-cli',
-            'user_group': 'admin'},
+            'user_group': 'primary'},
   'msg': '',
   'success': True,
   'task_uid': '6d23469a-94c3-4d4f-ad5a-dda4861515c7'}
@@ -1430,7 +1430,7 @@ Load and check the list of allowed plans. Make sure that ``grid_scan`` is in the
   'plans_allowed_uid': '68753b90-7716-4ce6-b273-b2b8e3646123',
   'success': True}
 
-Load and inspect permissions for the *admin* user group: users are allowed to execute all
+Load and inspect permissions for the *primary* user group: users are allowed to execute all
 plans (see :ref:`configuring_user_group_permissions`)::
 
   $ qserver permissions get
@@ -1438,7 +1438,7 @@ plans (see :ref:`configuring_user_group_permissions`)::
   13:47:20 - MESSAGE:
   {'msg': '',
   'success': True,
-  'user_group_permissions': {'user_groups': {'admin': {'allowed_devices': [':?.*:depth=5'],
+  'user_group_permissions': {'user_groups': {'primary': {'allowed_devices': [':?.*:depth=5'],
                                                         'allowed_functions': ['function_sleep'],
                                                         'allowed_plans': [':.*'],
                                                         'forbidden_devices': [None],
@@ -1466,7 +1466,7 @@ permissions that are applied to all other groups, must always exist in the dicti
         - null  # Allow all
       forbidden_functions:
         - ":^_"  # All functions with names starting with '_'
-    admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    primary:  # The group includes beamline staff, includes all or most of the plans and devices
       allowed_plans:
         - ":.*"  # Different way to allow all plans.
       forbidden_plans:
@@ -1492,7 +1492,7 @@ Load the permission again to verify that they are modified::
   13:57:40 - MESSAGE:
   {'msg': '',
   'success': True,
-  'user_group_permissions': {'user_groups': {'admin': {'allowed_devices': [':?.*:depth=5'],
+  'user_group_permissions': {'user_groups': {'primary': {'allowed_devices': [':?.*:depth=5'],
                                                         'allowed_functions': ['function_sleep'],
                                                         'allowed_plans': [':.*'],
                                                         'forbidden_devices': [None],

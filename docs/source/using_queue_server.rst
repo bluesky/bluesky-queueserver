@@ -354,7 +354,7 @@ a function ``function_sleep`` (defined in the demo startup code) returns ::
             'kwargs': {},
             'name': 'function_sleep',
             'user': 'qserver-cli',
-            'user_group': 'admin'},
+            'user_group': 'primary'},
   'msg': '',
   'success': True,
   'task_uid': '21ecccbe-df52-4478-a42b-3a94b4f54fcd'}

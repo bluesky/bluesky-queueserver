@@ -98,7 +98,7 @@ users to submit some plans to the queue, but it may not be necessary in some wor
 Missing ``allowed_devices`` section means that no devices could be passed to plans as parameters.
 
 Following is an example of a trivial user permission dictionary (in YAML format), which
-allows all plans and devices for ``admin`` user group ('admin' is an arbitrarily chosen name).
+allows all plans and devices for ``primary`` user group (group names could be arbitrarily chosen).
 Restrictions for the ``root`` group forbid access to all plans and devices starting with local
 names (starting with '_'). Note, that those plans and devices can still be used in plans.
 The ``root`` permissions are applied to all other groups, which means that no group
@@ -121,7 +121,7 @@ is created with the sole purpose of demonstrating different types of name patter
         - null  # Allow all
       forbidden_functions:
         - ":^_"  # All functions with names starting with '_'
-    admin:  # The group includes beamline staff, includes all or most of the plans and devices
+    primary:  # The group includes beamline staff, includes all or most of the plans and devices
       allowed_plans:
         - ":.*"  # Different way to allow all plans.
       allowed_devices:

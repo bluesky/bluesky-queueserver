@@ -1286,7 +1286,7 @@ def test_qserver_permissions_reload_1(re_manager_pc_copy, tmp_path, restore_plan
 _permissions_dict_not_allow_count = {
     "user_groups": {
         "root": {"allowed_plans": [None], "allowed_devices": [None]},
-        "admin": {"allowed_plans": [None], "forbidden_plans": ["^count$"], "allowed_devices": [None]},
+        "primary": {"allowed_plans": [None], "forbidden_plans": ["^count$"], "allowed_devices": [None]},
     }
 }
 

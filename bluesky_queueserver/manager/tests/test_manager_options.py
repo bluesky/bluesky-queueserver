@@ -16,12 +16,12 @@ from .common import (
     condition_environment_created,
     condition_queue_processing_finished,
     condition_environment_closed,
+    user,
+    user_group,
 )
 
 from .common import re_manager_cmd  # noqa: F401
 
-# User name and user group name used throughout most of the tests.
-_user, _user_group = "Testing Script", "admin"
 
 _plan1 = {"name": "count", "args": [["det1", "det2"]], "item_type": "plan"}
 

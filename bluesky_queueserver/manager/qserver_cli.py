@@ -40,7 +40,7 @@ class QServerExitCodes(enum.Enum):
 
 
 default_user = "qserver-cli"
-default_user_group = "admin"
+default_user_group = "primary"
 
 # The following text is displayed as part of help information (-h or --help option)
 cli_examples = """

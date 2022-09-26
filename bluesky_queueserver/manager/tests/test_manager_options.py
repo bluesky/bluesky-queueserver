@@ -16,8 +16,8 @@ from .common import (
     condition_environment_created,
     condition_queue_processing_finished,
     condition_environment_closed,
-    user,
-    user_group,
+    _user,
+    _user_group,
 )
 
 from .common import re_manager_cmd  # noqa: F401

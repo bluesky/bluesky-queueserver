@@ -931,20 +931,20 @@ existing_devices:
       real1:
         classname: SoftPositioner
         is_flyable: false
-        is_movable: true
-        is_readable: true
+        is_movable: false
+        is_readable: false
         module: ophyd.positioner
       real2:
         classname: SoftPositioner
         is_flyable: false
-        is_movable: true
-        is_readable: true
+        is_movable: false
+        is_readable: false
         module: ophyd.positioner
       real3:
         classname: SoftPositioner
         is_flyable: false
-        is_movable: true
-        is_readable: true
+        is_movable: false
+        is_readable: false
         module: ophyd.positioner
     is_flyable: false
     is_movable: true
@@ -1013,20 +1013,20 @@ existing_devices:
       real1:
         classname: SoftPositioner
         is_flyable: false
-        is_movable: true
-        is_readable: true
+        is_movable: false
+        is_readable: false
         module: ophyd.positioner
       real2:
         classname: SoftPositioner
         is_flyable: false
-        is_movable: true
-        is_readable: true
+        is_movable: false
+        is_readable: false
         module: ophyd.positioner
       real3:
         classname: SoftPositioner
         is_flyable: false
-        is_movable: true
-        is_readable: true
+        is_movable: false
+        is_readable: false
         module: ophyd.positioner
       sig:
         classname: Signal

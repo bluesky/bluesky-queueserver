@@ -19,7 +19,12 @@ from bluesky import protocols
 import ophyd
 import ophyd.sim
 
-from .common import copy_default_profile_collection, patch_first_startup_file, append_code_to_last_startup_file, _user, _user_group
+from .common import (
+    copy_default_profile_collection,
+    patch_first_startup_file,
+    append_code_to_last_startup_file,
+    _user_group,
+)
 
 from .common import reset_sys_modules  # noqa: F401
 
@@ -4331,7 +4336,8 @@ def _gen_environment_pp2():
          [], {"plan_to_execute": "_pp_p2"}, {}, True, ""),
         ("plan5", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3"],  # remove
          [_pp_p3], {}, {}, False, "Validation of plan parameters failed"),
-        ("plan5", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3", True],  # exclude
+        ("plan5", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}},  # exclude
+         ["_pp_p3", True],
          [_pp_p3], {}, {}, False, "Validation of plan parameters failed"),
 
         # Passing plan names. Parameter contains '__PLAN__' built-in type in the annotation.
@@ -4345,7 +4351,8 @@ def _gen_environment_pp2():
          [], {"plan_to_execute": "_pp_p2"}, {}, True, ""),
         ("plan5b", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3"],  # remove
          ["_pp_p3"], {}, {}, True, ""),
-        ("plan5b", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3", True],  # exclude
+        ("plan5b", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}},  # exclude
+         ["_pp_p3", True],
          ["_pp_p3"], {}, {}, True, ""),
 
         # Passing plan names. Use Parameter 'convert_plan_names'.
@@ -4359,7 +4366,8 @@ def _gen_environment_pp2():
          [], {"plan_to_execute": "_pp_p2"}, {}, True, ""),
         ("plan5c", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3"],  # remove
          ["_pp_p3"], {}, {}, True, ""),
-        ("plan5c", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3", True],  # exclude
+        ("plan5c", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}},  # exclude
+         ["_pp_p3", True],
          ["_pp_p3"], {}, {}, True, ""),
 
         # Passing plan names. Parameter contains '__PLAN_OR_DEVICE__' built-in type in the annotation.
@@ -4373,7 +4381,8 @@ def _gen_environment_pp2():
          [], {"plan_to_execute": "_pp_p2"}, {}, True, ""),
         ("plan5d", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3"],  # remove
          ["_pp_p3"], {}, {}, True, ""),
-        ("plan5d", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}}, ["_pp_p3", True],  # exclude
+        ("plan5d", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}},  # exclude
+         ["_pp_p3", True],
          ["_pp_p3"], {}, {}, True, ""),
 
 

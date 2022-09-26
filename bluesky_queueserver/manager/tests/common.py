@@ -22,6 +22,7 @@ logger = logging.Logger(__name__)
 # User name and user group name used throughout most of the tests.
 _user, _user_group = "Testing Script", "primary"
 
+
 def copy_default_profile_collection(tmp_path, *, copy_py=True, copy_yaml=True):
     """
     Copy default profile collections (only .py files) to temporary directory.

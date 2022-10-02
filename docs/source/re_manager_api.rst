@@ -246,6 +246,8 @@ Returns       **msg**: *str*
 
                   - **'executing_queue'** - queue is being executed.
 
+                  - **'executing_task'** - foreground task (function or script) is being executed.
+
                   - **'closing_environment'** - RE Worker environment is in the process of being
                     closed (safe).
 

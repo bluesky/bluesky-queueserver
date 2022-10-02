@@ -11,7 +11,7 @@ Changed
 - Now requires ``bluesky>=1.7.0``.
 
 - Default user group name is changed from ``admin`` to ``primary``. Users of applications
-that rely on default user group name should change the group name in ``user_group_permissions.yaml`` file.
+  that rely on default user group name should change the group name in ``user_group_permissions.yaml`` file.
 
 Removed
 -------

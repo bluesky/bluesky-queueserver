@@ -40,7 +40,7 @@ Bluesky-QueueServer Documentation
    :maxdepth: 1
    :caption: Related Projects
 
-   Bluesky Queueserver API <https://blueskyproject.io/bluesky-queueserver-api>
+   Bluesky Queue Server API <https://blueskyproject.io/bluesky-queueserver-api>
    Bluesky HTTP Server <https://blueskyproject.io/bluesky-httpserver>
    Bluesky Widgets <https://blueskyproject.io/bluesky-widgets>
    Bluesky <https://blueskyproject.io/bluesky>

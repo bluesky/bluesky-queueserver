@@ -1176,7 +1176,7 @@ class RunEngineManager(Process):
             re_state = await self._comm_to_worker.send_msg("request_state")
             err_msg = ""
         except CommTimeoutError:
-            re_state, err_msg = None, "Timeout occurred"
+            re_state, err_msg = None, "Timeout occurred while processing the request"
         return re_state, err_msg
 
     async def _worker_request_plan_report(self):
@@ -1186,7 +1186,7 @@ class RunEngineManager(Process):
             if plan_report is None:
                 err_msg = "Report is not available at RE Worker"
         except CommTimeoutError:
-            plan_report, err_msg = None, "Timeout occurred"
+            plan_report, err_msg = None, "Timeout occurred while processing the request"
         return plan_report, err_msg
 
     async def _worker_request_run_list(self):
@@ -1196,7 +1196,7 @@ class RunEngineManager(Process):
             if run_list is None:
                 err_msg = "Failed to obtain the run list from the worker"
         except CommTimeoutError:
-            run_list, err_msg = None, "Timeout occurred"
+            run_list, err_msg = None, "Timeout occurred while processing the request"
         return run_list, err_msg
 
     async def _worker_request_plans_and_devices_list(self):
@@ -1206,7 +1206,7 @@ class RunEngineManager(Process):
             if plans_and_devices_list is None:
                 err_msg = "Failed to obtain the run list from the worker"
         except CommTimeoutError:
-            plans_and_devices_list, err_msg = None, "Timeout occurred"
+            plans_and_devices_list, err_msg = None, "Timeout occurred while processing the request"
         return plans_and_devices_list, err_msg
 
     async def _worker_request_task_results(self):
@@ -1216,7 +1216,7 @@ class RunEngineManager(Process):
             if results is None:
                 err_msg = "Failed to obtain the results of completed tasks from the worker"
         except CommTimeoutError:
-            results, err_msg = None, "Timeout occurred"
+            results, err_msg = None, "Timeout occurred while processing the request"
         return results, err_msg
 
     async def _worker_command_close_env(self):
@@ -1225,7 +1225,7 @@ class RunEngineManager(Process):
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
         except CommTimeoutError:
-            success, err_msg = None, "Timeout occurred"
+            success, err_msg = None, "Timeout occurred while processing the request"
         return success, err_msg
 
     async def _worker_command_confirm_exit(self):
@@ -1234,7 +1234,7 @@ class RunEngineManager(Process):
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
         except CommTimeoutError:
-            success, err_msg = None, "Timeout occurred"
+            success, err_msg = None, "Timeout occurred while processing the request"
         return success, err_msg
 
     async def _worker_command_run_plan(self, plan_info):
@@ -1243,7 +1243,7 @@ class RunEngineManager(Process):
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
         except CommTimeoutError:
-            success, err_msg = None, "Timeout occurred"
+            success, err_msg = None, "Timeout occurred while processing the request"
         return success, err_msg
 
     async def _worker_command_pause_plan(self, option):
@@ -1252,7 +1252,7 @@ class RunEngineManager(Process):
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
         except CommTimeoutError:
-            success, err_msg = None, "Timeout occurred"
+            success, err_msg = None, "Timeout occurred while processing the request"
         return success, err_msg
 
     async def _worker_command_continue_plan(self, option):
@@ -1261,7 +1261,7 @@ class RunEngineManager(Process):
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
         except CommTimeoutError:
-            success, err_msg = None, "Timeout occurred"
+            success, err_msg = None, "Timeout occurred while processing the request"
         return success, err_msg
 
     async def _worker_command_reset_worker(self):
@@ -1270,7 +1270,7 @@ class RunEngineManager(Process):
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
         except CommTimeoutError:
-            success, err_msg = None, "Timeout occurred"
+            success, err_msg = None, "Timeout occurred while processing the request"
         return success, err_msg
 
     async def _worker_command_permissions_reload(self):
@@ -1285,7 +1285,7 @@ class RunEngineManager(Process):
             if success:
                 await self._task_results.add_running_task(task_uid=task_uid, payload=payload)
         except CommTimeoutError:
-            success, err_msg = None, "Timeout occurred"
+            success, err_msg = None, "Timeout occurred while processing the request"
         return success, err_msg
 
     async def _worker_command_load_script(self, *, script, update_lists, update_re, run_in_background):
@@ -1306,7 +1306,7 @@ class RunEngineManager(Process):
             if success:
                 await self._task_results.add_running_task(task_uid=task_uid, payload=payload)
         except CommTimeoutError:
-            success, err_msg, task_uid = None, "Timeout occurred", None
+            success, err_msg, task_uid = None, "Timeout occurred while processing the request", None
         return success, err_msg, task_uid
 
     async def _worker_command_execute_function(self, *, func_info, run_in_background):
@@ -1322,7 +1322,7 @@ class RunEngineManager(Process):
             if success:
                 await self._task_results.add_running_task(task_uid=task_uid, payload=payload)
         except CommTimeoutError:
-            success, err_msg, task_uid = None, "Timeout occurred", None
+            success, err_msg, task_uid = (None, "Timeout occurred while processing the request", None)
         return success, err_msg, func_info, task_uid
 
     # ===============================================================================

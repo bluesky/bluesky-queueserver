@@ -3,6 +3,7 @@ import pprint
 import json
 import asyncio
 import uuid
+import queue
 import zmq
 import zmq.asyncio
 from jsonrpc import JSONRPCResponseManager
@@ -124,12 +125,34 @@ class PipeJsonRpcReceive:
 
         self._thread_name = name
 
+        # Buffer for for received but unprocessed messages. In normal operation
+        #   the buffer is not expected to hold more than one message at a time, since
+        #   the worker is designed to quickly respond to arriving messages. If the message
+        #   handler gets locked while processing a message (this would be considered a bug
+        #   requiring attention of developers), the message buffer fills up and
+        #   the following messages are discarded. Without this buffer, the interprocess pipe
+        #   would fill up and the sender process would get 'frozen' (the 'send' function
+        #   would indefinitely block the event loop, e.g. the manager process would go into
+        #   infinite cycle of restarts).
+        self._msg_buffer_size = 100
+        self._msg_buffer = queue.Queue(maxsize=self._msg_buffer_size)
+
         self._conn_polling_timeout = 0.1  # in sec.
 
-    def start(self):
+    def clear_buffer(self):
+        """
+        Clear the message buffer.
+        """
+        while not self._msg_buffer.empty():
+            self._msg_buffer.get()
+
+    def start(self, *, clear_buffer=True):
         """
         Start processing of the pipe messages
         """
+        if clear_buffer:
+            self.clear_buffer()
+
         self._start_conn_thread()
 
     def stop(self):
@@ -163,27 +186,55 @@ class PipeJsonRpcReceive:
                 self._conn.recv()
 
             self._thread_running = True
+
+            self._thread_proc = threading.Thread(
+                target=self._process_msg_thread, name=self._thread_name + " P", daemon=True
+            )
+            self._thread_proc.start()
+
             self._thread_conn = threading.Thread(
                 target=self._receive_conn_thread, name=self._thread_name, daemon=True
             )
             self._thread_conn.start()
 
     def _receive_conn_thread(self):
+        msg = None
         while True:
             if self._conn.poll(self._conn_polling_timeout):
                 try:
                     msg = self._conn.recv()
-                    # Messages should be handled in the event loop
-                    self._conn_received(msg)
+                    self._msg_buffer.put(msg, block=False)
+                except queue.Full:
+                    # There is a major malfunction with the worker if you are here ...
+                    logger.warning(
+                        "The buffer is full. Message is discarded: %s. Report the bug to the development team",
+                        str(msg),
+                    )
                 except Exception as ex:
                     logger.exception(
-                        "Exception occurred while waiting for RE Manager-> Watchdog message: %s", str(ex)
+                        "Exception occurred while waiting for a message or receiving a message: %s", str(ex)
                     )
                     break
             if not self._thread_running:  # Exit thread
                 break
 
-    def _conn_received(self, msg):
+    def _process_msg_thread(self):
+        """
+        Process messages held in the buffer
+        """
+        while True:
+            msg = None
+            try:
+                msg = self._msg_buffer.get(timeout=self._conn_polling_timeout)
+                self._handle_msg(msg)
+            except queue.Empty:
+                pass
+            except Exception as ex:
+                logger.exception("Exception occurred while processing the message %s: %s", str(msg), str(ex))
+            if not self._thread_running:  # Exit thread
+                break
+
+    def _handle_msg(self, msg):
 
         # if logger.level < 11:  # Print output only if logging level is DEBUG (10) or less
         #     msg_json = json.loads(msg)

@@ -28,7 +28,7 @@ def count_threads_with_name(name):
     """
     n_count = 0
     for th in threading.enumerate():
-        if th.name == name:
+        if th.name.startswith(name):
             n_count += 1
     return n_count
 
@@ -95,7 +95,7 @@ def test_PipeJsonRpcReceive_1():
 
     pc = PipeJsonRpcReceive(conn=conn2, name=new_name)
     pc.start()
-    assert count_threads_with_name(new_name) == 1, "One thread is expected to exist"
+    assert count_threads_with_name(new_name) == 2, "Two threads are expected to exist"
 
     pc.start()  # Expected to do nothing
 
@@ -104,7 +104,7 @@ def test_PipeJsonRpcReceive_1():
     assert count_threads_with_name(new_name) == 0, "No threads are expected to exist"
 
     pc.start()  # Restart
-    assert count_threads_with_name(new_name) == 1, "One thread is expected to exist"
+    assert count_threads_with_name(new_name) == 2, "Two thread are expected to exist"
     pc.stop()
 
 
@@ -230,7 +230,8 @@ def test_PipeJsonRpcReceive_3():
 
 def test_PipeJsonRpcReceive_4():
     """
-    Test if all outdated unprocessed messages are deleted once the processing thread is started.
+    Test if all outdated unprocessed messages are deleted from the pipe
+    as the processing thread is started.
     """
 
     def method_handler3(*, value=3):
@@ -272,7 +273,50 @@ def test_PipeJsonRpcReceive_4():
     pc.stop()
 
 
-def test_PipeJsonRpcReceive_5_failing():
+# fmt: off
+@pytest.mark.parametrize("clear_buffer", [False, True])
+# fmt: on
+def test_PipeJsonRpcReceive_5(clear_buffer):
+    """
+    Checking that the buffer overflow does not overflow the pipe.
+    """
+    n_calls = 0
+    start_processing = False
+
+    def method_handler3():
+        nonlocal n_calls
+        while not start_processing:
+            ttime.sleep(0.05)
+        n_calls += 1
+
+    conn1, conn2 = multiprocessing.Pipe()
+    pc = PipeJsonRpcReceive(conn=conn2)
+    pc.add_method(method_handler3, "method3")
+    pc.start()
+
+    # Non-existing method ('Method not found' error)
+    request = format_jsonrpc_msg("method3")
+
+    n_buf = pc._msg_buffer_size
+
+    conn1.send(json.dumps(request))
+    ttime.sleep(1)
+    for _ in range(n_buf * 2):
+        conn1.send(json.dumps(request))
+
+    if clear_buffer:
+        ttime.sleep(1)
+        pc.clear_buffer()
+
+    start_processing = True
+
+    ttime.sleep(1)
+    assert n_calls == (1 if clear_buffer else (n_buf + 1))
+
+    pc.stop()
+
+
+def test_PipeJsonRpcReceive_6_failing():
     """
     Those tests are a result of exploration of how `json-rpc` error processing works.
     """
@@ -337,7 +381,7 @@ def test_PipeJsonRpcReceive_5_failing():
     pc.stop()
 
 
-def test_PipeJsonRpcReceive_6_failing():
+def test_PipeJsonRpcReceive_7_failing():
     """
     Exception is raised inside the handler is causing 'Server Error' -32000.
     Returns error type (Exception type) and message. It is questionable whether
@@ -371,7 +415,7 @@ def test_PipeJsonRpcReceive_6_failing():
     pc.stop()
 
 
-def test_PipeJsonRpcReceive_7_failing():
+def test_PipeJsonRpcReceive_8_failing():
     """
     This is an example of handler to timeout. 'json-rpc' package can not handle timeouts.
     Care must be taken to write handles that execute quickly. Timeouts must be handled
@@ -622,7 +666,7 @@ class _PipeJsonRpcReceiveTest(PipeJsonRpcReceive):
     The test emulates possible issues with the process receiving messages.
     """
 
-    def _conn_received(self, msg):
+    def _handle_msg(self, msg):
         response = JSONRPCResponseManager.handle(msg, self._dispatcher)
         if response:
             response = response.json

@@ -304,6 +304,8 @@ def test_PipeJsonRpcReceive_5(clear_buffer):
     for _ in range(n_buf * 2):
         conn1.send(json.dumps(request))
 
+    ttime.sleep(1)
+
     if clear_buffer:
         ttime.sleep(1)
         pc.clear_buffer()

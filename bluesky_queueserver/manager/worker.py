@@ -905,7 +905,11 @@ class RunEngineWorker(Process):
                     raise RuntimeError(f"Option '{option}' is not supported. Available options: {pausing_options}")
 
                 defer = {"deferred": True, "immediate": False}[option]
-                self._RE.request_pause(defer=defer)
+                # The official 'request_pause' public function is blocking and does not work very well here,
+                #   because if RE event loop is blocked (a plan is stuck in the infinite loop), the operation
+                #   will never complete and block communication thread of the worker.
+                # self._RE.request_pause(defer=defer)  # WILL BLOCK THE LOOP
+                asyncio.run_coroutine_threadsafe(self._RE._request_pause_coro(defer), loop=self._RE.loop)
                 status = "accepted"
             except Exception as ex:
                 status = "error"

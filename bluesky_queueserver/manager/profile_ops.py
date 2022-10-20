@@ -7,7 +7,6 @@ import pkg_resources
 import yaml
 import re
 import sys
-import pprint
 import jsonschema
 import copy
 import typing
@@ -22,6 +21,8 @@ import traceback
 
 import logging
 import bluesky_queueserver
+
+from .logging_setup import PPrintForLogging as ppfl
 
 logger = logging.getLogger(__name__)
 qserver_version = bluesky_queueserver.__version__
@@ -796,7 +797,7 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
 
     if not success_meta:
         success = False
-        err_msg = f"Plan metadata must be a dictionary or a list of dictionaries: '{pprint.pformat(plan_meta)}'"
+        err_msg = f"Plan metadata must be a dictionary or a list of dictionaries: '{ppfl(plan_meta)}'"
 
     if not success:
         raise RuntimeError(f"Error while parsing the plan: {err_msg}")
@@ -2310,7 +2311,7 @@ def validate_plan(plan, *, allowed_plans, allowed_devices):
 
     except Exception as ex:
         success = False
-        msg = f"Plan validation failed: {str(ex)}\nPlan: {pprint.pformat(plan)}"
+        msg = f"Plan validation failed: {str(ex)}\nPlan: {ppfl(plan)}"
 
     return success, msg
 

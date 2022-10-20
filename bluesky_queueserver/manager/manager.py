@@ -3,7 +3,6 @@ import zmq
 import zmq.asyncio
 from multiprocessing import Process
 import time as ttime
-import pprint
 import enum
 import uuid
 import copy
@@ -21,7 +20,7 @@ from .profile_ops import (
 )
 from .plan_queue_ops import PlanQueueOperations
 from .output_streaming import setup_console_output_redirection
-from .logging_setup import setup_loggers
+from .logging_setup import setup_loggers, PPrintForLogging as ppfl
 from .task_results import TaskResults
 
 import logging
@@ -744,7 +743,7 @@ class RunEngineManager(Process):
             task_results = results["task_results"]
             for task_res in task_results:
                 if "task_uid" not in task_res:
-                    logger.error("Missing 'task_uid' data in task results: %s", pprint.pformat(task_res))
+                    logger.error("Missing 'task_uid' data in task results: %s", ppfl(task_res))
                     continue
 
                 task_uid = task_res["task_uid"]
@@ -754,7 +753,7 @@ class RunEngineManager(Process):
                     self._manager_state = MState.IDLE
                     self._running_task_uid = None
 
-                logger.debug("Loaded the results for task '%s': %s", task_uid, pprint.pformat(task_results))
+                logger.debug("Loaded the results for task '%s': %s", task_uid, ppfl(task_results))
 
     async def _start_plan(self):
         """
@@ -888,7 +887,7 @@ class RunEngineManager(Process):
                 }
 
                 # TODO: Decide if we really want to have metadata in the log
-                logger.info("Starting the plan:\n%s.", pprint.pformat(plan_info))
+                logger.info("Starting the plan:\n%s.", ppfl(plan_info))
 
                 success, err_msg = await self._worker_command_run_plan(plan_info)
                 if not success:
@@ -896,16 +895,12 @@ class RunEngineManager(Process):
                         exit_status="failed", run_uids=[], err_msg=err_msg, err_tb=""
                     )
                     self._manager_state = MState.IDLE
-                    logger.error(
-                        "Failed to start the plan %s.\nError: %s",
-                        pprint.pformat(plan_info),
-                        err_msg,
-                    )
+                    logger.error("Failed to start the plan %s.\nError: %s", ppfl(plan_info), err_msg)
                     err_msg = f"Failed to start the plan: {err_msg}"
 
             # The next items is INSTRUCTION
             elif next_item["item_type"] == "instruction":
-                logger.info("Executing instruction:\n%s.", pprint.pformat(next_item))
+                logger.info("Executing instruction:\n%s.", ppfl(next_item))
 
                 if next_item["name"] == "queue_stop":
                     await self._plan_queue.process_next_item(item=single_item)
@@ -1906,7 +1901,7 @@ class RunEngineManager(Process):
         ``default`` is passed, then the queue mode is reset to the default mode.
         """
         logger.info("Setting queue mode ...")
-        logger.debug("Request: %s", pprint.pformat(request))
+        logger.debug("Request: %s", ppfl(request))
 
         success, msg = True, ""
         try:
@@ -1948,7 +1943,7 @@ class RunEngineManager(Process):
         when modifying a running queue.
         """
         logger.info("Adding new item to the queue ...")
-        logger.debug("Request: %s", pprint.pformat(request))
+        logger.debug("Request: %s", ppfl(request))
 
         item_type, item, qsize, msg = None, None, None, ""
 
@@ -2013,7 +2008,7 @@ class RunEngineManager(Process):
         status of each item if 'global' ``success`` is ``True``.
         """
         logger.info("Adding a batch of items to the queue ...")
-        logger.debug("Request: %s", pprint.pformat(request))
+        logger.debug("Request: %s", ppfl(request))
 
         success, msg, item_list, results, qsize = True, "", [], [], None
 
@@ -2319,7 +2314,7 @@ class RunEngineManager(Process):
         item is finished, RE Manager is switched to the IDLE state.
         """
         logger.info("Starting immediate executing a queue item ...")
-        logger.debug("Request: %s", pprint.pformat(request))
+        logger.debug("Request: %s", ppfl(request))
 
         item_type, item, qsize, msg = None, None, None, ""
 
@@ -2525,22 +2520,27 @@ class RunEngineManager(Process):
 
             self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
+            logger.info("function_execute: getting data from request")  ##
             item, item_type, _success, _msg = self._get_item_from_request(
                 request=request, supported_item_types=("function",)
             )
             if not _success:
                 raise Exception(_msg)
+            logger.info("function_execute: checking user and user group")  ##
 
             user, user_group = self._get_user_info_from_request(request=request)
             run_in_background = bool(request.get("run_in_background", False))
 
+            logger.info("function_execute: preparing item")  ##
             item, _ = self._prepare_item(
                 item=item, item_type=item_type, user=user, user_group=user_group, generate_new_uid=True
             )
 
+            logger.info("function_execute: calling '_environment_function_execute'")  ##
             success, msg, item, task_uid = await self._environment_function_execute(
                 item=item, run_in_background=run_in_background
             )
+            logger.info("function_execute: completed")  ##
             if not success:
                 raise RuntimeError(msg)
 
@@ -3106,6 +3106,7 @@ class RunEngineManager(Process):
         }
 
         try:
+            logger.info("starting the handler")  ##
             if isinstance(msg, str):
                 raise Exception(f"Failed to decode the request: {msg}")
             if not isinstance(msg, dict):
@@ -3121,6 +3122,7 @@ class RunEngineManager(Process):
             method = msg["method"]  # Required
             params = msg.get("params", {})  # Optional
 
+            logger.info(f"handling message: method={method}")  ##
             handler_name = handler_dict[method]
             handler = getattr(self, handler_name)
             result = await handler(params)
@@ -3141,6 +3143,7 @@ class RunEngineManager(Process):
     async def _zmq_receive(self):
         try:
             msg_in = await self._zmq_socket.recv_json()
+            logger.info("zmq message received")  ##
         except Exception as ex:
             msg_in = f"JSON decode error: {ex}"
         return msg_in
@@ -3280,7 +3283,9 @@ class RunEngineManager(Process):
         while True:
             #  Wait for next request from client
             msg_in = await self._zmq_receive()
-            logger.debug("ZeroMQ server received request: %s", pprint.pformat(msg_in))
+            logger.info("Received request")  ##
+            logger.debug("ZeroMQ server received request: %s", ppfl(msg_in))
+            logger.info("Following with execute")  ##
 
             msg_out = await self._zmq_execute(msg_in)
 
@@ -3289,18 +3294,21 @@ class RunEngineManager(Process):
                 Avoid printing large dictionaries (allowed devices or allowed plans) in the log.
                 Replace values with "..." for better visualization.
                 """
-                log_msg_out = copy.deepcopy(msg_out)
+                log_msg_out = copy.copy(msg_out)
                 # Do not print large dicts in the log: replace values with "..."
                 large_dicts = ("plans_allowed", "plans_existing", "devices_allowed", "devices_existing")
                 for dict_name in large_dicts:
                     if dict_name in log_msg_out:
-                        d = log_msg_out[dict_name]
+                        d = copy.deepcopy(log_msg_out[dict_name])
                         for k in d.keys():
                             d[k] = "{...}"
                 return log_msg_out
 
+            if logger.level <= logging.DEBUG:
+                msg_out_reduced = gen_log_msg(msg_out)
+                logger.debug("ZeroMQ server sending response: %s", ppfl(msg_out_reduced))
+
             #  Send reply back to client
-            logger.debug("ZeroMQ server sending response: %s", pprint.pformat(gen_log_msg(msg_out)))
             await self._zmq_send(msg_out)
 
             if self._manager_stopping:

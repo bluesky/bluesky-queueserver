@@ -2,7 +2,6 @@ import ast
 import copy
 import time as ttime
 from datetime import datetime
-import pprint
 import argparse
 import enum
 import os
@@ -17,7 +16,7 @@ from .comms import (
     generate_zmq_keys,
     default_zmq_control_address,
 )
-
+from .logging_setup import PPrintForLogging as ppfl
 from .plan_queue_ops import PlanQueueOperations
 
 import logging
@@ -1123,7 +1122,7 @@ def prepare_qserver_output(msg):
             d = msg[dict_name]
             for k in d.keys():
                 d[k] = "{...}"
-    return pprint.pformat(msg)
+    return ppfl(msg)
 
 
 def qserver():
@@ -1350,7 +1349,7 @@ def qserver_clear_lock():
             await pq.start()
             lock_info = await pq.lock_info_retrieve()
             if lock_info is not None:
-                print(f"Detected lock info:\n{pprint.pformat(lock_info)}")
+                print(f"Detected lock info:\n{ppfl(lock_info)}")
                 print("Clearing the lock ...")
                 await pq.lock_info_clear()
                 print("RE Manager lock was cleared. Restart RE Manager service to unlock the manager!")

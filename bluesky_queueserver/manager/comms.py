@@ -1,5 +1,4 @@
 import threading
-import pprint
 import json
 import asyncio
 import uuid
@@ -8,6 +7,7 @@ import zmq
 import zmq.asyncio
 from jsonrpc import JSONRPCResponseManager
 from jsonrpc.dispatcher import Dispatcher
+from .logging_setup import PPrintForLogging as ppfl
 
 import logging
 
@@ -240,7 +240,7 @@ class PipeJsonRpcReceive:
         #     msg_json = json.loads(msg)
         #     We don't want to print 'heartbeat' messages
         #     if not isinstance(msg_json, dict) or (msg_json["method"] != "heartbeat"):
-        #         logger.debug("Command received RE Manager->Watchdog: %s", pprint.pformat(msg_json))
+        #         logger.debug("Command received RE Manager->Watchdog: %s", ppfl(msg_json))
 
         response = JSONRPCResponseManager.handle(msg, self._dispatcher)
         if response:
@@ -418,8 +418,7 @@ class PipeJsonRpcSendAsync:
                         raise CommJsonRpcError(err_msg, error_code=err_code, error_type=err_type)
                     else:
                         err_msg = (
-                            f"Message {pprint.pformat(msg)}\n"
-                            f"resulted in response with unknown format: {pprint.pformat(response)}"
+                            f"Message {ppfl(msg)}\n" f"resulted in response with unknown format: {ppfl(response)}"
                         )
                         raise RuntimeError(err_msg)
                 else:
@@ -427,7 +426,7 @@ class PipeJsonRpcSendAsync:
                 return response
 
             except asyncio.TimeoutError:
-                raise CommTimeoutError(f"Timeout while waiting for response to message: \n{pprint.pformat(msg)}")
+                raise CommTimeoutError(f"Timeout while waiting for response to message: \n{ppfl(msg)}")
             finally:
                 self._fut_comm = None
                 self._expected_msg_id = None
@@ -445,7 +444,7 @@ class PipeJsonRpcSendAsync:
                         "Received response with incorrect message ID: %s. Expected %s.\nMessage: %s",
                         response["id"],
                         self._expected_msg_id,
-                        pprint.pformat(response),
+                        ppfl(response),
                     )
                 else:
                     # Accept the message. Otherwise wait for timeout
@@ -453,12 +452,9 @@ class PipeJsonRpcSendAsync:
                     self._expected_msg_id = None
             else:
                 # Missing ID: ignore the message
-                logger.error("Received response with missing message ID: %s", pprint.pformat(response))
+                logger.error("Received response with missing message ID: %s", ppfl(response))
         else:
-            logger.error(
-                "Unsolicited message received: %s. Message is ignored",
-                pprint.pformat(response),
-            )
+            logger.error("Unsolicited message received: %s. Message is ignored", ppfl(response))
 
     def _conn_received(self, response):
         asyncio.create_task(self._response_received(response))
@@ -469,7 +465,7 @@ class PipeJsonRpcSendAsync:
                 try:
                     msg_json = self._conn.recv()
                     msg = json.loads(msg_json)
-                    # logger.debug("Message Watchdog->Manager received: '%s'", pprint.pformat(msg))
+                    # logger.debug("Message Watchdog->Manager received: '%s'", ppfl(msg))
                     # Messages should be handled in the event loop
                     self._loop.call_soon_threadsafe(self._conn_received, msg)
                 except Exception as ex:

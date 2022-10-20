@@ -3289,26 +3289,8 @@ class RunEngineManager(Process):
 
             msg_out = await self._zmq_execute(msg_in)
 
-            def gen_log_msg(msg_out):
-                """
-                Avoid printing large dictionaries (allowed devices or allowed plans) in the log.
-                Replace values with "..." for better visualization.
-                """
-                log_msg_out = copy.copy(msg_out)
-                # Do not print large dicts in the log: replace values with "..."
-                large_dicts = ("plans_allowed", "plans_existing", "devices_allowed", "devices_existing")
-                for dict_name in large_dicts:
-                    if dict_name in log_msg_out:
-                        d = copy.deepcopy(log_msg_out[dict_name])
-                        for k in d.keys():
-                            d[k] = "{...}"
-                return log_msg_out
-
-            if logger.level <= logging.DEBUG:
-                msg_out_reduced = gen_log_msg(msg_out)
-                logger.debug("ZeroMQ server sending response: %s", ppfl(msg_out_reduced))
-
             #  Send reply back to client
+            logger.debug("ZeroMQ server sending response: %s", ppfl(msg_out))
             await self._zmq_send(msg_out)
 
             if self._manager_stopping:

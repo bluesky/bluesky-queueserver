@@ -208,11 +208,11 @@ class PipeJsonRpcReceive:
                     # There is a major malfunction with the worker if you are here ...
                     logger.warning(
                         "The buffer is full. Message is discarded: %s. Report the bug to the development team",
-                        str(msg),
+                        msg,
                     )
                 except Exception as ex:
                     logger.exception(
-                        "Exception occurred while waiting for a message or receiving a message: %s", str(ex)
+                        "Exception occurred while waiting for a message or receiving a message: %s", ex
                     )
                     break
             if not self._thread_running:  # Exit thread
@@ -230,7 +230,7 @@ class PipeJsonRpcReceive:
             except queue.Empty:
                 pass
             except Exception as ex:
-                logger.exception("Exception occurred while processing the message %s: %s", str(msg), str(ex))
+                logger.exception("Exception occurred while processing the message %s: %s", msg, ex)
             if not self._thread_running:  # Exit thread
                 break
 
@@ -469,7 +469,7 @@ class PipeJsonRpcSendAsync:
                     # Messages should be handled in the event loop
                     self._loop.call_soon_threadsafe(self._conn_received, msg)
                 except Exception as ex:
-                    logger.exception("Exception occurred while waiting for packet: %s", str(ex))
+                    logger.exception("Exception occurred while waiting for packet: %s", ex)
                     break
             if not self._thread_running:  # Exit thread
                 break
@@ -569,7 +569,7 @@ class ZMQCommSendThreads:
             msg = zmq_comm.send_message(method="some_method", params={"some_value": n})
             # Code that uses msg
         except CommTimeoutError as ex:
-            logger.exception("Exception occurred: %s", str(ex)
+            logger.exception("Exception occurred: %s", ex)
 
         # Non-blocking call (trivial example)
         msg_received, msg_err_received = [], []
@@ -662,7 +662,7 @@ class ZMQCommSendThreads:
                         self._cb(msg, msg_err)
                     except Exception as ex:
                         # Operation should continue even if there are problems with callback
-                        logger.exception("Exception occurred in ZMQ communication callback: %s", str(ex))
+                        logger.exception("Exception occurred in ZMQ communication callback: %s", ex)
 
                 self._event_wait_for_msg.clear()
                 if self._blocking_call:
@@ -797,7 +797,7 @@ class ZMQCommSendThreads:
         # Successful connection does not mean that the socket exists
         self._zmq_socket.connect(self._zmq_server_address)
 
-        logger.info("Connected to ZeroMQ server '%s'" % str(self._zmq_server_address))
+        logger.info("Connected to ZeroMQ server '%s'", self._zmq_server_address)
         logger.info("ZMQ encryption: %s", "disabled" if self._server_public_key is None else "enabled")
 
     def _zmq_socket_restart(self):
@@ -983,7 +983,7 @@ class ZMQCommSendAsync:
                 raise Exception("timeout occurred")
         except Exception as ex:
             # Timeout occurred. Socket needs to be reset.
-            logger.exception("ZeroMQ communication failed: %s" % str(ex))
+            logger.exception("ZeroMQ communication failed: %s", ex)
             raise
         return msg
 
@@ -1012,7 +1012,7 @@ class ZMQCommSendAsync:
         # Successful connection does not mean that the socket exists
         self._zmq_socket.connect(self._zmq_server_address)
 
-        logger.info("Connected to ZeroMQ server '%s'" % str(self._zmq_server_address))
+        logger.info("Connected to ZeroMQ server '%s'", self._zmq_server_address)
         logger.info("ZMQ encryption: %s", "disabled" if self._server_public_key is None else "enabled")
 
     def _zmq_socket_restart(self):
@@ -1138,6 +1138,6 @@ def zmq_single_request(method, params=None, *, zmq_server_address=None, server_p
         msg_err = str(ex)
 
     if msg_err:
-        logger.warning("Communication with RE Manager failed: %s", str(msg_err))
+        logger.warning("Communication with RE Manager failed: %s", msg_err)
 
     return msg, msg_err

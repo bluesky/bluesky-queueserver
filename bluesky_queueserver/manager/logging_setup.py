@@ -3,6 +3,8 @@ import logging
 import sys
 import pprint
 from collections.abc import Iterable, Mapping
+from platform import python_version
+from packaging import version
 
 
 def setup_loggers(*, log_level, name="bluesky_queueserver"):
@@ -105,4 +107,13 @@ class PPrintForLogging:
                 msg_out = msg_in
             return msg_out
 
-        return pprint.pformat(reduce_msg(self._msg), sort_dicts=False)
+        if version.parse(python_version()) < version.parse("3.8"):
+            # NOTE: delete this after support for 3.7 is dropped
+            f_sorted = pprint._sorted
+            pprint._sorted = lambda x: x
+            msg_out = pprint.pformat(reduce_msg(self._msg))
+            pprint._sorted = f_sorted
+        else:
+            msg_out = pprint.pformat(reduce_msg(self._msg), sort_dicts=False)
+
+        return msg_out

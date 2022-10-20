@@ -3,6 +3,7 @@ import time as ttime
 import json
 import logging
 import multiprocessing
+import pprint
 import threading
 import asyncio
 import zmq
@@ -1133,7 +1134,48 @@ def test_ZMQCommSendThreads_4(is_blocking, raise_exception, delay_between_reads,
     thread.join()
 
 
-def test_ZMQCommSendThreads_5_fail():
+def _zmq_server_delay3(delay):
+    """
+    ZMQ server: delay of 3 seconds before the response
+    """
+    ctx = zmq.Context()
+    zmq_socket = ctx.socket(zmq.REP)
+    zmq_socket.bind("tcp://*:60615")
+    msg_in = zmq_socket.recv_json()
+    ttime.sleep(delay)  # Generate timeout at the client
+    msg_out = {"success": True, "msg_in": msg_in}
+    zmq_socket.send_json(msg_out)
+    zmq_socket.close(linger=10)
+
+
+# fmt: off
+@pytest.mark.parametrize("timeout", [None, 2000, 5000])
+# fmt: on
+def test_ZMQCommSendThreads_5(timeout):
+    """
+    ZMQCommSendThreads: Pass timeout as 'send_message' parameter.
+    """
+    delay = 3000
+    thread = threading.Thread(target=_zmq_server_delay3, kwargs={"delay": delay / 1000})
+    thread.start()
+
+    timeout_default = 2000
+    zmq_comm = ZMQCommSendThreads(timeout_recv=timeout_default)
+    method, params = "testing", {"p1": 10, "p2": "abc"}
+
+    timeout_used = timeout or timeout_default
+
+    if timeout_used < delay:
+        with pytest.raises(CommTimeoutError, match="timeout occurred"):
+            zmq_comm.send_message(method=method, params=params, timeout=timeout, raise_exceptions=True)
+    else:
+        msg_recv = zmq_comm.send_message(method=method, params=params, timeout=timeout, raise_exceptions=True)
+        assert msg_recv["success"] is True, pprint.pformat(msg_recv)
+
+    thread.join()
+
+
+def test_ZMQCommSendThreads_6_fail():
     """
     Invalid public key
     """
@@ -1302,7 +1344,39 @@ def test_ZMQCommSendAsync_4(raise_exception, delay_between_reads, encryption_ena
     thread.join()
 
 
-def test_ZMQCommSendAsync_5_fail():
+# fmt: off
+@pytest.mark.parametrize("timeout", [None, 2000, 5000])
+# fmt: on
+def test_ZMQCommSendAsync_5(timeout):
+    """
+    ZMQCommSendThreads: Pass timeout as 'send_message' parameter.
+    """
+    delay = 3000
+    thread = threading.Thread(target=_zmq_server_delay3, kwargs={"delay": delay / 1000})
+    thread.start()
+
+    async def testing():
+        timeout_default = 2000
+        zmq_comm = ZMQCommSendAsync(timeout_recv=timeout_default)
+        method, params = "testing", {"p1": 10, "p2": "abc"}
+
+        timeout_used = timeout or timeout_default
+
+        if timeout_used < delay:
+            with pytest.raises(CommTimeoutError, match="timeout occurred"):
+                await zmq_comm.send_message(method=method, params=params, timeout=timeout, raise_exceptions=True)
+        else:
+            msg_recv = await zmq_comm.send_message(
+                method=method, params=params, timeout=timeout, raise_exceptions=True
+            )
+            assert msg_recv["success"] is True, pprint.pformat(msg_recv)
+
+    asyncio.run(testing())
+
+    thread.join()
+
+
+def test_ZMQCommSendAsync_6_fail():
     """
     Invalid public key
     """

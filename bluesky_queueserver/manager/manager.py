@@ -2518,27 +2518,22 @@ class RunEngineManager(Process):
 
             self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
-            logger.info("function_execute: getting data from request")  ##
             item, item_type, _success, _msg = self._get_item_from_request(
                 request=request, supported_item_types=("function",)
             )
             if not _success:
                 raise Exception(_msg)
-            logger.info("function_execute: checking user and user group")  ##
 
             user, user_group = self._get_user_info_from_request(request=request)
             run_in_background = bool(request.get("run_in_background", False))
 
-            logger.info("function_execute: preparing item")  ##
             item, _ = self._prepare_item(
                 item=item, item_type=item_type, user=user, user_group=user_group, generate_new_uid=True
             )
 
-            logger.info("function_execute: calling '_environment_function_execute'")  ##
             success, msg, item, task_uid = await self._environment_function_execute(
                 item=item, run_in_background=run_in_background
             )
-            logger.info("function_execute: completed")  ##
             if not success:
                 raise RuntimeError(msg)
 
@@ -3107,7 +3102,6 @@ class RunEngineManager(Process):
         }
 
         try:
-            logger.info("starting the handler")  ##
             if isinstance(msg, str):
                 raise Exception(f"Failed to decode the request: {msg}")
             if not isinstance(msg, dict):
@@ -3123,7 +3117,6 @@ class RunEngineManager(Process):
             method = msg["method"]  # Required
             params = msg.get("params", {})  # Optional
 
-            logger.info(f"handling message: method={method}")  ##
             handler_name = handler_dict[method]
             handler = getattr(self, handler_name)
             result = await handler(params)
@@ -3144,7 +3137,6 @@ class RunEngineManager(Process):
     async def _zmq_receive(self):
         try:
             msg_in = await self._zmq_socket.recv_json()
-            logger.info("zmq message received")  ##
         except Exception as ex:
             msg_in = f"JSON decode error: {ex}"
         return msg_in
@@ -3284,9 +3276,7 @@ class RunEngineManager(Process):
         while True:
             #  Wait for next request from client
             msg_in = await self._zmq_receive()
-            logger.info("Received request")  ##
             logger.debug("ZeroMQ server received request: %s", ppfl(msg_in))
-            logger.info("Following with execute")  ##
 
             msg_out = await self._zmq_execute(msg_in)
 

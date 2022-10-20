@@ -611,6 +611,7 @@ class ZMQCommSendThreads:
         self._server_public_key = server_public_key
 
         self._timeout_receive = timeout_recv  # Timeout for 'recv' operation (ms)
+        self._timeout_receive_last = None  # Timeout used for last acquisition (ms)
         self._timeout_send = timeout_send  # # Timeout for 'send' operation (ms)
         self._raise_exceptions = raise_exceptions
 
@@ -648,7 +649,7 @@ class ZMQCommSendThreads:
             if self._event_wait_for_msg.wait(timeout=self._polling_timeout / 1000):
                 msg, msg_err = {}, ""
                 try:
-                    if self._zmq_socket.poll(timeout=self._timeout_receive):
+                    if self._zmq_socket.poll(timeout=self._timeout_receive_last):
                         msg = self._zmq_socket.recv_json()
                     else:
                         # This is very likely a timeout (RE Manager is not responding)
@@ -708,7 +709,7 @@ class ZMQCommSendThreads:
         self._received_data = {"msg": msg, "msg_err": msg_err}
         self._event_msg_received.set()
 
-    def _zmq_communicate(self, msg_out, *, cb):
+    def _zmq_communicate(self, msg_out, *, cb, timeout):
         """
         Send message to the server and receive the response.
 
@@ -720,6 +721,9 @@ class ZMQCommSendThreads:
             Reference to callback function. If callback function is specified, then
             the `_zmq_communicate` sends outgoing message and exits. Callback function
             is called once the response is received from the server or timeout occurs.
+        timeout: int or None
+            Timeout (in ms) used for the single request. If ``None``, then the default
+            timeout is used.
 
         Returns
         -------
@@ -748,6 +752,13 @@ class ZMQCommSendThreads:
         else:
             self._cb = cb
             self._blocking_call = False
+
+        # Compute timeout
+        if timeout is None:
+            timeout = self._timeout_receive
+        if self._timeout_receive_last != timeout:
+            self._timeout_receive_last = timeout
+            self._zmq_socket.RCVTIMEO = timeout + 1
 
         self._zmq_socket.send_json(msg_out)
         self._event_wait_for_msg.set()
@@ -821,7 +832,7 @@ class ZMQCommSendThreads:
         """
         return {"method": method, "params": params}
 
-    def send_message(self, *, method, params=None, cb=None, raise_exceptions=None):
+    def send_message(self, *, method, params=None, timeout=None, cb=None, raise_exceptions=None):
         """
         Send message to ZMQ server and wait for the response. The message must contain
         a name of a method supported by the server and a dictionary of parameters that
@@ -837,6 +848,9 @@ class ZMQCommSendThreads:
         params: dict or None
             Dictionary of parameters passed to the method. If ``None``, then an empty dictionary
             is passed to the server.
+        timeout: int or None
+            Read timeout (in ms) for the single request. If ``None``, then the default
+            timeout is used.
         cb: callable or None
             Callback function. If None, then the function blocks until communication is complete.
             Otherwise the function exits after the message is sent to the server. The callback
@@ -868,7 +882,7 @@ class ZMQCommSendThreads:
 
         try:
             msg_out = self._create_msg(method=method, params=params)
-            msg_in = self._zmq_communicate(msg_out, cb=cb)
+            msg_in = self._zmq_communicate(msg_out, cb=cb, timeout=timeout)
         except Exception as ex:
             errmsg = f"ZMQ communication error: {str(ex)}"
             use_ex = raise_exceptions if (raise_exceptions is not None) else self._raise_exceptions
@@ -948,7 +962,8 @@ class ZMQCommSendAsync:
         self._server_public_key = server_public_key
 
         self._timeout_receive = timeout_recv  # Timeout for 'recv' operation (ms)
-        self._timeout_send = timeout_send  # # Timeout for 'send' operation (ms)
+        self._timeout_receive_last = None  # Timeout used for last acquisition (ms)
+        self._timeout_send = timeout_send  # Timeout for 'send' operation (ms)
         self._raise_exceptions = raise_exceptions
 
         # ZeroMQ communication
@@ -974,9 +989,9 @@ class ZMQCommSendAsync:
     async def _zmq_send(self, msg):
         await self._zmq_socket.send_json(msg)
 
-    async def _zmq_receive(self):
+    async def _zmq_receive(self, *, timeout):
         try:
-            if await self._zmq_socket.poll(timeout=self._timeout_receive):
+            if await self._zmq_socket.poll(timeout=timeout):
                 msg = await self._zmq_socket.recv_json()
             else:
                 # This is very likely a timeout (RE Manager is not responding)
@@ -987,9 +1002,15 @@ class ZMQCommSendAsync:
             raise
         return msg
 
-    async def _zmq_communicate(self, msg_out):
+    async def _zmq_communicate(self, msg_out, *, timeout):
+        if timeout is None:
+            timeout = self._timeout_receive
+        if self._timeout_receive_last != timeout:
+            self._timeout_receive_last = timeout
+            self._zmq_socket.RCVTIMEO = timeout + 1
+
         await self._zmq_send(msg_out)
-        msg_in = await self._zmq_receive()
+        msg_in = await self._zmq_receive(timeout=timeout)
         return msg_in
 
     def _zmq_socket_open(self):
@@ -1022,7 +1043,7 @@ class ZMQCommSendAsync:
     def _create_msg(self, *, method, params=None):
         return {"method": method, "params": params}
 
-    async def send_message(self, *, method, params=None, raise_exceptions=None):
+    async def send_message(self, *, method, params=None, timeout=None, raise_exceptions=None):
         """
         Send message to ZMQ server and wait for the response. The message must contain
         a name of a method supported by the server and a dictionary of parameters that
@@ -1038,6 +1059,9 @@ class ZMQCommSendAsync:
         params: dict or None
             Dictionary of parameters passed to the method. If ``None``, then an empty dictionary
             is passed to the server.
+        timeout: int or None
+            Read timeout (in ms) for the single request. If ``None``, then the default
+            timeout is used.
         raise_exceptions: bool or None
             The flag indicates if exception should be raised in case of communication error
             (such as timeout). If ``False``, then error message is returned instead.
@@ -1063,7 +1087,7 @@ class ZMQCommSendAsync:
         async with self._lock_zmq:
             try:
                 msg_out = self._create_msg(method=method, params=params)
-                msg_in = await self._zmq_communicate(msg_out)
+                msg_in = await self._zmq_communicate(msg_out, timeout=timeout)
             except Exception as ex:
                 # This is very likely a timeout (RE Manager is not responding)
                 self._zmq_socket_restart()
@@ -1083,7 +1107,7 @@ class ZMQCommSendAsync:
             self._zmq_socket.close()
 
 
-def zmq_single_request(method, params=None, *, zmq_server_address=None, server_public_key=None):
+def zmq_single_request(method, params=None, *, timeout=None, zmq_server_address=None, server_public_key=None):
     """
     Send a single request to ZMQ server. The function opens the socket, sends
     a single ZMQ request and closes the socket. The function is not expected
@@ -1098,6 +1122,8 @@ def zmq_single_request(method, params=None, *, zmq_server_address=None, server_p
     params: dict or None
         Dictionary of parameters (payload of the message). If ``None`` then
         the message is sent with empty payload: ``params = {}``.
+    timeout: int or None
+        Read timeout (in ms).
     zmq_server_address: str or None
         Address of the ZMQ control socket of RE Manager. Default address is used if the
         value is ``None``.
@@ -1125,7 +1151,9 @@ def zmq_single_request(method, params=None, *, zmq_server_address=None, server_p
         zmq_to_manager = ZMQCommSendAsync(
             zmq_server_address=zmq_server_address, server_public_key=server_public_key
         )
-        msg_received = await zmq_to_manager.send_message(method=method, params=params, raise_exceptions=True)
+        msg_received = await zmq_to_manager.send_message(
+            method=method, params=params, timeout=timeout, raise_exceptions=True
+        )
         zmq_to_manager.close()
 
     try:

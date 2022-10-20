@@ -181,7 +181,7 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
         for file in file_list:
 
             try:
-                logger.info(f"Loading startup file {file!r} ...")
+                logger.info("Loading startup file '%s' ...", file)
 
                 # Set '__file__' and '__name__' variables
                 patch = f"__file__ = '{file}'; __name__ = 'startup_script'\n"
@@ -447,7 +447,7 @@ def load_script_into_existing_nspace(
 
     root_path_exists = script_root_path and os.path.isdir(script_root_path)
     if enable_local_imports and not root_path_exists:
-        logger.error(f"The path {script_root_path!r} does not exist. Local imports will not work.")
+        logger.error("The path '%s' does not exist. Local imports will not work.", script_root_path)
 
     use_local_imports = enable_local_imports and root_path_exists
 
@@ -589,7 +589,7 @@ def _get_nspace_object(object_name, *, objects_in_nspace):
                 device = getattr(device, c, None)
                 if object_found is None:
                     object_found = False
-                    logger.error("Device '%s' does not have attribute (subdevice) '%s'", str(object_name), str(c))
+                    logger.error("Device '%s' does not have attribute (subdevice) '%s'", object_name, c)
                 object_found = object_found if device else False
 
             else:
@@ -2853,7 +2853,7 @@ def _prepare_devices(devices, *, max_depth=0, ignore_all_subdevices_if_one_fails
                 except Exception as ex:
                     ignore_subdevices = ignore_all_subdevices_if_one_fails
                     logger.warning(
-                        f"Device '%s': component {comp_name!r} can not be processed: %s", device_name, ex
+                        "Device '%s': component '%s' can not be processed: %s", device_name, comp_name, ex
                     )
                 if ignore_subdevices:
                     components = {}  # Ignore all components of the subdevice
@@ -3143,7 +3143,7 @@ def load_existing_plans_and_devices(path_to_file=None):
         try:
             existing_plans_and_devices = yaml.load(stream, Loader=yaml.FullLoader)
         except Exception as ex:
-            logger.error("%s File '%s' has invalid YAML: %s", msg, path_to_file, str(ex))
+            logger.error("%s File '%s' has invalid YAML: %s", msg, path_to_file, ex)
             existing_plans_and_devices = {}
 
     if not isinstance(existing_plans_and_devices, dict):
@@ -3294,7 +3294,7 @@ def update_existing_plans_and_devices(
                 )
             except Exception as ex:
                 logger.error(
-                    "Failed to save lists of existing plans and device to file '%s': %s", path_to_file, str(ex)
+                    "Failed to save lists of existing plans and device to file '%s': %s", path_to_file, ex
                 )
 
     return changes_exist
@@ -3706,7 +3706,7 @@ def load_allowed_plans_and_devices(
             allowed_plans[group] = selected_plans
 
     except Exception as ex:
-        logger.exception("Error occurred while generating the list of allowed plans and devices: %s", str(ex))
+        logger.exception("Error occurred while generating the list of allowed plans and devices: %s", ex)
 
         # The 'default' lists in case error occurred while generating lists
         allowed_plans["root"] = existing_plans

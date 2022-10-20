@@ -1246,10 +1246,10 @@ def qserver():
             ttime.sleep(1)
 
     except CommandParameterError as ex:
-        logger.error("Invalid command or parameters: %s.", str(ex))
+        logger.error("Invalid command or parameters: %s.", ex)
         exit_code = QServerExitCodes.PARAMETER_ERROR
     except Exception as ex:
-        logger.exception("Exception occurred: %s.", str(ex))
+        logger.exception("Exception occurred: %s.", ex)
         exit_code = QServerExitCodes.EXCEPTION_OCCURRED
     except KeyboardInterrupt:
         print("\nThe program was manually stopped.")
@@ -1357,7 +1357,7 @@ def qserver_clear_lock():
                 print("No lock was detected.")
         except Exception as ex:
             exit_code = 1
-            logger.error(f"Failed to clear RE Manager lock: {ex}")
+            logger.error("Failed to clear RE Manager lock: %s", ex)
 
     asyncio.run(remove_lock())
 

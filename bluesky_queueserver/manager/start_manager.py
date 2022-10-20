@@ -570,7 +570,7 @@ def start_manager():
         # Check if startup script exists (if it is specified)
         if startup_script_path is not None:
             if not os.path.isfile(startup_script_path):
-                logger.error(f"The script '{startup_script_path}' is not found.")
+                logger.error("The script '%s' is not found.", startup_script_path)
                 return 1
 
     config_worker["keep_re"] = args.keep_re
@@ -649,7 +649,7 @@ def start_manager():
         try:
             validate_zmq_key(zmq_private_key)
         except Exception as ex:
-            logger.error("ZMQ private key is improperly formatted: %s", str(ex))
+            logger.error("ZMQ private key is improperly formatted: %s", ex)
             return 1
 
     zmq_control_addr = args.zmq_control_addr
@@ -666,7 +666,7 @@ def start_manager():
 
     redis_addr = args.redis_addr
     if redis_addr.count(":") > 1:
-        logger.error(f"Redis address is incorrectly formatted: '{redis_addr}'")
+        logger.error("Redis address is incorrectly formatted: '%s'", redis_addr)
         return 1
     config_manager["redis_addr"] = redis_addr
 

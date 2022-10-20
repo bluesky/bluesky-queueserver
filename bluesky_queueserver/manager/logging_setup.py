@@ -1,4 +1,3 @@
-import copy
 import logging
 import sys
 import pprint
@@ -79,8 +78,8 @@ class PPrintForLogging:
             if not isinstance(msg_in, Mapping):
                 return reduce_msg(msg_in)
             else:
-                msg_out = copy.deepcopy(msg_in)
-                for k in msg_out.keys():
+                msg_out = {}
+                for k in msg_in.keys():
                     msg_out[k] = "{...}"
                 return msg_out
 
@@ -109,10 +108,9 @@ class PPrintForLogging:
 
         if version.parse(python_version()) < version.parse("3.8"):
             # NOTE: delete this after support for 3.7 is dropped
-            f_sorted = pprint._sorted
-            pprint._sorted = lambda x: x
+            pprint.sorted = lambda x, key=None: x
             msg_out = pprint.pformat(reduce_msg(self._msg))
-            pprint._sorted = f_sorted
+            delattr(pprint, "sorted")
         else:
             msg_out = pprint.pformat(reduce_msg(self._msg), sort_dicts=False)
 

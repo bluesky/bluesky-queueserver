@@ -286,7 +286,7 @@ class RunEngineWorker(Process):
 
         except Exception as ex:
             # The exception was raised while preparing the function for execution.
-            logger.exception(f"Failed to execute task in main thread: {ex}")
+            logger.exception("Failed to execute task in main thread: %s", ex)
         else:
             logger.debug("Task execution is completed.")
 
@@ -516,7 +516,7 @@ class RunEngineWorker(Process):
 
         task_uid = task_uid or str(uuid.uuid4())
         time_start = ttime.time()
-        logger.debug(f"Starting task {name!r}. Task UID: {task_uid!r}.")
+        logger.debug("Starting task '%s'. Task UID: '%s'.", name, task_uid)
 
         try:
             # Verify that the environment is ready
@@ -567,7 +567,11 @@ class RunEngineWorker(Process):
             status, msg = "error", f"Error occurred while to starting the task {name!r}: {ex}"
 
         logger.debug(
-            f"Completing the request to start the task {name!r} ({task_uid!r}): status={status!r} msg={msg!r}."
+            "Completing the request to start the task '%s' ('%s'): status='%s' msg='%s'.",
+            name,
+            task_uid,
+            status,
+            msg,
         )
 
         # Payload contains information that may be useful for tracking the execution of the task.
@@ -703,7 +707,7 @@ class RunEngineWorker(Process):
         return_value = func_callable(*func_args, **func_kwargs)
 
         func_name = func_info.get("name", "--")
-        logger.debug(f"The execution of the function {func_name!r} was successfully completed.")
+        logger.debug("The execution of the function '%s' was successfully completed.", func_name)
 
         return return_value
 
@@ -1149,9 +1153,9 @@ class RunEngineWorker(Process):
         except Exception as ex:
             s = "Failed to start RE Worker environment. Error while loading startup code"
             if hasattr(ex, "tb"):  # ScriptLoadingError
-                logger.error("%s:\n%s\n", s, str(ex.tb))
+                logger.error("%s:\n%s\n", s, ex.tb)
             else:
-                logger.exception("%s: %s.", s, str(ex))
+                logger.exception("%s: %s.", s, ex)
             success = False
 
         if success:
@@ -1238,7 +1242,7 @@ class RunEngineWorker(Process):
 
             except BaseException as ex:
                 success = False
-                logger.exception("Error occurred while initializing the environment: %s.", str(ex))
+                logger.exception("Error occurred while initializing the environment: %s.", ex)
 
         if success:
             logger.info("RE Environment is ready")

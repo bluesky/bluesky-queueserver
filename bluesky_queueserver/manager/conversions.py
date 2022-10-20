@@ -132,7 +132,7 @@ def simplify_plan_descriptions(plans_source):
                         p["default"] = default
                         p["is_optional"] = True
                     except Exception:
-                        logger.error(f"Failed to reconstruct the default value {param['default']} from string")
+                        logger.error("Failed to reconstruct the default value %s from string", param["default"])
                 p["is_optional"] = "default" in p
 
                 # Copy 'min', 'max' and 'step' values if any
@@ -140,17 +140,17 @@ def simplify_plan_descriptions(plans_source):
                     try:
                         p["min"] = _convert_str_to_number(param["min"])
                     except Exception as ex:
-                        logger.error(f"Failed to reconstruct 'min' value from string: {ex}")
+                        logger.error("Failed to reconstruct 'min' value from string: %s", ex)
                 if "max" in param:
                     try:
                         p["max"] = _convert_str_to_number(param["max"])
                     except Exception as ex:
-                        logger.error(f"Failed to reconstruct 'max' value from string: {ex}")
+                        logger.error("Failed to reconstruct 'max' value from string: %s", ex)
                 if "step" in param:
                     try:
                         p["step"] = _convert_str_to_number(param["step"])
                     except Exception as ex:
-                        logger.error(f"Failed to reconstruct 'step' value from string: {ex}")
+                        logger.error("Failed to reconstruct 'step' value from string: %s", ex)
 
                 plan["parameters"].append(p)
 
@@ -349,7 +349,7 @@ def spreadsheet_to_plan_list(*, spreadsheet_file, file_name, **kwargs):  # noqa:
             plan_list.append(plan)
 
         except Exception as ex:
-            logger.exception(f"{ex}")
+            logger.exception("Exception: %s", ex)
             raise ValueError(
                 f"Error occurred while interpreting plan parameters in row {nr + 1} ({_format_row(df, nr)}): {ex}"
             )

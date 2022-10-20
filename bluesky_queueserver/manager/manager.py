@@ -345,7 +345,7 @@ class RunEngineManager(Process):
         except Exception as ex:
             success = False
             err_msg = f"Unhandled exception: {str(ex)}"
-            logger.exception("Unhandled exception during background task execution: %s", str(ex))
+            logger.exception("Unhandled exception during background task execution: %s", ex)
 
         background_task_status.update({"status": "success" if success else "failed", "err_msg": err_msg})
 
@@ -408,7 +408,7 @@ class RunEngineManager(Process):
                 success, err_msg = False, "Error occurred while opening RE Worker environment."
 
         except Exception as ex:
-            logger.exception("Failed to start_Worker: %s", str(ex))
+            logger.exception("Failed to start_Worker: %s", ex)
             success, err_msg = False, f"Failed to start_Worker {str(ex)}"
 
         self._manager_state = MState.IDLE
@@ -631,8 +631,8 @@ class RunEngineManager(Process):
             logger.debug(
                 "Report received from RE Worker:\nplan_state=%s\nsuccess=%s\n%s\n)",
                 plan_state,
-                str(success),
-                str(msg_display),
+                success,
+                msg_display,
             )
 
             if plan_state in "completed":
@@ -675,7 +675,7 @@ class RunEngineManager(Process):
         if run_list is None:
             # TODO: this would typically mean a bug (communication error). Probably more
             #       complicated processing is needed
-            logger.error(f"Failed to download plan report: {err_msg}.")
+            logger.error("Failed to download plan report: %s.", err_msg)
         else:
             self._re_run_list = run_list["run_list"]
             self._re_run_list_uid = _generate_uid()
@@ -689,14 +689,14 @@ class RunEngineManager(Process):
             if always_update_uids or (existing_plans != self._existing_plans):
                 self._existing_plans_uid = _generate_uid()
         except Exception as ex:
-            logger.warning("Failed to compare lists of existing plans: %s", str(ex))
+            logger.warning("Failed to compare lists of existing plans: %s", ex)
             self._existing_plans_uid = _generate_uid()
 
         try:
             if always_update_uids or (existing_devices != self._existing_devices):
                 self._existing_devices_uid = _generate_uid()
         except Exception as ex:
-            logger.warning("Failed to compare lists of existing devices: %s", str(ex))
+            logger.warning("Failed to compare lists of existing devices: %s", ex)
             self._existing_devices_uid = _generate_uid()
 
         # Now update the references
@@ -714,7 +714,7 @@ class RunEngineManager(Process):
             # TODO: this would typically mean a bug (communication error). Probably more
             #       complicated processing is needed
             logger.error(
-                f"Failed to download the list of existing plans and devices from the worker process: {err_msg}."
+                "Failed to download the list of existing plans and devices from the worker process: %s", err_msg
             )
         else:
             self._set_existing_plans_and_devices(
@@ -725,7 +725,7 @@ class RunEngineManager(Process):
             try:
                 self._generate_lists_of_allowed_plans_and_devices()
             except Exception as ex:
-                logger.exception("Failed to compute the list of allowed plans and devices: %s", str(ex))
+                logger.exception("Failed to compute the list of allowed plans and devices: %s", ex)
 
     async def _load_task_results_from_worker(self):
         """
@@ -736,9 +736,7 @@ class RunEngineManager(Process):
         if results is None:
             # TODO: this would typically mean a bug (communication error). Probably more
             #       complicated processing is needed
-            logger.error(
-                "Failed to download the results of completed tasks from the worker process: %s.", str(err_msg)
-            )
+            logger.error("Failed to download the results of completed tasks from the worker process: %s", err_msg)
         else:
             task_results = results["task_results"]
             for task_res in task_results:
@@ -1090,14 +1088,14 @@ class RunEngineManager(Process):
                 self._allowed_plans = allowed_plans
                 self._allowed_plans_uid = _generate_uid()
         except Exception as ex:
-            logger.error("Error occurred while comparing lists of allowed plans: %s", str(ex))
+            logger.error("Error occurred while comparing lists of allowed plans: %s", ex)
 
         try:
             if always_update_uids or (allowed_devices != self._allowed_devices):
                 self._allowed_devices = allowed_devices
                 self._allowed_devices_uid = _generate_uid()
         except Exception as ex:
-            logger.error("Error occurred while comparing lists of allowed devices: %s", str(ex))
+            logger.error("Error occurred while comparing lists of allowed devices: %s", ex)
 
     async def _load_permissions_from_disk(self):
         """
@@ -1109,7 +1107,7 @@ class RunEngineManager(Process):
             # Save loaded permissions to Redis
             await self._plan_queue.user_group_permissions_save(self._user_group_permissions)
         except Exception as ex:
-            logger.exception("Error occurred while loading user permissions from file '%s': %s", path_ug, str(ex))
+            logger.exception("Error occurred while loading user permissions from file '%s': %s", path_ug, ex)
 
     async def _load_permissions_from_redis(self):
         """
@@ -1122,7 +1120,7 @@ class RunEngineManager(Process):
             validate_user_group_permissions(ug_permissions)
             self._user_group_permissions = ug_permissions
         except Exception as ex:
-            logger.error("Validation of user group permissions loaded from Redis failed: %s", str(ex))
+            logger.error("Validation of user group permissions loaded from Redis failed: %s", ex)
             await self._load_permissions_from_disk()
 
     def _update_allowed_plans_and_devices(self, restore_plans_devices=False):
@@ -2913,14 +2911,17 @@ class RunEngineManager(Process):
 
                 await self._save_lock_info_to_redis()
                 logger.info(
-                    f"RE Manager was locked by the user {user_name!r}: environment={environment} "
-                    f"queue={queue}. Note: {note}."
+                    "RE Manager was locked by the user '%s': environment=%s " "queue=%s. Note: %s",
+                    user_name,
+                    environment,
+                    queue,
+                    note,
                 )
             else:
                 raise ValueError(f"RE Manager was locked with a different key: \n{self._lock_info.to_str()}")
 
         except Exception as ex:
-            logger.info(f"Failed to lock RE Manager: {ex}")
+            logger.info("Failed to lock RE Manager: %s", ex)
             success, msg = False, f"Error: {ex}"
 
         return {"success": success, "msg": msg, "lock_info": lock_info, "lock_info_uid": lock_info_uid}

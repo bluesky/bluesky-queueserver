@@ -792,7 +792,7 @@ class PlanQueueOperations:
                 item, _ = await self._pop_item_from_queue(uid=uid)
                 items.append(item)
             except Exception as ex:
-                logger.debug("Failed to remove item with UID '%s' from the queue: %s", uid, str(ex))
+                logger.debug("Failed to remove item with UID '%s' from the queue: %s", uid, ex)
 
         qsize = await self._get_queue_size()
         return items, qsize
@@ -1023,7 +1023,7 @@ class PlanQueueOperations:
                     await self._pop_item_from_queue(uid=uid)
                 except Exception as ex:
                     logger.error(
-                        "Failed to remove an item with uid='%s' after failure to add a batch of plans", str(ex)
+                        "Failed to remove an item with uid='%s' after failure to add a batch of plans", ex
                     )
 
             # Also do not return 'changed' items if adding the batch failed.

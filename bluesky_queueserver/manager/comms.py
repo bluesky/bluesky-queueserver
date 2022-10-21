@@ -134,8 +134,8 @@ class PipeJsonRpcReceive:
         #   would fill up and the sender process would get 'frozen' (the 'send' function
         #   would indefinitely block the event loop, e.g. the manager process would go into
         #   infinite cycle of restarts).
-        self._msg_buffer_size = 100
-        self._msg_buffer = queue.Queue(maxsize=self._msg_buffer_size)
+        self._msg_recv_buffer_size = 100
+        self._msg_recv_buffer = queue.Queue(maxsize=self._msg_recv_buffer_size)
 
         self._conn_polling_timeout = 0.1  # in sec.
 
@@ -143,8 +143,8 @@ class PipeJsonRpcReceive:
         """
         Clear the message buffer.
         """
-        while not self._msg_buffer.empty():
-            self._msg_buffer.get()
+        while not self._msg_recv_buffer.empty():
+            self._msg_recv_buffer.get()
 
     def start(self, *, clear_buffer=True):
         """
@@ -193,7 +193,7 @@ class PipeJsonRpcReceive:
             self._thread_proc.start()
 
             self._thread_conn = threading.Thread(
-                target=self._receive_conn_thread, name=self._thread_name, daemon=True
+                target=self._receive_conn_thread, name=self._thread_name + " R", daemon=True
             )
             self._thread_conn.start()
 
@@ -203,13 +203,15 @@ class PipeJsonRpcReceive:
             if self._conn.poll(self._conn_polling_timeout):
                 try:
                     msg = self._conn.recv()
-                    self._msg_buffer.put(msg, block=False)
+                    self._msg_recv_buffer.put(msg, block=False)
                 except queue.Full:
                     # There is a major malfunction with the worker if you are here ...
                     logger.warning(
                         "The buffer is full. Message is discarded: %s. Report the bug to the development team",
                         msg,
                     )
+                except EOFError:
+                    pass
                 except Exception as ex:
                     logger.exception(
                         "Exception occurred while waiting for a message or receiving a message: %s", ex
@@ -225,7 +227,7 @@ class PipeJsonRpcReceive:
         while True:
             msg = None
             try:
-                msg = self._msg_buffer.get(timeout=self._conn_polling_timeout)
+                msg = self._msg_recv_buffer.get(timeout=self._conn_polling_timeout)
                 self._handle_msg(msg)
             except queue.Empty:
                 pass
@@ -305,7 +307,7 @@ class PipeJsonRpcSendAsync:
 
         self._thread_name = name
 
-        self._fut_comm = None  # Future for waiting for messages from watchdog
+        self._fut_recv = None  # Future for waiting for incoming messages
         # Lock that prevents sending of the next message before response
         #   to the previous message is received.
         self._lock_comm = asyncio.Lock()
@@ -314,6 +316,9 @@ class PipeJsonRpcSendAsync:
         # Polling timeout for the pipe. The data will be read from the pipe instantly once it is available.
         #   The timeout determines how long it would take to stop the thread when needed.
         self._conn_polling_timeout = 0.1
+
+        # Buffer for moving outgoing messages to the background thread which sends the messages
+        self._msg_send_buffer = queue.Queue(maxsize=1)
 
         self._thread_running = False  # True - thread is running
 
@@ -340,10 +345,15 @@ class PipeJsonRpcSendAsync:
         # Start 'receive' thread
         if not self._thread_running:
             self._thread_running = True
-            self._pipe_receive_thread = threading.Thread(
-                target=self._pipe_receive, name=self._thread_name, daemon=True
+            self._pipe_recv_thread = threading.Thread(
+                target=self._pipe_receive, name=self._thread_name + " R", daemon=True
             )
-            self._pipe_receive_thread.start()
+            self._pipe_send_thread = threading.Thread(
+                target=self._pipe_send, name=self._thread_name + " S", daemon=True
+            )
+
+            self._pipe_recv_thread.start()
+            self._pipe_send_thread.start()
 
     async def send_msg(self, method, params=None, *, notification=False, timeout=None):
         """
@@ -360,9 +370,11 @@ class PipeJsonRpcSendAsync:
             True - message is notification. The function returns immediately without
             waiting of the response, which is never generated for notification.
         timeout: float
-            Timeout in seconds. If no response is received at expiration of timeout,
-            `CommTimeoutError` is raised. If the response will be received later, it
-            will be ignored.
+            Timeout in seconds. The timeout is applied separately during sending and
+            receiving message. If timeout is exceeded during sending message or receiving
+            a response, `CommTimeoutError` is raised. The message is unlikely to be sent
+            if send timeout expires, and the response is ingored if it is received after
+            receive timeout expires.
 
         Raises
         ------
@@ -390,16 +402,24 @@ class PipeJsonRpcSendAsync:
         async with self._lock_comm:
             msg = format_jsonrpc_msg(method, params, notification=notification)
             try:
-                msg_json = json.dumps(msg)
-                self._conn.send(msg_json)
+
+                # 'fut_send' sent along with the message. If the thread is still sending the previous
+                #   message, the future is not going to be set until the current message is sent.
+                fut_send = self._loop.create_future()
+                if not notification:
+                    # 'self._fut_recv' is set only when the response with the specific message UID is received.
+                    self._expected_msg_id = msg["id"]
+                    self._fut_recv = self._loop.create_future()
+
+                self._msg_send_buffer.put((msg, fut_send), block=False)  # Buffer is expected to be empty
+                await asyncio.wait_for(fut_send, timeout=timeout)
+                fut_send.result()
 
                 # No response is expected if this is a notification
                 if not notification:
-                    self._expected_msg_id = msg["id"]
-                    self._fut_comm = self._loop.create_future()
                     # Waiting for the future may raise 'asyncio.TimeoutError'
-                    await asyncio.wait_for(self._fut_comm, timeout=timeout)
-                    response = self._fut_comm.result()
+                    await asyncio.wait_for(self._fut_recv, timeout=timeout)
+                    response = self._fut_recv.result()
 
                     if "result" in response:
                         return response["result"]
@@ -427,8 +447,14 @@ class PipeJsonRpcSendAsync:
 
             except asyncio.TimeoutError:
                 raise CommTimeoutError(f"Timeout while waiting for response to message: \n{ppfl(msg)}")
+            except queue.Full:
+                raise CommTimeoutError(f"The outgoing message buffer is full: \n{ppfl(msg)}")
             finally:
-                self._fut_comm = None
+                # Clear the 'send' buffer
+                while not self._msg_send_buffer.empty():
+                    self._msg_send_buffer.get()
+
+                self._fut_recv = None
                 self._expected_msg_id = None
 
     async def _response_received(self, response):
@@ -448,16 +474,22 @@ class PipeJsonRpcSendAsync:
                     )
                 else:
                     # Accept the message. Otherwise wait for timeout
-                    self._fut_comm.set_result(response)
+                    self._fut_recv.set_result(response)
                     self._expected_msg_id = None
             else:
                 # Missing ID: ignore the message
                 logger.error("Received response with missing message ID: %s", ppfl(response))
         else:
-            logger.error("Unsolicited message received: %s. Message is ignored", ppfl(response))
+            logger.error("Unexpected message received: %s. The message is ignored", ppfl(response))
 
     def _conn_received(self, response):
         asyncio.create_task(self._response_received(response))
+
+    async def _response_sent(self, response, fut_send):
+        fut_send.set_result(True)
+
+    def _conn_sent(self, response, fut_send):
+        asyncio.create_task(self._response_sent(response, fut_send))
 
     def _pipe_receive(self):
         while True:
@@ -468,9 +500,25 @@ class PipeJsonRpcSendAsync:
                     # logger.debug("Message Watchdog->Manager received: '%s'", ppfl(msg))
                     # Messages should be handled in the event loop
                     self._loop.call_soon_threadsafe(self._conn_received, msg)
+                except EOFError:
+                    pass
                 except Exception as ex:
                     logger.exception("Exception occurred while waiting for packet: %s", ex)
-                    break
+            if not self._thread_running:  # Exit thread
+                break
+
+    def _pipe_send(self):
+        while True:
+            msg = None
+            try:
+                msg, fut_send = self._msg_send_buffer.get(timeout=self._conn_polling_timeout)
+                msg_json = json.dumps(msg)
+                self._conn.send(msg_json)
+                self._loop.call_soon_threadsafe(self._conn_sent, msg, fut_send)
+            except queue.Empty:
+                pass
+            except Exception as ex:
+                logger.exception("Exception occurred while sending the message %s: %s", ppfl(msg), ex)
             if not self._thread_running:  # Exit thread
                 break
 
@@ -604,21 +652,22 @@ class ZMQCommSendThreads:
         server_public_key=None,
     ):
 
+        zmq_server_address = zmq_server_address or default_zmq_control_address
+
+        # ZeroMQ communication
+        self._ctx = zmq.Context()
+        self._zmq_socket = None
+        self._zmq_server_address = zmq_server_address
+
         if server_public_key is not None:
             validate_zmq_key(server_public_key)
 
-        zmq_server_address = zmq_server_address or default_zmq_control_address
         self._server_public_key = server_public_key
 
         self._timeout_receive = timeout_recv  # Timeout for 'recv' operation (ms)
         self._timeout_receive_last = None  # Timeout used for last acquisition (ms)
         self._timeout_send = timeout_send  # # Timeout for 'send' operation (ms)
         self._raise_exceptions = raise_exceptions
-
-        # ZeroMQ communication
-        self._ctx = zmq.Context()
-        self._zmq_socket = None
-        self._zmq_server_address = zmq_server_address
 
         self._zmq_socket_open()
         self._lock_zmq = threading.Lock()
@@ -897,7 +946,8 @@ class ZMQCommSendThreads:
         Close ZMQ socket. Call to close socket if the object is no longer needed, but may
         not be destroyed for some time.
         """
-        self._zmq_socket.close()
+        if self._zmq_socket is not None:
+            self._zmq_socket.close()
         self._thread_running = False
 
 

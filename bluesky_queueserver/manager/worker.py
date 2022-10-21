@@ -1006,6 +1006,7 @@ class RunEngineWorker(Process):
         # Reuse item UID as task UID
         task_uid = func_info.get("item_uid", None)
 
+        logger.info("======== Starting task ...")  ##
         status, err_msg, task_uid, payload = self._start_task(
             name="Execute function",
             target=self._execute_function_in_environment,
@@ -1013,7 +1014,9 @@ class RunEngineWorker(Process):
             run_in_background=run_in_background,
             task_uid=task_uid,
         )
+        logger.info("======== Starting task finished")  ##
         msg_out = {"status": status, "err_msg": err_msg, "task_uid": task_uid, "payload": payload}
+        logger.info(f"========  msg_out={msg_out}")  ##
         return msg_out
 
     # ------------------------------------------------------------

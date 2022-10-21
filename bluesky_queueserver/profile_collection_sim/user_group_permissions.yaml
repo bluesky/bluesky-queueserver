@@ -42,5 +42,6 @@ user_groups:
       - ":elements$"
       - "function_sleep"
       - "clear_buffer"
+      - ":^unit_test.*$"
     forbidden_functions:
       - ":^_"  # All functions with names starting with '_'

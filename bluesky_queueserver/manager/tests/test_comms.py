@@ -298,7 +298,7 @@ def test_PipeJsonRpcReceive_5(clear_buffer):
     # Non-existing method ('Method not found' error)
     request = format_jsonrpc_msg("method3")
 
-    n_buf = pc._msg_buffer_size
+    n_buf = pc._msg_recv_buffer_size
 
     conn1.send(json.dumps(request))
     ttime.sleep(1)
@@ -464,7 +464,7 @@ def test_PipeJsonRpcSendAsync_1():
 
         pc = PipeJsonRpcSendAsync(conn=conn1, name=new_name)
         pc.start()
-        assert count_threads_with_name(new_name) == 1, "One thread is expected to exist"
+        assert count_threads_with_name(new_name) == 2, "One thread is expected to exist"
 
         pc.start()  # Expected to do nothing
 
@@ -473,7 +473,7 @@ def test_PipeJsonRpcSendAsync_1():
         assert count_threads_with_name(new_name) == 0, "No threads are expected to exist"
 
         pc.start()  # Restart
-        assert count_threads_with_name(new_name) == 1, "One thread is expected to exist"
+        assert count_threads_with_name(new_name) == 2, "One thread is expected to exist"
         pc.stop()
 
     asyncio.run(object_start_stop())
@@ -709,7 +709,7 @@ def test_PipeJsonRpcSendAsync_6(caplog):
     asyncio.run(send_messages())
     pc.stop()
 
-    txt = "Unsolicited message received"
+    txt = "Unexpected message received"
     assert txt in caplog.text
     assert caplog.text.count(txt) == 2, caplog.text
 

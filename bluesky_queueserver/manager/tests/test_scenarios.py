@@ -1,6 +1,7 @@
 import pytest
 import time as ttime
 import pprint
+import random
 
 import bluesky_queueserver
 
@@ -454,3 +455,91 @@ def test_blocking_plan_01(re_manager):  # noqa: F811
     resp10, _ = zmq_single_request("environment_destroy")
     assert resp10["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_closed)
+
+
+def poll_for_task_completion(task_uid, *, timeout):
+    # Simplified polling
+    t_start = ttime.time()
+    while True:
+        resp, _ = zmq_single_request("task_status", params={"task_uid": task_uid})
+        assert resp["success"] is True
+        if resp["status"] == "completed":
+            break
+        assert ttime.time() - t_start < timeout
+        ttime.sleep(0.5)
+
+
+script_upload_download_data = """
+_data = None
+
+def unit_test_upload_data(data):
+    global _data
+    _data = data
+    return "Data is received"
+
+
+def unit_test_download_data():
+    global _data
+    # ttime.sleep(0.1)
+    return _data
+"""
+
+
+def test_large_datasets_01(re_manager):  # noqa: F811
+    """
+    Submit large array as a plan parameter.
+    """
+    n_elements, timeout_ms = 1000000, 10000
+    vlist = [random.random() for _ in range(n_elements)]
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp2, _ = zmq_single_request("script_upload", params={"script": script_upload_download_data})
+    assert resp2["success"] is True
+    assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+    func_item = {"name": "unit_test_upload_data", "item_type": "function", "kwargs": {"data": vlist}}
+    params = {"item": func_item, "run_in_background": True, "user": _user, "user_group": _test_user_group}
+    resp3, _ = zmq_single_request("function_execute", params=params, timeout=timeout_ms)
+    assert resp3["success"] is True
+    task_uid = resp3["task_uid"]
+
+    poll_for_task_completion(task_uid, timeout=10)
+
+    resp4, _ = zmq_single_request("task_result", params={"task_uid": task_uid})
+    assert resp4["success"] is True
+    assert resp4["status"] == "completed"
+    assert resp4["result"]["return_value"] == "Data is received"
+
+    func_item = {"name": "unit_test_download_data", "item_type": "function"}
+    params = {"item": func_item, "run_in_background": True, "user": _user, "user_group": _test_user_group}
+    resp5, _ = zmq_single_request("function_execute", params=params, timeout=timeout_ms)
+    assert resp5["success"] is True, pprint.pformat(resp5)
+    task_uid = resp5["task_uid"]
+
+    poll_for_task_completion(task_uid, timeout=30)
+
+    resp6, _ = zmq_single_request("task_result", params={"task_uid": task_uid})
+    assert resp6["success"] is True
+    assert resp6["status"] == "completed"
+    assert resp6["result"]["return_value"] == vlist
+
+    resp10, _ = zmq_single_request("environment_destroy")
+    assert resp10["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_closed)
+
+
+def test_large_datasets_02(re_manager):  # noqa: F811
+    """
+    Submit large array as a function parameter.
+    """
+    pass
+
+
+def test_large_datasets_03(re_manager):  # noqa: F811
+    """
+    Submit large number of plans to the queue.
+    """
+    pass

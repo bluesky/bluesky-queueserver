@@ -218,6 +218,9 @@ class RunEngineManager(Process):
         #   Numbering starts from 1.
         self._number_of_restarts = number_of_restarts
 
+        self._comm_to_worker_timeout = 0.5  # Timeout for regular requests, s
+        self._comm_to_worker_timeout_long = 10  # Timeout for potentially long requests, s
+
         self._lock_info = LockInfo()  # Lock/unlock environment and/or queue
         self._lock_info.set_emergency_lock_key(config["lock_key_emergency"])
 
@@ -1204,7 +1207,8 @@ class RunEngineManager(Process):
 
     async def _worker_request_task_results(self):
         try:
-            results = await self._comm_to_worker.send_msg("request_task_results")
+            tt = self._comm_to_worker_timeout_long
+            results = await self._comm_to_worker.send_msg("request_task_results", timeout=tt)
             err_msg = ""
             if results is None:
                 err_msg = "Failed to obtain the results of completed tasks from the worker"
@@ -1232,7 +1236,10 @@ class RunEngineManager(Process):
 
     async def _worker_command_run_plan(self, plan_info):
         try:
-            response = await self._comm_to_worker.send_msg("command_run_plan", {"plan_info": plan_info})
+            tt = self._comm_to_worker_timeout_long
+            response = await self._comm_to_worker.send_msg(
+                "command_run_plan", {"plan_info": plan_info}, timeout=tt
+            )
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
         except CommTimeoutError:
@@ -1283,6 +1290,7 @@ class RunEngineManager(Process):
 
     async def _worker_command_load_script(self, *, script, update_lists, update_re, run_in_background):
         try:
+            tt = self._comm_to_worker_timeout_long
             response = await self._comm_to_worker.send_msg(
                 "command_load_script",
                 params={
@@ -1291,6 +1299,7 @@ class RunEngineManager(Process):
                     "update_re": update_re,
                     "run_in_background": run_in_background,
                 },
+                timeout=tt,
             )
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
@@ -1304,9 +1313,11 @@ class RunEngineManager(Process):
 
     async def _worker_command_execute_function(self, *, func_info, run_in_background):
         try:
+            tt = self._comm_to_worker_timeout_long
             response = await self._comm_to_worker.send_msg(
                 "command_execute_function",
                 params={"func_info": func_info, "run_in_background": run_in_background},
+                timeout=tt,
             )
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
@@ -3152,8 +3163,15 @@ class RunEngineManager(Process):
 
         self._loop = asyncio.get_running_loop()
 
-        self._comm_to_watchdog = PipeJsonRpcSendAsync(conn=self._watchdog_conn, name="RE Manager-Watchdog Comm")
-        self._comm_to_worker = PipeJsonRpcSendAsync(conn=self._worker_conn, name="RE Manager-Worker Comm")
+        self._comm_to_watchdog = PipeJsonRpcSendAsync(
+            conn=self._watchdog_conn,
+            name="RE Manager-Watchdog Comm",
+        )
+        self._comm_to_worker = PipeJsonRpcSendAsync(
+            conn=self._worker_conn,
+            name="RE Manager-Worker Comm",
+            timeout=self._comm_to_worker_timeout,
+        )
         self._comm_to_watchdog.start()
         self._comm_to_worker.start()
 

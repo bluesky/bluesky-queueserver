@@ -2,7 +2,6 @@ import ast
 import copy
 import time as ttime
 from datetime import datetime
-import pprint
 import argparse
 import enum
 import os
@@ -17,7 +16,7 @@ from .comms import (
     generate_zmq_keys,
     default_zmq_control_address,
 )
-
+from .logging_setup import PPrintForLogging as ppfl
 from .plan_queue_ops import PlanQueueOperations
 
 import logging
@@ -1123,7 +1122,7 @@ def prepare_qserver_output(msg):
             d = msg[dict_name]
             for k in d.keys():
                 d[k] = "{...}"
-    return pprint.pformat(msg)
+    return ppfl(msg)
 
 
 def qserver():
@@ -1247,10 +1246,10 @@ def qserver():
             ttime.sleep(1)
 
     except CommandParameterError as ex:
-        logger.error("Invalid command or parameters: %s.", str(ex))
+        logger.error("Invalid command or parameters: %s.", ex)
         exit_code = QServerExitCodes.PARAMETER_ERROR
     except Exception as ex:
-        logger.exception("Exception occurred: %s.", str(ex))
+        logger.exception("Exception occurred: %s.", ex)
         exit_code = QServerExitCodes.EXCEPTION_OCCURRED
     except KeyboardInterrupt:
         print("\nThe program was manually stopped.")
@@ -1350,7 +1349,7 @@ def qserver_clear_lock():
             await pq.start()
             lock_info = await pq.lock_info_retrieve()
             if lock_info is not None:
-                print(f"Detected lock info:\n{pprint.pformat(lock_info)}")
+                print(f"Detected lock info:\n{ppfl(lock_info)}")
                 print("Clearing the lock ...")
                 await pq.lock_info_clear()
                 print("RE Manager lock was cleared. Restart RE Manager service to unlock the manager!")
@@ -1358,7 +1357,7 @@ def qserver_clear_lock():
                 print("No lock was detected.")
         except Exception as ex:
             exit_code = 1
-            logger.error(f"Failed to clear RE Manager lock: {ex}")
+            logger.error("Failed to clear RE Manager lock: %s", ex)
 
     asyncio.run(remove_lock())
 

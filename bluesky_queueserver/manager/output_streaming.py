@@ -153,7 +153,7 @@ class PublishConsoleOutput:
                 logger.error(
                     "Failed to create 0MQ socket at %s. Console output will not be published. Exception: %s",
                     self._zmq_publish_addr,
-                    str(ex),
+                    ex,
                 )
 
         if self._socket and self._zmq_publish_on:
@@ -262,8 +262,8 @@ class ReceiveConsoleOutput:
 
         zmq_subscribe_addr = zmq_subscribe_addr or default_zmq_info_address
 
-        logger.info(f"Subscribing to console output stream from 0MQ address: {zmq_subscribe_addr} ...")
-        logger.info(f"Subscribing to 0MQ topic: '{zmq_topic}' ...")
+        logger.info("Subscribing to console output stream from 0MQ address: %s ...", zmq_subscribe_addr)
+        logger.info("Subscribing to 0MQ topic: '%s' ...", zmq_topic)
         self._zmq_subscribe_addr = zmq_subscribe_addr
         self._zmq_topic = zmq_topic
 
@@ -441,8 +441,8 @@ class ReceiveConsoleOutputAsync:
         self._exit = False
         self._is_running = False
 
-        logger.info(f"Subscribing to console output stream from 0MQ address: {zmq_subscribe_addr} ...")
-        logger.info(f"Subscribing to 0MQ topic: '{zmq_topic}' ...")
+        logger.info("Subscribing to console output stream from 0MQ address: %s ...", zmq_subscribe_addr)
+        logger.info("Subscribing to 0MQ topic: '%s' ...", zmq_topic)
         self._zmq_subscribe_addr = zmq_subscribe_addr
         self._zmq_topic = zmq_topic
 
@@ -542,7 +542,9 @@ class ReceiveConsoleOutputAsync:
         except TimeoutError:
             pass
         except Exception as ex:
-            logger.exception(f"Exception occurred while while waiting for RE Manager console output message: {ex}")
+            logger.exception(
+                "Exception occurred while while waiting for RE Manager console output message: %s", ex
+            )
 
         if not self._exit:
             asyncio.ensure_future(self._recv_next_message())

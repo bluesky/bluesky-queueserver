@@ -7,7 +7,6 @@ import pkg_resources
 import yaml
 import re
 import sys
-import pprint
 import jsonschema
 import copy
 import typing
@@ -22,6 +21,8 @@ import traceback
 
 import logging
 import bluesky_queueserver
+
+from .logging_setup import PPrintForLogging as ppfl
 
 logger = logging.getLogger(__name__)
 qserver_version = bluesky_queueserver.__version__
@@ -180,7 +181,7 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
         for file in file_list:
 
             try:
-                logger.info(f"Loading startup file {file!r} ...")
+                logger.info("Loading startup file '%s' ...", file)
 
                 # Set '__file__' and '__name__' variables
                 patch = f"__file__ = '{file}'; __name__ = 'startup_script'\n"
@@ -446,7 +447,7 @@ def load_script_into_existing_nspace(
 
     root_path_exists = script_root_path and os.path.isdir(script_root_path)
     if enable_local_imports and not root_path_exists:
-        logger.error(f"The path {script_root_path!r} does not exist. Local imports will not work.")
+        logger.error("The path '%s' does not exist. Local imports will not work.", script_root_path)
 
     use_local_imports = enable_local_imports and root_path_exists
 
@@ -588,7 +589,7 @@ def _get_nspace_object(object_name, *, objects_in_nspace):
                 device = getattr(device, c, None)
                 if object_found is None:
                     object_found = False
-                    logger.error("Device '%s' does not have attribute (subdevice) '%s'", str(object_name), str(c))
+                    logger.error("Device '%s' does not have attribute (subdevice) '%s'", object_name, c)
                 object_found = object_found if device else False
 
             else:
@@ -796,7 +797,7 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
 
     if not success_meta:
         success = False
-        err_msg = f"Plan metadata must be a dictionary or a list of dictionaries: '{pprint.pformat(plan_meta)}'"
+        err_msg = f"Plan metadata must be a dictionary or a list of dictionaries: '{ppfl(plan_meta)}'"
 
     if not success:
         raise RuntimeError(f"Error while parsing the plan: {err_msg}")
@@ -1705,24 +1706,26 @@ def _check_ranges(kwargs_in, param_list):
     """
 
     def process_argument(v, v_min, v_max):
-        # Recursively process lists (iterables) and dictionaries.
-        # Raises the exception if any found number is out of range.
-        if isinstance(v, numbers.Number):
-            out_of_range = False
-            if (v_min is not None) and (v < v_min):
-                out_of_range = True
-            if (v_max is not None) and (v > v_max):
-                out_of_range = True
-            if out_of_range:
-                s_v_min = f"{v_min}" if v_min is not None else "-inf"
-                s_v_max = f"{v_max}" if v_max is not None else "inf"
-                raise ValueError(f"Value {v} is out of range [{s_v_min}, {s_v_max}]")
-        elif isinstance(v, dict):
-            for key, value in v.items():
-                process_argument(value, v_min, v_max)
-        elif isinstance(v, Iterable) and not isinstance(v, str):
-            for item in v:
-                process_argument(item, v_min, v_max)
+
+        queue = [v]
+
+        while queue:
+            v_cur = queue.pop(0)
+
+            if isinstance(v_cur, numbers.Number):
+                out_of_range = False
+                if (v_min is not None) and (v_cur < v_min):
+                    out_of_range = True
+                if (v_max is not None) and (v_cur > v_max):
+                    out_of_range = True
+                if out_of_range:
+                    s_v_min = f"{v_min}" if v_min is not None else "-inf"
+                    s_v_max = f"{v_max}" if v_max is not None else "inf"
+                    raise ValueError(f"Value {v_cur} is out of range [{s_v_min}, {s_v_max}]")
+            elif isinstance(v_cur, dict):
+                queue.extend(v_cur.values())
+            elif isinstance(v_cur, Iterable) and not isinstance(v_cur, str):
+                queue.extend(v_cur)
 
     match, msg = True, ""
     for p in param_list:
@@ -2153,7 +2156,11 @@ def _validate_plan_parameters(param_list, call_args, call_kwargs):
         # The next step: match types of the output value of the pydantic model with input
         #   types. 'Pydantic' is converting types whenever possible, but we need precise
         #   type checking with a fiew exceptions
-        success, msg = _compare_in_out(bound_args.arguments, m.dict())
+        # NOTE: in the next statement we are using 'm.__dict__' instead of officially
+        #   recommended 'm.dict()', because 'm.dict()' was causing performance problems
+        #   when validating large batches of plans. Based on testing, 'm.__dict__' seems
+        #   to work fine in this application.
+        success, msg = _compare_in_out(bound_args.arguments, m.__dict__)
         if not success:
             raise ValueError(f"Error in argument types: {msg}")
 
@@ -2310,7 +2317,7 @@ def validate_plan(plan, *, allowed_plans, allowed_devices):
 
     except Exception as ex:
         success = False
-        msg = f"Plan validation failed: {str(ex)}\nPlan: {pprint.pformat(plan)}"
+        msg = f"Plan validation failed: {str(ex)}\nPlan: {ppfl(plan)}"
 
     return success, msg
 
@@ -2852,7 +2859,7 @@ def _prepare_devices(devices, *, max_depth=0, ignore_all_subdevices_if_one_fails
                 except Exception as ex:
                     ignore_subdevices = ignore_all_subdevices_if_one_fails
                     logger.warning(
-                        f"Device '%s': component {comp_name!r} can not be processed: %s", device_name, ex
+                        "Device '%s': component '%s' can not be processed: %s", device_name, comp_name, ex
                     )
                 if ignore_subdevices:
                     components = {}  # Ignore all components of the subdevice
@@ -3142,7 +3149,7 @@ def load_existing_plans_and_devices(path_to_file=None):
         try:
             existing_plans_and_devices = yaml.load(stream, Loader=yaml.FullLoader)
         except Exception as ex:
-            logger.error("%s File '%s' has invalid YAML: %s", msg, path_to_file, str(ex))
+            logger.error("%s File '%s' has invalid YAML: %s", msg, path_to_file, ex)
             existing_plans_and_devices = {}
 
     if not isinstance(existing_plans_and_devices, dict):
@@ -3293,7 +3300,7 @@ def update_existing_plans_and_devices(
                 )
             except Exception as ex:
                 logger.error(
-                    "Failed to save lists of existing plans and device to file '%s': %s", path_to_file, str(ex)
+                    "Failed to save lists of existing plans and device to file '%s': %s", path_to_file, ex
                 )
 
     return changes_exist
@@ -3705,7 +3712,7 @@ def load_allowed_plans_and_devices(
             allowed_plans[group] = selected_plans
 
     except Exception as ex:
-        logger.exception("Error occurred while generating the list of allowed plans and devices: %s", str(ex))
+        logger.exception("Error occurred while generating the list of allowed plans and devices: %s", ex)
 
         # The 'default' lists in case error occurred while generating lists
         allowed_plans["root"] = existing_plans

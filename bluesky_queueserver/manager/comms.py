@@ -1,5 +1,4 @@
 import threading
-import pprint
 import json
 import asyncio
 import uuid
@@ -8,6 +7,7 @@ import zmq
 import zmq.asyncio
 from jsonrpc import JSONRPCResponseManager
 from jsonrpc.dispatcher import Dispatcher
+from .logging_setup import PPrintForLogging as ppfl
 
 import logging
 
@@ -134,8 +134,8 @@ class PipeJsonRpcReceive:
         #   would fill up and the sender process would get 'frozen' (the 'send' function
         #   would indefinitely block the event loop, e.g. the manager process would go into
         #   infinite cycle of restarts).
-        self._msg_buffer_size = 100
-        self._msg_buffer = queue.Queue(maxsize=self._msg_buffer_size)
+        self._msg_recv_buffer_size = 100
+        self._msg_recv_buffer = queue.Queue(maxsize=self._msg_recv_buffer_size)
 
         self._conn_polling_timeout = 0.1  # in sec.
 
@@ -143,8 +143,8 @@ class PipeJsonRpcReceive:
         """
         Clear the message buffer.
         """
-        while not self._msg_buffer.empty():
-            self._msg_buffer.get()
+        while not self._msg_recv_buffer.empty():
+            self._msg_recv_buffer.get()
 
     def start(self, *, clear_buffer=True):
         """
@@ -193,7 +193,7 @@ class PipeJsonRpcReceive:
             self._thread_proc.start()
 
             self._thread_conn = threading.Thread(
-                target=self._receive_conn_thread, name=self._thread_name, daemon=True
+                target=self._receive_conn_thread, name=self._thread_name + " R", daemon=True
             )
             self._thread_conn.start()
 
@@ -203,16 +203,18 @@ class PipeJsonRpcReceive:
             if self._conn.poll(self._conn_polling_timeout):
                 try:
                     msg = self._conn.recv()
-                    self._msg_buffer.put(msg, block=False)
+                    self._msg_recv_buffer.put(msg, block=False)
                 except queue.Full:
                     # There is a major malfunction with the worker if you are here ...
                     logger.warning(
                         "The buffer is full. Message is discarded: %s. Report the bug to the development team",
-                        str(msg),
+                        msg,
                     )
+                except EOFError:
+                    pass
                 except Exception as ex:
                     logger.exception(
-                        "Exception occurred while waiting for a message or receiving a message: %s", str(ex)
+                        "Exception occurred while waiting for a message or receiving a message: %s", ex
                     )
                     break
             if not self._thread_running:  # Exit thread
@@ -225,12 +227,12 @@ class PipeJsonRpcReceive:
         while True:
             msg = None
             try:
-                msg = self._msg_buffer.get(timeout=self._conn_polling_timeout)
+                msg = self._msg_recv_buffer.get(timeout=self._conn_polling_timeout)
                 self._handle_msg(msg)
             except queue.Empty:
                 pass
             except Exception as ex:
-                logger.exception("Exception occurred while processing the message %s: %s", str(msg), str(ex))
+                logger.exception("Exception occurred while processing the message %s: %s", msg, ex)
             if not self._thread_running:  # Exit thread
                 break
 
@@ -240,7 +242,7 @@ class PipeJsonRpcReceive:
         #     msg_json = json.loads(msg)
         #     We don't want to print 'heartbeat' messages
         #     if not isinstance(msg_json, dict) or (msg_json["method"] != "heartbeat"):
-        #         logger.debug("Command received RE Manager->Watchdog: %s", pprint.pformat(msg_json))
+        #         logger.debug("Command received RE Manager->Watchdog: %s", ppfl(msg_json))
 
         response = JSONRPCResponseManager.handle(msg, self._dispatcher)
         if response:
@@ -305,7 +307,7 @@ class PipeJsonRpcSendAsync:
 
         self._thread_name = name
 
-        self._fut_comm = None  # Future for waiting for messages from watchdog
+        self._fut_recv = None  # Future for waiting for incoming messages
         # Lock that prevents sending of the next message before response
         #   to the previous message is received.
         self._lock_comm = asyncio.Lock()
@@ -314,6 +316,9 @@ class PipeJsonRpcSendAsync:
         # Polling timeout for the pipe. The data will be read from the pipe instantly once it is available.
         #   The timeout determines how long it would take to stop the thread when needed.
         self._conn_polling_timeout = 0.1
+
+        # Buffer for moving outgoing messages to the background thread which sends the messages
+        self._msg_send_buffer = queue.Queue(maxsize=1)
 
         self._thread_running = False  # True - thread is running
 
@@ -340,10 +345,15 @@ class PipeJsonRpcSendAsync:
         # Start 'receive' thread
         if not self._thread_running:
             self._thread_running = True
-            self._pipe_receive_thread = threading.Thread(
-                target=self._pipe_receive, name=self._thread_name, daemon=True
+            self._pipe_recv_thread = threading.Thread(
+                target=self._pipe_receive, name=self._thread_name + " R", daemon=True
             )
-            self._pipe_receive_thread.start()
+            self._pipe_send_thread = threading.Thread(
+                target=self._pipe_send, name=self._thread_name + " S", daemon=True
+            )
+
+            self._pipe_recv_thread.start()
+            self._pipe_send_thread.start()
 
     async def send_msg(self, method, params=None, *, notification=False, timeout=None):
         """
@@ -360,9 +370,11 @@ class PipeJsonRpcSendAsync:
             True - message is notification. The function returns immediately without
             waiting of the response, which is never generated for notification.
         timeout: float
-            Timeout in seconds. If no response is received at expiration of timeout,
-            `CommTimeoutError` is raised. If the response will be received later, it
-            will be ignored.
+            Timeout in seconds. The timeout is applied separately during sending and
+            receiving message. If timeout is exceeded during sending message or receiving
+            a response, `CommTimeoutError` is raised. The message is unlikely to be sent
+            if send timeout expires, and the response is ingored if it is received after
+            receive timeout expires.
 
         Raises
         ------
@@ -389,17 +401,26 @@ class PipeJsonRpcSendAsync:
 
         async with self._lock_comm:
             msg = format_jsonrpc_msg(method, params, notification=notification)
+
             try:
-                msg_json = json.dumps(msg)
-                self._conn.send(msg_json)
+
+                # 'fut_send' sent along with the message. If the thread is still sending the previous
+                #   message, the future is not going to be set until the current message is sent.
+                fut_send = self._loop.create_future()
+                if not notification:
+                    # 'self._fut_recv' is set only when the response with the specific message UID is received.
+                    self._expected_msg_id = msg["id"]
+                    self._fut_recv = self._loop.create_future()
+
+                self._msg_send_buffer.put((msg, fut_send), block=False)  # Buffer is expected to be empty
+                await asyncio.wait_for(fut_send, timeout=timeout)
+                fut_send.result()
 
                 # No response is expected if this is a notification
                 if not notification:
-                    self._expected_msg_id = msg["id"]
-                    self._fut_comm = self._loop.create_future()
                     # Waiting for the future may raise 'asyncio.TimeoutError'
-                    await asyncio.wait_for(self._fut_comm, timeout=timeout)
-                    response = self._fut_comm.result()
+                    await asyncio.wait_for(self._fut_recv, timeout=timeout)
+                    response = self._fut_recv.result()
 
                     if "result" in response:
                         return response["result"]
@@ -418,8 +439,7 @@ class PipeJsonRpcSendAsync:
                         raise CommJsonRpcError(err_msg, error_code=err_code, error_type=err_type)
                     else:
                         err_msg = (
-                            f"Message {pprint.pformat(msg)}\n"
-                            f"resulted in response with unknown format: {pprint.pformat(response)}"
+                            f"Message {ppfl(msg)}\n" f"resulted in response with unknown format: {ppfl(response)}"
                         )
                         raise RuntimeError(err_msg)
                 else:
@@ -427,9 +447,15 @@ class PipeJsonRpcSendAsync:
                 return response
 
             except asyncio.TimeoutError:
-                raise CommTimeoutError(f"Timeout while waiting for response to message: \n{pprint.pformat(msg)}")
+                raise CommTimeoutError(f"Timeout while waiting for response to message: \n{ppfl(msg)}")
+            except queue.Full:
+                raise CommTimeoutError(f"The outgoing message buffer is full: \n{ppfl(msg)}")
             finally:
-                self._fut_comm = None
+                # Clear the 'send' buffer
+                while not self._msg_send_buffer.empty():
+                    self._msg_send_buffer.get()
+
+                self._fut_recv = None
                 self._expected_msg_id = None
 
     async def _response_received(self, response):
@@ -445,23 +471,27 @@ class PipeJsonRpcSendAsync:
                         "Received response with incorrect message ID: %s. Expected %s.\nMessage: %s",
                         response["id"],
                         self._expected_msg_id,
-                        pprint.pformat(response),
+                        ppfl(response),
                     )
                 else:
                     # Accept the message. Otherwise wait for timeout
-                    self._fut_comm.set_result(response)
+                    self._fut_recv.set_result(response)
                     self._expected_msg_id = None
             else:
                 # Missing ID: ignore the message
-                logger.error("Received response with missing message ID: %s", pprint.pformat(response))
+                logger.error("Received response with missing message ID: %s", ppfl(response))
         else:
-            logger.error(
-                "Unsolicited message received: %s. Message is ignored",
-                pprint.pformat(response),
-            )
+            logger.error("Unexpected message received: %s. The message is ignored", ppfl(response))
 
     def _conn_received(self, response):
         asyncio.create_task(self._response_received(response))
+
+    async def _response_sent(self, response, fut_send):
+        if not fut_send.done():
+            fut_send.set_result(True)  # The result value is not used
+
+    def _conn_sent(self, response, fut_send):
+        asyncio.create_task(self._response_sent(response, fut_send))
 
     def _pipe_receive(self):
         while True:
@@ -469,12 +499,28 @@ class PipeJsonRpcSendAsync:
                 try:
                     msg_json = self._conn.recv()
                     msg = json.loads(msg_json)
-                    # logger.debug("Message Watchdog->Manager received: '%s'", pprint.pformat(msg))
+                    # logger.debug("Message Watchdog->Manager received: '%s'", ppfl(msg))
                     # Messages should be handled in the event loop
                     self._loop.call_soon_threadsafe(self._conn_received, msg)
+                except EOFError:
+                    pass
                 except Exception as ex:
-                    logger.exception("Exception occurred while waiting for packet: %s", str(ex))
-                    break
+                    logger.exception("Exception occurred while waiting for packet: %s", ex)
+            if not self._thread_running:  # Exit thread
+                break
+
+    def _pipe_send(self):
+        while True:
+            msg = None
+            try:
+                msg, fut_send = self._msg_send_buffer.get(timeout=self._conn_polling_timeout)
+                msg_json = json.dumps(msg)
+                self._conn.send(msg_json)
+                self._loop.call_soon_threadsafe(self._conn_sent, msg, fut_send)
+            except queue.Empty:
+                pass
+            except Exception as ex:
+                logger.exception("Exception occurred while sending the message %s: %s", ppfl(msg), ex)
             if not self._thread_running:  # Exit thread
                 break
 
@@ -573,7 +619,7 @@ class ZMQCommSendThreads:
             msg = zmq_comm.send_message(method="some_method", params={"some_value": n})
             # Code that uses msg
         except CommTimeoutError as ex:
-            logger.exception("Exception occurred: %s", str(ex)
+            logger.exception("Exception occurred: %s", ex)
 
         # Non-blocking call (trivial example)
         msg_received, msg_err_received = [], []
@@ -608,20 +654,22 @@ class ZMQCommSendThreads:
         server_public_key=None,
     ):
 
-        if server_public_key is not None:
-            validate_zmq_key(server_public_key)
-
         zmq_server_address = zmq_server_address or default_zmq_control_address
-        self._server_public_key = server_public_key
-
-        self._timeout_receive = timeout_recv  # Timeout for 'recv' operation (ms)
-        self._timeout_send = timeout_send  # # Timeout for 'send' operation (ms)
-        self._raise_exceptions = raise_exceptions
 
         # ZeroMQ communication
         self._ctx = zmq.Context()
         self._zmq_socket = None
         self._zmq_server_address = zmq_server_address
+
+        if server_public_key is not None:
+            validate_zmq_key(server_public_key)
+
+        self._server_public_key = server_public_key
+
+        self._timeout_receive = timeout_recv  # Timeout for 'recv' operation (ms)
+        self._timeout_receive_last = None  # Timeout used for last acquisition (ms)
+        self._timeout_send = timeout_send  # # Timeout for 'send' operation (ms)
+        self._raise_exceptions = raise_exceptions
 
         self._zmq_socket_open()
         self._lock_zmq = threading.Lock()
@@ -652,7 +700,7 @@ class ZMQCommSendThreads:
             if self._event_wait_for_msg.wait(timeout=self._polling_timeout / 1000):
                 msg, msg_err = {}, ""
                 try:
-                    if self._zmq_socket.poll(timeout=self._timeout_receive):
+                    if self._zmq_socket.poll(timeout=self._timeout_receive_last):
                         msg = self._zmq_socket.recv_json()
                     else:
                         # This is very likely a timeout (RE Manager is not responding)
@@ -666,7 +714,7 @@ class ZMQCommSendThreads:
                         self._cb(msg, msg_err)
                     except Exception as ex:
                         # Operation should continue even if there are problems with callback
-                        logger.exception("Exception occurred in ZMQ communication callback: %s", str(ex))
+                        logger.exception("Exception occurred in ZMQ communication callback: %s", ex)
 
                 self._event_wait_for_msg.clear()
                 if self._blocking_call:
@@ -712,7 +760,7 @@ class ZMQCommSendThreads:
         self._received_data = {"msg": msg, "msg_err": msg_err}
         self._event_msg_received.set()
 
-    def _zmq_communicate(self, msg_out, *, cb):
+    def _zmq_communicate(self, msg_out, *, cb, timeout):
         """
         Send message to the server and receive the response.
 
@@ -724,6 +772,9 @@ class ZMQCommSendThreads:
             Reference to callback function. If callback function is specified, then
             the `_zmq_communicate` sends outgoing message and exits. Callback function
             is called once the response is received from the server or timeout occurs.
+        timeout: int or None
+            Timeout (in ms) used for the single request. If ``None``, then the default
+            timeout is used.
 
         Returns
         -------
@@ -752,6 +803,13 @@ class ZMQCommSendThreads:
         else:
             self._cb = cb
             self._blocking_call = False
+
+        # Compute timeout
+        if timeout is None:
+            timeout = self._timeout_receive
+        if self._timeout_receive_last != timeout:
+            self._timeout_receive_last = timeout
+            self._zmq_socket.RCVTIMEO = timeout + 1
 
         self._zmq_socket.send_json(msg_out)
         self._event_wait_for_msg.set()
@@ -801,7 +859,7 @@ class ZMQCommSendThreads:
         # Successful connection does not mean that the socket exists
         self._zmq_socket.connect(self._zmq_server_address)
 
-        logger.info("Connected to ZeroMQ server '%s'" % str(self._zmq_server_address))
+        logger.info("Connected to ZeroMQ server '%s'", self._zmq_server_address)
         logger.info("ZMQ encryption: %s", "disabled" if self._server_public_key is None else "enabled")
 
     def _zmq_socket_restart(self):
@@ -825,7 +883,7 @@ class ZMQCommSendThreads:
         """
         return {"method": method, "params": params}
 
-    def send_message(self, *, method, params=None, cb=None, raise_exceptions=None):
+    def send_message(self, *, method, params=None, timeout=None, cb=None, raise_exceptions=None):
         """
         Send message to ZMQ server and wait for the response. The message must contain
         a name of a method supported by the server and a dictionary of parameters that
@@ -841,6 +899,9 @@ class ZMQCommSendThreads:
         params: dict or None
             Dictionary of parameters passed to the method. If ``None``, then an empty dictionary
             is passed to the server.
+        timeout: int or None
+            Read timeout (in ms) for the single request. If ``None``, then the default
+            timeout is used.
         cb: callable or None
             Callback function. If None, then the function blocks until communication is complete.
             Otherwise the function exits after the message is sent to the server. The callback
@@ -872,7 +933,7 @@ class ZMQCommSendThreads:
 
         try:
             msg_out = self._create_msg(method=method, params=params)
-            msg_in = self._zmq_communicate(msg_out, cb=cb)
+            msg_in = self._zmq_communicate(msg_out, cb=cb, timeout=timeout)
         except Exception as ex:
             errmsg = f"ZMQ communication error: {str(ex)}"
             use_ex = raise_exceptions if (raise_exceptions is not None) else self._raise_exceptions
@@ -887,7 +948,8 @@ class ZMQCommSendThreads:
         Close ZMQ socket. Call to close socket if the object is no longer needed, but may
         not be destroyed for some time.
         """
-        self._zmq_socket.close()
+        if self._zmq_socket is not None:
+            self._zmq_socket.close()
         self._thread_running = False
 
 
@@ -952,7 +1014,8 @@ class ZMQCommSendAsync:
         self._server_public_key = server_public_key
 
         self._timeout_receive = timeout_recv  # Timeout for 'recv' operation (ms)
-        self._timeout_send = timeout_send  # # Timeout for 'send' operation (ms)
+        self._timeout_receive_last = None  # Timeout used for last acquisition (ms)
+        self._timeout_send = timeout_send  # Timeout for 'send' operation (ms)
         self._raise_exceptions = raise_exceptions
 
         # ZeroMQ communication
@@ -978,22 +1041,28 @@ class ZMQCommSendAsync:
     async def _zmq_send(self, msg):
         await self._zmq_socket.send_json(msg)
 
-    async def _zmq_receive(self):
+    async def _zmq_receive(self, *, timeout):
         try:
-            if await self._zmq_socket.poll(timeout=self._timeout_receive):
+            if await self._zmq_socket.poll(timeout=timeout):
                 msg = await self._zmq_socket.recv_json()
             else:
                 # This is very likely a timeout (RE Manager is not responding)
                 raise Exception("timeout occurred")
         except Exception as ex:
             # Timeout occurred. Socket needs to be reset.
-            logger.exception("ZeroMQ communication failed: %s" % str(ex))
+            logger.exception("ZeroMQ communication failed: %s", ex)
             raise
         return msg
 
-    async def _zmq_communicate(self, msg_out):
+    async def _zmq_communicate(self, msg_out, *, timeout):
+        if timeout is None:
+            timeout = self._timeout_receive
+        if self._timeout_receive_last != timeout:
+            self._timeout_receive_last = timeout
+            self._zmq_socket.RCVTIMEO = timeout + 1
+
         await self._zmq_send(msg_out)
-        msg_in = await self._zmq_receive()
+        msg_in = await self._zmq_receive(timeout=timeout)
         return msg_in
 
     def _zmq_socket_open(self):
@@ -1016,7 +1085,7 @@ class ZMQCommSendAsync:
         # Successful connection does not mean that the socket exists
         self._zmq_socket.connect(self._zmq_server_address)
 
-        logger.info("Connected to ZeroMQ server '%s'" % str(self._zmq_server_address))
+        logger.info("Connected to ZeroMQ server '%s'", self._zmq_server_address)
         logger.info("ZMQ encryption: %s", "disabled" if self._server_public_key is None else "enabled")
 
     def _zmq_socket_restart(self):
@@ -1026,7 +1095,7 @@ class ZMQCommSendAsync:
     def _create_msg(self, *, method, params=None):
         return {"method": method, "params": params}
 
-    async def send_message(self, *, method, params=None, raise_exceptions=None):
+    async def send_message(self, *, method, params=None, timeout=None, raise_exceptions=None):
         """
         Send message to ZMQ server and wait for the response. The message must contain
         a name of a method supported by the server and a dictionary of parameters that
@@ -1042,6 +1111,9 @@ class ZMQCommSendAsync:
         params: dict or None
             Dictionary of parameters passed to the method. If ``None``, then an empty dictionary
             is passed to the server.
+        timeout: int or None
+            Read timeout (in ms) for the single request. If ``None``, then the default
+            timeout is used.
         raise_exceptions: bool or None
             The flag indicates if exception should be raised in case of communication error
             (such as timeout). If ``False``, then error message is returned instead.
@@ -1067,7 +1139,7 @@ class ZMQCommSendAsync:
         async with self._lock_zmq:
             try:
                 msg_out = self._create_msg(method=method, params=params)
-                msg_in = await self._zmq_communicate(msg_out)
+                msg_in = await self._zmq_communicate(msg_out, timeout=timeout)
             except Exception as ex:
                 # This is very likely a timeout (RE Manager is not responding)
                 self._zmq_socket_restart()
@@ -1087,7 +1159,7 @@ class ZMQCommSendAsync:
             self._zmq_socket.close()
 
 
-def zmq_single_request(method, params=None, *, zmq_server_address=None, server_public_key=None):
+def zmq_single_request(method, params=None, *, timeout=None, zmq_server_address=None, server_public_key=None):
     """
     Send a single request to ZMQ server. The function opens the socket, sends
     a single ZMQ request and closes the socket. The function is not expected
@@ -1102,6 +1174,8 @@ def zmq_single_request(method, params=None, *, zmq_server_address=None, server_p
     params: dict or None
         Dictionary of parameters (payload of the message). If ``None`` then
         the message is sent with empty payload: ``params = {}``.
+    timeout: int or None
+        Read timeout (in ms).
     zmq_server_address: str or None
         Address of the ZMQ control socket of RE Manager. Default address is used if the
         value is ``None``.
@@ -1129,7 +1203,9 @@ def zmq_single_request(method, params=None, *, zmq_server_address=None, server_p
         zmq_to_manager = ZMQCommSendAsync(
             zmq_server_address=zmq_server_address, server_public_key=server_public_key
         )
-        msg_received = await zmq_to_manager.send_message(method=method, params=params, raise_exceptions=True)
+        msg_received = await zmq_to_manager.send_message(
+            method=method, params=params, timeout=timeout, raise_exceptions=True
+        )
         zmq_to_manager.close()
 
     try:
@@ -1142,6 +1218,6 @@ def zmq_single_request(method, params=None, *, zmq_server_address=None, server_p
         msg_err = str(ex)
 
     if msg_err:
-        logger.warning("Communication with RE Manager failed: %s", str(msg_err))
+        logger.warning("Communication with RE Manager failed: %s", msg_err)
 
     return msg, msg_err

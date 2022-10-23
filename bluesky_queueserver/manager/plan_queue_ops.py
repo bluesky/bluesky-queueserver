@@ -792,7 +792,7 @@ class PlanQueueOperations:
                 item, _ = await self._pop_item_from_queue(uid=uid)
                 items.append(item)
             except Exception as ex:
-                logger.debug("Failed to remove item with UID '%s' from the queue: %s", uid, str(ex))
+                logger.debug("Failed to remove item with UID '%s' from the queue: %s", uid, ex)
 
         qsize = await self._get_queue_size()
         return items, qsize
@@ -1023,7 +1023,7 @@ class PlanQueueOperations:
                     await self._pop_item_from_queue(uid=uid)
                 except Exception as ex:
                     logger.error(
-                        "Failed to remove an item with uid='%s' after failure to add a batch of plans", str(ex)
+                        "Failed to remove an item with uid='%s' after failure to add a batch of plans", ex
                     )
 
             # Also do not return 'changed' items if adding the batch failed.
@@ -1401,8 +1401,18 @@ class PlanQueueOperations:
         """
         See ``self.clear_queue()`` method.
         """
-        while await self._get_queue_size():
-            await self._pop_item_from_queue()
+        self._plan_queue_uid = self.new_item_uid()
+        await self._r_pool.delete(self._name_plan_queue)
+
+        # Remove all entries from 'self._uid_dict' except the running item.
+        running_item = await self._get_running_item_info()
+        if running_item:
+            uid = running_item["item_uid"]
+            item = self._uid_dict_get_item(uid)
+            self._uid_dict_clear()
+            self._uid_dict_add(item)
+        else:
+            self._uid_dict_clear()
 
     async def clear_queue(self):
         """
@@ -1480,8 +1490,7 @@ class PlanQueueOperations:
         See ``self.clear_history()`` method.
         """
         self._plan_history_uid = self.new_item_uid()
-        while await self._get_history_size():
-            await self._r_pool.rpop(self._name_plan_history)
+        await self._r_pool.delete(self._name_plan_history)
 
     async def clear_history(self):
         """

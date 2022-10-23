@@ -3,7 +3,6 @@ import zmq
 import zmq.asyncio
 from multiprocessing import Process
 import time as ttime
-import pprint
 import enum
 import uuid
 import copy
@@ -21,7 +20,7 @@ from .profile_ops import (
 )
 from .plan_queue_ops import PlanQueueOperations
 from .output_streaming import setup_console_output_redirection
-from .logging_setup import setup_loggers
+from .logging_setup import setup_loggers, PPrintForLogging as ppfl
 from .task_results import TaskResults
 
 import logging
@@ -219,6 +218,9 @@ class RunEngineManager(Process):
         #   Numbering starts from 1.
         self._number_of_restarts = number_of_restarts
 
+        self._comm_to_worker_timeout = 0.5  # Timeout for regular requests, s
+        self._comm_to_worker_timeout_long = 10  # Timeout for potentially long requests, s
+
         self._lock_info = LockInfo()  # Lock/unlock environment and/or queue
         self._lock_info.set_emergency_lock_key(config["lock_key_emergency"])
 
@@ -303,8 +305,13 @@ class RunEngineManager(Process):
         """
         t_period = 0.5
         while True:
-            await asyncio.sleep(t_period)
-            await self._watchdog_send_heartbeat()
+            try:
+                await asyncio.sleep(t_period)
+                await self._watchdog_send_heartbeat()
+            except asyncio.CancelledError:
+                break
+            except Exception as ex:
+                logger.warning(f"Exception occurred while sending heartbeat: {ex}")
 
     # ======================================================================
     #          Functions that implement functionality of the server
@@ -346,7 +353,7 @@ class RunEngineManager(Process):
         except Exception as ex:
             success = False
             err_msg = f"Unhandled exception: {str(ex)}"
-            logger.exception("Unhandled exception during background task execution: %s", str(ex))
+            logger.exception("Unhandled exception during background task execution: %s", ex)
 
         background_task_status.update({"status": "success" if success else "failed", "err_msg": err_msg})
 
@@ -409,7 +416,7 @@ class RunEngineManager(Process):
                 success, err_msg = False, "Error occurred while opening RE Worker environment."
 
         except Exception as ex:
-            logger.exception("Failed to start_Worker: %s", str(ex))
+            logger.exception("Failed to start_Worker: %s", ex)
             success, err_msg = False, f"Failed to start_Worker {str(ex)}"
 
         self._manager_state = MState.IDLE
@@ -632,8 +639,8 @@ class RunEngineManager(Process):
             logger.debug(
                 "Report received from RE Worker:\nplan_state=%s\nsuccess=%s\n%s\n)",
                 plan_state,
-                str(success),
-                str(msg_display),
+                success,
+                msg_display,
             )
 
             if plan_state in "completed":
@@ -676,7 +683,7 @@ class RunEngineManager(Process):
         if run_list is None:
             # TODO: this would typically mean a bug (communication error). Probably more
             #       complicated processing is needed
-            logger.error(f"Failed to download plan report: {err_msg}.")
+            logger.error("Failed to download plan report: %s.", err_msg)
         else:
             self._re_run_list = run_list["run_list"]
             self._re_run_list_uid = _generate_uid()
@@ -690,14 +697,14 @@ class RunEngineManager(Process):
             if always_update_uids or (existing_plans != self._existing_plans):
                 self._existing_plans_uid = _generate_uid()
         except Exception as ex:
-            logger.warning("Failed to compare lists of existing plans: %s", str(ex))
+            logger.warning("Failed to compare lists of existing plans: %s", ex)
             self._existing_plans_uid = _generate_uid()
 
         try:
             if always_update_uids or (existing_devices != self._existing_devices):
                 self._existing_devices_uid = _generate_uid()
         except Exception as ex:
-            logger.warning("Failed to compare lists of existing devices: %s", str(ex))
+            logger.warning("Failed to compare lists of existing devices: %s", ex)
             self._existing_devices_uid = _generate_uid()
 
         # Now update the references
@@ -715,7 +722,7 @@ class RunEngineManager(Process):
             # TODO: this would typically mean a bug (communication error). Probably more
             #       complicated processing is needed
             logger.error(
-                f"Failed to download the list of existing plans and devices from the worker process: {err_msg}."
+                "Failed to download the list of existing plans and devices from the worker process: %s", err_msg
             )
         else:
             self._set_existing_plans_and_devices(
@@ -726,7 +733,7 @@ class RunEngineManager(Process):
             try:
                 self._generate_lists_of_allowed_plans_and_devices()
             except Exception as ex:
-                logger.exception("Failed to compute the list of allowed plans and devices: %s", str(ex))
+                logger.exception("Failed to compute the list of allowed plans and devices: %s", ex)
 
     async def _load_task_results_from_worker(self):
         """
@@ -737,14 +744,12 @@ class RunEngineManager(Process):
         if results is None:
             # TODO: this would typically mean a bug (communication error). Probably more
             #       complicated processing is needed
-            logger.error(
-                "Failed to download the results of completed tasks from the worker process: %s.", str(err_msg)
-            )
+            logger.error("Failed to download the results of completed tasks from the worker process: %s", err_msg)
         else:
             task_results = results["task_results"]
             for task_res in task_results:
                 if "task_uid" not in task_res:
-                    logger.error("Missing 'task_uid' data in task results: %s", pprint.pformat(task_res))
+                    logger.error("Missing 'task_uid' data in task results: %s", ppfl(task_res))
                     continue
 
                 task_uid = task_res["task_uid"]
@@ -754,7 +759,7 @@ class RunEngineManager(Process):
                     self._manager_state = MState.IDLE
                     self._running_task_uid = None
 
-                logger.debug("Loaded the results for task '%s': %s", task_uid, pprint.pformat(task_results))
+                logger.debug("Loaded the results for task '%s': %s", task_uid, ppfl(task_results))
 
     async def _start_plan(self):
         """
@@ -888,7 +893,7 @@ class RunEngineManager(Process):
                 }
 
                 # TODO: Decide if we really want to have metadata in the log
-                logger.info("Starting the plan:\n%s.", pprint.pformat(plan_info))
+                logger.info("Starting the plan:\n%s.", ppfl(plan_info))
 
                 success, err_msg = await self._worker_command_run_plan(plan_info)
                 if not success:
@@ -896,16 +901,12 @@ class RunEngineManager(Process):
                         exit_status="failed", run_uids=[], err_msg=err_msg, err_tb=""
                     )
                     self._manager_state = MState.IDLE
-                    logger.error(
-                        "Failed to start the plan %s.\nError: %s",
-                        pprint.pformat(plan_info),
-                        err_msg,
-                    )
+                    logger.error("Failed to start the plan %s.\nError: %s", ppfl(plan_info), err_msg)
                     err_msg = f"Failed to start the plan: {err_msg}"
 
             # The next items is INSTRUCTION
             elif next_item["item_type"] == "instruction":
-                logger.info("Executing instruction:\n%s.", pprint.pformat(next_item))
+                logger.info("Executing instruction:\n%s.", ppfl(next_item))
 
                 if next_item["name"] == "queue_stop":
                     await self._plan_queue.process_next_item(item=single_item)
@@ -1095,14 +1096,14 @@ class RunEngineManager(Process):
                 self._allowed_plans = allowed_plans
                 self._allowed_plans_uid = _generate_uid()
         except Exception as ex:
-            logger.error("Error occurred while comparing lists of allowed plans: %s", str(ex))
+            logger.error("Error occurred while comparing lists of allowed plans: %s", ex)
 
         try:
             if always_update_uids or (allowed_devices != self._allowed_devices):
                 self._allowed_devices = allowed_devices
                 self._allowed_devices_uid = _generate_uid()
         except Exception as ex:
-            logger.error("Error occurred while comparing lists of allowed devices: %s", str(ex))
+            logger.error("Error occurred while comparing lists of allowed devices: %s", ex)
 
     async def _load_permissions_from_disk(self):
         """
@@ -1114,7 +1115,7 @@ class RunEngineManager(Process):
             # Save loaded permissions to Redis
             await self._plan_queue.user_group_permissions_save(self._user_group_permissions)
         except Exception as ex:
-            logger.exception("Error occurred while loading user permissions from file '%s': %s", path_ug, str(ex))
+            logger.exception("Error occurred while loading user permissions from file '%s': %s", path_ug, ex)
 
     async def _load_permissions_from_redis(self):
         """
@@ -1127,7 +1128,7 @@ class RunEngineManager(Process):
             validate_user_group_permissions(ug_permissions)
             self._user_group_permissions = ug_permissions
         except Exception as ex:
-            logger.error("Validation of user group permissions loaded from Redis failed: %s", str(ex))
+            logger.error("Validation of user group permissions loaded from Redis failed: %s", ex)
             await self._load_permissions_from_disk()
 
     def _update_allowed_plans_and_devices(self, restore_plans_devices=False):
@@ -1211,7 +1212,8 @@ class RunEngineManager(Process):
 
     async def _worker_request_task_results(self):
         try:
-            results = await self._comm_to_worker.send_msg("request_task_results")
+            tt = self._comm_to_worker_timeout_long
+            results = await self._comm_to_worker.send_msg("request_task_results", timeout=tt)
             err_msg = ""
             if results is None:
                 err_msg = "Failed to obtain the results of completed tasks from the worker"
@@ -1239,7 +1241,10 @@ class RunEngineManager(Process):
 
     async def _worker_command_run_plan(self, plan_info):
         try:
-            response = await self._comm_to_worker.send_msg("command_run_plan", {"plan_info": plan_info})
+            tt = self._comm_to_worker_timeout_long
+            response = await self._comm_to_worker.send_msg(
+                "command_run_plan", {"plan_info": plan_info}, timeout=tt
+            )
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
         except CommTimeoutError:
@@ -1290,6 +1295,7 @@ class RunEngineManager(Process):
 
     async def _worker_command_load_script(self, *, script, update_lists, update_re, run_in_background):
         try:
+            tt = self._comm_to_worker_timeout_long
             response = await self._comm_to_worker.send_msg(
                 "command_load_script",
                 params={
@@ -1298,6 +1304,7 @@ class RunEngineManager(Process):
                     "update_re": update_re,
                     "run_in_background": run_in_background,
                 },
+                timeout=tt,
             )
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
@@ -1311,9 +1318,11 @@ class RunEngineManager(Process):
 
     async def _worker_command_execute_function(self, *, func_info, run_in_background):
         try:
+            tt = self._comm_to_worker_timeout_long
             response = await self._comm_to_worker.send_msg(
                 "command_execute_function",
                 params={"func_info": func_info, "run_in_background": run_in_background},
+                timeout=tt,
             )
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
@@ -1906,7 +1915,7 @@ class RunEngineManager(Process):
         ``default`` is passed, then the queue mode is reset to the default mode.
         """
         logger.info("Setting queue mode ...")
-        logger.debug("Request: %s", pprint.pformat(request))
+        logger.debug("Request: %s", ppfl(request))
 
         success, msg = True, ""
         try:
@@ -1948,7 +1957,7 @@ class RunEngineManager(Process):
         when modifying a running queue.
         """
         logger.info("Adding new item to the queue ...")
-        logger.debug("Request: %s", pprint.pformat(request))
+        logger.debug("Request: %s", ppfl(request))
 
         item_type, item, qsize, msg = None, None, None, ""
 
@@ -1988,6 +1997,36 @@ class RunEngineManager(Process):
         rdict = {"success": success, "msg": msg, "qsize": qsize, "item": item}
         return rdict
 
+    def validate_item_batch(self, items, user, user_group):
+
+        logger.debug("Starting validation of item batch ...")
+
+        success, items_prepared, results = True, [], []
+        for item_info in items:
+            item, item_type = None, None
+
+            try:
+                item, item_type, _success, _msg = self._get_item_from_request(item=item_info)
+                if not _success:
+                    raise Exception(_msg)
+
+                # Always generate a new UID for the added plan!!!
+                item_prepared, _ = self._prepare_item(
+                    item=item, item_type=item_type, user=user, user_group=user_group, generate_new_uid=True
+                )
+
+                items_prepared.append(item_prepared)
+                results.append({"success": True, "msg": ""})
+
+            except Exception as ex:
+                success = False
+                items_prepared.append(item)  # Add unchanged item or None if no item is found
+                results.append({"success": False, "msg": f"Failed to add a plan: {ex}"})
+
+        logger.debug("Validation of item batch completed: success=%s.", success)
+
+        return success, items_prepared, results
+
     async def _queue_item_add_batch_handler(self, request):
         """
         Adds a batch of items to the end of the queue. The request is expected to contain the following
@@ -2013,7 +2052,7 @@ class RunEngineManager(Process):
         status of each item if 'global' ``success`` is ``True``.
         """
         logger.info("Adding a batch of items to the queue ...")
-        logger.debug("Request: %s", pprint.pformat(request))
+        logger.debug("Request: %s", ppfl(request))
 
         success, msg, item_list, results, qsize = True, "", [], [], None
 
@@ -2037,25 +2076,9 @@ class RunEngineManager(Process):
             after_uid = request.get("after_uid", None)
 
             # First validate all the items
-            for item_info in items:
-                item, item_type = None, None
-                try:
-                    item, item_type, _success, _msg = self._get_item_from_request(item=item_info)
-                    if not _success:
-                        raise Exception(_msg)
-
-                    # Always generate a new UID for the added plan!!!
-                    item_prepared, _ = self._prepare_item(
-                        item=item, item_type=item_type, user=user, user_group=user_group, generate_new_uid=True
-                    )
-
-                    items_prepared.append(item_prepared)
-                    results.append({"success": True, "msg": ""})
-
-                except Exception as ex:
-                    success = False
-                    items_prepared.append(item)  # Add unchanged item or None if no item is found
-                    results.append({"success": False, "msg": f"Failed to add a plan: {ex}"})
+            success, items_prepared, results = await self._loop.run_in_executor(
+                None, self.validate_item_batch, items, user, user_group
+            )
 
             if len(results) != len(items) != len(items_prepared):
                 # This error should never happen, but the message may be useful for debugging if it happens.
@@ -2319,7 +2342,7 @@ class RunEngineManager(Process):
         item is finished, RE Manager is switched to the IDLE state.
         """
         logger.info("Starting immediate executing a queue item ...")
-        logger.debug("Request: %s", pprint.pformat(request))
+        logger.debug("Request: %s", ppfl(request))
 
         item_type, item, qsize, msg = None, None, None, ""
 
@@ -2913,14 +2936,17 @@ class RunEngineManager(Process):
 
                 await self._save_lock_info_to_redis()
                 logger.info(
-                    f"RE Manager was locked by the user {user_name!r}: environment={environment} "
-                    f"queue={queue}. Note: {note}."
+                    "RE Manager was locked by the user '%s': environment=%s " "queue=%s. Note: %s",
+                    user_name,
+                    environment,
+                    queue,
+                    note,
                 )
             else:
                 raise ValueError(f"RE Manager was locked with a different key: \n{self._lock_info.to_str()}")
 
         except Exception as ex:
-            logger.info(f"Failed to lock RE Manager: {ex}")
+            logger.info("Failed to lock RE Manager: %s", ex)
             success, msg = False, f"Error: {ex}"
 
         return {"success": success, "msg": msg, "lock_info": lock_info, "lock_info_uid": lock_info_uid}
@@ -3156,8 +3182,15 @@ class RunEngineManager(Process):
 
         self._loop = asyncio.get_running_loop()
 
-        self._comm_to_watchdog = PipeJsonRpcSendAsync(conn=self._watchdog_conn, name="RE Manager-Watchdog Comm")
-        self._comm_to_worker = PipeJsonRpcSendAsync(conn=self._worker_conn, name="RE Manager-Worker Comm")
+        self._comm_to_watchdog = PipeJsonRpcSendAsync(
+            conn=self._watchdog_conn,
+            name="RE Manager-Watchdog Comm",
+        )
+        self._comm_to_worker = PipeJsonRpcSendAsync(
+            conn=self._worker_conn,
+            name="RE Manager-Worker Comm",
+            timeout=self._comm_to_worker_timeout,
+        )
         self._comm_to_watchdog.start()
         self._comm_to_worker.start()
 
@@ -3280,27 +3313,12 @@ class RunEngineManager(Process):
         while True:
             #  Wait for next request from client
             msg_in = await self._zmq_receive()
-            logger.debug("ZeroMQ server received request: %s", pprint.pformat(msg_in))
+            logger.debug("ZeroMQ server received request: %s", ppfl(msg_in))
 
             msg_out = await self._zmq_execute(msg_in)
 
-            def gen_log_msg(msg_out):
-                """
-                Avoid printing large dictionaries (allowed devices or allowed plans) in the log.
-                Replace values with "..." for better visualization.
-                """
-                log_msg_out = copy.deepcopy(msg_out)
-                # Do not print large dicts in the log: replace values with "..."
-                large_dicts = ("plans_allowed", "plans_existing", "devices_allowed", "devices_existing")
-                for dict_name in large_dicts:
-                    if dict_name in log_msg_out:
-                        d = log_msg_out[dict_name]
-                        for k in d.keys():
-                            d[k] = "{...}"
-                return log_msg_out
-
             #  Send reply back to client
-            logger.debug("ZeroMQ server sending response: %s", pprint.pformat(gen_log_msg(msg_out)))
+            logger.debug("ZeroMQ server sending response: %s", ppfl(msg_out))
             await self._zmq_send(msg_out)
 
             if self._manager_stopping:
@@ -3321,6 +3339,7 @@ class RunEngineManager(Process):
                     await self._kill_re_worker_task()
 
                 await self._watchdog_manager_stopping()
+                self._heartbeat_generator_task.cancel()
                 self._comm_to_watchdog.stop()
                 self._comm_to_worker.stop()
                 self._zmq_socket.close()

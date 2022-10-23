@@ -68,50 +68,69 @@ class PPrintForLogging:
         return self.__str__()
 
     def __str__(self):
-
+        # Non-iterative implementation of the transformation. Copying is minimized.
         large_dict_keys = ("plans_allowed", "plans_existing", "devices_allowed", "devices_existing")
 
         def convert_large_dicts(msg_in):
             """
             Some large dictionaries need to be treated in a special way.
             """
-            if not isinstance(msg_in, Mapping):
-                return reduce_msg(msg_in)
-            else:
-                msg_out = {}
-                for k in msg_in.keys():
-                    msg_out[k] = "{...}"
-                return msg_out
+            msg_out = {}
+            for k in msg_in.keys():
+                msg_out[k] = "{...}"
+            return msg_out
 
-        def reduce_msg(msg_in):
+        def process_entry(msg_in):
             if isinstance(msg_in, Mapping):
                 msg_out = {}
                 for n, k in enumerate(msg_in):
                     if n < self._max_dict_size:
-                        if k in large_dict_keys:
-                            msg_out[k] = convert_large_dicts(msg_in[k])
-                        else:
-                            msg_out[k] = reduce_msg(msg_in[k])
+                        msg_out[k] = msg_in[k]
                     else:
                         msg_out["..."] = "..."
                         break
+                new_entries = [msg_out]
             elif isinstance(msg_in, Iterable) and not isinstance(msg_in, str):
                 msg_out = list(msg_in[: self._max_list_size + 1])
-                n_pts = min(len(msg_out), self._max_list_size)
-                for n in range(n_pts):
-                    msg_out[n] = reduce_msg(msg_out[n])
                 if len(msg_out) > self._max_list_size:
                     msg_out[-1] = "..."
+                new_entries = [msg_out]
             else:
                 msg_out = msg_in
-            return msg_out
+                new_entries = []
+
+            return msg_out, new_entries
+
+
+        msg_reduced, queue = process_entry(self._msg)
+
+        while queue:
+            msg = queue.pop(0)
+
+            # The queue contains processed objects, so it is safe to assume that
+            #   all mappings are 'dict' and all iterables are 'list'.
+            if isinstance(msg, dict):
+                for k in msg.keys():
+                    # msg[k] is still unprocessed, so use Mapping
+                    if (k in large_dict_keys) and isinstance(msg[k], Mapping):
+                        msg[k] = convert_large_dicts(msg[k])
+                    else:
+                        mo, qe = process_entry(msg[k])
+                        msg[k] = mo
+                        queue.extend(qe)
+
+            elif isinstance(msg, list):
+                for k in range(len(msg)):
+                    mo, qe = process_entry(msg[k])
+                    msg[k] = mo
+                    queue.extend(qe)
 
         if version.parse(python_version()) < version.parse("3.8"):
             # NOTE: delete this after support for 3.7 is dropped
             pprint.sorted = lambda x, key=None: x
-            msg_out = pprint.pformat(reduce_msg(self._msg))
+            msg_out = pprint.pformat(msg_reduced)
             delattr(pprint, "sorted")
         else:
-            msg_out = pprint.pformat(reduce_msg(self._msg), sort_dicts=False)
+            msg_out = pprint.pformat(msg_reduced, sort_dicts=False)
 
         return msg_out

@@ -480,16 +480,19 @@ def unit_test_upload_data(data):
 
 def unit_test_download_data():
     global _data
-    # ttime.sleep(0.1)
     return _data
 """
 
-
-def test_large_datasets_01(re_manager):  # noqa: F811
+# fmt: off
+@pytest.mark.parametrize("background", [False, True])
+# fmt: on
+@pytest.mark.xfail(reason="Test is unreliable on CI, but expected to pass locally")
+def test_large_datasets_01(re_manager, background):  # noqa: F811
     """
-    Submit large array as a plan parameter.
+    Submit large array as a function parameter. When running functions on background
+    start execution of a plan in the main thread of the worker.
     """
-    n_elements, timeout_ms = 1000000, 10000
+    n_elements, timeout_ms = 1000000, 15000
     vlist = [random.random() for _ in range(n_elements)]
 
     resp1, _ = zmq_single_request("environment_open")
@@ -500,8 +503,16 @@ def test_large_datasets_01(re_manager):  # noqa: F811
     assert resp2["success"] is True
     assert wait_for_condition(time=10, condition=condition_manager_idle)
 
+    if background:
+        params = {"item": _plan4, "user": _user, "user_group": _user_group}
+        resp, _ = zmq_single_request("queue_item_add", params)
+        assert resp["success"] is True, pprint.pformat(resp)
+
+        resp, _ = zmq_single_request("queue_start")
+        assert resp["success"] is True, pprint.pformat(resp)
+
     func_item = {"name": "unit_test_upload_data", "item_type": "function", "kwargs": {"data": vlist}}
-    params = {"item": func_item, "run_in_background": True, "user": _user, "user_group": _test_user_group}
+    params = {"item": func_item, "run_in_background": background, "user": _user, "user_group": _test_user_group}
     resp3, _ = zmq_single_request("function_execute", params=params, timeout=timeout_ms)
     assert resp3["success"] is True
     task_uid = resp3["task_uid"]
@@ -514,7 +525,7 @@ def test_large_datasets_01(re_manager):  # noqa: F811
     assert resp4["result"]["return_value"] == "Data is received"
 
     func_item = {"name": "unit_test_download_data", "item_type": "function"}
-    params = {"item": func_item, "run_in_background": True, "user": _user, "user_group": _test_user_group}
+    params = {"item": func_item, "run_in_background": background, "user": _user, "user_group": _test_user_group}
     resp5, _ = zmq_single_request("function_execute", params=params, timeout=timeout_ms)
     assert resp5["success"] is True, pprint.pformat(resp5)
     task_uid = resp5["task_uid"]
@@ -526,20 +537,113 @@ def test_large_datasets_01(re_manager):  # noqa: F811
     assert resp6["status"] == "completed"
     assert resp6["result"]["return_value"] == vlist
 
+    assert wait_for_condition(time=30, condition=condition_manager_idle)
+
+    status = get_queue_state()
+    assert status["items_in_queue"] == 0
+    assert status["items_in_history"] == (1 if background else 0)
+
     resp10, _ = zmq_single_request("environment_destroy")
     assert resp10["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_closed)
 
 
+script_plan_processing_large_array = """
+def plan_large_array(vlist, n):
+    assert len(vlist) == n
+    yield from bps.sleep(0.1)
+"""
+
+
 def test_large_datasets_02(re_manager):  # noqa: F811
     """
-    Submit large array as a function parameter.
+    Submit large array as a plan parameter. Then download the queue that contains the plan.
+    Then run the plan.
+
+    NOTE ABOUT THIS TEST !!!
+    This is a stress test for RE Manager. THIS WOULD BE A HORRIBLE PRACTICE IN PRODUCTION.
+    Never pass large datasets with plan parameters. The plan parameters are kept in the queue
+    and downloaded each time the queue is downloaded. Then they are move to plan history and
+    stay there until history is cleared. This test is slow with just one such plan, it will
+    not work if there are several plans like this in the queue or the history. Keep data passed
+    as parameters as as small as possible and pass large datasets using some other method
+    (e.g. using functions, which are not kept in the queue or history).
     """
-    pass
+    n_elements, timeout_ms = 1000000, 15000
+    vlist = [random.random() for _ in range(n_elements)]
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp2, _ = zmq_single_request("script_upload", params={"script": script_plan_processing_large_array})
+    assert resp2["success"] is True
+    assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+    plan = {"name": "plan_large_array", "kwargs": {"vlist": vlist, "n": len(vlist)}, "item_type": "plan"}
+    params = {"item": plan, "user": _user, "user_group": _user_group}
+    resp, _ = zmq_single_request("queue_item_add", params, timeout=timeout_ms)
+    assert resp["success"] is True, pprint.pformat(resp)
+
+    resp4, _ = zmq_single_request("queue_get", timeout=timeout_ms)
+    assert resp4["success"] is True, pprint.pformat(resp4)
+    assert len(resp4["items"]) == 1
+    assert resp4["items"][0]["kwargs"]["vlist"] == vlist
+    assert resp4["items"][0]["kwargs"]["n"] == len(vlist)
+
+    resp, _ = zmq_single_request("queue_start")
+    assert resp["success"] is True, pprint.pformat(resp)
+
+    assert wait_for_condition(time=30, condition=condition_manager_idle)
+
+    status = get_queue_state()
+    assert status["items_in_queue"] == 0
+    assert status["items_in_history"] == 1
+
+    resp10, _ = zmq_single_request("environment_destroy")
+    assert resp10["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_closed)
 
 
-def test_large_datasets_03(re_manager):  # noqa: F811
+
+# fmt: off
+_plan_move_then_count = {
+    "name": "move_then_count",
+    "kwargs": {"motors": ["motor1", "motor2"], "detectors": ["det1"], "positions": [1, 2]},
+    "item_type": "plan",
+}
+
+@pytest.mark.parametrize("plan, n_plans, timeout_ms", [
+    (_plan4, 10000, 60000),
+    (_plan_move_then_count, 10000, 60000),
+])
+# fmt: on
+def test_large_datasets_03(re_manager, plan, n_plans, timeout_ms):  # noqa: F811
     """
-    Submit large number of plans to the queue.
+    Submit large number of plans to the queue as a batch.
+
+    This is a stress test. Never submit large batches in production.
     """
-    pass
+    plans = [plan] * n_plans
+    params = {"items": plans, "user": _user, "user_group": _user_group}
+
+    resp, _ = zmq_single_request("queue_item_add_batch", params, timeout=timeout_ms)
+    assert "success" in resp, pprint.pformat(resp)
+    assert resp["success"] is True, pprint.pformat(resp)
+
+    status = get_queue_state()
+    assert status["items_in_queue"] == n_plans
+    assert status["items_in_history"] == 0
+
+    resp, _ = zmq_single_request("queue_get", timeout=timeout_ms)
+    assert "success" in resp, pprint.pformat(resp)
+    assert resp["success"] is True, pprint.pformat(resp)
+    assert len(resp["items"]) == n_plans
+
+    resp, _ = zmq_single_request("queue_clear")
+    assert "success" in resp, pprint.pformat(resp)
+    assert resp["success"] is True, pprint.pformat(resp)
+
+    status = get_queue_state()
+    assert status["items_in_queue"] == 0
+    assert status["items_in_history"] == 0

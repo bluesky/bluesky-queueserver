@@ -1706,24 +1706,26 @@ def _check_ranges(kwargs_in, param_list):
     """
 
     def process_argument(v, v_min, v_max):
-        # Recursively process lists (iterables) and dictionaries.
-        # Raises the exception if any found number is out of range.
-        if isinstance(v, numbers.Number):
-            out_of_range = False
-            if (v_min is not None) and (v < v_min):
-                out_of_range = True
-            if (v_max is not None) and (v > v_max):
-                out_of_range = True
-            if out_of_range:
-                s_v_min = f"{v_min}" if v_min is not None else "-inf"
-                s_v_max = f"{v_max}" if v_max is not None else "inf"
-                raise ValueError(f"Value {v} is out of range [{s_v_min}, {s_v_max}]")
-        elif isinstance(v, dict):
-            for key, value in v.items():
-                process_argument(value, v_min, v_max)
-        elif isinstance(v, Iterable) and not isinstance(v, str):
-            for item in v:
-                process_argument(item, v_min, v_max)
+
+        queue = [v]
+
+        while queue:
+            v_cur = queue.pop(0)
+
+            if isinstance(v_cur, numbers.Number):
+                out_of_range = False
+                if (v_min is not None) and (v_cur < v_min):
+                    out_of_range = True
+                if (v_max is not None) and (v_cur > v_max):
+                    out_of_range = True
+                if out_of_range:
+                    s_v_min = f"{v_min}" if v_min is not None else "-inf"
+                    s_v_max = f"{v_max}" if v_max is not None else "inf"
+                    raise ValueError(f"Value {v_cur} is out of range [{s_v_min}, {s_v_max}]")
+            elif isinstance(v_cur, dict):
+                queue.extend(v_cur.values())
+            elif isinstance(v_cur, Iterable) and not isinstance(v_cur, str):
+                queue.extend(v_cur)
 
     match, msg = True, ""
     for p in param_list:
@@ -2154,7 +2156,11 @@ def _validate_plan_parameters(param_list, call_args, call_kwargs):
         # The next step: match types of the output value of the pydantic model with input
         #   types. 'Pydantic' is converting types whenever possible, but we need precise
         #   type checking with a fiew exceptions
-        success, msg = _compare_in_out(bound_args.arguments, m.dict())
+        # NOTE: in the next statement we are using 'm.__dict__' instead of officially
+        #   recommended 'm.dict()', because 'm.dict()' was causing performance problems
+        #   when validating large batches of plans. Based on testing, 'm.__dict__' seems
+        #   to work fine in this application.
+        success, msg = _compare_in_out(bound_args.arguments, m.__dict__)
         if not success:
             raise ValueError(f"Error in argument types: {msg}")
 

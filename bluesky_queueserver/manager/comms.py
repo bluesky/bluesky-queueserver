@@ -401,6 +401,8 @@ class PipeJsonRpcSendAsync:
 
         async with self._lock_comm:
             msg = format_jsonrpc_msg(method, params, notification=notification)
+            import time as ttime  ##
+
             try:
 
                 # 'fut_send' sent along with the message. If the thread is still sending the previous
@@ -486,7 +488,8 @@ class PipeJsonRpcSendAsync:
         asyncio.create_task(self._response_received(response))
 
     async def _response_sent(self, response, fut_send):
-        fut_send.set_result(True)
+        if not fut_send.done():
+            fut_send.set_result(True)  # The result value is not used
 
     def _conn_sent(self, response, fut_send):
         asyncio.create_task(self._response_sent(response, fut_send))

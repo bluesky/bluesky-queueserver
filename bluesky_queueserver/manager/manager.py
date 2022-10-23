@@ -306,9 +306,7 @@ class RunEngineManager(Process):
         t_period = 0.5
         while True:
             try:
-                logger.debug("Waiting for the next heartbeat: %s", str(ttime.time()))  ##
                 await asyncio.sleep(t_period)
-                logger.debug("Requesting to send heartbeat: %s", str(ttime.time()))  ##
                 await self._watchdog_send_heartbeat()
             except Exception as ex:
                 logger.warning(f"Exception occurred while sending heartbeat: {ex}")
@@ -1400,7 +1398,6 @@ class RunEngineManager(Process):
         """
         Send (periodic) heartbeat signal to Watchdog.
         """
-        logger.debug("Sending heartbeat: %s", str(ttime.time()))  ##
         await self._comm_to_watchdog.send_msg("heartbeat", {"value": "alive"}, notification=True)
 
     # =========================================================================
@@ -1849,7 +1846,6 @@ class RunEngineManager(Process):
             allowed_plans = self._allowed_plans[user_group] if self._allowed_plans else self._allowed_plans
             allowed_devices = self._allowed_devices[user_group] if self._allowed_devices else self._allowed_devices
             success, msg = validate_plan(item, allowed_plans=allowed_plans, allowed_devices=allowed_devices)
-            ## success, msg = True, ""  ##
         elif item_type == "instruction":
             # At this point we support only one instruction ('queue_stop'), so validation is trivial.
             if ("name" in item) and (item["name"] == "queue_stop"):
@@ -2003,19 +1999,9 @@ class RunEngineManager(Process):
 
         logger.debug("Starting validation of item batch ...")
 
-        t0 = ttime.time()  ##
-        t1 = t0  ##
-
         success, items_prepared, results = True, [], []
-        for n, item_info in enumerate(items):
-            # if n > 10:
-            #     break
+        for item_info in items:
             item, item_type = None, None
-            if not (n % 200):  ##
-                t2 = ttime.time()  ##
-                dt = t2 - t1  ##
-                t1 = t2  ##
-                logger.debug("n=%s time=%s dt=%s", n, t2 - t0, dt)  ##
 
             try:
                 item, item_type, _success, _msg = self._get_item_from_request(item=item_info)
@@ -2027,11 +2013,6 @@ class RunEngineManager(Process):
                     item=item, item_type=item_type, user=user, user_group=user_group, generate_new_uid=True
                 )
 
-                # for n in range(2000):  ##
-                #     item_prepared, _ = self._prepare_item(  ##
-                #         item=item, item_type=item_type, user=user, user_group=user_group, generate_new_uid=True  ##
-                #     )  ##
-
                 items_prepared.append(item_prepared)
                 results.append({"success": True, "msg": ""})
 
@@ -2039,18 +2020,6 @@ class RunEngineManager(Process):
                 success = False
                 items_prepared.append(item)  # Add unchanged item or None if no item is found
                 results.append({"success": False, "msg": f"Failed to add a plan: {ex}"})
-
-        # allowed_plans = self._allowed_plans[user_group] if self._allowed_plans else self._allowed_plans  ##
-        # allowed_devices = self._allowed_devices[user_group] if self._allowed_devices else self._allowed_devices  ##
-        # for n in range(len(items)-4000):  ##
-        #     if not (n % 100):  ##
-        #         ttime.sleep(0.1)  ##
-        #     validate_plan(items[0], allowed_plans=allowed_plans, allowed_devices=allowed_devices)  ##
-
-        # start = ttime.time()
-        # i = 0
-        # while ttime.time() - start < 90:  ##
-        #     i += 1  ##
 
         logger.debug("Validation of item batch completed: success=%s.", success)
 
@@ -2105,53 +2074,9 @@ class RunEngineManager(Process):
             after_uid = request.get("after_uid", None)
 
             # First validate all the items
-            logger.info(f"Validating items")  ##
             success, items_prepared, results = await self._loop.run_in_executor(
                 None, self.validate_item_batch, items, user, user_group
             )
-
-            # import math
-            # n_items, n_step = len(items), 500
-            # n_intervals = math.ceil(n_items/n_step)
-
-            # for n in range(n_intervals):
-            #     ## if n > 0:
-            #     ##     await asyncio.sleep(2)
-            #     logger.debug("Range %s ... %s", n * n_step, (n+1)*n_step - 1)  ##
-            #     _success, _items_prepared, _results = await self._loop.run_in_executor(
-            #         None, self.validate_item_batch, items[n * n_step: (n+1)*n_step], user, user_group
-            #     )
-            #     success = success if not success else _success
-            #     items_prepared.extend(_items_prepared)
-            #     results.extend(_results)
-
-            # success, items_prepared, results = self.validate_item_batch(items=items, user=user, user_group=user_group)
-
-            # for n, item_info in enumerate(items):
-            #     if not (n % 200):
-            #         await self._watchdog_send_heartbeat()
-            #         # await asyncio.sleep(0.05)
-            #         logger.debug("n=%s", n) ##
-            #     item, item_type = None, None
-            #     try:
-            #         item, item_type, _success, _msg = self._get_item_from_request(item=item_info)
-            #         if not _success:
-            #             raise Exception(_msg)
-
-            #         # Always generate a new UID for the added plan!!!
-            #         item_prepared, _ = self._prepare_item(
-            #             item=item, item_type=item_type, user=user, user_group=user_group, generate_new_uid=True
-            #         )
-
-            #         items_prepared.append(item_prepared)
-            #         results.append({"success": True, "msg": ""})
-
-            #     except Exception as ex:
-            #         success = False
-            #         items_prepared.append(item)  # Add unchanged item or None if no item is found
-            #         results.append({"success": False, "msg": f"Failed to add a plan: {ex}"})
-
-            logger.info(f"Validation completed")  ##
 
             if len(results) != len(items) != len(items_prepared):
                 # This error should never happen, but the message may be useful for debugging if it happens.

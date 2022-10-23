@@ -101,7 +101,6 @@ class PPrintForLogging:
 
             return msg_out, new_entries
 
-
         msg_reduced, queue = process_entry(self._msg)
 
         while queue:

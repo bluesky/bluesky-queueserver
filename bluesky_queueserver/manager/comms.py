@@ -401,7 +401,6 @@ class PipeJsonRpcSendAsync:
 
         async with self._lock_comm:
             msg = format_jsonrpc_msg(method, params, notification=notification)
-            import time as ttime  ##
 
             try:
 

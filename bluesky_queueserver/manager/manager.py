@@ -308,6 +308,8 @@ class RunEngineManager(Process):
             try:
                 await asyncio.sleep(t_period)
                 await self._watchdog_send_heartbeat()
+            except asyncio.CancelledError:
+                break
             except Exception as ex:
                 logger.warning(f"Exception occurred while sending heartbeat: {ex}")
 
@@ -3337,6 +3339,7 @@ class RunEngineManager(Process):
                     await self._kill_re_worker_task()
 
                 await self._watchdog_manager_stopping()
+                self._heartbeat_generator_task.cancel()
                 self._comm_to_watchdog.stop()
                 self._comm_to_worker.stop()
                 self._zmq_socket.close()

@@ -111,6 +111,31 @@ msg_in_06a = {"plans_existing": {"plan1": {}, "plan2": []}, "devices_allowed": [
 # msg: on
 msg_out_06a = "{'plans_existing': {'plan1': '{...}', 'plan2': '{...}'}, 'devices_allowed': []}"
 
+# Long string: 508 characters
+msg_in_07a = "The result is an aggregate list of returned values."
+msg_out_07a = "'The result is an aggregate list of returned values.'"
+
+msg_in_07b = "If all awaitables are completed successfully, the result is an aggregate list of returned values."
+msg_out_07b = "'If all awaitables are completed  ...\\n... gregate list of returned values.'"
+
+msg_in_07c = {
+    "msg": "If all awaitables are completed successfully, the result is an aggregate list of returned values.",
+    "lst": ["If all awaitables are completed successfully, the result is an aggregate list of returned values."],
+}
+
+msg_out_07c = """{'msg': 'If all awaitables are completed  ...\\n'
+        '... gregate list of returned values.',
+ 'lst': ['If all awaitables are completed  ...\\n'
+         '... gregate list of returned values.']}"""
+
+msg_in_07d = {
+    "traceback": "If all awaitables are completed successfully, "
+    "the result is an aggregate list of returned values.",
+}
+
+msg_out_07d = """{'traceback': 'If all awaitables are completed successfully, the result is an '
+              'aggregate list of returned values.'}"""
+
 
 # fmt: on
 @pytest.mark.parametrize(
@@ -129,12 +154,16 @@ msg_out_06a = "{'plans_existing': {'plan1': '{...}', 'plan2': '{...}'}, 'devices
         (msg_in_04d, msg_out_04d),
         (msg_in_05a, msg_out_05a),
         (msg_in_06a, msg_out_06a),
+        (msg_in_07a, msg_out_07a),
+        (msg_in_07b, msg_out_07b),
+        (msg_in_07c, msg_out_07c),
+        (msg_in_07d, msg_out_07d),
     ],
 )
 # fmt: off
 def test_PPrintForLogging_01(msg_in, msg_out):
     msg_in_backup = copy.deepcopy(msg_in)
-    result = str(ppfl(msg_in, max_list_size=5, max_dict_size=7))
+    result = str(ppfl(msg_in, max_list_size=5, max_dict_size=7, max_chars_in_str=64))
     print(result)
     # Check the result
     assert result == msg_out

@@ -59,10 +59,11 @@ class PPrintForLogging:
         Formatted object ``msg``.
     """
 
-    def __init__(self, msg, *, max_list_size=10, max_dict_size=25):
+    def __init__(self, msg, *, max_list_size=10, max_dict_size=25, max_chars_in_str=1024):
         self._msg = msg
         self._max_list_size = max_list_size
         self._max_dict_size = max_dict_size
+        self._max_chars_in_str = max_chars_in_str
 
     def __repr__(self):
         return self.__str__()
@@ -70,6 +71,7 @@ class PPrintForLogging:
     def __str__(self):
         # Non-iterative implementation of the transformation. Copying is minimized.
         large_dict_keys = ("plans_allowed", "plans_existing", "devices_allowed", "devices_existing")
+        keep_strings_keys = "traceback"
 
         def convert_large_dicts(msg_in):
             """
@@ -90,7 +92,14 @@ class PPrintForLogging:
                         msg_out["..."] = "..."
                         break
                 new_entries = [msg_out]
-            elif isinstance(msg_in, Iterable) and not isinstance(msg_in, str):
+            elif isinstance(msg_in, str):
+                if len(msg_in) > self._max_chars_in_str:
+                    half = int(self._max_chars_in_str / 2)
+                    msg_out = msg_in[:half] + " ...\n... " + msg_in[-half:]
+                else:
+                    msg_out = msg_in
+                new_entries = []
+            elif isinstance(msg_in, Iterable):
                 msg_out = list(msg_in[: self._max_list_size + 1])
                 if len(msg_out) > self._max_list_size:
                     msg_out[-1] = "..."
@@ -113,6 +122,8 @@ class PPrintForLogging:
                     # msg[k] is still unprocessed, so use Mapping
                     if (k in large_dict_keys) and isinstance(msg[k], Mapping):
                         msg[k] = convert_large_dicts(msg[k])
+                    elif (k in keep_strings_keys) and isinstance(msg[k], str):
+                        pass
                     else:
                         mo, qe = process_entry(msg[k])
                         msg[k] = mo

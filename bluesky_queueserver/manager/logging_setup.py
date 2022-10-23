@@ -51,7 +51,15 @@ class PPrintForLogging:
         Maximum number of displayed elements of a lists (iterable)
     max_dict_size: int (optional)
         Maximum number of displayed elements of a dictionary (mapping). The number
-        should be large enought to fully display 'status'.
+        should be large enought to fully display 'status'. The dictionary values for
+        the keys ``plans_allowed``, ``plans_existing``, ``devices_allowed`` and
+        ``devices_existing``, which are dictionaries themselves are treated differently:
+        all the keys (names of plans or devices) are kept, but all values are replaced with
+        ``"{ ... }"`` (string).
+    max_chars_in_str: int (optional)
+        Strings longer then specified number of characters are truncated. Only the first
+        and the last ``max_chars_in_str / 2`` are printed. If the string is the value
+        of a ``traceback`` key of a dictionary, then it is not truncated.
 
     Returns
     -------

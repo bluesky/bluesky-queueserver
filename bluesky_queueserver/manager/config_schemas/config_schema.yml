@@ -22,24 +22,46 @@ properties:
       redis_addr:
         type: string
   startup:
-    type: object
-    additionalProperties: false
-    properties:
-      keep_re: 
-        type: boolean
-      oneOf:
-        - startup_dir:
+    oneOf:
+      - type: object
+        additionalProperties: false
+        properties:
+          keep_re:
+            type: boolean
+          existing_plans_and_devices_path:
             type: string
-        - startup_profile:
+          user_group_permissions_path:
             type: string
-        - startup_module:
+      - type: object
+        additionalProperties: false
+        properties:
+          keep_re:
+            type: boolean
+          startup_dir:
             type: string
-        - startup_script:
+          startup_profile:
             type: string
-      existing_plans_and_devices_path:
-        type: string
-      user_group_permissions_path:
-        type: string
+          startup_module:
+            type: string
+          startup_script:
+            type: string
+          existing_plans_and_devices_path:
+            type: string
+          user_group_permissions_path:
+            type: string
+        oneOf:
+          - type: object
+            required:
+              - startup_dir
+          - type: object
+            required:
+              - startup_profile
+          - type: object
+            required:
+              - startup_module
+          - type: object
+            required:
+              - startup_script
   operation:
     type: object
     additionalProperties: false
@@ -54,7 +76,7 @@ properties:
         pattern: "^(NEVER)|(ENVIRONMENT_OPEN)|(ALWAYS)$"
       user_group_permissions_reload:
         type: string
-        pattern: "^(NEVER)|("ON_REQUEST")|("ON_STARTUP")
+        pattern: "^(NEVER)|(ON_REQUEST)|(ON_STARTUP)"
   run_engine:
     type: object
     additional_properties: false

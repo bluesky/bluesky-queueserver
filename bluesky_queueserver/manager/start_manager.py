@@ -15,6 +15,7 @@ from .output_streaming import (
     default_zmq_info_address_for_server,
 )
 from .logging_setup import setup_loggers
+from .config import parse_configs, get_log_level_from_config
 
 from .. import __version__
 
@@ -223,6 +224,17 @@ def start_manager():
     parser = argparse.ArgumentParser(
         description=f"Start Run Engine (RE) Manager\nbluesky-queueserver version {__version__}\n\n{s_enc}",
         formatter_class=formatter,
+    )
+
+    parser.add_argument(
+        "--config",
+        dest="config_path",
+        type=str,
+        default=None,
+        help="Path to a YML config file or a directory containing multiple config files. The path passed "
+        "as a parameter overrides the path set using QSERVER_CONFIG environment variable. The config path "
+        "must point to an existing file or directory (may be empty), otherwise the manager can not "
+        "be started.",
     )
     parser.add_argument(
         "--zmq-control-addr",
@@ -460,13 +472,17 @@ def start_manager():
 
     args = parser.parse_args()
 
-    log_level = logging.INFO
-    if args.logger_verbose:
-        log_level = logging.DEBUG
-    elif args.logger_quiet:
-        log_level = logging.WARNING
-    elif args.logger_silent:
-        log_level = logging.CRITICAL + 1
+    # Load configuration from file
+    config_path = args.config_path
+    config_path = config_path or os.environ.get("QSERVER_CONFIG", None)
+    config_from_file = parse_configs(config_path) if config_path else {}
+
+    log_level = get_log_level_from_config(
+        config_from_file,
+        param_verbose=args.logger_verbose,
+        param_quiet=args.logger_quiet,
+        param_silent=args.logger_silent,
+    )
 
     console_output_on = args.console_output == "ON"
     zmq_publish_console_on = args.zmq_publish_console == "ON"

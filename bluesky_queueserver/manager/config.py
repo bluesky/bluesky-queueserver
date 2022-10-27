@@ -7,8 +7,8 @@ import builtins
 from collections.abc import Mapping
 import os
 from pathlib import Path
-
 import jsonschema
+import logging
 
 from .config_schemas.loading import load_schema_from_yml, ConfigError
 
@@ -150,3 +150,75 @@ def parse_configs(config_path):
 
     merged_config = merge(parsed_configs)
     return merged_config
+
+
+_supported_keys = [
+    "network/zmq_control_addr",
+    "network/zmq_private_key",
+    "network/zmq_info_addr",
+    "network/zmq_publish_console",
+    "network/redis_addr",
+    "startup/keep_re",
+    "startup/existing_plans_and_devices_path",
+    "startup/user_group_permissions_path",
+    "startup/startup_dir",
+    "startup/startup_profile",
+    "startup/startup_module",
+    "startup/startup_script",
+    "operation/print_console_output",
+    "operation/console_output_level",
+    "operation/existing_plans_and_devices_update",
+    "operation/user_group_permissions_reload",
+    "run_engine/user_persistent_metadata",
+    "run_engine/kafka_server",
+    "run_engine/kafka_topic",
+    "run_engine/databroker_config",
+]
+
+
+def get_value_from_config(config, key, default=None):
+    """
+    Returns value from config dictionary. The keys is a sequence of keys separated with ``/``,
+    e.g. ``"startup/keep_re"``. If the key is not in config, then the default value is returned.
+    If the key is an empty string or does not exist, the ``ConfigError`` is raised.
+    """
+    if not key or key not in _supported_keys:
+        raise ConfigError(f"The key {key!r} is not supported.")
+
+    keys = key.split("/")
+
+    try:
+        value = config
+        for k in keys:
+            value = value[k]
+    except KeyError:
+        value = default
+
+    return value
+
+
+def get_log_level_from_config(config, param_verbose, param_quiet, param_silent):
+    value = None
+    if param_verbose:
+        value = "VERBOSE"
+    elif param_quiet:
+        value = "QUIET"
+    elif param_silent:
+        value = "SILENT"
+
+    value = get_value_from_config(config, "startup/keep_re", default=value)
+
+    if value is None:
+        value = "NORMAL"
+
+    levels = {
+        "VERBOSE": logging.DEBUG,
+        "NORMAL": logging.INFO,
+        "QUIET": logging.WARNING,
+        "SILENT": logging.CRITICAL + 1,
+    }
+
+    if value not in levels:
+        raise ConfigError(f"Unknown level: {value}. Supported levels: {list(levels.keys())}")
+
+    return levels[value]

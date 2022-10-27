@@ -1,7 +1,8 @@
+import copy
 import os
 import pytest
 
-from ..config import parse_configs, ConfigError
+from ..config import parse_configs, ConfigError, get_value_from_config
 
 fln_config_schema = "config_schema.yml"
 
@@ -180,3 +181,22 @@ def test_config_schema_02(tmpdir, option):
     else:
         config = parse_configs(config_path)
         assert config == {}
+
+
+def test_get_value_from_config_01():
+    config = config_01_dict
+    assert get_value_from_config(config, key="startup/keep_re") is True
+    assert get_value_from_config(config, key="startup/keep_re", default=False) is True
+
+    config2 = copy.deepcopy(config)
+    del config2["startup"]["keep_re"]
+    assert get_value_from_config(config2, key="startup/keep_re", default=False) is False
+
+    with pytest.raises(ConfigError, match="is not supported"):
+        get_value_from_config(config, key="", default=False)
+
+    with pytest.raises(ConfigError, match="is not supported"):
+        get_value_from_config(config, key="some_key", default=False)
+
+    with pytest.raises(ConfigError, match="is not supported"):
+        get_value_from_config(config, key="some/key", default=False)

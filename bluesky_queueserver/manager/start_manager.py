@@ -479,9 +479,9 @@ def start_manager():
 
     log_level = get_log_level_from_config(
         config_from_file,
-        param_verbose=args.logger_verbose,
-        param_quiet=args.logger_quiet,
-        param_silent=args.logger_silent,
+        cli_verbose=args.logger_verbose,
+        cli_quiet=args.logger_quiet,
+        cli_silent=args.logger_silent,
     )
 
     console_output_on = args.console_output == "ON"

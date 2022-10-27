@@ -197,17 +197,24 @@ def get_value_from_config(config, key, default=None):
     return value
 
 
-def get_log_level_from_config(config, param_verbose, param_quiet, param_silent):
+def get_log_level_from_config(config, cli_verbose, cli_quiet, cli_silent):
+    """
+    Select logging level based on config and CLI parameters. It is assumed that
+    only one of cli parameters is true (not checked here). CLI parameters have
+    precedence over config parameters.
+    """
     value = None
-    if param_verbose:
+    if cli_verbose:
         value = "VERBOSE"
-    elif param_quiet:
+    elif cli_quiet:
         value = "QUIET"
-    elif param_silent:
+    elif cli_silent:
         value = "SILENT"
 
+    # If 'value' is still None, then there is no CLI parameters. Use settings from config.
     value = get_value_from_config(config, "startup/keep_re", default=value)
 
+    # If 'value' is still None, then use the default value.
     if value is None:
         value = "NORMAL"
 

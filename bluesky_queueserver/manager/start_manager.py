@@ -167,7 +167,6 @@ class WatchdogProcess:
 
         logging.basicConfig(level=max(logging.WARNING, self._log_level))
         setup_loggers(log_level=self._log_level)
-
         # Requests
         self._comm_to_manager.add_method(self._start_re_worker_handler, "start_re_worker")
         self._comm_to_manager.add_method(self._join_re_worker_handler, "join_re_worker")
@@ -180,6 +179,7 @@ class WatchdogProcess:
         self._comm_to_manager.start()
 
         self._start_re_manager()
+
         while True:
             # Primitive implementation of the loop that restarts the process.
             self._re_manager.join(0.1)  # Small timeout
@@ -510,7 +510,7 @@ def start_manager():
 
     startup_dir = settings.startup_dir
     startup_module_name = settings.startup_module
-    startup_script_path = settings.startup_script_path
+    startup_script_path = settings.startup_script
 
     # Primitive error processing: make sure that all essential data exists.
     if startup_dir is not None:
@@ -618,3 +618,5 @@ def start_manager():
         wp.run()
     except KeyboardInterrupt:
         logger.info("The program was manually stopped")
+    except Exception as ex:
+        logger.exception(ex)

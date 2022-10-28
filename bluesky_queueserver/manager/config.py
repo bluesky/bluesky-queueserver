@@ -469,12 +469,14 @@ class Settings:
         """
         return self._update_existing_plans_devices
 
+    @property
     def user_group_permissions_reload(self):
         """
         Returns the selected option as a string.
         """
         return self._user_group_permissions_reload
 
+    @property
     def emergency_lock_key(self):
         """
         Returns the emergency lock key (string) or ``None``.

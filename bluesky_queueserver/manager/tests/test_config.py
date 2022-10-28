@@ -20,13 +20,15 @@ startup:
   user_group_permissions_path: ~/.ipython/profile_collection/startup
 operation:
   print_console_output: true
-  console_output_level: NORMAL
-  existing_plans_and_devices_update: ENVIRONMENT_OPEN
+  console_logging_level: NORMAL
+  update_existing_plans_and_devices: ENVIRONMENT_OPEN
   user_group_permissions_reload: ON_REQUEST
+  emergency_lock_key: some_lock_key
 run_engine:
-  user_persistent_metadata: true
+  use_persistent_metadata: true
   kafka_server: 127.0.0.1:9092
   kafka_topic: topic_name
+  zmq_data_proxy_addr: localhost:5567
   databroker_config: TST
 """
 
@@ -50,16 +52,18 @@ startup:
 config_01c_success = """
 operation:
   print_console_output: true
-  console_output_level: NORMAL
-  existing_plans_and_devices_update: ENVIRONMENT_OPEN
+  console_logging_level: NORMAL
+  update_existing_plans_and_devices: ENVIRONMENT_OPEN
   user_group_permissions_reload: ON_REQUEST
+  emergency_lock_key: some_lock_key
 """
 
 config_01d_success = """
 run_engine:
-  user_persistent_metadata: true
+  use_persistent_metadata: true
   kafka_server: 127.0.0.1:9092
   kafka_topic: topic_name
+  zmq_data_proxy_addr: localhost:5567
   databroker_config: TST
 """
 
@@ -79,14 +83,16 @@ config_01_dict = {
     },
     "operation": {
         "print_console_output": True,
-        "console_output_level": "NORMAL",
-        "existing_plans_and_devices_update": "ENVIRONMENT_OPEN",
+        "console_logging_level": "NORMAL",
+        "update_existing_plans_and_devices": "ENVIRONMENT_OPEN",
         "user_group_permissions_reload": "ON_REQUEST",
+        "emergency_lock_key": "some_lock_key",
     },
     "run_engine": {
-        "user_persistent_metadata": True,
+        "use_persistent_metadata": True,
         "kafka_server": "127.0.0.1:9092",
         "kafka_topic": "topic_name",
+        "zmq_data_proxy_addr": "localhost:5567",
         "databroker_config": "TST",
     },
 }
@@ -107,12 +113,12 @@ startup:
 
 config_04_fail = """
 startup:
-  console_output_level: INVALID
+  console_logging_level: INVALID
 """
 
 config_05_fail = """
 startup:
-  existing_plans_and_devices_update: INVALID
+  update_existing_plans_and_devices: INVALID
 """
 
 config_06_fail = """

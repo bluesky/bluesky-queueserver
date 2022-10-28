@@ -68,24 +68,28 @@ properties:
     properties:
       print_console_output:
         type: boolean
-      console_output_level:
+      console_logging_level:
         type: string
         pattern: "^(VERBOSE)|(NORMAL)|(QUIET)|(SILENT)$"
-      existing_plans_and_devices_update:
+      update_existing_plans_and_devices:
         type: string
         pattern: "^(NEVER)|(ENVIRONMENT_OPEN)|(ALWAYS)$"
       user_group_permissions_reload:
         type: string
         pattern: "^(NEVER)|(ON_REQUEST)|(ON_STARTUP)"
+      emergency_lock_key:
+        type: string
   run_engine:
     type: object
     additional_properties: false
     properties:
-      user_persistent_metadata:
+      use_persistent_metadata:
         type: boolean
       kafka_server:
         type: string
       kafka_topic:
+        type: string
+      zmq_data_proxy_addr:
         type: string
       databroker_config:
         type: string

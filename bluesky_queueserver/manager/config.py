@@ -388,7 +388,7 @@ class Settings:
     def __str__(self):
         cfg = {
             "zmq_control_addr": self.zmq_control_addr,
-            "zmq_private_key": None if self.zmq_private_key is None else "...",
+            "zmq_private_key": None if (self.zmq_private_key is None) else "...",
             "zmq_info_addr": self.zmq_info_addr,
             "zmq_publish_console": self.zmq_publish_console,
             "redis_addr": self.redis_addr,

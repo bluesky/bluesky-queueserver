@@ -498,6 +498,8 @@ def start_manager():
 
     stream_publisher.start()
 
+    logger.info("RE Manager configuration:\n%s", settings)
+
     config_worker = {}
     config_manager = {}
     if settings.kafka_topic is not None:

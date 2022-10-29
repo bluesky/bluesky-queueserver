@@ -11,6 +11,10 @@ from pathlib import Path
 import jsonschema
 import logging
 import sys
+import pprint
+from platform import python_version
+from packaging import version
+
 
 from .output_streaming import default_zmq_info_address_for_server
 from .config_schemas.loading import load_schema_from_yml, ConfigError
@@ -212,8 +216,13 @@ class _ArgsExisting:
         """
         key_mapping = {_.dest: _.option_strings for _ in self._parser._actions}
         key_specified = {}
+
+        # We need to recognize two cases: ``--zmq-info-addr tcp://*:60621`` and
+        #   ``--zmq-info-addr=tcp://*:60621``
+        sys_argsv = [_.split("=")[0] for _ in sys.argv[1:] if _.startswith("-")]
         for k, v in key_mapping.items():
-            key_specified[k] = any([_ in sys.argv[1:] for _ in v])
+            key_specified[k] = any([_ in sys_argsv for _ in v])
+
         return key_specified
 
     def __call__(self, param_name, *, default=None):
@@ -221,7 +230,7 @@ class _ArgsExisting:
         Parameters
         ----------
         param_name: str
-            Parameter name. If the parameter name is non-existing, then ``KeyErrror`` is raised.
+            Parameter name. If the parameter name is non-existing, then ``KeyError`` is raised.
         default: object
             The default value, which is returned if the parameter is not set in the CLI parameters.
         """
@@ -375,6 +384,44 @@ class Settings:
             value_config=self._get_value_from_config("databroker_config"),
             value_cli=self._args_existing("databroker_config"),
         )
+
+    def __str__(self):
+        cfg = {
+            "zmq_control_addr": self.zmq_control_addr,
+            "zmq_private_key": None if self.zmq_private_key is None else "...",
+            "zmq_info_addr": self.zmq_info_addr,
+            "zmq_publish_console": self.zmq_publish_console,
+            "redis_addr": self.redis_addr,
+            "keep_re": self.keep_re,
+            "existing_plans_and_devices_path": self.existing_plans_and_devices_path,
+            "user_group_permissions_path": self.user_group_permissions_path,
+            "startup_dir": self.startup_dir,
+            "startup_module": self.startup_module,
+            "startup_script": self.startup_script,
+            "print_console_output": self.print_console_output,
+            "update_existing_plans_devices": self.update_existing_plans_devices,
+            "user_group_permissions_reload": self.user_group_permissions_reload,
+            "emergency_lock_key": self.emergency_lock_key,
+            "console_logging_level": self.console_logging_level,
+            "use_persistent_metadata": self.use_persistent_metadata,
+            "kafka_server": self.kafka_server,
+            "kafka_topic": self.kafka_topic,
+            "zmq_data_proxy_addr": self.zmq_data_proxy_addr,
+            "databroker_config": self.databroker_config,
+        }
+
+        if version.parse(python_version()) < version.parse("3.8"):
+            # TODO: delete this after support for 3.7 is dropped
+            pprint.sorted = lambda x, key=None: x
+            setting_str = pprint.pformat(cfg, indent=4)
+            delattr(pprint, "sorted")
+        else:
+            setting_str = pprint.pformat(cfg, indent=4, sort_dicts=False)
+
+        return setting_str
+
+    def __repr__(self):
+        return self.__str__()
 
     @property
     def zmq_control_addr(self):

@@ -480,7 +480,7 @@ def test_manager_with_config_file_01(
     re_manager_cmd(params_server)
 
     with open(save_settings_path, "r") as f:
-        current_settings = yaml.load(f)
+        current_settings = yaml.load(f, Loader=yaml.FullLoader)
 
     print(pprint.pformat(current_settings))
     assert current_settings == loaded_settings

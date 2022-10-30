@@ -385,7 +385,7 @@ class Settings:
             value_cli=self._args_existing("databroker_config"),
         )
 
-    def __str__(self):
+    def to_dict(self):
         cfg = {
             "zmq_control_addr": self.zmq_control_addr,
             "zmq_private_key": None if (self.zmq_private_key is None) else "...",
@@ -409,6 +409,10 @@ class Settings:
             "zmq_data_proxy_addr": self.zmq_data_proxy_addr,
             "databroker_config": self.databroker_config,
         }
+        return cfg
+
+    def __str__(self):
+        cfg = self.to_dict()
 
         if version.parse(python_version()) < version.parse("3.8"):
             # TODO: delete this after support for 3.7 is dropped

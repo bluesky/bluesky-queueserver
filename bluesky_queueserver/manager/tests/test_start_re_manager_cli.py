@@ -2,6 +2,7 @@ import os
 import pytest
 import subprocess
 import pprint
+import yaml
 
 from ..comms import zmq_single_request
 from .common import re_manager_cmd  # noqa: F401
@@ -18,7 +19,7 @@ from .common import (
     _user_group,
 )
 
-from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
+from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices, get_default_startup_dir
 
 
 # Plans used in most of the tests: '_plan1' and '_plan2' are quickly executed '_plan3' runs for 5 seconds.
@@ -436,3 +437,50 @@ def test_cli_parameters_zmq_server_address_1(monkeypatch, re_manager_cmd, test_m
     else:
         assert msg != "", (status, msg)
         assert status is None, (status, msg)
+
+
+_loaded_settings_1 = {
+    "console_logging_level": 10,
+    "databroker_config": None,
+    "emergency_lock_key": None,
+    "existing_plans_and_devices_path": None,
+    "kafka_server": "127.0.0.1:9092",
+    "kafka_topic": None,
+    "keep_re": False,
+    "print_console_output": True,
+    "redis_addr": "localhost",
+    "startup_dir": get_default_startup_dir(),
+    "startup_module": None,
+    "startup_script": None,
+    "update_existing_plans_devices": "ENVIRONMENT_OPEN",
+    "use_persistent_metadata": False,
+    "user_group_permissions_path": None,
+    "user_group_permissions_reload": "ON_STARTUP",
+    "zmq_control_addr": "tcp://*:60615",
+    "zmq_data_proxy_addr": None,
+    "zmq_info_addr": "tcp://*:60625",
+    "zmq_private_key": None,
+    "zmq_publish_console": False,
+}
+
+
+# fmt: off
+@pytest.mark.parametrize("pass_config, cli_params, loaded_settings", [
+    (False, [], _loaded_settings_1),
+])
+# fmt: on
+def test_manager_with_config_file_01(
+    tmpdir, monkeypatch, re_manager_cmd, pass_config, cli_params, loaded_settings  # noqa: F811
+):
+
+    save_settings_path = os.path.join(tmpdir, "current_settings.yaml")
+    monkeypatch.setenv("QSERVER_SETTINGS_SAVE_TO_FILE", save_settings_path)
+
+    params_server = []
+    re_manager_cmd(params_server)
+
+    with open(save_settings_path, "r") as f:
+        current_settings = yaml.load(f)
+
+    print(pprint.pformat(current_settings))
+    assert current_settings == loaded_settings

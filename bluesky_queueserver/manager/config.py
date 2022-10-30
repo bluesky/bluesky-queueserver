@@ -4,6 +4,7 @@ This module handles server configuration.
 See profiles.py for client configuration.
 """
 import builtins
+import copy
 from collections.abc import Mapping
 from importlib.util import find_spec
 import os
@@ -11,9 +12,7 @@ from pathlib import Path
 import jsonschema
 import logging
 import sys
-import pprint
-from platform import python_version
-from packaging import version
+import yaml
 
 
 from .output_streaming import default_zmq_info_address_for_server
@@ -277,304 +276,140 @@ class Settings:
         self._parser = parser
         self._args = args
         self._args_existing = _ArgsExisting(parser=parser, args=args)
+        self._settings = {}
 
         config_path = args.config_path
         config_path = config_path or os.environ.get("QSERVER_CONFIG", None)
         self._config = parse_configs(config_path) if config_path else {}
 
-        self._zmq_control_addr = self._get_zmq_control_addr()
-        self._zmq_private_key = self._get_zmq_private_key()
+        self._settings["zmq_control_addr"] = self._get_zmq_control_addr()
+        self._settings["zmq_private_key"] = self._get_zmq_private_key()
 
-        self._zmq_info_addr = self._get_param(
+        self._settings["zmq_info_addr"] = self._get_param(
             value_default=default_zmq_info_address_for_server,
             value_ev=os.environ.get("QSERVER_ZMQ_INFO_ADDRESS_FOR_SERVER", None),
             value_config=self._get_value_from_config("zmq_info_addr"),
             value_cli=self._args_existing("zmq_info_addr") or self._args_existing("zmq_publish_console_addr"),
         )
 
-        self._zmq_publish_console = self._get_param_boolean(
+        self._settings["zmq_publish_console"] = self._get_param_boolean(
             value_default=args.zmq_publish_console,
             value_config=self._get_value_from_config("zmq_publish_console"),
             value_cli=self._args_existing("zmq_publish_console"),
         )
 
-        self._redis_addr = self._get_param(
+        redis_addr = self._get_param(
             value_default=self._args.redis_addr,
             value_config=self._get_value_from_config("redis_addr"),
             value_cli=self._args_existing("redis_addr"),
         )
-        if self._redis_addr.count(":") > 1:
-            raise ConfigError(f"Redis address is incorrectly formatted: {self._redis_addr}")
+        if redis_addr.count(":") > 1:
+            raise ConfigError(f"Redis address is incorrectly formatted: {redis_addr}")
+        self._settings["redis_addr"] = redis_addr
 
-        self._keep_re = self._get_param_boolean(
+        self._settings["keep_re"] = self._get_param_boolean(
             value_default=args.keep_re,
             value_config=self._get_value_from_config("keep_re"),
             value_cli=self._args_existing("keep_re"),
         )
 
-        self._existing_plans_and_devices_path = self._get_param(
+        existing_plans_and_devices_path = self._get_param(
             value_default=args.existing_plans_and_devices_path,
             value_config=self._get_value_from_config("existing_plans_and_devices_path"),
             value_cli=self._args_existing("existing_plans_and_devices_path"),
         )
-        if isinstance(self._existing_plans_and_devices_path, str):
-            self._existing_plans_and_devices_path = os.path.expanduser(self._existing_plans_and_devices_path)
+        if isinstance(existing_plans_and_devices_path, str):
+            existing_plans_and_devices_path = os.path.expanduser(existing_plans_and_devices_path)
+        self._settings["existing_plans_and_devices_path"] = existing_plans_and_devices_path
 
-        self._user_group_permissions_path = self._get_param(
+        user_group_permissions_path = self._get_param(
             value_default=args.user_group_permissions_path,
             value_config=self._get_value_from_config("user_group_permissions_path"),
             value_cli=self._args_existing("user_group_permissions_path"),
         )
-        if isinstance(self._user_group_permissions_path, str):
-            self._user_group_permissions_path = os.path.expanduser(self._user_group_permissions_path)
+        if isinstance(user_group_permissions_path, str):
+            user_group_permissions_path = os.path.expanduser(user_group_permissions_path)
+        self._settings["user_group_permissions_path"] = user_group_permissions_path
 
-        self._startup_dir, self._startup_module, self._startup_script = self._get_startup_options()
+        startup_dir, startup_module, startup_script = self._get_startup_options()
+        self._settings["startup_dir"] = startup_dir
+        self._settings["startup_module"] = startup_module
+        self._settings["startup_script"] = startup_script
 
-        self._print_console_output = self._get_param_boolean(
+        self._settings["print_console_output"] = self._get_param_boolean(
             value_default=args.console_output,
             value_config=self._get_value_from_config("print_console_output"),
             value_cli=self._args_existing("console_output"),
         )
 
-        self._console_logging_level = self._get_console_logging_level()
+        self._settings["console_logging_level"] = self._get_console_logging_level()
 
-        self._update_existing_plans_devices = self._get_param(
+        self._settings["update_existing_plans_devices"] = self._get_param(
             value_default=args.update_existing_plans_devices,
             value_config=self._get_value_from_config("update_existing_plans_devices"),
             value_cli=self._args_existing("update_existing_plans_devices"),
         )
 
-        self._user_group_permissions_reload = self._get_param(
+        self._settings["user_group_permissions_reload"] = self._get_param(
             value_default=args.user_group_permissions_reload,
             value_config=self._get_value_from_config("user_group_permissions_reload"),
             value_cli=self._args_existing("user_group_permissions_reload"),
         )
 
-        self._emergency_lock_key = self._get_param(
+        self._settings["emergency_lock_key"] = self._get_param(
             value_ev=os.environ.get("QSERVER_EMERGENCY_LOCK_KEY_FOR_SERVER", None),
             value_config=self._get_value_from_config("emergency_lock_key"),
         )
 
-        self._use_persistent_metadata = self._get_param_boolean(
+        self._settings["use_persistent_metadata"] = self._get_param_boolean(
             value_default=args.use_persistent_metadata,
             value_config=self._get_value_from_config("use_persistent_metadata"),
             value_cli=self._args_existing("use_persistent_metadata"),
         )
 
-        self._kafka_server = self._get_param(
+        self._settings["kafka_server"] = self._get_param(
             value_default=args.kafka_server,
             value_config=self._get_value_from_config("kafka_server"),
             value_cli=self._args_existing("kafka_server"),
         )
 
-        self._kafka_topic = self._get_param(
+        self._settings["kafka_topic"] = self._get_param(
             value_default=args.kafka_topic,
             value_config=self._get_value_from_config("kafka_topic"),
             value_cli=self._args_existing("kafka_topic"),
         )
 
-        self._zmq_data_proxy_addr = self._get_param(
+        self._settings["zmq_data_proxy_addr"] = self._get_param(
             value_default=args.zmq_data_proxy_addr,
             value_config=self._get_value_from_config("zmq_data_proxy_addr"),
             value_cli=self._args_existing("zmq_data_proxy_addr"),
         )
 
-        self._databroker_config = self._get_param(
+        self._settings["databroker_config"] = self._get_param(
             value_default=args.databroker_config,
             value_config=self._get_value_from_config("databroker_config"),
             value_cli=self._args_existing("databroker_config"),
         )
 
+    def __getattr__(self, attr):
+        if attr in self._settings:
+            return self._settings[attr]
+        raise AttributeError(f"{self.__class__.__name__!r} object has no attribute {attr!r}")
+
     def to_dict(self):
-        cfg = {
-            "zmq_control_addr": self.zmq_control_addr,
-            "zmq_private_key": None if (self.zmq_private_key is None) else "...",
-            "zmq_info_addr": self.zmq_info_addr,
-            "zmq_publish_console": self.zmq_publish_console,
-            "redis_addr": self.redis_addr,
-            "keep_re": self.keep_re,
-            "existing_plans_and_devices_path": self.existing_plans_and_devices_path,
-            "user_group_permissions_path": self.user_group_permissions_path,
-            "startup_dir": self.startup_dir,
-            "startup_module": self.startup_module,
-            "startup_script": self.startup_script,
-            "print_console_output": self.print_console_output,
-            "update_existing_plans_devices": self.update_existing_plans_devices,
-            "user_group_permissions_reload": self.user_group_permissions_reload,
-            "emergency_lock_key": self.emergency_lock_key,
-            "console_logging_level": self.console_logging_level,
-            "use_persistent_metadata": self.use_persistent_metadata,
-            "kafka_server": self.kafka_server,
-            "kafka_topic": self.kafka_topic,
-            "zmq_data_proxy_addr": self.zmq_data_proxy_addr,
-            "databroker_config": self.databroker_config,
-        }
-        return cfg
+        """Return a copy of the dictionary with settings, which is safe to modify."""
+        return copy.deepcopy(self._settings)
 
     def __str__(self):
-        cfg = self.to_dict()
-
-        if version.parse(python_version()) < version.parse("3.8"):
-            # TODO: delete this after support for 3.7 is dropped
-            pprint.sorted = lambda x, key=None: x
-            setting_str = pprint.pformat(cfg, indent=4)
-            delattr(pprint, "sorted")
-        else:
-            setting_str = pprint.pformat(cfg, indent=4, sort_dicts=False)
-
-        return setting_str
+        settings_str = ""
+        for k, v in self._settings.items():
+            if k == "zmq_private_key":
+                v = None if (self.zmq_private_key is None) else "..."
+            settings_str += f"    {k}: {v!r}\n"
+        return settings_str
 
     def __repr__(self):
         return self.__str__()
-
-    @property
-    def zmq_control_addr(self):
-        """
-        Returns a string representing 0MQ control address.
-        """
-        return self._zmq_control_addr
-
-    @property
-    def zmq_private_key(self):
-        """
-        Returns a string representing 0MQ private key or ``None``.
-        """
-        return self._zmq_private_key
-
-    @property
-    def zmq_info_addr(self):
-        """
-        Returns a string representing 0MQ info address.
-        """
-        return self._zmq_info_addr
-
-    @property
-    def zmq_publish_console(self):
-        """
-        True/False
-        """
-        return self._zmq_publish_console
-
-    @property
-    def redis_addr(self):
-        """
-        Redis address (string).
-        """
-        return self._redis_addr
-
-    @property
-    def keep_re(self):
-        """
-        True/False
-        """
-        return self._keep_re
-
-    @property
-    def existing_plans_and_devices_path(self):
-        """
-        Returns absolute or relative path to the file containing lists of existing plans and devices
-        or ``None`` if the path is not set.
-        """
-        return self._existing_plans_and_devices_path
-
-    @property
-    def user_group_permissions_path(self):
-        """
-        Returns absolute or relative path to the file containing user group permissions
-        or ``None`` if the path is not set.
-        """
-        return self._user_group_permissions_path
-
-    @property
-    def startup_dir(self):
-        """
-        Full path to the directory containing the startup script or ``None``.
-        """
-        return self._startup_dir
-
-    @property
-    def startup_module(self):
-        """
-        Name of a Python module containing startup code or ``None``.
-        """
-        return self._startup_module
-
-    @property
-    def startup_script(self):
-        """
-        Full path to the Python startup script or ``None``.
-        """
-        return self._startup_script
-
-    @property
-    def print_console_output(self):
-        """
-        True/False
-        """
-        return self._print_console_output
-
-    @property
-    def update_existing_plans_devices(self):
-        """
-        Returns the selected option as a string.
-        """
-        return self._update_existing_plans_devices
-
-    @property
-    def user_group_permissions_reload(self):
-        """
-        Returns the selected option as a string.
-        """
-        return self._user_group_permissions_reload
-
-    @property
-    def emergency_lock_key(self):
-        """
-        Returns the emergency lock key (string) or ``None``.
-        """
-        return self._emergency_lock_key
-
-    @property
-    def console_logging_level(self):
-        """
-        The returned log level can be passed to the functions from ``logging`` package.
-        """
-        return self._console_logging_level
-
-    @property
-    def use_persistent_metadata(self):
-        """
-        True/False.
-        """
-        return self._use_persistent_metadata
-
-    @property
-    def kafka_server(self):
-        """
-        Returns a string representing kafka server address.
-        """
-        return self._kafka_server
-
-    @property
-    def kafka_topic(self):
-        """
-        Returns a string representing kafka topic.
-        """
-        return self._kafka_topic
-
-    @property
-    def zmq_data_proxy_addr(self):
-        """
-        Returns a string representing the address of 0MQ data proxy.
-        """
-        return self._zmq_data_proxy_addr
-
-    @property
-    def databroker_config(self):
-        """
-        Returns a string databroker configuration name or ``None`` if the configuration name is not set.
-        """
-        return self._databroker_config
 
     def _get_value_from_config(self, key, default=None):
         """
@@ -750,3 +585,21 @@ class Settings:
                 raise ConfigError("ZMQ private key is improperly formatted: %s", ex) from ex
 
         return zmq_private_key
+
+
+def save_settings_to_file(settings):
+    """
+    Save RE Manager current setting to a YAML file. The file path is passed using
+    ``QSERVER_SETTINGS_SAVE_TO_FILE``. Error message is printed if the operation can not
+    be completed. Used in automated testing.
+    """
+    # Save current settings to file. This feature is mostly for testing.
+    save_config_path = os.environ.get("QSERVER_SETTINGS_SAVE_TO_FILE", None)
+    if save_config_path and isinstance(save_config_path, str):
+        try:
+            save_config_path = os.path.abspath(os.path.expanduser(save_config_path))
+            with open(save_config_path, "w") as f:
+                yaml.dump(settings.to_dict(), f)
+            logger.info("Current settings are saved to file %r", save_config_path)
+        except Exception as ex:
+            logger.error("Failed to save current settings to file %r: %s", save_config_path, ex)

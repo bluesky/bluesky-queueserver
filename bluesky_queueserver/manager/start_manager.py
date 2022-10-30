@@ -3,7 +3,6 @@ from multiprocessing import Pipe, Queue
 import threading
 import time as ttime
 import os
-import yaml
 
 from .worker import RunEngineWorker
 from .manager import RunEngineManager
@@ -14,7 +13,7 @@ from .output_streaming import (
     default_zmq_info_address_for_server,
 )
 from .logging_setup import setup_loggers
-from .config import Settings
+from .config import Settings, save_settings_to_file
 
 from .. import __version__
 
@@ -486,16 +485,8 @@ def start_manager():
     logging.basicConfig(level=max(logging.WARNING, log_level))
     setup_loggers(log_level=log_level)
 
-    # Save current settings to file. This feature is mostly for testing.
-    save_config_path = os.environ.get("QSERVER_SETTINGS_SAVE_TO_FILE", None)
-    if save_config_path and isinstance(save_config_path, str):
-        try:
-            save_config_path = os.path.abspath(os.path.expanduser(save_config_path))
-            with open(save_config_path, "w") as f:
-                yaml.dump(settings.to_dict(), f)
-            logger.info("Current config is saved to file '%s'", save_config_path)
-        except Exception as ex:
-            logger.error("Failed to save current config to file '%s': %s", save_config_path, ex)
+    # Optionally save settings to a YAML file (used for testing)
+    save_settings_to_file(settings)
 
     stream_publisher = PublishConsoleOutput(
         msg_queue=msg_queue,

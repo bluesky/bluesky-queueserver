@@ -15,6 +15,7 @@ from .common import (
     copy_default_profile_collection,
     clear_redis_pool,
     set_qserver_zmq_address,
+    set_qserver_zmq_public_key,
     _user,
     _user_group,
 )
@@ -439,48 +440,196 @@ def test_cli_parameters_zmq_server_address_1(monkeypatch, re_manager_cmd, test_m
         assert status is None, (status, msg)
 
 
-_loaded_settings_1 = {
-    "console_logging_level": 10,
-    "databroker_config": None,
-    "emergency_lock_key": None,
-    "existing_plans_and_devices_path": None,
-    "kafka_server": "127.0.0.1:9092",
-    "kafka_topic": None,
-    "keep_re": False,
-    "print_console_output": True,
-    "redis_addr": "localhost",
-    "startup_dir": get_default_startup_dir(),
-    "startup_module": None,
-    "startup_script": None,
-    "update_existing_plans_devices": "ENVIRONMENT_OPEN",
-    "use_persistent_metadata": False,
-    "user_group_permissions_path": None,
-    "user_group_permissions_reload": "ON_STARTUP",
-    "zmq_control_addr": "tcp://*:60615",
-    "zmq_data_proxy_addr": None,
-    "zmq_info_addr": "tcp://*:60625",
-    "zmq_private_key": None,
-    "zmq_publish_console": False,
-}
+def _get_expected_settings_default_1(tmpdir):
+    return {
+        "console_logging_level": 10,
+        "databroker_config": None,
+        "emergency_lock_key": None,
+        "existing_plans_and_devices_path": None,
+        "kafka_server": "127.0.0.1:9092",
+        "kafka_topic": None,
+        "keep_re": False,
+        "print_console_output": True,
+        "redis_addr": "localhost",
+        "startup_dir": get_default_startup_dir(),
+        "startup_module": None,
+        "startup_script": None,
+        "update_existing_plans_devices": "ENVIRONMENT_OPEN",
+        "use_persistent_metadata": False,
+        "user_group_permissions_path": None,
+        "user_group_permissions_reload": "ON_STARTUP",
+        "zmq_control_addr": "tcp://*:60615",
+        "zmq_data_proxy_addr": None,
+        "zmq_info_addr": "tcp://*:60625",
+        "zmq_private_key": None,
+        "zmq_publish_console": False,
+    }
+
+
+_dir_2 = "startup2"
+
+
+# matching public key: =E0[czQkp!!%0TL1LCJ5X[<wjYD[iV+p[yuaI0an
+def _get_config_file_2(tmpdir):
+    s = """
+network:
+  zmq_control_addr: tcp://*:60617
+  zmq_private_key: {0}
+  zmq_info_addr: tcp://*:60627
+  zmq_publish_console: true
+  redis_addr: localhost:6379
+startup:
+  keep_re: false
+  startup_dir: {1}
+  existing_plans_and_devices_path: {2}
+  user_group_permissions_path: {3}
+operation:
+  print_console_output: true
+  console_logging_level: VERBOSE
+  update_existing_plans_and_devices: ALWAYS
+  user_group_permissions_reload: ON_REQUEST
+  emergency_lock_key: different_lock_key
+run_engine:
+  use_persistent_metadata: true
+  kafka_server: 127.0.0.1:9095
+  kafka_topic: different_topic_name
+  zmq_data_proxy_addr: tcp://localhost:5569
+  databroker_config: DIF
+"""
+    file_dir = os.path.join(tmpdir, _dir_2)
+    return s.format("Ue=.po0aQ9.}<Xvrny+f{V04XMc6JZ9ufKf5aeFy", file_dir, file_dir, file_dir)
+
+
+def _get_expected_settings_config_2(tmpdir):
+    file_dir = os.path.join(tmpdir, _dir_2)
+    return {
+        "console_logging_level": 10,
+        "databroker_config": "DIF",
+        "emergency_lock_key": "different_lock_key",
+        "existing_plans_and_devices_path": f"{file_dir}",
+        "kafka_server": "127.0.0.1:9095",
+        "kafka_topic": "different_topic_name",
+        "keep_re": False,
+        "print_console_output": True,
+        "redis_addr": "localhost:6379",
+        "startup_dir": f"{file_dir}",
+        "startup_module": None,
+        "startup_script": None,
+        "update_existing_plans_devices": "ALWAYS",
+        "use_persistent_metadata": True,
+        "user_group_permissions_path": f"{file_dir}",
+        "user_group_permissions_reload": "ON_REQUEST",
+        "zmq_control_addr": "tcp://*:60617",
+        "zmq_data_proxy_addr": "tcp://localhost:5569",
+        "zmq_info_addr": "tcp://*:60627",
+        "zmq_private_key": "Ue=.po0aQ9.}<Xvrny+f{V04XMc6JZ9ufKf5aeFy",
+        "zmq_publish_console": True,
+    }
+
+
+_dir_3 = "startup2"
+
+
+def _get_cli_params_3(tmpdir):
+    file_dir = os.path.join(tmpdir, _dir_3)
+    return [
+        "--zmq-control-addr=tcp://*:60619",
+        f"--startup-dir={file_dir}",
+        f"--existing-plans-devices={file_dir}",
+        "--update-existing-plans-devices=NEVER",
+        f"--user-group-permissions={file_dir}",
+        "--user-group-permissions-reload=NEVER",
+        "--redis-addr=localhost:6379",
+        "--kafka-topic=yet_another_topic",
+        "--kafka-server=127.0.0.1:9099",
+        "--keep-re",
+        "--zmq-data-proxy-addr=tcp://localhost:5571",
+        "--databroker-config=NEW",
+        "--zmq-info-addr=tcp://*:60629",
+        "--zmq-publish-console=OFF",
+        "--console-output=OFF",
+    ]
+
+
+def _get_expected_settings_params_3(tmpdir):
+    file_dir = os.path.join(tmpdir, _dir_3)
+    return {
+        "console_logging_level": 10,
+        "databroker_config": "NEW",
+        "emergency_lock_key": "different_lock_key",
+        "existing_plans_and_devices_path": f"{file_dir}",
+        "kafka_server": "127.0.0.1:9099",
+        "kafka_topic": "yet_another_topic",
+        "keep_re": True,
+        "print_console_output": False,
+        "redis_addr": "localhost:6379",
+        "startup_dir": f"{file_dir}",
+        "startup_module": None,
+        "startup_script": None,
+        "update_existing_plans_devices": "NEVER",
+        "use_persistent_metadata": True,
+        "user_group_permissions_path": f"{file_dir}",
+        "user_group_permissions_reload": "NEVER",
+        "zmq_control_addr": "tcp://*:60619",
+        "zmq_data_proxy_addr": "tcp://localhost:5571",
+        "zmq_info_addr": "tcp://*:60629",
+        "zmq_private_key": "Ue=.po0aQ9.}<Xvrny+f{V04XMc6JZ9ufKf5aeFy",
+        "zmq_publish_console": False,
+    }
+
+
+def _get_empty_params_1(tmpdir):
+    return []
 
 
 # fmt: off
-@pytest.mark.parametrize("pass_config, cli_params, loaded_settings", [
-    (False, [], _loaded_settings_1),
+@pytest.mark.parametrize("pass_config, file_dir, get_cli_params, get_expected_settings", [
+    (None, None, _get_empty_params_1, _get_expected_settings_default_1),
+    ("name_as_ev", _dir_2, _get_empty_params_1, _get_expected_settings_config_2),
+    ("name_as_param", _dir_2, _get_empty_params_1, _get_expected_settings_config_2),
+    ("name_as_param", _dir_3, _get_cli_params_3, _get_expected_settings_params_3),
 ])
 # fmt: on
 def test_manager_with_config_file_01(
-    tmpdir, monkeypatch, re_manager_cmd, pass_config, cli_params, loaded_settings  # noqa: F811
+    tmpdir, monkeypatch, re_manager_cmd, pass_config, file_dir, get_cli_params, get_expected_settings  # noqa: F811
 ):
+    """
+    Basic test for parameter handling functionality. Test if the parameters are successfully
+    loaded from config file and if CLI parameters override the parameters from config.
+    The test is not comprehensive or well organized, so it does not test the details, but
+    it is likely to fail if there are major issues with parameter handling.
+    """
+    if file_dir:
+        copy_default_profile_collection(os.path.join(tmpdir, file_dir))
 
     save_settings_path = os.path.join(tmpdir, "current_settings.yaml")
     monkeypatch.setenv("QSERVER_SETTINGS_SAVE_TO_FILE", save_settings_path)
 
-    params_server = []
+    config_path = os.path.join(tmpdir, "config.yml")
+    if pass_config:
+        set_qserver_zmq_public_key(monkeypatch, server_public_key="=E0[czQkp!!%0TL1LCJ5X[<wjYD[iV+p[yuaI0an")
+        set_qserver_zmq_address(monkeypatch, zmq_server_address="tcp://localhost:60617")
+        with open(config_path, "w") as f:
+            f.writelines(_get_config_file_2(tmpdir))
+
+    cli_params = get_cli_params(tmpdir)
+    if cli_params:
+        set_qserver_zmq_public_key(monkeypatch, server_public_key="=E0[czQkp!!%0TL1LCJ5X[<wjYD[iV+p[yuaI0an")
+        set_qserver_zmq_address(monkeypatch, zmq_server_address="tcp://localhost:60619")
+
+    params_server = cli_params
+
+    if pass_config == "name_as_ev":
+        monkeypatch.setenv("QSERVER_CONFIG", config_path)
+    elif pass_config == "name_as_param":
+        params_server.append(f"--config={config_path}")
+    elif pass_config is not None:
+        assert False, f"Unknown option {pass_config!r}"
+
     re_manager_cmd(params_server)
 
     with open(save_settings_path, "r") as f:
         current_settings = yaml.load(f, Loader=yaml.FullLoader)
 
     print(pprint.pformat(current_settings))
-    assert current_settings == loaded_settings
+    assert current_settings == get_expected_settings(tmpdir)

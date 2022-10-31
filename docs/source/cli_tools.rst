@@ -24,6 +24,15 @@ the location of beamline startup scripts.
 
 .. _location_of_startup_code:
 
+Using a Configuration Files
++++++++++++++++++++++++++++
+
+RM Manager can be customized using a config file (YML). Combining the parameters
+in a single config file may be more convenient in production deployments. The path
+to config file is passed to the manager using environment variable ``QSERVER_CONFIG``
+or using CLI parameter ``--config``. CLI parameters passed to ``start-re-manager``
+override the parameters set in config file or passed using environment variables.
+
 Location of Startup Code
 ++++++++++++++++++++++++
 
@@ -177,10 +186,10 @@ Other Configuration Parameters
 .. code-block::
 
     $ start-re-manager -h
-    usage: start-re-manager [-h] [--zmq-control-addr ZMQ_CONTROL_ADDR] [--zmq-addr ZMQ_ADDR]
+    usage: start-re-manager [-h] [--config CONFIG_PATH] [--zmq-control-addr ZMQ_CONTROL_ADDR]
+                            [--zmq-addr ZMQ_ADDR]
                             [--startup-dir STARTUP_DIR | --startup-profile PROFILE_NAME |
-                             --startup-module STARTUP_MODULE_NAME |
-                             --startup-script STARTUP_SCRIPT_PATH]
+                             --startup-module STARTUP_MODULE_NAME | --startup-script STARTUP_SCRIPT_PATH]
                             [--existing-plans-devices EXISTING_PLANS_AND_DEVICES_PATH]
                             [--update-existing-plans-devices {NEVER,ENVIRONMENT_OPEN,ALWAYS}]
                             [--user-group-permissions USER_GROUP_PERMISSIONS_PATH]
@@ -196,7 +205,7 @@ Other Configuration Parameters
                             [--verbose | --quiet | --silent]
 
     Start Run Engine (RE) Manager
-    bluesky-queueserver version 0.0.15
+    bluesky-queueserver version 0.0.17.post32.dev0+ga4ba9d1
 
     Encryption for ZeroMQ communication server may be enabled by setting the value of
     'QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER' environment variable to a valid private key
@@ -210,6 +219,12 @@ Other Configuration Parameters
 
     optional arguments:
       -h, --help        show this help message and exit
+      --config CONFIG_PATH
+                        Path to a YML config file or a directory containing multiple config
+                        files. The path passed as a parameter overrides the path set using
+                        QSERVER_CONFIG environment variable. The config path must point to an
+                        existing file or directory (may be empty), otherwise the manager can
+                        not be started.
       --zmq-control-addr ZMQ_CONTROL_ADDR
                         The address of ZMQ server (control connection). The parameter
                         overrides the address defined by the environment variable

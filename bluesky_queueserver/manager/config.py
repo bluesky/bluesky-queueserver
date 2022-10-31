@@ -404,7 +404,7 @@ class Settings:
         settings_str = ""
         for k, v in self._settings.items():
             if k == "zmq_private_key":
-                v = None if (self.zmq_private_key is None) else "..."
+                v = None if (self.zmq_private_key is None) else "*******"
             settings_str += f"    {k}: {v!r}\n"
         return settings_str
 

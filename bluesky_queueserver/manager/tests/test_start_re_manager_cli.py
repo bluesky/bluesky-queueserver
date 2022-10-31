@@ -585,9 +585,13 @@ def _get_empty_params_1(tmpdir):
 
 # fmt: off
 @pytest.mark.parametrize("pass_config, file_dir, get_cli_params, get_expected_settings", [
+    # Starting RE Manager using default parameters (--verbose CLI parameter is always set)
     (None, None, _get_empty_params_1, _get_expected_settings_default_1),
+    # Pass config file (use EV to pass the path)
     ("name_as_ev", _dir_2, _get_empty_params_1, _get_expected_settings_config_2),
+    # Pass config file (use --config CLI parameter to pass the path)
     ("name_as_param", _dir_2, _get_empty_params_1, _get_expected_settings_config_2),
+    # Pass the config file and a set of CLI parameters that override the config parameters
     ("name_as_param", _dir_3, _get_cli_params_3, _get_expected_settings_params_3),
 ])
 # fmt: on
@@ -632,7 +636,7 @@ def test_manager_with_config_file_01(
     with open(save_settings_path, "r") as f:
         current_settings = yaml.load(f, Loader=yaml.FullLoader)
 
-    print(pprint.pformat(current_settings))
+    print(pprint.pformat(current_settings))  # Useful in case of failure
 
     # Remove 'startup_dir' from the settings dictionaries and compare them
     #   separately. This is needed because the default startup directory

@@ -2,6 +2,28 @@
 Release History
 ===============
 
+v0.0.18 (2022-10-31)
+====================
+
+Fixed
+-----
+
+- Improved manager and worker stability in case of malfunctioning plans (plans that block
+  Run Engine event loop).
+
+Added
+-----
+
+- New ``timeout`` parameter for ``ZMQCommSendThreads.send_message()``, ``ZMQCommSendAsync.send_message()``
+  and ``zmq_single_request()`` functions. The timeout overrides the default timeout ``timeout_recv``
+  set during instantiation of the respective classes for the particular request.
+
+- Support for managing parameters to RE Manager using configuration YML files.
+
+- New CLI parameter ``--config`` and environment variable ``QSERVER_CONFIG`` for passing
+  the path to config file to RE Manager.
+
+
 v0.0.17 (2022-10-02)
 ====================
 

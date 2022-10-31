@@ -3,18 +3,17 @@ from multiprocessing import Pipe, Queue
 import threading
 import time as ttime
 import os
-from importlib.util import find_spec
 
 from .worker import RunEngineWorker
 from .manager import RunEngineManager
-from .comms import PipeJsonRpcReceive, validate_zmq_key, default_zmq_control_address_for_server
-from .profile_ops import get_default_startup_dir
+from .comms import PipeJsonRpcReceive, default_zmq_control_address_for_server
 from .output_streaming import (
     PublishConsoleOutput,
     setup_console_output_redirection,
     default_zmq_info_address_for_server,
 )
 from .logging_setup import setup_loggers
+from .config import Settings, save_settings_to_file
 
 from .. import __version__
 
@@ -168,7 +167,6 @@ class WatchdogProcess:
 
         logging.basicConfig(level=max(logging.WARNING, self._log_level))
         setup_loggers(log_level=self._log_level)
-
         # Requests
         self._comm_to_manager.add_method(self._start_re_worker_handler, "start_re_worker")
         self._comm_to_manager.add_method(self._join_re_worker_handler, "join_re_worker")
@@ -181,6 +179,7 @@ class WatchdogProcess:
         self._comm_to_manager.start()
 
         self._start_re_manager()
+
         while True:
             # Primitive implementation of the loop that restarts the process.
             self._re_manager.join(0.1)  # Small timeout
@@ -223,6 +222,17 @@ def start_manager():
     parser = argparse.ArgumentParser(
         description=f"Start Run Engine (RE) Manager\nbluesky-queueserver version {__version__}\n\n{s_enc}",
         formatter_class=formatter,
+    )
+
+    parser.add_argument(
+        "--config",
+        dest="config_path",
+        type=str,
+        default=None,
+        help="Path to a YML config file or a directory containing multiple config files. The path passed "
+        "as a parameter overrides the path set using QSERVER_CONFIG environment variable. The config path "
+        "must point to an existing file or directory (may be empty), otherwise the manager can not "
+        "be started.",
     )
     parser.add_argument(
         "--zmq-control-addr",
@@ -460,88 +470,52 @@ def start_manager():
 
     args = parser.parse_args()
 
-    log_level = logging.INFO
-    if args.logger_verbose:
-        log_level = logging.DEBUG
-    elif args.logger_quiet:
-        log_level = logging.WARNING
-    elif args.logger_silent:
-        log_level = logging.CRITICAL + 1
+    settings = Settings(parser=parser, args=args)
 
-    console_output_on = args.console_output == "ON"
-    zmq_publish_console_on = args.zmq_publish_console == "ON"
-
-    zmq_info_addr = args.zmq_info_addr
     if args.zmq_publish_console_addr is not None:
         logger.warning(
             "Parameter --zmq-publish-console-addr is deprecated and will be removed in future releases. "
             "Use --zmq-info-addr instead."
         )
-    zmq_info_addr = zmq_info_addr or args.zmq_publish_console_addr
-    zmq_info_addr = zmq_info_addr or os.environ.get("QSERVER_ZMQ_INFO_ADDRESS_FOR_SERVER", None)
-    zmq_info_addr = zmq_info_addr or default_zmq_info_address_for_server
 
     msg_queue = Queue()
     setup_console_output_redirection(msg_queue)
 
+    log_level = settings.console_logging_level
     logging.basicConfig(level=max(logging.WARNING, log_level))
     setup_loggers(log_level=log_level)
 
+    # Optionally save settings to a YAML file (used for testing)
+    save_settings_to_file(settings)
+
     stream_publisher = PublishConsoleOutput(
         msg_queue=msg_queue,
-        console_output_on=console_output_on,
-        zmq_publish_on=zmq_publish_console_on,
-        zmq_publish_addr=zmq_info_addr,
+        console_output_on=settings.print_console_output,
+        zmq_publish_on=settings.zmq_publish_console,
+        zmq_publish_addr=settings.zmq_info_addr,
     )
 
-    if zmq_publish_console_on:
+    if settings.zmq_publish_console:
         # Wait for a short period to allow monitoring applications to connect.
         ttime.sleep(1)
 
     stream_publisher.start()
 
+    logger.info("RE Manager configuration:\n%s", settings)
+
     config_worker = {}
     config_manager = {}
-    if args.kafka_topic is not None:
+    if settings.kafka_topic is not None:
         config_worker["kafka"] = {}
-        config_worker["kafka"]["topic"] = args.kafka_topic
-        config_worker["kafka"]["bootstrap"] = args.kafka_server
+        config_worker["kafka"]["topic"] = settings.kafka_topic
+        config_worker["kafka"]["bootstrap"] = settings.kafka_server
 
-    if args.zmq_data_proxy_addr is not None:
-        config_worker["zmq_data_proxy_addr"] = args.zmq_data_proxy_addr
+    if settings.zmq_data_proxy_addr is not None:
+        config_worker["zmq_data_proxy_addr"] = settings.zmq_data_proxy_addr
 
-    startup_dir, startup_module_name, startup_script_path = None, None, None
-
-    # Find startup directory
-    if args.profile_name:
-        profile_name = args.profile_name
-        if find_spec("IPython"):
-            import IPython
-
-            path_to_ipython = IPython.paths.get_ipython_dir()
-        else:
-            logger.error(
-                "IPython is not installed. Specify directory to startup file by using '--startup-dir' option."
-            )
-            return 1
-        ipython_dir = os.path.abspath(path_to_ipython)
-        profile_name_full = f"profile_{profile_name}"
-        startup_dir = os.path.join(ipython_dir, profile_name_full, "startup")
-    elif args.startup_dir:
-        startup_dir = args.startup_dir
-        startup_dir = os.path.abspath(os.path.expanduser(startup_dir))
-    elif args.startup_module_name:
-        startup_module_name = args.startup_module_name
-    elif args.startup_script_path:
-        startup_script_path = os.path.abspath(os.path.expanduser(args.startup_script_path))
-    else:
-        # The default collection is the collection of simulated Ophyd devices
-        #   and built-in Bluesky plans.
-        startup_dir = get_default_startup_dir()
-
-    if sum([_ is not None for _ in [startup_dir, startup_module_name, startup_script_path]]) != 1:
-        logger.error("Multiple or no startup code sources were specified.")
-        return 1
+    startup_dir = settings.startup_dir
+    startup_module_name = settings.startup_module
+    startup_script_path = settings.startup_script
 
     # Primitive error processing: make sure that all essential data exists.
     if startup_dir is not None:
@@ -555,13 +529,13 @@ def start_manager():
         # startup_module_name or startup_script_path is set. This option requires
         #   the paths to existing plans and devices and user group permissions to be set.
         #   (The default directory can not be used in this case).
-        if not args.existing_plans_and_devices_path:
+        if not settings.existing_plans_and_devices_path:
             logger.error(
                 "The path to the list of existing plans and devices (--existing-plans-and-devices) "
                 "is not specified."
             )
             return 1
-        if not args.user_group_permissions_path:
+        if not settings.user_group_permissions_path:
             logger.error(
                 "The path to the file containing user group permissions (--user-group-permissions) "
                 "is not specified."
@@ -573,20 +547,20 @@ def start_manager():
                 logger.error("The script '%s' is not found.", startup_script_path)
                 return 1
 
-    config_worker["keep_re"] = args.keep_re
-    config_worker["use_persistent_metadata"] = args.use_persistent_metadata
+    config_worker["keep_re"] = settings.keep_re
+    config_worker["use_persistent_metadata"] = settings.use_persistent_metadata
 
     config_worker["databroker"] = {}
-    if args.databroker_config:
-        config_worker["databroker"]["config"] = args.databroker_config
+    if settings.databroker_config:
+        config_worker["databroker"]["config"] = settings.databroker_config
 
     config_worker["startup_dir"] = startup_dir
     config_worker["startup_module_name"] = startup_module_name
     config_worker["startup_script_path"] = startup_script_path
 
     default_existing_pd_fln = "existing_plans_and_devices.yaml"
-    if args.existing_plans_and_devices_path:
-        existing_pd_path = os.path.expanduser(args.existing_plans_and_devices_path)
+    if settings.existing_plans_and_devices_path:
+        existing_pd_path = os.path.expanduser(settings.existing_plans_and_devices_path)
         if not os.path.isabs(existing_pd_path) and startup_dir:
             existing_pd_path = os.path.join(startup_dir, existing_pd_path)
         if not existing_pd_path.endswith(".yaml"):
@@ -611,8 +585,8 @@ def start_manager():
         )
 
     default_user_group_pd_fln = "user_group_permissions.yaml"
-    if args.user_group_permissions_path:
-        user_group_pd_path = os.path.expanduser(args.user_group_permissions_path)
+    if settings.user_group_permissions_path:
+        user_group_pd_path = os.path.expanduser(settings.user_group_permissions_path)
         if not os.path.isabs(user_group_pd_path) and startup_dir:
             user_group_pd_path = os.path.join(startup_dir, user_group_pd_path)
         if not user_group_pd_path.endswith(".yaml"):
@@ -632,46 +606,15 @@ def start_manager():
     config_manager["existing_plans_and_devices_path"] = existing_pd_path
     config_manager["user_group_permissions_path"] = user_group_pd_path
 
-    config_worker["update_existing_plans_devices"] = args.update_existing_plans_devices
+    config_worker["update_existing_plans_devices"] = settings.update_existing_plans_devices
+    config_manager["user_group_permissions_reload"] = settings.user_group_permissions_reload
 
-    config_manager["user_group_permissions_reload"] = args.user_group_permissions_reload
+    config_manager["zmq_addr"] = settings.zmq_control_addr
+    config_manager["zmq_private_key"] = settings.zmq_private_key
 
-    # Read private key from the environment variable, then check if the CLI parameter exists
-    zmq_private_key = os.environ.get("QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER", None)
-    if (zmq_private_key is None) and ("QSERVER_ZMQ_PRIVATE_KEY" in os.environ):
-        logger.warning(
-            "Environment variable QSERVER_ZMQ_PRIVATE_KEY is deprecated and will be removed "
-            "in future releases. Use QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER instead"
-        )
-    zmq_private_key = zmq_private_key or os.environ.get("QSERVER_ZMQ_PRIVATE_KEY", None)
-    zmq_private_key = zmq_private_key or None  # Case of key==""
-    if zmq_private_key is not None:
-        try:
-            validate_zmq_key(zmq_private_key)
-        except Exception as ex:
-            logger.error("ZMQ private key is improperly formatted: %s", ex)
-            return 1
+    config_manager["redis_addr"] = settings.redis_addr
 
-    zmq_control_addr = args.zmq_control_addr
-    if args.zmq_addr is not None:
-        logger.warning(
-            "Parameter --zmq-addr is deprecated and will be removed in future releases. "
-            "Use --zmq-control-addr instead."
-        )
-    zmq_control_addr = zmq_control_addr or args.zmq_addr
-    zmq_control_addr = zmq_control_addr or os.environ.get("QSERVER_ZMQ_CONTROL_ADDRESS_FOR_SERVER")
-    zmq_control_addr = zmq_control_addr or default_zmq_control_address_for_server
-    config_manager["zmq_addr"] = zmq_control_addr
-    config_manager["zmq_private_key"] = zmq_private_key
-
-    redis_addr = args.redis_addr
-    if redis_addr.count(":") > 1:
-        logger.error("Redis address is incorrectly formatted: '%s'", redis_addr)
-        return 1
-    config_manager["redis_addr"] = redis_addr
-
-    lock_key_emergency = os.environ.get("QSERVER_EMERGENCY_LOCK_KEY_FOR_SERVER", None)
-    config_manager["lock_key_emergency"] = lock_key_emergency
+    config_manager["lock_key_emergency"] = settings.emergency_lock_key
 
     wp = WatchdogProcess(
         config_worker=config_worker, config_manager=config_manager, msg_queue=msg_queue, log_level=log_level
@@ -680,3 +623,5 @@ def start_manager():
         wp.run()
     except KeyboardInterrupt:
         logger.info("The program was manually stopped")
+    except Exception as ex:
+        logger.exception(ex)

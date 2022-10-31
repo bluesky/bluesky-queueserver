@@ -27,6 +27,7 @@ Bluesky-QueueServer Documentation
    item_validation
    plan_annotation
    cli_tools
+   manager_config
    qserver_quick_ref
 
 .. toctree::

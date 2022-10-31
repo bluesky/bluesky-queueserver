@@ -7,6 +7,7 @@ flake8
 happi>=1.14.0
 pytest
 pytest-xprocess
+py
 sphinx
 # These are dependencies of various sphinx extensions for documentation.
 ipython

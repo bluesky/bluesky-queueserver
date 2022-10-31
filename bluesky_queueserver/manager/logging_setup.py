@@ -144,7 +144,7 @@ class PPrintForLogging:
                     queue.extend(qe)
 
         if version.parse(python_version()) < version.parse("3.8"):
-            # NOTE: delete this after support for 3.7 is dropped
+            # TODO: delete this after support for 3.7 is dropped
             pprint.sorted = lambda x, key=None: x
             msg_out = pprint.pformat(msg_reduced)
             delattr(pprint, "sorted")

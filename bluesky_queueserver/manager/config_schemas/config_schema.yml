@@ -1,0 +1,95 @@
+# This schema (a jsonschema in YAML format) is used
+# for validating configuration.
+#
+# ref: https://json-schema.org/learn/getting-started-step-by-step.html
+#
+$schema": http://json-schema.org/draft-07/schema#
+type: object
+additionalProperties: false
+properties:
+  network:
+    type: object
+    additionalProperties: false
+    properties:
+      zmq_control_addr:
+        type: string
+      zmq_private_key:
+        type: string
+      zmq_info_addr:
+        type: string
+      zmq_publish_console:
+        type: boolean
+      redis_addr:
+        type: string
+  startup:
+    oneOf:
+      - type: object
+        additionalProperties: false
+        properties:
+          keep_re:
+            type: boolean
+          existing_plans_and_devices_path:
+            type: string
+          user_group_permissions_path:
+            type: string
+      - type: object
+        additionalProperties: false
+        properties:
+          keep_re:
+            type: boolean
+          startup_dir:
+            type: string
+          startup_profile:
+            type: string
+          startup_module:
+            type: string
+          startup_script:
+            type: string
+          existing_plans_and_devices_path:
+            type: string
+          user_group_permissions_path:
+            type: string
+        oneOf:
+          - type: object
+            required:
+              - startup_dir
+          - type: object
+            required:
+              - startup_profile
+          - type: object
+            required:
+              - startup_module
+          - type: object
+            required:
+              - startup_script
+  operation:
+    type: object
+    additionalProperties: false
+    properties:
+      print_console_output:
+        type: boolean
+      console_logging_level:
+        type: string
+        pattern: "^(VERBOSE)|(NORMAL)|(QUIET)|(SILENT)$"
+      update_existing_plans_and_devices:
+        type: string
+        pattern: "^(NEVER)|(ENVIRONMENT_OPEN)|(ALWAYS)$"
+      user_group_permissions_reload:
+        type: string
+        pattern: "^(NEVER)|(ON_REQUEST)|(ON_STARTUP)"
+      emergency_lock_key:
+        type: string
+  run_engine:
+    type: object
+    additional_properties: false
+    properties:
+      use_persistent_metadata:
+        type: boolean
+      kafka_server:
+        type: string
+      kafka_topic:
+        type: string
+      zmq_data_proxy_addr:
+        type: string
+      databroker_config:
+        type: string

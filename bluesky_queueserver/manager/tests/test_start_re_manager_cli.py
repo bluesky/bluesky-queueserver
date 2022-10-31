@@ -1,3 +1,4 @@
+import copy
 import os
 import pytest
 import subprocess
@@ -20,7 +21,7 @@ from .common import (
     _user_group,
 )
 
-from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices, get_default_startup_dir
+from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
 
 
 # Plans used in most of the tests: '_plan1' and '_plan2' are quickly executed '_plan3' runs for 5 seconds.
@@ -451,7 +452,7 @@ def _get_expected_settings_default_1(tmpdir):
         "keep_re": False,
         "print_console_output": True,
         "redis_addr": "localhost",
-        "startup_dir": get_default_startup_dir(),
+        "startup_dir": "/bluesky_queueserver/profile_collection_sim/",
         "startup_module": None,
         "startup_script": None,
         "update_existing_plans_devices": "ENVIRONMENT_OPEN",
@@ -632,4 +633,16 @@ def test_manager_with_config_file_01(
         current_settings = yaml.load(f, Loader=yaml.FullLoader)
 
     print(pprint.pformat(current_settings))
-    assert current_settings == get_expected_settings(tmpdir)
+
+    # Remove 'startup_dir' from the settings dictionaries and compare them
+    #   separately. This is needed because the default startup directory
+    #   returned by 'get_default_startup_dir()` is different for the manager
+    #   and the testing code when the test is running on CI.
+    expected_settings = copy.deepcopy(get_expected_settings(tmpdir))
+    expected_startup_dir_suffix = expected_settings.pop("startup_dir")
+    startup_dir = current_settings.pop("startup_dir")
+    assert isinstance(startup_dir, str), startup_dir
+    assert isinstance(expected_startup_dir_suffix, str), expected_startup_dir_suffix
+    assert startup_dir.endswith(expected_startup_dir_suffix)
+
+    assert current_settings == expected_settings

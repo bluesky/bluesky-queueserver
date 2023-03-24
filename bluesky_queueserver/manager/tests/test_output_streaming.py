@@ -1,16 +1,17 @@
 import asyncio
 import multiprocessing
-import pytest
 import sys
-import time as ttime
 import threading
+import time as ttime
+
+import pytest
 
 from bluesky_queueserver.manager.output_streaming import (
     ConsoleOutputStream,
-    setup_console_output_redirection,
     PublishConsoleOutput,
     ReceiveConsoleOutput,
     ReceiveConsoleOutputAsync,
+    setup_console_output_redirection,
 )
 
 

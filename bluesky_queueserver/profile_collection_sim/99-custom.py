@@ -1,13 +1,15 @@
 # flake8: noqa
 import time as ttime
 import typing
-import ophyd
-from ophyd import Device, Component as Cpt  # Keep 'Device' imported, used in unit tests
-import bluesky
-import bluesky.preprocessors as bpp
-import bluesky.plan_stubs as bps
-from bluesky_queueserver.manager.annotation_decorator import parameter_annotation_decorator
 
+import bluesky
+import bluesky.plan_stubs as bps
+import bluesky.preprocessors as bpp
+import ophyd
+from ophyd import Component as Cpt  # Keep 'Device' imported, used in unit tests
+from ophyd import Device
+
+from bluesky_queueserver.manager.annotation_decorator import parameter_annotation_decorator
 
 # Some useless devices for unit tests.
 custom_test_device = ophyd.Device(name="custom_test_device")

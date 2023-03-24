@@ -1,21 +1,20 @@
-import os
-import glob
-import shutil
-import pytest
-import subprocess
 import asyncio
-import time as ttime
-import intake
-import tempfile
+import glob
+import logging
+import os
+import shutil
+import subprocess
 import sys
+import tempfile
+import time as ttime
 
+import intake
+import pytest
 from databroker import catalog_search_path
 
-from bluesky_queueserver.manager.profile_ops import get_default_startup_dir
-from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
 from bluesky_queueserver.manager.comms import zmq_single_request
-
-import logging
+from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
+from bluesky_queueserver.manager.profile_ops import get_default_startup_dir
 
 logger = logging.Logger(__name__)
 

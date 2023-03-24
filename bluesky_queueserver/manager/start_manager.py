@@ -1,23 +1,21 @@
 import argparse
-from multiprocessing import Pipe, Queue
+import logging
+import os
 import threading
 import time as ttime
-import os
-
-from .worker import RunEngineWorker
-from .manager import RunEngineManager
-from .comms import PipeJsonRpcReceive, default_zmq_control_address_for_server
-from .output_streaming import (
-    PublishConsoleOutput,
-    setup_console_output_redirection,
-    default_zmq_info_address_for_server,
-)
-from .logging_setup import setup_loggers
-from .config import Settings, save_settings_to_file
+from multiprocessing import Pipe, Queue
 
 from .. import __version__
-
-import logging
+from .comms import PipeJsonRpcReceive, default_zmq_control_address_for_server
+from .config import Settings, save_settings_to_file
+from .logging_setup import setup_loggers
+from .manager import RunEngineManager
+from .output_streaming import (
+    PublishConsoleOutput,
+    default_zmq_info_address_for_server,
+    setup_console_output_redirection,
+)
+from .worker import RunEngineWorker
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +31,6 @@ class WatchdogProcess:
         msg_queue=None,
         log_level=logging.DEBUG,
     ):
-
         self._log_level = log_level
 
         self._cls_run_engine_worker = cls_run_engine_worker
@@ -164,7 +161,6 @@ class WatchdogProcess:
         self._re_manager.start()
 
     def run(self):
-
         logging.basicConfig(level=max(logging.WARNING, self._log_level))
         setup_loggers(log_level=self._log_level)
         # Requests
@@ -204,7 +200,6 @@ class WatchdogProcess:
 
 
 def start_manager():
-
     s_enc = (
         "Encryption for ZeroMQ communication server may be enabled by setting the value of\n"
         "'QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER' environment variable to a valid private key\n"

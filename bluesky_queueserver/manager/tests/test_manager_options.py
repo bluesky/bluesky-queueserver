@@ -1,27 +1,26 @@
-import pytest
-import shutil
-import os
 import glob
+import multiprocessing
+import os
+import shutil
 import subprocess
 import time as ttime
-import multiprocessing
 
-from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
+import pytest
+
 from bluesky_queueserver.manager.comms import zmq_single_request
-
-from .common import (
-    copy_default_profile_collection,
-    append_code_to_last_startup_file,
-    wait_for_condition,
-    condition_environment_created,
-    condition_queue_processing_finished,
-    condition_environment_closed,
-    _user,
-    _user_group,
-)
+from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
 
 from .common import re_manager_cmd  # noqa: F401
-
+from .common import (
+    _user,
+    _user_group,
+    append_code_to_last_startup_file,
+    condition_environment_closed,
+    condition_environment_created,
+    condition_queue_processing_finished,
+    copy_default_profile_collection,
+    wait_for_condition,
+)
 
 _plan1 = {"name": "count", "args": [["det1", "det2"]], "item_type": "plan"}
 

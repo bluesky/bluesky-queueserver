@@ -1,11 +1,12 @@
-import aioredis
 import asyncio
 import copy
 import json
-import uuid
 import logging
-from packaging import version
 import time as ttime
+import uuid
+
+import aioredis
+from packaging import version
 
 logger = logging.getLogger(__name__)
 

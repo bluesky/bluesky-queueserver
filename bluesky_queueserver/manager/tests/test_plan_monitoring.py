@@ -1,7 +1,8 @@
-import pytest
 import uuid
 
-from bluesky_queueserver.manager.plan_monitoring import RunList, CallbackRegisterRun
+import pytest
+
+from bluesky_queueserver.manager.plan_monitoring import CallbackRegisterRun, RunList
 
 
 def test_RunList_1():

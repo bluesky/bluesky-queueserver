@@ -1,28 +1,27 @@
 import copy
 import os
-import pytest
-import subprocess
 import pprint
+import subprocess
+
+import pytest
 import yaml
-
-from ..comms import zmq_single_request
-from .common import re_manager_cmd  # noqa: F401
-
-from .common import (
-    wait_for_condition,
-    condition_environment_created,
-    condition_environment_closed,
-    condition_queue_processing_finished,
-    copy_default_profile_collection,
-    clear_redis_pool,
-    set_qserver_zmq_address,
-    set_qserver_zmq_public_key,
-    _user,
-    _user_group,
-)
 
 from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
 
+from ..comms import zmq_single_request
+from .common import re_manager_cmd  # noqa: F401
+from .common import (
+    _user,
+    _user_group,
+    clear_redis_pool,
+    condition_environment_closed,
+    condition_environment_created,
+    condition_queue_processing_finished,
+    copy_default_profile_collection,
+    set_qserver_zmq_address,
+    set_qserver_zmq_public_key,
+    wait_for_condition,
+)
 
 # Plans used in most of the tests: '_plan1' and '_plan2' are quickly executed '_plan3' runs for 5 seconds.
 _plan1 = {"name": "count", "args": [["det1", "det2"]], "item_type": "plan"}

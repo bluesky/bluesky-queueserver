@@ -1,25 +1,26 @@
+import argparse
 import ast
-import os
+import copy
+import enum
 import glob
+import importlib
 import inspect
-from collections.abc import Iterable
-import pkg_resources
-import yaml
+import logging
+import numbers
+import os
+import random
 import re
 import sys
-import jsonschema
-import copy
-import typing
-import pydantic
-import enum
-import random
-import argparse
-import importlib
-import numbers
-from numpydoc.docscrape import NumpyDocString
 import traceback
+import typing
+from collections.abc import Iterable
 
-import logging
+import jsonschema
+import pkg_resources
+import pydantic
+import yaml
+from numpydoc.docscrape import NumpyDocString
+
 import bluesky_queueserver
 
 from .logging_setup import PPrintForLogging as ppfl
@@ -172,14 +173,12 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
         path_is_set = False
 
     try:
-
         # Load the files into the namespace 'nspace'.
         nspace = {}
 
         if patch_profiles:
             exec(_startup_script_patch, nspace, nspace)
         for file in file_list:
-
             try:
                 logger.info("Loading startup file '%s' ...", file)
 
@@ -236,7 +235,6 @@ def load_startup_module(module_name, *, keep_re=False):
     importlib.invalidate_caches()
 
     try:
-
         _module = importlib.import_module(module_name)
         nspace = _module.__dict__
 
@@ -305,7 +303,6 @@ def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True
         raise ScriptLoadingError(msg, ex_str) from ex
 
     finally:
-
         patch = "del __file__\n"  # Do not delete '__name__'
         exec(patch, nspace, nspace)
 
@@ -1706,7 +1703,6 @@ def _check_ranges(kwargs_in, param_list):
     """
 
     def process_argument(v, v_min, v_max):
-
         queue = [v]
 
         while queue:
@@ -2373,7 +2369,6 @@ def _parse_docstring(docstring):
     """
     doc_annotation = {}
     if docstring:
-
         # Make sure that the first line of the docstring is properly indented, otherwise it is
         #   incorrectly parsed by 'numpydoc' (new line is optional).
         # Find the minimum
@@ -2986,7 +2981,7 @@ def gen_list_of_plans_and_devices(
     RuntimeError
         Error occurred while creating or saving the lists.
     """
-    from .profile_tools import set_re_worker_active, clear_re_worker_active
+    from .profile_tools import clear_re_worker_active, set_re_worker_active
 
     file_name = file_name or "existing_plans_and_devices.yaml"
     try:

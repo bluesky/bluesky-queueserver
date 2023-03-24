@@ -3,15 +3,15 @@ import asyncio
 import inspect
 import io
 import json
+import logging
 import os
 import sys
-import time as ttime
 import threading
+import time as ttime
+
 import zmq
 
 import bluesky_queueserver
-
-import logging
 
 logger = logging.getLogger(__name__)
 qserver_version = bluesky_queueserver.__version__
@@ -257,7 +257,6 @@ class ReceiveConsoleOutput:
     """
 
     def __init__(self, *, zmq_subscribe_addr=None, zmq_topic=_default_zmq_console_topic, timeout=1000):
-
         self._timeout = timeout  # Timeout for 'recv' operation (ms)
 
         zmq_subscribe_addr = zmq_subscribe_addr or default_zmq_info_address
@@ -432,7 +431,6 @@ class ReceiveConsoleOutputAsync:
     """
 
     def __init__(self, *, zmq_subscribe_addr=None, zmq_topic=_default_zmq_console_topic, timeout=1000):
-
         self._timeout = timeout  # Timeout for 'recv' operation (ms)
 
         zmq_subscribe_addr = zmq_subscribe_addr or "tcp://localhost:60625"

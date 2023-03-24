@@ -1,77 +1,73 @@
-import os
-import pytest
 import copy
-import yaml
-import typing
-from typing import Dict, Optional
-import subprocess
-import pprint
-import sys
 import enum
 import inspect
-from collections.abc import Callable
+import os
+import pprint
 import re
 import shutil
+import subprocess
+import sys
 import time as ttime
+import typing
+from collections.abc import Callable
+from typing import Dict, Optional
 
-
-from bluesky import protocols
 import ophyd
 import ophyd.sim
+import pytest
+import yaml
+from bluesky import protocols
 
-from .common import (
-    copy_default_profile_collection,
-    patch_first_startup_file,
-    append_code_to_last_startup_file,
-    _user_group,
+from bluesky_queueserver.manager.annotation_decorator import parameter_annotation_decorator
+from bluesky_queueserver.manager.profile_ops import (
+    ScriptLoadingError,
+    _build_device_name_list,
+    _build_plan_name_list,
+    _check_ranges,
+    _decode_parameter_types_and_defaults,
+    _filter_allowed_plans,
+    _filter_device_tree,
+    _find_and_replace_built_in_types,
+    _get_nspace_object,
+    _is_object_name_in_list,
+    _prepare_devices,
+    _prepare_plans,
+    _process_annotation,
+    _process_default_value,
+    _process_plan,
+    _select_allowed_plans,
+    _split_name_pattern,
+    _validate_user_group_permissions_schema,
+    bind_plan_arguments,
+    check_if_function_allowed,
+    construct_parameters,
+    devices_from_nspace,
+    extract_script_root_path,
+    format_text_descriptions,
+    gen_list_of_plans_and_devices,
+    get_default_startup_dir,
+    load_allowed_plans_and_devices,
+    load_existing_plans_and_devices,
+    load_profile_collection,
+    load_script_into_existing_nspace,
+    load_startup_module,
+    load_startup_script,
+    load_user_group_permissions,
+    load_worker_startup_code,
+    plans_from_nspace,
+    prepare_function,
+    prepare_plan,
+    update_existing_plans_and_devices,
+    validate_plan,
 )
 
 from .common import reset_sys_modules  # noqa: F401
-
-from bluesky_queueserver.manager.annotation_decorator import parameter_annotation_decorator
-
-from bluesky_queueserver.manager.profile_ops import (
-    get_default_startup_dir,
-    load_profile_collection,
-    load_startup_script,
-    load_startup_module,
-    load_worker_startup_code,
-    load_script_into_existing_nspace,
-    extract_script_root_path,
-    plans_from_nspace,
-    devices_from_nspace,
-    prepare_plan,
-    gen_list_of_plans_and_devices,
-    load_existing_plans_and_devices,
-    update_existing_plans_and_devices,
-    load_user_group_permissions,
-    _process_plan,
-    validate_plan,
-    bind_plan_arguments,
-    _select_allowed_plans,
-    load_allowed_plans_and_devices,
-    _prepare_plans,
-    _prepare_devices,
-    ScriptLoadingError,
-    _process_annotation,
-    _decode_parameter_types_and_defaults,
-    _process_default_value,
-    construct_parameters,
-    _check_ranges,
-    format_text_descriptions,
-    check_if_function_allowed,
-    _validate_user_group_permissions_schema,
-    prepare_function,
-    _split_name_pattern,
-    _build_device_name_list,
-    _build_plan_name_list,
-    _find_and_replace_built_in_types,
-    _is_object_name_in_list,
-    _get_nspace_object,
-    _filter_allowed_plans,
-    _filter_device_tree,
+from .common import (
+    _user_group,
+    append_code_to_last_startup_file,
+    copy_default_profile_collection,
+    patch_first_startup_file,
 )
-
 
 python_version = sys.version_info  # Can be compare to tuples (such as 'python_version >= (3, 9)')
 
@@ -2961,6 +2957,7 @@ def test_process_plan_5_fail(plan_func, err_msg):
 # ---------------------------------------------------------------------------------
 #                    _find_and_replace_built_in_types()
 
+
 # fmt: off
 @pytest.mark.parametrize("type_str_in, plans, devices, enums, type_str_out, convert_plans, convert_devices", [
     ("some_type", None, None, None, "some_type", False, False),
@@ -3170,6 +3167,7 @@ def test_process_annotation_3(encoded_annotation, type_expected, success, errmsg
 # -----------------------------------------------------------------------------------------------------
 #                                 _process_default_value
 
+
 # fmt: off
 @pytest.mark.parametrize("default_encoded, default_expected, success, errmsg", [
     ("10", 10, True, ""),
@@ -3181,7 +3179,6 @@ def test_process_annotation_3(encoded_annotation, type_expected, success, errmsg
 ])
 # fmt: on
 def test_process_default_value_1(default_encoded, default_expected, success, errmsg):
-
     if success:
         default = _process_default_value(default_encoded)
         assert default == default_expected
@@ -3863,7 +3860,8 @@ def _pp_generate_stage_devs():
     Created compound devices for testing 'prepare_plan' function.
     """
 
-    from ophyd.sim import motor1 as _pp_motor1, motor2 as _pp_motor2
+    from ophyd.sim import motor1 as _pp_motor1
+    from ophyd.sim import motor2 as _pp_motor2
 
     class SimStage(ophyd.Device):
         x = ophyd.Component(ophyd.sim.SynAxis, name="y", labels={"motors"})
@@ -4978,7 +4976,6 @@ def test_load_existing_plans_and_devices_1():
 @pytest.mark.parametrize("option", ["normal", "no_file", "empty_file", "corrupt_file1", "corrupt_file2"])
 # fmt: on
 def test_load_existing_plans_and_devices_2(tmp_path, option):
-
     path_to_file = os.path.join(tmp_path, "some_dir")
     os.makedirs(path_to_file, exist_ok=True)
     path_to_file = os.path.join(path_to_file, "p_and_d.yaml")

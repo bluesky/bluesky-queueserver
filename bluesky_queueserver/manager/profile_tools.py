@@ -1,7 +1,7 @@
 import functools
 import inspect
-import re
 import os
+import re
 
 
 class UserNamespace:

@@ -1,11 +1,11 @@
+import ast
+import logging
 import math
+import os
+import re
+
 import numpy as np
 import pandas as pd
-import re
-import os
-import ast
-
-import logging
 
 from .profile_ops import _convert_str_to_number
 
@@ -67,7 +67,6 @@ def simplify_plan_descriptions(plans_source):
 
     plans_filtered = {}
     for p_name, p_items in plans_source.items():
-
         plan = dict()
         # Plan name - mandatory (actually it always equals 'pname')
         plan["name"] = p_items["name"]

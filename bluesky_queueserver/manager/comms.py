@@ -1,15 +1,16 @@
-import threading
-import json
 import asyncio
-import uuid
+import json
+import logging
 import queue
+import threading
+import uuid
+
 import zmq
 import zmq.asyncio
 from jsonrpc import JSONRPCResponseManager
 from jsonrpc.dispatcher import Dispatcher
-from .logging_setup import PPrintForLogging as ppfl
 
-import logging
+from .logging_setup import PPrintForLogging as ppfl
 
 logger = logging.getLogger(__name__)
 
@@ -180,7 +181,6 @@ class PipeJsonRpcReceive:
 
     def _start_conn_thread(self):
         if not self._thread_running:
-
             # Clear the pipe from outdated unprocessed messages.
             while self._conn.poll():
                 self._conn.recv()
@@ -237,7 +237,6 @@ class PipeJsonRpcReceive:
                 break
 
     def _handle_msg(self, msg):
-
         # if logger.level < 11:  # Print output only if logging level is DEBUG (10) or less
         #     msg_json = json.loads(msg)
         #     We don't want to print 'heartbeat' messages
@@ -403,7 +402,6 @@ class PipeJsonRpcSendAsync:
             msg = format_jsonrpc_msg(method, params, notification=notification)
 
             try:
-
                 # 'fut_send' sent along with the message. If the thread is still sending the previous
                 #   message, the future is not going to be set until the current message is sent.
                 fut_send = self._loop.create_future()
@@ -653,7 +651,6 @@ class ZMQCommSendThreads:
         raise_exceptions=True,
         server_public_key=None,
     ):
-
         zmq_server_address = zmq_server_address or default_zmq_control_address
 
         # ZeroMQ communication
@@ -1198,7 +1195,6 @@ def zmq_single_request(method, params=None, *, timeout=None, zmq_server_address=
     msg_received = None
 
     async def send_request(method, params):
-
         nonlocal msg_received
         zmq_to_manager = ZMQCommSendAsync(
             zmq_server_address=zmq_server_address, server_public_key=server_public_key

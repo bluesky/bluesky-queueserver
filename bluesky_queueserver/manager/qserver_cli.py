@@ -1,25 +1,26 @@
+import argparse
 import ast
+import asyncio
 import copy
+import enum
+import logging
+import os
 import time as ttime
 from datetime import datetime
-import argparse
-import enum
-import os
+
 import yaml
-import asyncio
 
 import bluesky_queueserver
+
 from .comms import (
-    zmq_single_request,
-    validate_zmq_key,
-    generate_zmq_public_key,
-    generate_zmq_keys,
     default_zmq_control_address,
+    generate_zmq_keys,
+    generate_zmq_public_key,
+    validate_zmq_key,
+    zmq_single_request,
 )
 from .logging_setup import PPrintForLogging as ppfl
 from .plan_queue_ops import PlanQueueOperations
-
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -1126,7 +1127,6 @@ def prepare_qserver_output(msg):
 
 
 def qserver():
-
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger("bluesky_queueserver").setLevel("ERROR")
 
@@ -1259,7 +1259,6 @@ def qserver():
 
 
 def qserver_zmq_keys():
-
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger("bluesky_queueserver").setLevel("INFO")
 
@@ -1312,7 +1311,6 @@ def qserver_zmq_keys():
 
 
 def qserver_clear_lock():
-
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger("bluesky_queueserver").setLevel("INFO")
 

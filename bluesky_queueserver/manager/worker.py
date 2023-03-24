@@ -1,36 +1,34 @@
-from multiprocessing import Process
-import threading
-import queue
-import time as ttime
-import os
 import asyncio
-from functools import partial
-import logging
-import uuid
-import enum
-import traceback
 import copy
+import enum
 import json
-
-from .comms import PipeJsonRpcReceive
-from .output_streaming import setup_console_output_redirection
-from .logging_setup import setup_loggers
-
-from event_model import RunRouter
+import logging
+import os
+import queue
+import threading
+import time as ttime
+import traceback
+import uuid
+from functools import partial
+from multiprocessing import Process
 
 import msgpack
 import msgpack_numpy as mpn
+from event_model import RunRouter
 
+from .comms import PipeJsonRpcReceive
+from .logging_setup import setup_loggers
+from .output_streaming import setup_console_output_redirection
 from .profile_ops import (
-    load_worker_startup_code,
-    load_allowed_plans_and_devices,
-    update_existing_plans_and_devices,
-    prepare_plan,
+    compare_existing_plans_and_devices,
     existing_plans_and_devices_from_nspace,
     extract_script_root_path,
+    load_allowed_plans_and_devices,
     load_script_into_existing_nspace,
-    compare_existing_plans_and_devices,
+    load_worker_startup_code,
     prepare_function,
+    prepare_plan,
+    update_existing_plans_and_devices,
 )
 
 logger = logging.getLogger(__name__)
@@ -94,7 +92,6 @@ class RunEngineWorker(Process):
         user_group_permissions=None,
         **kwargs,
     ):
-
         if not conn:
             raise RuntimeError("Invalid value of parameter 'conn': %S.", str(conn))
 
@@ -229,7 +226,6 @@ class RunEngineWorker(Process):
 
         except BaseException as ex:
             with self._re_report_lock:
-
                 self._re_report = {
                     "action": "plan_exit",
                     "result": "",
@@ -1051,7 +1047,7 @@ class RunEngineWorker(Process):
 
         success = True
 
-        from .profile_tools import set_re_worker_active, clear_re_worker_active
+        from .profile_tools import clear_re_worker_active, set_re_worker_active
 
         self._env_state = EState.INITIALIZING
 
@@ -1061,7 +1057,7 @@ class RunEngineWorker(Process):
 
         self._completed_tasks_lock = threading.Lock()
 
-        from .plan_monitoring import RunList, CallbackRegisterRun
+        from .plan_monitoring import CallbackRegisterRun, RunList
 
         self._active_run_list = RunList()  # Initialization should be done before communication is enabled.
 
@@ -1096,10 +1092,10 @@ class RunEngineWorker(Process):
         self._existing_items_lock = threading.Lock()
 
         from bluesky import RunEngine
-        from bluesky.run_engine import get_bluesky_event_loop
         from bluesky.callbacks.best_effort import BestEffortCallback
-        from bluesky_kafka import Publisher as kafkaPublisher
+        from bluesky.run_engine import get_bluesky_event_loop
         from bluesky.utils import PersistentDict
+        from bluesky_kafka import Publisher as kafkaPublisher
 
         from .profile_tools import global_user_namespace
 

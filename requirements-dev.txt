@@ -4,6 +4,7 @@ black
 codecov
 coverage
 flake8
+isort
 happi>=1.14.0
 pytest
 pytest-xprocess
@@ -13,6 +14,7 @@ sphinx
 ipython
 matplotlib
 numpy
+intake
 numpydoc
 scikit-image
 sphinx

@@ -1,33 +1,34 @@
-import time as ttime
-import subprocess
-import pytest
 import os
+import subprocess
+import time as ttime
+
+import pytest
 import yaml
 
-from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
 from bluesky_queueserver.manager.comms import generate_zmq_keys
-
-from .common import (
-    patch_first_startup_file,
-    patch_first_startup_file_undo,
-    wait_for_condition,
-    condition_manager_idle,
-    condition_manager_paused,
-    condition_environment_created,
-    condition_environment_closed,
-    condition_queue_processing_finished,
-    get_reduced_state_info,
-    get_queue_state,
-    get_queue,
-    append_code_to_last_startup_file,
-    set_qserver_zmq_public_key,
-    zmq_single_request,
-    set_qserver_zmq_address,
-)
-
-from .common import re_manager, re_manager_pc_copy, re_manager_cmd  # noqa: F401
+from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
 
 from ..qserver_cli import QServerExitCodes
+from .common import (  # noqa: F401
+    append_code_to_last_startup_file,
+    condition_environment_closed,
+    condition_environment_created,
+    condition_manager_idle,
+    condition_manager_paused,
+    condition_queue_processing_finished,
+    get_queue,
+    get_queue_state,
+    get_reduced_state_info,
+    patch_first_startup_file,
+    patch_first_startup_file_undo,
+    re_manager,
+    re_manager_cmd,
+    re_manager_pc_copy,
+    set_qserver_zmq_address,
+    set_qserver_zmq_public_key,
+    wait_for_condition,
+    zmq_single_request,
+)
 
 # Exit codes for CLI tool
 SUCCESS = QServerExitCodes.SUCCESS.value
@@ -453,7 +454,6 @@ raise Exception("This exception is raised to test if error handling works correc
 ])
 # fmt: on
 def test_qserver_env_open_various_cases(re_manager_pc_copy, additional_code, success):  # noqa: F811
-
     _, pc_path = re_manager_pc_copy
 
     # Patch one of the startup files.
@@ -612,7 +612,6 @@ def test_queue_mode_set_2_fail(re_manager, plist, exit_code):  # noqa F811
 ])
 # fmt: on
 def test_queue_item_add_1(re_manager, pos, pos_result, success):  # noqa F811
-
     # Wait until RE Manager is started
     assert wait_for_condition(time=10, condition=condition_manager_idle)
 

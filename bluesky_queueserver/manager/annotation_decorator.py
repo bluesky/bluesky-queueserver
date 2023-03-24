@@ -1,7 +1,8 @@
+import copy
 import functools
 import inspect
+
 import jsonschema
-import copy
 
 _parameter_annotation_schema = {
     "type": "object",

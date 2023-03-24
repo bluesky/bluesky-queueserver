@@ -1,30 +1,30 @@
-import os
 import inspect
-import pytest
+import os
 import sys
 
+import pytest
+
+from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices, load_profile_collection
 from bluesky_queueserver.manager.profile_tools import (
+    clear_re_worker_active,
     global_user_namespace,
+    is_re_worker_active,
     load_devices_from_happi,
     set_re_worker_active,
-    clear_re_worker_active,
-    is_re_worker_active,
 )
-from bluesky_queueserver.manager.profile_ops import load_profile_collection, gen_list_of_plans_and_devices
 
 from ..comms import zmq_single_request
-
+from .common import re_manager_cmd  # noqa: F401
 from .common import (
-    wait_for_condition,
-    condition_environment_created,
+    _user,
+    _user_group,
     condition_environment_closed,
+    condition_environment_created,
     condition_manager_idle,
     copy_default_profile_collection,
     patch_first_startup_file,
-    _user,
-    _user_group,
+    wait_for_condition,
 )
-from .common import re_manager_cmd  # noqa: F401
 
 
 def create_local_imports_files(tmp_path):

@@ -1,21 +1,22 @@
-import pytest
-import time as ttime
+import asyncio
 import json
 import logging
 import multiprocessing
 import pprint
 import threading
-import asyncio
+import time as ttime
+
+import pytest
 import zmq
 
 from bluesky_queueserver.manager.comms import (
+    CommJsonRpcError,
+    CommTimeoutError,
+    JSONRPCResponseManager,
     PipeJsonRpcReceive,
     PipeJsonRpcSendAsync,
-    JSONRPCResponseManager,
-    CommTimeoutError,
-    CommJsonRpcError,
-    ZMQCommSendThreads,
     ZMQCommSendAsync,
+    ZMQCommSendThreads,
     generate_zmq_keys,
     generate_zmq_public_key,
     validate_zmq_key,
@@ -1186,6 +1187,7 @@ def test_ZMQCommSendThreads_6_fail():
 # =======================================================================
 #                       Class ZMQCommSendAsync
 
+
 # fmt: off
 @pytest.mark.parametrize("encryption_enabled", [False, True])
 # fmt: on
@@ -1260,7 +1262,6 @@ def test_ZMQCommSendAsync_3(encryption_enabled):
     thread.start()
 
     async def testing():
-
         zmq_comm = ZMQCommSendAsync(server_public_key=public_key if encryption_enabled else None)
         method, params = "testing", {"p1": 10, "p2": "abc"}
 
@@ -1308,7 +1309,6 @@ def test_ZMQCommSendAsync_4(raise_exception, delay_between_reads, encryption_ena
     thread.start()
 
     async def testing():
-
         zmq_comm = ZMQCommSendAsync(server_public_key=public_key if encryption_enabled else None)
         method, params = "testing", {"p1": 10, "p2": "abc"}
 

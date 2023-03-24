@@ -1,11 +1,10 @@
+import json
+import logging
 import threading
 import time as ttime
-import json
 
 from bluesky_queueserver.manager.start_manager import WatchdogProcess
 from bluesky_queueserver.tests.common import format_jsonrpc_msg
-
-import logging
 
 
 class ReManagerEmulation(threading.Thread):

@@ -1,56 +1,56 @@
-import pytest
-import os
-import time as ttime
 import asyncio
 import copy
-import pprint
-import re
 import glob
 import json
-import numpy as np
-import zmq
-import yaml
+import os
+import pprint
+import re
+import time as ttime
 from datetime import datetime
 
-import bluesky_queueserver
+import numpy as np
+import pytest
+import yaml
+import zmq
 
+import bluesky_queueserver
+from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
 from bluesky_queueserver.manager.profile_ops import (
-    get_default_startup_dir,
-    load_allowed_plans_and_devices,
-    gen_list_of_plans_and_devices,
-    load_profile_collection,
     _prepare_devices,
     _prepare_plans,
     devices_from_nspace,
+    gen_list_of_plans_and_devices,
+    get_default_startup_dir,
+    load_allowed_plans_and_devices,
+    load_profile_collection,
     plans_from_nspace,
 )
 
-from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
-
 from ..comms import (
-    zmq_single_request,
-    ZMQCommSendThreads,
-    ZMQCommSendAsync,
     CommTimeoutError,
+    ZMQCommSendAsync,
+    ZMQCommSendThreads,
     default_zmq_control_address,
+    zmq_single_request,
 )
-
-from .common import (
-    wait_for_condition,
-    condition_environment_created,
-    condition_queue_processing_finished,
-    condition_manager_paused,
-    wait_for_task_result,
-    get_queue_state,
-    condition_environment_closed,
-    condition_manager_idle,
-    append_code_to_last_startup_file,
-    copy_default_profile_collection,
+from .common import (  # noqa: F401
     _user,
     _user_group,
-    # clear_redis_pool,
+    append_code_to_last_startup_file,
+    condition_environment_closed,
+    condition_environment_created,
+    condition_manager_idle,
+    condition_manager_paused,
+    condition_queue_processing_finished,
+    copy_default_profile_collection,
+    db_catalog,
+    get_queue_state,
+    re_manager,
+    re_manager_cmd,
+    re_manager_pc_copy,
+    wait_for_condition,
+    wait_for_task_result,
 )
-from .common import re_manager, re_manager_pc_copy, re_manager_cmd, db_catalog  # noqa: F401
 
 qserver_version = bluesky_queueserver.__version__
 
@@ -200,6 +200,7 @@ def test_invalid_requests_1(re_manager):  # noqa F811
 
 # =======================================================================================
 #                   Methods 'ping' (currently returning status), "status"
+
 
 # fmt: off
 @pytest.mark.parametrize("api_name", ["ping", "status"])
@@ -394,7 +395,6 @@ def test_zmq_api_queue_item_add_01(re_manager):  # noqa F811
 ])
 # fmt: on
 def test_zmq_api_queue_item_add_02(re_manager, pos, pos_result, success):  # noqa F811
-
     plan1 = {"name": "count", "args": [["det1"]], "item_type": "plan"}
     plan2 = {"name": "count", "args": [["det1", "det2"]], "item_type": "plan"}
 
@@ -801,7 +801,6 @@ def test_zmq_api_queue_item_add_09(db_catalog, re_manager_cmd, meta_param, meta_
 
 
 def test_zmq_api_queue_item_add_10_fail(re_manager):  # noqa F811
-
     # Unknown plan name
     plan1 = {"name": "count_test", "args": [["det1", "det2"]], "item_type": "plan"}
     params1 = {"item": plan1, "user": _user, "user_group": _user_group}
@@ -1117,6 +1116,7 @@ def test_zmq_api_queue_item_execute_4_fail(re_manager):  # noqa: F811
 # =======================================================================================
 #                          Method 'queue_item_add_batch'
 
+
 # fmt: off
 @pytest.mark.parametrize("batch_params, queue_seq, batch_seq, expected_seq, success, msgs", [
     ({}, "", "", "", True, "" * 3),  # Add an empty batch
@@ -1396,6 +1396,7 @@ def test_zmq_api_queue_item_add_batch_4_fail(re_manager):  # noqa: F811
 
 # =======================================================================================
 #                            Method 'queue_item_update'
+
 
 # fmt: on
 @pytest.mark.parametrize("replace", [None, False, True])
@@ -3335,6 +3336,7 @@ def test_zmq_api_item_remove_batch_2_fail(re_manager):  # noqa: F811
 # =======================================================================================
 #                              Method `queue_item_move`
 
+
 # fmt: off
 @pytest.mark.parametrize("params, src, order, success, msg", [
     ({"pos": 1, "pos_dest": 1}, 1, [0, 1, 2], True, ""),
@@ -3669,6 +3671,7 @@ def test_zmq_api_queue_mode_set_3_loop_mode(re_manager):  # noqa: F811
 
 # =======================================================================================
 #                              Method 'permissions_reload'
+
 
 # fmt: off
 @pytest.mark.parametrize("restore_plans_devices", [False, True])
@@ -4043,6 +4046,7 @@ def test_permissions_set_get_3_fail(re_manager, params, err_msg):  # noqa: F811
 
 # =======================================================================================
 #                              Method `environment_destroy`
+
 
 # fmt: off
 @pytest.mark.parametrize("destroy_while_opening, delay", [
@@ -4529,7 +4533,6 @@ def test_zmq_api_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_resta
     # Wait for the end of execution of the plan with timeout (60 seconds)
     time_finish = ttime.time() + 60
     while ttime.time() < time_finish:
-
         # If the manager was restarted, then wait for the manager to restart.
         #   All requests will time out until the manager is restarted.
         resp, _ = zmq_single_request("status")

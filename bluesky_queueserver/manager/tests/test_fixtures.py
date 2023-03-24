@@ -2,15 +2,15 @@ import pytest
 
 from bluesky_queueserver.manager.comms import zmq_single_request
 
-from .common import re_manager_cmd, db_catalog  # noqa: F401
-
-from .common import (
-    wait_for_condition,
-    condition_environment_created,
-    condition_manager_idle,
-    condition_environment_closed,
+from .common import (  # noqa: F401
     _user,
     _user_group,
+    condition_environment_closed,
+    condition_environment_created,
+    condition_manager_idle,
+    db_catalog,
+    re_manager_cmd,
+    wait_for_condition,
 )
 
 

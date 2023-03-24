@@ -1,11 +1,10 @@
-import typing
-import pytest
-import jsonschema
 import inspect
-from bluesky_queueserver.manager.annotation_decorator import (
-    parameter_annotation_decorator,
-)
+import typing
 
+import jsonschema
+import pytest
+
+from bluesky_queueserver.manager.annotation_decorator import parameter_annotation_decorator
 
 _simple_annotation = {
     "description": "Simple generator function",
@@ -526,6 +525,7 @@ def test_annotation_dectorator_10():
     """
     Test if decorated generator function is recognized as a generator function by ``inspect``.
     """
+
     # Apply decorator to a function
     @parameter_annotation_decorator(_trivial_annotation)
     def func():

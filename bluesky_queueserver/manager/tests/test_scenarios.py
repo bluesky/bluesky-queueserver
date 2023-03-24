@@ -1,29 +1,29 @@
-import pytest
-import time as ttime
 import pprint
 import random
+import time as ttime
+
+import pytest
 
 import bluesky_queueserver
 
-from ..comms import (
-    zmq_single_request,
-    generate_zmq_keys,
-)
-
-from .common import (
-    zmq_secure_request,
-    wait_for_condition,
-    condition_environment_created,
-    condition_queue_processing_finished,
-    condition_manager_paused,
-    get_queue_state,
-    condition_environment_closed,
-    condition_manager_idle,
-    set_qserver_zmq_public_key,
+from ..comms import generate_zmq_keys, zmq_single_request
+from .common import (  # noqa: F401
     _user,
     _user_group,
+    condition_environment_closed,
+    condition_environment_created,
+    condition_manager_idle,
+    condition_manager_paused,
+    condition_queue_processing_finished,
+    db_catalog,
+    get_queue_state,
+    re_manager,
+    re_manager_cmd,
+    re_manager_pc_copy,
+    set_qserver_zmq_public_key,
+    wait_for_condition,
+    zmq_secure_request,
 )
-from .common import re_manager, re_manager_pc_copy, re_manager_cmd, db_catalog  # noqa: F401
 
 qserver_version = bluesky_queueserver.__version__
 

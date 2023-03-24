@@ -1,6 +1,6 @@
 import copy
-import threading
 import logging
+import threading
 
 from bluesky.callbacks.core import CallbackBase
 

@@ -1,29 +1,31 @@
 import asyncio
+import copy
+import enum
+import logging
+import time as ttime
+import uuid
+from datetime import datetime
+from multiprocessing import Process
+
 import zmq
 import zmq.asyncio
-from multiprocessing import Process
-import time as ttime
-import enum
-import uuid
-import copy
-from datetime import datetime
 
 import bluesky_queueserver
-from .comms import PipeJsonRpcSendAsync, CommTimeoutError, validate_zmq_key
+
+from .comms import CommTimeoutError, PipeJsonRpcSendAsync, validate_zmq_key
+from .logging_setup import PPrintForLogging as ppfl
+from .logging_setup import setup_loggers
+from .output_streaming import setup_console_output_redirection
+from .plan_queue_ops import PlanQueueOperations
 from .profile_ops import (
+    check_if_function_allowed,
     load_allowed_plans_and_devices,
     load_existing_plans_and_devices,
-    validate_plan,
     load_user_group_permissions,
+    validate_plan,
     validate_user_group_permissions,
-    check_if_function_allowed,
 )
-from .plan_queue_ops import PlanQueueOperations
-from .output_streaming import setup_console_output_redirection
-from .logging_setup import setup_loggers, PPrintForLogging as ppfl
 from .task_results import TaskResults
-
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -197,7 +199,6 @@ class RunEngineManager(Process):
         number_of_restarts,
         **kwargs,
     ):
-
         if not conn_watchdog:
             raise RuntimeError(
                 "Value of the parameter 'conn_watchdog' is invalid: %s.",
@@ -573,7 +574,6 @@ class RunEngineManager(Process):
         while True:
             await asyncio.sleep(t_period)
             if self._environment_exists or (self._manager_state == MState.CREATING_ENVIRONMENT):
-
                 if self._manager_state == MState.DESTROYING_ENVIRONMENT:
                     continue
 
@@ -861,7 +861,6 @@ class RunEngineManager(Process):
 
             # The next items is PLAN
             if next_item["item_type"] == "plan":
-
                 # Reset RE environment (worker)
                 success, err_msg = await self._worker_command_reset_worker()
                 if not success:
@@ -1998,7 +1997,6 @@ class RunEngineManager(Process):
         return rdict
 
     def validate_item_batch(self, items, user, user_group):
-
         logger.debug("Starting validation of item batch ...")
 
         success, items_prepared, results = True, [], []
@@ -3225,7 +3223,6 @@ class RunEngineManager(Process):
 
         # Now check if the plan is still being executed (if it was executed)
         if self._environment_exists:
-
             # The environment is expected to contain the most recent version of the list of plans and devices
             #   and a copy of user group permissions, so they could be downloaded from the worker.
             #   If the request to download plans and devices fails, then the lists of existing and allowed

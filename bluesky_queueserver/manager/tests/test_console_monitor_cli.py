@@ -1,14 +1,10 @@
-import pytest
 import subprocess
+
+import pytest
 
 from ..comms import zmq_single_request
 from .common import re_manager_cmd  # noqa: F401
-
-from .common import (
-    wait_for_condition,
-    condition_environment_created,
-    condition_environment_closed,
-)
+from .common import condition_environment_closed, condition_environment_created, wait_for_condition
 
 
 # fmt: off

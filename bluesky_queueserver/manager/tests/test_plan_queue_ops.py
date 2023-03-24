@@ -1,12 +1,13 @@
 import asyncio
-import pytest
-import json
 import copy
-import re
+import json
 import pprint
-from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
+import re
 import time as ttime
 
+import pytest
+
+from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
 
 errmsg_wrong_plan_type = "Parameter 'item' should be a dictionary"
 
@@ -428,7 +429,6 @@ def test_uid_dict_4_failing():
 
     async def testing():
         async with PQ() as pq:
-
             pq._uid_dict_add(plan_a)
             pq._uid_dict_add(plan_b)
 
@@ -464,7 +464,6 @@ def test_remove_item():
 
     async def testing():
         async with PQ() as pq:
-
             plan_list = [{"name": "a"}, {"name": "b"}, {"name": "c"}]
             for plan in plan_list:
                 await pq.add_item_to_queue(plan)
@@ -1886,7 +1885,6 @@ def test_set_processed_item_as_completed_1():
             assert _["result"]["time_start"] < _["result"]["time_stop"]
 
     async def testing():
-
         async with PQ() as pq:
             for plan in plans:
                 await pq.add_item_to_queue(plan)

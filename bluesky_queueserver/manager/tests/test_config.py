@@ -1,7 +1,8 @@
 import os
+
 import pytest
 
-from ..config import parse_configs, ConfigError
+from ..config import ConfigError, parse_configs
 
 fln_config_schema = "config_schema.yml"
 

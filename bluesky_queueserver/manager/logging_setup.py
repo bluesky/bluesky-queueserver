@@ -1,8 +1,9 @@
 import logging
-import sys
 import pprint
+import sys
 from collections.abc import Iterable, Mapping
 from platform import python_version
+
 from packaging import version
 
 

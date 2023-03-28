@@ -155,11 +155,15 @@ class RunEngineWorker(Process):
             update_pd = "NEVER"
         self._update_existing_plans_devices_on_disk = update_pd
 
+        self._use_ipython_kernel = self._config_dict["use_ipython_kernel"]
+
         # The list of runs that were opened as part of execution of the currently running plan.
         # Initialized with 'RunList()' in 'run()' method.
         self._active_run_list = None
 
         self._re_namespace, self._plans_in_nspace, self._devices_in_nspace = {}, {}, {}
+
+        self._success_startup = True  # Indicates if worker startup is proceding successfully
 
     def _execute_plan_or_task(self, parameters, exec_option):
         """
@@ -1035,21 +1039,11 @@ class RunEngineWorker(Process):
 
     # ------------------------------------------------------------
 
-    def run(self):
+    def _worker_startup_code(self):
         """
-        Overrides the `run()` function of the `multiprocessing.Process` class. Called
-        by the `start` method.
+        Perform startup tasks for the worker.
         """
-        setup_console_output_redirection(msg_queue=self._msg_queue)
-
-        logging.basicConfig(level=max(logging.WARNING, self._log_level))
-        setup_loggers(name="bluesky_queueserver", log_level=self._log_level)
-
-        success = True
-
-        from .profile_tools import clear_re_worker_active, set_re_worker_active
-
-        self._env_state = EState.INITIALIZING
+        from .profile_tools import set_re_worker_active
 
         # Set the environment variable indicating that RE Worker is active. Status may be
         #   checked using 'is_re_worker_active()' in startup scripts or modules.
@@ -1152,9 +1146,9 @@ class RunEngineWorker(Process):
                 logger.error("%s:\n%s\n", s, ex.tb)
             else:
                 logger.exception("%s: %s.", s, ex)
-            success = False
+            self._success_startup = False
 
-        if success:
+        if self._success_startup:
             self._generate_lists_of_allowed_plans_and_devices()
             self._update_existing_pd_file(options=("ENVIRONMENT_OPEN", "ALWAYS"))
 
@@ -1237,14 +1231,14 @@ class RunEngineWorker(Process):
                 self._env_state = EState.IDLE
 
             except BaseException as ex:
-                success = False
+                self._success_startup = False
                 logger.exception("Error occurred while initializing the environment: %s.", ex)
 
-        if success:
-            logger.info("RE Environment is ready")
-            self._execute_in_main_thread()
-        else:
-            self._exit_event.set()
+    def _worker_shutdown_code(self):
+        """
+        Perform shutdown tasks for the worker.
+        """
+        from .profile_tools import clear_re_worker_active
 
         logger.info("Environment is waiting to be closed ...")
         self._env_state = EState.CLOSING
@@ -1260,5 +1254,32 @@ class RunEngineWorker(Process):
         self._RE = None
 
         self._comm_to_manager.stop()
+
+    def _run_loop_python(self):
+        """
+        Run loop (Python kernel)
+        """
+        if self._success_startup:
+            logger.info("RE Environment is ready")
+            self._execute_in_main_thread()
+        else:
+            self._exit_event.set()
+
+    def run(self):
+        """
+        Overrides the `run()` function of the `multiprocessing.Process` class. Called
+        by the `start` method.
+        """
+        setup_console_output_redirection(msg_queue=self._msg_queue)
+
+        logging.basicConfig(level=max(logging.WARNING, self._log_level))
+        setup_loggers(name="bluesky_queueserver", log_level=self._log_level)
+
+        self._success_startup = True
+        self._env_state = EState.INITIALIZING
+
+        self._worker_startup_code()
+        self._run_loop_python()
+        self._worker_shutdown_code()
 
         logger.info("Run Engine environment was closed successfully")

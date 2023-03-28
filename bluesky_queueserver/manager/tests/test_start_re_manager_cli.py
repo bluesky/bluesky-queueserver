@@ -449,6 +449,7 @@ def _get_expected_settings_default_1(tmpdir):
         "kafka_server": "127.0.0.1:9092",
         "kafka_topic": None,
         "keep_re": False,
+        "use_ipython_kernel": False,
         "print_console_output": True,
         "redis_addr": "localhost",
         "startup_dir": "/bluesky_queueserver/profile_collection_sim/",
@@ -478,6 +479,8 @@ network:
   zmq_info_addr: tcp://*:60627
   zmq_publish_console: true
   redis_addr: localhost:6379
+worker:
+  use_ipython_kernel: true
 startup:
   keep_re: false
   startup_dir: {1}
@@ -510,6 +513,7 @@ def _get_expected_settings_config_2(tmpdir):
         "kafka_server": "127.0.0.1:9095",
         "kafka_topic": "different_topic_name",
         "keep_re": False,
+        "use_ipython_kernel": True,
         "print_console_output": True,
         "redis_addr": "localhost:6379",
         "startup_dir": f"{file_dir}",
@@ -543,6 +547,7 @@ def _get_cli_params_3(tmpdir):
         "--kafka-topic=yet_another_topic",
         "--kafka-server=127.0.0.1:9099",
         "--keep-re",
+        "--use-ipython-kernel",
         "--zmq-data-proxy-addr=tcp://localhost:5571",
         "--databroker-config=NEW",
         "--zmq-info-addr=tcp://*:60629",
@@ -561,6 +566,7 @@ def _get_expected_settings_params_3(tmpdir):
         "kafka_server": "127.0.0.1:9099",
         "kafka_topic": "yet_another_topic",
         "keep_re": True,
+        "use_ipython_kernel": True,
         "print_console_output": False,
         "redis_addr": "localhost:6379",
         "startup_dir": f"{file_dir}",

@@ -21,6 +21,12 @@ properties:
         type: boolean
       redis_addr:
         type: string
+  worker:
+    type: object
+    additionalProperties: false
+    properties:
+      use_ipython_kernel:
+        type: boolean
   startup:
     oneOf:
       - type: object

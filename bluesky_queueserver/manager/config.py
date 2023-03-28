@@ -90,6 +90,15 @@ def merge(configs):
                 )
             network_source = filepath
             merged["network"] = config["network"]
+        if "worker" in config:
+            if "worker" in merged:
+                raise ConfigError(
+                    "'worker' can only be specified in one file. "
+                    f"It was found in both {startup_source} and "
+                    f"{filepath}"
+                )
+            startup_source = filepath
+            merged["worker"] = config["worker"]
         if "startup" in config:
             if "startup" in merged:
                 raise ConfigError(
@@ -429,7 +438,6 @@ class Settings:
             raise ConfigError(f"The key {key!r} is not supported.")
 
         keys = _key_mapping[key].split("/")
-
         try:
             value = self._config
             for k in keys:

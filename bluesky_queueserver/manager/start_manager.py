@@ -374,6 +374,14 @@ def start_manager():
         "inside the profile collection, since '--databroker-config' argument "
         "is ignored.",
     )
+
+    parser.add_argument(
+        "--use-ipython-kernel",
+        dest="use_ipython_kernel",
+        action="store_true",
+        help="Run the Run Engine worker in IPython kernel.",
+    )
+
     parser.add_argument(
         "--use-persistent-metadata",
         dest="use_persistent_metadata",
@@ -543,6 +551,7 @@ def start_manager():
                 return 1
 
     config_worker["keep_re"] = settings.keep_re
+    config_worker["use_ipython_kernel"] = settings.use_ipython_kernel
     config_worker["use_persistent_metadata"] = settings.use_persistent_metadata
 
     config_worker["databroker"] = {}
@@ -608,6 +617,8 @@ def start_manager():
     config_manager["zmq_private_key"] = settings.zmq_private_key
 
     config_manager["redis_addr"] = settings.redis_addr
+
+    config_manager["use_ipython_kernel"] = settings.use_ipython_kernel
 
     config_manager["lock_key_emergency"] = settings.emergency_lock_key
 

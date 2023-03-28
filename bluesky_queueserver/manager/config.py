@@ -175,6 +175,7 @@ _key_mapping = {
     "startup_profile": "startup/startup_profile",
     "startup_module": "startup/startup_module",
     "startup_script": "startup/startup_script",
+    "use_ipython_kernel": "worker/use_ipython_kernel",
     "print_console_output": "operation/print_console_output",
     "console_logging_level": "operation/console_logging_level",
     "update_existing_plans_devices": "operation/update_existing_plans_and_devices",
@@ -311,6 +312,13 @@ class Settings:
             value_default=args.keep_re,
             value_config=self._get_value_from_config("keep_re"),
             value_cli=self._args_existing("keep_re"),
+        )
+
+        self._settings["use_ipython_kernel"] = self._get_param_boolean(
+            value_default=args.use_ipython_kernel,
+            value_ev=os.environ.get("QSERVER_USE_IPYTHON_KERNEL", None),
+            value_config=self._get_value_from_config("use_ipython_kernel"),
+            value_cli=self._args_existing("use_ipython_kernel"),
         )
 
         existing_plans_and_devices_path = self._get_param(

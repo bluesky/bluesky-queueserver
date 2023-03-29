@@ -116,7 +116,7 @@ def _patch_script_code(code_str):
     return "\n".join(s_list)
 
 
-def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
+def load_profile_collection(path, *, patch_profiles=True, keep_re=False, nspace=None):
     """
     Load profile collection located at the specified path. The collection consists of
     .py files started with 'DD-', where D is a digit (e.g. 05-file.py). The files
@@ -132,11 +132,15 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
     keep_re: boolean
         Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
         or removed (``False``).
+    nspace: dict or None
+        Reference to the existing namespace, in which the code is executed. If ``nspace``
+        is *None*, then the new namespace is created.
 
     Returns
     -------
     nspace: dict
-        namespace in which the profile collection was executed
+        namespace in which the profile collection was executed. Reference to ``nspace``
+        passed as a parameter is returned if ``nspace`` is not *None*.
 
     Raises
     ------
@@ -174,7 +178,7 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
 
     try:
         # Load the files into the namespace 'nspace'.
-        nspace = {}
+        nspace = {} if nspace is None else nspace
 
         if patch_profiles:
             exec(_startup_script_patch, nspace, nspace)
@@ -215,7 +219,7 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
     return nspace
 
 
-def load_startup_module(module_name, *, keep_re=False):
+def load_startup_module(module_name, *, keep_re=False, nspace=None):
     """
     Populate namespace by import a module.
 
@@ -226,17 +230,22 @@ def load_startup_module(module_name, *, keep_re=False):
     keep_re: boolean
         Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
         or removed (``False``).
+    nspace: dict or None
+        Reference to the existing namespace, in which the code is executed. If ``nspace``
+        is *None*, then the new namespace is created.
 
     Returns
     -------
     nspace: dict
-        namespace that contains objects loaded from the module.
+        namespace that contains objects loaded from the module. Reference to ``nspace``
+        passed as a parameter is returned if ``nspace`` is not *None*.
     """
     importlib.invalidate_caches()
 
     try:
         _module = importlib.import_module(module_name)
-        nspace = _module.__dict__
+        nspace = {} if nspace is None else nspace
+        nspace.update(_module.__dict__)
 
     except BaseException as ex:
         # Capture traceback and send it as a message
@@ -250,7 +259,7 @@ def load_startup_module(module_name, *, keep_re=False):
     return nspace
 
 
-def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True):
+def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True, nspace=None):
     """
     Populate namespace by import a module.
 
@@ -264,18 +273,22 @@ def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True
     enable_local_imports : boolean
         If ``False``, local imports from the script will not work. Setting to ``True``
         enables local imports.
+    nspace: dict or None
+        Reference to the existing namespace, in which the code is executed. If ``nspace``
+        is *None*, then the new namespace is created.
 
     Returns
     -------
     nspace: dict
-        namespace that contains objects loaded from the module.
+        namespace that contains objects loaded from the module. Reference to ``nspace``
+        passed as a parameter is returned if ``nspace`` is not *None*.
     """
     importlib.invalidate_caches()
 
     if not os.path.isfile(script_path):
         raise ImportError(f"Failed to load the script '{script_path}': script was not found")
 
-    nspace = {}
+    nspace = {} if nspace is None else nspace
 
     if enable_local_imports:
         p = os.path.split(script_path)[0]
@@ -284,7 +297,6 @@ def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True
         sm_keys = list(sys.modules.keys())
 
     try:
-        nspace = {}
         if not os.path.isfile(script_path):
             raise IOError(f"Startup file {script_path!r} was not found")
 
@@ -323,7 +335,13 @@ def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True
 
 
 def load_worker_startup_code(
-    *, startup_dir=None, startup_module_name=None, startup_script_path=None, keep_re=False
+    *,
+    startup_dir=None,
+    startup_module_name=None,
+    startup_script_path=None,
+    keep_re=False,
+    use_ipython_kernel=False,
+    nspace=None,
 ):
     """
     Load worker startup code. Possible sources: startup directory (IPython-style profile collection),
@@ -340,11 +358,18 @@ def load_worker_startup_code(
     keep_re: boolean
         Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
         or removed (``False``).
+    use_ipython_kernel: boolean
+        Indicates if the code is run in IPython kernel.
+    nspace: dict or None
+        Reference to the existing namespace, in which the code is executed. If ``nspace``
+        is *None*, then the new namespace is created.
+
 
     Returns
     -------
     nspace : dict
-       Dictionary with loaded namespace data
+       Dictionary with loaded namespace data. Reference to ``nspace`` passed as a parameter
+       is returned if ``nspace`` is not *None*.
     """
 
     if sum([_ is None for _ in [startup_dir, startup_module_name, startup_script_path]]) != 2:
@@ -354,16 +379,18 @@ def load_worker_startup_code(
         logger.info("Loading RE Worker startup code from directory '%s' ...", startup_dir)
         startup_dir = os.path.abspath(os.path.expanduser(startup_dir))
         logger.info("Startup directory: '%s'", startup_dir)
-        nspace = load_profile_collection(startup_dir, keep_re=keep_re)
+        nspace = load_profile_collection(
+            startup_dir, keep_re=keep_re, patch_profiles=use_ipython_kernel, nspace=nspace
+        )
 
     elif startup_module_name is not None:
         logger.info("Loading RE Worker startup code from module '%s' ...", startup_module_name)
-        nspace = load_startup_module(startup_module_name, keep_re=keep_re)
+        nspace = load_startup_module(startup_module_name, keep_re=keep_re, nspace=nspace)
 
     elif startup_script_path is not None:
         logger.info("Loading RE Worker startup code from script '%s' ...", startup_script_path)
         startup_script_path = os.path.abspath(os.path.expanduser(startup_script_path))
-        nspace = load_startup_script(startup_script_path, keep_re=keep_re)
+        nspace = load_startup_script(startup_script_path, keep_re=keep_re, nspace=nspace)
 
     else:
         logger.warning(

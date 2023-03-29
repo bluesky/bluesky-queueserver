@@ -5,12 +5,15 @@ import json
 import logging
 import os
 import queue
+import re
+import sys
 import threading
 import time as ttime
 import traceback
 import uuid
 from functools import partial
 from multiprocessing import Process
+from threading import Thread
 
 import msgpack
 import msgpack_numpy as mpn
@@ -156,6 +159,13 @@ class RunEngineWorker(Process):
         self._update_existing_plans_devices_on_disk = update_pd
 
         self._use_ipython_kernel = self._config_dict["use_ipython_kernel"]
+        self._ip_kernel_app = None  # Reference to IPKernelApp, None if IPython is not used
+        self._ip_connect_file = ""  # Filename with connection info for the running IP kernel
+        self._ip_connect_info = {}  # Connection info for the running IP Kernel
+        self._ip_kernel_client = None  # Kernel client for communication with IP kernel.
+        self._ip_kernel_execution_state = None
+        self._ip_kernel_is_idle = True
+        self._ip_kernel_monitor_stop = False
 
         # The list of runs that were opened as part of execution of the currently running plan.
         # Initialized with 'RunList()' in 'run()' method.
@@ -1110,6 +1120,8 @@ class RunEngineWorker(Process):
                 startup_module_name=startup_module_name,
                 startup_script_path=startup_script_path,
                 keep_re=keep_re,
+                use_ipython_kernel=self._use_ipython_kernel,
+                nspace=self._re_namespace,
             )
 
             if keep_re and ("RE" not in self._re_namespace):
@@ -1156,7 +1168,9 @@ class RunEngineWorker(Process):
 
             try:
                 # Make RE namespace available to the plan code.
-                global_user_namespace.set_user_namespace(user_ns=self._re_namespace, use_ipython=False)
+                global_user_namespace.set_user_namespace(
+                    user_ns=self._re_namespace, use_ipython=self._use_ipython_kernel
+                )
 
                 if self._config_dict["keep_re"]:
                     # Copy references from the namespace
@@ -1229,6 +1243,7 @@ class RunEngineWorker(Process):
                 self._execution_queue = queue.Queue()
 
                 self._env_state = EState.IDLE
+                logger.info("RE Environment is ready")
 
             except BaseException as ex:
                 self._success_startup = False
@@ -1260,10 +1275,54 @@ class RunEngineWorker(Process):
         Run loop (Python kernel)
         """
         if self._success_startup:
-            logger.info("RE Environment is ready")
             self._execute_in_main_thread()
         else:
             self._exit_event.set()
+
+    def _ip_kernel_monitor_thread(self, output_stream, error_stream):
+        while True:
+            if self._ip_kernel_monitor_stop:
+                break
+
+            try:
+                msg = self._ip_kernel_client.get_iopub_msg(timeout=0.5)
+                if msg["header"]["msg_type"] == "status":
+                    self._ip_kernel_execution_state = msg["content"]["execution_state"]
+                    self._ip_kernel_is_idle = self._ip_kernel_execution_state == "idle"
+                try:
+                    session_id = self._ip_kernel_client.session.session
+                    discard = msg["parent_header"]["session"] != session_id
+
+                    if not discard:
+                        if msg["header"]["msg_type"] == "stream":
+                            stream_name = msg["content"]["name"]
+                            stream_text = msg["content"]["text"]
+                            if stream_name == "stdout":
+                                output_stream.write(stream_text)
+                            elif stream_name == "stderr":
+                                error_stream.write(stream_text)
+                        elif msg["header"]["msg_type"] == "error":
+                            tb = msg["content"]["traceback"]
+                            # Remove escape characters from traceback
+                            ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+                            tb = [ansi_escape.sub("", _) for _ in tb]
+                            tb = "\n".join(tb)
+                            print(f"Traceback: {tb}", file=error_stream)
+                        elif msg["header"]["msg_type"] == "execute_result":
+                            # print(f"msg={msg}", file=output_stream)
+                            res = msg["content"]["data"]["text/plain"]
+                            print(f">> {res}", file=output_stream)
+                except KeyError:
+                    pass
+            except queue.Empty:
+                pass
+            except Exception as ex:
+                logger.exception(ex)
+
+    def _ip_kernel_shutdown(self):
+        logger.info("Requesting kernel to shut down ...")
+        kernel_shutdown_task = "quit"
+        self._ip_kernel_client.execute(kernel_shutdown_task, reply=False)
 
     def run(self):
         """
@@ -1278,8 +1337,63 @@ class RunEngineWorker(Process):
         self._success_startup = True
         self._env_state = EState.INITIALIZING
 
-        self._worker_startup_code()
-        self._run_loop_python()
+        if not self._use_ipython_kernel:
+            self._worker_startup_code()
+            self._run_loop_python()
+        else:
+            from ipykernel.kernelapp import IPKernelApp
+
+            self._re_namespace["_run_engine_worker_class_object__"] = self
+            self._ip_kernel_app = IPKernelApp.instance(user_ns=self._re_namespace)
+            out_stream, err_stream = sys.stdout, sys.stderr
+
+            # Prevent kernel from capturing stdout/stderr, otherwise it creates a mess.
+            self._ip_kernel_app.capture_fd_output = False
+            self._ip_kernel_app.initialize([])
+
+            # Save connection info.
+            self._ip_connect_file = self._ip_kernel_app.connection_file
+            self._ip_connect_info = {
+                "shell_port": self._ip_kernel_app.shell_port,
+                "iopub_port": self._ip_kernel_app.iopub_port,
+                "stdin_port": self._ip_kernel_app.stdin_port,
+                "control_port": self._ip_kernel_app.control_port,
+                "hb_port": self._ip_kernel_app.hb_port,
+                "ip": self._ip_kernel_app.ip,
+                "key": self._ip_kernel_app.session.key,
+            }
+
+            from jupyter_client import BlockingKernelClient
+
+            self._ip_kernel_client = BlockingKernelClient()
+            self._ip_kernel_client.load_connection_info(self._ip_connect_info)
+            logger.info("Session ID for communication with IP kernel: %s", self._ip_kernel_client.session.session)
+            self._ip_kernel_client.start_channels()
+
+            ip_kernel_monitor_thread = Thread(
+                target=self._ip_kernel_monitor_thread,
+                kwargs=dict(output_stream=out_stream, error_stream=err_stream),
+                daemon=True,
+            )
+            ip_kernel_monitor_thread.start()
+
+            def starting_tasks_in_kernel():
+                ttime.sleep(1)  # TODO: may be we don't need to wait that long
+                kernel_startup_task1 = "_run_engine_worker_class_object__._worker_startup_code()"
+                self._ip_kernel_client.execute(kernel_startup_task1, reply=False)
+                while self._env_state != EState.IDLE:
+                    ttime.sleep(0.1)
+                if not self._success_startup:
+                    self._ip_kernel_shutdown()
+
+            starting_tasks_thread = Thread(target=starting_tasks_in_kernel, daemon=True)
+            starting_tasks_thread.start()
+
+            logging.info("Preparing to start IPython kernel ...")
+            self._ip_kernel_app.start()
+            self._ip_kernel_monitor_stop = True
+            sys.stdout, sys.stderr = out_stream, err_stream
+
         self._worker_shutdown_code()
 
         logger.info("Run Engine environment was closed successfully")

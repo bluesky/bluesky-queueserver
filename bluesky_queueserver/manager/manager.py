@@ -47,7 +47,7 @@ def _generate_uid():
 # TODO: this is incomplete set of states. Expect it to be expanded.
 class MState(enum.Enum):
     INITIALIZING = "initializing"
-    IDLE = "idle"
+    IDLE = "idle"  # Stopped queue as a result of intervention, error, or initial startup.
     PAUSED = "paused"  # Paused plan
     CREATING_ENVIRONMENT = "creating_environment"
     STARTING_QUEUE = "starting_queue"  # Starting the first plan of the queue
@@ -55,6 +55,7 @@ class MState(enum.Enum):
     EXECUTING_TASK = "executing_task"
     CLOSING_ENVIRONMENT = "closing_environment"
     DESTROYING_ENVIRONMENT = "destroying_environment"
+    AUTO_START = "auto_start"  # Caveat to IDLE. Queue is empty but meant to start when an item is added.
 
 
 class LockInfo:
@@ -234,6 +235,7 @@ class RunEngineManager(Process):
         # we (this manager process) have not yet seen it as 'paused', useful for the situations where the
         # worker did accept a request to pause (deferred) but had already passed its last checkpoint
         self._worker_state_info = None  # Copy of the last downloaded state of RE Worker
+        self._queue_auto_start = False  # Queue will auto-start if not put into IDLE state through stopping/errors
 
         self._re_run_list = []
         self._re_run_list_uid = _generate_uid()
@@ -436,7 +438,7 @@ class RunEngineManager(Process):
                 raise RuntimeError("Queue execution is in progress.")
             elif self._manager_state is MState.EXECUTING_TASK:
                 raise RuntimeError("Foreground task execution is in progress.")
-            elif self._manager_state != MState.IDLE:
+            elif self._manager_state not in [MState.IDLE, MState.AUTO_START]:
                 raise RuntimeError(f"Manager state is not idle. Current state: {self._manager_state.value}")
             else:
                 accepted, err_msg = True, ""
@@ -458,7 +460,7 @@ class RunEngineManager(Process):
             self._manager_state = MState.IDLE
             return False, "Environment does not exist"
 
-        if self._manager_state not in [MState.IDLE, MState.CLOSING_ENVIRONMENT]:
+        if self._manager_state not in [MState.IDLE, MState.AUTO_START, MState.CLOSING_ENVIRONMENT]:
             return False, f"Manager state was {self._manager_state.value}"
 
         self._fut_manager_task_completed = self._loop.create_future()
@@ -768,7 +770,7 @@ class RunEngineManager(Process):
         try:
             if not self._environment_exists:
                 raise RuntimeError("RE Worker environment does not exist.")
-            elif self._manager_state != MState.IDLE:
+            elif self._manager_state not in [MState.IDLE, MState.AUTO_START]:
                 raise RuntimeError("RE Manager is busy.")
             else:
                 self._queue_stop_deactivate()  # Just in case
@@ -790,7 +792,7 @@ class RunEngineManager(Process):
         try:
             if not self._environment_exists:
                 raise RuntimeError("RE Worker environment does not exist.")
-            elif self._manager_state != MState.IDLE:
+            elif self._manager_state not in [MState.IDLE, MState.AUTO_START]:
                 raise RuntimeError("RE Manager is busy.")
             else:
                 self._queue_stop_deactivate()  # Just in case
@@ -830,7 +832,7 @@ class RunEngineManager(Process):
                 logger.info("No items are left in the queue.")
 
             if not n_pending_plans:
-                self._manager_state = MState.IDLE
+                self._manager_state = MState.AUTO_START if self._queue_auto_start else MState.IDLE
                 self._re_pause_pending = False
                 success, err_msg = False, "Queue is empty."
                 logger.info(err_msg)
@@ -936,6 +938,22 @@ class RunEngineManager(Process):
 
     def _queue_stop_deactivate(self):
         self._queue_stop_pending = False
+        return True, ""
+
+    def _queue_auto_start_activate(self):
+        """Sets queue auto start mode and changes manager state for the empty queue"""
+        self._queue_auto_start = True
+        n_pending_plans = self._plan_queue.get_queue_size()
+        if not n_pending_plans:
+            self._manager_state = MState.AUTO_START
+        return True, ""
+
+    def _queue_auto_start_deactivate(self):
+        """Deactivates queue auto start mode and changes manager state for the empty queue"""
+        self._queue_auto_start = False
+        n_pending_plans = self._plan_queue.get_queue_size()
+        if not n_pending_plans:
+            self._manager_state = MState.IDLE
         return True, ""
 
     async def _pause_run_engine(self, option):
@@ -1464,6 +1482,7 @@ class RunEngineManager(Process):
         running_item_uid = running_item_info["item_uid"] if running_item_info else None
         manager_state = self._manager_state.value
         queue_stop_pending = self._queue_stop_pending
+        queue_auto_start_mode = self._queue_auto_start
         worker_environment_exists = self._environment_exists
         re_state = self._worker_state_info["re_state"] if self._worker_state_info else None
         env_state = self._worker_state_info["environment_state"] if self._worker_state_info else "closed"
@@ -1492,6 +1511,7 @@ class RunEngineManager(Process):
             "running_item_uid": running_item_uid,
             "manager_state": manager_state,
             "queue_stop_pending": queue_stop_pending,
+            "queue_auto_start_mode": queue_auto_start_mode,
             "worker_environment_exists": worker_environment_exists,
             "worker_environment_state": env_state,  # State of the worker environment
             "worker_background_tasks": background_tasks,  # The number of background tasks
@@ -1987,6 +2007,10 @@ class RunEngineManager(Process):
             )
             success = True
 
+            # If empty queue but queue auto-start; may catch an exception, and overwrite success
+            if self._manager_state == MState.AUTO_START:
+                success, msg = await self._start_plan()
+
         except Exception as ex:
             success = False
             msg = f"Failed to add an item: {str(ex)}"
@@ -2095,6 +2119,13 @@ class RunEngineManager(Process):
                 n_items = len(item_list)
                 n_failed = sum([not _["success"] for _ in results])
                 msg = f"Failed to add all items: validation of {n_failed} out of {n_items} submitted items failed"
+
+            # If empty queue but queue auto-start; may catch an exception, and update success
+            if self._manager_state == MState.AUTO_START:
+                success_, msg_ = await self._start_plan()
+            success = success and success_
+            if msg_:
+                msg = f"{msg} / {msg_}"
 
         except Exception as ex:
             success = False
@@ -2678,6 +2709,34 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg}
 
+    async def _queue_auto_start_activate_handler(self, request):
+        """
+        Adjust the mode to auto-start the queue when populated and not in an IDLE state.
+        This will start the execution of a loaded queue. If the queue is empty, then nothing will happen.
+        """
+        logger.info("Activating the queue auto-start mode.")
+        try:
+            success, msg = self._queue_auto_start_activate()
+            success_, msg_ = await self._queue_start_handler(request)
+            success = success and success_
+            if msg_:
+                msg = f"{msg} / {msg_}"
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+        return {"success": success, "msg": msg}
+
+    async def _queue_auto_start_deactivate_handler(self, request):
+        """
+        Adjust the mode to auto-start the queue when populated and not in an IDLE state.
+        This will not effect an already running queue. Stopping the queue is a separate action.
+        """
+        logger.info("Deactivating the queue auto-start mode.")
+        try:
+            success, msg = self._queue_auto_start_deactivate()
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+        return {"success": success, "msg": msg}
+
     async def _queue_stop_cancel_handler(self, request):
         """
         Deactivate the sequence of stopping the queue execution.
@@ -3050,7 +3109,7 @@ class RunEngineManager(Process):
                 else:
                     raise ValueError(f"Option '{r_option}' is not allowed. Allowed options: {allowed_options}")
 
-            if (option == "safe_on") and (self._manager_state != MState.IDLE):
+            if (option == "safe_on") and (self._manager_state not in [MState.IDLE, MState.AUTO_START]):
                 raise RuntimeError(
                     f"Closing RE Manager with option '{option}' is allowed "
                     f"only in 'idle' state. Current state: '{self._manager_state.value}'"
@@ -3116,6 +3175,8 @@ class RunEngineManager(Process):
             "queue_start": "_queue_start_handler",
             "queue_stop": "_queue_stop_handler",
             "queue_stop_cancel": "_queue_stop_cancel_handler",
+            "queue_auto_start_activate": "_queue_auto_start_activate_handler",
+            "queue_auto_start_deactivate": "_queue_auto_start_deactivate_handler",
             "re_pause": "_re_pause_handler",
             "re_resume": "_re_resume_handler",
             "re_stop": "_re_stop_handler",

@@ -373,6 +373,74 @@ def test_zmq_api_queue_execution_4(re_manager, stop_queue, pause_before_kill):  
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
+def test_zmq_api_queue_execution_5(re_manager):  # noqa: F811
+    """Working with the auto-start mode"""
+
+    # Open the environemnt and change the auto-start attribute
+    resp1a, _ = zmq_single_request("environment_open")
+    assert resp1a["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp1b, _ = zmq_single_request("status")
+    assert "queue_auto_start_mode" in resp1b
+    assert not resp1b["queue_auto_start_mode"]
+
+    resp1c, _ = zmq_single_request("queue_auto_start_activate")
+    assert resp1c["success"] is True, f"resp={resp1c}"
+
+    resp1d, _ = zmq_single_request("status")
+    assert resp1d["queue_auto_start_mode"]
+
+    resp1e, _ = zmq_single_request("queue_auto_start_deactivate")
+    assert resp1e["success"] is True
+
+    resp1f, _ = zmq_single_request("status")
+    assert not resp1f["queue_auto_start_mode"]
+
+    # Add a plan and a stop request. Make sure they land in the history. Skipping assertions from other tests.
+    zmq_single_request("queue_auto_start_activate")
+    params2a = {"item": _plan1, "user": _user, "user_group": _user_group}
+    resp2a, _ = zmq_single_request("queue_item_add", params2a)
+    assert resp2a["success"] is True, f"resp={resp2a}"
+    assert resp2a["msg"] == ""
+
+    params2b = {"item": _instruction_stop, "user": _user, "user_group": _user_group}
+    resp2b, _ = zmq_single_request("queue_item_add", params2b)
+    assert resp2b["success"] is True
+    wait_for_condition(time=5, condition=condition_manager_idle)
+    resp2c, _ = zmq_single_request("status")
+    assert resp2c["items_in_history"] == 1
+    assert resp2c["items_in_queue"] == 0
+    assert resp2c["queue_auto_start_mode"]
+    assert resp2c["manager_state"] == "idle"
+
+    # Add a plan to an idle queue and make sure it doesn't start
+    params2d = {"item": _plan1, "user": _user, "user_group": _user_group}
+    resp2d, _ = zmq_single_request("queue_item_add", params2d)
+    assert resp2d["success"] is True, f"resp={resp2d}"
+    wait_for_condition(time=5, condition=condition_manager_idle)
+    resp2e, _ = zmq_single_request("status")
+    assert resp2e["items_in_history"] == 1
+    assert resp2e["items_in_queue"] == 1
+
+    # Deactivate auto start
+    resp3a, _ = zmq_single_request("queue_auto_start_deactivate")
+    assert resp3a["success"] is True
+    params3b = {"item": _plan1, "user": _user, "user_group": _user_group}
+    resp3b, _ = zmq_single_request("queue_item_add", params3b)
+    assert resp3b["success"] is True, f"resp={resp3b}"
+    params3c = {"item": _plan1, "user": _user, "user_group": _user_group}
+    resp3c, _ = zmq_single_request("queue_item_add", params3c)
+    assert resp3c["success"] is True, f"resp={resp3c}"
+    wait_for_condition(time=5, condition=condition_manager_idle)
+
+    resp3d, _ = zmq_single_request("status")
+    assert resp3d["items_in_queue"] == 3
+    assert resp3d["items_in_history"] == 1
+    assert not resp3d["queue_auto_start_mode"]
+    assert resp3d["manager_state"] == "idle"
+
+
 # =======================================================================================
 #                        Execution of malfunctioning plans
 

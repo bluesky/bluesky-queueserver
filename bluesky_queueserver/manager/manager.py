@@ -831,16 +831,16 @@ class RunEngineManager(Process):
             else:
                 logger.info("No items are left in the queue.")
 
-            if not n_pending_plans:
-                self._manager_state = MState.AUTO_START if self._queue_auto_start else MState.IDLE
-                self._re_pause_pending = False
-                success, err_msg = False, "Queue is empty."
-                logger.info(err_msg)
-
-            elif self._queue_stop_pending or stop_queue:
+            if self._queue_stop_pending or stop_queue:
                 self._manager_state = MState.IDLE
                 self._re_pause_pending = False
                 success, err_msg = False, "Queue is stopped."
+                logger.info(err_msg)
+
+            elif not n_pending_plans:
+                self._manager_state = MState.AUTO_START if self._queue_auto_start else MState.IDLE
+                self._re_pause_pending = False
+                success, err_msg = False, "Queue is empty."
                 logger.info(err_msg)
 
             elif self._re_pause_pending:
@@ -940,18 +940,18 @@ class RunEngineManager(Process):
         self._queue_stop_pending = False
         return True, ""
 
-    def _queue_auto_start_activate(self):
+    async def _queue_auto_start_activate(self):
         """Sets queue auto start mode and changes manager state for the empty queue"""
         self._queue_auto_start = True
-        n_pending_plans = self._plan_queue.get_queue_size()
+        n_pending_plans = await self._plan_queue.get_queue_size()
         if not n_pending_plans:
             self._manager_state = MState.AUTO_START
         return True, ""
 
-    def _queue_auto_start_deactivate(self):
+    async def _queue_auto_start_deactivate(self):
         """Deactivates queue auto start mode and changes manager state for the empty queue"""
         self._queue_auto_start = False
-        n_pending_plans = self._plan_queue.get_queue_size()
+        n_pending_plans = await self._plan_queue.get_queue_size()
         if not n_pending_plans:
             self._manager_state = MState.IDLE
         return True, ""
@@ -2716,8 +2716,8 @@ class RunEngineManager(Process):
         """
         logger.info("Activating the queue auto-start mode.")
         try:
-            success, msg = self._queue_auto_start_activate()
-            success_, msg_ = await self._queue_start_handler(request)
+            success, msg = await self._queue_auto_start_activate()
+            success_, msg_ = await self._start_plan()
             success = success and success_
             if msg_:
                 msg = f"{msg} / {msg_}"
@@ -2732,7 +2732,7 @@ class RunEngineManager(Process):
         """
         logger.info("Deactivating the queue auto-start mode.")
         try:
-            success, msg = self._queue_auto_start_deactivate()
+            success, msg = await self._queue_auto_start_deactivate()
         except Exception as ex:
             success, msg = False, f"Error: {ex}"
         return {"success": success, "msg": msg}

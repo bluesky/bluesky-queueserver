@@ -1394,6 +1394,42 @@ def test_zmq_api_queue_item_add_batch_4_fail(re_manager):  # noqa: F811
     assert state["items_in_history"] == 0
 
 
+def test_zmq_api_queue_item_add_batch_5(re_manager):  # noqa: F811
+    """
+    Test for ``queue_item_add_batch``: add a batch of items (including plans and instructions)
+    with an auto-start queue, and confirm execution.
+    Loose copy of `test_zmq_api_queue_item_add_batch_3` with a hot queue.
+    """
+    items = [_plan1, _plan2, _plan3]
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp2a, _ = zmq_single_request("queue_auto_start_activate")
+    assert resp2a["success"] is True, f"resp={resp2a}"
+
+    params = {"items": items, "user": _user, "user_group": _user_group}
+    resp2b, _ = zmq_single_request("queue_item_add_batch", params)
+    assert resp2b["success"] is True, f"resp={resp2b}"
+    assert resp2b["msg"] == ""
+    assert resp2b["qsize"] == 3
+    item_list = resp2b["items"]
+    item_results = resp2b["results"]
+    assert len(item_list) == len(items)
+    assert len(item_results) == len(items)
+
+    assert wait_for_condition(time=10, condition=condition_queue_processing_finished)
+
+    state = get_queue_state()
+    assert state["items_in_queue"] == 0
+    assert state["items_in_history"] == 3
+
+    resp3, _ = zmq_single_request("environment_close")
+    assert resp3["success"] is True
+    assert wait_for_condition(time=5, condition=condition_manager_idle)
+
+
 # =======================================================================================
 #                            Method 'queue_item_update'
 

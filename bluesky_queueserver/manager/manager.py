@@ -2123,6 +2123,8 @@ class RunEngineManager(Process):
             # If empty queue but queue auto-start; may catch an exception, and update success
             if self._manager_state == MState.AUTO_START:
                 success_, msg_ = await self._start_plan()
+            else:
+                success_, msg_ = True, ""
             success = success and success_
             if msg_:
                 msg = f"{msg} / {msg_}"

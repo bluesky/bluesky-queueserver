@@ -20,6 +20,7 @@ import msgpack_numpy as mpn
 from event_model import RunRouter
 
 from .comms import PipeJsonRpcReceive
+from .logging_setup import PPrintForLogging as ppfl
 from .logging_setup import setup_loggers
 from .output_streaming import setup_console_output_redirection
 from .profile_ops import (
@@ -166,6 +167,11 @@ class RunEngineWorker(Process):
         self._ip_kernel_execution_state = None
         self._ip_kernel_is_idle = True
         self._ip_kernel_monitor_stop = False
+        # List of message types that are allowed to be printed even if the message does not contain parent header
+        self._ip_kernel_monitor_always_allow_types = []
+        # The list of collected tracebacks. If the variable is a list, then tracebacks (strings) are appended
+        #   to the list. If the variable is None, then tracebacks are not collected.
+        self._ip_kernel_monitor_collected_tracebacks = None
 
         # The list of runs that were opened as part of execution of the currently running plan.
         # Initialized with 'RunList()' in 'run()' method.
@@ -1049,9 +1055,9 @@ class RunEngineWorker(Process):
 
     # ------------------------------------------------------------
 
-    def _worker_startup_code(self):
+    def _worker_prepare_for_startup(self):
         """
-        Perform startup tasks for the worker.
+        Operations necessary to prepare for worker startup (before loading)
         """
         from .profile_tools import set_re_worker_active
 
@@ -1061,7 +1067,7 @@ class RunEngineWorker(Process):
 
         self._completed_tasks_lock = threading.Lock()
 
-        from .plan_monitoring import CallbackRegisterRun, RunList
+        from .plan_monitoring import RunList
 
         self._active_run_list = RunList()  # Initialization should be done before communication is enabled.
 
@@ -1095,19 +1101,24 @@ class RunEngineWorker(Process):
         self._allowed_items_lock = threading.Lock()
         self._existing_items_lock = threading.Lock()
 
-        from bluesky import RunEngine
-        from bluesky.callbacks.best_effort import BestEffortCallback
         from bluesky.run_engine import get_bluesky_event_loop
-        from bluesky.utils import PersistentDict
-        from bluesky_kafka import Publisher as kafkaPublisher
 
-        from .profile_tools import global_user_namespace
-
-        # TODO: TC - Do you think that the following code may be included in RE.__init__()
-        #   (for Python 3.8 and above)
         # Setting the default event loop is needed to make the code work with Python 3.8.
         loop = get_bluesky_event_loop() or asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+
+    def _worker_startup_code(self):
+        """
+        Perform startup tasks for the worker.
+        """
+
+        from bluesky import RunEngine
+        from bluesky.callbacks.best_effort import BestEffortCallback
+        from bluesky.utils import PersistentDict
+        from bluesky_kafka import Publisher as kafkaPublisher
+
+        from .plan_monitoring import CallbackRegisterRun
+        from .profile_tools import global_user_namespace
 
         try:
             keep_re = self._config_dict["keep_re"]
@@ -1115,14 +1126,16 @@ class RunEngineWorker(Process):
             startup_module_name = self._config_dict.get("startup_module_name", None)
             startup_script_path = self._config_dict.get("startup_script_path", None)
 
-            self._re_namespace = load_worker_startup_code(
-                startup_dir=startup_dir,
-                startup_module_name=startup_module_name,
-                startup_script_path=startup_script_path,
-                keep_re=keep_re,
-                use_ipython_kernel=self._use_ipython_kernel,
-                nspace=self._re_namespace,
-            )
+            # If IPython kernel is used, the startup code is loaded during kernel initialization.
+            if not self._use_ipython_kernel:
+                self._re_namespace = load_worker_startup_code(
+                    startup_dir=startup_dir,
+                    startup_module_name=startup_module_name,
+                    startup_script_path=startup_script_path,
+                    keep_re=keep_re,
+                    use_ipython_kernel=self._use_ipython_kernel,
+                    nspace=self._re_namespace,
+                )
 
             if keep_re and ("RE" not in self._re_namespace):
                 raise RuntimeError(
@@ -1272,14 +1285,14 @@ class RunEngineWorker(Process):
 
     def _run_loop_python(self):
         """
-        Run loop (Python kernel)
+        Run loop (Python kernel). The loop is blocking the main thread until the environment is closed.
         """
         if self._success_startup:
             self._execute_in_main_thread()
         else:
             self._exit_event.set()
 
-    def _ip_kernel_monitor_thread(self, output_stream, error_stream):
+    def _ip_kernel_iopub_monitor_thread(self, output_stream, error_stream):
         while True:
             if self._ip_kernel_monitor_stop:
                 break
@@ -1290,8 +1303,11 @@ class RunEngineWorker(Process):
                     self._ip_kernel_execution_state = msg["content"]["execution_state"]
                     self._ip_kernel_is_idle = self._ip_kernel_execution_state == "idle"
                 try:
-                    session_id = self._ip_kernel_client.session.session
-                    discard = msg["parent_header"]["session"] != session_id
+                    if "parent_header" in msg and msg["parent_header"]:
+                        session_id = self._ip_kernel_client.session.session
+                        discard = msg["parent_header"]["session"] != session_id
+                    else:
+                        discard = msg["header"]["msg_type"] not in self._ip_kernel_monitor_always_allow_types
 
                     if not discard:
                         if msg["header"]["msg_type"] == "stream":
@@ -1307,6 +1323,8 @@ class RunEngineWorker(Process):
                             ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
                             tb = [ansi_escape.sub("", _) for _ in tb]
                             tb = "\n".join(tb)
+                            if self._ip_kernel_monitor_collected_tracebacks is not None:
+                                self._ip_kernel_monitor_collected_tracebacks.append(tb)
                             print(f"Traceback: {tb}", file=error_stream)
                         elif msg["header"]["msg_type"] == "execute_result":
                             # print(f"msg={msg}", file=output_stream)
@@ -1322,7 +1340,7 @@ class RunEngineWorker(Process):
     def _ip_kernel_shutdown(self):
         logger.info("Requesting kernel to shut down ...")
         kernel_shutdown_task = "quit"
-        self._ip_kernel_client.execute(kernel_shutdown_task, reply=False)
+        self._ip_kernel_client.execute(kernel_shutdown_task, reply=False, store_history=False)
 
     def run(self):
         """
@@ -1330,6 +1348,8 @@ class RunEngineWorker(Process):
         by the `start` method.
         """
         setup_console_output_redirection(msg_queue=self._msg_queue)
+        # No output should be printed directly on the screen
+        sys.__stdout__, sys.__stderr__ = sys.stdout, sys.stderr
 
         logging.basicConfig(level=max(logging.WARNING, self._log_level))
         setup_loggers(name="bluesky_queueserver", log_level=self._log_level)
@@ -1338,60 +1358,123 @@ class RunEngineWorker(Process):
         self._env_state = EState.INITIALIZING
 
         if not self._use_ipython_kernel:
+            self._worker_prepare_for_startup()
             self._worker_startup_code()
             self._run_loop_python()
         else:
             from ipykernel.kernelapp import IPKernelApp
 
+            # from traitlets.config.loader import Config
             self._re_namespace["_run_engine_worker_class_object__"] = self
             self._ip_kernel_app = IPKernelApp.instance(user_ns=self._re_namespace)
             out_stream, err_stream = sys.stdout, sys.stderr
 
+            self._worker_prepare_for_startup()
+
             # Prevent kernel from capturing stdout/stderr, otherwise it creates a mess.
+            # See https://github.com/ipython/ipykernel/issues/795
             self._ip_kernel_app.capture_fd_output = False
+
+            # Echo all the output to sys.__stdout__ and sys.__stderr__ during kernel initialization
+            self._ip_kernel_app.quiet = False
+
+            # self._ip_kernel_app.reraise_ipython_extension_failures = True
+
+            # self._ip_kernel_app.code_to_run = "a = 10\nif test:\n    a = 20"
+            # self._ip_kernel_app.exec_lines = ["a = 10", "if test:", "    a = 20"]
+            # self._ip_kernel_app.code_to_run = "print('==== Hello ====')\nprint(f'b={b}')\nif b == 60:\n    b = b + 10"
+            # self._ip_kernel_app.exec_lines = ["print(b)", "if b == 60:", "    b = b + 10", "c = 90"]
+            # self._ip_kernel_app.file_to_run = "/home/dgavrilov/Projects/tmp/ipython_kernel/module_test/mod_code.py"
+            # self._ip_kernel_app.exec_files = ["/home/dgavrilov/Projects/tmp/ipython_kernel/module_test/mod_code.py"]
+
+            # Starting from module: startup files are still loaded, the module is not
+            #   'executed in the namespace (as 'code_to_run'), so it can not use variables
+            #   from the namespace. All variables are added to the namespace.
+            # # PYTHONPATH=/home/dgavrilov/Projects/tmp/ipython_kernel/module_test
+            # self._ip_kernel_app.module_to_run = "mod_code"
+
+            # Execute a file (script) in the namespace.
+            # self._ip_kernel_app.file_to_run = "/home/dgavrilov/Projects/tmp/ipython_kernel/module_test/mod_code.py"
+
+            # Ports numbers are automatically generated during initialization, but we want to subscribe to
+            #   them before initialization, so we need to set them manually.
+            # TODO: generate random available port numbers
+            self._ip_kernel_app.shell_port = 60000
+            self._ip_kernel_app.iopub_port = 60001
+            self._ip_kernel_app.stdin_port = 60002
+            self._ip_kernel_app.hb_port = 60003
+            self._ip_kernel_app.control_port = 60004
+            self._ip_connect_info = self._ip_kernel_app.get_connection_info()
+
+            def start_jupyter_client():
+                from jupyter_client import BlockingKernelClient
+
+                self._ip_kernel_client = BlockingKernelClient()
+                self._ip_kernel_client.load_connection_info(self._ip_connect_info)
+                logger.info(
+                    "Session ID for communication with IP kernel: %s", self._ip_kernel_client.session.session
+                )
+                self._ip_kernel_client.start_channels()
+
+                ip_kernel_iopub_monitor_thread = Thread(
+                    target=self._ip_kernel_iopub_monitor_thread,
+                    kwargs=dict(output_stream=out_stream, error_stream=err_stream),
+                    daemon=True,
+                )
+                ip_kernel_iopub_monitor_thread.start()
+
+            start_jupyter_client()
+
+            self._ip_kernel_monitor_always_allow_types = ["error"]
+            self._ip_kernel_monitor_collected_tracebacks = []
+
             self._ip_kernel_app.initialize([])
 
-            # Save connection info.
+            self._ip_kernel_monitor_always_allow_types = []
+            collected_tracebacks = self._ip_kernel_monitor_collected_tracebacks
+            self._ip_kernel_monitor_collected_tracebacks = None
+
             self._ip_connect_file = self._ip_kernel_app.connection_file
-            self._ip_connect_info = {
-                "shell_port": self._ip_kernel_app.shell_port,
-                "iopub_port": self._ip_kernel_app.iopub_port,
-                "stdin_port": self._ip_kernel_app.stdin_port,
-                "control_port": self._ip_kernel_app.control_port,
-                "hb_port": self._ip_kernel_app.hb_port,
-                "ip": self._ip_kernel_app.ip,
-                "key": self._ip_kernel_app.session.key,
-            }
 
-            from jupyter_client import BlockingKernelClient
+            # This is a very naive idea: if no exceptions were raised during kernel initialization
+            #   the we consider that startup code was loaded and the environment is fully functional
+            #   Otherwise we assume that loading failed and the collected tracebacks are used
+            #   to generate report (if needed). TODO: there could be some other non-obvious way to
+            #   detect if startup code was loaded. Ideas are appreciated.
+            if collected_tracebacks:
+                self._success_startup = False
+                logger.error("The environment can not be opened: failed to load startup code.")
 
-            self._ip_kernel_client = BlockingKernelClient()
-            self._ip_kernel_client.load_connection_info(self._ip_connect_info)
-            logger.info("Session ID for communication with IP kernel: %s", self._ip_kernel_client.session.session)
-            self._ip_kernel_client.start_channels()
+            # Disable echoing, since startup code is already loaded
+            self._ip_kernel_app.quiet = True
+            self._ip_kernel_app.init_io()
 
-            ip_kernel_monitor_thread = Thread(
-                target=self._ip_kernel_monitor_thread,
-                kwargs=dict(output_stream=out_stream, error_stream=err_stream),
-                daemon=True,
-            )
-            ip_kernel_monitor_thread.start()
+            # Print connect info for the kernel (after kernel initialization)
+            cinfo = copy.deepcopy(self._ip_connect_info)
+            cinfo["key"] = cinfo["key"].decode("utf-8")
+            logger.info("IPython kernel connection info:\n %r", ppfl(cinfo))
 
-            def starting_tasks_in_kernel():
-                ttime.sleep(1)  # TODO: may be we don't need to wait that long
-                kernel_startup_task1 = "_run_engine_worker_class_object__._worker_startup_code()"
-                self._ip_kernel_client.execute(kernel_startup_task1, reply=False)
-                while self._env_state != EState.IDLE:
-                    ttime.sleep(0.1)
-                if not self._success_startup:
-                    self._ip_kernel_shutdown()
+            if self._success_startup:
 
-            starting_tasks_thread = Thread(target=starting_tasks_in_kernel, daemon=True)
-            starting_tasks_thread.start()
+                def starting_tasks_in_kernel():
+                    kernel_startup_task1 = "_run_engine_worker_class_object__._worker_startup_code()"
+                    self._ip_kernel_client.execute(kernel_startup_task1, reply=False, store_history=False)
+                    while self._env_state != EState.IDLE:
+                        ttime.sleep(0.1)
+                    if not self._success_startup:
+                        self._ip_kernel_shutdown()
 
-            logging.info("Preparing to start IPython kernel ...")
-            self._ip_kernel_app.start()
+                starting_tasks_thread = Thread(target=starting_tasks_in_kernel, daemon=True)
+                starting_tasks_thread.start()
+
+                logging.info("Preparing to start IPython kernel ...")
+                self._ip_kernel_app.start()
+
+            self._ip_kernel_app.close()
+            self._exit_event.set()
             self._ip_kernel_monitor_stop = True
+
+            # Restore 'sys.stdout' and 'sys.stderr' changed during kernel initialization
             sys.stdout, sys.stderr = out_stream, err_stream
 
         self._worker_shutdown_code()

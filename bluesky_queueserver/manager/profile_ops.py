@@ -379,8 +379,10 @@ def load_worker_startup_code(
         logger.info("Loading RE Worker startup code from directory '%s' ...", startup_dir)
         startup_dir = os.path.abspath(os.path.expanduser(startup_dir))
         logger.info("Startup directory: '%s'", startup_dir)
+        patch_profiles = not use_ipython_kernel
+        logger.info("Patching startup code files is enabled: %s", patch_profiles)
         nspace = load_profile_collection(
-            startup_dir, keep_re=keep_re, patch_profiles=use_ipython_kernel, nspace=nspace
+            startup_dir, keep_re=keep_re, patch_profiles=patch_profiles, nspace=nspace
         )
 
     elif startup_module_name is not None:

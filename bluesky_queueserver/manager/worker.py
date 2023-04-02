@@ -51,6 +51,14 @@ class EState(enum.Enum):
     CLOSED = "closed"  # For completeness
 
 
+# State of IPKernel
+class IPKernelState(enum.Enum):
+    OFF = "off"  # Kernel is not started (or worker is in Python mode)
+    BUSY = "busy"
+    IDLE = "idle"
+    STARTING = "starting"
+
+
 class ExecOption(enum.Enum):
     NEW = "new"  # New plan
     RESUME = "resume"  # Resume paused plan
@@ -164,8 +172,7 @@ class RunEngineWorker(Process):
         self._ip_connect_file = ""  # Filename with connection info for the running IP kernel
         self._ip_connect_info = {}  # Connection info for the running IP Kernel
         self._ip_kernel_client = None  # Kernel client for communication with IP kernel.
-        self._ip_kernel_execution_state = None
-        self._ip_kernel_is_idle = True
+        self._ip_kernel_state = IPKernelState.OFF
         self._ip_kernel_monitor_stop = False
         # List of message types that are allowed to be printed even if the message does not contain parent header
         self._ip_kernel_monitor_always_allow_types = []
@@ -751,6 +758,7 @@ class RunEngineWorker(Process):
         plans_and_devices_list_updated = self._existing_plans_and_devices_changed
         completed_tasks_available = bool(self._completed_tasks)
         background_tasks_num = self._background_tasks_num
+        ip_kernel_state = self._ip_kernel_state.value
 
         msg_out = {
             "running_item_uid": item_uid,
@@ -764,6 +772,7 @@ class RunEngineWorker(Process):
             "running_task_uid": task_uid,
             "completed_tasks_available": completed_tasks_available,
             "background_tasks_num": background_tasks_num,
+            "ip_kernel_state": ip_kernel_state,
         }
         return msg_out
 
@@ -1300,8 +1309,7 @@ class RunEngineWorker(Process):
             try:
                 msg = self._ip_kernel_client.get_iopub_msg(timeout=0.5)
                 if msg["header"]["msg_type"] == "status":
-                    self._ip_kernel_execution_state = msg["content"]["execution_state"]
-                    self._ip_kernel_is_idle = self._ip_kernel_execution_state == "idle"
+                    self._ip_kernel_state = IPKernelState(msg["content"]["execution_state"])
                 try:
                     if "parent_header" in msg and msg["parent_header"]:
                         session_id = self._ip_kernel_client.session.session
@@ -1364,7 +1372,6 @@ class RunEngineWorker(Process):
         else:
             from ipykernel.kernelapp import IPKernelApp
 
-            # from traitlets.config.loader import Config
             self._re_namespace["_run_engine_worker_class_object__"] = self
             self._ip_kernel_app = IPKernelApp.instance(user_ns=self._re_namespace)
             out_stream, err_stream = sys.stdout, sys.stderr

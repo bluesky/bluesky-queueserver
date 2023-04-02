@@ -1466,6 +1466,7 @@ class RunEngineManager(Process):
         queue_stop_pending = self._queue_stop_pending
         worker_environment_exists = self._environment_exists
         re_state = self._worker_state_info["re_state"] if self._worker_state_info else None
+        ip_kernel_state = self._worker_state_info["ip_kernel_state"] if self._worker_state_info else None
         env_state = self._worker_state_info["environment_state"] if self._worker_state_info else "closed"
         background_tasks = self._worker_state_info["background_tasks_num"] if self._worker_state_info else 0
         deferred_pause_pending = self._re_pause_pending
@@ -1496,6 +1497,7 @@ class RunEngineManager(Process):
             "worker_environment_state": env_state,  # State of the worker environment
             "worker_background_tasks": background_tasks,  # The number of background tasks
             "re_state": re_state,  # State of Run Engine
+            "ip_kernel_state": ip_kernel_state,  # State of IPython kernel
             "pause_pending": deferred_pause_pending,  # True/False - Cleared once pause processed
             # If Run List UID change, download the list of runs for the current plan.
             # Run List UID is updated when the list is cleared as well.

@@ -1163,7 +1163,7 @@ class RunEngineWorker(Process):
             # Always download existing plans and devices when loading the new environment
             self._existing_plans_and_devices_changed = True
 
-            logger.info("Startup code loading was completed")
+            logger.info("Startup code was successfully loaded.")
 
         except Exception as ex:
             s = "Failed to start RE Worker environment. Error while loading startup code"
@@ -1371,6 +1371,20 @@ class RunEngineWorker(Process):
 
             self._worker_prepare_for_startup()
 
+            startup_profile = self._config_dict.get("startup_profile", None)
+            startup_module_name = self._config_dict.get("startup_module_name", None)
+            startup_script_path = self._config_dict.get("startup_script_path", None)
+            ipython_dir = self._config_dict.get("ipython_dir", None)
+
+            if startup_profile:
+                self._ip_kernel_app.profile = startup_profile
+            if startup_module_name:
+                self._ip_kernel_app.module_to_run = startup_module_name
+            if startup_script_path:
+                self._ip_kernel_app.file_to_run = startup_script_path
+            if ipython_dir:
+                self._ip_kernel_app.ipython_dir = ipython_dir
+
             # Prevent kernel from capturing stdout/stderr, otherwise it creates a mess.
             # See https://github.com/ipython/ipykernel/issues/795
             self._ip_kernel_app.capture_fd_output = False
@@ -1428,6 +1442,7 @@ class RunEngineWorker(Process):
             self._ip_kernel_monitor_always_allow_types = ["error"]
             self._ip_kernel_monitor_collected_tracebacks = []
 
+            ttime.sleep(1)
             self._ip_kernel_app.initialize([])
 
             self._ip_kernel_monitor_always_allow_types = []

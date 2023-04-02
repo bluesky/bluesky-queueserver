@@ -184,6 +184,7 @@ _key_mapping = {
     "startup_profile": "startup/startup_profile",
     "startup_module": "startup/startup_module",
     "startup_script": "startup/startup_script",
+    "ipython_dir": "startup/ipython_dir",
     "use_ipython_kernel": "worker/use_ipython_kernel",
     "print_console_output": "operation/print_console_output",
     "console_logging_level": "operation/console_logging_level",
@@ -265,11 +266,13 @@ def to_boolean(value):
         return None
 
 
-def _profile_name_to_startup_dir(profile_name):
+def _profile_name_to_startup_dir(profile_name, ipython_dir=None):
     """
     Finds and returns full path to startup directory based on the profile name.
     """
-    if find_spec("IPython"):
+    if ipython_dir:
+        path_to_ipython = ipython_dir
+    elif find_spec("IPython"):
         import IPython
 
         path_to_ipython = IPython.paths.get_ipython_dir()
@@ -348,10 +351,12 @@ class Settings:
             user_group_permissions_path = os.path.expanduser(user_group_permissions_path)
         self._settings["user_group_permissions_path"] = user_group_permissions_path
 
-        startup_dir, startup_module, startup_script = self._get_startup_options()
+        startup_dir, startup_module, startup_script, startup_profile, ipython_dir = self._get_startup_options()
         self._settings["startup_dir"] = startup_dir
         self._settings["startup_module"] = startup_module
         self._settings["startup_script"] = startup_script
+        self._settings["startup_profile"] = startup_profile
+        self._settings["ipython_dir"] = ipython_dir
 
         self._settings["print_console_output"] = self._get_param_boolean(
             value_default=args.console_output,
@@ -514,46 +519,154 @@ class Settings:
         """
 
         # Default: startup scripts with simulated plans and devices
-        startup_dir, startup_module, startup_script = get_default_startup_dir(), None, None
+        default_startup_dir = get_default_startup_dir()
+        ipython_dir, startup_profile = None, None
+        startup_dir, startup_module, startup_script = None, None, None
 
-        # Process config parameters
-        cfg_dir, cfg_module, cfg_script = None, None, None
-        if self._get_value_from_config("startup_profile"):
-            cfg_dir = _profile_name_to_startup_dir(self._get_value_from_config("startup_profile"))
-        elif self._get_value_from_config("startup_dir"):
-            cfg_dir = self._get_value_from_config("startup_dir")
-            cfg_dir = os.path.abspath(os.path.expanduser(cfg_dir))
-        elif self._get_value_from_config("startup_module"):
-            cfg_module = self._get_value_from_config("startup_module")
-        elif self._get_value_from_config("startup_script"):
-            cfg_script = os.path.abspath(os.path.expanduser(self._get_value_from_config("startup_script")))
+        use_ipk = self.use_ipython_kernel
 
-        if any([cfg_dir, cfg_module, cfg_script]):
-            startup_dir, startup_module, startup_script = cfg_dir, cfg_module, cfg_script
+        def get_profile_from_path(startup_dir):
+            """
+            Returns name of profile and ipython path based on path to startup directory.
+            """
+            sd = os.path.abspath(os.path.expanduser(startup_dir))
 
-        # Process CLI parameters
-        cli_dir, cli_module, cli_script = None, None, None
-        if self._args_existing("profile_name"):
-            cli_dir = _profile_name_to_startup_dir(self._args_existing("profile_name"))
-        elif self._args_existing("startup_dir"):
-            cli_dir = self._args_existing("startup_dir")
-            cli_dir = os.path.abspath(os.path.expanduser(cli_dir))
-        elif self._args_existing("startup_module_name"):
-            cli_module = self._args_existing("startup_module_name")
-        elif self._args_existing("startup_script_path"):
-            cli_script = os.path.abspath(os.path.expanduser(self._args_existing("startup_script_path")))
+            profile_name, ip_dir = None, None
+            p, d = os.path.split(sd)
+            if d == "startup":
+                ipd, pr = os.path.split(p)
+                if pr.startswith("profile_"):
+                    profile_name = pr[len("profile_") :]
+                    ip_dir = ipd
+            return profile_name, ip_dir
 
-        if any([cli_dir, cli_module, cli_script]):
-            startup_dir, startup_module, startup_script = cli_dir, cli_module, cli_script
+        _cfg_dir = self._get_value_from_config("startup_dir")
+        _cfg_module = self._get_value_from_config("startup_module")
+        _cfg_script = self._get_value_from_config("startup_script")
+        _cfg_profile = self._get_value_from_config("startup_profile")
+        _cfg_ipdir = self._get_value_from_config("ipython_dir")
 
-        # Check that only one source is defined (just in case)
-        if sum([_ is not None for _ in [startup_dir, startup_module, startup_script]]) != 1:
-            raise ConfigError(
-                f"Multiple or no startup code sources were specified: startup_dir={startup_dir!r} "
-                f"startup_module={startup_module!r} startup_script={startup_script!r}"
-            )
+        _cli_dir = self._args_existing("startup_dir")
+        _cli_module = self._args_existing("startup_module")
+        _cli_script = self._args_existing("startup_script")
+        _cli_profile = self._args_existing("startup_profile")
+        _cli_ipdir = self._args_existing("ipython_dir")
 
-        return startup_dir, startup_module, startup_script
+        if use_ipk:
+            # Process config parameters
+            cfg_module, cfg_script, cfg_profile, cfg_ipdir = None, None, None, None
+
+            if _cfg_dir and (_cfg_profile or _cfg_ipdir):
+                raise ConfigError(
+                    f"Ambiguous location of startup code is specified in the config file: "
+                    f"startup_dir={_cfg_dir!r} startup_profile={_cfg_profile!r} ipython_dir={_cfg_ipdir!r}"
+                )
+            if _cfg_module and _cfg_script:
+                raise ConfigError(
+                    f"Ambiguous location of startup code is specified in the config file: "
+                    f"startup_module={_cfg_module!r} startup_script={_cfg_script!r}"
+                )
+
+            if _cfg_profile:
+                cfg_profile, cfg_ipdir = _cfg_profile, _cfg_ipdir
+            elif _cfg_dir:
+                cfg_profile, cfg_ipdir = get_profile_from_path(_cfg_dir)
+
+            if _cfg_module:
+                cfg_module = _cfg_module
+            elif _cfg_script:
+                cfg_script = os.path.abspath(os.path.expanduser(_cfg_script))
+
+            if any([cfg_profile, cfg_ipdir]):
+                startup_profile, ipython_dir = cfg_profile, cfg_ipdir
+            if any([cfg_module, cfg_script]):
+                startup_module, startup_script = cfg_module, cfg_script
+
+            # Process CLI parameters
+            cli_module, cli_script, cli_profile, cli_ipdir = None, None, None, None
+
+            if _cli_dir and (_cli_profile or _cli_ipdir):
+                raise ConfigError(
+                    f"Ambiguous location of startup code is specified in the CLI parameters: "
+                    f"startup_dir={_cli_dir!r} startup_profile={_cli_profile!r} ipython_dir={_cli_ipdir!r}"
+                )
+            if _cli_module and _cli_script:
+                raise ConfigError(
+                    f"Ambiguous location of startup code is specified in the CLI parameters: "
+                    f"startup_module={_cli_module!r} startup_script={_cli_script!r}"
+                )
+
+            if _cli_profile:
+                cli_profile, cli_ipdir = _cli_profile, _cli_ipdir
+            elif _cli_dir:
+                cli_profile, cli_ipdir = get_profile_from_path(_cli_dir)
+
+            if _cli_module:
+                cli_module = _cli_module
+            elif _cli_script:
+                cli_script = os.path.abspath(os.path.expanduser(_cli_script))
+
+            if any([cli_profile, cli_ipdir]):
+                startup_profile, ipython_dir = cli_profile, cli_ipdir
+            if any([cli_module, cli_script]):
+                startup_module, startup_script = cli_module, cli_script
+
+            # If no location of startup code was specified, then load the default
+            #   simulated ipython_sim/profile_collection_sim
+            if not any([ipython_dir, startup_profile, startup_module, ipython_dir]):
+                startup_profile, ipython_dir = get_profile_from_path(default_startup_dir)
+
+            # We still need to set startup directory. It is used to locate config files.
+            startup_dir = _profile_name_to_startup_dir(startup_profile, ipython_dir)
+        else:
+            # Process config parameters
+            cfg_dir, cfg_module, cfg_script = None, None, None
+
+            # We ignore profile name if other location is specified
+            if sum([_ is not None for _ in [_cfg_dir, _cfg_module, _cfg_script]]) > 1:
+                raise ConfigError(
+                    f"Ambiguous location of startup code is specified in the config file: "
+                    f"startup_dir={_cfg_dir!r} startup_module={_cfg_module!r} startup_script={_cfg_script!r}"
+                )
+
+            if _cfg_dir:
+                cfg_dir = os.path.abspath(os.path.expanduser(_cfg_dir))
+            elif _cfg_module:
+                cfg_module = _cfg_module
+            elif _cfg_script:
+                cfg_script = os.path.abspath(os.path.expanduser(_cfg_script))
+            elif _cfg_profile:
+                cfg_dir = _profile_name_to_startup_dir(_cfg_profile, _cfg_ipdir)
+
+            if any([cfg_dir, cfg_module, cfg_script]):
+                startup_dir, startup_module, startup_script = cfg_dir, cfg_module, cfg_script
+
+            # Process CLI parameters
+            cli_dir, cli_module, cli_script = None, None, None
+
+            # We ignore profile name if other location is specified
+            if sum([_ is not None for _ in [_cli_dir, _cli_module, _cli_script]]) > 1:
+                raise ConfigError(
+                    f"Ambiguous location of startup code is specified in the CLI parameters: "
+                    f"startup_dir={_cli_dir!r} startup_module={_cli_module!r} startup_script={_cli_script!r}"
+                )
+
+            if _cli_dir:
+                cli_dir = os.path.abspath(os.path.expanduser(_cli_dir))
+            elif _cli_module:
+                cli_module = _cli_module
+            elif _cli_script:
+                cli_script = os.path.abspath(os.path.expanduser(_cli_script))
+            elif _cli_profile:
+                cli_dir = _profile_name_to_startup_dir(_cli_profile, _cli_ipdir)
+
+            if any([cli_dir, cli_module, cli_script]):
+                startup_dir, startup_module, startup_script = cli_dir, cli_module, cli_script
+
+            if not any([startup_dir, startup_module, startup_script]):
+                startup_dir = default_startup_dir
+
+        return startup_dir, startup_module, startup_script, startup_profile, ipython_dir
 
     def _get_zmq_control_addr(self):
         """

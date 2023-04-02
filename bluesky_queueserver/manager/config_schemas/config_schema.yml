@@ -51,6 +51,8 @@ properties:
             type: string
           startup_script:
             type: string
+          ipython_dir:
+            type: string
           existing_plans_and_devices_path:
             type: string
           user_group_permissions_path:
@@ -59,9 +61,6 @@ properties:
           - type: object
             required:
               - startup_dir
-          - type: object
-            required:
-              - startup_profile
           - type: object
             required:
               - startup_module

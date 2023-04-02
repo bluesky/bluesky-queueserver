@@ -1,4 +1,6 @@
 # flake8: noqa
+print(f"Loading file {__file__!r}")
+
 import time as ttime
 import typing
 

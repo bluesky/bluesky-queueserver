@@ -259,7 +259,7 @@ def start_manager():
     )
     group.add_argument(
         "--startup-profile",
-        dest="profile_name",
+        dest="startup_profile",
         type=str,
         help="The name of IPython profile used to find the location of startup files. Example: if IPython is "
         "configured to look for profiles in '~/.ipython' directory (default behavior) and the profile "
@@ -268,7 +268,7 @@ def start_manager():
     )
     group.add_argument(
         "--startup-module",
-        dest="startup_module_name",
+        dest="startup_module",
         type=str,
         help="The name of the module with startup code. The module is imported each time the RE Worker "
         "environment is opened. Example: 'some.startup.module'. Paths to the list of existing "
@@ -278,7 +278,7 @@ def start_manager():
 
     group.add_argument(
         "--startup-script",
-        dest="startup_script_path",
+        dest="startup_script",
         type=str,
         help="The path to the script with startup code. The script is loaded each time the RE Worker "
         "environment is opened. Example: '~/startup/scripts/scripts.py'. Paths to the list of existing "
@@ -380,6 +380,14 @@ def start_manager():
         dest="use_ipython_kernel",
         action="store_true",
         help="Run the Run Engine worker in IPython kernel.",
+    )
+
+    group.add_argument(
+        "--ipython-dir",
+        dest="ipython_dir",
+        type=str,
+        help="The path to IPython root directory, which contains profiles. Overrides IPYTHONDIR environment "
+        "variable. The parameter is ignored if IPython kernel is not used.",
     )
 
     parser.add_argument(
@@ -516,9 +524,11 @@ def start_manager():
     if settings.zmq_data_proxy_addr is not None:
         config_worker["zmq_data_proxy_addr"] = settings.zmq_data_proxy_addr
 
+    startup_profile = settings.startup_profile
     startup_dir = settings.startup_dir
     startup_module_name = settings.startup_module
     startup_script_path = settings.startup_script
+    ipython_dir = settings.ipython_dir
 
     # Primitive error processing: make sure that all essential data exists.
     if startup_dir is not None:
@@ -558,9 +568,11 @@ def start_manager():
     if settings.databroker_config:
         config_worker["databroker"]["config"] = settings.databroker_config
 
+    config_worker["startup_profile"] = startup_profile
     config_worker["startup_dir"] = startup_dir
     config_worker["startup_module_name"] = startup_module_name
     config_worker["startup_script_path"] = startup_script_path
+    config_worker["ipython_dir"] = ipython_dir
 
     default_existing_pd_fln = "existing_plans_and_devices.yaml"
     if settings.existing_plans_and_devices_path:

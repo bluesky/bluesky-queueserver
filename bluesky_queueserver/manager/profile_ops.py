@@ -51,7 +51,7 @@ def get_default_startup_dir():
     Returns the path to the default profile collection that is distributed with the package.
     The function does not guarantee that the directory exists.
     """
-    pc_path = pkg_resources.resource_filename("bluesky_queueserver", "ipythondir_sim/profile_collection_sim/startup/")
+    pc_path = pkg_resources.resource_filename("bluesky_queueserver", "ipython_sim/profile_collection_sim/startup/")
     return pc_path
 
 

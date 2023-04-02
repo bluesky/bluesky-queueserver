@@ -10,7 +10,9 @@ import numbers
 import os
 import random
 import re
+import shutil
 import sys
+import tempfile
 import traceback
 import typing
 from collections.abc import Iterable
@@ -49,10 +51,36 @@ class ScriptLoadingError(Exception):
 def get_default_startup_dir():
     """
     Returns the path to the default profile collection that is distributed with the package.
-    The function does not guarantee that the directory exists.
+    The function does not guarantee that the directory exists. Used for demo with Python-based worker.
     """
     pc_path = pkg_resources.resource_filename("bluesky_queueserver", "ipython_sim/profile_collection_sim/startup/")
     return pc_path
+
+
+def get_default_startup_profile():
+    """
+    Returns the name for the default startup profile. Used for demo with IPython-based worker.
+    The startup code is expected to be in ``/tmp/qserver/ipython/profile_collection_sim/startup`` directory.
+    """
+    return "collection_sim"
+
+
+def create_demo_ipython_profile(startup_dir, *, delete_existing=True):
+    """
+    Create demo IPython profile in temporary location. Copy startup directory
+    to the new profile. Raises IOError if the destination directory is not temporary.
+    """
+    tempdir = tempfile.gettempdir()
+    if os.path.commonprefix([tempdir, startup_dir]) != tempdir:
+        raise IOError("Attempting to create a demo profile in non-temporary startup directory: %r", startup_dir)
+
+    # Delete the existing startup directory (but not the whole profile).
+    if delete_existing:
+        shutil.rmtree(startup_dir, ignore_errors=True)
+
+    # Copy the startup files
+    default_startup_dir = get_default_startup_dir()
+    shutil.copytree(default_startup_dir, startup_dir)
 
 
 _startup_script_patch = """

@@ -15,6 +15,7 @@ from .output_streaming import (
     default_zmq_info_address_for_server,
     setup_console_output_redirection,
 )
+from .profile_ops import create_demo_ipython_profile
 from .worker import RunEngineWorker
 
 logger = logging.getLogger(__name__)
@@ -529,6 +530,17 @@ def start_manager():
     startup_module_name = settings.startup_module
     startup_script_path = settings.startup_script
     ipython_dir = settings.ipython_dir
+    use_ipython_kernel = settings.use_ipython_kernel
+    demo_mode = settings.demo_mode
+
+    if demo_mode and use_ipython_kernel:
+        # Create demo profile for IPython with simulated startup files
+        try:
+            create_demo_ipython_profile(startup_dir)
+            logger.info("Temporary IPython profile was created (%r)", startup_dir)
+        except Exception as ex:
+            logger.exception(ex)
+            return 1
 
     # Primitive error processing: make sure that all essential data exists.
     if startup_dir is not None:

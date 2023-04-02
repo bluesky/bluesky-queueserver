@@ -1379,8 +1379,10 @@ class RunEngineWorker(Process):
             if startup_profile:
                 self._ip_kernel_app.profile = startup_profile
             if startup_module_name:
+                # NOTE: Startup files are still loaded.
                 self._ip_kernel_app.module_to_run = startup_module_name
             if startup_script_path:
+                # NOTE: Startup files are still loaded.
                 self._ip_kernel_app.file_to_run = startup_script_path
             if ipython_dir:
                 self._ip_kernel_app.ipython_dir = ipython_dir
@@ -1391,24 +1393,6 @@ class RunEngineWorker(Process):
 
             # Echo all the output to sys.__stdout__ and sys.__stderr__ during kernel initialization
             self._ip_kernel_app.quiet = False
-
-            # self._ip_kernel_app.reraise_ipython_extension_failures = True
-
-            # self._ip_kernel_app.code_to_run = "a = 10\nif test:\n    a = 20"
-            # self._ip_kernel_app.exec_lines = ["a = 10", "if test:", "    a = 20"]
-            # self._ip_kernel_app.code_to_run = "print('==== Hello ====')\nprint(f'b={b}')\nif b == 60:\n    b = b + 10"
-            # self._ip_kernel_app.exec_lines = ["print(b)", "if b == 60:", "    b = b + 10", "c = 90"]
-            # self._ip_kernel_app.file_to_run = "/home/dgavrilov/Projects/tmp/ipython_kernel/module_test/mod_code.py"
-            # self._ip_kernel_app.exec_files = ["/home/dgavrilov/Projects/tmp/ipython_kernel/module_test/mod_code.py"]
-
-            # Starting from module: startup files are still loaded, the module is not
-            #   'executed in the namespace (as 'code_to_run'), so it can not use variables
-            #   from the namespace. All variables are added to the namespace.
-            # # PYTHONPATH=/home/dgavrilov/Projects/tmp/ipython_kernel/module_test
-            # self._ip_kernel_app.module_to_run = "mod_code"
-
-            # Execute a file (script) in the namespace.
-            # self._ip_kernel_app.file_to_run = "/home/dgavrilov/Projects/tmp/ipython_kernel/module_test/mod_code.py"
 
             # Ports numbers are automatically generated during initialization, but we want to subscribe to
             #   them before initialization, so we need to set them manually.

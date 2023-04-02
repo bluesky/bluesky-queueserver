@@ -12,7 +12,7 @@ recursive-include docs *.rst conf.py Makefile make.bat
 include versioneer.py
 include bluesky_queueserver/_version.py
 include bluesky_queueserver/manager/config_schemas/*.yml
-recursive-include bluesky_queueserver/ipython_sim/profile_collection_sim/startup/ *
+recursive-include bluesky_queueserver/profile_collection_sim/ *
 
 # If including data files in the package, add them like:
 # include path/to/data_file

@@ -186,6 +186,8 @@ class RunEngineWorker(Process):
 
         self._re_namespace, self._plans_in_nspace, self._devices_in_nspace = {}, {}, {}
 
+        self._worker_shutdown_initiated = False  # Indicates if shutdown is initiated by request
+        self._unexpected_shutdown = False  # Indicates if shutdown is in progress, but it was not requested
         self._success_startup = True  # Indicates if worker startup is proceding successfully
 
     def _execute_plan_or_task(self, parameters, exec_option):
@@ -759,6 +761,7 @@ class RunEngineWorker(Process):
         completed_tasks_available = bool(self._completed_tasks)
         background_tasks_num = self._background_tasks_num
         ip_kernel_state = self._ip_kernel_state.value
+        unexpected_shutdown = self._unexpected_shutdown
 
         msg_out = {
             "running_item_uid": item_uid,
@@ -773,6 +776,7 @@ class RunEngineWorker(Process):
             "completed_tasks_available": completed_tasks_available,
             "background_tasks_num": background_tasks_num,
             "ip_kernel_state": ip_kernel_state,
+            "unexpected_shutdown": unexpected_shutdown,
         }
         return msg_out
 
@@ -837,16 +841,26 @@ class RunEngineWorker(Process):
         #       Run Engine is running using this method. Different method that kills
         #       the worker process is needed.
         err_msg = None
-        if (self._RE is None) or (self._RE._state != "running"):
+
+        if self._ip_kernel_state == IPKernelState.BUSY:
+            # The condition for IP Kernel 'busy' state accounts for the case when IP is not used.
+            status = "rejected"
+            err_msg = "IPython kernel is busy and can not be stopped."
+        elif (self._RE is not None) and (self._RE._state == "running"):
+            status = "rejected"
+            err_msg = "Run Engine is executing a plan.Stop the running plan and try again."
+        else:
             try:
-                self._exit_event.set()
+                if self._use_ipython_kernel:
+                    # Send 'quit' command to the kernel, 'exit_event' is set elsewhere.
+                    self._ip_kernel_shutdown()
+                else:
+                    self._exit_event.set()
+                self._worker_shutdown_initiated = True  # Shutdown is initiated by request
                 status = "accepted"
             except Exception as ex:
                 status = "error"
                 err_msg = str(ex)
-        else:
-            status = "rejected"
-            err_msg = "Can not close the environment with running Run Engine. Stop the running plan and try again."
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
 
@@ -1276,6 +1290,9 @@ class RunEngineWorker(Process):
         Perform shutdown tasks for the worker.
         """
         from .profile_tools import clear_re_worker_active
+
+        if not self._worker_shutdown_initiated:
+            self._unexpected_shutdown = True
 
         logger.info("Environment is waiting to be closed ...")
         self._env_state = EState.CLOSING

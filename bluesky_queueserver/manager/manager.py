@@ -275,6 +275,8 @@ class RunEngineManager(Process):
         self._comm_to_watchdog = None
         self._comm_to_worker = None
 
+        self._use_ipython_kernel = config["use_ipython_kernel"]
+
         # Note: 'self._config' is a private attribute of 'multiprocessing.Process'. Overriding
         #   this variable may lead to unpredictable and hard to debug issues.
         self._config_dict = config or {}
@@ -428,6 +430,11 @@ class RunEngineManager(Process):
         Initiate closing of the RE Worker environment.
         """
         try:
+            ip_kernel_is_busy, ws = False, self._worker_state_info
+            if self._use_ipython_kernel and ws:
+                # This is not 100% reliable. The request may still be rejected because of busy kernel.
+                ip_kernel_is_busy = ws["ip_kernel_state"] == "busy"
+
             if not self._environment_exists:
                 raise RuntimeError("RE Worker environment does not exist.")
             elif self._manager_state is MState.CLOSING_ENVIRONMENT:
@@ -438,6 +445,8 @@ class RunEngineManager(Process):
                 raise RuntimeError("Foreground task execution is in progress.")
             elif self._manager_state != MState.IDLE:
                 raise RuntimeError(f"Manager state is not idle. Current state: {self._manager_state.value}")
+            elif ip_kernel_is_busy:
+                raise RuntimeError("Worker IPython kernel is busy")
             else:
                 accepted, err_msg = True, ""
                 self._manager_state = MState.CLOSING_ENVIRONMENT
@@ -476,6 +485,8 @@ class RunEngineManager(Process):
                 err_msg = "Failed to confirm closing of RE Worker thread"
             else:
                 await self._task_results.clear_running_tasks()
+        else:
+            logger.error("Environment can not be closed: %s", err_msg)
 
         self._manager_state = MState.IDLE
         self._running_task_uid = None
@@ -588,6 +599,10 @@ class RunEngineManager(Process):
 
                     if ws["completed_tasks_available"]:
                         self._loop.create_task(self._load_task_results_from_worker())
+
+                    if ws["unexpected_shutdown"]:
+                        # Shutdown was not requested by the manager (caused by external client).
+                        self._loop.create_task(self._confirm_re_worker_exit())
 
                     if self._manager_state == MState.CLOSING_ENVIRONMENT:
                         if ws["environment_state"] == "closing":

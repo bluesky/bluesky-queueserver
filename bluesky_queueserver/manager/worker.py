@@ -53,7 +53,7 @@ class EState(enum.Enum):
 
 # State of IPKernel
 class IPKernelState(enum.Enum):
-    OFF = "off"  # Kernel is not started (or worker is in Python mode)
+    DISABLED = "disabled"  # Kernel is not started (or worker is in Python mode)
     BUSY = "busy"
     IDLE = "idle"
     STARTING = "starting"
@@ -172,7 +172,7 @@ class RunEngineWorker(Process):
         self._ip_connect_file = ""  # Filename with connection info for the running IP kernel
         self._ip_connect_info = {}  # Connection info for the running IP Kernel
         self._ip_kernel_client = None  # Kernel client for communication with IP kernel.
-        self._ip_kernel_state = IPKernelState.OFF
+        self._ip_kernel_state = IPKernelState.DISABLED
         self._ip_kernel_monitor_stop = False
         # List of message types that are allowed to be printed even if the message does not contain parent header
         self._ip_kernel_monitor_always_allow_types = []
@@ -1230,7 +1230,7 @@ class RunEngineWorker(Process):
                         # Documents from each run are routed to an independent
                         #   instance of BestEffortCallback
                         bec = BestEffortCallback()
-                        bec.disable_plots()
+                        # bec.disable_plots()
                         return [bec], []
 
                     # Subscribe to Best Effort Callback in the way that works with multi-run plans.
@@ -1414,6 +1414,8 @@ class RunEngineWorker(Process):
             if ipython_dir:
                 self._ip_kernel_app.ipython_dir = ipython_dir
 
+            # self._ip_kernel_app.matplotlib = "qt5"
+
             # Prevent kernel from capturing stdout/stderr, otherwise it creates a mess.
             # See https://github.com/ipython/ipykernel/issues/795
             self._ip_kernel_app.capture_fd_output = False
@@ -1453,7 +1455,8 @@ class RunEngineWorker(Process):
             self._ip_kernel_monitor_always_allow_types = ["error"]
             self._ip_kernel_monitor_collected_tracebacks = []
 
-            ttime.sleep(1)
+            ttime.sleep(1)  # Wait unitl 0MQ monitor is connected to the kernel ports
+            logger.info("Initializing IPython kernel ...")
             self._ip_kernel_app.initialize([])
 
             self._ip_kernel_monitor_always_allow_types = []
@@ -1488,14 +1491,16 @@ class RunEngineWorker(Process):
                     while self._env_state != EState.IDLE:
                         ttime.sleep(0.1)
                     if not self._success_startup:
+                        logger.error("Failed to start IPython kernel.")
                         self._ip_kernel_shutdown()
 
                 starting_tasks_thread = Thread(target=starting_tasks_in_kernel, daemon=True)
                 starting_tasks_thread.start()
 
-                logging.info("Preparing to start IPython kernel ...")
+                logger.info("Preparing to start IPython kernel ...")
                 self._ip_kernel_app.start()
 
+            self._ip_kernel_state = IPKernelState.DISABLED
             self._ip_kernel_app.close()
             self._exit_event.set()
             self._ip_kernel_monitor_stop = True

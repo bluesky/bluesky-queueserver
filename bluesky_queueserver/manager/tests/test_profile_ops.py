@@ -1222,8 +1222,8 @@ def test_load_script_into_existing_nspace_09():  # noqa: F811
 
 
 code_script_upload_test10_1 = """
-# '__file__' should not be defined
-assert "__file__" not in globals()
+# '__file__' should be defined
+assert "__file__" in globals()
 mod_name1 = __name__
 """
 

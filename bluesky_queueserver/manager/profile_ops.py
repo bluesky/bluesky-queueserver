@@ -520,7 +520,8 @@ def load_script_into_existing_nspace(
 
     try:
         # Set '__name__' variables. NOTE: '__file__' variable is undefined (difference!!!)
-        patch = "__name__ = 'startup_script'\n__file__ = 'script'\n"
+        script_path = os.path.join(script_root_path, "script") if script_root_path else "script"
+        patch = f"__name__ = 'startup_script'\n__file__ = '{script_path}'\n"
         exec(patch, nspace, nspace)
 
         # A script may be partially loaded into the environment in case it fails.

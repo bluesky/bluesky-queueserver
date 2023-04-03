@@ -18,6 +18,18 @@ class RunList:
         self._lock = threading.Lock()
         self._list_changed = False
 
+
+    def is_empty(self):
+        """
+        The method reports whether the list of runs is empty.
+
+        Returns
+        -------
+        boolean
+            True - the list contains no runs
+        """
+        return len(self._run_list)
+
     def is_changed(self):
         """
         Verifies if the list was changed since the list state was last cleared.

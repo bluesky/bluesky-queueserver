@@ -649,6 +649,7 @@ class RunEngineManager(Process):
             result = plan_report["result"]
             err_msg = plan_report["err_msg"]
             err_tb = plan_report["traceback"]
+            stop_queue = plan_report["stop_queue"]  # Worker tells the manager to stop the queue
 
             msg_display = result if result else err_msg
             logger.debug(
@@ -670,7 +671,7 @@ class RunEngineManager(Process):
                 await self._plan_queue.set_processed_item_as_completed(
                     exit_status=plan_state, run_uids=result, err_msg=err_msg, err_tb=err_tb
                 )
-                await self._start_plan_task(stop_queue=bool(immediate_execution))
+                await self._start_plan_task(stop_queue=stop_queue or bool(immediate_execution))
             elif plan_state in ("failed", "stopped", "aborted", "halted"):
                 # Paused plan was stopped/aborted/halted
                 await self._plan_queue.set_processed_item_as_stopped(
@@ -688,6 +689,12 @@ class RunEngineManager(Process):
         if self._manager_state == MState.IDLE:
             # No plans are running: deactivate the stop sequence.
             self._queue_stop_deactivate()
+        
+        if self._manager_state in (MState.IDLE, MState.PAUSED):
+            logger.info("Sending request to stop the loop ...")  ##
+            # Stop the execution loop at the worker
+            if self._use_ipython_kernel:
+                await self._worker_command_exec_loop_stop()
 
     async def _download_run_list(self):
         """
@@ -1253,6 +1260,19 @@ class RunEngineManager(Process):
             success, err_msg = None, "Timeout occurred while processing the request"
         return success, err_msg
 
+    async def _worker_command_exec_loop_stop(self):
+        """
+        Initiate stopping the execution loop. Call fails if the worker is running on Python 
+        (not IPython kernel).
+        """
+        try:
+            response = await self._comm_to_worker.send_msg("command_exec_loop_stop")
+            success = response["status"] == "accepted"
+            err_msg = response["err_msg"]
+        except CommTimeoutError:
+            success, err_msg = None, "Timeout occurred while processing the request"
+        return success, err_msg
+
     async def _worker_command_run_plan(self, plan_info):
         try:
             tt = self._comm_to_worker_timeout_long
@@ -1347,6 +1367,7 @@ class RunEngineManager(Process):
         except CommTimeoutError:
             success, err_msg, task_uid = (None, "Timeout occurred while processing the request", None)
         return success, err_msg, func_info, task_uid
+    
 
     # ===============================================================================
     #         Functions that send commands/request data from Watchdog process
@@ -1482,6 +1503,7 @@ class RunEngineManager(Process):
         worker_environment_exists = self._environment_exists
         re_state = self._worker_state_info["re_state"] if self._worker_state_info else None
         ip_kernel_state = self._worker_state_info["ip_kernel_state"] if self._worker_state_info else None
+        exec_loop_active = self._worker_state_info["exec_loop_active"] if self._worker_state_info else None
         env_state = self._worker_state_info["environment_state"] if self._worker_state_info else "closed"
         background_tasks = self._worker_state_info["background_tasks_num"] if self._worker_state_info else 0
         deferred_pause_pending = self._re_pause_pending
@@ -1513,6 +1535,7 @@ class RunEngineManager(Process):
             "worker_background_tasks": background_tasks,  # The number of background tasks
             "re_state": re_state,  # State of Run Engine
             "ip_kernel_state": ip_kernel_state,  # State of IPython kernel
+            "exec_loop_active": exec_loop_active,
             "pause_pending": deferred_pause_pending,  # True/False - Cleared once pause processed
             # If Run List UID change, download the list of runs for the current plan.
             # Run List UID is updated when the list is cleared as well.

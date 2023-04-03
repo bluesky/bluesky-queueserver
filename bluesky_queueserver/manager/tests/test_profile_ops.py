@@ -1242,12 +1242,28 @@ def test_load_script_into_existing_nspace_10(tmp_path, reset_sys_modules):  # no
     assert nspace["__name__"] == "startup_script"
 
 
-code_script_upload_test11_1 = """
+def test_load_script_into_existing_nspace_11(tmp_path, reset_sys_modules):  # noqa: F811
+    """
+    ``load_script_into_existing_nspace``: test that if ``__file__`` is defined in namespace,
+    it remains defined.
+    """
+    initial__file__ = "abcde"
+    nspace = {"__file__": initial__file__}  # Namespace already has '__file__' defined.
+    load_script_into_existing_nspace(script=code_script_upload_test10_1, nspace=nspace)
+
+    assert nspace["mod_name1"] == "startup_script"
+
+    assert "__file__" in nspace
+    assert nspace["__file__"] == initial__file__
+    assert nspace["__name__"] == "startup_script"
+
+
+code_script_upload_test12_1 = """
 raise ValueError("Testing exceptions")
 """
 
 
-def test_load_script_into_existing_nspace_11(tmp_path, reset_sys_modules):  # noqa: F811
+def test_load_script_into_existing_nspace_12(tmp_path, reset_sys_modules):  # noqa: F811
     """
     ``load_script_into_existing_nspace``: test processing exceptions
     """
@@ -1255,7 +1271,7 @@ def test_load_script_into_existing_nspace_11(tmp_path, reset_sys_modules):  # no
     nspace = {}
 
     try:
-        load_script_into_existing_nspace(script=code_script_upload_test11_1, nspace=nspace)
+        load_script_into_existing_nspace(script=code_script_upload_test12_1, nspace=nspace)
         assert False, "Exception was not raised"
     except ScriptLoadingError as ex:
         msg = str(ex)

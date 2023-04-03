@@ -3,6 +3,7 @@ bluesky>=1.7.0
 bluesky-kafka
 databroker
 event-model
+ipykernel
 json-rpc
 jsonschema
 matplotlib # Needed for BEC, should be factored out

@@ -520,7 +520,7 @@ def load_script_into_existing_nspace(
 
     try:
         # Set '__name__' variables. NOTE: '__file__' variable is undefined (difference!!!)
-        patch = "__name__ = 'startup_script'\n"
+        patch = "__name__ = 'startup_script'\n__file__ = 'script'\n"
         exec(patch, nspace, nspace)
 
         # A script may be partially loaded into the environment in case it fails.
@@ -535,6 +535,9 @@ def load_script_into_existing_nspace(
         raise ScriptLoadingError(msg, ex_str) from ex
 
     finally:
+        patch = "del __file__\n"  # Do not delete '__name__'
+        exec(patch, nspace, nspace)
+
         if not update_re:
             # Remove references for 'RE' and 'db' from the namespace
             nspace.pop("RE", None)

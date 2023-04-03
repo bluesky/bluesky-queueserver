@@ -344,7 +344,7 @@ def db_catalog():
     """
     db_catalog_name = "qserver_tests"
 
-    config_dir = catalog_search_path()[0]
+    config_dir = catalog_search_path()[0]  # ~/.config/tiled/profiles
     config_path = os.path.join(config_dir, f"{db_catalog_name}.yml")
 
     files_dir = os.path.join(tempfile.gettempdir(), "qserver_tests", "db_catalog_files")

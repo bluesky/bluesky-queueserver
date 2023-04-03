@@ -188,6 +188,7 @@ class RunEngineWorker(Process):
 
         self._worker_shutdown_initiated = False  # Indicates if shutdown is initiated by request
         self._unexpected_shutdown = False  # Indicates if shutdown is in progress, but it was not requested
+
         self._success_startup = True  # Indicates if worker startup is proceding successfully
 
     def _execute_plan_or_task(self, parameters, exec_option):
@@ -1291,6 +1292,8 @@ class RunEngineWorker(Process):
         """
         from .profile_tools import clear_re_worker_active
 
+        # If shutdown was not initiated by request from manager, then the manager needs to know this,
+        #   since it still needs to send a request to the worker to confirm the orderly exit.
         if not self._worker_shutdown_initiated:
             self._unexpected_shutdown = True
 

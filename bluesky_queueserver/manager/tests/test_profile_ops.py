@@ -269,7 +269,7 @@ def test_load_profile_collection_05(tmp_path, keep_re):
     patch = """
 from bluesky import RunEngine
 RE = RunEngine({})
-from databroker import Broker
+from databroker.v0 import Broker
 db = Broker.named('temp')
 RE.subscribe(db.insert)
 """

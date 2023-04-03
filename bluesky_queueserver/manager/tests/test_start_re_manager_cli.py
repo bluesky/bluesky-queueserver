@@ -444,8 +444,10 @@ def _get_expected_settings_default_1(tmpdir):
     return {
         "console_logging_level": 10,
         "databroker_config": None,
+        "demo_mode": True,
         "emergency_lock_key": None,
         "existing_plans_and_devices_path": None,
+        "ipython_dir": None,
         "kafka_server": "127.0.0.1:9092",
         "kafka_topic": None,
         "keep_re": False,
@@ -454,6 +456,7 @@ def _get_expected_settings_default_1(tmpdir):
         "redis_addr": "localhost",
         "startup_dir": "/bluesky_queueserver/profile_collection_sim/",
         "startup_module": None,
+        "startup_profile": None,
         "startup_script": None,
         "update_existing_plans_devices": "ENVIRONMENT_OPEN",
         "use_persistent_metadata": False,
@@ -467,7 +470,7 @@ def _get_expected_settings_default_1(tmpdir):
     }
 
 
-_dir_2 = "startup2"
+_dir_2 = os.path.join("ipython_test", "profile_collection_test", "startup")
 
 
 # matching public key: =E0[czQkp!!%0TL1LCJ5X[<wjYD[iV+p[yuaI0an
@@ -508,8 +511,10 @@ def _get_expected_settings_config_2(tmpdir):
     return {
         "console_logging_level": 10,
         "databroker_config": "DIF",
+        "demo_mode": False,
         "emergency_lock_key": "different_lock_key",
         "existing_plans_and_devices_path": f"{file_dir}",
+        "ipython_dir": "/tmp/pytest-of-dgavrilov/pytest-33/test_manager_with_config_file_1/ipython_test",
         "kafka_server": "127.0.0.1:9095",
         "kafka_topic": "different_topic_name",
         "keep_re": False,
@@ -518,6 +523,7 @@ def _get_expected_settings_config_2(tmpdir):
         "redis_addr": "localhost:6379",
         "startup_dir": f"{file_dir}",
         "startup_module": None,
+        "startup_profile": "collection_test",
         "startup_script": None,
         "update_existing_plans_devices": "ALWAYS",
         "use_persistent_metadata": True,
@@ -531,7 +537,7 @@ def _get_expected_settings_config_2(tmpdir):
     }
 
 
-_dir_3 = "startup2"
+_dir_3 = os.path.join("ipython_test2", "profile_collection_test", "startup")
 
 
 def _get_cli_params_3(tmpdir):
@@ -561,8 +567,10 @@ def _get_expected_settings_params_3(tmpdir):
     return {
         "console_logging_level": 10,
         "databroker_config": "NEW",
+        "demo_mode": False,
         "emergency_lock_key": "different_lock_key",
         "existing_plans_and_devices_path": f"{file_dir}",
+        "ipython_dir": "/tmp/pytest-of-dgavrilov/pytest-33/test_manager_with_config_file_1/ipython_test2",
         "kafka_server": "127.0.0.1:9099",
         "kafka_topic": "yet_another_topic",
         "keep_re": True,
@@ -571,6 +579,7 @@ def _get_expected_settings_params_3(tmpdir):
         "redis_addr": "localhost:6379",
         "startup_dir": f"{file_dir}",
         "startup_module": None,
+        "startup_profile": "collection_test",
         "startup_script": None,
         "update_existing_plans_devices": "NEVER",
         "use_persistent_metadata": True,
@@ -654,4 +663,13 @@ def test_manager_with_config_file_01(
     assert isinstance(expected_startup_dir_suffix, str), expected_startup_dir_suffix
     assert startup_dir.endswith(expected_startup_dir_suffix)
 
-    assert current_settings == expected_settings
+    cs_idir = current_settings["ipython_dir"]
+    cs_idir = os.path.split(cs_idir)[1] if isinstance(cs_idir, str) else cs_idir
+    es_idir = expected_settings["ipython_dir"]
+    es_idir = os.path.split(es_idir)[1] if isinstance(es_idir, str) else es_idir
+    assert cs_idir == es_idir
+
+    cs, es = copy.copy(current_settings), copy.copy(expected_settings)
+    cs.pop("ipython_dir")
+    es.pop("ipython_dir")
+    assert cs == es

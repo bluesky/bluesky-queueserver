@@ -59,6 +59,13 @@ class IPKernelState(enum.Enum):
     STARTING = "starting"
 
 
+class PlanExecState(enum.Enum):
+    RESET = "reset"  # The environment is reset and ready to start a new plan.
+    COMPLETED = "completed"  # Plan is not running, results are passed to the manager (report is generated)
+    SUBMITTED = "submitted"  # Plan is scheduled, but Run Engine is not started yet
+    RUNNING = "running"  # Plan is running or finished, but the results are not passed to the manager.
+
+
 class ExecOption(enum.Enum):
     NEW = "new"  # New plan
     RESUME = "resume"  # Resume paused plan
@@ -129,7 +136,7 @@ class RunEngineWorker(Process):
         # The following variable determine the state of RE Worker
         self._env_state = EState.CLOSED
         self._running_plan_info = None
-        self._running_plan_completed = False
+        self._running_plan_exec_state = PlanExecState.COMPLETED
         self._running_task_uid = None  # UID of the running foreground task (if running a task)
 
         self._background_tasks_num = 0  # The number of background tasks
@@ -230,6 +237,20 @@ class RunEngineWorker(Process):
             else:
                 raise RuntimeError(f"Unsupported plan execution option: {exec_option!r}")
 
+            # ------------------------------------------------------------------------------------------
+            # TODO: The purpose of using the thread is to avoid (or minimize) the chance that the state
+            # is triggered before RE state changes, which may lead to issues (a report for 'abandoned' plan
+            # may be generated before the plan is started). It would be useful to have a RE hook that could
+            # be used to monitor state changes or at least hooks for the beginning and the end of
+            # the plan (not a run).
+            def set_plan_exec_state_as_running():
+                ttime.sleep(0.02)  # Short delay: wait until Run Engine starts and switches to IDLE state
+                self._running_plan_exec_state = PlanExecState.RUNNING
+
+            th = Thread(target=set_plan_exec_state_as_running, daemon=True)
+            th.start()
+            # -------------------------------------------------------------------------------------------
+
             result = func()
             with self._re_report_lock:
                 self._re_report = {
@@ -242,11 +263,11 @@ class RunEngineWorker(Process):
                 }
                 if exec_option in (ExecOption.NEW, ExecOption.RESUME):
                     self._re_report["plan_state"] = "completed"
-                    self._running_plan_completed = True
+                    self._running_plan_exec_state = PlanExecState.COMPLETED
                 else:
                     # Here we don't distinguish between stop/abort/halt
                     self._re_report["plan_state"] = _plan_exit_status_expected[exec_option]
-                    self._running_plan_completed = True
+                    self._running_plan_exec_state = PlanExecState.COMPLETED
 
                 # Include RE state
                 self._re_report["re_state"] = str(self._RE._state)
@@ -279,7 +300,7 @@ class RunEngineWorker(Process):
                     self._re_report["plan_state"] = "failed"
                     self._re_report["success"] = False
                     self._re_report["err_msg"] = f"Plan failed: {ex}"
-                    self._running_plan_completed = True
+                    self._running_plan_exec_state = PlanExecState.COMPLETED
 
                     # Clear the list of active runs (don't clean the list for the paused plan).
                     self._active_run_list.clear()
@@ -321,7 +342,7 @@ class RunEngineWorker(Process):
                 "re_state": str(self._RE.state),
             }
 
-        self._running_plan_completed = True
+        self._running_plan_exec_state = PlanExecState.COMPLETED
         self._active_run_list.clear()
 
         logger.debug(f"Plan was completed outside RE Manager. Plan state: {plan_state!r}. Report was generated.")
@@ -338,7 +359,8 @@ class RunEngineWorker(Process):
             if self._exit_event.is_set():
                 break
             if self._use_ipython_kernel and not self._exec_loop_active_event.is_set() and self._RE:
-                if not self._running_plan_completed and self._RE.state in ("idle", "panicked"):
+                plan_is_running = self._running_plan_exec_state == PlanExecState.RUNNING
+                if plan_is_running and self._RE.state in ("idle", "panicked"):
                     self._generate_report_for_abandoned_plan()
 
     def _execute_task(self, parameters, exec_option):
@@ -521,7 +543,7 @@ class RunEngineWorker(Process):
 
         # Save reference to the currently executed plan
         self._running_plan_info = plan_info
-        self._running_plan_completed = False
+        self._running_plan_exec_state = PlanExecState.SUBMITTED
         self._env_state = EState.EXECUTING_PLAN
 
         logger.info("Starting a plan '%s'.", plan_info["name"])
@@ -799,7 +821,7 @@ class RunEngineWorker(Process):
         """
         item_uid = self._running_plan_info["item_uid"] if self._running_plan_info else None
         task_uid = self._running_task_uid
-        plan_completed = self._running_plan_completed
+        plan_completed = self._running_plan_exec_state == PlanExecState.COMPLETED
         # TODO: replace RE._state with RE.state property in the worker code (improve code style).
         re_state = str(self._RE._state) if self._RE else "null"
         try:
@@ -952,7 +974,7 @@ class RunEngineWorker(Process):
             invalid_state = 1
         elif self._RE.state == "running":
             invalid_state = 2
-        elif self._running_plan_info or self._running_plan_completed:
+        elif self._running_plan_info or (self._running_plan_exec_state != PlanExecState.RESET):
             invalid_state = 3
         elif self._use_ipython_kernel and not self._exec_loop_active_event.is_set():
             if not self._ip_kernel_capture():
@@ -1071,7 +1093,7 @@ class RunEngineWorker(Process):
         err_msg = ""
         if self._RE._state == "idle":
             self._running_plan_info = None
-            self._running_plan_completed = False
+            self._running_plan_exec_state = PlanExecState.RESET
             with self._re_report_lock:
                 self._re_report = None
             status = "accepted"

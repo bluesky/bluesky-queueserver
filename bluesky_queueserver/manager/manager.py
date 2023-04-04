@@ -659,7 +659,7 @@ class RunEngineManager(Process):
                 msg_display,
             )
 
-            if plan_state in "completed":
+            if plan_state in ("completed", "unknown"):
                 # Check if the plan was running in the 'immediate_execution' mode.
                 item = await self._plan_queue.get_running_item_info()
                 immediate_execution = item.get("properties", {}).get("immediate_execution", False)

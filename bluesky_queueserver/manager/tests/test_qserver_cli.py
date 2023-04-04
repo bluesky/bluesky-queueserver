@@ -562,7 +562,7 @@ def test_qserver_manager_stop_2(re_manager, option):  # noqa: F811
         assert n_history == 2
 
 
-def test_queue_mode_set_1(re_manager):  # noqa F811
+def test_qserver_queue_mode_set_1(re_manager):  # noqa F811
     """
     Basic test for ``qserver queue mode set`` command
     """
@@ -586,7 +586,7 @@ def test_queue_mode_set_1(re_manager):  # noqa F811
     (("set", "loop", "10"), REQ_FAILED),  # Invalid parameter value
 ])
 # fmt: on
-def test_queue_mode_set_2_fail(re_manager, plist, exit_code):  # noqa F811
+def test_qserver_queue_mode_set_2_fail(re_manager, plist, exit_code):  # noqa F811
     """
     Failing cases of the ``qserver queue mode set`` command
     """
@@ -611,7 +611,7 @@ def test_queue_mode_set_2_fail(re_manager, plist, exit_code):  # noqa F811
     (-100, 0, True),
 ])
 # fmt: on
-def test_queue_item_add_1(re_manager, pos, pos_result, success):  # noqa F811
+def test_qserver_queue_item_add_1(re_manager, pos, pos_result, success):  # noqa F811
     # Wait until RE Manager is started
     assert wait_for_condition(time=10, condition=condition_manager_idle)
 
@@ -641,7 +641,7 @@ def test_queue_item_add_1(re_manager, pos, pos_result, success):  # noqa F811
         assert "item_uid" in resp["items"][pos_result]
 
 
-def test_queue_item_add_2(re_manager):  # noqa F811
+def test_qserver_queue_item_add_2(re_manager):  # noqa F811
     """
     Failing cases: adding the plans that are expected to fail validation.
     """
@@ -666,7 +666,7 @@ def test_queue_item_add_2(re_manager):  # noqa F811
     (False, 1, [0, 1, 2]),
 ])
 # fmt: on
-def test_queue_item_add_3(re_manager, before, target_pos, result_order):  # noqa F811
+def test_qserver_queue_item_add_3(re_manager, before, target_pos, result_order):  # noqa F811
     """
     Insert an item before or after the element with a given UID
     """
@@ -698,7 +698,7 @@ def test_queue_item_add_3(re_manager, before, target_pos, result_order):  # noqa
             assert False, f"uids_1: {uids_1}, uids_2: {uids_2}, result_order: {result_order}"
 
 
-def test_queue_item_add_4(re_manager):  # noqa F811
+def test_qserver_queue_item_add_4(re_manager):  # noqa F811
     """
     Add instruction to the queue
     """
@@ -720,7 +720,7 @@ def test_queue_item_add_4(re_manager):  # noqa F811
 # fmt: off
 @pytest.mark.parametrize("pos", [None, "back"])
 # fmt: on
-def test_queue_item_add_5_fail(re_manager, pos):  # noqa F811
+def test_qserver_queue_item_add_5_fail(re_manager, pos):  # noqa F811
     """
     No plan is supplied.
     """
@@ -736,7 +736,7 @@ def test_queue_item_add_5_fail(re_manager, pos):  # noqa F811
 # fmt: off
 @pytest.mark.parametrize("pos", [10, "front", "back"])
 # fmt: on
-def test_queue_item_add_6_fail(re_manager, pos):  # noqa F811
+def test_qserver_queue_item_add_6_fail(re_manager, pos):  # noqa F811
     """
     Incorrect order of arguments (position is specified).
     """
@@ -760,7 +760,7 @@ def test_queue_item_add_6_fail(re_manager, pos):  # noqa F811
     (["some_uid", "plan", "before_uid"], PARAM_ERROR),
 ])
 # fmt: on
-def test_queue_item_add_7_fail(re_manager, params, exit_code):  # noqa F811
+def test_qserver_queue_item_add_7_fail(re_manager, params, exit_code):  # noqa F811
     """
     Incorrect order of arguments (position is specified).
     """
@@ -776,7 +776,7 @@ def test_queue_item_add_7_fail(re_manager, params, exit_code):  # noqa F811
 @pytest.mark.parametrize("replace", [False, True])
 @pytest.mark.parametrize("item_type", ["plan", "instruction"])
 # fmt: off
-def test_queue_item_update_1(re_manager, replace, item_type):  # noqa F811
+def test_qserver_queue_item_update_1(re_manager, replace, item_type):  # noqa F811
     """
     Basic test for `queue_item_update` method.
     """
@@ -816,7 +816,7 @@ def test_queue_item_update_1(re_manager, replace, item_type):  # noqa F811
 @pytest.mark.parametrize("replace", [False, True])
 @pytest.mark.parametrize("item_type", ["plan", "instruction"])
 # fmt: off
-def test_queue_item_update_2_fail(re_manager, replace, item_type):  # noqa F811
+def test_qserver_queue_item_update_2_fail(re_manager, replace, item_type):  # noqa F811
     """
     Failing cases for `queue_item_update`: no matching UID is found in the queue.
     """
@@ -915,7 +915,7 @@ def test_qserver_item_execute_1(re_manager, item_type, env_exists):  # noqa: F81
     (None, 3, 2, False),
 ])
 # fmt: on
-def test_queue_item_get_remove(re_manager, pos, uid_ind, pos_result, success):  # noqa F811
+def test_qserver_queue_item_get_remove(re_manager, pos, uid_ind, pos_result, success):  # noqa F811
     """
     Tests for ``queue_item_get`` and ``queue_item_remove`` requests.
     """
@@ -987,7 +987,7 @@ def test_queue_item_get_remove(re_manager, pos, uid_ind, pos_result, success):  
     (["0"], [0, 1, 2], PARAM_ERROR),  # Not enough parameters
 ])
 # fmt: on
-def test_queue_item_get_move(re_manager, params, result_order, exit_code):  # noqa F811
+def test_qserver_queue_item_get_move(re_manager, params, result_order, exit_code):  # noqa F811
     """
     Tests for ``queue_item_get`` and ``queue_item_remove`` requests.
     """
@@ -1113,7 +1113,7 @@ def count_modified(detectors, num=1, delay=None):
 @pytest.mark.parametrize("update_re", [False, True])
 @pytest.mark.parametrize("update_lists", [False, True])
 # fmt: on
-def test_script_upload_1(re_manager, tmp_path, run_in_background, update_lists, update_re):  # noqa: F811
+def test_qserver_script_upload_1(re_manager, tmp_path, run_in_background, update_lists, update_re):  # noqa: F811
     """
     Tests for 'qserver script upload'. The uploaded script does not change RE, so the tests
     simply checks if 'update-re' parameter is accepted.
@@ -1166,7 +1166,7 @@ def test_script_upload_1(re_manager, tmp_path, run_in_background, update_lists, 
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_script_upload_2_fail(re_manager, tmp_path):  # noqa: F811
+def test_qserver_script_upload_2_fail(re_manager, tmp_path):  # noqa: F811
     """
     Tests for 'qserver script upload': failing cases.
     """
@@ -1184,7 +1184,7 @@ def test_script_upload_2_fail(re_manager, tmp_path):  # noqa: F811
 # fmt: off
 @pytest.mark.parametrize("run_in_background", [False, True])
 # fmt: on
-def test_function_execute_1(re_manager, run_in_background):  # noqa: F811
+def test_qserver_function_execute_1(re_manager, run_in_background):  # noqa: F811
     """
     Tests for 'qserver function execute'.
     """
@@ -1215,7 +1215,7 @@ def test_function_execute_1(re_manager, run_in_background):  # noqa: F811
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_function_execute_2_fail(re_manager):  # noqa: F811
+def test_qserver_function_execute_2_fail(re_manager):  # noqa: F811
     """
     Tests for 'qserver function execute': failing cases.
     """
@@ -1225,7 +1225,7 @@ def test_function_execute_2_fail(re_manager):  # noqa: F811
     assert subprocess.call(["qserver", "function", "execute", item, "invalid_param"]) == PARAM_ERROR
 
 
-def test_task_result_status_1(re_manager):  # noqa: F811
+def test_qserver_task_result_status_1(re_manager):  # noqa: F811
     """
     Tests for 'qserver task result' and 'qserver task status.
     """

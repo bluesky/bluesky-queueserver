@@ -321,17 +321,20 @@ class RunEngineWorker(Process):
         the manager, then paused and completed from command line. Used only if the worker
         is using IPython kernel.
         """
+        # Plan state based on exit status (returns limited set of states):
+        #   'success' may be returned if the plan is completed or stopped, so we pass 'unknown'.
+        exit_status_to_plan_state = {"fail": "failed", "abort": "aborted", "success": "unknown"}
         run_list = self._active_run_list.get_run_list()
-        if run_list:
-            uids = [_["uid"] for _ in run_list]
-            exit_status_all = [_["exit_status"] for _ in run_list]
-            exit_status_set = set(exit_status_all)
-            failed_status_set = exit_status_set - set(["success", "stop"])
-            # If no runs failed, then the plan is considered successful.
-            plan_state = "failed" if failed_status_set else "completed"
-        else:
-            logger.warning("Exit status for the plan is unknown. The plan is assumed successfully completed.")
-            plan_state, uids = "success", []
+        exit_status_list = [_["exit_status"] for _ in run_list]
+        exit_status = "success"
+        for es in exit_status_to_plan_state:
+            if es in exit_status_list:
+                exit_status = es
+                break
+        plan_state = exit_status_to_plan_state[exit_status]
+
+        # List of UIDs (simulated return value for the plan)
+        uids = [_["uid"] for _ in run_list]
 
         with self._re_report_lock:
             self._re_report = {
@@ -511,6 +514,8 @@ class RunEngineWorker(Process):
                 if not run_in_background:
                     self._env_state = EState.IDLE
                     self._running_task_uid = None
+                    if self._use_ipython_kernel:
+                        self._ip_kernel_release()
                 else:
                     self._background_tasks_num = max(self._background_tasks_num - 1, 0)
 
@@ -635,6 +640,11 @@ class RunEngineWorker(Process):
                 raise RejectedError(
                     f"Incorrect environment state: '{self._env_state.value}'. Acceptable state: 'idle'"
                 )
+
+            if not run_in_background:
+                if self._use_ipython_kernel and not self._exec_loop_active_event.is_set():
+                    if not self._ip_kernel_capture():
+                        raise RejectedError("Failed to start execution loop ('capture' the kernel)")
 
             task_uid_short = task_uid.split("-")[-1]
             thread_name = f"BS QServer - {name} {task_uid_short} "

@@ -689,9 +689,8 @@ class RunEngineManager(Process):
         if self._manager_state == MState.IDLE:
             # No plans are running: deactivate the stop sequence.
             self._queue_stop_deactivate()
-        
+
         if self._manager_state in (MState.IDLE, MState.PAUSED):
-            logger.info("Sending request to stop the loop ...")  ##
             # Stop the execution loop at the worker
             if self._use_ipython_kernel:
                 await self._worker_command_exec_loop_stop()
@@ -1262,7 +1261,7 @@ class RunEngineManager(Process):
 
     async def _worker_command_exec_loop_stop(self):
         """
-        Initiate stopping the execution loop. Call fails if the worker is running on Python 
+        Initiate stopping the execution loop. Call fails if the worker is running on Python
         (not IPython kernel).
         """
         try:
@@ -1367,7 +1366,6 @@ class RunEngineManager(Process):
         except CommTimeoutError:
             success, err_msg, task_uid = (None, "Timeout occurred while processing the request", None)
         return success, err_msg, func_info, task_uid
-    
 
     # ===============================================================================
     #         Functions that send commands/request data from Watchdog process

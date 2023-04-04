@@ -1284,6 +1284,8 @@ class RunEngineWorker(Process):
             startup_module_name = self._config_dict.get("startup_module_name", None)
             startup_script_path = self._config_dict.get("startup_script_path", None)
 
+            ipython_matplotlib = self._config_dict.get("ipython_matplotlib", None)
+
             # If IPython kernel is used, the startup code is loaded during kernel initialization.
             if not self._use_ipython_kernel:
                 self._re_namespace = load_worker_startup_code(
@@ -1364,7 +1366,8 @@ class RunEngineWorker(Process):
                         # Documents from each run are routed to an independent
                         #   instance of BestEffortCallback
                         bec = BestEffortCallback()
-                        # bec.disable_plots()
+                        if not self._use_ipython_kernel or not ipython_matplotlib:
+                            bec.disable_plots()
                         return [bec], []
 
                     # Subscribe to Best Effort Callback in the way that works with multi-run plans.
@@ -1568,6 +1571,7 @@ class RunEngineWorker(Process):
             startup_module_name = self._config_dict.get("startup_module_name", None)
             startup_script_path = self._config_dict.get("startup_script_path", None)
             ipython_dir = self._config_dict.get("ipython_dir", None)
+            ipython_matplotlib = self._config_dict.get("ipython_matplotlib", None)
 
             if startup_profile:
                 self._ip_kernel_app.profile = startup_profile
@@ -1580,7 +1584,8 @@ class RunEngineWorker(Process):
             if ipython_dir:
                 self._ip_kernel_app.ipython_dir = ipython_dir
 
-            # self._ip_kernel_app.matplotlib = "qt5"
+            if ipython_matplotlib:
+                self._ip_kernel_app.matplotlib = ipython_matplotlib
 
             # Prevent kernel from capturing stdout/stderr, otherwise it creates a mess.
             # See https://github.com/ipython/ipykernel/issues/795

@@ -259,15 +259,6 @@ def start_manager():
         "directory.",
     )
     group.add_argument(
-        "--startup-profile",
-        dest="startup_profile",
-        type=str,
-        help="The name of IPython profile used to find the location of startup files. Example: if IPython is "
-        "configured to look for profiles in '~/.ipython' directory (default behavior) and the profile "
-        "name is 'testing', then RE Manager will look for startup files in "
-        "'~/.ipython/profile_testing/startup' directory.",
-    )
-    group.add_argument(
         "--startup-module",
         dest="startup_module",
         type=str,
@@ -285,6 +276,16 @@ def start_manager():
         "environment is opened. Example: '~/startup/scripts/scripts.py'. Paths to the list of existing "
         "plans and devices (--existing-plans-and-devices) and user group permissions "
         "(--user-group-permissions) must be explicitly specified if this option is used.",
+    )
+
+    parser.add_argument(
+        "--startup-profile",
+        dest="startup_profile",
+        type=str,
+        help="The name of IPython profile used to find the location of startup files. Example: if IPython is "
+        "configured to look for profiles in '~/.ipython' directory (default behavior) and the profile "
+        "name is 'testing', then RE Manager will look for startup files in "
+        "'~/.ipython/profile_testing/startup' directory.",
     )
 
     parser.add_argument(
@@ -383,12 +384,21 @@ def start_manager():
         help="Run the Run Engine worker in IPython kernel.",
     )
 
-    group.add_argument(
+    parser.add_argument(
         "--ipython-dir",
         dest="ipython_dir",
         type=str,
         help="The path to IPython root directory, which contains profiles. Overrides IPYTHONDIR environment "
         "variable. The parameter is ignored if IPython kernel is not used.",
+    )
+
+    parser.add_argument(
+        "--ipython-matplotlib",
+        dest="ipython_matplotlib",
+        type=str,
+        help="Default Matplotlib backend, typically 'qt5'. The parameter have the same meaning and accepts "
+        "the same values as --matplotlib parameter of IPython. The value is passed directly to IPython kernel. "
+        "The parameter is ignored if the worker is running pure Python (--use-ipython-kernel is not set).",
     )
 
     parser.add_argument(
@@ -585,6 +595,7 @@ def start_manager():
     config_worker["startup_module_name"] = startup_module_name
     config_worker["startup_script_path"] = startup_script_path
     config_worker["ipython_dir"] = ipython_dir
+    config_worker["ipython_matplotlib"] = settings.ipython_matplotlib
 
     default_existing_pd_fln = "existing_plans_and_devices.yaml"
     if settings.existing_plans_and_devices_path:

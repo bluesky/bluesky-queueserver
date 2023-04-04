@@ -187,6 +187,7 @@ _key_mapping = {
     "startup_script": "startup/startup_script",
     "ipython_dir": "startup/ipython_dir",
     "use_ipython_kernel": "worker/use_ipython_kernel",
+    "ipython_matplotlib": "worker/ipython_matplotlib",
     "print_console_output": "operation/print_console_output",
     "console_logging_level": "operation/console_logging_level",
     "update_existing_plans_devices": "operation/update_existing_plans_and_devices",
@@ -332,6 +333,12 @@ class Settings:
             value_ev=os.environ.get("QSERVER_USE_IPYTHON_KERNEL", None),
             value_config=self._get_value_from_config("use_ipython_kernel"),
             value_cli=self._args_existing("use_ipython_kernel"),
+        )
+
+        self._settings["ipython_matplotlib"] = self._get_param(
+            value_default=args.ipython_matplotlib,
+            value_config=self._get_value_from_config("ipython_matplotlib"),
+            value_cli=self._args_existing("ipython_matplotlib"),
         )
 
         existing_plans_and_devices_path = self._get_param(

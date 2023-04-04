@@ -964,10 +964,7 @@ class RunEngineManager(Process):
         Pause execution of a running plan. Run Engine must be in 'running' state in order for
         the request to pause to be accepted by RE Worker.
         """
-        if self._manager_state != MState.EXECUTING_QUEUE:
-            success = False
-            err_msg = f"RE Manager is not executing the queue: current state is '{self._manager_state.value}'"
-        elif not self._environment_exists:
+        if not self._environment_exists:
             success = False
             err_msg = "Environment does not exist."
         else:
@@ -2768,7 +2765,7 @@ class RunEngineManager(Process):
         except Exception as ex:
             success, msg = False, f"Error: {ex}"
 
-        return {"success": success, "msg": msg}
+        return {"success": bool(success), "msg": msg}
 
     async def _re_resume_handler(self, request):
         """

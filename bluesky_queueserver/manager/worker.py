@@ -245,7 +245,8 @@ class RunEngineWorker(Process):
             # the plan (not a run).
             def set_plan_exec_state_as_running():
                 ttime.sleep(0.02)  # Short delay: wait until Run Engine starts and switches to IDLE state
-                # Make sure that the plan is not finished/failed while we were waiting. Expected state is SUBMITTED.
+                # Make sure that the plan is not finished/failed while we were waiting.
+                # The expected state is 'SUBMITTED'.
                 if self._running_plan_exec_state != PlanExecState.COMPLETED:
                     self._running_plan_exec_state = PlanExecState.RUNNING
 

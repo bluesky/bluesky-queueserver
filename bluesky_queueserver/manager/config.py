@@ -651,14 +651,14 @@ class Settings:
                     f"startup_dir={_cfg_dir!r} startup_module={_cfg_module!r} startup_script={_cfg_script!r}"
                 )
 
-            if _cfg_dir:
-                cfg_dir = os.path.abspath(os.path.expanduser(_cfg_dir))
-            elif _cfg_module:
+            if _cfg_module:
                 cfg_module = _cfg_module
             elif _cfg_script:
                 cfg_script = os.path.abspath(os.path.expanduser(_cfg_script))
             elif _cfg_profile:
                 cfg_dir = _profile_name_to_startup_dir(_cfg_profile, _cfg_ipdir)
+            elif _cfg_dir:
+                cfg_dir = os.path.abspath(os.path.expanduser(_cfg_dir))
 
             if any([cfg_dir, cfg_module, cfg_script]):
                 startup_dir, startup_module, startup_script = cfg_dir, cfg_module, cfg_script
@@ -673,14 +673,14 @@ class Settings:
                     f"startup_dir={_cli_dir!r} startup_module={_cli_module!r} startup_script={_cli_script!r}"
                 )
 
-            if _cli_dir:
-                cli_dir = os.path.abspath(os.path.expanduser(_cli_dir))
-            elif _cli_module:
+            if _cli_module:
                 cli_module = _cli_module
             elif _cli_script:
                 cli_script = os.path.abspath(os.path.expanduser(_cli_script))
             elif _cli_profile:
                 cli_dir = _profile_name_to_startup_dir(_cli_profile, _cli_ipdir)
+            elif _cli_dir:
+                cli_dir = os.path.abspath(os.path.expanduser(_cli_dir))
 
             if any([cli_dir, cli_module, cli_script]):
                 startup_dir, startup_module, startup_script = cli_dir, cli_module, cli_script

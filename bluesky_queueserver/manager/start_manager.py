@@ -248,16 +248,19 @@ def start_manager():
         help="The parameter is deprecated and will be removed in future releases. Use --zmq-control-addr instead.",
     )
 
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "--startup-dir",
-        dest="startup_dir",
+    parser.add_argument(
+        "--startup-profile",
+        dest="startup_profile",
         type=str,
-        help="Path to directory that contains a set of startup files (*.py and *.ipy). All the scripts "
-        "in the directory will be sorted in alphabetical order of their names and loaded in "
-        "the Run Engine Worker environment. The set of startup files may be located in any accessible "
-        "directory.",
+        help="The name of IPython profile used to find the location of startup files. Example: if IPython is "
+        "configured to look for profiles in '~/.ipython' directory (default behavior) and the profile "
+        "name is 'testing', then RE Manager will look for startup files in "
+        "'~/.ipython/profile_testing/startup' directory. If IPython-based worker is used, the code in "
+        "the startup profile or the default profile is always executed before running "
+        "a startup module or a script",
     )
+
+    group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--startup-module",
         dest="startup_module",
@@ -278,14 +281,14 @@ def start_manager():
         "(--user-group-permissions) must be explicitly specified if this option is used.",
     )
 
-    parser.add_argument(
-        "--startup-profile",
-        dest="startup_profile",
+    group.add_argument(
+        "--startup-dir",
+        dest="startup_dir",
         type=str,
-        help="The name of IPython profile used to find the location of startup files. Example: if IPython is "
-        "configured to look for profiles in '~/.ipython' directory (default behavior) and the profile "
-        "name is 'testing', then RE Manager will look for startup files in "
-        "'~/.ipython/profile_testing/startup' directory.",
+        help="Path to directory that contains a set of startup files (*.py and *.ipy). All the scripts "
+        "in the directory will be sorted in alphabetical order of their names and loaded in "
+        "the Run Engine Worker environment. The set of startup files may be located in any accessible "
+        "directory. The value is ignored if --startup-profile is specified.",
     )
 
     parser.add_argument(

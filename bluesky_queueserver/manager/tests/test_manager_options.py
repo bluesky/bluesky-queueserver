@@ -46,9 +46,9 @@ def test_manager_options_startup_profile(re_manager_cmd, tmp_path, monkeypatch, 
     gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, overwrite=True)
 
     # Start manager
-    if option == "startup_dir":
+    if option in "startup_dir":
         re_manager_cmd(["--startup-dir", pc_path])
-    elif option == "profile":
+    elif option in ("profile", "multiple"):
         # This option is more complicated: we want to recreate the structure of IPython startup
         #   directory: <some root dir>/profile_<profile_name>/startup.
         root_dir = os.path.split(pc_path)[0]
@@ -63,13 +63,14 @@ def test_manager_options_startup_profile(re_manager_cmd, tmp_path, monkeypatch, 
 
         os.rmdir(pc_path)
 
-        # We pass only profile name as a parameter.
-        re_manager_cmd(["--startup-profile", profile_name])
+        if option == "profile":
+            re_manager_cmd(["--startup-profile", profile_name])
+        else:
+            re_manager_cmd(["--startup-dir", pc_path, "--startup-profile", profile_name])
+
     elif option == "multiple":
-        # Expected to fail if multiple options are selected.
-        with pytest.raises(TimeoutError, match="RE Manager failed to start"):
-            re_manager_cmd(["--startup-dir", pc_path, "--startup-profile", "some_name"])
-        return
+        # Both options are allowed. For Python kernel, the profile will be ignored
+        re_manager_cmd(["--startup-dir", pc_path, "--startup-profile", "some_name"])
     else:
         assert False, f"Unknown option '{option}'"
 

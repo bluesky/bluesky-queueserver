@@ -334,7 +334,7 @@ class RunEngineWorker(Process):
         plan_state = exit_status_to_plan_state[exit_status]
 
         # List of UIDs (simulated return value for the plan)
-        uids = [_["uid"] for _ in run_list]
+        uids = tuple([_["uid"] for _ in run_list])
 
         with self._re_report_lock:
             self._re_report = {
@@ -1499,11 +1499,10 @@ class RunEngineWorker(Process):
                 if msg["header"]["msg_type"] == "status":
                     self._ip_kernel_state = IPKernelState(msg["content"]["execution_state"])
                 try:
-                    if "parent_header" in msg and msg["parent_header"]:
+                    discard = msg["header"]["msg_type"] not in self._ip_kernel_monitor_always_allow_types
+                    if discard and "parent_header" in msg and msg["parent_header"]:
                         session_id = self._ip_kernel_client.session.session
                         discard = msg["parent_header"]["session"] != session_id
-                    else:
-                        discard = msg["header"]["msg_type"] not in self._ip_kernel_monitor_always_allow_types
 
                     if not discard:
                         if msg["header"]["msg_type"] == "stream":
@@ -1629,7 +1628,7 @@ class RunEngineWorker(Process):
             logger.info("Initializing IPython kernel ...")
             self._ip_kernel_app.initialize([])
 
-            self._ip_kernel_monitor_always_allow_types = []
+            self._ip_kernel_monitor_always_allow_types = ["stream", "error", "execute_result"]
             collected_tracebacks = self._ip_kernel_monitor_collected_tracebacks
             self._ip_kernel_monitor_collected_tracebacks = None
 

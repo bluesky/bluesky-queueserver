@@ -118,21 +118,10 @@ def create_excel_file_from_plan_list(tmp_path, *, plan_list, ss_filename="spread
     def verify_excel(ss_path, df):
         _, ext = os.path.splitext(ss_path)
         if ext == ".xlsx":
-            df_read = pd.read_excel(ss_path, engine="openpyxl")
+            df_read = pd.read_excel(ss_path, engine="openpyxl", keep_default_na=False, na_values="")
         elif ext == ".csv":
-            df_read = pd.read_csv(ss_path, keep_default_na=False, na_values=['NaN'])
-            # df_read = df_read.replace({'None': None})
-            df_read = df_read.replace({"": np.nan})
+            df_read = pd.read_csv(ss_path, keep_default_na=False, na_values="")
             df_read = fix_dataframe_types(df_read)
-        print(f"df_read={df_read['num']}")  ##
-        print(f"df={df['num']}")  ##
-        print(f"df={df_read['num'] == df['num']}")  ##
-        print(f"df_read={type(df_read['extra_param'][11])}")  ##
-        print(f"df={type(df['extra_param'][11])}")  ##
-        print(f"{df_read['num'].equals(df['num'])}")
-        print(f"df={df.keys()}")  ##
-        for k in df.keys():
-            print(f"key={k!r} {df_read[k].equals(df[k])}")
         assert df_read.equals(df), str(df_read)
 
     df = create_excel(ss_path, plan_params, col_names)

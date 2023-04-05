@@ -179,6 +179,7 @@ _key_mapping = {
     "zmq_publish_console": "network/zmq_publish_console",
     "redis_addr": "network/redis_addr",
     "keep_re": "startup/keep_re",
+    "ignore_invalid_plans": "startup/ignore_invalid_plans",
     "existing_plans_and_devices_path": "startup/existing_plans_and_devices_path",
     "user_group_permissions_path": "startup/user_group_permissions_path",
     "startup_dir": "startup/startup_dir",
@@ -326,6 +327,12 @@ class Settings:
             value_default=args.keep_re,
             value_config=self._get_value_from_config("keep_re"),
             value_cli=self._args_existing("keep_re"),
+        )
+
+        self._settings["ignore_invalid_plans"] = self._get_param_boolean(
+            value_default=args.ignore_invalid_plans,
+            value_config=self._get_value_from_config("ignore_invalid_plans"),
+            value_cli=self._args_existing("ignore_invalid_plans"),
         )
 
         self._settings["use_ipython_kernel"] = self._get_param_boolean(

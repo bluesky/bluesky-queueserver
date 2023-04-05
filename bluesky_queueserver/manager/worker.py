@@ -775,7 +775,9 @@ class RunEngineWorker(Process):
         if update_lists:
             logger.info("Updating lists of existing and available plans and devices ...")
 
-            epd = existing_plans_and_devices_from_nspace(nspace=self._re_namespace)
+            epd = existing_plans_and_devices_from_nspace(
+                nspace=self._re_namespace, ignore_invalid_plans=self._config_dict["ignore_invalid_plans"]
+            )
             existing_plans, existing_devices, plans_in_nspace, devices_in_nspace = epd
 
             self._existing_plans_and_devices_changed = not compare_existing_plans_and_devices(
@@ -1302,7 +1304,9 @@ class RunEngineWorker(Process):
                     "Run Engine is not created in the startup code and 'keep_re' option is activated."
                 )
 
-            epd = existing_plans_and_devices_from_nspace(nspace=self._re_namespace)
+            epd = existing_plans_and_devices_from_nspace(
+                nspace=self._re_namespace, ignore_invalid_plans=self._config_dict["ignore_invalid_plans"]
+            )
             existing_plans, existing_devices, plans_in_nspace, devices_in_nspace = epd
 
             # self._existing_plans_and_devices_changed = not compare_existing_plans_and_devices(
@@ -1583,8 +1587,7 @@ class RunEngineWorker(Process):
             if ipython_dir:
                 self._ip_kernel_app.ipython_dir = ipython_dir
 
-            if ipython_matplotlib:
-                self._ip_kernel_app.matplotlib = ipython_matplotlib
+            self._ip_kernel_app.matplotlib = ipython_matplotlib if ipython_matplotlib else "agg"
 
             # Prevent kernel from capturing stdout/stderr, otherwise it creates a mess.
             # See https://github.com/ipython/ipykernel/issues/795

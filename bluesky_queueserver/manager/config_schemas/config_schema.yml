@@ -45,6 +45,8 @@ properties:
         properties:
           keep_re:
             type: boolean
+          ignore_invalid_plans:
+            type: boolean
           startup_dir:
             type: string
           startup_profile:

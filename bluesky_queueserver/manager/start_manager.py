@@ -292,6 +292,15 @@ def start_manager():
     )
 
     parser.add_argument(
+        "--ignore-invalid-plans",
+        dest="ignore_invalid_plans",
+        action="store_true",
+        help="Ignore plans with unsupported signatures When loading startup code or executing scripts. "
+        "The default behavior is to raise an exception. If the parameter is set, the message is printed for each "
+        "invalid plan and only plans that were processed correctly are included in the list of existing plans.",
+    )
+
+    parser.add_argument(
         "--existing-plans-devices",
         dest="existing_plans_and_devices_path",
         type=str,
@@ -559,9 +568,11 @@ def start_manager():
     if startup_dir is not None:
         if not os.path.exists(startup_dir):
             logger.error("Startup directory '%s' does not exist", startup_dir)
+            ttime.sleep(0.01)
             return 1
         if not os.path.isdir(startup_dir):
             logger.error("Startup directory '%s' is not a directory", startup_dir)
+            ttime.sleep(0.01)
             return 1
     elif (startup_module_name is not None) or (startup_script_path is not None):
         # startup_module_name or startup_script_path is set. This option requires
@@ -572,12 +583,14 @@ def start_manager():
                 "The path to the list of existing plans and devices (--existing-plans-and-devices) "
                 "is not specified."
             )
+            ttime.sleep(0.01)
             return 1
         if not settings.user_group_permissions_path:
             logger.error(
                 "The path to the file containing user group permissions (--user-group-permissions) "
                 "is not specified."
             )
+            ttime.sleep(0.01)
             return 1
         # Check if startup script exists (if it is specified)
         if startup_script_path is not None:
@@ -599,6 +612,7 @@ def start_manager():
     config_worker["startup_script_path"] = startup_script_path
     config_worker["ipython_dir"] = ipython_dir
     config_worker["ipython_matplotlib"] = settings.ipython_matplotlib
+    config_worker["ignore_invalid_plans"] = settings.ignore_invalid_plans
 
     default_existing_pd_fln = "existing_plans_and_devices.yaml"
     if settings.existing_plans_and_devices_path:
@@ -617,6 +631,7 @@ def start_manager():
             "Create the directory manually and restart RE Manager.",
             pd_dir,
         )
+        ttime.sleep(0.01)
         return 1
     if not os.path.isfile(existing_pd_path):
         logger.warning(

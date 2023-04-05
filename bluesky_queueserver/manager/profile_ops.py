@@ -2838,16 +2838,19 @@ def _process_plan(plan, *, existing_devices, existing_plans):
     return ret
 
 
-def _prepare_plans(plans, *, existing_devices):
+def _prepare_plans(plans, *, existing_devices, ignore_invalid_plans=False):
     """
     Prepare dictionary of existing plans for saving to YAML file.
 
     Parameters
     ----------
-    plans : dict
+    plans: dict
         Dictionary of plans extracted from the workspace
-    existing_devices : dict
+    existing_devices: dict
         Prepared dictionary of existing devices (returned by the function ``_prepare_devices``.
+    ignore_invalid_plans: bool
+        Ignore plans with unsupported signatures. If the argument is ``False`` (default), then
+        an exception is raised otherwise a message is printed and the plan is not included in the list.
 
     Returns
     -------
@@ -2855,9 +2858,17 @@ def _prepare_plans(plans, *, existing_devices):
         Dictionary that maps plan names to plan descriptions
     """
     plan_names = set(plans.keys())
-    return {
-        k: _process_plan(v, existing_devices=existing_devices, existing_plans=plan_names) for k, v in plans.items()
-    }
+    prepared_plans = {}
+    for k, v in plans.items():
+        try:
+            prepared_plans[k] = _process_plan(v, existing_devices=existing_devices, existing_plans=plan_names)
+        except Exception as ex:
+            if ignore_invalid_plans:
+                logger.warning("PLAN WAS IGNORED: %s", ex)
+            else:
+                raise
+
+    return prepared_plans
 
 
 def _prepare_devices(devices, *, max_depth=0, ignore_all_subdevices_if_one_fails=True, expand_areadetectors=False):
@@ -2944,7 +2955,7 @@ def _prepare_devices(devices, *, max_depth=0, ignore_all_subdevices_if_one_fails
     return {k: create_device_description(v, k) for k, v in devices.items()}
 
 
-def existing_plans_and_devices_from_nspace(*, nspace):
+def existing_plans_and_devices_from_nspace(*, nspace, ignore_invalid_plans=False):
     """
     Generate lists of existing plans and devices from namespace. The namespace
     must be in the form returned by ``load_worker_startup_code()``.
@@ -2953,6 +2964,10 @@ def existing_plans_and_devices_from_nspace(*, nspace):
     ----------
     nspace : dict
         Namespace that contains plans and devices
+    ignore_invalid_plans: bool
+        Ignore plans with unsupported signatures. If the argument is ``False`` (default), then
+        an exception is raised otherwise a message is printed and the plan is not included in the list.
+
 
     Returns
     -------
@@ -2969,7 +2984,9 @@ def existing_plans_and_devices_from_nspace(*, nspace):
     devices_in_nspace = devices_from_nspace(nspace)
 
     existing_devices = _prepare_devices(devices_in_nspace)
-    existing_plans = _prepare_plans(plans_in_nspace, existing_devices=existing_devices)
+    existing_plans = _prepare_plans(
+        plans_in_nspace, existing_devices=existing_devices, ignore_invalid_plans=ignore_invalid_plans
+    )
 
     return existing_plans, existing_devices, plans_in_nspace, devices_in_nspace
 
@@ -3024,6 +3041,7 @@ def gen_list_of_plans_and_devices(
     file_dir=None,
     file_name=None,
     overwrite=False,
+    ignore_invalid_plans=False,
 ):
     """
     Generate the list of plans and devices from a collection of startup files, python module or
@@ -3048,6 +3066,10 @@ def gen_list_of_plans_and_devices(
         name of the output YAML file, None - default file name is used
     overwrite: boolean
         overwrite the file if it already exists
+    ignore_invalid_plans: bool
+        Ignore plans with unsupported signatures. If the argument is ``False`` (default), then
+        an exception is raised otherwise a message is printed and the plan is not included in the list.
+
 
     Returns
     -------
@@ -3076,7 +3098,9 @@ def gen_list_of_plans_and_devices(
             startup_script_path=startup_script_path,
         )
 
-        existing_plans, existing_devices, _, _ = existing_plans_and_devices_from_nspace(nspace=nspace)
+        existing_plans, existing_devices, _, _ = existing_plans_and_devices_from_nspace(
+            nspace=nspace, ignore_invalid_plans=ignore_invalid_plans
+        )
 
         save_existing_plans_and_devices(
             existing_plans=existing_plans,
@@ -3164,6 +3188,14 @@ def gen_list_of_plans_and_devices_cli():
         "'qserver-list-plans-devices --startup-script ~/startup/scripts/script.py' loads "
         "startup code from the script and saves the results to the file in the current directory.",
     )
+    parser.add_argument(
+        "--ignore-invalid-plans",
+        dest="ignore_invalid_plans",
+        action="store_true",
+        help="Ignore plans with unsupported signatures When loading startup code or executing scripts. "
+        "The default behavior is to raise an exception. If the parameter is set, the message is printed for each "
+        "invalid plan and only plans that were processed correctly are included in the list of existing plans.",
+    )
 
     args = parser.parse_args()
     file_dir = args.file_dir
@@ -3171,6 +3203,7 @@ def gen_list_of_plans_and_devices_cli():
     startup_dir = args.startup_dir
     startup_module_name = args.startup_module_name
     startup_script_path = args.startup_script_path
+    ignore_invalid_plans = args.ignore_invalid_plans
 
     if file_dir is not None:
         file_dir = os.path.expanduser(file_dir)
@@ -3184,6 +3217,7 @@ def gen_list_of_plans_and_devices_cli():
             file_dir=file_dir,
             file_name=file_name,
             overwrite=True,
+            ignore_invalid_plans=ignore_invalid_plans,
         )
         print("The list of existing plans and devices was created successfully.")
         exit_code = 0

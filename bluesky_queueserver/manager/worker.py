@@ -413,6 +413,7 @@ class RunEngineWorker(Process):
                 devices_in_nspace=self._devices_in_nspace,
                 allowed_plans=allowed_plans,
                 allowed_devices=allowed_devices,
+                nspace=self._re_namespace,
             )
 
             plan_func = plan_parsed["callable"]

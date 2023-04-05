@@ -603,7 +603,7 @@ def devices_from_nspace(nspace):
     return devices
 
 
-def _get_nspace_object(object_name, *, objects_in_nspace):
+def _get_nspace_object(object_name, *, objects_in_nspace, nspace=None):
     """
     Search for object in namespace by name (e.g. ``count`` or ``det1.val``).
     The function searches for subdevices by using ``component_name`` device property
@@ -616,6 +616,11 @@ def _get_nspace_object(object_name, *, objects_in_nspace):
         Object (device or plan) name, such as ``count``, ``det1`` or ``det1.val``.
     objects_in_nspace: dict
         Dictionary of objects (devices and/or plans) in namespace.
+    nspace: dict
+        Reference to plan execution namespace. If ``nspace`` is not *None*, the up-to-date references
+        to plans and devices are taken directly from the namespace. The plans and devices still must be
+        present in ``plans_in_nspace`` and ``devices_in_nspace``, but those dictionaries may contain
+        stale references (e.g. if a plan is interactively replaced by a user).
 
     Returns
     -------
@@ -634,7 +639,12 @@ def _get_nspace_object(object_name, *, objects_in_nspace):
 
     object_found = True
     if components[0] in objects_in_nspace:
-        device = objects_in_nspace[components[0]]
+        if nspace:
+            # This is actual reference to the object from execution namespace. It may be different from
+            #   the reference saved during the last update of the lists.
+            device = nspace[components[0]]
+        else:
+            device = objects_in_nspace[components[0]]
     else:
         object_found = False
 
@@ -661,26 +671,31 @@ def _get_nspace_object(object_name, *, objects_in_nspace):
     return device
 
 
-def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, allowed_devices):
+def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, allowed_devices, nspace=None):
     """
     Prepare the plan for execution: replace the device names (str) in the plan specification
     by references to ophyd objects; replace plan name by the reference to the plan.
 
     Parameters
     ----------
-    plan : dict
+    plan: dict
         Plan specification. Keys: `name` (str) - plan name, `args` - plan args,
         `kwargs` - plan kwargs. The plan parameters must contain ``user_group``.
-    plans_in_nspace : dict(str, callable)
+    plans_in_nspace: dict(str, callable)
         Dictionary of existing plans from the RE workspace.
-    devices_in_nspace : dict(str, ophyd.Device)
+    devices_in_nspace: dict(str, ophyd.Device)
         Dictionary of existing devices from RE workspace.
-    allowed_plans : dict(str, dict)
+    allowed_plans: dict(str, dict)
         Dictionary of allowed plans that maps group name to dictionary of plans allowed
         to the members of the group (group name can be found in ``plan["user_group"]``.
-    allowed_devices : dict(str, dict)
+    allowed_devices: dict(str, dict)
         Dictionary of allowed devices that maps group name to dictionary of devices allowed
         to the members of the group.
+    nspace: dict
+        Reference to plan execution namespace. If ``nspace`` is not *None*, the up-to-date references
+        to plans and devices are taken directly from the namespace. The plans and devices still must be
+        present in ``plans_in_nspace`` and ``devices_in_nspace``, but those dictionaries may contain
+        stale references (e.g. if a plan is interactively replaced by a user).
 
     Returns
     -------
@@ -741,27 +756,27 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
                 default_value = _process_default_value(p["default"])
                 default_params.update({p["name"]: default_value})
 
-    def ref_from_name(v, objects_in_nspace, sel_object_names, selected_object_tree):
+    def ref_from_name(v, objects_in_nspace, sel_object_names, selected_object_tree, nspace):
         if isinstance(v, str):
             if (v in sel_object_names) or _is_object_name_in_list(v, allowed_objects=selected_object_tree):
-                v = _get_nspace_object(v, objects_in_nspace=objects_in_nspace)
+                v = _get_nspace_object(v, objects_in_nspace=objects_in_nspace, nspace=nspace)
         return v
 
-    def process_argument(v, objects_in_nspace, sel_object_names, selected_object_tree):
+    def process_argument(v, objects_in_nspace, sel_object_names, selected_object_tree, nspace):
         # Recursively process lists (iterables) and dictionaries
         if isinstance(v, str):
-            v = ref_from_name(v, objects_in_nspace, sel_object_names, selected_object_tree)
+            v = ref_from_name(v, objects_in_nspace, sel_object_names, selected_object_tree, nspace)
         elif isinstance(v, dict):
             for key, value in v.copy().items():
-                v[key] = process_argument(value, objects_in_nspace, sel_object_names, selected_object_tree)
+                v[key] = process_argument(value, objects_in_nspace, sel_object_names, selected_object_tree, nspace)
         elif isinstance(v, Iterable):
             v_original = v
             v = list()
             for item in v_original:
-                v.append(process_argument(item, objects_in_nspace, sel_object_names, selected_object_tree))
+                v.append(process_argument(item, objects_in_nspace, sel_object_names, selected_object_tree, nspace))
         return v
 
-    def process_parameter_value(value, pp, objects_in_nspace, group_plans, group_devices):
+    def process_parameter_value(value, pp, objects_in_nspace, group_plans, group_devices, nspace):
         """
         Process a parameter value ``value`` based on parameter description ``pp``
         (``pp = allowed_plans[<plan_name>][<param_name>]``).
@@ -804,7 +819,7 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
         sel_object_names = pname_list.union(dname_list)
 
         if sel_object_names or selected_object_tree:
-            value = process_argument(value, objects_in_nspace, sel_object_names, selected_object_tree)
+            value = process_argument(value, objects_in_nspace, sel_object_names, selected_object_tree, nspace)
 
         return value
 
@@ -812,7 +827,7 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
     items_in_nspace = devices_in_nspace.copy()
     items_in_nspace.update(plans_in_nspace)
 
-    plan_func = process_argument(plan_name, plans_in_nspace, set(), group_plans)
+    plan_func = process_argument(plan_name, plans_in_nspace, set(), group_plans, nspace)
     if isinstance(plan_func, str):
         success = False
         err_msg = f"Plan '{plan_name}' is not allowed or does not exist"
@@ -824,14 +839,16 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
         # Fetch parameter description ({} if parameter is not found)
         pp = param_descriptions.get(p_name, {})
         bound_args.arguments[p_name] = process_parameter_value(
-            value, pp, items_in_nspace, group_plans, group_devices
+            value, pp, items_in_nspace, group_plans, group_devices, nspace
         )
 
     for p_name in default_params:
         value = default_params[p_name]
         # Fetch parameter description ({} if parameter is not found)
         pp = group_plans[plan_name].get(p_name, {})
-        default_params[p_name] = process_parameter_value(value, pp, items_in_nspace, group_plans, group_devices)
+        default_params[p_name] = process_parameter_value(
+            value, pp, items_in_nspace, group_plans, group_devices, nspace
+        )
 
     plan_args_parsed = list(bound_args.args)
     plan_kwargs_parsed = bound_args.kwargs

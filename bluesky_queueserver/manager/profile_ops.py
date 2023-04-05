@@ -368,7 +368,6 @@ def load_worker_startup_code(
     startup_module_name=None,
     startup_script_path=None,
     keep_re=False,
-    use_ipython_kernel=False,
     nspace=None,
 ):
     """
@@ -386,8 +385,6 @@ def load_worker_startup_code(
     keep_re: boolean
         Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
         or removed (``False``).
-    use_ipython_kernel: boolean
-        Indicates if the code is run in IPython kernel.
     nspace: dict or None
         Reference to the existing namespace, in which the code is executed. If ``nspace``
         is *None*, then the new namespace is created.
@@ -407,11 +404,7 @@ def load_worker_startup_code(
         logger.info("Loading RE Worker startup code from directory '%s' ...", startup_dir)
         startup_dir = os.path.abspath(os.path.expanduser(startup_dir))
         logger.info("Startup directory: '%s'", startup_dir)
-        patch_profiles = not use_ipython_kernel
-        logger.info("Patching startup code files is enabled: %s", patch_profiles)
-        nspace = load_profile_collection(
-            startup_dir, keep_re=keep_re, patch_profiles=patch_profiles, nspace=nspace
-        )
+        nspace = load_profile_collection(startup_dir, keep_re=keep_re, patch_profiles=True, nspace=nspace)
 
     elif startup_module_name is not None:
         logger.info("Loading RE Worker startup code from module '%s' ...", startup_module_name)

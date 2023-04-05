@@ -1293,7 +1293,6 @@ class RunEngineWorker(Process):
                     startup_module_name=startup_module_name,
                     startup_script_path=startup_script_path,
                     keep_re=keep_re,
-                    use_ipython_kernel=self._use_ipython_kernel,
                     nspace=self._re_namespace,
                 )
 

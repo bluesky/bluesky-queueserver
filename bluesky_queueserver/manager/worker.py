@@ -45,6 +45,7 @@ DEFAULT_RUN_FOREGROUND_TASKS_IN_SEPARATE_THREADS = False
 class EState(enum.Enum):
     INITIALIZING = "initializing"
     IDLE = "idle"
+    FAILED = "failed"
     EXECUTING_PLAN = "executing_plan"
     EXECUTING_TASK = "executing_task"
     CLOSING = "closing"
@@ -1427,6 +1428,9 @@ class RunEngineWorker(Process):
                 self._success_startup = False
                 logger.exception("Error occurred while initializing the environment: %s.", ex)
 
+        if not self._success_startup:
+            self._env_state = EState.FAILED
+
     def _worker_shutdown_code(self):
         """
         Perform shutdown tasks for the worker.
@@ -1663,7 +1667,7 @@ class RunEngineWorker(Process):
                 def starting_tasks_in_kernel():
                     kernel_startup_task1 = "_run_engine_worker_class_object__._worker_startup_code()"
                     self._ip_kernel_client.execute(kernel_startup_task1, reply=False, store_history=False)
-                    while self._env_state != EState.IDLE:
+                    while self._env_state not in (EState.IDLE, EState.FAILED):
                         ttime.sleep(0.1)
                     if not self._success_startup:
                         logger.error("Failed to start IPython kernel.")

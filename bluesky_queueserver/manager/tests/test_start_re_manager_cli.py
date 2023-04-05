@@ -447,6 +447,7 @@ def _get_expected_settings_default_1(tmpdir):
         "demo_mode": True,
         "emergency_lock_key": None,
         "existing_plans_and_devices_path": None,
+        "ignore_invalid_plans": False,
         "ipython_dir": None,
         "kafka_server": "127.0.0.1:9092",
         "kafka_topic": None,
@@ -488,6 +489,7 @@ worker:
   ipython_matplotlib: qt5
 startup:
   keep_re: false
+  ignore_invalid_plans: true
   startup_dir: {1}
   existing_plans_and_devices_path: {2}
   user_group_permissions_path: {3}
@@ -520,6 +522,7 @@ def _get_expected_settings_config_2(tmpdir):
         "kafka_server": "127.0.0.1:9095",
         "kafka_topic": "different_topic_name",
         "keep_re": False,
+        "ignore_invalid_plans": True,
         "use_ipython_kernel": True,
         "ipython_matplotlib": "qt5",
         "print_console_output": True,
@@ -556,6 +559,7 @@ def _get_cli_params_3(tmpdir):
         "--kafka-topic=yet_another_topic",
         "--kafka-server=127.0.0.1:9099",
         "--keep-re",
+        "--ignore-invalid-plans",
         "--use-ipython-kernel",
         "--ipython-matplotlib=qt",
         "--zmq-data-proxy-addr=tcp://localhost:5571",
@@ -578,6 +582,7 @@ def _get_expected_settings_params_3(tmpdir):
         "kafka_server": "127.0.0.1:9099",
         "kafka_topic": "yet_another_topic",
         "keep_re": True,
+        "ignore_invalid_plans": True,
         "use_ipython_kernel": True,
         "ipython_matplotlib": "qt",
         "print_console_output": False,

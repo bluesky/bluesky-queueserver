@@ -945,6 +945,11 @@ class RunEngineManager(Process):
             # No plans are running: deactivate the stop sequence.
             self._queue_stop_deactivate()
 
+        if self._manager_state in (MState.IDLE, MState.PAUSED):
+            # Stop the execution loop at the worker
+            if self._use_ipython_kernel:
+                await self._worker_command_exec_loop_stop()
+
         return success, err_msg
 
     def _queue_stop_activate(self):

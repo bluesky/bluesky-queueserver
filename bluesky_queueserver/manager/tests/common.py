@@ -432,6 +432,10 @@ class ReManager:
         if not any([_ in params for _ in logging_levels]):
             params.append("--verbose")
 
+        # Start the manager with IPython kernel if the
+        if ("--use-ipython-kernel" not in params) and use_ipykernel_for_tests():
+            params.append("--use-ipython-kernel")
+
         if not self._p:
             if cleanup:
                 clear_redis_pool()

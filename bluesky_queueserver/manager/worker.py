@@ -1485,7 +1485,7 @@ class RunEngineWorker(Process):
         if self._ip_kernel_state != IPKernelState.IDLE:
             return False
         start_loop_task = "_run_engine_worker_class_object__._run_loop_ipython()"
-        self._ip_kernel_client.execute(start_loop_task, reply=False, store_history=False)
+        self._ip_kernel_execute_command(command=start_loop_task)
         return self._exec_loop_active_event.wait(timeout=timeout)
 
     def _ip_kernel_release(self):
@@ -1541,10 +1541,19 @@ class RunEngineWorker(Process):
             except Exception as ex:
                 logger.exception(ex)
 
-    def _ip_kernel_shutdown(self):
+    def _ip_kernel_execute_command(self, *, command: str, except_on: bool = False):
+        try:
+            self._ip_kernel_client.execute(command, reply=False, store_history=False)
+        except Exception as ex:
+            if except_on:
+                raise
+            logger.exception(
+                "Error occurred while sending request to IPython kernel: Command: %r.\n%s", command, ex
+            )
+
+    def _ip_kernel_shutdown(self, *, except_on: bool = False):
         logger.info("Requesting kernel to shut down ...")
-        kernel_shutdown_task = "quit"
-        self._ip_kernel_client.execute(kernel_shutdown_task, reply=False, store_history=False)
+        self._ip_kernel_execute_command(command="quit")
 
     def run(self):
         """
@@ -1667,12 +1676,12 @@ class RunEngineWorker(Process):
                 def starting_tasks_in_kernel():
                     try:
                         kernel_startup_task1 = "_run_engine_worker_class_object__._worker_startup_code()"
-                        self._ip_kernel_client.execute(kernel_startup_task1, reply=False, store_history=False)
+                        self._ip_kernel_execute_command(command=kernel_startup_task1, except_on=True)
                         while self._env_state not in (EState.IDLE, EState.FAILED):
                             ttime.sleep(0.1)
                         if not self._success_startup:
                             logger.error("Failed to start IPython kernel.")
-                            self._ip_kernel_shutdown()
+                            self._ip_kernel_shutdown(except_on=True)
                     except Exception as ex:
                         # This error means that the worker can not communicate with the kernel and
                         #   can not be used. This indicates a bug or an issue with 'jupyter-client'

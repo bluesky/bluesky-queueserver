@@ -1665,13 +1665,27 @@ class RunEngineWorker(Process):
                 monitor_abandoned_plans.start()
 
                 def starting_tasks_in_kernel():
-                    kernel_startup_task1 = "_run_engine_worker_class_object__._worker_startup_code()"
-                    self._ip_kernel_client.execute(kernel_startup_task1, reply=False, store_history=False)
-                    while self._env_state not in (EState.IDLE, EState.FAILED):
-                        ttime.sleep(0.1)
-                    if not self._success_startup:
-                        logger.error("Failed to start IPython kernel.")
-                        self._ip_kernel_shutdown()
+                    try:
+                        kernel_startup_task1 = "_run_engine_worker_class_object__._worker_startup_code()"
+                        self._ip_kernel_client.execute(kernel_startup_task1, reply=False, store_history=False)
+                        while self._env_state not in (EState.IDLE, EState.FAILED):
+                            ttime.sleep(0.1)
+                        if not self._success_startup:
+                            logger.error("Failed to start IPython kernel.")
+                            self._ip_kernel_shutdown()
+                    except Exception as ex:
+                        # This error means that the worker can not communicate with the kernel and
+                        #   can not be used. This indicates a bug or an issue with 'jupyter-client'
+                        #   package (it happens for v7.4.1 and older). The environment will be
+                        #   indicated as successfully opened, but the namespace will be empty.
+                        #   The environment can be 'destroyed' (may be convenient during debugging).
+                        #   TODO: revise how this error is handled (if it causes any issues in the future).
+                        self._env_state = EState.IDLE
+                        logger.error(
+                            "Failed to initiate startup. The worker namespace is empty. "
+                            "The environment can be 'destroyed'."
+                        )
+                        logger.exception(ex)
 
                 starting_tasks_thread = Thread(target=starting_tasks_in_kernel, daemon=True)
                 starting_tasks_thread.start()

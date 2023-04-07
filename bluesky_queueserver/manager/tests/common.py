@@ -13,6 +13,7 @@ import pytest
 from databroker import catalog_search_path
 
 from bluesky_queueserver.manager.comms import zmq_single_request
+from bluesky_queueserver.manager.config import to_boolean
 from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
 from bluesky_queueserver.manager.profile_ops import get_default_startup_dir
 
@@ -20,6 +21,16 @@ logger = logging.Logger(__name__)
 
 # User name and user group name used throughout most of the tests.
 _user, _user_group = "Testing Script", "primary"
+
+
+def use_ipykernel_for_tests():
+    """
+    Returns True/False if the value of USE_IPYKERNEL environment variable has
+    a boolean value. The function returns *None* if the environment variable is
+    not set, or the value can not be interpreted as boolean. The function
+    is intended for using in test configuration.
+    """
+    return to_boolean(os.environ.get("USE_IPYKERNEL", None))
 
 
 def copy_default_profile_collection(tmp_path, *, copy_py=True, copy_yaml=True):

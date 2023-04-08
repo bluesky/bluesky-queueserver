@@ -41,7 +41,7 @@ def copy_default_profile_collection(tmp_path, *, copy_py=True, copy_yaml=True):
     # Default path
     pc_path = get_default_startup_dir()
     # New path
-    new_pc_path = os.path.join(tmp_path, "startup")
+    new_pc_path = os.path.join(tmp_path, "ipython", "profile_collection_sim", "startup")
 
     os.makedirs(new_pc_path, exist_ok=True)
 
@@ -283,8 +283,8 @@ def condition_environment_closed(msg):
 
 def condition_queue_processing_finished(msg):
     items_in_queue = msg["items_in_queue"]
-    queue_is_running = msg["manager_state"] == "executing_queue"
-    return (items_in_queue == 0) and not queue_is_running
+    manager_idle = msg["manager_state"] == "idle"
+    return (items_in_queue == 0) and manager_idle
 
 
 def wait_for_condition(time, condition):

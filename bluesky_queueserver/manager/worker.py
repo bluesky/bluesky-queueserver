@@ -516,8 +516,8 @@ class RunEngineWorker(Process):
                 if not run_in_background:
                     self._env_state = EState.IDLE
                     self._running_task_uid = None
-                    if self._use_ipython_kernel:
-                        self._ip_kernel_release()
+                    ## if self._use_ipython_kernel:
+                    ##     self._ip_kernel_release()
                 else:
                     self._background_tasks_num = max(self._background_tasks_num - 1, 0)
 

@@ -450,11 +450,11 @@ def test_load_profile_collection_07(tmp_path):
 
     assert nspace["file_name1"] == pc_fln_1
     assert nspace["file_name2"] == pc_fln_2
-    assert nspace["mod_name1"] == "startup_script"
-    assert nspace["mod_name2"] == "startup_script"
+    assert nspace["mod_name1"] == "__main__"
+    assert nspace["mod_name2"] == "__main__"
 
     assert "__file__" not in nspace
-    assert nspace["__name__"] == "startup_script"
+    assert nspace["__name__"] == "__main__"
 
 
 code_script_test8_1 = """
@@ -833,10 +833,10 @@ def test_load_startup_script_5(tmp_path, reset_sys_modules):  # noqa: F811
     nspace = load_startup_script(script_path)
 
     assert nspace["file_name1"] == script_path
-    assert nspace["mod_name1"] == "startup_script"
+    assert nspace["mod_name1"] == "__main__"
 
     assert "__file__" not in nspace
-    assert nspace["__name__"] == "startup_script"
+    assert nspace["__name__"] == "__main__"
 
 
 code_script_startup_test6_1 = """
@@ -1236,10 +1236,10 @@ def test_load_script_into_existing_nspace_10(tmp_path, reset_sys_modules):  # no
     nspace = {}
     load_script_into_existing_nspace(script=code_script_upload_test10_1, nspace=nspace)
 
-    assert nspace["mod_name1"] == "startup_script"
+    assert nspace["mod_name1"] == "__main__"
 
     assert "__file__" not in nspace
-    assert nspace["__name__"] == "startup_script"
+    assert nspace["__name__"] == "__main__"
 
 
 def test_load_script_into_existing_nspace_11(tmp_path, reset_sys_modules):  # noqa: F811
@@ -1251,11 +1251,11 @@ def test_load_script_into_existing_nspace_11(tmp_path, reset_sys_modules):  # no
     nspace = {"__file__": initial__file__}  # Namespace already has '__file__' defined.
     load_script_into_existing_nspace(script=code_script_upload_test10_1, nspace=nspace)
 
-    assert nspace["mod_name1"] == "startup_script"
+    assert nspace["mod_name1"] == "__main__"
 
     assert "__file__" in nspace
     assert nspace["__file__"] == initial__file__
-    assert nspace["__name__"] == "startup_script"
+    assert nspace["__name__"] == "__main__"
 
 
 code_script_upload_test12_1 = """

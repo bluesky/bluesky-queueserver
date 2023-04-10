@@ -1157,7 +1157,7 @@ existing_devices:
         is_flyable: false
         is_movable: false
         is_readable: true
-        module: startup_script
+        module: __main__
       mtrs:
         classname: SimStage
         components:
@@ -1275,11 +1275,11 @@ existing_devices:
         is_flyable: false
         is_movable: true
         is_readable: true
-        module: startup_script
+        module: __main__
     is_flyable: false
     is_movable: false
     is_readable: true
-    module: startup_script
+    module: __main__
   sim_bundle_B:
     classname: SimBundle
     components:
@@ -1375,7 +1375,7 @@ existing_devices:
         is_flyable: false
         is_movable: false
         is_readable: true
-        module: startup_script
+        module: __main__
       mtrs:
         classname: SimStage
         components:
@@ -1493,11 +1493,11 @@ existing_devices:
         is_flyable: false
         is_movable: true
         is_readable: true
-        module: startup_script
+        module: __main__
     is_flyable: false
     is_movable: false
     is_readable: true
-    module: startup_script
+    module: __main__
   trivial_flyer:
     classname: TrivialFlyer
     is_flyable: true
@@ -1506,7 +1506,7 @@ existing_devices:
     module: ophyd.sim
 existing_plans:
   _sim_plan_inner:
-    module: startup_script
+    module: __main__
     name: _sim_plan_inner
     parameters:
     - annotation:
@@ -1632,7 +1632,7 @@ existing_plans:
     properties:
       is_generator: true
   count_bundle_test:
-    module: startup_script
+    module: __main__
     name: count_bundle_test
     parameters:
     - annotation:
@@ -1972,7 +1972,7 @@ existing_plans:
     properties:
       is_generator: true
   marked_up_count:
-    module: startup_script
+    module: __main__
     name: marked_up_count
     parameters:
     - annotation:
@@ -2006,7 +2006,7 @@ existing_plans:
       is_generator: true
   move_then_count:
     description: Move motors into positions; then count dets.
-    module: startup_script
+    module: __main__
     name: move_then_count
     parameters:
     - annotation:
@@ -2051,7 +2051,7 @@ existing_plans:
       is_generator: true
   plan_test_progress_bars:
     description: Test visualization of progress bars.
-    module: startup_script
+    module: __main__
     name: plan_test_progress_bars
     parameters:
     - annotation:
@@ -2733,7 +2733,7 @@ existing_plans:
   sim_multirun_plan_nested:
     description: 'Simulated multi-run plan: two nested runs. The plan is included
       for testing purposes only.'
-    module: startup_script
+    module: __main__
     name: sim_multirun_plan_nested
     parameters:
     - annotation:

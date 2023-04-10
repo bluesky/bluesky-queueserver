@@ -607,8 +607,8 @@ class RunEngineManager(Process):
                         # Shutdown was not requested by the manager (caused by external client).
                         self._loop.create_task(self._confirm_re_worker_exit())
 
-                    ##if self._manager_state_pending and not ws["exec_loop_active"]:
-                    if not self._exec_loop_deactivated_event.is_set() and not ws["exec_loop_active"]:
+                    ##if self._manager_state_pending and not ws["ip_kernel_captured"]:
+                    if not self._exec_loop_deactivated_event.is_set() and not ws["ip_kernel_captured"]:
                         # Expected to be used only if IPython kernel is used.
                         self._exec_loop_deactivated_event.set()
                         ## await self._set_manager_state_operations()
@@ -620,9 +620,10 @@ class RunEngineManager(Process):
                     elif self._manager_state == MState.CREATING_ENVIRONMENT:
                         # If RE Worker environment fails to open, then it switches to 'closing' state.
                         #   Closing must be confirmed by Manager before it is closed.
-                        if ws["environment_state"] in ("idle", "executing_plan", "executing_task"):
+                        done = not self._use_ipython_kernel or not ws["ip_kernel_captured"]
+                        if done and ws["environment_state"] in ("idle", "executing_plan", "executing_task"):
                             self._fut_manager_task_completed.set_result(True)
-                        if ws["environment_state"] == "closing":
+                        if done and ws["environment_state"] == "closing":
                             self._fut_manager_task_completed.set_result(False)
 
                     elif self._manager_state in (MState.EXECUTING_QUEUE, MState.PAUSED):
@@ -726,18 +727,16 @@ class RunEngineManager(Process):
     #         await acb()
     #     print(f"======================== Hello5 {self._manager_state}") ##
 
-
-    async def _set_manager_state(self, state, *, acb=None):
+    async def _set_manager_state(self, state, *, coro=None):
         """
         Set manager state to ``MState.IDLE`` or ``MState.PAUSE``. When using IPython kernel,
         the manager should wait for the execution loop to be stopped before setting the state.
         """
 
         if state not in (MState.IDLE, MState.PAUSED):
-            raise ValueError(f"Attempting to set invalid state: {state!r}. "
-                             "Only 'idle' or 'paused' states are allowed.")
-
-        print(f"======================== Hello4") ##
+            raise ValueError(
+                f"Attempting to set invalid state: {state!r}. " "Only 'idle' or 'paused' states are allowed."
+            )
 
         if self._use_ipython_kernel:
             await self._worker_command_exec_loop_stop()
@@ -754,10 +753,8 @@ class RunEngineManager(Process):
         if state == MState.IDLE:
             self._queue_stop_deactivate()  # MState.EXECUTING_QUEUE
 
-        if acb:
-            await acb()
-
-        print(f"======================== Hello5") ##
+        if coro:
+            await coro()
 
         # await self._set_manager_state_operations(state, acb=acb)
 
@@ -851,22 +848,19 @@ class RunEngineManager(Process):
                 task_uid = task_res["task_uid"]
 
                 def factory(*, task_uid, task_res):
-                    async def _():
-                        print(f"======================= Adding task result")  ##
+                    async def inner():
                         await self._task_results.add_completed_task(task_uid=task_uid, payload=task_res)
-                    return _
 
-                acb = factory(task_uid=task_uid, task_res=task_res)
+                    return inner
 
-                print(f"======================== Hello") ##
+                coro = factory(task_uid=task_uid, task_res=task_res)
+
                 if (self._manager_state == MState.EXECUTING_TASK) and (task_uid == self._running_task_uid):
-                    print(f"======================== Hello2") ##
-                    self._loop.create_task(self._set_manager_state(MState.IDLE, acb=acb))
-                    print(f"======================== Hello3") ##
+                    self._loop.create_task(self._set_manager_state(MState.IDLE, coro=coro))
                     ## self._manager_state = MState.IDLE
                     ## self._running_task_uid = None
                 else:
-                    await acb()
+                    await coro()
 
                 logger.debug("Loaded the results for task '%s': %s", task_uid, ppfl(task_results))
 
@@ -1594,7 +1588,7 @@ class RunEngineManager(Process):
         worker_environment_exists = self._environment_exists
         re_state = self._worker_state_info["re_state"] if self._worker_state_info else None
         ip_kernel_state = self._worker_state_info["ip_kernel_state"] if self._worker_state_info else None
-        exec_loop_active = self._worker_state_info["exec_loop_active"] if self._worker_state_info else None
+        ip_kernel_captured = self._worker_state_info["ip_kernel_captured"] if self._worker_state_info else None
         env_state = self._worker_state_info["environment_state"] if self._worker_state_info else "closed"
         background_tasks = self._worker_state_info["background_tasks_num"] if self._worker_state_info else 0
         deferred_pause_pending = self._re_pause_pending
@@ -1626,7 +1620,7 @@ class RunEngineManager(Process):
             "worker_background_tasks": background_tasks,  # The number of background tasks
             "re_state": re_state,  # State of Run Engine
             "ip_kernel_state": ip_kernel_state,  # State of IPython kernel
-            "exec_loop_active": exec_loop_active,
+            "ip_kernel_captured": ip_kernel_captured,
             "pause_pending": deferred_pause_pending,  # True/False - Cleared once pause processed
             # If Run List UID change, download the list of runs for the current plan.
             # Run List UID is updated when the list is cleared as well.

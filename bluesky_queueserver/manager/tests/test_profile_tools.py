@@ -465,8 +465,11 @@ def test_is_re_worker_active_2(re_manager_cmd, tmp_path, monkeypatch, option):  
     monkeypatch.setattr(os, "environ", os.environ.copy())
 
     # Load first script
-    script_dir = os.path.join(tmp_path, "script_dir1")
+    ipython_dir = os.path.join(tmp_path, "ipython")
+    startup_profile = "collection_sim"
+    script_dir = os.path.join(ipython_dir, f"profile_{startup_profile}", "startup")
     script_path = os.path.join(script_dir, "startup_script.py")
+    module_dir = os.path.join(ipython_dir, f"profile_{startup_profile}")
 
     os.makedirs(script_dir, exist_ok=True)
     with open(script_path, "w") as f:
@@ -490,9 +493,9 @@ def test_is_re_worker_active_2(re_manager_cmd, tmp_path, monkeypatch, option):  
     elif option == "module":
         # Temporarily add module to the search path
         sys_path = sys.path
-        monkeypatch.setattr(sys, "path", [str(tmp_path)] + sys_path)
+        monkeypatch.setattr(sys, "path", [module_dir] + sys_path)
         gen_list_of_plans_and_devices(
-            startup_module_name="script_dir1.startup_script", file_dir=script_dir, overwrite=True
+            startup_module_name="startup.startup_script", file_dir=script_dir, overwrite=True
         )
     else:
         assert False, f"Unknown option '{option}'"
@@ -517,7 +520,7 @@ def test_is_re_worker_active_2(re_manager_cmd, tmp_path, monkeypatch, option):  
         re_manager_cmd(
             [
                 "--startup-module",
-                "script_dir1.startup_script",
+                "startup.startup_script",
                 "--user-group-permissions",
                 path_user_permissions,
                 "--existing-plans-devices",

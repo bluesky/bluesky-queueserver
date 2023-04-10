@@ -215,7 +215,7 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False, nspace=
                 logger.info("Loading startup file '%s' ...", file)
 
                 # Set '__file__' and '__name__' variables
-                patch = f"__file__ = '{file}'; __name__ = 'startup_script'\n"
+                patch = f"__file__ = '{file}'; __name__ = '__main__'\n"
                 exec(patch, nspace, nspace)
 
                 if not os.path.isfile(file):
@@ -329,7 +329,7 @@ def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True
             raise IOError(f"Startup file {script_path!r} was not found")
 
         # Set '__file__' and '__name__' variables
-        patch = f"__file__ = '{script_path}'; __name__ = 'startup_script'\n"
+        patch = f"__file__ = '{script_path}'; __name__ = '__main__'\n"
         exec(patch, nspace, nspace)
 
         code = compile(open(script_path).read(), script_path, "exec")
@@ -516,7 +516,7 @@ def load_script_into_existing_nspace(
         # Set '__name__' variables. NOTE: '__file__' variable is undefined (difference!!!)
         script_path = os.path.join(script_root_path, "script") if script_root_path else "script"
         saved__file__ = nspace["__file__"] if "__file__" in nspace else None
-        patch = f"__name__ = 'startup_script'\n__file__ = '{script_path}'\n"
+        patch = f"__name__ = '__main__'\n__file__ = '{script_path}'\n"
         exec(patch, nspace, nspace)
 
         # A script may be partially loaded into the environment in case it fails.
@@ -2980,6 +2980,8 @@ def existing_plans_and_devices_from_nspace(*, nspace, ignore_invalid_plans=False
     devices_in_nspace : dict
         Dictionary of devices in namespace
     """
+    logger.debug("Extracting existing plans and devices from the namespace ...")
+
     plans_in_nspace = plans_from_nspace(nspace)
     devices_in_nspace = devices_from_nspace(nspace)
 

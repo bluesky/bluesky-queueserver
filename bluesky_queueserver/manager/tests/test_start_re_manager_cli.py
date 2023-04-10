@@ -21,6 +21,7 @@ from .common import (
     set_qserver_zmq_address,
     set_qserver_zmq_public_key,
     wait_for_condition,
+    use_ipykernel_for_tests,
 )
 
 # Plans used in most of the tests: '_plan1' and '_plan2' are quickly executed '_plan3' runs for 5 seconds.
@@ -202,7 +203,7 @@ def test_start_re_manager_console_output_2(monkeypatch, re_manager_cmd, test_mod
     )
 
     zmq_single_request("environment_open")
-    assert wait_for_condition(time=3, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
     zmq_single_request("environment_close")
     assert wait_for_condition(time=3, condition=condition_environment_closed)
 
@@ -250,6 +251,7 @@ def test_cli_update_existing_plans_devices_01(
 
     # Add a plan ('count50') and a device ('det50') if needed
     with open(os.path.join(pc_path, "zz.py"), "w") as f:
+        f.writelines("print(f'Loading file {__file__!r}')\n")
         if option in ("add_device", "add_plan_device"):
             f.writelines("det50 = det\n")
         if option in ("add_plan", "add_plan_device"):
@@ -441,6 +443,18 @@ def test_cli_parameters_zmq_server_address_1(monkeypatch, re_manager_cmd, test_m
 
 
 def _get_expected_settings_default_1(tmpdir):
+
+    if use_ipykernel_for_tests():
+        startup_dir = "/tmp/qserver/ipython/profile_collection_sim/startup"
+        ipython_dir = "/tmp/ipython"
+        startup_profile =  "collection_sim"
+        use_ipython_kernel = True
+    else:
+        startup_dir = "/bluesky_queueserver/profile_collection_sim/"
+        ipython_dir = None
+        startup_profile =  None
+        use_ipython_kernel = False
+
     return {
         "console_logging_level": 10,
         "databroker_config": None,
@@ -448,17 +462,17 @@ def _get_expected_settings_default_1(tmpdir):
         "emergency_lock_key": None,
         "existing_plans_and_devices_path": None,
         "ignore_invalid_plans": False,
-        "ipython_dir": None,
+        "ipython_dir": ipython_dir,
         "kafka_server": "127.0.0.1:9092",
         "kafka_topic": None,
         "keep_re": False,
-        "use_ipython_kernel": False,
+        "use_ipython_kernel": use_ipython_kernel,
         "ipython_matplotlib": None,
         "print_console_output": True,
         "redis_addr": "localhost",
-        "startup_dir": "/bluesky_queueserver/profile_collection_sim/",
+        "startup_dir": startup_dir,
         "startup_module": None,
-        "startup_profile": None,
+        "startup_profile": startup_profile,
         "startup_script": None,
         "update_existing_plans_devices": "ENVIRONMENT_OPEN",
         "use_persistent_metadata": False,
@@ -470,6 +484,7 @@ def _get_expected_settings_default_1(tmpdir):
         "zmq_private_key": None,
         "zmq_publish_console": False,
     }
+
 
 
 _dir_2 = os.path.join("ipython_test", "profile_collection_test", "startup")
@@ -671,7 +686,7 @@ def test_manager_with_config_file_01(
     startup_dir = current_settings.pop("startup_dir")
     assert isinstance(startup_dir, str), startup_dir
     assert isinstance(expected_startup_dir_suffix, str), expected_startup_dir_suffix
-    assert startup_dir.endswith(expected_startup_dir_suffix)
+    assert startup_dir.endswith(expected_startup_dir_suffix), (startup_dir, expected_startup_dir_suffix)
 
     cs_idir = current_settings["ipython_dir"]
     cs_idir = os.path.split(cs_idir)[1] if isinstance(cs_idir, str) else cs_idir

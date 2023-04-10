@@ -401,13 +401,13 @@ _user_groups_text = r"""user_groups:
       - null  # Nothing is forbidden
 """
 
-
-_startup_script_1 = """
+def _get_startup_script_1(use_relative_imports):
+    startup_script = """
 from ophyd.sim import det1, det2
 from bluesky.plans import count
 
 from bluesky_queueserver.manager.profile_tools import is_re_worker_active
-from dir1.file1 import f1
+from {}dir1.file1 import f1
 
 # Executed during import
 if not is_re_worker_active():
@@ -425,11 +425,18 @@ def sim_plan_1():
 
     yield from count([det1, det2])
 """
-
+    return startup_script.format("." if use_relative_imports else "")
 
 def create_local_imports_dir(pc_path):
     path1 = os.path.join(pc_path, "dir1")
     fln1 = os.path.join(path1, "file1.py")
+
+    # If the following modules were already imported during tests, then they
+    # will interfere with the new imports. So just delete them.
+    modules_to_delete = ["dir1", "dir1.file1"]
+    for m in modules_to_delete:
+        if m in sys.modules:
+            del sys.modules[m]
 
     os.makedirs(path1, exist_ok=True)
 
@@ -451,8 +458,8 @@ def f1():
 
 
 # fmt: off
-#@pytest.mark.parametrize("option", ["startup_dir", "script", "module"])
-@pytest.mark.parametrize("option", ["module"])
+@pytest.mark.parametrize("option", ["startup_dir", "script", "module"])
+# @pytest.mark.parametrize("option", ["module"])
 # fmt: on
 def test_is_re_worker_active_2(re_manager_cmd, tmp_path, monkeypatch, option):  # noqa: F811
     """
@@ -465,8 +472,6 @@ def test_is_re_worker_active_2(re_manager_cmd, tmp_path, monkeypatch, option):  
     of startup profile collection and execution of the plan in RE Worker environment.
     """
     monkeypatch.setattr(os, "environ", os.environ.copy())
-
-    using_ipykernel = use_ipykernel_for_tests()
 
     # Load first script
     ipython_dir = os.path.join(tmp_path, "ipython")
@@ -484,7 +489,7 @@ def test_is_re_worker_active_2(re_manager_cmd, tmp_path, monkeypatch, option):  
     os.makedirs(script_dir, exist_ok=True)
 
     with open(fpath, "w") as f:
-        f.write(_startup_script_1)
+        f.write(_get_startup_script_1(option=="module"))
 
     create_local_imports_dir(fdir)
 
@@ -514,7 +519,7 @@ def test_is_re_worker_active_2(re_manager_cmd, tmp_path, monkeypatch, option):  
 
     # When IPython kernel is used, point it to an empty profile
     extra_params = []
-    if use_ipykernel_for_tests:
+    if use_ipykernel_for_tests():
         extra_params.extend(["--ipython-dir", ipython_dir, "--startup-profile", startup_profile])
 
     if option == "startup_dir":

@@ -459,7 +459,6 @@ def f1():
 
 # fmt: off
 @pytest.mark.parametrize("option", ["startup_dir", "script", "module"])
-# @pytest.mark.parametrize("option", ["module"])
 # fmt: on
 def test_is_re_worker_active_2(re_manager_cmd, tmp_path, monkeypatch, option):  # noqa: F811
     """

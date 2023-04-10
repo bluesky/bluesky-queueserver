@@ -131,7 +131,6 @@ class RunEngineWorker(Process):
         #   Kernel may still remain 'captured' for some time until the updated kernel state is reported.
         self._exec_loop_active = False
         self._exec_loop_active_cnd = None
-        ## self._exec_loop_active_event = None
         self._exit_main_loop_event = None  # Used with IPython kernel
         self._exit_event = None
         self._exit_confirmed_event = None
@@ -522,8 +521,6 @@ class RunEngineWorker(Process):
                 if not run_in_background:
                     self._env_state = EState.IDLE
                     self._running_task_uid = None
-                    ## if self._use_ipython_kernel:
-                    ##     self._ip_kernel_release()
                 else:
                     self._background_tasks_num = max(self._background_tasks_num - 1, 0)
 
@@ -649,7 +646,6 @@ class RunEngineWorker(Process):
                     f"Incorrect environment state: '{self._env_state.value}'. Acceptable state: 'idle'"
                 )
 
-            logger.info("Starting the task ................................")  ##
             if not run_in_background:
                 if self._use_ipython_kernel and not self._exec_loop_active:
                     if not self._ip_kernel_capture():
@@ -863,7 +859,6 @@ class RunEngineWorker(Process):
         ip_kernel_state = self._ip_kernel_state.value
         ip_kernel_captured = self._ip_kernel_captured
         unexpected_shutdown = self._unexpected_shutdown
-        ##exec_loop_active = self._exec_loop_active
         msg_out = {
             "running_item_uid": item_uid,
             "running_plan_completed": plan_completed,
@@ -878,7 +873,6 @@ class RunEngineWorker(Process):
             "background_tasks_num": background_tasks_num,
             "ip_kernel_state": ip_kernel_state,
             "ip_kernel_captured": ip_kernel_captured,
-            ## "exec_loop_active": exec_loop_active,
             "unexpected_shutdown": unexpected_shutdown,
         }
         return msg_out
@@ -1207,7 +1201,7 @@ class RunEngineWorker(Process):
                 self._ip_kernel_captured = True
                 self._exec_loop_active = True
                 self._exec_loop_active_cnd.notify_all()
-            ##self._exec_loop_active_event.set()
+
             self._exit_main_loop_event.clear()
             while True:
                 # Polling 10 times per second. This is fast enough for slowly executed plans.
@@ -1226,7 +1220,7 @@ class RunEngineWorker(Process):
                     self._ip_kernel_captured = False
                 self._exec_loop_active = False
                 self._exec_loop_active_cnd.notify_all()
-            ##self._exec_loop_active_event.clear()
+
             self._exit_main_loop_event.clear()
 
     # ------------------------------------------------------------
@@ -1275,7 +1269,6 @@ class RunEngineWorker(Process):
         self._ip_kernel_captured = False
         self._exec_loop_active = False
         self._exec_loop_active_cnd = threading.Condition()
-        # self._exec_loop_active_event = threading.Event()
         self._exit_main_loop_event = threading.Event()
         self._exit_event = threading.Event()
         self._exit_confirmed_event = threading.Event()
@@ -1294,13 +1287,6 @@ class RunEngineWorker(Process):
         """
         Perform startup tasks for the worker.
         """
-        # Just reuse the mechanism for managing 'ip_kernel_captured' state.
-        # There is no actual exec loop started here.
-        with self._exec_loop_active_cnd:
-            self._ip_kernel_captured = True
-            self._exec_loop_active = True
-            self._exec_loop_active_cnd.notify_all()
-
         from bluesky import RunEngine
         from bluesky.callbacks.best_effort import BestEffortCallback
         from bluesky.utils import PersistentDict
@@ -1458,13 +1444,6 @@ class RunEngineWorker(Process):
         if not self._success_startup:
             self._env_state = EState.FAILED
 
-        with self._exec_loop_active_cnd:
-            if not self._use_ipython_kernel:
-                self._ip_kernel_captured = False
-            self._exec_loop_active = False
-            self._exec_loop_active_cnd.notify_all()
-
-
     def _worker_shutdown_code(self):
         """
         Perform shutdown tasks for the worker.
@@ -1514,21 +1493,15 @@ class RunEngineWorker(Process):
         If the loop was not started because of timeout, it may start later, but it will exit quickly
         without executing any tasks.
         """
-        logger.info(f"+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")  ##
-        logger.info(f"=========== Calling '_ip_kernel_capture ...........")  ##
         if not self._use_ipython_kernel:
             return True
         if self._ip_kernel_state != IPKernelState.IDLE:
             return False
-        logger.info(f"=========== Sending request ...........")  ##
         start_loop_task = "_run_engine_worker_class_object__._run_loop_ipython()"
         self._ip_kernel_execute_command(command=start_loop_task)
-        logger.info(f"=========== Waiting ...........")  ##
         with self._exec_loop_active_cnd:
             success = self._exec_loop_active_cnd.wait_for(lambda: self._exec_loop_active, timeout=timeout)
-        logger.info(f"============ Wait finished: success={success}")  ##
         return success
-        # return self._exec_loop_active_event.wait(timeout=timeout)
 
     def _ip_kernel_release(self):
         """
@@ -1552,18 +1525,13 @@ class RunEngineWorker(Process):
                     self._ip_kernel_state = IPKernelState(msg["content"]["execution_state"])
                     # Set kernel as not captured if the exec loop was stopped and we are
                     #   waiting for the kernel to become idle.
-                    logger.info(f"============================================")  ##
-                    logger.info(  ##
-                        f"ip_kernel_state={self._ip_kernel_state} exec_loop_active={self._exec_loop_active} "  ##
-                        f"ip_kernel_captured={self._ip_kernel_captured}"  ##
-                    )  ##
                     if (
                         self._ip_kernel_captured
                         and not self._exec_loop_active
                         and self._ip_kernel_state == IPKernelState.IDLE
                     ):
                         self._ip_kernel_captured = False
-                        logger.info(f"============ ip_kernel_captured={self._ip_kernel_captured}")  ##
+
                 try:
                     discard = msg["header"]["msg_type"] not in self._ip_kernel_monitor_always_allow_types
                     if discard and "parent_header" in msg and msg["parent_header"]:
@@ -1588,7 +1556,6 @@ class RunEngineWorker(Process):
                                 self._ip_kernel_monitor_collected_tracebacks.append(tb)
                             print(f"Traceback: {tb}", file=error_stream)
                         elif msg["header"]["msg_type"] == "execute_result":
-                            # print(f"msg={msg}", file=output_stream)
                             res = msg["content"]["data"]["text/plain"]
                             print(f">> {res}", file=output_stream)
                 except KeyError:
@@ -1726,37 +1693,16 @@ class RunEngineWorker(Process):
             cinfo["key"] = cinfo["key"].decode("utf-8")
             logger.info("IPython kernel connection info:\n %r", ppfl(cinfo))
 
+            # --------------------------------------------------------------------------
+            #               Run startup code outside the IPython kernel1
             if self._success_startup:
-                monitor_abandoned_plans = Thread(target=self._monitor_abandoned_plans_thread, daemon=True)
-                monitor_abandoned_plans.start()
+                logger.info("Configuring the environment ...")
+                self._worker_startup_code()
 
-                def starting_tasks_in_kernel():
-                    try:
-                        kernel_startup_task1 = "_run_engine_worker_class_object__._worker_startup_code()"
-                        self._ip_kernel_execute_command(command=kernel_startup_task1, except_on=True)
-                        while self._env_state not in (EState.IDLE, EState.FAILED):
-                            ttime.sleep(0.1)
-                        if not self._success_startup:
-                            logger.error("Failed to start IPython kernel.")
-                            self._ip_kernel_shutdown(except_on=True)
-                    except Exception as ex:
-                        # This error means that the worker can not communicate with the kernel and
-                        #   can not be used. This indicates a bug or an issue with 'jupyter-client'
-                        #   package (it happens for v7.4.1 and older). The environment will be
-                        #   indicated as successfully opened, but the namespace will be empty.
-                        #   The environment can be 'destroyed' (may be convenient during debugging).
-                        #   TODO: revise how this error is handled (if it causes any issues in the future).
-                        self._env_state = EState.IDLE
-                        logger.error(
-                            "Failed to initiate startup. The worker namespace is empty. "
-                            "The environment can be 'destroyed'."
-                        )
-                        logger.exception(ex)
-
-                starting_tasks_thread = Thread(target=starting_tasks_in_kernel, daemon=True)
-                starting_tasks_thread.start()
-
+            if self._success_startup:
                 logger.info("Preparing to start IPython kernel ...")
+                # Execute some useless command in kernel to make it report IDLE state
+                self._ip_kernel_execute_command(command="", except_on=False)
                 self._ip_kernel_app.start()
 
             self._ip_kernel_state = IPKernelState.DISABLED

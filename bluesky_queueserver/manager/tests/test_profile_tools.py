@@ -23,8 +23,8 @@ from .common import (
     condition_manager_idle,
     copy_default_profile_collection,
     patch_first_startup_file,
-    wait_for_condition,
     use_ipykernel_for_tests,
+    wait_for_condition,
 )
 
 
@@ -401,6 +401,7 @@ _user_groups_text = r"""user_groups:
       - null  # Nothing is forbidden
 """
 
+
 def _get_startup_script_1(use_relative_imports):
     startup_script = """
 from ophyd.sim import det1, det2
@@ -426,6 +427,7 @@ def sim_plan_1():
     yield from count([det1, det2])
 """
     return startup_script.format("." if use_relative_imports else "")
+
 
 def create_local_imports_dir(pc_path):
     path1 = os.path.join(pc_path, "dir1")
@@ -488,7 +490,7 @@ def test_is_re_worker_active_2(re_manager_cmd, tmp_path, monkeypatch, option):  
     os.makedirs(script_dir, exist_ok=True)
 
     with open(fpath, "w") as f:
-        f.write(_get_startup_script_1(option=="module"))
+        f.write(_get_startup_script_1(option == "module"))
 
     create_local_imports_dir(fdir)
 

@@ -229,7 +229,6 @@ class RunEngineManager(Process):
         self._manager_stopping = False  # Set True to exit manager (by _manager_stop_handler)
         self._environment_exists = False  # True if RE Worker environment exists
         self._manager_state = MState.INITIALIZING
-        ## self._manager_state_pending = None  # Used with IPython kernel
         self._queue_stop_pending = False  # Queue is in the process of being stopped
         self._re_pause_pending = False  # True when worker process has accepted our pause request but
         # we (this manager process) have not yet seen it as 'paused', useful for the situations where the
@@ -607,11 +606,9 @@ class RunEngineManager(Process):
                         # Shutdown was not requested by the manager (caused by external client).
                         self._loop.create_task(self._confirm_re_worker_exit())
 
-                    ##if self._manager_state_pending and not ws["ip_kernel_captured"]:
                     if not self._exec_loop_deactivated_event.is_set() and not ws["ip_kernel_captured"]:
                         # Expected to be used only if IPython kernel is used.
                         self._exec_loop_deactivated_event.set()
-                        ## await self._set_manager_state_operations()
 
                     if self._manager_state == MState.CLOSING_ENVIRONMENT:
                         if ws["environment_state"] == "closing":
@@ -620,10 +617,9 @@ class RunEngineManager(Process):
                     elif self._manager_state == MState.CREATING_ENVIRONMENT:
                         # If RE Worker environment fails to open, then it switches to 'closing' state.
                         #   Closing must be confirmed by Manager before it is closed.
-                        done = not self._use_ipython_kernel or not ws["ip_kernel_captured"]
-                        if done and ws["environment_state"] in ("idle", "executing_plan", "executing_task"):
+                        if ws["environment_state"] in ("idle", "executing_plan", "executing_task"):
                             self._fut_manager_task_completed.set_result(True)
-                        if done and ws["environment_state"] == "closing":
+                        if ws["environment_state"] == "closing":
                             self._fut_manager_task_completed.set_result(False)
 
                     elif self._manager_state in (MState.EXECUTING_QUEUE, MState.PAUSED):
@@ -688,44 +684,11 @@ class RunEngineManager(Process):
                     exit_status=plan_state, run_uids=result, err_msg=err_msg, err_tb=err_tb
                 )
                 self._loop.create_task(self._set_manager_state(MState.IDLE))
-                ## self._manager_state = MState.IDLE
-                ## self._re_pause_pending = False
             elif plan_state == "paused":
                 # The plan was paused (nothing should be done).
                 self._loop.create_task(self._set_manager_state(MState.PAUSED))
-                ## self._manager_state = MState.PAUSED
-                ## self._re_pause_pending = False
             else:
                 logger.error("Unknown plan state %s was returned by RE Worker.", plan_state)
-
-        ## if self._manager_state == MState.IDLE:
-        ##     # No plans are running: deactivate the stop sequence.
-        ##     self._queue_stop_deactivate()
-
-        ## if self._manager_state in (MState.IDLE, MState.PAUSED):
-        ##     # Stop the execution loop at the worker
-        ##     if self._use_ipython_kernel:
-        ##         await self._worker_command_exec_loop_stop()
-
-    # async def _set_manager_state_operations(self, state=None, *, acb=None):
-    #     """
-    #     The sequence of operations that should be performed to configure the manager for
-    #     IDLE or PAUSED state after execution of a plan.
-    #     """
-    #     print(f"======================== Hello4") ##
-    #     state = state or self._manager_state_pending
-    #     if state not in (MState.IDLE, MState.PAUSED):
-    #         raise ValueError(f"Attempting to set invalid state: {state!r}. "
-    #                          "Only 'idle' or 'paused' states are allowed.")
-    #     self._manager_state = state
-    #     self._re_pause_pending = False  # MState.EXECUTING_QUEUE
-    #     self._running_task_uid = None  # MState.EXECUTING_TASK
-    #     self._manager_state_pending = None
-    #     if state == MState.IDLE:
-    #         self._queue_stop_deactivate()  # MState.EXECUTING_QUEUE
-    #     if acb:
-    #         await acb()
-    #     print(f"======================== Hello5 {self._manager_state}") ##
 
     async def _set_manager_state(self, state, *, coro=None):
         """
@@ -748,24 +711,12 @@ class RunEngineManager(Process):
         self._manager_state = state
         self._re_pause_pending = False  # MState.EXECUTING_QUEUE
         self._running_task_uid = None  # MState.EXECUTING_TASK
-        ##self._manager_state_pending = None
 
         if state == MState.IDLE:
             self._queue_stop_deactivate()  # MState.EXECUTING_QUEUE
 
         if coro:
             await coro()
-
-        # await self._set_manager_state_operations(state, acb=acb)
-
-        # if self._use_ipython_kernel:
-        #     self._manager_state_pending = state
-        #     await self._worker_command_exec_loop_stop()
-        #     # Now wait for the manager state to be changed when the loop is stopped.
-        #     await self._worker_request_state()
-        # else:
-        #     # Directly set the state. There is nothing to wait
-        #     await self._set_manager_state_operations(state, acb=acb)
 
     async def _download_run_list(self):
         """
@@ -857,8 +808,6 @@ class RunEngineManager(Process):
 
                 if (self._manager_state == MState.EXECUTING_TASK) and (task_uid == self._running_task_uid):
                     self._loop.create_task(self._set_manager_state(MState.IDLE, coro=coro))
-                    ## self._manager_state = MState.IDLE
-                    ## self._running_task_uid = None
                 else:
                     await coro()
 
@@ -934,22 +883,16 @@ class RunEngineManager(Process):
 
             if not n_pending_plans:
                 self._loop.create_task(self._set_manager_state(MState.IDLE))
-                ## self._manager_state = MState.IDLE
-                ## self._re_pause_pending = False
                 success, err_msg = False, "Queue is empty."
                 logger.info(err_msg)
 
             elif self._queue_stop_pending or stop_queue:
                 self._loop.create_task(self._set_manager_state(MState.IDLE))
-                ## self._manager_state = MState.IDLE
-                ## self._re_pause_pending = False
                 success, err_msg = False, "Queue is stopped."
                 logger.info(err_msg)
 
             elif self._re_pause_pending:
                 self._loop.create_task(self._set_manager_state(MState.IDLE))
-                ## self._manager_state = MState.IDLE
-                ## self._re_pause_pending = False
                 success, err_msg = False, "Queue is stopped due to unresolved outstanding RE pause request."
                 logger.info(err_msg)
 
@@ -1025,15 +968,6 @@ class RunEngineManager(Process):
             else:
                 success = False
                 err_msg = f"Unrecognized item type: '{next_item['item_type']}' (item {next_item})"
-
-        ## if self._manager_state == MState.IDLE:
-        ##     # No plans are running: deactivate the stop sequence.
-        ##     self._queue_stop_deactivate()
-
-        ## if self._manager_state in (MState.IDLE, MState.PAUSED):
-        ##     # Stop the execution loop at the worker
-        ##     if self._use_ipython_kernel:
-        ##         await self._worker_command_exec_loop_stop()
 
         return success, err_msg
 

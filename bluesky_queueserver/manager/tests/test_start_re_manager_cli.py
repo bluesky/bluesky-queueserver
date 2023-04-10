@@ -20,8 +20,8 @@ from .common import (
     copy_default_profile_collection,
     set_qserver_zmq_address,
     set_qserver_zmq_public_key,
-    wait_for_condition,
     use_ipykernel_for_tests,
+    wait_for_condition,
 )
 
 # Plans used in most of the tests: '_plan1' and '_plan2' are quickly executed '_plan3' runs for 5 seconds.
@@ -443,16 +443,15 @@ def test_cli_parameters_zmq_server_address_1(monkeypatch, re_manager_cmd, test_m
 
 
 def _get_expected_settings_default_1(tmpdir):
-
     if use_ipykernel_for_tests():
         startup_dir = "/tmp/qserver/ipython/profile_collection_sim/startup"
         ipython_dir = "/tmp/ipython"
-        startup_profile =  "collection_sim"
+        startup_profile = "collection_sim"
         use_ipython_kernel = True
     else:
         startup_dir = "/bluesky_queueserver/profile_collection_sim/"
         ipython_dir = None
-        startup_profile =  None
+        startup_profile = None
         use_ipython_kernel = False
 
     return {
@@ -484,7 +483,6 @@ def _get_expected_settings_default_1(tmpdir):
         "zmq_private_key": None,
         "zmq_publish_console": False,
     }
-
 
 
 _dir_2 = os.path.join("ipython_test", "profile_collection_test", "startup")

@@ -61,16 +61,16 @@ properties:
             type: string
           user_group_permissions_path:
             type: string
-        oneOf:
-          - type: object
-            required:
-              - startup_dir
-          - type: object
-            required:
-              - startup_module
-          - type: object
-            required:
-              - startup_script
+        # oneOf:
+        #   - type: object
+        #     required:
+        #       - startup_dir
+        #   - type: object
+        #     required:
+        #       - startup_module
+        #   - type: object
+        #     required:
+        #       - startup_script
   operation:
     type: object
     additionalProperties: false

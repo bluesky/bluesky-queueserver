@@ -617,9 +617,10 @@ class RunEngineManager(Process):
                     elif self._manager_state == MState.CREATING_ENVIRONMENT:
                         # If RE Worker environment fails to open, then it switches to 'closing' state.
                         #   Closing must be confirmed by Manager before it is closed.
-                        if ws["environment_state"] in ("idle", "executing_plan", "executing_task"):
+                        done = not self._use_ipython_kernel or not ws["ip_kernel_captured"]
+                        if done and ws["environment_state"] in ("idle", "executing_plan", "executing_task"):
                             self._fut_manager_task_completed.set_result(True)
-                        if ws["environment_state"] == "closing":
+                        if done and ws["environment_state"] == "closing":
                             self._fut_manager_task_completed.set_result(False)
 
                     elif self._manager_state in (MState.EXECUTING_QUEUE, MState.PAUSED):

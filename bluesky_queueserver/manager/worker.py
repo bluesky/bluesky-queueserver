@@ -1497,7 +1497,7 @@ class RunEngineWorker(Process):
             return True
         if self._ip_kernel_state != IPKernelState.IDLE:
             return False
-        start_loop_task = "_run_engine_worker_class_object__._run_loop_ipython()"
+        start_loop_task = "___ip_execution_loop_start___()"
         self._ip_kernel_execute_command(command=start_loop_task)
         with self._exec_loop_active_cnd:
             success = self._exec_loop_active_cnd.wait_for(lambda: self._exec_loop_active, timeout=timeout)
@@ -1579,6 +1579,12 @@ class RunEngineWorker(Process):
         logger.info("Requesting kernel to shut down ...")
         self._ip_kernel_execute_command(command="quit")
 
+    def _ip_kernel_startup_init(self):
+        with self._exec_loop_active_cnd:
+            self._ip_kernel_captured = True
+            self._exec_loop_active = False  # Loop is not running
+            self._exec_loop_active_cnd.notify_all()
+
     def run(self):
         """
         Overrides the `run()` function of the `multiprocessing.Process` class. Called
@@ -1604,7 +1610,8 @@ class RunEngineWorker(Process):
             from ipykernel.kernelapp import IPKernelApp
             from jupyter_client.localinterfaces import localhost
 
-            self._re_namespace["_run_engine_worker_class_object__"] = self
+            self._re_namespace["___ip_execution_loop_start___"] = self._run_loop_ipython
+            self._re_namespace["___ip_kernel_startup_init___"] = self._ip_kernel_startup_init
             self._ip_kernel_app = IPKernelApp.instance(user_ns=self._re_namespace)
             out_stream, err_stream = sys.stdout, sys.stderr
 
@@ -1718,7 +1725,7 @@ class RunEngineWorker(Process):
             if self._success_startup:
                 logger.info("Preparing to start IPython kernel ...")
                 # Execute some useless command in kernel to make it report IDLE state
-                self._ip_kernel_execute_command(command="", except_on=False)
+                self._ip_kernel_execute_command(command="___ip_kernel_startup_init___()", except_on=False)
                 self._ip_kernel_app.start()
 
             self._ip_kernel_state = IPKernelState.DISABLED

@@ -1688,9 +1688,12 @@ class RunEngineWorker(Process):
             self._ip_kernel_monitor_always_allow_types = ["error"]
             self._ip_kernel_monitor_collected_tracebacks = []
 
-            ttime.sleep(1)  # Wait unitl 0MQ monitor is connected to the kernel ports
+            ttime.sleep(0.5)  # Wait unitl 0MQ monitor is connected to the kernel ports
+
             logger.info("Initializing IPython kernel ...")
             self._ip_kernel_app.initialize([])
+
+            ttime.sleep(0.2)  # Wait until the error message are delivered (if startup fails)
 
             self._ip_kernel_monitor_always_allow_types = ["stream", "error", "execute_result"]
             collected_tracebacks = self._ip_kernel_monitor_collected_tracebacks

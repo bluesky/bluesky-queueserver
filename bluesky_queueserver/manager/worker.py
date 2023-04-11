@@ -1229,11 +1229,12 @@ class RunEngineWorker(Process):
         """
         Operations necessary to prepare for worker startup (before loading)
         """
-        from .profile_tools import set_re_worker_active
+        from .profile_tools import set_ipython_mode, set_re_worker_active
 
         # Set the environment variable indicating that RE Worker is active. Status may be
         #   checked using 'is_re_worker_active()' in startup scripts or modules.
         set_re_worker_active()
+        set_ipython_mode(self._use_ipython_kernel)
 
         self._completed_tasks_lock = threading.Lock()
 
@@ -1448,7 +1449,7 @@ class RunEngineWorker(Process):
         """
         Perform shutdown tasks for the worker.
         """
-        from .profile_tools import clear_re_worker_active
+        from .profile_tools import clear_ipython_mode, clear_re_worker_active
 
         # If shutdown was not initiated by request from manager, then the manager needs to know this,
         #   since it still needs to send a request to the worker to confirm the orderly exit.
@@ -1465,6 +1466,7 @@ class RunEngineWorker(Process):
         # Clear the environment variable indicating that RE Worker is active. It is an optional step
         #   since the process is about to close, but we still do it for consistency.
         clear_re_worker_active()
+        clear_ipython_mode()
 
         self._RE = None
 

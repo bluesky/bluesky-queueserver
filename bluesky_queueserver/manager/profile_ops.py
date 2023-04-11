@@ -3082,7 +3082,9 @@ def gen_list_of_plans_and_devices(
     RuntimeError
         Error occurred while creating or saving the lists.
     """
-    from .profile_tools import clear_re_worker_active, set_re_worker_active
+    from .profile_tools import clear_ipython_mode, clear_re_worker_active, set_ipython_mode, set_re_worker_active
+
+    use_ipython_kernel = False  # TODO: Make this a parameter, but it requires extension of functionality
 
     file_name = file_name or "existing_plans_and_devices.yaml"
     try:
@@ -3093,6 +3095,7 @@ def gen_list_of_plans_and_devices(
             raise ValueError("Source of the startup code was not specified or multiple sources were specified.")
 
         set_re_worker_active()
+        set_ipython_mode(use_ipython_kernel)
 
         nspace = load_worker_startup_code(
             startup_dir=startup_dir,
@@ -3117,6 +3120,7 @@ def gen_list_of_plans_and_devices(
 
     finally:
         clear_re_worker_active()
+        clear_ipython_mode()
 
 
 def gen_list_of_plans_and_devices_cli():

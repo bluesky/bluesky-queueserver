@@ -297,7 +297,10 @@ def load_devices_from_happi(device_names, *, namespace, **kwargs):
 
 # Name of the environment variable may change in the future. Use API to set/clear the variable.
 #   The variable name should not be included in the documentation.
-_env_re_worker_active = "QSERVER_RE_WORKER_ACTIVE"
+_env_re_worker_active = "_QSERVER_RE_WORKER_ACTIVE"
+_env_ipython_kernel = "_QSERVER_RUNNING_IPYTHON_KERNEL"
+
+_env_values_false = ("", "n", "no", "f", "false", "off", "0")
 
 
 def set_re_worker_active():
@@ -343,4 +346,49 @@ def is_re_worker_active():
     boolean
         ``True`` - the code is executed in RE Worker environment, otherwise ``False``.
     """
-    return os.environ.get(_env_re_worker_active, "false").lower() not in ("", "n", "no", "f", "false", "off", "0")
+    return os.environ.get(_env_re_worker_active, "false").lower() not in _env_values_false
+
+
+def set_ipython_mode(ipython_kernel):
+    """
+    Set the environment variable used to determine if RE Manager is using IPython-based worker.
+    The variable is used by ``is_ipython_mode()`` public API, which determines if the script
+    is running in IPython environment. THIS FUNCTION SHOULD NEVER BE CALLED IN STARTUP SCRIPTS.
+
+    Parameters
+    ----------
+    ipython_kernel: bool
+        Pass ``True`` if the worker is using IPython kernel, ``False`` otherwise.
+    """
+    os.environ[_env_ipython_kernel] = "1"
+
+
+def clear_ipython_mode():
+    """
+    Clear the environment variable set by ``set_ipython_mode()`` function.
+    THIS FUNCTION SHOULD NEVER BE CALLED IN STARTUP SCRIPTS.
+    """
+    if _env_ipython_kernel in os.environ:
+        del os.environ[_env_ipython_kernel]
+
+
+def is_ipython_mode():
+    """
+    The function can be used in startup scripts or modules to check if the script is running in
+    IPython environment. The common way of checking the return value of ``IPython.get_ipython()``
+    function may not be reliable when the script is running in RE Worker environment.
+    Use this function returns correct result whether the script is running in the worker
+    environment or outside the worker and may be used in conjunction with ``is_re_worker_active()``
+    to obtain the information about the environment.
+
+    Returns
+    -------
+    boolean
+        ``True`` - the code is executed in IPython environment, ``False``.
+    """
+    if is_re_worker_active() and _env_ipython_kernel in os.environ:
+        return os.environ.get(_env_ipython_kernel).lower() not in _env_values_false
+    else:
+        from IPython import get_ipython
+
+        return bool(get_ipython())

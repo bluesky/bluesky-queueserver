@@ -36,17 +36,12 @@ properties:
         properties:
           keep_re:
             type: boolean
+          ignore_invalid_plans:
+            type: boolean
           existing_plans_and_devices_path:
             type: string
           user_group_permissions_path:
             type: string
-      - type: object
-        additionalProperties: false
-        properties:
-          keep_re:
-            type: boolean
-          ignore_invalid_plans:
-            type: boolean
           startup_dir:
             type: string
           startup_profile:
@@ -57,20 +52,238 @@ properties:
             type: string
           ipython_dir:
             type: string
-          existing_plans_and_devices_path:
-            type: string
-          user_group_permissions_path:
-            type: string
-        # oneOf:
-        #   - type: object
-        #     required:
-        #       - startup_dir
-        #   - type: object
-        #     required:
-        #       - startup_module
-        #   - type: object
-        #     required:
-        #       - startup_script
+        oneOf:
+          - type: object
+            additionalProperties: false
+            properties:
+              keep_re:
+                type: boolean
+              ignore_invalid_plans:
+                type: boolean
+              existing_plans_and_devices_path:
+                type: string
+              user_group_permissions_path:
+                type: string
+          - type: object
+            additionalProperties: false
+            properties:
+              keep_re:
+                type: boolean
+              ignore_invalid_plans:
+                type: boolean
+              existing_plans_and_devices_path:
+                type: string
+              user_group_permissions_path:
+                type: string
+
+              startup_profile:
+                type: string
+            required:
+              - startup_profile
+          - type: object
+            additionalProperties: false
+            properties:
+              keep_re:
+                type: boolean
+              ignore_invalid_plans:
+                type: boolean
+              existing_plans_and_devices_path:
+                type: string
+              user_group_permissions_path:
+                type: string
+
+              ipython_dir:
+                type: string
+            required:
+              - ipython_dir
+          - type: object
+            additionalProperties: false
+            properties:
+              keep_re:
+                type: boolean
+              ignore_invalid_plans:
+                type: boolean
+              existing_plans_and_devices_path:
+                type: string
+              user_group_permissions_path:
+                type: string
+
+              startup_profile:
+                type: string
+              ipython_dir:
+                type: string
+            required:
+              - startup_profile
+              - ipython_dir
+          - type: object
+            additionalProperties: false
+            properties:
+              keep_re:
+                type: boolean
+              ignore_invalid_plans:
+                type: boolean
+              existing_plans_and_devices_path:
+                type: string
+              user_group_permissions_path:
+                type: string
+
+              startup_dir:
+                type: string
+            required:
+              - startup_dir
+          - type: object
+            additionalProperties: false
+            properties:
+              keep_re:
+                type: boolean
+              ignore_invalid_plans:
+                type: boolean
+              existing_plans_and_devices_path:
+                type: string
+              user_group_permissions_path:
+                type: string
+
+              startup_script:
+                type: string
+            required:
+              - startup_script
+          - type: object
+            additionalProperties: false
+            properties:
+              keep_re:
+                type: boolean
+              ignore_invalid_plans:
+                type: boolean
+              existing_plans_and_devices_path:
+                type: string
+              user_group_permissions_path:
+                type: string
+
+              startup_module:
+                type: string
+            required:
+              - startup_module
+          - type: object
+            additionalProperties: false
+            properties:
+              keep_re:
+                type: boolean
+              ignore_invalid_plans:
+                type: boolean
+              existing_plans_and_devices_path:
+                type: string
+              user_group_permissions_path:
+                type: string
+
+              startup_profile:
+                type: string
+              startup_script:
+                type: string
+            required:
+              - startup_profile
+              - startup_script
+          - type: object
+            additionalProperties: false
+            properties:
+              keep_re:
+                type: boolean
+              ignore_invalid_plans:
+                type: boolean
+              existing_plans_and_devices_path:
+                type: string
+              user_group_permissions_path:
+                type: string
+
+              ipython_dir:
+                type: string
+              startup_script:
+                type: string
+            required:
+              - ipython_dir
+              - startup_script
+          - type: object
+            additionalProperties: false
+            properties:
+              keep_re:
+                type: boolean
+              ignore_invalid_plans:
+                type: boolean
+              existing_plans_and_devices_path:
+                type: string
+              user_group_permissions_path:
+                type: string
+
+              startup_profile:
+                type: string
+              ipython_dir:
+                type: string
+              startup_script:
+                type: string
+            required:
+              - startup_profile
+              - ipython_dir
+              - startup_script
+          - type: object
+            additionalProperties: false
+            properties:
+              keep_re:
+                type: boolean
+              ignore_invalid_plans:
+                type: boolean
+              existing_plans_and_devices_path:
+                type: string
+              user_group_permissions_path:
+                type: string
+
+              startup_profile:
+                type: string
+              startup_module:
+                type: string
+            required:
+              - startup_profile
+              - startup_module
+          - type: object
+            additionalProperties: false
+            properties:
+              keep_re:
+                type: boolean
+              ignore_invalid_plans:
+                type: boolean
+              existing_plans_and_devices_path:
+                type: string
+              user_group_permissions_path:
+                type: string
+
+              ipython_dir:
+                type: string
+              startup_module:
+                type: string
+            required:
+              - ipython_dir
+              - startup_module
+          - type: object
+            additionalProperties: false
+            properties:
+              keep_re:
+                type: boolean
+              ignore_invalid_plans:
+                type: boolean
+              existing_plans_and_devices_path:
+                type: string
+              user_group_permissions_path:
+                type: string
+
+              startup_profile:
+                type: string
+              ipython_dir:
+                type: string
+              startup_module:
+                type: string
+            required:
+              - startup_profile
+              - ipython_dir
+              - startup_module
+
   operation:
     type: object
     additionalProperties: false

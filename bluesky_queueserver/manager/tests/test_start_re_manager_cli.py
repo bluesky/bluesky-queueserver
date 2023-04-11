@@ -14,6 +14,7 @@ from .common import (
     _user,
     _user_group,
     clear_redis_pool,
+    condition_manager_idle,
     condition_environment_closed,
     condition_environment_created,
     condition_queue_processing_finished,
@@ -357,6 +358,7 @@ def test_cli_user_group_permissions_reload_01(
     # Start the manager again
     params = ["--user-group-permissions-reload", user_group_permissions_reload]
     re.start_manager(params=params, cleanup=False)
+    wait_for_condition(time=10, condition=condition_manager_idle)
 
     resp2, _ = zmq_single_request("permissions_get")
     assert resp2["success"] is True

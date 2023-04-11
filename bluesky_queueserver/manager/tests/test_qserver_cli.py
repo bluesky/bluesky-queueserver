@@ -1528,6 +1528,7 @@ def test_qserver_clear_lock_01(re_manager_cmd):  # noqa: F811
     # Restart the manager
     manager.stop_manager(cleanup=False)
     manager.start_manager(cleanup=False)
+    wait_for_condition(time=10, condition=condition_manager_idle)
 
     check_state(False, False)
 

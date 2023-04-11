@@ -161,8 +161,6 @@ def parse_configs(config_path):
             continue
         with open(filepath) as file:
             config = parse(file)
-            import pprint ##
-            print(f"config={pprint.pformat(config)}")  ##
             try:
                 jsonschema.validate(instance=config, schema=load_schema_from_yml(SERVICE_CONFIGURATION_FILE_NAME))
             except jsonschema.ValidationError as err:

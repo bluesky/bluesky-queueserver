@@ -57,7 +57,12 @@ startup:
   startup_script: ~/.ipython/profile_collection/startup/startup.py
 """
 
-config_00g_dict = {"startup": {"startup_profile": "collection_sim", "startup_script": "~/.ipython/profile_collection/startup/startup.py"}}
+config_00g_dict = {
+    "startup": {
+        "startup_profile": "collection_sim",
+        "startup_script": "~/.ipython/profile_collection/startup/startup.py",
+    }
+}
 
 
 config_00h_success = """
@@ -66,7 +71,9 @@ startup:
   startup_script: ~/.ipython/profile_collection/startup/startup.py
 """
 
-config_00h_dict = {"startup": {"ipython_dir": "~/.ipython", "startup_script": "~/.ipython/profile_collection/startup/startup.py"}}
+config_00h_dict = {
+    "startup": {"ipython_dir": "~/.ipython", "startup_script": "~/.ipython/profile_collection/startup/startup.py"}
+}
 
 
 config_00i_success = """
@@ -76,7 +83,13 @@ startup:
   startup_script: ~/.ipython/profile_collection/startup/startup.py
 """
 
-config_00i_dict = {"startup": {"startup_profile": "collection_sim", "ipython_dir": "~/.ipython", "startup_script": "~/.ipython/profile_collection/startup/startup.py"}}
+config_00i_dict = {
+    "startup": {
+        "startup_profile": "collection_sim",
+        "ipython_dir": "~/.ipython",
+        "startup_script": "~/.ipython/profile_collection/startup/startup.py",
+    }
+}
 
 
 config_00j_success = """
@@ -104,7 +117,13 @@ startup:
   startup_module: startup.module
 """
 
-config_00l_dict = {"startup": {"startup_profile": "collection_sim", "ipython_dir": "~/.ipython", "startup_module": "startup.module"}}
+config_00l_dict = {
+    "startup": {
+        "startup_profile": "collection_sim",
+        "ipython_dir": "~/.ipython",
+        "startup_module": "startup.module",
+    }
+}
 
 
 config_00m_fail = """

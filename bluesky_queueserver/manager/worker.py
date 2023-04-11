@@ -1599,7 +1599,10 @@ class RunEngineWorker(Process):
             self._worker_startup_code()
             self._run_loop_python()
         else:
+            import socket
+
             from ipykernel.kernelapp import IPKernelApp
+            from jupyter_client.localinterfaces import localhost
 
             self._re_namespace["_run_engine_worker_class_object__"] = self
             self._ip_kernel_app = IPKernelApp.instance(user_ns=self._re_namespace)
@@ -1633,14 +1636,27 @@ class RunEngineWorker(Process):
             # Echo all the output to sys.__stdout__ and sys.__stderr__ during kernel initialization
             self._ip_kernel_app.quiet = False
 
-            # Ports numbers are automatically generated during initialization, but we want to subscribe to
-            #   them before initialization, so we need to set them manually.
-            # TODO: generate random available port numbers
-            self._ip_kernel_app.shell_port = 60005
-            self._ip_kernel_app.iopub_port = 60006
-            self._ip_kernel_app.stdin_port = 60007
-            self._ip_kernel_app.hb_port = 60008
-            self._ip_kernel_app.control_port = 60009
+            def generate_random_port(ip=None):
+                """
+                Generate random port number for a free port. The code is vendored from here:
+                https://github.com/jupyter/jupyter_client/blob/58017fc04199ab012ad2b6f5a01b8d3e11698e7c/
+                jupyter_client/connect.py#L102-L112
+                """
+                ip = ip or localhost()
+                sock = socket.socket()
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, b"\0" * 8)
+                sock.bind((ip, 0))
+                port = sock.getsockname()[1]
+                sock.close()
+
+                return port
+
+            logger.info("Generating random port numbers for IPython kernel ...")
+            self._ip_kernel_app.shell_port = generate_random_port()
+            self._ip_kernel_app.iopub_port = generate_random_port()
+            self._ip_kernel_app.stdin_port = generate_random_port()
+            self._ip_kernel_app.hb_port = generate_random_port()
+            self._ip_kernel_app.control_port = generate_random_port()
             self._ip_connect_info = self._ip_kernel_app.get_connection_info()
 
             def start_jupyter_client():

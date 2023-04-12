@@ -1579,7 +1579,9 @@ class RunEngineWorker(Process):
 
     def _ip_kernel_shutdown(self, *, except_on: bool = False):
         logger.info("Requesting kernel to shut down ...")
-        self._ip_kernel_execute_command(command="quit")
+        # self._ip_kernel_execute_command(command="quit")
+        self._ip_kernel_client.shutdown()
+        self._ip_kernel_app.io_loop.stop()  # TODO: ?
 
     def _ip_kernel_startup_init(self):
         with self._exec_loop_active_cnd:

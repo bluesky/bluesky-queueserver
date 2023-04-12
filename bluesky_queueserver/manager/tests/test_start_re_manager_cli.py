@@ -575,7 +575,7 @@ def _get_cli_params_3(tmpdir):
         "--kafka-server=127.0.0.1:9099",
         "--keep-re",
         "--ignore-invalid-plans",
-        "--use-ipython-kernel",
+        "--use-ipython-kernel=ON",
         "--ipython-matplotlib=qt",
         "--zmq-data-proxy-addr=tcp://localhost:5571",
         "--databroker-config=NEW",

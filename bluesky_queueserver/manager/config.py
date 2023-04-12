@@ -20,6 +20,7 @@ from .comms import default_zmq_control_address_for_server, validate_zmq_key
 from .config_schemas.loading import ConfigError, load_schema_from_yml
 from .output_streaming import default_zmq_info_address_for_server
 from .profile_ops import get_default_startup_dir, get_default_startup_profile
+from .utils import to_boolean
 
 logger = logging.getLogger(__name__)
 
@@ -253,20 +254,6 @@ class _ArgsExisting:
             return default
         else:
             return getattr(self._args, param_name)
-
-
-def to_boolean(value):
-    """
-    Returns ``True`` or ``False`` if ``value`` is found in one of the lists of supported values.
-    Otherwise returns ``None`` (typicall means that the value is not set).
-    """
-    v = value.lower() if isinstance(value, str) else value
-    if v in (True, "y", "yes", "t", "true", "on", "1"):
-        return True
-    elif v in (False, "", "n", "no", "f", "false", "off", "0"):
-        return False
-    else:
-        return None
 
 
 def _profile_name_to_startup_dir(profile_name, ipython_dir=None):

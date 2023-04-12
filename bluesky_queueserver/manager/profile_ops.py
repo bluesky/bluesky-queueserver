@@ -26,6 +26,7 @@ from numpydoc.docscrape import NumpyDocString
 import bluesky_queueserver
 
 from .logging_setup import PPrintForLogging as ppfl
+from .utils import to_boolean
 
 logger = logging.getLogger(__name__)
 qserver_version = bluesky_queueserver.__version__
@@ -3197,10 +3198,13 @@ def gen_list_of_plans_and_devices_cli():
     parser.add_argument(
         "--ignore-invalid-plans",
         dest="ignore_invalid_plans",
-        action="store_true",
+        type=str,
+        choices=["ON", "OFF"],
+        default="OFF",
         help="Ignore plans with unsupported signatures When loading startup code or executing scripts. "
         "The default behavior is to raise an exception. If the parameter is set, the message is printed for each "
-        "invalid plan and only plans that were processed correctly are included in the list of existing plans.",
+        "invalid plan and only plans that were processed correctly are included in the list of existing plans "
+        "(default: %(default)s).",
     )
 
     args = parser.parse_args()
@@ -3209,7 +3213,7 @@ def gen_list_of_plans_and_devices_cli():
     startup_dir = args.startup_dir
     startup_module_name = args.startup_module_name
     startup_script_path = args.startup_script_path
-    ignore_invalid_plans = args.ignore_invalid_plans
+    ignore_invalid_plans = to_boolean(args.ignore_invalid_plans)
 
     if file_dir is not None:
         file_dir = os.path.expanduser(file_dir)

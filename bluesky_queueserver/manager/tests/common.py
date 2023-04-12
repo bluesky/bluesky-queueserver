@@ -434,7 +434,7 @@ class ReManager:
 
         # Start the manager with IPython kernel if the
         if ("--use-ipython-kernel" not in params) and use_ipykernel_for_tests():
-            params.append("--use-ipython-kernel")
+            params.append("--use-ipython-kernel=ON")
 
         if not self._p:
             if cleanup:

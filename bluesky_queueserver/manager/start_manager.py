@@ -294,10 +294,13 @@ def start_manager():
     parser.add_argument(
         "--ignore-invalid-plans",
         dest="ignore_invalid_plans",
-        action="store_true",
+        type=str,
+        choices=["ON", "OFF"],
+        default="OFF",
         help="Ignore plans with unsupported signatures When loading startup code or executing scripts. "
         "The default behavior is to raise an exception. If the parameter is set, the message is printed for each "
-        "invalid plan and only plans that were processed correctly are included in the list of existing plans.",
+        "invalid plan and only plans that were processed correctly are included in the list of existing plans "
+        "(default: %(default)s).",
     )
 
     parser.add_argument(
@@ -392,8 +395,10 @@ def start_manager():
     parser.add_argument(
         "--use-ipython-kernel",
         dest="use_ipython_kernel",
-        action="store_true",
-        help="Run the Run Engine worker in IPython kernel.",
+        type=str,
+        choices=["ON", "OFF"],
+        default="OFF",
+        help="Run the Run Engine worker in IPython kernel (default: %(default)s).",
     )
 
     parser.add_argument(
@@ -410,7 +415,7 @@ def start_manager():
         type=str,
         help="Default Matplotlib backend, typically 'qt5'. The parameter have the same meaning and accepts "
         "the same values as --matplotlib parameter of IPython. The value is passed directly to IPython kernel. "
-        "The parameter is ignored if the worker is running pure Python (--use-ipython-kernel is not set).",
+        "The parameter is ignored if the worker is running pure Python (--use-ipython-kernel is OFF).",
     )
 
     parser.add_argument(

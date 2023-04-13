@@ -686,6 +686,8 @@ def start_manager():
     try:
         wp.run()
     except KeyboardInterrupt:
+        wp._re_worker.kill()
+        wp._re_manager.kill()
         logger.info("The program was manually stopped")
     except Exception as ex:
         logger.exception(ex)

@@ -194,6 +194,9 @@ class RunEngineWorker(Process):
         #   to the list. If the variable is None, then tracebacks are not collected.
         self._ip_kernel_monitor_collected_tracebacks = None
 
+        # The event is used to monitor shutdown of IPython kernel.
+        self._ip_kernel_is_shut_down_event = None
+
         # The list of runs that were opened as part of execution of the currently running plan.
         # Initialized with 'RunList()' in 'run()' method.
         self._active_run_list = None
@@ -1231,6 +1234,8 @@ class RunEngineWorker(Process):
         """
         from .profile_tools import set_ipython_mode, set_re_worker_active
 
+        self._ip_kernel_is_shut_down_event = threading.Event()  # Used with IPython kernel
+
         # Set the environment variable indicating that RE Worker is active. Status may be
         #   checked using 'is_re_worker_active()' in startup scripts or modules.
         set_re_worker_active()
@@ -1577,11 +1582,36 @@ class RunEngineWorker(Process):
                 "Error occurred while sending request to IPython kernel: Command: %r.\n%s", command, ex
             )
 
-    def _ip_kernel_shutdown(self, *, except_on: bool = False):
+    def _ip_kernel_shutdown_thread(self):
         logger.info("Requesting kernel to shut down ...")
-        # self._ip_kernel_execute_command(command="quit")
         self._ip_kernel_client.shutdown()
-        self._ip_kernel_app.io_loop.stop()  # TODO: ?
+
+        timeout = 20
+        t_stop = ttime.time() + timeout
+        while True:
+            ttime.sleep(1)
+            if self._ip_kernel_is_shut_down_event.is_set() or (ttime.time() > t_stop):
+                break
+            self._ip_kernel_execute_command(command="")
+
+        if not self._ip_kernel_is_shut_down_event.is_set():
+            logger.info("Kernel failed to stop normalling. Killing the ioloop ...")
+            self._ip_kernel_app.io_loop.stop()
+
+        logger.info("Done ...")
+
+    def _ip_kernel_shutdown(self, *, except_on: bool = False):
+        self._ip_kernel_is_shut_down_event.clear()
+
+        th = threading.Thread(target=self._ip_kernel_shutdown_thread, daemon=True)
+        th.start()
+        logger.info("Thread closing the kernel was started")
+
+    # def _ip_kernel_shutdown(self, *, except_on: bool = False):
+    #     logger.info("Requesting kernel to shut down ...")
+    #     # self._ip_kernel_execute_command(command="quit")
+    #     self._ip_kernel_client.shutdown()
+    #     self._ip_kernel_app.io_loop.stop()  # TODO: ?
 
     def _ip_kernel_startup_init(self):
         with self._exec_loop_active_cnd:
@@ -1734,6 +1764,8 @@ class RunEngineWorker(Process):
                 # Execute some useless command in kernel to make it report IDLE state
                 self._ip_kernel_execute_command(command="___ip_kernel_startup_init___()", except_on=False)
                 self._ip_kernel_app.start()
+
+            self._ip_kernel_is_shut_down_event.set()
 
             self._ip_kernel_state = IPKernelState.DISABLED
             self._ip_kernel_app.close()

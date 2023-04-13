@@ -1586,12 +1586,12 @@ class RunEngineWorker(Process):
         logger.info("Requesting kernel to shut down ...")
         self._ip_kernel_client.shutdown()
 
-        timeout = 20
+        timeout = 20  # This is time before the kernel is terminated. It can be parametrized if necessary.
         t_stop = ttime.time() + timeout
-        while True:
-            ttime.sleep(1)
-            if self._ip_kernel_is_shut_down_event.is_set() or (ttime.time() > t_stop):
+        while not self._ip_kernel_is_shut_down_event.wait(1):
+            if ttime.time() > t_stop:
                 break
+            logger.debug("Sending '' (empty string) to IP kernel")
             self._ip_kernel_execute_command(command="")
 
         if not self._ip_kernel_is_shut_down_event.is_set():
@@ -1764,7 +1764,7 @@ class RunEngineWorker(Process):
             self._ip_kernel_is_shut_down_event.set()
 
             self._ip_kernel_state = IPKernelState.DISABLED
-            self._ip_kernel_app.close()
+            # self._ip_kernel_app.close()
             self._exit_event.set()
             self._ip_kernel_monitor_stop = True
 

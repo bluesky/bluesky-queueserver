@@ -477,7 +477,7 @@ class RunEngineManager(Process):
         success, err_msg = await self._worker_command_close_env()
         if success:
             # Wait for RE Worker to be prepared to close
-            self._event_worker_closed = asyncio.Event()
+            self._event_worker_closed = asyncio.Event()  # !!
 
             self._manager_state = MState.CLOSING_ENVIRONMENT
             await self._fut_manager_task_completed  # TODO: timeout may be needed here

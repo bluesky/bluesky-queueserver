@@ -1598,20 +1598,13 @@ class RunEngineWorker(Process):
             logger.info("Kernel failed to stop normalling. Killing the ioloop ...")
             self._ip_kernel_app.io_loop.stop()
 
-        logger.info("Done ...")
+        logger.debug("Request to shutdown IP kernel is completed. Exiting the thread ...")
 
-    def _ip_kernel_shutdown(self, *, except_on: bool = False):
+    def _ip_kernel_shutdown(self):
         self._ip_kernel_is_shut_down_event.clear()
 
         th = threading.Thread(target=self._ip_kernel_shutdown_thread, daemon=True)
         th.start()
-        logger.info("Thread closing the kernel was started")
-
-    # def _ip_kernel_shutdown(self, *, except_on: bool = False):
-    #     logger.info("Requesting kernel to shut down ...")
-    #     # self._ip_kernel_execute_command(command="quit")
-    #     self._ip_kernel_client.shutdown()
-    #     self._ip_kernel_app.io_loop.stop()  # TODO: ?
 
     def _ip_kernel_startup_init(self):
         with self._exec_loop_active_cnd:

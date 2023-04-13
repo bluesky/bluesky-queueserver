@@ -131,7 +131,7 @@ class CallbackRegisterRun(CallbackBase):
             uid = doc["uid"]
             self._run_list.add_run(uid=uid)
 
-            logger.info("New run was open: '%s'", uid)
+            logger.info("New run was open: %r", uid)
             logger.debug("Run list: %s", self._run_list.get_run_list())
         except Exception as ex:
             logger.exception("RE Manager: Could not register new run: %s", ex)
@@ -145,6 +145,6 @@ class CallbackRegisterRun(CallbackBase):
             exit_status = doc["exit_status"]
             self._run_list.set_run_closed(uid=uid, exit_status=exit_status)
 
-            print(f"Run was closed: '{uid}'")
+            logger.info("Run was closed: %r", uid)
         except Exception as ex:
             logger.exception("RE Manager: Failed to label run as closed: %s", ex)

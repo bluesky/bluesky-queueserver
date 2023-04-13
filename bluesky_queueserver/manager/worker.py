@@ -1746,6 +1746,9 @@ class RunEngineWorker(Process):
             cinfo["key"] = cinfo["key"].decode("utf-8")
             logger.info("IPython kernel connection info:\n %r", ppfl(cinfo))
 
+            th_abandoned_plans = threading.Thread(target=self._monitor_abandoned_plans_thread, daemon=True)
+            th_abandoned_plans.start()
+
             # --------------------------------------------------------------------------
             #               Run startup code outside the IPython kernel1
             if self._success_startup:

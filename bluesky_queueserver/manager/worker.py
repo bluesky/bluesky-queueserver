@@ -1583,24 +1583,41 @@ class RunEngineWorker(Process):
             )
 
     def _ip_kernel_shutdown_thread(self):
+        """
+        Simply sending 'shutdown_request' or 'quit' to the kernel does not always work.
+        It was found that on the beamline machines the kernel does not shut down until
+        it receives additional command (e.g. the kernel does not quit until jupyter console
+        application is started). The following procedure sends periodic requests to the
+        kernel for 20 seconds and then kills the kernel (stops ioloop) if it did not quit.
+        It may look like overkill, since in simulated environments the kernel quits immediately
+        after shutdown request, and on the beamline machines after the first request
+        (to execute an empty cell), but it is may be important that the operation of closing
+        the environment works reliably.
+        """
         logger.info("Requesting kernel to shut down ...")
-        self._ip_kernel_client.shutdown()
+        self._ip_kernel_client.shutdown()  # Sends 'shutdown_request' to the kernel
+
+        # Alternative method is to send 'quit' command. It seems like 0MQ sockets
+        #   of the client may be closed explicitly. TODO: should shutdown or 'quit' be used?
+        # self._ip_kernel_execute_command(command="quit")
 
         timeout = 20  # This is time before the kernel is terminated. It can be parametrized if necessary.
         t_stop = ttime.time() + timeout
         while not self._ip_kernel_is_shut_down_event.wait(1):
             if ttime.time() > t_stop:
                 break
-            logger.debug("Sending '' (empty string) to IP kernel")
+            logger.debug("Sending '' (empty string) command to IP kernel")
             self._ip_kernel_execute_command(command="")
 
         if not self._ip_kernel_is_shut_down_event.is_set():
-            logger.info("Kernel failed to stop normalling. Killing the ioloop ...")
+            logger.info("Kernel failed to stop normaly. Killing the ioloop ...")
             self._ip_kernel_app.io_loop.stop()
 
         logger.debug("Request to shutdown IP kernel is completed. Exiting the thread ...")
 
     def _ip_kernel_shutdown(self):
+        # The manager is now designed not to send repeated requests to stop the environment.
+        #   This code needs to be revised if this behavior is changed.
         self._ip_kernel_is_shut_down_event.clear()
 
         th = threading.Thread(target=self._ip_kernel_shutdown_thread, daemon=True)
@@ -1764,7 +1781,7 @@ class RunEngineWorker(Process):
             self._ip_kernel_is_shut_down_event.set()
 
             self._ip_kernel_state = IPKernelState.DISABLED
-            # self._ip_kernel_app.close()
+            # self._ip_kernel_app.close()  # Does not work well if kernel is shut down
             self._exit_event.set()
             self._ip_kernel_monitor_stop = True
 

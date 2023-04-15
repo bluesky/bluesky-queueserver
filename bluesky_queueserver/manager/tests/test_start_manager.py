@@ -157,21 +157,38 @@ def test_WatchdogProcess_2():
     wp = WatchdogProcess(cls_run_engine_manager=ReManagerEmulation)
     wp_th = threading.Thread(target=wp.run)
     wp_th.start()
-    ttime.sleep(1)  # Let RE Manager run 1 second
-    assert wp._re_manager.n_loops > 0, "RE is not running"
-    assert wp._re_manager_n_restarts == 1
 
-    n_loops = wp._re_manager.n_loops
+    # Test with disabled watchdog, then enable it within the same test
+    for wd_enabled in (False, True):
+        print(f"wd_enabled = {wd_enabled}")
 
-    wp._re_manager.stop_heartbeat()
-    hb_timeout = wp._heartbeat_timeout
-    ttime.sleep(hb_timeout + 0.5)
-    # At this point RE Manager is expected to run for 0.5 second, so
-    #   the new number of loops must be about 'n_loops/2'.
-    #   Here we check if RE Manager was really restarted and the number of
-    #   loops reset.
-    assert wp._re_manager.n_loops < n_loops, "Unexpected number of loops"
-    assert wp._re_manager_n_restarts == 2
+        if wd_enabled:
+            ttime.sleep(0.01)
+            response = wp._re_manager.send_msg_to_watchdog("watchdog_enable")
+            assert response["success"] is True
+
+        ttime.sleep(1)  # Let RE Manager run 1 second
+        assert wp._re_manager.n_loops > 0, f"RE is not running, wd_enabled={wd_enabled}"
+        assert wp._re_manager_n_restarts == 1
+
+        n_loops = wp._re_manager.n_loops
+
+        wp._re_manager.stop_heartbeat()
+        hb_timeout = wp._heartbeat_timeout
+        ttime.sleep(hb_timeout + 0.5)
+        if wd_enabled:
+            # Manager is restarted
+            #
+            # At this point RE Manager is expected to run for 0.5 second, so
+            #   the new number of loops must be about 'n_loops/2'.
+            #   Here we check if RE Manager was really restarted and the number of
+            #   loops reset.
+            assert wp._re_manager.n_loops < n_loops, "Unexpected number of loops"
+            assert wp._re_manager_n_restarts == 2
+        else:
+            # Manager continues to run without restart
+            assert wp._re_manager.n_loops > n_loops, "Unexpected number of loops"
+            assert wp._re_manager_n_restarts == 1
 
     wp._re_manager.exit(restart=False)
     ttime.sleep(0.05)
@@ -185,6 +202,11 @@ def test_WatchdogProcess_3():
     wp = WatchdogProcess(cls_run_engine_manager=ReManagerEmulation)
     wp_th = threading.Thread(target=wp.run)
     wp_th.start()
+
+    ttime.sleep(0.01)
+    response = wp._re_manager.send_msg_to_watchdog("watchdog_enable")
+    assert response["success"] is True
+
     ttime.sleep(1)  # Let RE Manager run 1 second
     assert wp._re_manager.n_loops > 0, "RE is not running"
     n_loops = wp._re_manager.n_loops

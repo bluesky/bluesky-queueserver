@@ -59,6 +59,7 @@ class WatchdogProcess:
         )
 
         self._watchdog_state = 0  # State is currently just time since last notification
+        self._watchdog_enabled = False
         self._watchdog_state_lock = threading.Lock()
 
         self._manager_is_stopping = False  # Set True to stop the server
@@ -76,6 +77,20 @@ class WatchdogProcess:
 
     # ======================================================================
     #             Handlers for messages from RE Manager
+
+    def _watchdog_enable_handler(self):
+        """
+        Enable watchdog. The watchdog is disabled when the manager is started and
+        remain disabled while it is initialized. The watchdog should be enabled
+        by the manager after initialization is complete.
+
+        The idea is to avoid the server getting into a loop of restarting the server
+        if initialization takes longer than expected. If initialization fails, it
+        most likely fails after restart.
+        """
+        self._init_watchdog_state()
+        self._watchdog_enabled = True
+        return {"success": True}
 
     def _start_re_worker_handler(self, user_group_permissions):
         """
@@ -150,6 +165,7 @@ class WatchdogProcess:
 
     def _start_re_manager(self):
         self._re_manager_n_restarts += 1
+        self._watchdog_enabled = False
         self._init_watchdog_state()
         self._re_manager = self._cls_run_engine_manager(
             conn_watchdog=self._manager_to_watchdog_conn,
@@ -166,6 +182,7 @@ class WatchdogProcess:
         logging.basicConfig(level=max(logging.WARNING, self._log_level))
         setup_loggers(log_level=self._log_level)
         # Requests
+        self._comm_to_manager.add_method(self._watchdog_enable_handler, "watchdog_enable")
         self._comm_to_manager.add_method(self._start_re_worker_handler, "start_re_worker")
         self._comm_to_manager.add_method(self._join_re_worker_handler, "join_re_worker")
         self._comm_to_manager.add_method(self._kill_re_worker_handler, "kill_re_worker")
@@ -184,6 +201,9 @@ class WatchdogProcess:
 
             if self._manager_is_stopping and not self._re_manager.is_alive():
                 break  # Exit if the program was actually stopped (process joined)
+
+            if not self._watchdog_enabled:
+                continue
 
             with self._watchdog_state_lock:
                 time_passed = ttime.time() - self._watchdog_state

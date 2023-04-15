@@ -1392,6 +1392,18 @@ class RunEngineManager(Process):
     # ===============================================================================
     #         Functions that send commands/request data from Watchdog process
 
+    async def _watchdog_enable(self):
+        """
+        Enable watchdog once manager initialization is complete. Always succeeds (returns ``True``).
+        """
+        try:
+            response = await self._comm_to_watchdog.send_msg("watchdog_enable")
+            success = response["success"]
+        except CommTimeoutError:
+            success = False
+        # TODO: add processing of CommJsonRpcError and RuntimeError to all handlers !!!
+        return success
+
     async def _watchdog_start_re_worker(self):
         """
         Initiate the startup of the RE Worker. Returned 'success==True' means that the process
@@ -3234,7 +3246,7 @@ class RunEngineManager(Process):
 
     async def zmq_server_comm(self):
         """
-        This function is supposed to be executed by asyncio.run() to start the manager.
+        This function is executed by asyncio.run() to start the manager.
         """
         self._ctx = zmq.asyncio.Context()
 
@@ -3289,6 +3301,7 @@ class RunEngineManager(Process):
             #   If the request to download plans and devices fails, then the lists of existing and allowed
             #   devices and plans and the dictionary of user group permissions are going to be empty ({}).
             await self._load_existing_plans_and_devices_from_worker()
+
             try:
                 self._update_allowed_plans_and_devices(restore_plans_devices=False)
             except Exception as ex:
@@ -3367,6 +3380,9 @@ class RunEngineManager(Process):
 
         if self._manager_state == MState.INITIALIZING:
             self._manager_state = MState.IDLE
+
+        # Initialization is complete, enable the watchdog.
+        await self._watchdog_enable()
 
         while True:
             #  Wait for next request from client

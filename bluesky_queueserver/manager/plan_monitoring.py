@@ -17,6 +17,25 @@ class RunList:
         self._run_list = []
         self._lock = threading.Lock()
         self._list_changed = False
+        self._enabled = False
+
+    def enable(self):
+        """
+        Enable collection of runs.
+        """
+        self._enabled = True
+
+    def disable(self):
+        """
+        Disable collection of runs. The list can still be cleared.
+        """
+        self._enabled = False
+
+    def is_enabled(self):
+        """
+        Returns ``True`` if run collection is enabled, ``False`` otherwise.
+        """
+        return self._enabled
 
     def is_empty(self):
         """
@@ -26,6 +45,19 @@ class RunList:
         -------
         boolean
             True - the list contains no runs
+        """
+        return bool(self._run_list)
+
+    @property
+    def nruns(self):
+        """
+        Returns the number of collected runs (completed and incomplete).
+
+        Returns
+        -------
+        int
+            The number of collected runs.
+
         """
         return len(self._run_list)
 
@@ -57,6 +89,9 @@ class RunList:
         uid : str
             UID of the run.
         """
+        if not self._enabled:
+            return
+
         with self._lock:
             self._run_list.append({"uid": uid, "is_open": True, "exit_status": None})
             self._list_changed = True
@@ -72,6 +107,9 @@ class RunList:
         exit_status : str
             exit status of the run (Bluesky run exit status as returned in 'stop' document).
         """
+        if not self._enabled:
+            return
+
         with self._lock:
             run = None
             # 'reversed' - if a plan sequentially opens/closes many runs, the open run is much more

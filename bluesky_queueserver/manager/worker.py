@@ -241,6 +241,7 @@ class RunEngineWorker(Process):
 
             if exec_option == ExecOption.NEW:
                 func = self._generate_new_plan(parameters)
+                self._active_run_list.enable()
             elif exec_option in plan_continue_options:
                 func = self._generate_continued_plan(parameters)
             else:
@@ -286,6 +287,7 @@ class RunEngineWorker(Process):
 
                 # Clear the list of active runs
                 self._active_run_list.clear()
+                self._active_run_list.disable()
 
                 logger.info("The plan was exited. Plan state: %s", self._re_report["plan_state"])
 
@@ -316,6 +318,7 @@ class RunEngineWorker(Process):
 
                     # Clear the list of active runs (don't clean the list for the paused plan).
                     self._active_run_list.clear()
+                    self._active_run_list.disable()
                     logger.error("The plan failed: %s", self._re_report["err_msg"])
 
                 # Include RE state
@@ -359,6 +362,7 @@ class RunEngineWorker(Process):
 
         self._running_plan_exec_state = PlanExecState.COMPLETED
         self._active_run_list.clear()
+        self._active_run_list.disable()
 
         logger.debug(f"Plan was completed outside RE Manager. Plan state: {plan_state!r}. Report was generated.")
 

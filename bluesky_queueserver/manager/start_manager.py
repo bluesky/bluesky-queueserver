@@ -1,4 +1,5 @@
 import argparse
+import atexit
 import logging
 import os
 import threading
@@ -684,10 +685,18 @@ def start_manager():
         config_worker=config_worker, config_manager=config_manager, msg_queue=msg_queue, log_level=log_level
     )
     try:
+
+        def kill_all_processes():
+            if wp._re_worker and wp._re_worker.is_alive():
+                wp._re_worker.kill()
+            if wp._re_manager and wp._re_manager.is_alive():
+                wp._re_manager.kill()
+
+        # Make sure that all processes are killed before exit
+        atexit.register(kill_all_processes)
+
         wp.run()
     except KeyboardInterrupt:
-        wp._re_worker.kill()
-        wp._re_manager.kill()
         logger.info("The program was manually stopped")
     except Exception as ex:
         logger.exception(ex)

@@ -18,6 +18,7 @@ import pytest
 import yaml
 from bluesky import protocols
 
+from bluesky_queueserver import register_device, register_plan
 from bluesky_queueserver.manager.annotation_decorator import parameter_annotation_decorator
 from bluesky_queueserver.manager.profile_ops import (
     ScriptLoadingError,
@@ -40,6 +41,7 @@ from bluesky_queueserver.manager.profile_ops import (
     _validate_user_group_permissions_schema,
     bind_plan_arguments,
     check_if_function_allowed,
+    clear_registered_items,
     construct_parameters,
     devices_from_nspace,
     extract_script_root_path,
@@ -4502,6 +4504,73 @@ def test_prepare_plan_2(plan_name, plan, remove_objs, exp_args, exp_kwargs, exp_
 
 
 # fmt: off
+@pytest.mark.parametrize("registered_plans, excluded_plans, existing_plans, missing_plans", [
+    (["plan1", "plan2"], [], ["plan1", "plan2"], []),
+    (["plan1", "plan2"], ["plan2"], ["plan1"], ["plan2"]),
+    (["plan1", "plan2"], ["plan1", "plan2"], [], ["plan1", "plan2"]),
+    (["plan1", "plan2", "noplan"], ["plan1", "plan2", "noplan"], [], ["plan1", "plan2"]),
+])
+# fmt: on
+def test_prepare_plan_3(registered_plans, excluded_plans, existing_plans, missing_plans):
+    """
+    Test if plans can be excluded from the list of existing plans and consequently
+    from the list of allowed plans using ``register_plan()`` API.
+    """
+    clear_registered_items()
+
+    for name in registered_plans:
+        kwargs = {}
+        if name in excluded_plans:
+            kwargs.update({"exclude": True})
+        register_plan(name, **kwargs)
+
+    plans_in_nspace, _, allowed_plans, _ = _gen_environment_pp2()
+
+    for name in existing_plans:
+        assert name in plans_in_nspace
+        assert name in allowed_plans["root"]
+
+    for name in missing_plans:
+        assert name not in allowed_plans["root"]
+
+
+# fmt: off
+@pytest.mark.parametrize("ignore_invalid_plans", [None, False, True])
+# fmt: on
+def test_prepare_plan_4(ignore_invalid_plans):
+    """
+    _prepare_plans: 'ignore_invalid_plans' parameter.
+    """
+
+    def plan1(dets=_pp_dev1):
+        # The default value is a detector, which can not be included in the plan description.
+        yield from []
+
+    def plan2(dets):
+        yield from []
+
+    nspace = {"_pp_dev1": _pp_dev1, "plan1": plan1, "plan2": plan2}
+
+    plans_in_nspace = plans_from_nspace(nspace)
+    devices_in_nspace = devices_from_nspace(nspace)
+
+    existing_devices = _prepare_devices(devices_in_nspace)
+
+    if ignore_invalid_plans is not None:
+        kwargs = dict(ignore_invalid_plans=ignore_invalid_plans)
+    else:
+        kwargs = {}
+
+    if ignore_invalid_plans:
+        existing_plans = _prepare_plans(plans_in_nspace, existing_devices=existing_devices, **kwargs)
+        assert "plan1" not in existing_plans
+        assert "plan2" in existing_plans
+    else:
+        with pytest.raises(ValueError, match="Failed to create description of plan 'plan1'"):
+            _prepare_plans(plans_in_nspace, existing_devices=existing_devices, **kwargs)
+
+
+# fmt: off
 _det_components = {
     "components": {
         "Imax": {}, "center": {}, "noise": {},
@@ -4563,39 +4632,66 @@ _stg_components_depth_3 = {  # Used for tests with 'depth==3'
 
 
 # fmt: off
-@pytest.mark.parametrize("max_depth, expected_devices", [
-    (0, _all_devices_pd1),
-    (None, _all_devices_pd1),
-    (-1, _all_devices_pd1),  # negative number is replaced with 0
-    (1, {
+@pytest.mark.parametrize("max_depth, registered_devices, expected_devices", [
+    (0, {}, _all_devices_pd1),
+    (None, {}, _all_devices_pd1),
+    (-1, {}, _all_devices_pd1),  # negative number is replaced with 0
+    (1, {}, {
         "_pp_dev1": {},
         "_pp_dev2": {},
         "_pp_dev3": {},
         "_pp_stg_A": {},
         "_pp_stg_B": {},
     }),
-    (2, {
+    (2, {}, {
         "_pp_dev1": {},
         "_pp_dev2": {},
         "_pp_dev3": {},
         "_pp_stg_A": {'components': {'dets': {}, 'mtrs': {}}},
         "_pp_stg_B": {'components': {'dets': {}, 'mtrs': {}}},
     }),
-    (3, {
+    (3, {}, {
         "_pp_dev1": {},
         "_pp_dev2": {},
         "_pp_dev3": {},
         "_pp_stg_A": _stg_components_depth_3,
         "_pp_stg_B": _stg_components_depth_3,
     }),
-    (4, _all_devices_pd1),
-    (5, _all_devices_pd1),
+    (4, {}, _all_devices_pd1),
+    (5, {}, _all_devices_pd1),
+    (3, {"_pp_dev2": {"exclude": True},
+         "_pp_dev3": {"exclude": True},
+         "_pp_stg_A": {"exclude": True}},
+        {
+        "_pp_dev1": {},
+        "_pp_stg_B": _stg_components_depth_3,
+    }),
+    (2, {"_pp_dev2": {"exclude": True},
+         "_pp_dev3": {"exclude": False},
+         "_pp_stg_A": {"depth": 1},
+         "_pp_stg_B": {"depth": 3}},
+        {
+        "_pp_dev1": {},
+        "_pp_dev3": {},
+        "_pp_stg_A": {},
+        "_pp_stg_B": _stg_components_depth_3,
+    }),
+    (2, {"_pp_dev2": {"exclude": False},
+         "_pp_dev3": {"exclude": False},
+         "_pp_stg_A": {"depth": 0},
+         "_pp_stg_B": {"depth": 0}},
+        _all_devices_pd1
+     ),
 ])
 # fmt: on
-def test_prepare_devices_1(max_depth, expected_devices):
+def test_prepare_devices_1(max_depth, registered_devices, expected_devices):
     """
     ``_prepare_devices``: basic tests
     """
+    clear_registered_items()
+    for name, p in registered_devices.items():
+        register_device(name, **p)
+
     _, devices_in_nspace, _, _ = _gen_environment_pp2()
 
     params = {}
@@ -4732,14 +4828,27 @@ def _pp_generate_env_with_areadetector():
 
 
 # fmt: off
-@pytest.mark.parametrize("expand_areadetectors", [False, True, None])
+@pytest.mark.parametrize("expand_areadetectors, ad_depth", [
+    (False, None),
+    (True, None),
+    (None, None),
+    (False, 1),
+    (False, 2),
+    (False, 0),
+    (True, 1),
+    (True, 2),
+    (True, 0),
+])
 # fmt: on
-def test_prepare_devices_3(expand_areadetectors):
+def test_prepare_devices_3(expand_areadetectors, ad_depth):
     """
     ``_prepare_devices``: test that components of the areadetectors are not included in the list
     by default. Also test that the parameter ``expand_areadetectors`` controls whether
     the components are included.
     """
+    if ad_depth is not None:
+        register_device("ad", depth=ad_depth)
+
     devices_in_nspace = _pp_generate_env_with_areadetector()
 
     params = {}
@@ -4755,7 +4864,7 @@ def test_prepare_devices_3(expand_areadetectors):
     assert existing_devices["_pp_stg_A"]["components"]
 
     assert "ad" in existing_devices
-    if expand_areadetectors:
+    if (expand_areadetectors and ad_depth is None) or ad_depth in (0, 2):
         assert "components" in existing_devices["ad"]
         assert existing_devices["ad"]["components"]
     else:

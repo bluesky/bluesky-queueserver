@@ -787,7 +787,9 @@ class RunEngineWorker(Process):
             logger.info("Updating lists of existing and available plans and devices ...")
 
             epd = existing_plans_and_devices_from_nspace(
-                nspace=self._re_namespace, ignore_invalid_plans=self._config_dict["ignore_invalid_plans"]
+                nspace=self._re_namespace,
+                ignore_invalid_plans=self._config_dict["ignore_invalid_plans"],
+                max_depth=self._config_dict["device_max_depth"],
             )
             existing_plans, existing_devices, plans_in_nspace, devices_in_nspace = epd
 
@@ -1329,7 +1331,9 @@ class RunEngineWorker(Process):
                 )
 
             epd = existing_plans_and_devices_from_nspace(
-                nspace=self._re_namespace, ignore_invalid_plans=self._config_dict["ignore_invalid_plans"]
+                nspace=self._re_namespace,
+                ignore_invalid_plans=self._config_dict["ignore_invalid_plans"],
+                max_depth=self._config_dict["device_max_depth"],
             )
             existing_plans, existing_devices, plans_in_nspace, devices_in_nspace = epd
 

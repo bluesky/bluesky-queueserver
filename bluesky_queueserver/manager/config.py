@@ -188,6 +188,7 @@ _key_mapping = {
     "startup_module": "startup/startup_module",
     "startup_script": "startup/startup_script",
     "ipython_dir": "startup/ipython_dir",
+    "device_max_depth": "startup/device_max_depth",
     "use_ipython_kernel": "worker/use_ipython_kernel",
     "ipython_matplotlib": "worker/ipython_matplotlib",
     "print_console_output": "operation/print_console_output",
@@ -315,6 +316,19 @@ class Settings:
             value_config=self._get_value_from_config("keep_re"),
             value_cli=self._args_existing("keep_re"),
         )
+
+        device_max_depth = self._get_param(
+            value_default=self._args.device_max_depth,
+            value_config=self._get_value_from_config("device_max_depth"),
+            value_cli=self._args_existing("device_max_depth"),
+        )
+        try:
+            device_max_depth = int(device_max_depth)
+        except Exception as ex:
+            raise ConfigError(f"'device_max_depth' must be a positive integer: {ex}") from ex
+        if device_max_depth < 0:
+            raise ConfigError(f"'device_max_depth' must be a positive integer (value: {device_max_depth!r})")
+        self._settings["device_max_depth"] = device_max_depth
 
         self._settings["ignore_invalid_plans"] = self._get_param_boolean(
             value_default=args.ignore_invalid_plans,

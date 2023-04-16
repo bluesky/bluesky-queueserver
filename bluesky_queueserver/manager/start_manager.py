@@ -325,6 +325,17 @@ def start_manager():
     )
 
     parser.add_argument(
+        "--device-max-depth",
+        dest="device_max_depth",
+        type=int,
+        default=0,
+        help="Default maximum depth for devices included in the list of existing devices: "
+        "0 - unlimited depth (full tree of subdevices is included for all devices except areadetectors), "
+        "1 - only top level devices are included, 2 - top level devices and subdevices are included, etc. "
+        "(default: %(default)s).",
+    )
+
+    parser.add_argument(
         "--existing-plans-devices",
         dest="existing_plans_and_devices_path",
         type=str,
@@ -625,6 +636,7 @@ def start_manager():
                 return 1
 
     config_worker["keep_re"] = settings.keep_re
+    config_worker["device_max_depth"] = settings.device_max_depth
     config_worker["use_ipython_kernel"] = settings.use_ipython_kernel
     config_worker["use_persistent_metadata"] = settings.use_persistent_metadata
 

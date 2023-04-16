@@ -467,6 +467,7 @@ def _get_expected_settings_default_1(tmpdir):
         "kafka_server": "127.0.0.1:9092",
         "kafka_topic": None,
         "keep_re": False,
+        "device_max_depth": 0,
         "use_ipython_kernel": use_ipython_kernel,
         "ipython_matplotlib": None,
         "print_console_output": True,
@@ -504,6 +505,7 @@ worker:
   ipython_matplotlib: qt5
 startup:
   keep_re: false
+  device_max_depth: 2
   ignore_invalid_plans: true
   startup_dir: {1}
   existing_plans_and_devices_path: {2}
@@ -537,6 +539,7 @@ def _get_expected_settings_config_2(tmpdir):
         "kafka_server": "127.0.0.1:9095",
         "kafka_topic": "different_topic_name",
         "keep_re": False,
+        "device_max_depth": 2,
         "ignore_invalid_plans": True,
         "use_ipython_kernel": True,
         "ipython_matplotlib": "qt5",
@@ -574,6 +577,7 @@ def _get_cli_params_3(tmpdir):
         "--kafka-topic=yet_another_topic",
         "--kafka-server=127.0.0.1:9099",
         "--keep-re",
+        "--device-max-depth=5",
         "--ignore-invalid-plans=ON",
         "--use-ipython-kernel=ON",
         "--ipython-matplotlib=qt",
@@ -597,6 +601,7 @@ def _get_expected_settings_params_3(tmpdir):
         "kafka_server": "127.0.0.1:9099",
         "kafka_topic": "yet_another_topic",
         "keep_re": True,
+        "device_max_depth": 5,
         "ignore_invalid_plans": True,
         "use_ipython_kernel": True,
         "ipython_matplotlib": "qt",

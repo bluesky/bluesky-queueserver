@@ -169,6 +169,7 @@ startup:
   startup_dir: ~/.ipython/profile_collection/startup
   existing_plans_and_devices_path: ~/.ipython/profile_collection/startup
   user_group_permissions_path: ~/.ipython/profile_collection/startup
+  device_max_depth: 3
 operation:
   print_console_output: true
   console_logging_level: NORMAL
@@ -198,6 +199,7 @@ startup:
   startup_dir: ~/.ipython/profile_collection/startup
   existing_plans_and_devices_path: ~/.ipython/profile_collection/startup
   user_group_permissions_path: ~/.ipython/profile_collection/startup
+  device_max_depth: 3
 """
 
 config_01c_success = """
@@ -231,6 +233,7 @@ config_01_dict = {
         "startup_dir": "~/.ipython/profile_collection/startup",
         "existing_plans_and_devices_path": "~/.ipython/profile_collection/startup",
         "user_group_permissions_path": "~/.ipython/profile_collection/startup",
+        "device_max_depth": 3,
     },
     "operation": {
         "print_console_output": True,

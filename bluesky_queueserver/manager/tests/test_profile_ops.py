@@ -59,6 +59,7 @@ from bluesky_queueserver.manager.profile_ops import (
     plans_from_nspace,
     prepare_function,
     prepare_plan,
+    reg_ns_items,
     update_existing_plans_and_devices,
     validate_plan,
 )
@@ -98,6 +99,77 @@ def test_load_profile_collection_02(tmp_path):
     pc_path = copy_default_profile_collection(tmp_path)
     nspace = load_profile_collection(pc_path)
     assert len(nspace) > 0, "Failed to load the profile collection"
+
+
+# fmt: off
+@pytest.mark.parametrize("name, params, result", [
+    ("plan1", {}, {"obj": None, "exclude": False}),
+    ("_plan_1", {}, {"obj": None, "exclude": False}),
+    ("plan1", {"exclude": False}, {"obj": None, "exclude": False}),
+    ("plan1", {"exclude": True}, {"obj": None, "exclude": True}),
+    ("plan1", {"exclude": 0}, {"obj": None, "exclude": False}),
+    ("plan1", {"exclude": 1}, {"obj": None, "exclude": True}),
+])
+# fmt: on
+def test_register_plan_01(name, params, result):
+    """
+    register_plan: basic tests
+    """
+    register_plan(name, **params)
+    assert len(reg_ns_items.reg_plans) == 1
+    assert reg_ns_items.reg_plans[name] == result
+
+
+# fmt: off
+@pytest.mark.parametrize("name, params, exc_type, msg", [
+    ("pl.an1", {}, ValueError, "Plan name 'pl.an1' contains invalid characters."),
+    ("", {}, ValueError, "Plan name is an empty string"),
+    (10, {}, TypeError, "Plan name must be a string"),
+])
+# fmt: on
+def test_register_plan_02_fail(name, params, exc_type, msg):
+    """
+    register_plan: failing tests
+    """
+    with pytest.raises(exc_type, match=msg):
+        register_plan(name, **params)
+
+
+# fmt: off
+@pytest.mark.parametrize("name, params, result", [
+    ("dev1", {}, {"obj": None, "exclude": False, "depth": 1}),
+    ("_dev_1", {}, {"obj": None, "exclude": False, "depth": 1}),
+    ("dev1", {"exclude": False}, {"obj": None, "exclude": False, "depth": 1}),
+    ("dev1", {"exclude": True}, {"obj": None, "exclude": True, "depth": 1}),
+    ("dev1", {"exclude": 0}, {"obj": None, "exclude": False, "depth": 1}),
+    ("dev1", {"exclude": 1}, {"obj": None, "exclude": True, "depth": 1}),
+    ("dev1", {"depth": 5}, {"obj": None, "exclude": False, "depth": 5}),
+])
+# fmt: on
+def test_register_device_01(name, params, result):
+    """
+    register_device: basic tests
+    """
+    register_device(name, **params)
+    assert len(reg_ns_items.reg_devices) == 1
+    assert reg_ns_items.reg_devices[name] == result
+
+
+# fmt: off
+@pytest.mark.parametrize("name, params, exc_type, msg", [
+    ("dev.1", {}, ValueError, "Device name 'dev.1' contains invalid characters."),
+    ("", {}, ValueError, "Device name is an empty string"),
+    (10, {}, TypeError, "Device name must be a string"),
+    ("dev1", {"depth": -1}, ValueError, "Depth must be a positive integer: depth=-1"),
+    ("dev1", {"depth": 0.5}, TypeError, "Depth must be an integer number"),
+])
+# fmt: on
+def test_register_device_02_fail(name, params, exc_type, msg):
+    """
+    register_device: failing tests
+    """
+    with pytest.raises(exc_type, match=msg):
+        register_device(name, **params)
 
 
 code_local_import = """

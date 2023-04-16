@@ -703,3 +703,94 @@ def test_manager_with_config_file_01(
     cs.pop("ipython_dir")
     es.pop("ipython_dir")
     assert cs == es
+
+
+_sim_bundle_A_depth_0 = {
+    "dets": {
+        "det_A": {"Imax": {}, "center": {}, "noise": {}, "noise_multiplier": {}, "sigma": {}, "val": {}},
+        "det_B": {"Imax": {}, "center": {}, "noise": {}, "noise_multiplier": {}, "sigma": {}, "val": {}},
+    },
+    "mtrs": {
+        "x": {"acceleration": {}, "readback": {}, "setpoint": {}, "unused": {}, "velocity": {}},
+        "y": {"acceleration": {}, "readback": {}, "setpoint": {}, "unused": {}, "velocity": {}},
+        "z": {"acceleration": {}, "readback": {}, "setpoint": {}, "unused": {}, "velocity": {}},
+    },
+}
+
+_sim_bundle_A_depth_1 = {}
+
+_sim_bundle_A_depth_2 = {"dets": {}, "mtrs": {}}
+
+
+# fmt: off
+@pytest.mark.parametrize("device_max_depth, det_structure", [
+    (None, _sim_bundle_A_depth_0),
+    (0, _sim_bundle_A_depth_0),
+    (1, _sim_bundle_A_depth_1),
+    (2, _sim_bundle_A_depth_2),
+])
+# fmt: on
+def test_cli_device_max_depth_01(re_manager_cmd, tmp_path, device_max_depth, det_structure):  # noqa: F811
+    """
+    CLI parameter '--device-max-depth': pass default max depth as a CLI parameter.
+    Verify that the device descriptions are including components up to correct depth both
+    for the devices from startup code and from uploaded script.
+    """
+    # Copy the default profile collection and generate the list of existing devices
+    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=True)
+
+    # Start the manager
+    params = ["--startup-dir", pc_path]
+    if device_max_depth is not None:
+        params.extend(["--device-max-depth", str(device_max_depth)])
+    re_manager_cmd(params)
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp3, _ = zmq_single_request("devices_allowed", {"user_group": _user_group})
+    assert resp3["success"] is True
+    devices_allowed_1 = resp3["devices_allowed"]
+    assert "sim_bundle_A" in devices_allowed_1
+
+    resp3, _ = zmq_single_request("devices_allowed")
+
+    script = "sim_bundle_copy = sim_bundle_A"
+    resp4, _ = zmq_single_request("script_upload", params={"script": script})
+    assert resp4["success"] is True, resp4
+
+    wait_for_condition(time=10, condition=condition_manager_idle)
+
+    resp5, _ = zmq_single_request("devices_allowed", {"user_group": _user_group})
+    assert resp5["success"] is True
+    devices_allowed_2 = resp5["devices_allowed"]
+    assert "sim_bundle_A" in devices_allowed_2
+    assert "sim_bundle_copy" in devices_allowed_2
+
+    resp9, _ = zmq_single_request("environment_close")
+    assert resp9["success"] is True
+    assert resp9["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+    def reduce_device_description(description):
+        def inner(dev, dev_out):
+            if "components" in dev:
+                for name in dev["components"]:
+                    dev_out[name] = {}
+                    inner(dev["components"][name], dev_out[name])
+
+        dev_out = {}
+        inner(description, dev_out)
+        return dev_out
+
+    desc1 = reduce_device_description(devices_allowed_1["sim_bundle_A"])
+    desc2a = reduce_device_description(devices_allowed_2["sim_bundle_A"])
+    desc2b = reduce_device_description(devices_allowed_2["sim_bundle_copy"])
+
+    assert desc1 == det_structure, pprint.pformat(desc1)
+    assert desc2a == det_structure, pprint.pformat(desc2a)
+    assert desc2b == det_structure, pprint.pformat(desc2b)

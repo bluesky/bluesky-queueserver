@@ -1702,7 +1702,11 @@ def test_zmq_api_script_upload_01(re_manager, update_lists, run_in_background): 
     assert result["task_uid"] == task_uid
     assert result["run_in_background"] is run_in_background
 
-    ttime.sleep(1.5)
+    def condition_new_task_result_uid(msg):
+        return msg["task_results_uid"] != task_results_uid
+
+    # Waiting for the task to complete.
+    assert wait_for_condition(time=3, condition=condition_new_task_result_uid)
 
     status, _ = zmq_single_request("status")
     assert status["task_results_uid"] != task_results_uid

@@ -6,6 +6,8 @@ from ..comms import zmq_single_request
 from .common import re_manager_cmd  # noqa: F401
 from .common import condition_environment_closed, condition_environment_created, wait_for_condition
 
+timeout_env_open = 10
+
 
 # fmt: off
 @pytest.mark.parametrize("test_mode", ["none", "parameter", "env_var", "both_success", "both_fail"])
@@ -56,7 +58,7 @@ def test_console_monitor_cli_parameters_1(monkeypatch, re_manager_cmd, test_mode
     )
 
     zmq_single_request("environment_open")
-    assert wait_for_condition(time=3, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
     zmq_single_request("environment_close")
     assert wait_for_condition(time=3, condition=condition_environment_closed)
 

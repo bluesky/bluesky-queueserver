@@ -63,13 +63,17 @@ def test_manager_options_startup_profile(re_manager_cmd, tmp_path, monkeypatch, 
 
         os.rmdir(pc_path)
 
-        # We pass only profile name as a parameter.
-        re_manager_cmd(["--startup-profile", profile_name])
+        if option == "profile":
+            re_manager_cmd(["--startup-profile", profile_name])
+        else:
+            re_manager_cmd(["--startup-dir", pc_path, "--startup-profile", profile_name])
+
     elif option == "multiple":
         # Expected to fail if multiple options are selected.
         with pytest.raises(TimeoutError, match="RE Manager failed to start"):
             re_manager_cmd(["--startup-dir", pc_path, "--startup-profile", "some_name"])
         return
+
     else:
         assert False, f"Unknown option '{option}'"
 

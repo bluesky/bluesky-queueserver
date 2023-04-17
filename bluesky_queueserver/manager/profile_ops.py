@@ -10,7 +10,9 @@ import numbers
 import os
 import random
 import re
+import shutil
 import sys
+import tempfile
 import traceback
 import typing
 from collections.abc import Iterable
@@ -24,6 +26,7 @@ from numpydoc.docscrape import NumpyDocString
 import bluesky_queueserver
 
 from .logging_setup import PPrintForLogging as ppfl
+from .utils import to_boolean
 
 logger = logging.getLogger(__name__)
 qserver_version = bluesky_queueserver.__version__
@@ -46,13 +49,160 @@ class ScriptLoadingError(Exception):
         return self._tb
 
 
+class _RegisteredNamespaceItems:
+    def __init__(self):
+        self._reg_devices = {}
+        self._reg_plans = {}
+
+    def clear(self):
+        """
+        Clear the dictionaries of registered plans and devices.
+        """
+        self._reg_devices.clear()
+        self._reg_plans.clear()
+
+    @property
+    def reg_devices(self):
+        """
+        Property returns the reference to the dictionary of registered devices.
+        """
+        return self._reg_devices
+
+    @property
+    def reg_plans(self):
+        """
+        Property returns the reference to the dictionary of registered plans.
+        """
+        return self._reg_plans
+
+    def _validate_name(self, name, *, item_type):
+        """
+        Validate object name (for a plan or device). Item type should be a string ('device' or 'plan'),
+        used in error messages.
+        """
+        item_type = item_type.capitalize()
+        if not isinstance(name, str):
+            raise TypeError(f"{item_type} name must be a string: name={name} type(name)={type(name)}")
+        if not name:
+            raise ValueError(f"{item_type} name is an empty string")
+        if not re.search(r"^[_a-zA-Z]([_a-zA-Z0-9])*$", name):
+            raise ValueError(
+                f"{item_type} name {name!r} contains invalid characters. The name must start with a letter "
+                "or underscore and may contain letters, numbers and underscores.)"
+            )
+
+    def _validate_depth(self, depth):
+        """
+        Validate the value of 'depth' parameter.
+        """
+        if not isinstance(depth, int):
+            raise TypeError(f"Depth must be an integer number: depth={depth} type(depth)={type(depth)}")
+        if depth < 0:
+            raise ValueError(f"Depth must be a positive integer: depth={depth}")
+
+    def register_device(self, name, *, depth=1, exclude=False):
+        """
+        Register a device with Queue Server. The function allows to specify depth of the tree
+        of subdevices included in the list or exclude the device from the list. Only top-level
+        devices can be registered. Devices can be registered before they are defined in
+        the startup code.
+
+        This is experimental API. Functionality may change in the future.
+
+        Parameters
+        ----------
+        name: str
+            Name of the device. This should be a name of the variable in the global scope
+            of the startup code. Only top level devices can be registered. Names of the device
+            components are not accepted.
+        depth: int
+            Depth of the device tree included in the list of existing devices: 0 - include
+            the tree of unlimited depth, 1 - include only top-level device, 2 - include
+            the top-level device and it's components etc. Depth specified for registered
+            devices overrides the depth used by default for unregistered devices.
+        exclude: boolean
+            Set this parameter ``False`` to exclude the device from the list of existing
+            devices. The device can still be used in the code, but it can not be passed
+            as a parameter value to a plan via RE Manager.
+
+        Raises
+        ------
+        ValueError, TypeError
+            Unsupported type or value of passed parameters.
+        """
+        self._validate_name(name, item_type="device")
+        self._validate_depth(depth)
+        exclude = bool(exclude)
+        self._reg_devices[name] = dict(obj=None, depth=depth, exclude=exclude)
+
+    def register_plan(self, name, *, exclude=False):
+        """
+        Register a plan with Queue Server. The function allows to exclude a plan from
+        processing by the Queue Server.
+
+        This is experimental API. Functionality may change in the future.
+
+        Parameters
+        ----------
+        name: str
+            Name of the plan. This should be a name of the variable in the global scope
+            of the startup code.
+        exclude: boolean
+            Set this parameter ``False`` to exclude the plan from the list of existing
+            plans. The plan can still be called from other plans, but it can not be
+            started using RE Manager.
+
+        Raises
+        ------
+        ValueError, TypeError
+            Unsupported type or value of passed parameters.
+        """
+        self._validate_name(name, item_type="plan")
+        exclude = bool(exclude)
+        self._reg_plans[name] = dict(obj=None, exclude=exclude)
+
+
+reg_ns_items = _RegisteredNamespaceItems()
+
+clear_registered_items = reg_ns_items.clear
+# The following are public functions intended to be used in startup code
+register_device = reg_ns_items.register_device
+register_plan = reg_ns_items.register_plan
+
+
 def get_default_startup_dir():
     """
     Returns the path to the default profile collection that is distributed with the package.
-    The function does not guarantee that the directory exists.
+    The function does not guarantee that the directory exists. Used for demo with Python-based worker.
     """
     pc_path = pkg_resources.resource_filename("bluesky_queueserver", "profile_collection_sim/")
     return pc_path
+
+
+def get_default_startup_profile():
+    """
+    Returns the name for the default startup profile. Used for demo with IPython-based worker.
+    The startup code is expected to be in ``/tmp/qserver/ipython/profile_collection_sim/startup`` directory.
+    """
+    return "collection_sim"
+
+
+def create_demo_ipython_profile(startup_dir, *, delete_existing=True):
+    """
+    Create demo IPython profile in temporary location. Copy startup directory
+    to the new profile. Raises IOError if the destination directory is not temporary.
+    """
+    tempdir = tempfile.gettempdir()
+    if os.path.commonprefix([tempdir, startup_dir]) != tempdir:
+        raise IOError("Attempting to create a demo profile in non-temporary startup directory: %r", startup_dir)
+
+    # Delete the existing startup directory (but not the whole profile).
+    if delete_existing:
+        shutil.rmtree(startup_dir, ignore_errors=True)
+
+    # Copy the startup files
+    default_startup_dir = get_default_startup_dir()
+    shutil.copytree(default_startup_dir, startup_dir)
 
 
 _startup_script_patch = """
@@ -116,7 +266,7 @@ def _patch_script_code(code_str):
     return "\n".join(s_list)
 
 
-def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
+def load_profile_collection(path, *, patch_profiles=True, keep_re=False, nspace=None):
     """
     Load profile collection located at the specified path. The collection consists of
     .py files started with 'DD-', where D is a digit (e.g. 05-file.py). The files
@@ -132,11 +282,15 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
     keep_re: boolean
         Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
         or removed (``False``).
+    nspace: dict or None
+        Reference to the existing namespace, in which the code is executed. If ``nspace``
+        is *None*, then the new namespace is created.
 
     Returns
     -------
     nspace: dict
-        namespace in which the profile collection was executed
+        namespace in which the profile collection was executed. Reference to ``nspace``
+        passed as a parameter is returned if ``nspace`` is not *None*.
 
     Raises
     ------
@@ -174,7 +328,7 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
 
     try:
         # Load the files into the namespace 'nspace'.
-        nspace = {}
+        nspace = {} if nspace is None else nspace
 
         if patch_profiles:
             exec(_startup_script_patch, nspace, nspace)
@@ -183,7 +337,7 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
                 logger.info("Loading startup file '%s' ...", file)
 
                 # Set '__file__' and '__name__' variables
-                patch = f"__file__ = '{file}'; __name__ = 'startup_script'\n"
+                patch = f"__file__ = '{file}'; __name__ = '__main__'\n"
                 exec(patch, nspace, nspace)
 
                 if not os.path.isfile(file):
@@ -215,7 +369,7 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False):
     return nspace
 
 
-def load_startup_module(module_name, *, keep_re=False):
+def load_startup_module(module_name, *, keep_re=False, nspace=None):
     """
     Populate namespace by import a module.
 
@@ -226,17 +380,22 @@ def load_startup_module(module_name, *, keep_re=False):
     keep_re: boolean
         Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
         or removed (``False``).
+    nspace: dict or None
+        Reference to the existing namespace, in which the code is executed. If ``nspace``
+        is *None*, then the new namespace is created.
 
     Returns
     -------
     nspace: dict
-        namespace that contains objects loaded from the module.
+        namespace that contains objects loaded from the module. Reference to ``nspace``
+        passed as a parameter is returned if ``nspace`` is not *None*.
     """
     importlib.invalidate_caches()
 
     try:
         _module = importlib.import_module(module_name)
-        nspace = _module.__dict__
+        nspace = {} if nspace is None else nspace
+        nspace.update(_module.__dict__)
 
     except BaseException as ex:
         # Capture traceback and send it as a message
@@ -250,7 +409,7 @@ def load_startup_module(module_name, *, keep_re=False):
     return nspace
 
 
-def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True):
+def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True, nspace=None):
     """
     Populate namespace by import a module.
 
@@ -264,18 +423,22 @@ def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True
     enable_local_imports : boolean
         If ``False``, local imports from the script will not work. Setting to ``True``
         enables local imports.
+    nspace: dict or None
+        Reference to the existing namespace, in which the code is executed. If ``nspace``
+        is *None*, then the new namespace is created.
 
     Returns
     -------
     nspace: dict
-        namespace that contains objects loaded from the module.
+        namespace that contains objects loaded from the module. Reference to ``nspace``
+        passed as a parameter is returned if ``nspace`` is not *None*.
     """
     importlib.invalidate_caches()
 
     if not os.path.isfile(script_path):
         raise ImportError(f"Failed to load the script '{script_path}': script was not found")
 
-    nspace = {}
+    nspace = {} if nspace is None else nspace
 
     if enable_local_imports:
         p = os.path.split(script_path)[0]
@@ -284,12 +447,11 @@ def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True
         sm_keys = list(sys.modules.keys())
 
     try:
-        nspace = {}
         if not os.path.isfile(script_path):
             raise IOError(f"Startup file {script_path!r} was not found")
 
         # Set '__file__' and '__name__' variables
-        patch = f"__file__ = '{script_path}'; __name__ = 'startup_script'\n"
+        patch = f"__file__ = '{script_path}'; __name__ = '__main__'\n"
         exec(patch, nspace, nspace)
 
         code = compile(open(script_path).read(), script_path, "exec")
@@ -323,7 +485,12 @@ def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True
 
 
 def load_worker_startup_code(
-    *, startup_dir=None, startup_module_name=None, startup_script_path=None, keep_re=False
+    *,
+    startup_dir=None,
+    startup_module_name=None,
+    startup_script_path=None,
+    keep_re=False,
+    nspace=None,
 ):
     """
     Load worker startup code. Possible sources: startup directory (IPython-style profile collection),
@@ -340,30 +507,37 @@ def load_worker_startup_code(
     keep_re: boolean
         Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
         or removed (``False``).
+    nspace: dict or None
+        Reference to the existing namespace, in which the code is executed. If ``nspace``
+        is *None*, then the new namespace is created.
+
 
     Returns
     -------
     nspace : dict
-       Dictionary with loaded namespace data
+       Dictionary with loaded namespace data. Reference to ``nspace`` passed as a parameter
+       is returned if ``nspace`` is not *None*.
     """
 
     if sum([_ is None for _ in [startup_dir, startup_module_name, startup_script_path]]) != 2:
         raise ValueError("Source of the startup code was not specified or multiple sources were specified.")
 
+    clear_registered_items()  # Operation on the global object
+
     if startup_dir is not None:
         logger.info("Loading RE Worker startup code from directory '%s' ...", startup_dir)
         startup_dir = os.path.abspath(os.path.expanduser(startup_dir))
         logger.info("Startup directory: '%s'", startup_dir)
-        nspace = load_profile_collection(startup_dir, keep_re=keep_re)
+        nspace = load_profile_collection(startup_dir, keep_re=keep_re, patch_profiles=True, nspace=nspace)
 
     elif startup_module_name is not None:
         logger.info("Loading RE Worker startup code from module '%s' ...", startup_module_name)
-        nspace = load_startup_module(startup_module_name, keep_re=keep_re)
+        nspace = load_startup_module(startup_module_name, keep_re=keep_re, nspace=nspace)
 
     elif startup_script_path is not None:
         logger.info("Loading RE Worker startup code from script '%s' ...", startup_script_path)
         startup_script_path = os.path.abspath(os.path.expanduser(startup_script_path))
-        nspace = load_startup_script(startup_script_path, keep_re=keep_re)
+        nspace = load_startup_script(startup_script_path, keep_re=keep_re, nspace=nspace)
 
     else:
         logger.warning(
@@ -461,9 +635,12 @@ def load_script_into_existing_nspace(
         if "db" in nspace:
             object_backup["db"] = nspace["db"]
 
+    saved__file__ = None
     try:
         # Set '__name__' variables. NOTE: '__file__' variable is undefined (difference!!!)
-        patch = "__name__ = 'startup_script'\n"
+        script_path = os.path.join(script_root_path, "script") if script_root_path else "script"
+        saved__file__ = nspace["__file__"] if "__file__" in nspace else None
+        patch = f"__name__ = '__main__'\n__file__ = '{script_path}'\n"
         exec(patch, nspace, nspace)
 
         # A script may be partially loaded into the environment in case it fails.
@@ -478,6 +655,13 @@ def load_script_into_existing_nspace(
         raise ScriptLoadingError(msg, ex_str) from ex
 
     finally:
+        if saved__file__ is None:
+            patch = "del __file__\n"  # Do not delete '__name__'
+        else:
+            # Restore the original value
+            patch = f"__file__ = '{saved__file__}'"
+        exec(patch, nspace, nspace)
+
         if not update_re:
             # Remove references for 'RE' and 'db' from the namespace
             nspace.pop("RE", None)
@@ -497,6 +681,59 @@ def load_script_into_existing_nspace(
             sys.path.remove(script_root_path)
 
 
+def is_plan(obj):
+    """
+    Returns ``True`` if the object is a plan.
+    """
+    return inspect.isgeneratorfunction(obj)
+
+
+def is_device(obj):
+    """
+    Returns ``True`` if the object is a device.
+    """
+    from bluesky import protocols
+
+    return isinstance(obj, (protocols.Readable, protocols.Flyable)) and not inspect.isclass(obj)
+
+
+def _process_registered_objects(*, nspace, reg_objs, validator, obj_type):
+    """
+    Attempt to get a reference for each registered object (plan or device).
+    After processing, the parameter ``obj`` of each object will contain a valid reference
+    to the object, unless the object is registered as excluded, the object does not exist in
+    the namespace or not recognized as a plan or a device.
+
+    Parameters
+    ----------
+    nspace: dict
+        Worker namespace
+    reg_objs: dict
+        Reference to ``reg_ns_items.reg_plans`` or ``reg_ns_items.reg_devices``.
+    validator: dict
+        Function, which takes reference to the object and returns *True* if the object has
+        valid type (reference to ``is_plan`` or ``is_device``).
+    obj_type: str
+        The name of the object type used in error messages. Expected to be ``plan`` or ``device``
+
+    Returns
+    -------
+    None
+    """
+    for name, p in reg_objs.items():
+        try:
+            p["obj"] = None
+            if p["exclude"]:
+                continue
+            obj = eval(name, nspace, nspace)
+            if validator(obj):
+                p["obj"] = obj
+            else:
+                logger.warning(f"Registered object {name!r} is not recognized as a {obj_type}.")
+        except Exception as ex:
+            logger.warning(f"Registered {obj_type} {name!r} is not found in the namespace: {ex}.")
+
+
 def plans_from_nspace(nspace):
     """
     Extract plans from the namespace. Currently the function returns the dict of callable objects.
@@ -513,8 +750,11 @@ def plans_from_nspace(nspace):
     """
     plans = {}
     for name, obj in nspace.items():
-        if inspect.isgeneratorfunction(obj):
+        if is_plan(obj):
             plans[name] = obj
+
+    _process_registered_objects(nspace=nspace, reg_objs=reg_ns_items.reg_plans, validator=is_plan, obj_type="plan")
+
     return plans
 
 
@@ -534,16 +774,19 @@ def devices_from_nspace(nspace):
         Dictionary that maps device names to device objects.
     """
 
-    from bluesky import protocols
-
     devices = {}
     for name, obj in nspace.items():
-        if isinstance(obj, (protocols.Readable, protocols.Flyable)) and not inspect.isclass(obj):
+        if is_device(obj):
             devices[name] = obj
+
+    _process_registered_objects(
+        nspace=nspace, reg_objs=reg_ns_items.reg_devices, validator=is_device, obj_type="device"
+    )
+
     return devices
 
 
-def _get_nspace_object(object_name, *, objects_in_nspace):
+def _get_nspace_object(object_name, *, objects_in_nspace, nspace=None):
     """
     Search for object in namespace by name (e.g. ``count`` or ``det1.val``).
     The function searches for subdevices by using ``component_name`` device property
@@ -556,6 +799,11 @@ def _get_nspace_object(object_name, *, objects_in_nspace):
         Object (device or plan) name, such as ``count``, ``det1`` or ``det1.val``.
     objects_in_nspace: dict
         Dictionary of objects (devices and/or plans) in namespace.
+    nspace: dict
+        Reference to plan execution namespace. If ``nspace`` is not *None*, the up-to-date references
+        to plans and devices are taken directly from the namespace. The plans and devices still must be
+        present in ``plans_in_nspace`` and ``devices_in_nspace``, but those dictionaries may contain
+        stale references (e.g. if a plan is interactively replaced by a user).
 
     Returns
     -------
@@ -574,7 +822,12 @@ def _get_nspace_object(object_name, *, objects_in_nspace):
 
     object_found = True
     if components[0] in objects_in_nspace:
-        device = objects_in_nspace[components[0]]
+        if nspace:
+            # This is actual reference to the object from execution namespace. It may be different from
+            #   the reference saved during the last update of the lists.
+            device = nspace[components[0]]
+        else:
+            device = objects_in_nspace[components[0]]
     else:
         object_found = False
 
@@ -601,26 +854,31 @@ def _get_nspace_object(object_name, *, objects_in_nspace):
     return device
 
 
-def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, allowed_devices):
+def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, allowed_devices, nspace=None):
     """
     Prepare the plan for execution: replace the device names (str) in the plan specification
     by references to ophyd objects; replace plan name by the reference to the plan.
 
     Parameters
     ----------
-    plan : dict
+    plan: dict
         Plan specification. Keys: `name` (str) - plan name, `args` - plan args,
         `kwargs` - plan kwargs. The plan parameters must contain ``user_group``.
-    plans_in_nspace : dict(str, callable)
+    plans_in_nspace: dict(str, callable)
         Dictionary of existing plans from the RE workspace.
-    devices_in_nspace : dict(str, ophyd.Device)
+    devices_in_nspace: dict(str, ophyd.Device)
         Dictionary of existing devices from RE workspace.
-    allowed_plans : dict(str, dict)
+    allowed_plans: dict(str, dict)
         Dictionary of allowed plans that maps group name to dictionary of plans allowed
         to the members of the group (group name can be found in ``plan["user_group"]``.
-    allowed_devices : dict(str, dict)
+    allowed_devices: dict(str, dict)
         Dictionary of allowed devices that maps group name to dictionary of devices allowed
         to the members of the group.
+    nspace: dict
+        Reference to plan execution namespace. If ``nspace`` is not *None*, the up-to-date references
+        to plans and devices are taken directly from the namespace. The plans and devices still must be
+        present in ``plans_in_nspace`` and ``devices_in_nspace``, but those dictionaries may contain
+        stale references (e.g. if a plan is interactively replaced by a user).
 
     Returns
     -------
@@ -681,27 +939,27 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
                 default_value = _process_default_value(p["default"])
                 default_params.update({p["name"]: default_value})
 
-    def ref_from_name(v, objects_in_nspace, sel_object_names, selected_object_tree):
+    def ref_from_name(v, objects_in_nspace, sel_object_names, selected_object_tree, nspace):
         if isinstance(v, str):
             if (v in sel_object_names) or _is_object_name_in_list(v, allowed_objects=selected_object_tree):
-                v = _get_nspace_object(v, objects_in_nspace=objects_in_nspace)
+                v = _get_nspace_object(v, objects_in_nspace=objects_in_nspace, nspace=nspace)
         return v
 
-    def process_argument(v, objects_in_nspace, sel_object_names, selected_object_tree):
+    def process_argument(v, objects_in_nspace, sel_object_names, selected_object_tree, nspace):
         # Recursively process lists (iterables) and dictionaries
         if isinstance(v, str):
-            v = ref_from_name(v, objects_in_nspace, sel_object_names, selected_object_tree)
+            v = ref_from_name(v, objects_in_nspace, sel_object_names, selected_object_tree, nspace)
         elif isinstance(v, dict):
             for key, value in v.copy().items():
-                v[key] = process_argument(value, objects_in_nspace, sel_object_names, selected_object_tree)
+                v[key] = process_argument(value, objects_in_nspace, sel_object_names, selected_object_tree, nspace)
         elif isinstance(v, Iterable):
             v_original = v
             v = list()
             for item in v_original:
-                v.append(process_argument(item, objects_in_nspace, sel_object_names, selected_object_tree))
+                v.append(process_argument(item, objects_in_nspace, sel_object_names, selected_object_tree, nspace))
         return v
 
-    def process_parameter_value(value, pp, objects_in_nspace, group_plans, group_devices):
+    def process_parameter_value(value, pp, objects_in_nspace, group_plans, group_devices, nspace):
         """
         Process a parameter value ``value`` based on parameter description ``pp``
         (``pp = allowed_plans[<plan_name>][<param_name>]``).
@@ -744,7 +1002,7 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
         sel_object_names = pname_list.union(dname_list)
 
         if sel_object_names or selected_object_tree:
-            value = process_argument(value, objects_in_nspace, sel_object_names, selected_object_tree)
+            value = process_argument(value, objects_in_nspace, sel_object_names, selected_object_tree, nspace)
 
         return value
 
@@ -752,7 +1010,7 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
     items_in_nspace = devices_in_nspace.copy()
     items_in_nspace.update(plans_in_nspace)
 
-    plan_func = process_argument(plan_name, plans_in_nspace, set(), group_plans)
+    plan_func = process_argument(plan_name, plans_in_nspace, set(), group_plans, nspace)
     if isinstance(plan_func, str):
         success = False
         err_msg = f"Plan '{plan_name}' is not allowed or does not exist"
@@ -764,14 +1022,16 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
         # Fetch parameter description ({} if parameter is not found)
         pp = param_descriptions.get(p_name, {})
         bound_args.arguments[p_name] = process_parameter_value(
-            value, pp, items_in_nspace, group_plans, group_devices
+            value, pp, items_in_nspace, group_plans, group_devices, nspace
         )
 
     for p_name in default_params:
         value = default_params[p_name]
         # Fetch parameter description ({} if parameter is not found)
         pp = group_plans[plan_name].get(p_name, {})
-        default_params[p_name] = process_parameter_value(value, pp, items_in_nspace, group_plans, group_devices)
+        default_params[p_name] = process_parameter_value(
+            value, pp, items_in_nspace, group_plans, group_devices, nspace
+        )
 
     plan_args_parsed = list(bound_args.args)
     plan_kwargs_parsed = bound_args.kwargs
@@ -2761,26 +3021,50 @@ def _process_plan(plan, *, existing_devices, existing_plans):
     return ret
 
 
-def _prepare_plans(plans, *, existing_devices):
+def _prepare_plans(plans, *, existing_devices, ignore_invalid_plans=False):
     """
     Prepare dictionary of existing plans for saving to YAML file.
 
     Parameters
     ----------
-    plans : dict
+    plans: dict
         Dictionary of plans extracted from the workspace
-    existing_devices : dict
+    existing_devices: dict
         Prepared dictionary of existing devices (returned by the function ``_prepare_devices``.
+    ignore_invalid_plans: bool
+        Ignore plans with unsupported signatures. If the argument is ``False`` (default), then
+        an exception is raised otherwise a message is printed and the plan is not included in the list.
 
     Returns
     -------
     dict
         Dictionary that maps plan names to plan descriptions
     """
-    plan_names = set(plans.keys())
-    return {
-        k: _process_plan(v, existing_devices=existing_devices, existing_plans=plan_names) for k, v in plans.items()
-    }
+    reg_plans = reg_ns_items.reg_plans
+
+    plans_selected = {}
+    for name in set(plans.keys()).union(set(reg_plans.keys())):
+        obj = None
+        if name in reg_plans:
+            obj = reg_plans[name]["obj"]
+        elif name in plans:
+            obj = plans[name]
+        if obj:
+            plans_selected[name] = obj
+
+    plans_names = set(plans_selected)
+
+    prepared_plans = {}
+    for k, v in plans_selected.items():
+        try:
+            prepared_plans[k] = _process_plan(v, existing_devices=existing_devices, existing_plans=plans_names)
+        except Exception as ex:
+            if ignore_invalid_plans:
+                logger.warning("PLAN WAS IGNORED: %s", ex)
+            else:
+                raise
+
+    return prepared_plans
 
 
 def _prepare_devices(devices, *, max_depth=0, ignore_all_subdevices_if_one_fails=True, expand_areadetectors=False):
@@ -2835,13 +3119,13 @@ def _prepare_devices(devices, *, max_depth=0, ignore_all_subdevices_if_one_fails
             component_names = []
         return component_names
 
-    def create_device_description(device, device_name, *, depth=0):
+    def create_device_description(device, device_name, *, depth=0, max_depth=0, is_registered=False):
         description = get_device_params(device)
         comps = get_device_component_names(device)
         components = {}
 
         is_areadetector = isinstance(device, ADBase)
-        expand = not is_areadetector or expand_areadetectors
+        expand = is_registered or not is_areadetector or expand_areadetectors
 
         if expand and (not max_depth or (depth < max_depth - 1)):
             ignore_subdevices = False
@@ -2849,7 +3133,13 @@ def _prepare_devices(devices, *, max_depth=0, ignore_all_subdevices_if_one_fails
                 try:
                     if hasattr(device, comp_name):
                         c = getattr(device, comp_name)
-                        desc = create_device_description(c, device_name + "." + comp_name, depth=depth + 1)
+                        desc = create_device_description(
+                            c,
+                            device_name + "." + comp_name,
+                            depth=depth + 1,
+                            max_depth=max_depth,
+                            is_registered=is_registered,
+                        )
                         components[comp_name] = desc
                 except Exception as ex:
                     ignore_subdevices = ignore_all_subdevices_if_one_fails
@@ -2864,18 +3154,53 @@ def _prepare_devices(devices, *, max_depth=0, ignore_all_subdevices_if_one_fails
 
         return description
 
-    return {k: create_device_description(v, k) for k, v in devices.items()}
+    def process_devices(*, max_depth):
+        """
+        Process devices one by one based on information from the namespace and
+        the dictionary of registered devices.
+        """
+        reg_devices = reg_ns_items.reg_devices
+
+        devices_selected = {}
+        for name in set(devices.keys()).union(set(reg_devices.keys())):
+            obj, _max_depth, is_registered = None, max_depth, False
+            if name in reg_devices:
+                obj = reg_devices[name]["obj"]
+                _max_depth = reg_devices[name]["depth"]
+                if obj:
+                    is_registered = True
+            elif name in devices:
+                obj = devices[name]
+            if obj:
+                devices_selected[name] = dict(obj=obj, max_depth=_max_depth, is_registered=is_registered)
+
+        device_dict = {}
+        for name, p in devices_selected.items():
+            device_dict[name] = create_device_description(
+                p["obj"], name, max_depth=p["max_depth"], is_registered=p["is_registered"]
+            )
+
+        return device_dict
+
+    return process_devices(max_depth=max_depth)
 
 
-def existing_plans_and_devices_from_nspace(*, nspace):
+def existing_plans_and_devices_from_nspace(*, nspace, max_depth=0, ignore_invalid_plans=False):
     """
     Generate lists of existing plans and devices from namespace. The namespace
     must be in the form returned by ``load_worker_startup_code()``.
 
     Parameters
     ----------
-    nspace : dict
+    nspace: dict
         Namespace that contains plans and devices
+    max_depth: int
+        Default maximum depth for device search: 0 - unlimited depth, 1 - include only top level devices,
+        2 - include top level devices and subdevices, etc.
+    ignore_invalid_plans: bool
+        Ignore plans with unsupported signatures. If the argument is ``False`` (default), then
+        an exception is raised otherwise a message is printed and the plan is not included in the list.
+
 
     Returns
     -------
@@ -2888,11 +3213,15 @@ def existing_plans_and_devices_from_nspace(*, nspace):
     devices_in_nspace : dict
         Dictionary of devices in namespace
     """
+    logger.debug("Extracting existing plans and devices from the namespace ...")
+
     plans_in_nspace = plans_from_nspace(nspace)
     devices_in_nspace = devices_from_nspace(nspace)
 
-    existing_devices = _prepare_devices(devices_in_nspace)
-    existing_plans = _prepare_plans(plans_in_nspace, existing_devices=existing_devices)
+    existing_devices = _prepare_devices(devices_in_nspace, max_depth=max_depth)
+    existing_plans = _prepare_plans(
+        plans_in_nspace, existing_devices=existing_devices, ignore_invalid_plans=ignore_invalid_plans
+    )
 
     return existing_plans, existing_devices, plans_in_nspace, devices_in_nspace
 
@@ -2947,6 +3276,8 @@ def gen_list_of_plans_and_devices(
     file_dir=None,
     file_name=None,
     overwrite=False,
+    ignore_invalid_plans=False,
+    device_max_depth=0,
 ):
     """
     Generate the list of plans and devices from a collection of startup files, python module or
@@ -2971,6 +3302,13 @@ def gen_list_of_plans_and_devices(
         name of the output YAML file, None - default file name is used
     overwrite: boolean
         overwrite the file if it already exists
+    ignore_invalid_plans: bool
+        Ignore plans with unsupported signatures. If the argument is ``False`` (default), then
+        an exception is raised otherwise a message is printed and the plan is not included in the list.
+    device_max_depth: int
+        Default maximum depth for devices included in the list of existing devices:
+        0 - unlimited depth (full tree of subdevices is included for all devices except areadetectors),
+        1 - only top level devices are included, 2 - top level devices and subdevices are included, etc.
 
     Returns
     -------
@@ -2981,7 +3319,9 @@ def gen_list_of_plans_and_devices(
     RuntimeError
         Error occurred while creating or saving the lists.
     """
-    from .profile_tools import clear_re_worker_active, set_re_worker_active
+    from .profile_tools import clear_ipython_mode, clear_re_worker_active, set_ipython_mode, set_re_worker_active
+
+    use_ipython_kernel = False  # TODO: Make this a parameter, but it requires extension of functionality
 
     file_name = file_name or "existing_plans_and_devices.yaml"
     try:
@@ -2992,6 +3332,7 @@ def gen_list_of_plans_and_devices(
             raise ValueError("Source of the startup code was not specified or multiple sources were specified.")
 
         set_re_worker_active()
+        set_ipython_mode(use_ipython_kernel)
 
         nspace = load_worker_startup_code(
             startup_dir=startup_dir,
@@ -2999,7 +3340,9 @@ def gen_list_of_plans_and_devices(
             startup_script_path=startup_script_path,
         )
 
-        existing_plans, existing_devices, _, _ = existing_plans_and_devices_from_nspace(nspace=nspace)
+        existing_plans, existing_devices, _, _ = existing_plans_and_devices_from_nspace(
+            nspace=nspace, ignore_invalid_plans=ignore_invalid_plans, max_depth=device_max_depth
+        )
 
         save_existing_plans_and_devices(
             existing_plans=existing_plans,
@@ -3014,6 +3357,7 @@ def gen_list_of_plans_and_devices(
 
     finally:
         clear_re_worker_active()
+        clear_ipython_mode()
 
 
 def gen_list_of_plans_and_devices_cli():
@@ -3087,6 +3431,27 @@ def gen_list_of_plans_and_devices_cli():
         "'qserver-list-plans-devices --startup-script ~/startup/scripts/script.py' loads "
         "startup code from the script and saves the results to the file in the current directory.",
     )
+    parser.add_argument(
+        "--ignore-invalid-plans",
+        dest="ignore_invalid_plans",
+        type=str,
+        choices=["ON", "OFF"],
+        default="OFF",
+        help="Ignore plans with unsupported signatures When loading startup code or executing scripts. "
+        "The default behavior is to raise an exception. If the parameter is set, the message is printed for each "
+        "invalid plan and only plans that were processed correctly are included in the list of existing plans "
+        "(default: %(default)s).",
+    )
+    parser.add_argument(
+        "--device-max-depth",
+        dest="device_max_depth",
+        type=int,
+        default=0,
+        help="Default maximum depth for devices included in the list of existing devices: "
+        "0 - unlimited depth (full tree of subdevices is included for all devices except areadetectors), "
+        "1 - only top level devices are included, 2 - top level devices and subdevices are included, etc. "
+        "(default: %(default)s).",
+    )
 
     args = parser.parse_args()
     file_dir = args.file_dir
@@ -3094,6 +3459,8 @@ def gen_list_of_plans_and_devices_cli():
     startup_dir = args.startup_dir
     startup_module_name = args.startup_module_name
     startup_script_path = args.startup_script_path
+    ignore_invalid_plans = to_boolean(args.ignore_invalid_plans)
+    device_max_depth = int(args.device_max_depth)
 
     if file_dir is not None:
         file_dir = os.path.expanduser(file_dir)
@@ -3107,6 +3474,8 @@ def gen_list_of_plans_and_devices_cli():
             file_dir=file_dir,
             file_name=file_name,
             overwrite=True,
+            ignore_invalid_plans=ignore_invalid_plans,
+            device_max_depth=device_max_depth,
         )
         print("The list of existing plans and devices was created successfully.")
         exit_code = 0

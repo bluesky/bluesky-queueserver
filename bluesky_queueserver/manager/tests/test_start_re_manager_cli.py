@@ -16,10 +16,12 @@ from .common import (
     clear_redis_pool,
     condition_environment_closed,
     condition_environment_created,
+    condition_manager_idle,
     condition_queue_processing_finished,
     copy_default_profile_collection,
     set_qserver_zmq_address,
     set_qserver_zmq_public_key,
+    use_ipykernel_for_tests,
     wait_for_condition,
 )
 
@@ -202,7 +204,7 @@ def test_start_re_manager_console_output_2(monkeypatch, re_manager_cmd, test_mod
     )
 
     zmq_single_request("environment_open")
-    assert wait_for_condition(time=3, condition=condition_environment_created)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
     zmq_single_request("environment_close")
     assert wait_for_condition(time=3, condition=condition_environment_closed)
 
@@ -250,6 +252,7 @@ def test_cli_update_existing_plans_devices_01(
 
     # Add a plan ('count50') and a device ('det50') if needed
     with open(os.path.join(pc_path, "zz.py"), "w") as f:
+        f.writelines("print(f'Loading file {__file__!r}')\n")
         if option in ("add_device", "add_plan_device"):
             f.writelines("det50 = det\n")
         if option in ("add_plan", "add_plan_device"):
@@ -316,7 +319,7 @@ def test_cli_update_existing_plans_devices_01(
 _permissions_dict_not_allow_count = {
     "user_groups": {
         "root": {"allowed_plans": [None], "allowed_devices": [None]},
-        "primary": {"allowed_plans": [None], "forbidden_plans": ["^count$"], "allowed_devices": [None]},
+        "primary": {"allowed_plans": [None], "forbidden_plans": [":^count$"], "allowed_devices": [None]},
     }
 }
 
@@ -355,6 +358,7 @@ def test_cli_user_group_permissions_reload_01(
     # Start the manager again
     params = ["--user-group-permissions-reload", user_group_permissions_reload]
     re.start_manager(params=params, cleanup=False)
+    wait_for_condition(time=10, condition=condition_manager_idle)
 
     resp2, _ = zmq_single_request("permissions_get")
     assert resp2["success"] is True
@@ -441,18 +445,36 @@ def test_cli_parameters_zmq_server_address_1(monkeypatch, re_manager_cmd, test_m
 
 
 def _get_expected_settings_default_1(tmpdir):
+    if use_ipykernel_for_tests():
+        startup_dir = "/tmp/qserver/ipython/profile_collection_sim/startup"
+        ipython_dir = "/tmp/ipython"
+        startup_profile = "collection_sim"
+        use_ipython_kernel = True
+    else:
+        startup_dir = "/bluesky_queueserver/profile_collection_sim/"
+        ipython_dir = None
+        startup_profile = None
+        use_ipython_kernel = False
+
     return {
         "console_logging_level": 10,
         "databroker_config": None,
+        "demo_mode": True,
         "emergency_lock_key": None,
         "existing_plans_and_devices_path": None,
+        "ignore_invalid_plans": False,
+        "ipython_dir": ipython_dir,
         "kafka_server": "127.0.0.1:9092",
         "kafka_topic": None,
         "keep_re": False,
+        "device_max_depth": 0,
+        "use_ipython_kernel": use_ipython_kernel,
+        "ipython_matplotlib": None,
         "print_console_output": True,
         "redis_addr": "localhost",
-        "startup_dir": "/bluesky_queueserver/profile_collection_sim/",
+        "startup_dir": startup_dir,
         "startup_module": None,
+        "startup_profile": startup_profile,
         "startup_script": None,
         "update_existing_plans_devices": "ENVIRONMENT_OPEN",
         "use_persistent_metadata": False,
@@ -466,7 +488,7 @@ def _get_expected_settings_default_1(tmpdir):
     }
 
 
-_dir_2 = "startup2"
+_dir_2 = os.path.join("ipython_test", "profile_collection_test", "startup")
 
 
 # matching public key: =E0[czQkp!!%0TL1LCJ5X[<wjYD[iV+p[yuaI0an
@@ -478,8 +500,13 @@ network:
   zmq_info_addr: tcp://*:60627
   zmq_publish_console: true
   redis_addr: localhost:6379
+worker:
+  use_ipython_kernel: true
+  ipython_matplotlib: qt5
 startup:
   keep_re: false
+  device_max_depth: 2
+  ignore_invalid_plans: true
   startup_dir: {1}
   existing_plans_and_devices_path: {2}
   user_group_permissions_path: {3}
@@ -505,15 +532,22 @@ def _get_expected_settings_config_2(tmpdir):
     return {
         "console_logging_level": 10,
         "databroker_config": "DIF",
+        "demo_mode": False,
         "emergency_lock_key": "different_lock_key",
         "existing_plans_and_devices_path": f"{file_dir}",
+        "ipython_dir": "/tmp/pytest-of-dgavrilov/pytest-33/test_manager_with_config_file_1/ipython_test",
         "kafka_server": "127.0.0.1:9095",
         "kafka_topic": "different_topic_name",
         "keep_re": False,
+        "device_max_depth": 2,
+        "ignore_invalid_plans": True,
+        "use_ipython_kernel": True,
+        "ipython_matplotlib": "qt5",
         "print_console_output": True,
         "redis_addr": "localhost:6379",
         "startup_dir": f"{file_dir}",
         "startup_module": None,
+        "startup_profile": "collection_test",
         "startup_script": None,
         "update_existing_plans_devices": "ALWAYS",
         "use_persistent_metadata": True,
@@ -527,7 +561,7 @@ def _get_expected_settings_config_2(tmpdir):
     }
 
 
-_dir_3 = "startup2"
+_dir_3 = os.path.join("ipython_test2", "profile_collection_test", "startup")
 
 
 def _get_cli_params_3(tmpdir):
@@ -543,6 +577,10 @@ def _get_cli_params_3(tmpdir):
         "--kafka-topic=yet_another_topic",
         "--kafka-server=127.0.0.1:9099",
         "--keep-re",
+        "--device-max-depth=5",
+        "--ignore-invalid-plans=ON",
+        "--use-ipython-kernel=ON",
+        "--ipython-matplotlib=qt",
         "--zmq-data-proxy-addr=tcp://localhost:5571",
         "--databroker-config=NEW",
         "--zmq-info-addr=tcp://*:60629",
@@ -556,15 +594,22 @@ def _get_expected_settings_params_3(tmpdir):
     return {
         "console_logging_level": 10,
         "databroker_config": "NEW",
+        "demo_mode": False,
         "emergency_lock_key": "different_lock_key",
         "existing_plans_and_devices_path": f"{file_dir}",
+        "ipython_dir": "/tmp/pytest-of-dgavrilov/pytest-33/test_manager_with_config_file_1/ipython_test2",
         "kafka_server": "127.0.0.1:9099",
         "kafka_topic": "yet_another_topic",
         "keep_re": True,
+        "device_max_depth": 5,
+        "ignore_invalid_plans": True,
+        "use_ipython_kernel": True,
+        "ipython_matplotlib": "qt",
         "print_console_output": False,
         "redis_addr": "localhost:6379",
         "startup_dir": f"{file_dir}",
         "startup_module": None,
+        "startup_profile": "collection_test",
         "startup_script": None,
         "update_existing_plans_devices": "NEVER",
         "use_persistent_metadata": True,
@@ -646,6 +691,106 @@ def test_manager_with_config_file_01(
     startup_dir = current_settings.pop("startup_dir")
     assert isinstance(startup_dir, str), startup_dir
     assert isinstance(expected_startup_dir_suffix, str), expected_startup_dir_suffix
-    assert startup_dir.endswith(expected_startup_dir_suffix)
+    assert startup_dir.endswith(expected_startup_dir_suffix), (startup_dir, expected_startup_dir_suffix)
 
-    assert current_settings == expected_settings
+    cs_idir = current_settings["ipython_dir"]
+    cs_idir = os.path.split(cs_idir)[1] if isinstance(cs_idir, str) else cs_idir
+    es_idir = expected_settings["ipython_dir"]
+    es_idir = os.path.split(es_idir)[1] if isinstance(es_idir, str) else es_idir
+    assert cs_idir == es_idir
+
+    cs, es = copy.copy(current_settings), copy.copy(expected_settings)
+    cs.pop("ipython_dir")
+    es.pop("ipython_dir")
+    assert cs == es
+
+
+_sim_bundle_A_depth_0 = {
+    "dets": {
+        "det_A": {"Imax": {}, "center": {}, "noise": {}, "noise_multiplier": {}, "sigma": {}, "val": {}},
+        "det_B": {"Imax": {}, "center": {}, "noise": {}, "noise_multiplier": {}, "sigma": {}, "val": {}},
+    },
+    "mtrs": {
+        "x": {"acceleration": {}, "readback": {}, "setpoint": {}, "unused": {}, "velocity": {}},
+        "y": {"acceleration": {}, "readback": {}, "setpoint": {}, "unused": {}, "velocity": {}},
+        "z": {"acceleration": {}, "readback": {}, "setpoint": {}, "unused": {}, "velocity": {}},
+    },
+}
+
+_sim_bundle_A_depth_1 = {}
+
+_sim_bundle_A_depth_2 = {"dets": {}, "mtrs": {}}
+
+
+# fmt: off
+@pytest.mark.parametrize("device_max_depth, det_structure", [
+    (None, _sim_bundle_A_depth_0),
+    (0, _sim_bundle_A_depth_0),
+    (1, _sim_bundle_A_depth_1),
+    (2, _sim_bundle_A_depth_2),
+])
+# fmt: on
+def test_cli_device_max_depth_01(re_manager_cmd, tmp_path, device_max_depth, det_structure):  # noqa: F811
+    """
+    CLI parameter '--device-max-depth': pass default max depth as a CLI parameter.
+    Verify that the device descriptions are including components up to correct depth both
+    for the devices from startup code and from uploaded script.
+    """
+    # Copy the default profile collection and generate the list of existing devices
+    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=True)
+
+    # Start the manager
+    params = ["--startup-dir", pc_path]
+    if device_max_depth is not None:
+        params.extend(["--device-max-depth", str(device_max_depth)])
+    re_manager_cmd(params)
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp3, _ = zmq_single_request("devices_allowed", {"user_group": _user_group})
+    assert resp3["success"] is True
+    devices_allowed_1 = resp3["devices_allowed"]
+    assert "sim_bundle_A" in devices_allowed_1
+
+    resp3, _ = zmq_single_request("devices_allowed")
+
+    script = "sim_bundle_copy = sim_bundle_A"
+    resp4, _ = zmq_single_request("script_upload", params={"script": script})
+    assert resp4["success"] is True, resp4
+
+    wait_for_condition(time=10, condition=condition_manager_idle)
+
+    resp5, _ = zmq_single_request("devices_allowed", {"user_group": _user_group})
+    assert resp5["success"] is True
+    devices_allowed_2 = resp5["devices_allowed"]
+    assert "sim_bundle_A" in devices_allowed_2
+    assert "sim_bundle_copy" in devices_allowed_2
+
+    resp9, _ = zmq_single_request("environment_close")
+    assert resp9["success"] is True
+    assert resp9["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+    def reduce_device_description(description):
+        def inner(dev, dev_out):
+            if "components" in dev:
+                for name in dev["components"]:
+                    dev_out[name] = {}
+                    inner(dev["components"][name], dev_out[name])
+
+        dev_out = {}
+        inner(description, dev_out)
+        return dev_out
+
+    desc1 = reduce_device_description(devices_allowed_1["sim_bundle_A"])
+    desc2a = reduce_device_description(devices_allowed_2["sim_bundle_A"])
+    desc2b = reduce_device_description(devices_allowed_2["sim_bundle_copy"])
+
+    assert desc1 == det_structure, pprint.pformat(desc1)
+    assert desc2a == det_structure, pprint.pformat(desc2a)
+    assert desc2b == det_structure, pprint.pformat(desc2b)

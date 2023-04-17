@@ -13,6 +13,7 @@ import pytest
 from databroker import catalog_search_path
 
 from bluesky_queueserver.manager.comms import zmq_single_request
+from bluesky_queueserver.manager.config import to_boolean
 from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
 from bluesky_queueserver.manager.profile_ops import get_default_startup_dir
 
@@ -20,6 +21,16 @@ logger = logging.Logger(__name__)
 
 # User name and user group name used throughout most of the tests.
 _user, _user_group = "Testing Script", "primary"
+
+
+def use_ipykernel_for_tests():
+    """
+    Returns True/False if the value of USE_IPYKERNEL environment variable has
+    a boolean value. The function returns *None* if the environment variable is
+    not set, or the value can not be interpreted as boolean. The function
+    is intended for using in test configuration.
+    """
+    return to_boolean(os.environ.get("USE_IPYKERNEL", None))
 
 
 def copy_default_profile_collection(tmp_path, *, copy_py=True, copy_yaml=True):
@@ -30,7 +41,7 @@ def copy_default_profile_collection(tmp_path, *, copy_py=True, copy_yaml=True):
     # Default path
     pc_path = get_default_startup_dir()
     # New path
-    new_pc_path = os.path.join(tmp_path, "startup")
+    new_pc_path = os.path.join(tmp_path, "ipython", "profile_collection_sim", "startup")
 
     os.makedirs(new_pc_path, exist_ok=True)
 
@@ -272,8 +283,8 @@ def condition_environment_closed(msg):
 
 def condition_queue_processing_finished(msg):
     items_in_queue = msg["items_in_queue"]
-    queue_is_running = msg["manager_state"] == "executing_queue"
-    return (items_in_queue == 0) and not queue_is_running
+    manager_idle = msg["manager_state"] == "idle"
+    return (items_in_queue == 0) and manager_idle
 
 
 def wait_for_condition(time, condition):
@@ -344,7 +355,7 @@ def db_catalog():
     """
     db_catalog_name = "qserver_tests"
 
-    config_dir = catalog_search_path()[0]
+    config_dir = catalog_search_path()[0]  # ~/.config/tiled/profiles
     config_path = os.path.join(config_dir, f"{db_catalog_name}.yml")
 
     files_dir = os.path.join(tempfile.gettempdir(), "qserver_tests", "db_catalog_files")
@@ -420,6 +431,10 @@ class ReManager:
         logging_levels = ("--verbose", "--quiet", "--silent")
         if not any([_ in params for _ in logging_levels]):
             params.append("--verbose")
+
+        # Start the manager with IPython kernel if the
+        if ("--use-ipython-kernel" not in params) and use_ipykernel_for_tests():
+            params.append("--use-ipython-kernel=ON")
 
         if not self._p:
             if cleanup:

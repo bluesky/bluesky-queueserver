@@ -17,6 +17,49 @@ class RunList:
         self._run_list = []
         self._lock = threading.Lock()
         self._list_changed = False
+        self._enabled = False
+
+    def enable(self):
+        """
+        Enable collection of runs.
+        """
+        self._enabled = True
+
+    def disable(self):
+        """
+        Disable collection of runs. The list can still be cleared.
+        """
+        self._enabled = False
+
+    def is_enabled(self):
+        """
+        Returns ``True`` if run collection is enabled, ``False`` otherwise.
+        """
+        return self._enabled
+
+    def is_empty(self):
+        """
+        The method reports whether the list of runs is empty.
+
+        Returns
+        -------
+        boolean
+            True - the list contains no runs
+        """
+        return bool(self._run_list)
+
+    @property
+    def nruns(self):
+        """
+        Returns the number of collected runs (completed and incomplete).
+
+        Returns
+        -------
+        int
+            The number of collected runs.
+
+        """
+        return len(self._run_list)
 
     def is_changed(self):
         """
@@ -46,6 +89,9 @@ class RunList:
         uid : str
             UID of the run.
         """
+        if not self._enabled:
+            return
+
         with self._lock:
             self._run_list.append({"uid": uid, "is_open": True, "exit_status": None})
             self._list_changed = True
@@ -61,6 +107,9 @@ class RunList:
         exit_status : str
             exit status of the run (Bluesky run exit status as returned in 'stop' document).
         """
+        if not self._enabled:
+            return
+
         with self._lock:
             run = None
             # 'reversed' - if a plan sequentially opens/closes many runs, the open run is much more
@@ -120,7 +169,7 @@ class CallbackRegisterRun(CallbackBase):
             uid = doc["uid"]
             self._run_list.add_run(uid=uid)
 
-            logger.info("New run was open: '%s'", uid)
+            logger.info("New run was open: %r", uid)
             logger.debug("Run list: %s", self._run_list.get_run_list())
         except Exception as ex:
             logger.exception("RE Manager: Could not register new run: %s", ex)
@@ -134,6 +183,6 @@ class CallbackRegisterRun(CallbackBase):
             exit_status = doc["exit_status"]
             self._run_list.set_run_closed(uid=uid, exit_status=exit_status)
 
-            print(f"Run was closed: '{uid}'")
+            logger.info("Run was closed: %r", uid)
         except Exception as ex:
             logger.exception("RE Manager: Failed to label run as closed: %s", ex)

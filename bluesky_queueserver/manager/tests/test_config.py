@@ -6,6 +6,157 @@ from ..config import ConfigError, parse_configs
 
 fln_config_schema = "config_schema.yml"
 
+
+config_00a_success = """
+startup:
+  startup_profile: collection_sim
+"""
+
+config_00a_dict = {"startup": {"startup_profile": "collection_sim"}}
+
+config_00b_success = """
+startup:
+  ipython_dir: ~/.ipython
+"""
+
+config_00b_dict = {"startup": {"ipython_dir": "~/.ipython"}}
+
+config_00c_success = """
+startup:
+  startup_profile: collection_sim
+  ipython_dir: ~/.ipython
+"""
+
+config_00c_dict = {"startup": {"startup_profile": "collection_sim", "ipython_dir": "~/.ipython"}}
+
+config_00d_success = """
+startup:
+  startup_dir: ~/.ipython/profile_collection/startup
+"""
+
+config_00d_dict = {"startup": {"startup_dir": "~/.ipython/profile_collection/startup"}}
+
+
+config_00e_success = """
+startup:
+  startup_script: ~/.ipython/profile_collection/startup/startup.py
+"""
+
+config_00e_dict = {"startup": {"startup_script": "~/.ipython/profile_collection/startup/startup.py"}}
+
+config_00f_success = """
+startup:
+  startup_module: startup.module
+"""
+
+config_00f_dict = {"startup": {"startup_module": "startup.module"}}
+
+config_00g_success = """
+startup:
+  startup_profile: collection_sim
+  startup_script: ~/.ipython/profile_collection/startup/startup.py
+"""
+
+config_00g_dict = {
+    "startup": {
+        "startup_profile": "collection_sim",
+        "startup_script": "~/.ipython/profile_collection/startup/startup.py",
+    }
+}
+
+
+config_00h_success = """
+startup:
+  ipython_dir: ~/.ipython
+  startup_script: ~/.ipython/profile_collection/startup/startup.py
+"""
+
+config_00h_dict = {
+    "startup": {"ipython_dir": "~/.ipython", "startup_script": "~/.ipython/profile_collection/startup/startup.py"}
+}
+
+
+config_00i_success = """
+startup:
+  startup_profile: collection_sim
+  ipython_dir: ~/.ipython
+  startup_script: ~/.ipython/profile_collection/startup/startup.py
+"""
+
+config_00i_dict = {
+    "startup": {
+        "startup_profile": "collection_sim",
+        "ipython_dir": "~/.ipython",
+        "startup_script": "~/.ipython/profile_collection/startup/startup.py",
+    }
+}
+
+
+config_00j_success = """
+startup:
+  startup_profile: collection_sim
+  startup_module: startup.module
+"""
+
+config_00j_dict = {"startup": {"startup_profile": "collection_sim", "startup_module": "startup.module"}}
+
+
+config_00k_success = """
+startup:
+  ipython_dir: ~/.ipython
+  startup_module: startup.module
+"""
+
+config_00k_dict = {"startup": {"ipython_dir": "~/.ipython", "startup_module": "startup.module"}}
+
+
+config_00l_success = """
+startup:
+  startup_profile: collection_sim
+  ipython_dir: ~/.ipython
+  startup_module: startup.module
+"""
+
+config_00l_dict = {
+    "startup": {
+        "startup_profile": "collection_sim",
+        "ipython_dir": "~/.ipython",
+        "startup_module": "startup.module",
+    }
+}
+
+
+config_00m_fail = """
+startup:
+  startup_script: ~/.ipython/profile_collection/startup/startup.py
+  startup_module: startup.module
+"""
+
+
+config_00n_fail = """
+startup:
+  startup_profile: collection_sim
+  startup_dir: ~/.ipython/profile_collection/startup
+"""
+
+config_00o_fail = """
+startup:
+  ipython_dir: ~/.ipython
+  startup_dir: ~/.ipython/profile_collection/startup
+"""
+
+config_00p_fail = """
+startup:
+  startup_script: ~/.ipython/profile_collection/startup/startup.py
+  startup_dir: ~/.ipython/profile_collection/startup
+"""
+
+config_00q_fail = """
+startup:
+  startup_module: startup.module
+  startup_dir: ~/.ipython/profile_collection/startup
+"""
+
 config_01_success = """
 network:
   zmq_control_addr: tcp://*:60615
@@ -18,6 +169,7 @@ startup:
   startup_dir: ~/.ipython/profile_collection/startup
   existing_plans_and_devices_path: ~/.ipython/profile_collection/startup
   user_group_permissions_path: ~/.ipython/profile_collection/startup
+  device_max_depth: 3
 operation:
   print_console_output: true
   console_logging_level: NORMAL
@@ -47,6 +199,7 @@ startup:
   startup_dir: ~/.ipython/profile_collection/startup
   existing_plans_and_devices_path: ~/.ipython/profile_collection/startup
   user_group_permissions_path: ~/.ipython/profile_collection/startup
+  device_max_depth: 3
 """
 
 config_01c_success = """
@@ -80,6 +233,7 @@ config_01_dict = {
         "startup_dir": "~/.ipython/profile_collection/startup",
         "existing_plans_and_devices_path": "~/.ipython/profile_collection/startup",
         "user_group_permissions_path": "~/.ipython/profile_collection/startup",
+        "device_max_depth": 3,
     },
     "operation": {
         "print_console_output": True,
@@ -129,6 +283,23 @@ startup:
 
 # fmt: off
 @pytest.mark.parametrize("config_str, config_dict, success", [
+    ([config_00a_success], config_00a_dict, True),
+    ([config_00b_success], config_00b_dict, True),
+    ([config_00c_success], config_00c_dict, True),
+    ([config_00d_success], config_00d_dict, True),
+    ([config_00e_success], config_00e_dict, True),
+    ([config_00f_success], config_00f_dict, True),
+    ([config_00g_success], config_00g_dict, True),
+    ([config_00h_success], config_00h_dict, True),
+    ([config_00i_success], config_00i_dict, True),
+    ([config_00j_success], config_00j_dict, True),
+    ([config_00k_success], config_00k_dict, True),
+    ([config_00l_success], config_00l_dict, True),
+    ([config_00m_fail], None, False),
+    ([config_00n_fail], None, False),
+    ([config_00o_fail], None, False),
+    ([config_00p_fail], None, False),
+    ([config_00q_fail], None, False),
     ([config_01_success], config_01_dict, True),
     ([config_02_success], config_02_dict, True),
     ([config_03_fail], None, False),

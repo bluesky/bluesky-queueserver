@@ -1,4 +1,6 @@
 # flake8: noqa
+print(f"Loading file {__file__!r}")
+
 from typing import Any, Dict, List, Optional
 
 from bluesky.plans import (

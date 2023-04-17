@@ -1,4 +1,5 @@
 # flake8: noqa
+print(f"Loading file {__file__!r}")
 
 from ophyd.sim import hw
 

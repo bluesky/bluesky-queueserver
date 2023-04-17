@@ -23,6 +23,7 @@ from .common import (
     condition_manager_idle,
     copy_default_profile_collection,
     patch_first_startup_file,
+    use_ipykernel_for_tests,
     wait_for_condition,
 )
 
@@ -401,12 +402,13 @@ _user_groups_text = r"""user_groups:
 """
 
 
-_startup_script_1 = """
+def _get_startup_script_1(use_relative_imports):
+    startup_script = """
 from ophyd.sim import det1, det2
 from bluesky.plans import count
 
 from bluesky_queueserver.manager.profile_tools import is_re_worker_active
-from dir1.file1 import f1
+from {}dir1.file1 import f1
 
 # Executed during import
 if not is_re_worker_active():
@@ -424,11 +426,19 @@ def sim_plan_1():
 
     yield from count([det1, det2])
 """
+    return startup_script.format("." if use_relative_imports else "")
 
 
 def create_local_imports_dir(pc_path):
     path1 = os.path.join(pc_path, "dir1")
     fln1 = os.path.join(path1, "file1.py")
+
+    # If the following modules were already imported during tests, then they
+    # will interfere with the new imports. So just delete them.
+    modules_to_delete = ["dir1", "dir1.file1"]
+    for m in modules_to_delete:
+        if m in sys.modules:
+            del sys.modules[m]
 
     os.makedirs(path1, exist_ok=True)
 
@@ -465,41 +475,56 @@ def test_is_re_worker_active_2(re_manager_cmd, tmp_path, monkeypatch, option):  
     monkeypatch.setattr(os, "environ", os.environ.copy())
 
     # Load first script
-    script_dir = os.path.join(tmp_path, "script_dir1")
-    script_path = os.path.join(script_dir, "startup_script.py")
+    ipython_dir = os.path.join(tmp_path, "ipython")
+    startup_profile = "collection_sim"
+    startup_dir = os.path.join(ipython_dir, f"profile_{startup_profile}", "startup")
+    script_dir = os.path.join(tmp_path, "script_dir", "script")
+    script_name = "startup_script.py"
+    script_path = os.path.join(script_dir, script_name)
+    module_dir = os.path.join(tmp_path, "script_dir")
 
+    fdir = startup_dir if option == "startup_dir" else script_dir
+    fpath = os.path.join(fdir, script_name)
+
+    os.makedirs(startup_dir, exist_ok=True)
     os.makedirs(script_dir, exist_ok=True)
-    with open(script_path, "w") as f:
-        f.write(_startup_script_1)
 
-    create_local_imports_dir(script_dir)
+    with open(fpath, "w") as f:
+        f.write(_get_startup_script_1(option == "module"))
 
-    path_user_permissions = os.path.join(script_dir, "user_group_permissions.yaml")
+    create_local_imports_dir(fdir)
+
+    path_user_permissions = os.path.join(startup_dir, "user_group_permissions.yaml")
     with open(path_user_permissions, "w") as f:
         f.writelines(_user_groups_text)
 
-    path_existing_plans_and_devices = os.path.join(script_dir, "existing_plans_and_devices.yaml")
+    path_existing_plans_and_devices = os.path.join(startup_dir, "existing_plans_and_devices.yaml")
 
     # Make sure that 'is_re_worker_active()' works as expected when the list of plans and devices is
     #   created (profile collection is loaded in the current process).
     assert is_re_worker_active() is False
     if option == "startup_dir":
-        gen_list_of_plans_and_devices(startup_dir=script_dir, file_dir=script_dir, overwrite=True)
+        gen_list_of_plans_and_devices(startup_dir=startup_dir, file_dir=startup_dir, overwrite=True)
     elif option == "script":
-        gen_list_of_plans_and_devices(startup_script_path=script_path, file_dir=script_dir, overwrite=True)
+        gen_list_of_plans_and_devices(startup_script_path=script_path, file_dir=startup_dir, overwrite=True)
     elif option == "module":
         # Temporarily add module to the search path
         sys_path = sys.path
-        monkeypatch.setattr(sys, "path", [str(tmp_path)] + sys_path)
+        monkeypatch.setattr(sys, "path", [str(module_dir)] + sys_path)
         gen_list_of_plans_and_devices(
-            startup_module_name="script_dir1.startup_script", file_dir=script_dir, overwrite=True
+            startup_module_name="script.startup_script", file_dir=startup_dir, overwrite=True
         )
     else:
         assert False, f"Unknown option '{option}'"
     assert is_re_worker_active() is False  # Make sure that that 'active' state is cleared
 
+    # When IPython kernel is used, point it to an empty profile
+    extra_params = []
+    if use_ipykernel_for_tests():
+        extra_params.extend(["--ipython-dir", ipython_dir, "--startup-profile", startup_profile])
+
     if option == "startup_dir":
-        re_manager_cmd(["--startup-dir", script_dir])
+        re_manager_cmd(["--startup-dir", startup_dir])
     elif option == "script":
         re_manager_cmd(
             [
@@ -509,6 +534,7 @@ def test_is_re_worker_active_2(re_manager_cmd, tmp_path, monkeypatch, option):  
                 path_user_permissions,
                 "--existing-plans-devices",
                 path_existing_plans_and_devices,
+                *extra_params,
             ]
         )
     elif option == "module":
@@ -517,11 +543,12 @@ def test_is_re_worker_active_2(re_manager_cmd, tmp_path, monkeypatch, option):  
         re_manager_cmd(
             [
                 "--startup-module",
-                "script_dir1.startup_script",
+                "script.startup_script",
                 "--user-group-permissions",
                 path_user_permissions,
                 "--existing-plans-devices",
                 path_existing_plans_and_devices,
+                *extra_params,
             ]
         )
         # Since the environment can not be loaded, the rest of the test will not work.

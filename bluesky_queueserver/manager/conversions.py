@@ -272,11 +272,11 @@ def spreadsheet_to_plan_list(*, spreadsheet_file, file_name, **kwargs):  # noqa:
         )
 
     if ss_ext == ".xlsx":
-        df = pd.read_excel(spreadsheet_file, engine="openpyxl")
+        df = pd.read_excel(spreadsheet_file, engine="openpyxl", keep_default_na=False, na_values="")
     elif ss_ext == ".xls":
-        df = pd.read_excel(spreadsheet_file)
+        df = pd.read_excel(spreadsheet_file, keep_default_na=False, na_values="")
     elif ss_ext == ".csv":
-        df = pd.read_csv(spreadsheet_file)
+        df = pd.read_csv(spreadsheet_file, keep_default_na=False, na_values="")
 
     column_keys = df.keys()
     if len(column_keys) < 1:

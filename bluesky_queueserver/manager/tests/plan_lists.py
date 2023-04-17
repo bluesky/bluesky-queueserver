@@ -118,9 +118,9 @@ def create_excel_file_from_plan_list(tmp_path, *, plan_list, ss_filename="spread
     def verify_excel(ss_path, df):
         _, ext = os.path.splitext(ss_path)
         if ext == ".xlsx":
-            df_read = pd.read_excel(ss_path, engine="openpyxl")
+            df_read = pd.read_excel(ss_path, engine="openpyxl", keep_default_na=False, na_values="")
         elif ext == ".csv":
-            df_read = pd.read_csv(ss_path)
+            df_read = pd.read_csv(ss_path, keep_default_na=False, na_values="")
             df_read = fix_dataframe_types(df_read)
         assert df_read.equals(df), str(df_read)
 

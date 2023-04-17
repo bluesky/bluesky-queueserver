@@ -1,4 +1,5 @@
 import argparse
+import atexit
 import logging
 import os
 import threading
@@ -15,6 +16,7 @@ from .output_streaming import (
     default_zmq_info_address_for_server,
     setup_console_output_redirection,
 )
+from .profile_ops import create_demo_ipython_profile
 from .worker import RunEngineWorker
 
 logger = logging.getLogger(__name__)
@@ -57,6 +59,7 @@ class WatchdogProcess:
         )
 
         self._watchdog_state = 0  # State is currently just time since last notification
+        self._watchdog_enabled = False
         self._watchdog_state_lock = threading.Lock()
 
         self._manager_is_stopping = False  # Set True to stop the server
@@ -74,6 +77,20 @@ class WatchdogProcess:
 
     # ======================================================================
     #             Handlers for messages from RE Manager
+
+    def _watchdog_enable_handler(self):
+        """
+        Enable watchdog. The watchdog is disabled when the manager is started and
+        remain disabled while it is initialized. The watchdog should be enabled
+        by the manager after initialization is complete.
+
+        The idea is to avoid the server getting into a loop of restarting the server
+        if initialization takes longer than expected. If initialization fails, it
+        most likely fails after restart.
+        """
+        self._init_watchdog_state()
+        self._watchdog_enabled = True
+        return {"success": True}
 
     def _start_re_worker_handler(self, user_group_permissions):
         """
@@ -148,6 +165,7 @@ class WatchdogProcess:
 
     def _start_re_manager(self):
         self._re_manager_n_restarts += 1
+        self._watchdog_enabled = False
         self._init_watchdog_state()
         self._re_manager = self._cls_run_engine_manager(
             conn_watchdog=self._manager_to_watchdog_conn,
@@ -164,6 +182,7 @@ class WatchdogProcess:
         logging.basicConfig(level=max(logging.WARNING, self._log_level))
         setup_loggers(log_level=self._log_level)
         # Requests
+        self._comm_to_manager.add_method(self._watchdog_enable_handler, "watchdog_enable")
         self._comm_to_manager.add_method(self._start_re_worker_handler, "start_re_worker")
         self._comm_to_manager.add_method(self._join_re_worker_handler, "join_re_worker")
         self._comm_to_manager.add_method(self._kill_re_worker_handler, "kill_re_worker")
@@ -182,6 +201,9 @@ class WatchdogProcess:
 
             if self._manager_is_stopping and not self._re_manager.is_alive():
                 break  # Exit if the program was actually stopped (process joined)
+
+            if not self._watchdog_enabled:
+                continue
 
             with self._watchdog_state_lock:
                 time_passed = ttime.time() - self._watchdog_state
@@ -247,28 +269,22 @@ def start_manager():
         help="The parameter is deprecated and will be removed in future releases. Use --zmq-control-addr instead.",
     )
 
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "--startup-dir",
-        dest="startup_dir",
-        type=str,
-        help="Path to directory that contains a set of startup files (*.py and *.ipy). All the scripts "
-        "in the directory will be sorted in alphabetical order of their names and loaded in "
-        "the Run Engine Worker environment. The set of startup files may be located in any accessible "
-        "directory.",
-    )
-    group.add_argument(
+    parser.add_argument(
         "--startup-profile",
-        dest="profile_name",
+        dest="startup_profile",
         type=str,
         help="The name of IPython profile used to find the location of startup files. Example: if IPython is "
         "configured to look for profiles in '~/.ipython' directory (default behavior) and the profile "
         "name is 'testing', then RE Manager will look for startup files in "
-        "'~/.ipython/profile_testing/startup' directory.",
+        "'~/.ipython/profile_testing/startup' directory. If IPython-based worker is used, the code in "
+        "the startup profile or the default profile is always executed before running "
+        "a startup module or a script",
     )
+
+    group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--startup-module",
-        dest="startup_module_name",
+        dest="startup_module",
         type=str,
         help="The name of the module with startup code. The module is imported each time the RE Worker "
         "environment is opened. Example: 'some.startup.module'. Paths to the list of existing "
@@ -278,12 +294,45 @@ def start_manager():
 
     group.add_argument(
         "--startup-script",
-        dest="startup_script_path",
+        dest="startup_script",
         type=str,
         help="The path to the script with startup code. The script is loaded each time the RE Worker "
         "environment is opened. Example: '~/startup/scripts/scripts.py'. Paths to the list of existing "
         "plans and devices (--existing-plans-and-devices) and user group permissions "
         "(--user-group-permissions) must be explicitly specified if this option is used.",
+    )
+
+    group.add_argument(
+        "--startup-dir",
+        dest="startup_dir",
+        type=str,
+        help="Path to directory that contains a set of startup files (*.py and *.ipy). All the scripts "
+        "in the directory will be sorted in alphabetical order of their names and loaded in "
+        "the Run Engine Worker environment. The set of startup files may be located in any accessible "
+        "directory. The value is ignored if --startup-profile is specified.",
+    )
+
+    parser.add_argument(
+        "--ignore-invalid-plans",
+        dest="ignore_invalid_plans",
+        type=str,
+        choices=["ON", "OFF"],
+        default="OFF",
+        help="Ignore plans with unsupported signatures When loading startup code or executing scripts. "
+        "The default behavior is to raise an exception. If the parameter is set, the message is printed for each "
+        "invalid plan and only plans that were processed correctly are included in the list of existing plans "
+        "(default: %(default)s).",
+    )
+
+    parser.add_argument(
+        "--device-max-depth",
+        dest="device_max_depth",
+        type=int,
+        default=0,
+        help="Default maximum depth for devices included in the list of existing devices: "
+        "0 - unlimited depth (full tree of subdevices is included for all devices except areadetectors), "
+        "1 - only top level devices are included, 2 - top level devices and subdevices are included, etc. "
+        "(default: %(default)s).",
     )
 
     parser.add_argument(
@@ -374,6 +423,33 @@ def start_manager():
         "inside the profile collection, since '--databroker-config' argument "
         "is ignored.",
     )
+
+    parser.add_argument(
+        "--use-ipython-kernel",
+        dest="use_ipython_kernel",
+        type=str,
+        choices=["ON", "OFF"],
+        default="OFF",
+        help="Run the Run Engine worker in IPython kernel (default: %(default)s).",
+    )
+
+    parser.add_argument(
+        "--ipython-dir",
+        dest="ipython_dir",
+        type=str,
+        help="The path to IPython root directory, which contains profiles. Overrides IPYTHONDIR environment "
+        "variable. The parameter is ignored if IPython kernel is not used.",
+    )
+
+    parser.add_argument(
+        "--ipython-matplotlib",
+        dest="ipython_matplotlib",
+        type=str,
+        help="Default Matplotlib backend, typically 'qt5'. The parameter have the same meaning and accepts "
+        "the same values as --matplotlib parameter of IPython. The value is passed directly to IPython kernel. "
+        "The parameter is ignored if the worker is running pure Python (--use-ipython-kernel is OFF).",
+    )
+
     parser.add_argument(
         "--use-persistent-metadata",
         dest="use_persistent_metadata",
@@ -508,17 +584,32 @@ def start_manager():
     if settings.zmq_data_proxy_addr is not None:
         config_worker["zmq_data_proxy_addr"] = settings.zmq_data_proxy_addr
 
+    startup_profile = settings.startup_profile
     startup_dir = settings.startup_dir
     startup_module_name = settings.startup_module
     startup_script_path = settings.startup_script
+    ipython_dir = settings.ipython_dir
+    use_ipython_kernel = settings.use_ipython_kernel
+    demo_mode = settings.demo_mode
+
+    if demo_mode and use_ipython_kernel:
+        # Create demo profile for IPython with simulated startup files
+        try:
+            create_demo_ipython_profile(startup_dir)
+            logger.info("Temporary IPython profile was created (%r)", startup_dir)
+        except Exception as ex:
+            logger.exception(ex)
+            return 1
 
     # Primitive error processing: make sure that all essential data exists.
     if startup_dir is not None:
         if not os.path.exists(startup_dir):
             logger.error("Startup directory '%s' does not exist", startup_dir)
+            ttime.sleep(0.01)
             return 1
         if not os.path.isdir(startup_dir):
             logger.error("Startup directory '%s' is not a directory", startup_dir)
+            ttime.sleep(0.01)
             return 1
     elif (startup_module_name is not None) or (startup_script_path is not None):
         # startup_module_name or startup_script_path is set. This option requires
@@ -529,12 +620,14 @@ def start_manager():
                 "The path to the list of existing plans and devices (--existing-plans-and-devices) "
                 "is not specified."
             )
+            ttime.sleep(0.01)
             return 1
         if not settings.user_group_permissions_path:
             logger.error(
                 "The path to the file containing user group permissions (--user-group-permissions) "
                 "is not specified."
             )
+            ttime.sleep(0.01)
             return 1
         # Check if startup script exists (if it is specified)
         if startup_script_path is not None:
@@ -543,15 +636,21 @@ def start_manager():
                 return 1
 
     config_worker["keep_re"] = settings.keep_re
+    config_worker["device_max_depth"] = settings.device_max_depth
+    config_worker["use_ipython_kernel"] = settings.use_ipython_kernel
     config_worker["use_persistent_metadata"] = settings.use_persistent_metadata
 
     config_worker["databroker"] = {}
     if settings.databroker_config:
         config_worker["databroker"]["config"] = settings.databroker_config
 
+    config_worker["startup_profile"] = startup_profile
     config_worker["startup_dir"] = startup_dir
     config_worker["startup_module_name"] = startup_module_name
     config_worker["startup_script_path"] = startup_script_path
+    config_worker["ipython_dir"] = ipython_dir
+    config_worker["ipython_matplotlib"] = settings.ipython_matplotlib
+    config_worker["ignore_invalid_plans"] = settings.ignore_invalid_plans
 
     default_existing_pd_fln = "existing_plans_and_devices.yaml"
     if settings.existing_plans_and_devices_path:
@@ -570,6 +669,7 @@ def start_manager():
             "Create the directory manually and restart RE Manager.",
             pd_dir,
         )
+        ttime.sleep(0.01)
         return 1
     if not os.path.isfile(existing_pd_path):
         logger.warning(
@@ -609,12 +709,24 @@ def start_manager():
 
     config_manager["redis_addr"] = settings.redis_addr
 
+    config_manager["use_ipython_kernel"] = settings.use_ipython_kernel
+
     config_manager["lock_key_emergency"] = settings.emergency_lock_key
 
     wp = WatchdogProcess(
         config_worker=config_worker, config_manager=config_manager, msg_queue=msg_queue, log_level=log_level
     )
     try:
+
+        def kill_all_processes():
+            if wp._re_worker and wp._re_worker.is_alive():
+                wp._re_worker.kill()
+            if wp._re_manager and wp._re_manager.is_alive():
+                wp._re_manager.kill()
+
+        # Make sure that all processes are killed before exit
+        atexit.register(kill_all_processes)
+
         wp.run()
     except KeyboardInterrupt:
         logger.info("The program was manually stopped")

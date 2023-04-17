@@ -370,17 +370,18 @@ periodically requests and displays the status of Queue Server.
 
 .. code-block::
 
-    $ qserver -h
+    qserver -h
     usage: qserver [-h] [--zmq-control-addr ZMQ_CONTROL_ADDR] [--address ADDRESS]
+                  [--lock-key LOCK_KEY]
                   command [command ...]
 
     Command-line tool for communicating with RE Monitor.
-    bluesky-queueserver version 0.0.16
+    bluesky-queueserver version 0.0.19.
 
     positional arguments:
       command           a sequence of keywords and parameters that define the command
 
-    optional arguments:
+    options:
       -h, --help        show this help message and exit
       --zmq-control-addr ZMQ_CONTROL_ADDR, -a ZMQ_CONTROL_ADDR
                         Address of the control socket of RE Manager. The parameter overrides
@@ -391,6 +392,10 @@ periodically requests and displays the status of Queue Server.
       --address ADDRESS
                         The parameter is deprecated and will be removed. Use --zmq-control-
                         addr instead.
+      --lock-key LOCK_KEY, -k LOCK_KEY
+                        Lock key. The key is an arbitrary string is used to lock and unlock RE
+                        Manager ('lock' and 'unlock' API) and control the manager when the
+                        environment or the queue is locked.
 
     If RE Manager is configured to use encrypted ZeroMQ communication channel,
     the encryption must also be enabled before running 'qserver' CLI tool by setting
@@ -477,9 +482,11 @@ periodically requests and displays the status of Queue Server.
     qserver queue stop         # Request execition of the queue to stop after current plan
     qserver queue stop cancel  # Cancel request to stop execution of the queue
 
-    # Queue can operate in LOOP mode, which is disabled by default. To enable or disable the LOOP mode use
+    # Change the queue mode. Enable/disable LOOP and IGNORE_FAILURES modes:
     qserver queue mode set loop True
     qserver queue mode set loop False
+    qserver queue mode set ignore_failures True
+    qserver queue mode set ignore_failures False
 
     # The following requests are forwarded to the Run Engine:
     qserver re pause           # Request to PAUSE currently executed plan at the next checkpoint
@@ -507,6 +514,8 @@ periodically requests and displays the status of Queue Server.
     qserver script upload <path-to-file>              # Upload a script to RE Worker environment
     qserver script upload <path-to-file> background   # ... in the background
     qserver script upload <path-to-file> update-re    # ... allow 'RE' and 'db' to be updated
+    qserver script upload <path-to-file> keep-lists   # ... leave lists of allowed and existing plans and devices
+                                                      #   unchanged (saves processing time)
 
     qserver task result <task-uid>  # Load status or result of a task with the given UID
     qserver task status <task-uid>  # Check status of a task with the given UID

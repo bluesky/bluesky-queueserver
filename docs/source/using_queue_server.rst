@@ -249,7 +249,7 @@ and or halted, it is pushed to the front of the queue and added to the history a
 by enabling *IGNORE_FAILURES* mode, in which the server proceeds with execution of the next plan in the queue
 even after the current plan fails. The operation is slightly different if the *LOOP* mode is enabled:
 successfully executed (or stopped) plans and instructions are added to the back of the queue, allowing
-client to infinitely repeate a sequence of plans. The stopped plans are treated as successful in both modes.
+client to infinitely repeate a sequence of plans. The stopped plans are treated as successful in all modes.
 Stopping a plan also stops execution of the queue.
 
 See the tutorials :ref:`tutorial_starting_stopping_queue` and :ref:`tutorial_iteracting_with_run_engine`.

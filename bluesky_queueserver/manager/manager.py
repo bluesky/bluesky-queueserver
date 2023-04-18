@@ -56,6 +56,11 @@ class MState(enum.Enum):
     CLOSING_ENVIRONMENT = "closing_environment"
     DESTROYING_ENVIRONMENT = "destroying_environment"
 
+class Autostart(enum.Enum):
+    DISABLED = "disabled"
+    STOPPING = "stopping"
+    ENABLED = "enabled"
+
 
 class LockInfo:
     def __init__(self):
@@ -234,6 +239,8 @@ class RunEngineManager(Process):
         # we (this manager process) have not yet seen it as 'paused', useful for the situations where the
         # worker did accept a request to pause (deferred) but had already passed its last checkpoint
         self._worker_state_info = None  # Copy of the last downloaded state of RE Worker
+
+        self._queue_autostart_state = Autostart.DISABLED
 
         self._exec_loop_deactivated_event = None  # Used to defer manager status change
 
@@ -1034,6 +1041,32 @@ class RunEngineManager(Process):
 
         return success, err_msg
 
+    async def _autostart_task(self):
+        self._autostart_event = asyncio.Event()
+        while True:
+            queue_size = await self._plan_queue.get_queue_size()
+            if self._queue_autostart_state == Autostart.DISABLED:
+                break
+            if queue_size and self._manager_state == MState.IDLE:
+                success, err_msg = await self._start_plan()
+                if not success:
+                    logger.error("Autostart: failed to start a plan: %s", err_msg)
+
+            await self._autostart_event.wait(timeout=1)  # Pause
+            self._autostart_event.clear()
+
+    async def _autostart_enable(self):
+        is_stopping = self._queue_autostart_state == Autostart.STOPPING
+        self._queue_autostart_state = Autostart.ENABLED
+        if not is_stopping:
+            self._loop.create_task(self._autostart_task())
+
+    async def _autostart_disable(self):
+        self._manager_state == MState.IDLE:
+            self._queue_autostart_state = Autostart.DISABLED
+
+        self._queue_autostart_state = Autostart.STOPPING
+
     async def _environment_upload_script(self, *, script, update_lists, update_re, run_in_background):
         """
         Upload Python script to RE Worker environment. The script is then executed into
@@ -1535,6 +1568,7 @@ class RunEngineManager(Process):
         running_item_uid = running_item_info["item_uid"] if running_item_info else None
         manager_state = self._manager_state.value
         queue_stop_pending = self._queue_stop_pending
+        queue_autostart_enabled = self._queue_autostart_state != Autostart.DISABLED
         worker_environment_exists = self._environment_exists
         re_state = self._worker_state_info["re_state"] if self._worker_state_info else None
         ip_kernel_state = self._worker_state_info["ip_kernel_state"] if self._worker_state_info else None
@@ -1565,6 +1599,7 @@ class RunEngineManager(Process):
             "running_item_uid": running_item_uid,
             "manager_state": manager_state,
             "queue_stop_pending": queue_stop_pending,
+            "queue_autostart_enabled": queue_autostart_enabled,
             "worker_environment_exists": worker_environment_exists,
             "worker_environment_state": env_state,  # State of the worker environment
             "worker_background_tasks": background_tasks,  # The number of background tasks
@@ -2721,7 +2756,7 @@ class RunEngineManager(Process):
         """
         logger.info("Starting queue processing ...")
         try:
-            supported_param_names = ["lock_key"]
+            supported_param_names = ["autostart", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
             self._validate_lock_key(request.get("lock_key", None), check_environment=True)

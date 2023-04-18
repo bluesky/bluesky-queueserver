@@ -107,9 +107,13 @@ class PlanQueueOperations:
         # Settings that determine the mode of queue operation. The set of supported modes
         #      may be extended if additional modes are to be implemented. The mode will be saved in
         #      Redis, so that it is not modified between restarts of the manager.
-        #   Loop mode: loop, True/False. If enabled, then each executed item (plan or instruction)
-        #      will be placed to the back of the queue.
-        self._plan_queue_mode_default = {"loop": False}
+        #   Loop mode:
+        #      loop, True/False. If enabled, then each executed item (plan or instruction)
+        #        will be placed to the back of the queue.
+        #      ignore_failures, True/False. Run all the plans in the queue to the end
+        #        even if some or all of the plans fail. The queue is still stopped if the user
+        #        stops/aborts/halts a plan.
+        self._plan_queue_mode_default = {"loop": False, "ignore_failures": False}
         self._plan_queue_mode = self.plan_queue_mode_default
 
     @property
@@ -159,7 +163,7 @@ class PlanQueueOperations:
         # It is assumed that 'plan_queue_mode' will be a single-level dictionary that contains
         #   simple types (bool, int etc), so the following code provide better error reporting
         #   than schema validation.
-        expected_params = {"loop": bool}
+        expected_params = {"loop": bool, "ignore_failures": bool}
         missing_keys = set(expected_params.keys())
         for k, v in plan_queue_mode.items():
             if k not in expected_params:
@@ -185,6 +189,11 @@ class PlanQueueOperations:
         """
         queue_mode = await self._r_pool.get(self._name_plan_queue_mode)
         self._plan_queue_mode = json.loads(queue_mode) if queue_mode else self.plan_queue_mode_default
+        try:
+            self._validate_plan_queue_mode(self._plan_queue_mode)
+        except Exception as ex:
+            logger.error("Failed to load plan queue mode from Redis. The default mode is used: %s", ex)
+            self._plan_queue_mode = self.plan_queue_mode_default
 
     async def set_plan_queue_mode(self, plan_queue_mode, *, update=True):
         """

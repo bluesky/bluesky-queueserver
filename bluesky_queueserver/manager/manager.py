@@ -666,7 +666,10 @@ class RunEngineManager(Process):
                 msg_display,
             )
 
-            if plan_state in ("completed", "unknown"):
+            ignore_failures = self._plan_queue.plan_queue_mode["ignore_failures"]
+            continue_failed = (plan_state == "failed") and ignore_failures
+
+            if plan_state in ("completed", "unknown") or continue_failed:
                 # Check if the plan was running in the 'immediate_execution' mode.
                 item = await self._plan_queue.get_running_item_info()
                 immediate_execution = item.get("properties", {}).get("immediate_execution", False)

@@ -574,6 +574,14 @@ def test_qserver_queue_mode_set_1(re_manager):  # noqa F811
     status = get_queue_state()
     assert status["plan_queue_mode"]["loop"] is False
 
+    assert subprocess.call(["qserver", "queue", "mode", "set", "ignore_failures", "True"]) == SUCCESS
+    status = get_queue_state()
+    assert status["plan_queue_mode"]["ignore_failures"] is True
+
+    assert subprocess.call(["qserver", "queue", "mode", "set", "ignore_failures", "False"]) == SUCCESS
+    status = get_queue_state()
+    assert status["plan_queue_mode"]["ignore_failures"] is False
+
 
 # fmt: off
 @pytest.mark.parametrize("plist, exit_code", [
@@ -584,6 +592,8 @@ def test_qserver_queue_mode_set_1(re_manager):  # noqa F811
     (("set", "unknown_param", "True"), REQ_FAILED),  # Unsupported parameter name
     (("set", "loop", "true"), REQ_FAILED),  # Invalid parameter value
     (("set", "loop", "10"), REQ_FAILED),  # Invalid parameter value
+    (("set", "ignore_failures", "true"), REQ_FAILED),  # Invalid parameter value
+    (("set", "ignore_failures", "10"), REQ_FAILED),  # Invalid parameter value
 ])
 # fmt: on
 def test_qserver_queue_mode_set_2_fail(re_manager, plist, exit_code):  # noqa F811

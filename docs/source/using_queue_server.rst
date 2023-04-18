@@ -244,11 +244,13 @@ The queue can operate with enabled/disabled *LOOP* mode (see :ref:`method_queue_
 is disabled (normal mode), the items are popped from the front of the queue and executed by in the Worker
 (plans) or the manager (instructions). The successfully completed plans (including stopped plans) are
 permanently removed from the queue and added to plan history upon completion. If a plan fails, is aborted
-and or halted, it is pushed to the front of the queue and  added to the history along with execution results
-(error message and traceback) and the queue execution is automatically stopped. The operation is slightly
-different if the *LOOP* mode is enabled: successfully executed (or stopped) plans and instructions are
-added to the back of the queue, allowing client to infinitely repeate a sequence of plans. The stopped plans
-are treated as successful in both modes, except that stopping a plan also stops execution of the queue.
+and or halted, it is pushed to the front of the queue and added to the history along with execution results
+(error message and traceback) and the queue execution is automatically stopped. This behavior may be changed
+by enabling *IGNORE_FAILURES* mode, in which the server proceeds with execution of the next plan in the queue
+even after the current plan fails. The operation is slightly different if the *LOOP* mode is enabled:
+successfully executed (or stopped) plans and instructions are added to the back of the queue, allowing
+client to infinitely repeate a sequence of plans. The stopped plans are treated as successful in both modes.
+Stopping a plan also stops execution of the queue.
 
 See the tutorials :ref:`tutorial_starting_stopping_queue` and :ref:`tutorial_iteracting_with_run_engine`.
 

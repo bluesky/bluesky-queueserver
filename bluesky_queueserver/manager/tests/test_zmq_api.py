@@ -3590,9 +3590,16 @@ def test_zmq_api_queue_mode_set_1(re_manager):  # noqa: F811
     queue_mode_expected["loop"] = True
     assert status["plan_queue_mode"] == queue_mode_expected
 
-    # Reset to default
-    resp3, _ = zmq_single_request("queue_mode_set", params={"mode": "default"})
+    # Enable 'ignore_failures'
+    resp3, _ = zmq_single_request("queue_mode_set", params={"mode": {"ignore_failures": True}})
     assert resp3["success"] is True, str(resp3)
+    status = get_queue_state()
+    queue_mode_expected["ignore_failures"] = True
+    assert status["plan_queue_mode"] == queue_mode_expected
+
+    # Reset to default
+    resp4, _ = zmq_single_request("queue_mode_set", params={"mode": "default"})
+    assert resp4["success"] is True, str(resp4)
     status = get_queue_state()
     assert status["plan_queue_mode"] == queue_mode_default
 
@@ -3603,6 +3610,7 @@ def test_zmq_api_queue_mode_set_1(re_manager):  # noqa: F811
     (["a", "b"], "Queue mode is passed using object of unsupported type '<class 'list'>'"),
     ({"unsupported_key": 10}, "Unsupported plan queue mode parameter 'unsupported_key'"),
     ({"loop": 10}, "Unsupported type '<class 'int'>' of the parameter 'loop'"),
+    ({"ignore_failures": 10}, "Unsupported type '<class 'int'>' of the parameter 'ignore_failures'"),
 ])
 # fmt: on
 def test_zmq_api_queue_mode_set_2_fail(re_manager, mode, msg_expected):  # noqa: F811
@@ -3666,6 +3674,68 @@ def test_zmq_api_queue_mode_set_3_loop_mode(re_manager):  # noqa: F811
         status = get_queue_state()
         assert status["items_in_queue"] == (3 if loop_mode else 0), f"loop_mode={loop_mode}"
         assert status["items_in_history"] == (4 if loop_mode else 6), f"loop_mode={loop_mode}"
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+_failing_plan_script = """
+def failing_plan():
+    yield from bps.sleep(0.1)
+    raise Exception("Plan was made to fail intentionally!!!")
+"""
+
+
+def test_zmq_api_queue_mode_set_4_ignore_failures(re_manager):  # noqa: F811
+    """
+    More sophisticated test for ``queue_mode_set`` API. Run the queue with enabled and
+    disabled 'ignore_failures' mode.
+    """
+    failing_plan = {"name": "failing_plan", "item_type": "plan"}
+
+    items = (_plan1, failing_plan, _plan2)
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp, _ = zmq_single_request("script_upload", params={"script": _failing_plan_script})
+    assert resp["success"] is True
+
+    wait_for_condition(time=10, condition=condition_manager_idle)
+
+    # Intentionally switch between modes multiple times
+    for ignore_failures in (False, True, False, True):
+        print(f"ignore_failures={ignore_failures}")
+
+        resp, _ = zmq_single_request("queue_clear")
+        assert resp["success"] is True
+        resp, _ = zmq_single_request("history_clear")
+        assert resp["success"] is True
+
+        for item in items:
+            resp, _ = zmq_single_request(
+                "queue_item_add", params={"item": item, "user": _user, "user_group": _user_group}
+            )
+            assert resp["success"] is True
+
+        resp2, _ = zmq_single_request("queue_mode_set", params={"mode": {"ignore_failures": ignore_failures}})
+        assert resp2["success"] is True
+
+        resp3, _ = zmq_single_request("queue_start")
+        assert resp3["success"] is True
+
+        assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+        status = get_queue_state()
+        if ignore_failures:
+            assert status["items_in_queue"] == 0
+            assert status["items_in_history"] == 3
+        else:
+            assert status["items_in_queue"] == 2
+            assert status["items_in_history"] == 2
 
     # Close the environment
     resp6, _ = zmq_single_request("environment_close")

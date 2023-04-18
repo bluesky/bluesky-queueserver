@@ -276,7 +276,8 @@ Returns       **msg**: *str*
               **plan_queue_mode**: *dict*
                   the dictionary of parameters that determine queue execution mode. The key/value pairs
                   in the dictionary represent parameter names and values. Supported parameters:
-                  *'loop'* (*boolean*) - indicates if the LOOP mode is enabled.
+                  *'loop'* (*boolean*) - indicates if the LOOP mode is enabled, *'ignore_failures'*
+                  (*boolean*) - indicates if IGNORE_FAILURES mode is enabled.
 
               **queue_stop_pending**: *boolean*
                   indicates if the request to stop the queue after completion of the current plan is
@@ -716,11 +717,13 @@ Description   Sets parameters that define the mode of plan queue execution. The 
               built-in default values, set *mode="default"*. The request fails if the *'mode'* parameter
               is not a dictionary or the *'default'* string, the dictionary contains unsupported keys
               (mode parameters) or key values are of unsupported type. Supported mode parameters
-              (dictionary keys): *'loop'* (*True/False*) - enables/disables loop mode.
+              (dictionary keys): *'loop'* (*True/False*) - enables/disables loop mode; *'ignore_failures'*
+              (*True/False*) - enables/disables the option to continue execution of the queue after
+              a plan fails.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **mode**: *dict* or *str*
                   the dictionary of queue mode parameters or *'default'* string. Supported keys of
-                  the dictionary: *'loop'* (*boolean*).
+                  the dictionary: *'loop'* (*boolean*), *'ignore_failures'* (*boolean*).
 
               **lock_key**: *str* (optional)
                   Lock key. The API fails if **the queue** is locked and no valid key is submitted

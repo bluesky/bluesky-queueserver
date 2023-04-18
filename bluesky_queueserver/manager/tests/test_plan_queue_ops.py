@@ -130,11 +130,9 @@ def test_queue_clean(plan_running, plans, result_running, result_plans):
     asyncio.run(testing())
 
 
-@pytest.mark.parametrize("update", [False, True])
-def test_set_plan_queue_mode_1(update):
+def test_set_plan_queue_mode_1():
     """
-    Test basic functionality of ``set_plan_queue_mode`` function:
-    The case: ``update=False``.
+    ``set_plan_queue_mode``: basic functionality.
     """
 
     async def testing():
@@ -142,32 +140,60 @@ def test_set_plan_queue_mode_1(update):
             # Initially plan queue mode must be default queue mode
             assert pq.plan_queue_mode == pq.plan_queue_mode_default
             assert pq.plan_queue_mode["loop"] is False
+            assert pq.plan_queue_mode["ignore_failures"] is False
 
             # The properties are expecte to return copies
             assert pq.plan_queue_mode is not pq._plan_queue_mode
             assert pq.plan_queue_mode_default is not pq._plan_queue_mode_default
 
-            queue_mode = {"loop": True}
-            await pq.set_plan_queue_mode(queue_mode, update=update)
-            assert pq._plan_queue_mode is not queue_mode  # Verify that 'set' operation performs copy
-            assert pq.plan_queue_mode == queue_mode
+            mode_expected = pq.plan_queue_mode
+            assert mode_expected == dict(loop=False, ignore_failures=False)
 
-            with pytest.raises(ValueError, match="Unsupported plan queue mode parameter 'nonexisting_key'"):
-                await pq.set_plan_queue_mode({"nonexisting_key": True}, update=update)
+            mode_new = {"loop": True}
+            mode_expected.update(mode_new)
+            await pq.set_plan_queue_mode(mode_new, update=True)
+            assert pq._plan_queue_mode is not mode_new  # Verify that 'set' operation performs copy
+            assert pq.plan_queue_mode == mode_expected
 
-            if update:
-                await pq.set_plan_queue_mode({}, update=update)
-            else:
-                with pytest.raises(ValueError, match="Parameters {'loop'} are missing"):
-                    await pq.set_plan_queue_mode({}, update=update)
+            mode_new = {"ignore_failures": True}
+            mode_expected.update(mode_new)
+            await pq.set_plan_queue_mode(mode_new, update=True)
+            assert pq._plan_queue_mode is not mode_new  # Verify that 'set' operation performs copy
+            assert pq.plan_queue_mode == mode_expected
+
+            mode_new = {"loop": False, "ignore_failures": False}
+            mode_expected.update(mode_new)
+            await pq.set_plan_queue_mode(mode_new, update=False)
+            assert pq._plan_queue_mode is not mode_new  # Verify that 'set' operation performs copy
+            assert pq.plan_queue_mode == mode_expected
+
+            for update in (False, True):
+                print(f"update={update}")
+                with pytest.raises(ValueError, match="Unsupported plan queue mode parameter 'nonexisting_key'"):
+                    await pq.set_plan_queue_mode({"nonexisting_key": True}, update=update)
+
+            await pq.set_plan_queue_mode({}, update=True)
+            assert pq.plan_queue_mode == mode_expected
+
+            with pytest.raises(ValueError, match="Parameters .* are missing"):
+                await pq.set_plan_queue_mode({}, update=False)
+
+            mode_new = {"loop": True}
+            with pytest.raises(ValueError, match="Parameters {'ignore_failures'} are missing"):
+                await pq.set_plan_queue_mode(mode_new, update=False)
 
             with pytest.raises(TypeError, match="Unsupported type .* of the parameter 'loop'"):
-                await pq.set_plan_queue_mode({"loop": 10}, update=update)
+                await pq.set_plan_queue_mode({"loop": 10}, update=True)
 
-            with pytest.raises(TypeError, match="Unsupported type .* of the parameter 'loop'"):
-                await pq.set_plan_queue_mode({"loop": "some_string"}, update=update)
+            with pytest.raises(TypeError, match="Unsupported type .* of the parameter 'ignore_failures'"):
+                await pq.set_plan_queue_mode({"ignore_failures": []}, update=True)
+
+            assert pq.plan_queue_mode == mode_expected
 
             # Verify that the queue mode is saved to Redis
+            queue_mode = {"loop": True, "ignore_failures": True}
+            await pq.set_plan_queue_mode(queue_mode, update=False)
+
             pq2 = PlanQueueOperations()
             await pq2.start()
             assert pq2.plan_queue_mode == queue_mode

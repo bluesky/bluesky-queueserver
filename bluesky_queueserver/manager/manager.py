@@ -56,11 +56,6 @@ class MState(enum.Enum):
     CLOSING_ENVIRONMENT = "closing_environment"
     DESTROYING_ENVIRONMENT = "destroying_environment"
 
-class Autostart(enum.Enum):
-    DISABLED = "disabled"
-    STOPPING = "stopping"
-    ENABLED = "enabled"
-
 
 class LockInfo:
     def __init__(self):
@@ -240,10 +235,10 @@ class RunEngineManager(Process):
         # worker did accept a request to pause (deferred) but had already passed its last checkpoint
         self._worker_state_info = None  # Copy of the last downloaded state of RE Worker
 
-        self._queue_autostart_state = Autostart.DISABLED
+        self._queue_autostart_enabled = False
+        self._queue_autostart_event = None
 
         self._exec_loop_deactivated_event = None  # Used to defer manager status change
-
         self._re_run_list = []
         self._re_run_list_uid = _generate_uid()
 
@@ -694,14 +689,14 @@ class RunEngineManager(Process):
                 await self._plan_queue.set_processed_item_as_stopped(
                     exit_status=plan_state, run_uids=result, err_msg=err_msg, err_tb=err_tb
                 )
-                self._loop.create_task(self._set_manager_state(MState.IDLE))
+                self._loop.create_task(self._set_manager_state(MState.IDLE), autostart_disable=True)
             elif plan_state == "paused":
                 # The plan was paused (nothing should be done).
                 self._loop.create_task(self._set_manager_state(MState.PAUSED))
             else:
                 logger.error("Unknown plan state %s was returned by RE Worker.", plan_state)
 
-    async def _set_manager_state(self, state, *, coro=None):
+    async def _set_manager_state(self, state, *, coro=None, autostart_disable=False):
         """
         Set manager state to ``MState.IDLE`` or ``MState.PAUSE``. When using IPython kernel,
         the manager should wait for the execution loop to be stopped before setting the state.
@@ -725,6 +720,8 @@ class RunEngineManager(Process):
 
         if state == MState.IDLE:
             self._queue_stop_deactivate()  # MState.EXECUTING_QUEUE
+        if autostart_disable:
+            self._autostart_disable()
 
         if coro:
             await coro()
@@ -898,7 +895,8 @@ class RunEngineManager(Process):
                 logger.info(err_msg)
 
             elif self._queue_stop_pending or stop_queue:
-                self._loop.create_task(self._set_manager_state(MState.IDLE))
+                autostart_disable = self._queue_stop_pending
+                self._loop.create_task(self._set_manager_state(MState.IDLE, autostart_disable=autostart_disable))
                 success, err_msg = False, "Queue is stopped."
                 logger.info(err_msg)
 
@@ -1042,30 +1040,39 @@ class RunEngineManager(Process):
         return success, err_msg
 
     async def _autostart_task(self):
-        self._autostart_event = asyncio.Event()
+        self._queue_autostart_event.clear()
         while True:
             queue_size = await self._plan_queue.get_queue_size()
-            if self._queue_autostart_state == Autostart.DISABLED:
+            if not self._queue_autostart_enabled:
                 break
             if queue_size and self._manager_state == MState.IDLE:
                 success, err_msg = await self._start_plan()
                 if not success:
-                    logger.error("Autostart: failed to start a plan: %s", err_msg)
+                    logger.debug("Autostart: failed to start a plan: %s", err_msg)
 
-            await self._autostart_event.wait(timeout=1)  # Pause
-            self._autostart_event.clear()
+            await self._queue_autostart_event.wait(timeout=1)  # Pause
+            self._queue_autostart_event.clear()
 
     async def _autostart_enable(self):
-        is_stopping = self._queue_autostart_state == Autostart.STOPPING
-        self._queue_autostart_state = Autostart.ENABLED
-        if not is_stopping:
+        success, msg = True, ""
+        if self._queue_autostart_enabled:
+            success = False
+            msg = "Queue autostart is already enabled"
+        else:
+            self._queue_autostart_enabled = True
             self._loop.create_task(self._autostart_task())
 
-    async def _autostart_disable(self):
-        self._manager_state == MState.IDLE:
-            self._queue_autostart_state = Autostart.DISABLED
+        return success, msg
 
-        self._queue_autostart_state = Autostart.STOPPING
+    def _autostart_disable(self):
+        success, msg = True, ""
+
+        if self._queue_autostart_enabled:
+            self._queue_autostart_enabled = False
+            # Make the task quit as quickly as possible
+            self._queue_autostart_event.set()
+
+        return success, msg
 
     async def _environment_upload_script(self, *, script, update_lists, update_re, run_in_background):
         """
@@ -1568,7 +1575,7 @@ class RunEngineManager(Process):
         running_item_uid = running_item_info["item_uid"] if running_item_info else None
         manager_state = self._manager_state.value
         queue_stop_pending = self._queue_stop_pending
-        queue_autostart_enabled = self._queue_autostart_state != Autostart.DISABLED
+        queue_autostart_enabled = self._queue_autostart_enabled
         worker_environment_exists = self._environment_exists
         re_state = self._worker_state_info["re_state"] if self._worker_state_info else None
         ip_kernel_state = self._worker_state_info["ip_kernel_state"] if self._worker_state_info else None
@@ -2756,7 +2763,7 @@ class RunEngineManager(Process):
         """
         logger.info("Starting queue processing ...")
         try:
-            supported_param_names = ["autostart", "lock_key"]
+            supported_param_names = ["lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
             self._validate_lock_key(request.get("lock_key", None), check_environment=True)
@@ -2802,6 +2809,29 @@ class RunEngineManager(Process):
             self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
             success, msg = self._queue_stop_deactivate()
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg}
+
+    async def _queue_autostart_handler(self, request):
+        """
+        Turn the autostart mode on or off.
+        """
+        try:
+            enable = request.get("enable", False) if isinstance(request, dict) else False
+            logger.info("%s autostart ...", "Enabling" if enable else "Disabling")
+
+            supported_param_names = ["enable", "lock_key"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
+
+            if enable:
+                success, msg = await self._autostart_enable()
+            else:
+                success, msg = self._autostart_disable()
+
         except Exception as ex:
             success, msg = False, f"Error: {ex}"
 
@@ -3290,6 +3320,7 @@ class RunEngineManager(Process):
 
         self._loop = asyncio.get_running_loop()
         self._exec_loop_deactivated_event = asyncio.Event()
+        self._queue_autostart_event = asyncio.Event()
 
         self._comm_to_watchdog = PipeJsonRpcSendAsync(
             conn=self._watchdog_conn,

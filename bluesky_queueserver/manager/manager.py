@@ -427,6 +427,10 @@ class RunEngineManager(Process):
             success, err_msg = False, f"Failed to start_Worker {str(ex)}"
 
         self._manager_state = MState.IDLE
+
+        if success:
+            self._autostart_push()
+
         return success, err_msg
 
     async def _stop_re_worker(self):

@@ -689,7 +689,7 @@ class RunEngineManager(Process):
                 await self._plan_queue.set_processed_item_as_stopped(
                     exit_status=plan_state, run_uids=result, err_msg=err_msg, err_tb=err_tb
                 )
-                self._loop.create_task(self._set_manager_state(MState.IDLE), autostart_disable=True)
+                self._loop.create_task(self._set_manager_state(MState.IDLE, autostart_disable=True))
             elif plan_state == "paused":
                 # The plan was paused (nothing should be done).
                 self._loop.create_task(self._set_manager_state(MState.PAUSED))
@@ -1039,7 +1039,18 @@ class RunEngineManager(Process):
 
         return success, err_msg
 
+    def _autostart_push(self):
+        """
+        Make autostart task immediately process the new item.
+        """
+        if self._queue_autostart_enabled and self._manager_state == MState.IDLE:
+            self._queue_autostart_event.set()
+
     async def _autostart_task(self):
+        """
+        The task that is monitoring the queue in autostart mode and attempting to start
+        the queue if it is not empty.
+        """
         self._queue_autostart_event.clear()
         while True:
             queue_size = await self._plan_queue.get_queue_size()
@@ -1050,21 +1061,30 @@ class RunEngineManager(Process):
                 if not success:
                     logger.debug("Autostart: failed to start a plan: %s", err_msg)
 
-            await self._queue_autostart_event.wait(timeout=1)  # Pause
+            polling_period = 1
+
+            try:
+                await asyncio.wait_for(self._queue_autostart_event.wait(), timeout=polling_period)
+            except asyncio.TimeoutError:
+                pass
+
             self._queue_autostart_event.clear()
 
     async def _autostart_enable(self):
+        """
+        Enable autostart if it is not already enabled. The function always succeeds.
+        """
         success, msg = True, ""
-        if self._queue_autostart_enabled:
-            success = False
-            msg = "Queue autostart is already enabled"
-        else:
+        if not self._queue_autostart_enabled:
             self._queue_autostart_enabled = True
             self._loop.create_task(self._autostart_task())
 
         return success, msg
 
     def _autostart_disable(self):
+        """
+        Disable autostart if it is enabled. The function always succeeds.
+        """
         success, msg = True, ""
 
         if self._queue_autostart_enabled:
@@ -2102,6 +2122,8 @@ class RunEngineManager(Process):
             item, qsize = await self._plan_queue.add_item_to_queue(
                 item, pos=pos, before_uid=before_uid, after_uid=after_uid
             )
+            self._autostart_push()
+
             success = True
 
         except Exception as ex:
@@ -2204,6 +2226,8 @@ class RunEngineManager(Process):
                 item_list, results, _, success = await self._plan_queue.add_batch_to_queue(
                     items_prepared, pos=pos, before_uid=before_uid, after_uid=after_uid
                 )
+                self._autostart_push()
+
             else:
                 # Return the copy of the items received as part of the request without change
                 item_list = items
@@ -2819,8 +2843,13 @@ class RunEngineManager(Process):
         Turn the autostart mode on or off.
         """
         try:
-            enable = request.get("enable", False) if isinstance(request, dict) else False
-            logger.info("%s autostart ...", "Enabling" if enable else "Disabling")
+            enable = request.get("enable", None)
+            if enable is None:
+                raise ValueError("Required 'enable' parameter is missing in 'queue_autostart' API call.")
+            if not isinstance(enable, bool):
+                raise TypeError(f"Required 'enable' parameter must be boolean: type(enable)={type(enable)}.")
+
+            logger.info("Request to %s autostart ...", "enable" if enable else "disable")
 
             supported_param_names = ["enable", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
@@ -3256,6 +3285,7 @@ class RunEngineManager(Process):
             "queue_start": "_queue_start_handler",
             "queue_stop": "_queue_stop_handler",
             "queue_stop_cancel": "_queue_stop_cancel_handler",
+            "queue_autostart": "_queue_autostart_handler",
             "re_pause": "_re_pause_handler",
             "re_resume": "_re_resume_handler",
             "re_stop": "_re_stop_handler",

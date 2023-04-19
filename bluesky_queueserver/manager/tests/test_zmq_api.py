@@ -3744,6 +3744,34 @@ def test_zmq_api_queue_mode_set_4_ignore_failures(re_manager):  # noqa: F811
 
 
 # =======================================================================================
+#                              Method 'queue_autostart'
+
+
+def test_zmq_api_queue_autostart_01(re_manager):  # noqa: F811
+    resp1, _ = zmq_single_request("queue_autostart", params={"enable": True})
+    assert resp1["success"] is True, f"resp={resp1}"
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True
+
+    resp2, _ = zmq_single_request("queue_autostart", params={"enable": False})
+    assert resp2["success"] is True, f"resp={resp2}"
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is False
+
+
+def test_zmq_api_queue_autostart_02_fail(re_manager):  # noqa: F811
+    resp1, _ = zmq_single_request("queue_autostart", params={})
+    assert resp1["success"] is False, f"resp={resp1}"
+    assert "Required 'enable' parameter is missing" in resp1["msg"]
+
+    resp2, _ = zmq_single_request("queue_autostart", params={"enable": 50})
+    assert resp2["success"] is False, f"resp={resp1}"
+    assert "Required 'enable' parameter must be boolean" in resp2["msg"]
+
+
+# =======================================================================================
 #                              Method 'permissions_reload'
 
 
@@ -5110,6 +5138,12 @@ def test_zmq_api_lock_7(re_manager, lock_options, is_locked, unlock):  # noqa: F
     cond = condition_environment_created if not is_locked or unlock else condition_manager_idle
     assert wait_for_condition(20, condition=cond)
 
+    # resp4a, _ = zmq_single_request("queue_autostart", params={"enable": True, **unlock_params})
+    # check_reply(resp4a)
+
+    # resp4b, _ = zmq_single_request("queue_autostart", params={"enable": False, **unlock_params})
+    # check_reply(resp4b)
+
     for api_to_test in ("re_resume", "re_stop", "re_abort", "re_halt"):
         # Always add the plan (not part of the test, but necessary for the test to complete)
         params = {"item": _plan3, "user": _user, "user_group": _user_group, "lock_key": custom_key}
@@ -5251,6 +5285,7 @@ def test_zmq_api_unsupported_parameters(re_manager):  # noqa: F811
         "queue_start",
         "queue_stop",
         "queue_stop_cancel",
+        "queue_autostart",
         "re_pause",
         "re_resume",
         "re_stop",

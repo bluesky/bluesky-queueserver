@@ -120,6 +120,10 @@ qserver queue start        # Start execution of the queue
 qserver queue stop         # Request execition of the queue to stop after current plan
 qserver queue stop cancel  # Cancel request to stop execution of the queue
 
+# Enable and disable autostart
+qserver queue autostart enable
+qserver queue autostart disable
+
 # Change the queue mode. Enable/disable LOOP and IGNORE_FAILURES modes:
 qserver queue mode set loop True
 qserver queue mode set loop False
@@ -678,6 +682,38 @@ def msg_queue_mode(params):
     return method, prms
 
 
+def msg_queue_autostart(params):
+    """
+    Generate outgoing messages for `queue_autostart` command: 'queue autostart enable' and
+    'queue autostart disable'
+
+    Parameters
+    ----------
+    params : list
+        List of parameters of the command. The first two elements of the list are expected to
+        be ``autostart`` and ``enable``/``disable`` keywords.
+
+    Returns
+    -------
+    str
+        Name of the method from RE Manager API
+    dict
+        Dictionary of the method parameters
+    """
+    command, prms = "queue", {}
+    method = f"{command}_{params[0]}"
+    if len(params) != 2:
+        raise CommandParameterError(f"Request '{command} {params[0]}' must include two parameters")
+    if params[1] == "enable":
+        prms["enable"] = True
+    elif params[1] == "disable":
+        prms["enable"] = False
+    else:
+        raise CommandParameterError(f"Request '{command} {params[0]} {params[1]}' is not supported")
+
+    return method, prms
+
+
 def msg_queue_stop(params):
     """
     Generate outgoing message for `queue stop` command.
@@ -961,7 +997,19 @@ def create_msg(params, *, lock_key):
     elif command == "queue":
         if len(params) < 1:
             raise CommandParameterError(f"Request '{command}' must include at least one parameter")
-        supported_params = ("add", "update", "replace", "execute", "get", "clear", "item", "start", "stop", "mode")
+        supported_params = (
+            "add",
+            "update",
+            "replace",
+            "execute",
+            "get",
+            "clear",
+            "item",
+            "start",
+            "stop",
+            "mode",
+            "autostart",
+        )
         if params[0] in supported_params:
             if params[0] in ("add", "update", "replace", "execute"):
                 method, prms = msg_queue_add_update(params, cmd_opt=params[0])
@@ -988,6 +1036,18 @@ def create_msg(params, *, lock_key):
                 method, prms = msg_queue_mode(params)
                 if lock_key:
                     prms["lock_key"] = lock_key
+
+            elif params[0] == "autostart":
+                method, prms = msg_queue_autostart(params)
+
+                if len(params) != 2:
+                    raise CommandParameterError(f"Request '{command} {params[0]}' must include two parameters")
+                if params[1] == "enable":
+                    prms["enable"] = True
+                elif params[1] == "disable":
+                    prms["enable"] = False
+                else:
+                    raise CommandParameterError(f"Request '{command} {params[0]} {params[1]}' is not supported")
 
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")

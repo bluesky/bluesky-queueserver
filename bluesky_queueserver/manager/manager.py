@@ -2846,19 +2846,20 @@ class RunEngineManager(Process):
         """
         Turn the autostart mode on or off.
         """
+        logger.info("Enabling/disabling autostart mode ...")
         try:
-            enable = request.get("enable", None)
-            if enable is None:
-                raise ValueError("Required 'enable' parameter is missing in 'queue_autostart' API call.")
-            if not isinstance(enable, bool):
-                raise TypeError(f"Required 'enable' parameter must be boolean: type(enable)={type(enable)}.")
-
-            logger.info("Request to %s autostart ...", "enable" if enable else "disable")
-
             supported_param_names = ["enable", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
             self._validate_lock_key(request.get("lock_key", None), check_environment=True)
+
+            if "enable" not in request:
+                raise ValueError("Required 'enable' parameter is missing in 'queue_autostart' API call.")
+
+            enable = request.get("enable", None)
+
+            if not isinstance(enable, bool):
+                raise TypeError(f"Required 'enable' parameter must be boolean: type(enable)={type(enable)}.")
 
             if enable:
                 success, msg = await self._autostart_enable()

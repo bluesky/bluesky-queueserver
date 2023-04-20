@@ -80,6 +80,7 @@ class PlanQueueOperations:
         #   not used by other functions of the class.
         self._name_user_group_permissions = "user_group_permissions"
         self._name_lock_info = "lock_info"
+        self._name_autostart_mode_info = "autostart_mode_info"
 
         # The list of allowed item parameters used for parameter filtering. Filtering operation
         #   involves removing all parameters that are not in the list.
@@ -1866,4 +1867,36 @@ class PlanQueueOperations:
             Returns dictionary with saved lock info or ``None`` if no lock info is saved.
         """
         lock_info_json = await self._r_pool.get(self._name_lock_info)
+        return json.loads(lock_info_json) if lock_info_json else None
+
+    # =============================================================================================
+    #         Methods for saving and retrieving 'autostart' mode.
+
+    async def autostart_mode_clear(self):
+        """
+        Clear 'autostart' mode info info saved in Redis.
+        """
+        await self._r_pool.delete(self._name_autostart_mode_info)
+
+    async def autostart_mode_save(self, lock_info):
+        """
+        Save 'autostart' mode info to Redis.
+
+        Parameters
+        ----------
+        lock_info: dict
+            A dictionary containing lock info.
+        """
+        await self._r_pool.set(self._name_autostart_mode_info, json.dumps(lock_info))
+
+    async def autostart_mode_retrieve(self):
+        """
+        Retreive saved 'autostart' mode info.
+
+        Returns
+        -------
+        dict or None
+            Returns dictionary with saved lock info or ``None`` if no lock info is saved.
+        """
+        lock_info_json = await self._r_pool.get(self._name_autostart_mode_info)
         return json.loads(lock_info_json) if lock_info_json else None

@@ -341,6 +341,7 @@ def clear_redis_pool():
         await pq.delete_pool_entries()
         await pq.user_group_permissions_clear()
         await pq.lock_info_clear()
+        await pq.autostart_mode_clear()
 
     asyncio.run(run())
 

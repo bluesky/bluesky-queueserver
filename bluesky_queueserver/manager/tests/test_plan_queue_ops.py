@@ -31,6 +31,7 @@ class PQ:
         await self._pq.delete_pool_entries()
         await self._pq.user_group_permissions_clear()
         await self._pq.lock_info_clear()
+        await self._pq.autostart_mode_clear()
         return self._pq
 
     async def __aexit__(self, exc_t, exc_v, exc_tb):
@@ -41,6 +42,7 @@ class PQ:
         await self._pq.delete_pool_entries()
         await self._pq.user_group_permissions_clear()
         await self._pq.lock_info_clear()
+        await self._pq.autostart_mode_clear()
 
 
 # fmt: off
@@ -2373,5 +2375,30 @@ def test_lock_info_1():
 
             await pq.lock_info_clear()
             assert await pq.lock_info_retrieve() is None
+
+    asyncio.run(testing())
+
+
+# ==============================================================================================
+#                           Saving and retrieving autostart info
+def test_autostart_mode_info_1():
+    """
+    Test for saving and retrieving and clearing user group permissions, which are backed up in Redis.
+    """
+    autostart_info_1 = {"enabled": False}
+    autostart_info_2 = {"enabled": True}
+
+    async def testing():
+        async with PQ() as pq:
+            assert await pq.autostart_mode_retrieve() is None
+
+            await pq.autostart_mode_save(autostart_info_1)
+            assert await pq.autostart_mode_retrieve() == autostart_info_1
+
+            await pq.autostart_mode_save(autostart_info_2)
+            assert await pq.autostart_mode_retrieve() == autostart_info_2
+
+            await pq.autostart_mode_clear()
+            assert await pq.autostart_mode_retrieve() is None
 
     asyncio.run(testing())

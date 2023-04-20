@@ -3914,11 +3914,14 @@ def test_zmq_api_queue_autostart_04(re_manager, option):  # noqa: F811
 
     wait_for_condition(time=30, condition=condition_manager_idle)
 
+    expected_state = option in ("normal", "resume")
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] == expected_state
+
     resp, _ = zmq_single_request("environment_close")
     assert resp["success"] is True
     assert wait_for_condition(time=10, condition=condition_environment_closed)
 
-    expected_state = option in ("normal", "resume")
     status = get_queue_state()
     assert status["queue_autostart_enabled"] == expected_state
 
@@ -3936,6 +3939,163 @@ def test_zmq_api_queue_autostart_04(re_manager, option):  # noqa: F811
         assert status["items_in_history"] == 1
     else:
         assert False, f"Unknown option {option!r}"
+
+
+# fmt: off
+@pytest.mark.parametrize("option", [
+    "immediate_plan",
+    "script_function",
+])
+# fmt: on
+def test_zmq_api_queue_autostart_05(re_manager, option):  # noqa: F811
+    """
+    ``queue_autostart``: execute a plan in 'immediate' mode, a function and a script between
+    two plans while the queue is empty to make sure it does not affect the 'autostart' mode.
+    """
+
+    def add_plan():
+        resp, _ = zmq_single_request(
+            "queue_item_add", params={"item": _plan3, "user": _user, "user_group": _user_group}
+        )
+        assert resp["success"] is True
+
+    resp, _ = zmq_single_request("environment_open")
+    assert resp["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    add_plan()
+
+    resp, _ = zmq_single_request("queue_autostart", params={"enable": True})
+    assert resp["success"] is True, f"resp={resp}"
+
+    wait_for_condition(time=30, condition=condition_manager_idle)
+
+    if option == "immediate_plan":
+        resp, _ = zmq_single_request(
+            "queue_item_execute", params={"item": _plan3, "user": _user, "user_group": _user_group}
+        )
+        assert resp["success"] is True
+
+    elif option == "script_function":
+        # Run a script that defines function
+        script = "def func_for_test():\n    return 'Function result'"
+        resp, _ = zmq_single_request("script_upload", params={"script": script})
+        assert resp["success"] is True
+        task_uid = resp["task_uid"]
+
+        wait_for_condition(time=30, condition=condition_manager_idle)
+
+        resp, _ = zmq_single_request("task_result", params={"task_uid": task_uid})
+        assert resp["success"] is True
+        assert resp["status"] == "completed"
+        assert resp["result"]["success"] is True
+
+        func_info = {"name": "func_for_test", "item_type": "function"}
+        resp, _ = zmq_single_request(
+            "function_execute", params={"item": func_info, "user": _user, "user_group": _user_group}
+        )
+        assert resp["success"] is True, pprint.pformat(resp)
+        task_uid = resp["task_uid"]
+
+        wait_for_condition(time=30, condition=condition_manager_idle)
+
+        resp, _ = zmq_single_request("task_result", params={"task_uid": task_uid})
+        assert resp["success"] is True
+        assert resp["status"] == "completed"
+        assert resp["result"]["success"] is True
+        assert resp["result"]["return_value"] == "Function result"
+
+    else:
+        assert False, f"Unsupported option {option!r}"
+
+    wait_for_condition(time=30, condition=condition_manager_idle)
+
+    add_plan()
+
+    wait_for_condition(time=30, condition=condition_manager_idle)
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True
+
+    resp, _ = zmq_single_request("environment_close")
+    assert resp["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_closed)
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True
+
+    if option in "immediate_plan":
+        assert status["items_in_queue"] == 0
+        assert status["items_in_history"] == 3
+    else:
+        assert status["items_in_queue"] == 0
+        assert status["items_in_history"] == 2
+
+
+# fmt: off
+@pytest.mark.parametrize("option", [
+    "restart_middle",
+    "complete_during_restart",
+])
+# fmt: on
+def test_zmq_api_queue_autostart_06(re_manager, option):  # noqa: F811
+    """
+    ``queue_autostart``: make sure the autostart persists thoughout restart of the manager process.
+    """
+
+    def add_plan():
+        resp, _ = zmq_single_request(
+            "queue_item_add", params={"item": _plan4, "user": _user, "user_group": _user_group}
+        )
+        assert resp["success"] is True
+
+    resp, _ = zmq_single_request("environment_open")
+    assert resp["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    add_plan()
+
+    resp, _ = zmq_single_request("queue_autostart", params={"enable": True})
+    assert resp["success"] is True, f"resp={resp}"
+
+    if option == "restart_middle":
+        ttime.sleep(1)
+    elif option == "complete_during_restart":
+        ttime.sleep(8)
+
+    resp, _ = zmq_single_request("manager_kill")
+    assert resp is None
+
+    ttime.sleep(6)
+
+    wait_for_condition(time=30, condition=condition_manager_idle)
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True
+
+    add_plan()
+
+    wait_for_condition(time=30, condition=condition_manager_idle)
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True
+
+    resp, _ = zmq_single_request("environment_close")
+    assert resp["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_closed)
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True
+
+    assert status["items_in_queue"] == 0
+    assert status["items_in_history"] == 2
+
+    # if option in "immediate_plan":
+    #     assert status["items_in_queue"] == 0
+    #     assert status["items_in_history"] == 3
+    # else:
+    #     assert status["items_in_queue"] == 0
+    #     assert status["items_in_history"] == 2
 
 
 # =======================================================================================

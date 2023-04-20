@@ -306,6 +306,23 @@ class RunEngineManager(Process):
             ug_permissions_reload = "ON_STARTUP"
         self._user_group_permissions_reload_option = ug_permissions_reload
 
+    @property
+    def queue_autostart_enabled(self):
+        """
+        It is not necessary to read the value from Redis each time, since it happens too often.
+        """
+        return self._queue_autostart_enabled
+
+    @queue_autostart_enabled.setter
+    def queue_autostart_enabled(self, enabled):
+        """
+        Saves autostart_enabled to Redis.
+        """
+        enabled = bool(enabled)
+        self._queue_autostart_enabled = enabled
+        if self._plan_queue:
+            self._plan_queue.autostart_mode_save({"enabled": enabled})
+
     async def _heartbeat_generator(self):
         """
         Heartbeat generator for Watchdog (indicates that the loop is running)
@@ -1047,7 +1064,7 @@ class RunEngineManager(Process):
         """
         Make autostart task immediately process the new item.
         """
-        if self._queue_autostart_enabled and self._manager_state == MState.IDLE:
+        if self.queue_autostart_enabled and self._manager_state == MState.IDLE:
             self._queue_autostart_event.set()
 
     async def _autostart_task(self):
@@ -1058,7 +1075,7 @@ class RunEngineManager(Process):
         self._queue_autostart_event.clear()
         while True:
             queue_size = await self._plan_queue.get_queue_size()
-            if not self._queue_autostart_enabled:
+            if not self.queue_autostart_enabled:
                 break
             if queue_size and self._manager_state == MState.IDLE:
                 success, err_msg = await self._start_plan()
@@ -1079,8 +1096,8 @@ class RunEngineManager(Process):
         Enable autostart if it is not already enabled. The function always succeeds.
         """
         success, msg = True, ""
-        if not self._queue_autostart_enabled:
-            self._queue_autostart_enabled = True
+        if not self.queue_autostart_enabled:
+            self.queue_autostart_enabled = True
             self._loop.create_task(self._autostart_task())
 
         return success, msg
@@ -1091,8 +1108,8 @@ class RunEngineManager(Process):
         """
         success, msg = True, ""
 
-        if self._queue_autostart_enabled:
-            self._queue_autostart_enabled = False
+        if self.queue_autostart_enabled:
+            self.queue_autostart_enabled = False
             # Make the task quit as quickly as possible
             self._queue_autostart_event.set()
 
@@ -1599,7 +1616,7 @@ class RunEngineManager(Process):
         running_item_uid = running_item_info["item_uid"] if running_item_info else None
         manager_state = self._manager_state.value
         queue_stop_pending = self._queue_stop_pending
-        queue_autostart_enabled = self._queue_autostart_enabled
+        queue_autostart_enabled = self.queue_autostart_enabled
         worker_environment_exists = self._environment_exists
         re_state = self._worker_state_info["re_state"] if self._worker_state_info else None
         ip_kernel_state = self._worker_state_info["ip_kernel_state"] if self._worker_state_info else None
@@ -2844,7 +2861,7 @@ class RunEngineManager(Process):
 
     async def _queue_autostart_handler(self, request):
         """
-        Turn the autostart mode on or off.
+        Turn the 'autostart' mode on or off.
         """
         logger.info("Enabling/disabling autostart mode ...")
         try:
@@ -3381,6 +3398,10 @@ class RunEngineManager(Process):
         # Delete Redis entries (for testing and debugging)
         # self._plan_queue.delete_pool_entries()
 
+        # 'autostart_enabled' is set False when the application starts, and read from Redis on restarts
+        autostart_enabled_redis = self._plan_queue.autostart_mode_retrieve() or {"enabled": False}
+        self.queue_autostart_enabled = False if self._number_of_restarts == 1 else autostart_enabled_redis
+
         # Load user group permissions
         if (self._user_group_permissions_reload_option == "ON_STARTUP") and (self._number_of_restarts == 1):
             logger.debug("Loading user permissions from disk ...")
@@ -3471,6 +3492,10 @@ class RunEngineManager(Process):
                 err_msg="Plan exit status was lost due to restart of the RE Manager process",
                 err_tb="",
             )
+
+        # We also need to start the autostart loop if necessary
+        if self.queue_autostart_enabled:
+            self._loop.create_task(self._autostart_task())
 
         logger.info("Starting ZeroMQ server ...")
         self._zmq_socket = self._ctx.socket(zmq.REP)

@@ -893,15 +893,15 @@ class RunEngineManager(Process):
             else:
                 logger.info("No items are left in the queue.")
 
-            if not n_pending_plans:
-                self._loop.create_task(self._set_manager_state(MState.IDLE))
-                success, err_msg = False, "Queue is empty."
-                logger.info(err_msg)
-
-            elif self._queue_stop_pending or stop_queue:
+            if self._queue_stop_pending or stop_queue:
                 autostart_disable = self._queue_stop_pending
                 self._loop.create_task(self._set_manager_state(MState.IDLE, autostart_disable=autostart_disable))
                 success, err_msg = False, "Queue is stopped."
+                logger.info(err_msg)
+
+            elif not n_pending_plans:
+                self._loop.create_task(self._set_manager_state(MState.IDLE))
+                success, err_msg = False, "Queue is empty."
                 logger.info(err_msg)
 
             elif self._re_pause_pending:

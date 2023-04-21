@@ -143,6 +143,18 @@ class RunList:
                 self._list_changed = False
             return run_list_copy
 
+    def get_uids(self):
+        """
+        Return the list of run UIDs
+        """
+        return [_["uid"] for _ in self._run_list]
+
+    def get_scan_ids(self):
+        """
+        Return the list of scan IDs
+        """
+        return [_["scan_id"] for _ in self._run_list]
+
 
 class CallbackRegisterRun(CallbackBase):
     """

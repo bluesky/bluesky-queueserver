@@ -790,6 +790,7 @@ def test_zmq_api_queue_item_add_09(db_catalog, re_manager_cmd, meta_param, meta_
     # Check if metadata was recorded in the start document.
     uid = history[-1]["result"]["run_uids"][0]
     start_doc = cat[uid].metadata["start"]
+    assert start_doc["scan_id"] == history[-1]["result"]["scan_ids"][0]
     for key in meta_saved:
         assert key in start_doc, str(start_doc)
         assert meta_saved[key] == start_doc[key], str(start_doc)
@@ -5023,6 +5024,7 @@ def test_zmq_api_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_resta
             # Save full UID list (for all runs)
             if len(full_list) == 3:
                 full_uid_list = [_["uid"] for _ in full_list]
+                full_scan_id_list = [_["scan_id"] for _ in full_list]
 
             is_open_list = [_["is_open"] for _ in full_list]
             for n, state in enumerate(run_list_states):
@@ -5068,6 +5070,11 @@ def test_zmq_api_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_resta
     assert len(history_run_uids) == 3, str(resp5b)
     # Make sure that the list of UID in history matches the list of UIDs in the run list
     assert history_run_uids == full_uid_list
+
+    for scan_id in full_scan_id_list:
+        assert isinstance(scan_id, int)
+    history_scan_ids = history[0]["result"]["scan_ids"]
+    assert history_scan_ids == full_scan_id_list
 
     # Close the environment
     resp6, _ = zmq_single_request("environment_close")

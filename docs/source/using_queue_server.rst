@@ -494,3 +494,28 @@ The operations of locking and unlocking RE Manager using CLI tool could be found
   The :ref:`method_lock` API controls access to other API, not internal operation of the server.
   For example, if the server is executing the queue, the queue will continue running after
   the manager is locked until it runs out of plans or stopped.
+
+
+.. _queue_autostart_mode:
+
+Queue Autostart Mode
+--------------------
+
+RE Manager supports queue autostart mode. In the autostart mode, the manager automatically
+starts execution of the queue whenever the queue is not empty and the manager and the worker
+are in the correct state. For example, if the autostart mode is enabled at the time when 
+the queue is empty, adding a queue item will automatically start the queue execution.
+Once the queue runs out of items, the manager is switched to IDLE state, but the queue
+is automatically restarted once more items are added to the queue. If the manager is busy
+executing another task (a script or a function) when the plan is added, the queue is 
+restarted once the current task is completed.
+
+The autostart is enabled by calling :ref:`method_queue_autostart` API with *enable=True* and
+disabled using the same API with *enable=False*. The mode can be enabled at any time,
+even when the queue can not be started (e.g. the environment is closed). The manager 
+will automatically monitor the state start the queue when possible (e.g. once the environment
+is opened). The autostart is automatically disabled once the queue is stopped by the user
+(by inserting *'queue_stop'* queue instruction or by calling :ref:`method_queue_stop` API) 
+or a plan is stopped/halted/aborted or failed (unless *ignore_failures* queue mode is enabled).
+
+See documentation on :ref:`method_queue_autostart` API for more details.

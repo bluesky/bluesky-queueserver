@@ -284,6 +284,10 @@ Returns       **msg**: *str*
                   indicates if the request to stop the queue after completion of the current plan is
                   pending.
 
+              **queue_autostart_enabled**: *boolean*
+                  indicates if the autostart queue mode is enabled, see 
+                  :ref:`method_queue_autostart` API.
+
               **pause_pending**: *boolean*
                   indicates if the request to pause the currently running plan was send to Run Engine
                   (see **re_pause** method), but the plan is not stopped yet. It may take considerable
@@ -1412,12 +1416,12 @@ Description   Enable/disable autostart mode. In autostart mode, the queue execut
               started whenever the queue contains items and the manager and the environment are
               ready to execute plans. Client applications may check if the manager is in autostart
               mode using *queue_autostart_enabled* parameter of RE Manager status 
-              (see :ref:`method_status`).The autostart mode is not disabled after the queue runs out of
+              (see :ref:`method_status` API).The autostart mode is not disabled after the queue runs out of
               items, but is automatically restarted once new items are added. The autostart mode is
               disabled if the API is called with *enable=False*, or if the queue or the running plan 
               is stopped due to the following events:
 
-              - **queue_stop** queue instruction was executed;
+              - *'queue_stop'* queue instruction was executed;
 
               - the queue was stopped using :ref:`method_queue_stop` API (the API call itself does not
                 disable autostart, the queue remains in autostart mode if **queue_stop** was cancelled
@@ -1425,7 +1429,7 @@ Description   Enable/disable autostart mode. In autostart mode, the queue execut
 
               - running plan was stopped/aborted/halted;
 
-              - running plan failed, unless the *ignore_failures* queue mode is enabled (see 
+              - running plan failed, unless the *'ignore_failures'* queue mode is enabled (see 
                 :ref:`method_queue_mode_set` API).
 
               The autostart mode may be enabled/disabled at any time. If the queue contains items,
@@ -1433,8 +1437,8 @@ Description   Enable/disable autostart mode. In autostart mode, the queue execut
               the manager periodically checks the state of the manager and the worker and will attempt to
               start the queue once the manager and the worker are ready. If the queue runs
               out of items, the manager returns to IDLE state and will accept requests to execute
-              foreground tasks: run a plan (:ref:`method_queue_item_execute`), a function 
-              (:ref:`method_function_execute`) or a script (:ref:`method_script_upload`). 
+              foreground tasks: run a plan (:ref:`method_queue_item_execute` API), a function 
+              (:ref:`method_function_execute` API) or a script (:ref:`method_script_upload` API). 
               If plans are added to the queue while the manager is busy, the queue is 
               is automatically started once the task is complete.
 

@@ -564,7 +564,9 @@ Returns       **success**: *boolean*
                     to restart of RE Manager process, but plan information still needs to be placed in the history;
                     this is very unlikely to happen in practice);
 
-                  - **run_uids** - list of UIDs of runs executed by the plan;
+                  - **run_uids** - list of UIDs (str) of runs executed by the plan;
+
+                  - **scan_ids** - list of scan IDs (int) of runs executed by the plan;
 
                   - **time_start** and **time_stop** - time of start and completion of the plan (not runs),
                     floating point number returned by *time.time()*.
@@ -1496,8 +1498,8 @@ Returns       **success**: *boolean*
 
               **run_list**: *list(dict)*
                   the requested list of runs, list items are dictionaries with keys 'uid' (str),
-                  'is_open' (boolean) and 'exit_status' (str or None). See Bluesky documentation
-                  for 'exit_status' values.
+                  'scan_id' (int), 'is_open' (boolean) and 'exit_status' (str or None). 
+                  See Bluesky documentation for 'exit_status' values.
 
               **run_list_uid**: str
                   UID of the returned run list, identical to the RE Manager status field with

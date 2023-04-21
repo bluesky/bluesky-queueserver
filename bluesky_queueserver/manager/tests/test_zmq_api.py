@@ -3856,9 +3856,8 @@ def test_zmq_api_queue_autostart_03(re_manager, open_env_first, autostart_first,
 # fmt: on
 def test_zmq_api_queue_autostart_04(re_manager, option):  # noqa: F811
     """
-    ``queue_autostart``: check that the queue is properly started in various scenarios.
-    The following scenarios are tested: start env/add plans/enable autostart in
-    any sequence. Check that the manager is in correct state and the plan is running.
+    ``queue_autostart``: check that autostart is manually and automatically disabled
+    in various scenarios.
     """
     failing_plan = {"name": "failing_plan", "item_type": "plan"}
 

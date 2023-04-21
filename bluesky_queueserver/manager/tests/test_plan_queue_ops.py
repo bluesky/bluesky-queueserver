@@ -32,6 +32,7 @@ class PQ:
         await self._pq.user_group_permissions_clear()
         await self._pq.lock_info_clear()
         await self._pq.autostart_mode_clear()
+        await self._pq.stop_pending_clear()
         return self._pq
 
     async def __aexit__(self, exc_t, exc_v, exc_tb):
@@ -43,6 +44,7 @@ class PQ:
         await self._pq.user_group_permissions_clear()
         await self._pq.lock_info_clear()
         await self._pq.autostart_mode_clear()
+        await self._pq.stop_pending_clear()
 
 
 # fmt: off
@@ -2375,6 +2377,31 @@ def test_lock_info_1():
 
             await pq.lock_info_clear()
             assert await pq.lock_info_retrieve() is None
+
+    asyncio.run(testing())
+
+
+# ==============================================================================================
+#                           Saving and retrieving 'stop pending' info
+def test_stop_pending_info_1():
+    """
+    Test for saving and retrieving and clearing user group permissions, which are backed up in Redis.
+    """
+    stop_pending_info_1 = {"enabled": False}
+    stop_pending_info_2 = {"enabled": True}
+
+    async def testing():
+        async with PQ() as pq:
+            assert await pq.stop_pending_retrieve() is None
+
+            await pq.stop_pending_save(stop_pending_info_1)
+            assert await pq.stop_pending_retrieve() == stop_pending_info_1
+
+            await pq.stop_pending_save(stop_pending_info_2)
+            assert await pq.stop_pending_retrieve() == stop_pending_info_2
+
+            await pq.stop_pending_clear()
+            assert await pq.stop_pending_retrieve() is None
 
     asyncio.run(testing())
 

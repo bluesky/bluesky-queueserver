@@ -81,6 +81,7 @@ class PlanQueueOperations:
         self._name_user_group_permissions = "user_group_permissions"
         self._name_lock_info = "lock_info"
         self._name_autostart_mode_info = "autostart_mode_info"
+        self._name_stop_pending_info = "stop_pending_info"
 
         # The list of allowed item parameters used for parameter filtering. Filtering operation
         #   involves removing all parameters that are not in the list.
@@ -1868,6 +1869,38 @@ class PlanQueueOperations:
         """
         lock_info_json = await self._r_pool.get(self._name_lock_info)
         return json.loads(lock_info_json) if lock_info_json else None
+
+    # =============================================================================================
+    #         Methods for saving and retrieving 'queue_stop_pending'.
+
+    async def stop_pending_clear(self):
+        """
+        Clear 'stop_pending' mode info info saved in Redis.
+        """
+        await self._r_pool.delete(self._name_stop_pending_info)
+
+    async def stop_pending_save(self, stop_pending):
+        """
+        Save 'stop_pending' mode info to Redis.
+
+        Parameters
+        ----------
+        lock_info: dict
+            A dictionary containing lock info.
+        """
+        await self._r_pool.set(self._name_stop_pending_info, json.dumps(stop_pending))
+
+    async def stop_pending_retrieve(self):
+        """
+        Retreive saved 'stop_pending' mode info.
+
+        Returns
+        -------
+        dict or None
+            Returns dictionary with saved 'stop_pending' or ``None`` if no 'stop_pending' is saved.
+        """
+        stop_pending_json = await self._r_pool.get(self._name_stop_pending_info)
+        return json.loads(stop_pending_json) if stop_pending_json else None
 
     # =============================================================================================
     #         Methods for saving and retrieving 'autostart' mode.

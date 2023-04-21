@@ -114,6 +114,7 @@ Start and stop execution of the plan queue:
 - :ref:`method_queue_start`
 - :ref:`method_queue_stop`
 - :ref:`method_queue_stop_cancel`
+- :ref:`method_queue_autostart`
 
 Send commands to Bluesky Run Engine:
 
@@ -1386,6 +1387,63 @@ Description   Cancel the pending request to stop execution of the queue after th
               *The request always succeeds*.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the environment** is locked and no valid key is submitted
+                  with the request. See documentation on :ref:`method_lock` API for more details.
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+
+.. _method_queue_autostart:
+
+**'queue_autostart'**
+^^^^^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'queue_autostart'**
+------------  -----------------------------------------------------------------------------------------
+Description   Enable/disable autostart mode. In autostart mode, the queue execution is automatically 
+              started whenever the queue contains items and the manager and the environment are
+              ready to execute plans. Client applications may check if the manager is in autostart
+              mode using *queue_autostart_enabled* parameter of RE Manager status 
+              (see :ref:`method_status`).The autostart mode is not disabled after the queue runs out of
+              items, but is automatically restarted once new items are added. The autostart mode is
+              disabled if the API is called with *enable=False*, or if the queue or the running plan 
+              is stopped due to the following events:
+
+              - **queue_stop** queue instruction was executed;
+
+              - the queue was stopped using :ref:`method_queue_stop` API (the API call itself does not
+                disable autostart, the queue remains in autostart mode if **queue_stop** was cancelled
+                before the queue was stopped);
+
+              - running plan was stopped/aborted/halted;
+
+              - running plan failed, unless the *ignore_failures* queue mode is enabled (see 
+                :ref:`method_queue_mode_set` API).
+
+              The autostart mode may be enabled/disabled at any time. If the queue contains items,
+              but queue can not be started immediately, e.g. due to environment being closed,
+              the manager periodically checks the state of the manager and the worker and will attempt to
+              start the queue once the manager and the worker are ready. If the queue runs
+              out of items, the manager returns to IDLE state and will accept requests to execute
+              foreground tasks: run a plan (:ref:`method_queue_item_execute`), a function 
+              (:ref:`method_function_execute`) or a script (:ref:`method_script_upload`). 
+              If plans are added to the queue while the manager is busy, the queue is 
+              is automatically started once the task is complete.
+
+              *The request always succeeds*.
+------------  -----------------------------------------------------------------------------------------
+Parameters    **enable**: *boolean*
+                  pass *True* to enable the 'autostart' mode and *False* to disable it.
+
+              **lock_key**: *str* (optional)
                   Lock key. The API fails if **the environment** is locked and no valid key is submitted
                   with the request. See documentation on :ref:`method_lock` API for more details.
 ------------  -----------------------------------------------------------------------------------------

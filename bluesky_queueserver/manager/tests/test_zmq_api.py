@@ -4045,6 +4045,8 @@ def test_zmq_api_queue_autostart_06(re_manager, option, autostart_on, apply_queu
     ``queue_autostart``: make sure the autostart persists thoughout restart of the manager process.
     Test the following cases: enabled/disabled autostart, queue_stop is applied before restart,
     cases of 1 and 2 plans added to queue before the restart.
+
+    This tests also verifies that 'queue_stop' persists through the restart. There is not separate test for this.
     """
 
     def add_plans(plans):

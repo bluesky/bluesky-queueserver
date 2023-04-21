@@ -53,6 +53,9 @@ def test_RunList_1():
         run_list.set_run_closed(uid="non-existing-uid", exit_status="success")
     assert run_list.is_changed() is False
 
+    assert run_list.get_uids() == uids
+    assert run_list.get_scan_ids() == scan_ids
+
     run_list.clear()
     assert run_list.is_changed() is True
     assert run_list.get_run_list(clear_state=True) == []
@@ -105,6 +108,9 @@ def test_RunList_2():
     run_list.set_run_closed(uid=uids[1], exit_status="success")
     assert run_list.is_changed() is False
     assert run_list.nruns == 1
+
+    assert run_list.get_uids() == uids[:1]
+    assert run_list.get_scan_ids() == scan_ids[:1]
 
     # The disabled list can be cleared
     run_list.clear()

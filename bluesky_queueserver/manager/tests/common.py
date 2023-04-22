@@ -274,7 +274,7 @@ def condition_manager_paused(msg):
 
 
 def condition_environment_created(msg):
-    return msg["worker_environment_exists"] and (msg["manager_state"] == "idle")
+    return msg["worker_environment_exists"] and (msg["manager_state"] in ("idle", "executing_queue"))
 
 
 def condition_environment_closed(msg):
@@ -341,6 +341,8 @@ def clear_redis_pool():
         await pq.delete_pool_entries()
         await pq.user_group_permissions_clear()
         await pq.lock_info_clear()
+        await pq.autostart_mode_clear()
+        await pq.stop_pending_clear()
 
     asyncio.run(run())
 

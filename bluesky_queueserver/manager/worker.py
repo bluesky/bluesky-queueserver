@@ -265,11 +265,16 @@ class RunEngineWorker(Process):
             # -------------------------------------------------------------------------------------------
 
             result = func()
+
+            uids, scan_ids = self._active_run_list.get_uids(), self._active_run_list.get_scan_ids()
+
             with self._re_report_lock:
                 self._re_report = {
                     "action": "plan_exit",
                     "success": True,
                     "result": result,
+                    "uids": uids,
+                    "scan_ids": scan_ids,
                     "err_msg": "",
                     "traceback": "",
                     "stop_queue": False,  # True - request manager not to start the next plan
@@ -292,9 +297,13 @@ class RunEngineWorker(Process):
                 logger.info("The plan was exited. Plan state: %s", self._re_report["plan_state"])
 
         except BaseException as ex:
+            uids, scan_ids = self._active_run_list.get_uids(), self._active_run_list.get_scan_ids()
+
             with self._re_report_lock:
                 self._re_report = {
                     "action": "plan_exit",
+                    "uids": uids,
+                    "scan_ids": scan_ids,
                     "result": "",
                     "traceback": traceback.format_exc(),
                     "stop_queue": False,  # True - request manager not to start the next plan
@@ -345,15 +354,16 @@ class RunEngineWorker(Process):
                 break
         plan_state = exit_status_to_plan_state[exit_status]
 
-        # List of UIDs (simulated return value for the plan)
-        uids = tuple([_["uid"] for _ in run_list])
+        uids, scan_ids = self._active_run_list.get_uids(), self._active_run_list.get_scan_ids()
 
         with self._re_report_lock:
             self._re_report = {
                 "action": "plan_exit",
                 "success": plan_state == "success",
                 "plan_state": plan_state,
-                "result": uids,  # List of UIDs
+                "result": tuple(uids),  # List of UIDs
+                "uids": uids,
+                "scan_ids": scan_ids,
                 "err_msg": "The plan is completed outside RE Manager",  # List of UIDs
                 "traceback": "",
                 "stop_queue": True,  # True - request manager not to start the next plan

@@ -80,6 +80,8 @@ class PlanQueueOperations:
         #   not used by other functions of the class.
         self._name_user_group_permissions = "user_group_permissions"
         self._name_lock_info = "lock_info"
+        self._name_autostart_mode_info = "autostart_mode_info"
+        self._name_stop_pending_info = "stop_pending_info"
 
         # The list of allowed item parameters used for parameter filtering. Filtering operation
         #   involves removing all parameters that are not in the list.
@@ -1665,7 +1667,7 @@ class PlanQueueOperations:
         async with self._lock:
             return await self._set_next_item_as_running(item=item)
 
-    async def _set_processed_item_as_completed(self, *, exit_status, run_uids, err_msg, err_tb):
+    async def _set_processed_item_as_completed(self, *, exit_status, run_uids, scan_ids, err_msg, err_tb):
         """
         See ``self.set_processed_item_as_completed`` method.
         """
@@ -1687,6 +1689,7 @@ class PlanQueueOperations:
             item_cleaned.setdefault("result", {})
             item_cleaned["result"]["exit_status"] = exit_status
             item_cleaned["result"]["run_uids"] = run_uids
+            item_cleaned["result"]["scan_ids"] = scan_ids
             item_cleaned["result"]["time_start"] = item_time_start
             item_cleaned["result"]["time_stop"] = ttime.time()
             item_cleaned["result"]["msg"] = err_msg
@@ -1700,7 +1703,7 @@ class PlanQueueOperations:
             item_cleaned = {}
         return item_cleaned
 
-    async def set_processed_item_as_completed(self, *, exit_status, run_uids, err_msg, err_tb):
+    async def set_processed_item_as_completed(self, *, exit_status, run_uids, scan_ids, err_msg, err_tb):
         """
         Moves currently executed item (plan) to history and sets ``exit_status`` key.
         UID is removed from ``self._uid_dict``, so a copy of the item with
@@ -1716,6 +1719,8 @@ class PlanQueueOperations:
             Completion status of the plan.
         run_uids: list(str)
             A list of uids of completed runs.
+        scan_ids: list(int)
+            A list of scan IDs for the completed runs.
         err_msg: str
             Error message in case of failure.
         err_tb: str
@@ -1729,10 +1734,10 @@ class PlanQueueOperations:
         """
         async with self._lock:
             return await self._set_processed_item_as_completed(
-                exit_status=exit_status, run_uids=run_uids, err_msg=err_msg, err_tb=err_tb
+                exit_status=exit_status, run_uids=run_uids, scan_ids=scan_ids, err_msg=err_msg, err_tb=err_tb
             )
 
-    async def _set_processed_item_as_stopped(self, *, exit_status, run_uids, err_msg, err_tb):
+    async def _set_processed_item_as_stopped(self, *, exit_status, run_uids, scan_ids, err_msg, err_tb):
         """
         See ``self.set_processed_item_as_stopped()`` method.
         """
@@ -1741,7 +1746,7 @@ class PlanQueueOperations:
             # Stopped item is considered successful, so it is not pushed back to the beginning
             #   of the queue, and it is added to the back of the queue in LOOP mode.
             item_cleaned = await self._set_processed_item_as_completed(
-                exit_status=exit_status, run_uids=run_uids, err_msg=err_msg, err_tb=err_tb
+                exit_status=exit_status, run_uids=run_uids, scan_ids=scan_ids, err_msg=err_msg, err_tb=err_tb
             )
         elif await self._is_item_running():
             item = await self._get_running_item_info()
@@ -1752,6 +1757,7 @@ class PlanQueueOperations:
             item_cleaned.setdefault("result", {})
             item_cleaned["result"]["exit_status"] = exit_status
             item_cleaned["result"]["run_uids"] = run_uids
+            item_cleaned["result"]["scan_ids"] = scan_ids
             item_cleaned["result"]["time_start"] = item_time_start
             item_cleaned["result"]["time_stop"] = ttime.time()
             item_cleaned["result"]["msg"] = err_msg
@@ -1772,7 +1778,7 @@ class PlanQueueOperations:
             item_cleaned = {}
         return item_cleaned
 
-    async def set_processed_item_as_stopped(self, *, exit_status, run_uids, err_msg, err_tb):
+    async def set_processed_item_as_stopped(self, *, exit_status, run_uids, scan_ids, err_msg, err_tb):
         """
         A stopped plan is considered successfully completed (if ``exit_status=="stopped"``) or
         failed (otherwise). All items are added to history with respective ``exit_status``.
@@ -1787,6 +1793,8 @@ class PlanQueueOperations:
             Completion status of the plan.
         run_uids: list(str)
             A list of uids of completed runs.
+        scan_ids: list(int)
+            A list of scan IDs for the completed runs.
         err_msg: str
             Error message in case of failure.
         err_tb: str
@@ -1801,7 +1809,7 @@ class PlanQueueOperations:
         """
         async with self._lock:
             return await self._set_processed_item_as_stopped(
-                exit_status=exit_status, run_uids=run_uids, err_msg=err_msg, err_tb=err_tb
+                exit_status=exit_status, run_uids=run_uids, scan_ids=scan_ids, err_msg=err_msg, err_tb=err_tb
             )
 
     # =============================================================================================
@@ -1866,4 +1874,68 @@ class PlanQueueOperations:
             Returns dictionary with saved lock info or ``None`` if no lock info is saved.
         """
         lock_info_json = await self._r_pool.get(self._name_lock_info)
+        return json.loads(lock_info_json) if lock_info_json else None
+
+    # =============================================================================================
+    #         Methods for saving and retrieving 'queue_stop_pending'.
+
+    async def stop_pending_clear(self):
+        """
+        Clear 'stop_pending' mode info info saved in Redis.
+        """
+        await self._r_pool.delete(self._name_stop_pending_info)
+
+    async def stop_pending_save(self, stop_pending):
+        """
+        Save 'stop_pending' mode info to Redis.
+
+        Parameters
+        ----------
+        lock_info: dict
+            A dictionary containing lock info.
+        """
+        await self._r_pool.set(self._name_stop_pending_info, json.dumps(stop_pending))
+
+    async def stop_pending_retrieve(self):
+        """
+        Retreive saved 'stop_pending' mode info.
+
+        Returns
+        -------
+        dict or None
+            Returns dictionary with saved 'stop_pending' or ``None`` if no 'stop_pending' is saved.
+        """
+        stop_pending_json = await self._r_pool.get(self._name_stop_pending_info)
+        return json.loads(stop_pending_json) if stop_pending_json else None
+
+    # =============================================================================================
+    #         Methods for saving and retrieving 'autostart' mode.
+
+    async def autostart_mode_clear(self):
+        """
+        Clear 'autostart' mode info info saved in Redis.
+        """
+        await self._r_pool.delete(self._name_autostart_mode_info)
+
+    async def autostart_mode_save(self, lock_info):
+        """
+        Save 'autostart' mode info to Redis.
+
+        Parameters
+        ----------
+        lock_info: dict
+            A dictionary containing lock info.
+        """
+        await self._r_pool.set(self._name_autostart_mode_info, json.dumps(lock_info))
+
+    async def autostart_mode_retrieve(self):
+        """
+        Retreive saved 'autostart' mode info.
+
+        Returns
+        -------
+        dict or None
+            Returns dictionary with saved lock info or ``None`` if no lock info is saved.
+        """
+        lock_info_json = await self._r_pool.get(self._name_autostart_mode_info)
         return json.loads(lock_info_json) if lock_info_json else None

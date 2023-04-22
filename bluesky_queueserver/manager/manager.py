@@ -229,14 +229,16 @@ class RunEngineManager(Process):
         self._manager_stopping = False  # Set True to exit manager (by _manager_stop_handler)
         self._environment_exists = False  # True if RE Worker environment exists
         self._manager_state = MState.INITIALIZING
-        self._queue_stop_pending = False  # Queue is in the process of being stopped
+        self.__queue_stop_pending = False  # Queue is in the process of being stopped
         self._re_pause_pending = False  # True when worker process has accepted our pause request but
         # we (this manager process) have not yet seen it as 'paused', useful for the situations where the
         # worker did accept a request to pause (deferred) but had already passed its last checkpoint
         self._worker_state_info = None  # Copy of the last downloaded state of RE Worker
 
-        self._exec_loop_deactivated_event = None  # Used to defer manager status change
+        self.__queue_autostart_enabled = False
+        self._queue_autostart_event = None
 
+        self._exec_loop_deactivated_event = None  # Used to defer manager status change
         self._re_run_list = []
         self._re_run_list_uid = _generate_uid()
 
@@ -303,6 +305,38 @@ class RunEngineManager(Process):
             )
             ug_permissions_reload = "ON_STARTUP"
         self._user_group_permissions_reload_option = ug_permissions_reload
+
+    @property
+    def queue_stop_pending(self):
+        """
+        It is not necessary to read the value from Redis each time, since it happens too often.
+        """
+        return self.__queue_stop_pending
+
+    async def set_queue_stop_pending(self, enabled):
+        """
+        Saves autostart_enabled to Redis.
+        """
+        enabled = bool(enabled)
+        self.__queue_stop_pending = enabled
+        if self._plan_queue:
+            await self._plan_queue.stop_pending_save({"enabled": enabled})
+
+    @property
+    def queue_autostart_enabled(self):
+        """
+        It is not necessary to read the value from Redis each time, since it happens too often.
+        """
+        return self.__queue_autostart_enabled
+
+    async def set_queue_autostart_enabled(self, enabled):
+        """
+        Saves autostart_enabled to Redis.
+        """
+        enabled = bool(enabled)
+        self.__queue_autostart_enabled = enabled
+        if self._plan_queue:
+            await self._plan_queue.autostart_mode_save({"enabled": enabled})
 
     async def _heartbeat_generator(self):
         """
@@ -425,6 +459,10 @@ class RunEngineManager(Process):
             success, err_msg = False, f"Failed to start_Worker {str(ex)}"
 
         self._manager_state = MState.IDLE
+
+        if success:
+            self._autostart_push()
+
         return success, err_msg
 
     async def _stop_re_worker(self):
@@ -533,7 +571,11 @@ class RunEngineManager(Process):
 
         # If a plan is running, it needs to be pushed back into the queue
         await self._plan_queue.set_processed_item_as_stopped(
-            exit_status="failed", run_uids=[], err_msg="RE Worker environment was destroyed", err_tb=""
+            exit_status="failed",
+            run_uids=[],
+            scan_ids=[],
+            err_msg="RE Worker environment was destroyed",
+            err_tb="",
         )
 
         err_msg = "" if success else "Failed to properly destroy RE Worker environment."
@@ -645,6 +687,7 @@ class RunEngineManager(Process):
             await self._plan_queue.set_processed_item_as_stopped(
                 exit_status="failed",
                 run_uids=[],
+                scan_ids=[],
                 err_msg="Internal RE Manager error occurred. Report the error to the development team",
                 err_tb="",
             )
@@ -654,6 +697,8 @@ class RunEngineManager(Process):
             plan_state = plan_report["plan_state"]
             success = plan_report["success"]
             result = plan_report["result"]
+            uids = plan_report["uids"]
+            scan_ids = plan_report["scan_ids"]
             err_msg = plan_report["err_msg"]
             err_tb = plan_report["traceback"]
             stop_queue = plan_report["stop_queue"]  # Worker tells the manager to stop the queue
@@ -679,22 +724,22 @@ class RunEngineManager(Process):
                 # execution of the queue is stopped. It can be restarted later (failed or
                 # interrupted plan will still be in the queue.
                 await self._plan_queue.set_processed_item_as_completed(
-                    exit_status=plan_state, run_uids=result, err_msg=err_msg, err_tb=err_tb
+                    exit_status=plan_state, run_uids=uids, scan_ids=scan_ids, err_msg=err_msg, err_tb=err_tb
                 )
                 await self._start_plan_task(stop_queue=stop_queue or bool(immediate_execution))
             elif plan_state in ("failed", "stopped", "aborted", "halted"):
                 # Paused plan was stopped/aborted/halted
                 await self._plan_queue.set_processed_item_as_stopped(
-                    exit_status=plan_state, run_uids=result, err_msg=err_msg, err_tb=err_tb
+                    exit_status=plan_state, run_uids=uids, scan_ids=scan_ids, err_msg=err_msg, err_tb=err_tb
                 )
-                self._loop.create_task(self._set_manager_state(MState.IDLE))
+                self._loop.create_task(self._set_manager_state(MState.IDLE, autostart_disable=True))
             elif plan_state == "paused":
                 # The plan was paused (nothing should be done).
                 self._loop.create_task(self._set_manager_state(MState.PAUSED))
             else:
                 logger.error("Unknown plan state %s was returned by RE Worker.", plan_state)
 
-    async def _set_manager_state(self, state, *, coro=None):
+    async def _set_manager_state(self, state, *, coro=None, autostart_disable=False):
         """
         Set manager state to ``MState.IDLE`` or ``MState.PAUSE``. When using IPython kernel,
         the manager should wait for the execution loop to be stopped before setting the state.
@@ -717,7 +762,9 @@ class RunEngineManager(Process):
         self._running_task_uid = None  # MState.EXECUTING_TASK
 
         if state == MState.IDLE:
-            self._queue_stop_deactivate()  # MState.EXECUTING_QUEUE
+            await self._queue_stop_deactivate()  # MState.EXECUTING_QUEUE
+        if autostart_disable:
+            await self._autostart_disable()
 
         if coro:
             await coro()
@@ -827,7 +874,7 @@ class RunEngineManager(Process):
             elif self._manager_state != MState.IDLE:
                 raise RuntimeError("RE Manager is busy.")
             else:
-                self._queue_stop_deactivate()  # Just in case
+                await self._queue_stop_deactivate()  # Just in case
                 self._manager_state = MState.STARTING_QUEUE
                 asyncio.ensure_future(self._execute_background_task(self._start_plan_task()))
                 success, err_msg = True, ""
@@ -849,7 +896,7 @@ class RunEngineManager(Process):
             elif self._manager_state != MState.IDLE:
                 raise RuntimeError("RE Manager is busy.")
             else:
-                self._queue_stop_deactivate()  # Just in case
+                await self._queue_stop_deactivate()  # Just in case
                 self._manager_state = MState.STARTING_QUEUE
 
                 item = self._plan_queue.set_new_item_uuid(item)
@@ -864,7 +911,7 @@ class RunEngineManager(Process):
 
         return success, err_msg, item, qsize
 
-    async def _start_plan_task(self, stop_queue=False, single_item=None):
+    async def _start_plan_task(self, stop_queue=False, autostart_disable=False, single_item=None):
         """
         Upload the plan to the worker process for execution.
         Plan in the queue is represented as a dictionary with the keys "name" (plan name),
@@ -885,14 +932,15 @@ class RunEngineManager(Process):
             else:
                 logger.info("No items are left in the queue.")
 
-            if not n_pending_plans:
-                self._loop.create_task(self._set_manager_state(MState.IDLE))
-                success, err_msg = False, "Queue is empty."
+            if self.queue_stop_pending or stop_queue:
+                autostart_disable = self.queue_stop_pending or autostart_disable
+                self._loop.create_task(self._set_manager_state(MState.IDLE, autostart_disable=autostart_disable))
+                success, err_msg = False, "Queue is stopped."
                 logger.info(err_msg)
 
-            elif self._queue_stop_pending or stop_queue:
+            elif not n_pending_plans:
                 self._loop.create_task(self._set_manager_state(MState.IDLE))
-                success, err_msg = False, "Queue is stopped."
+                success, err_msg = False, "Queue is empty."
                 logger.info(err_msg)
 
             elif self._re_pause_pending:
@@ -950,7 +998,7 @@ class RunEngineManager(Process):
                 success, err_msg = await self._worker_command_run_plan(plan_info)
                 if not success:
                     await self._plan_queue.set_processed_item_as_stopped(
-                        exit_status="failed", run_uids=[], err_msg=err_msg, err_tb=""
+                        exit_status="failed", run_uids=[], scan_ids=[], err_msg=err_msg, err_tb=""
                     )
                     self._manager_state = MState.IDLE
                     logger.error("Failed to start the plan %s.\nError: %s", ppfl(plan_info), err_msg)
@@ -963,7 +1011,7 @@ class RunEngineManager(Process):
                 if next_item["name"] == "queue_stop":
                     await self._plan_queue.process_next_item(item=single_item)
                     self._manager_state = MState.EXECUTING_QUEUE
-                    asyncio.ensure_future(self._start_plan_task(stop_queue=True))
+                    asyncio.ensure_future(self._start_plan_task(stop_queue=True, autostart_disable=True))
                     success, err_msg = True, ""
                 else:
                     success = False
@@ -975,16 +1023,16 @@ class RunEngineManager(Process):
 
         return success, err_msg
 
-    def _queue_stop_activate(self):
+    async def _queue_stop_activate(self):
         if self._manager_state not in (MState.EXECUTING_QUEUE, MState.STARTING_QUEUE):
             msg = f"Failed to pause the queue. Queue is not running. Manager state: {self._manager_state}"
             return False, msg
         else:
-            self._queue_stop_pending = True
+            await self.set_queue_stop_pending(True)
             return True, ""
 
-    def _queue_stop_deactivate(self):
-        self._queue_stop_pending = False
+    async def _queue_stop_deactivate(self):
+        await self.set_queue_stop_pending(False)
         return True, ""
 
     async def _pause_run_engine(self, option):
@@ -1033,6 +1081,61 @@ class RunEngineManager(Process):
             )
 
         return success, err_msg
+
+    def _autostart_push(self):
+        """
+        Make autostart task immediately process the new item.
+        """
+        if self.queue_autostart_enabled and self._manager_state == MState.IDLE:
+            self._queue_autostart_event.set()
+
+    async def _autostart_task(self):
+        """
+        The task that is monitoring the queue in autostart mode and attempting to start
+        the queue if it is not empty.
+        """
+        self._queue_autostart_event.clear()
+        while True:
+            queue_size = await self._plan_queue.get_queue_size()
+            if not self.queue_autostart_enabled:
+                break
+            if queue_size and self._manager_state == MState.IDLE:
+                success, err_msg = await self._start_plan()
+                if not success:
+                    logger.debug("Autostart: failed to start a plan: %s", err_msg)
+
+            polling_period = 1
+
+            try:
+                await asyncio.wait_for(self._queue_autostart_event.wait(), timeout=polling_period)
+            except asyncio.TimeoutError:
+                pass
+
+            self._queue_autostart_event.clear()
+
+    async def _autostart_enable(self):
+        """
+        Enable autostart if it is not already enabled. The function always succeeds.
+        """
+        success, msg = True, ""
+        if not self.queue_autostart_enabled:
+            await self.set_queue_autostart_enabled(True)
+            self._loop.create_task(self._autostart_task())
+
+        return success, msg
+
+    async def _autostart_disable(self):
+        """
+        Disable autostart if it is enabled. The function always succeeds.
+        """
+        success, msg = True, ""
+
+        if self.queue_autostart_enabled:
+            await self.set_queue_autostart_enabled(False)
+            # Make the task quit as quickly as possible
+            self._queue_autostart_event.set()
+
+        return success, msg
 
     async def _environment_upload_script(self, *, script, update_lists, update_re, run_in_background):
         """
@@ -1534,7 +1637,8 @@ class RunEngineManager(Process):
         items_in_history = n_items_in_history
         running_item_uid = running_item_info["item_uid"] if running_item_info else None
         manager_state = self._manager_state.value
-        queue_stop_pending = self._queue_stop_pending
+        queue_stop_pending = self.queue_stop_pending
+        queue_autostart_enabled = self.queue_autostart_enabled
         worker_environment_exists = self._environment_exists
         re_state = self._worker_state_info["re_state"] if self._worker_state_info else None
         ip_kernel_state = self._worker_state_info["ip_kernel_state"] if self._worker_state_info else None
@@ -1565,6 +1669,7 @@ class RunEngineManager(Process):
             "running_item_uid": running_item_uid,
             "manager_state": manager_state,
             "queue_stop_pending": queue_stop_pending,
+            "queue_autostart_enabled": queue_autostart_enabled,
             "worker_environment_exists": worker_environment_exists,
             "worker_environment_state": env_state,  # State of the worker environment
             "worker_background_tasks": background_tasks,  # The number of background tasks
@@ -2060,6 +2165,8 @@ class RunEngineManager(Process):
             item, qsize = await self._plan_queue.add_item_to_queue(
                 item, pos=pos, before_uid=before_uid, after_uid=after_uid
             )
+            self._autostart_push()
+
             success = True
 
         except Exception as ex:
@@ -2162,6 +2269,8 @@ class RunEngineManager(Process):
                 item_list, results, _, success = await self._plan_queue.add_batch_to_queue(
                     items_prepared, pos=pos, before_uid=before_uid, after_uid=after_uid
                 )
+                self._autostart_push()
+
             else:
                 # Return the copy of the items received as part of the request without change
                 item_list = items
@@ -2747,7 +2856,7 @@ class RunEngineManager(Process):
 
             self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
-            success, msg = self._queue_stop_activate()
+            success, msg = await self._queue_stop_activate()
         except Exception as ex:
             success, msg = False, f"Error: {ex}"
 
@@ -2766,7 +2875,36 @@ class RunEngineManager(Process):
 
             self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
-            success, msg = self._queue_stop_deactivate()
+            success, msg = await self._queue_stop_deactivate()
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg}
+
+    async def _queue_autostart_handler(self, request):
+        """
+        Turn the 'autostart' mode on or off.
+        """
+        logger.info("Enabling/disabling autostart mode ...")
+        try:
+            supported_param_names = ["enable", "lock_key"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
+
+            if "enable" not in request:
+                raise ValueError("Required 'enable' parameter is missing in 'queue_autostart' API call.")
+
+            enable = request.get("enable", None)
+
+            if not isinstance(enable, bool):
+                raise TypeError(f"Required 'enable' parameter must be boolean: type(enable)={type(enable)}.")
+
+            if enable:
+                success, msg = await self._autostart_enable()
+            else:
+                success, msg = await self._autostart_disable()
+
         except Exception as ex:
             success, msg = False, f"Error: {ex}"
 
@@ -3191,6 +3329,7 @@ class RunEngineManager(Process):
             "queue_start": "_queue_start_handler",
             "queue_stop": "_queue_stop_handler",
             "queue_stop_cancel": "_queue_stop_cancel_handler",
+            "queue_autostart": "_queue_autostart_handler",
             "re_pause": "_re_pause_handler",
             "re_resume": "_re_resume_handler",
             "re_stop": "_re_stop_handler",
@@ -3255,6 +3394,7 @@ class RunEngineManager(Process):
 
         self._loop = asyncio.get_running_loop()
         self._exec_loop_deactivated_event = asyncio.Event()
+        self._queue_autostart_event = asyncio.Event()
 
         self._comm_to_watchdog = PipeJsonRpcSendAsync(
             conn=self._watchdog_conn,
@@ -3279,6 +3419,18 @@ class RunEngineManager(Process):
 
         # Delete Redis entries (for testing and debugging)
         # self._plan_queue.delete_pool_entries()
+
+        # 'stop_pending' is set False when the application starts, and read from Redis on restarts
+        queue_stop_pending_redis = await self._plan_queue.stop_pending_retrieve()
+        queue_stop_pending_redis = queue_stop_pending_redis or {"enabled": False}
+        queue_stop_pending_redis = queue_stop_pending_redis.get("enabled", False)
+        await self.set_queue_stop_pending(False if self._number_of_restarts == 1 else queue_stop_pending_redis)
+
+        # 'autostart_enabled' is set False when the application starts, and read from Redis on restarts
+        autostart_enabled_redis = await self._plan_queue.autostart_mode_retrieve()
+        autostart_enabled_redis = autostart_enabled_redis or {"enabled": False}
+        autostart_enabled_redis = autostart_enabled_redis.get("enabled", False)
+        await self.set_queue_autostart_enabled(False if self._number_of_restarts == 1 else autostart_enabled_redis)
 
         # Load user group permissions
         if (self._user_group_permissions_reload_option == "ON_STARTUP") and (self._number_of_restarts == 1):
@@ -3367,9 +3519,14 @@ class RunEngineManager(Process):
             await self._plan_queue.set_processed_item_as_completed(
                 exit_status="unknown",
                 run_uids=[],
+                scan_ids=[],
                 err_msg="Plan exit status was lost due to restart of the RE Manager process",
                 err_tb="",
             )
+
+        # We also need to start the autostart loop if necessary
+        if self.queue_autostart_enabled:
+            self._loop.create_task(self._autostart_task())
 
         logger.info("Starting ZeroMQ server ...")
         self._zmq_socket = self._ctx.socket(zmq.REP)

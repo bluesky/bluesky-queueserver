@@ -790,6 +790,7 @@ def test_zmq_api_queue_item_add_09(db_catalog, re_manager_cmd, meta_param, meta_
     # Check if metadata was recorded in the start document.
     uid = history[-1]["result"]["run_uids"][0]
     start_doc = cat[uid].metadata["start"]
+    assert start_doc["scan_id"] == history[-1]["result"]["scan_ids"][0]
     for key in meta_saved:
         assert key in start_doc, str(start_doc)
         assert meta_saved[key] == start_doc[key], str(start_doc)
@@ -3744,6 +3745,457 @@ def test_zmq_api_queue_mode_set_4_ignore_failures(re_manager):  # noqa: F811
 
 
 # =======================================================================================
+#                              Method 'queue_autostart'
+
+
+def test_zmq_api_queue_autostart_01(re_manager):  # noqa: F811
+    """
+    ``queue_autostart``: basic tests
+    """
+    resp1, _ = zmq_single_request("queue_autostart", params={"enable": True})
+    assert resp1["success"] is True, f"resp={resp1}"
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True
+
+    # The second call must return 'success'
+    resp1, _ = zmq_single_request("queue_autostart", params={"enable": True})
+    assert resp1["success"] is True, f"resp={resp1}"
+
+    resp2, _ = zmq_single_request("queue_autostart", params={"enable": False})
+    assert resp2["success"] is True, f"resp={resp2}"
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is False
+
+    # The second call must return 'success'
+    resp2, _ = zmq_single_request("queue_autostart", params={"enable": False})
+    assert resp2["success"] is True, f"resp={resp2}"
+
+
+def test_zmq_api_queue_autostart_02_fail(re_manager):  # noqa: F811
+    """
+    ``queue_autostart``: failing cases
+    """
+    resp1, _ = zmq_single_request("queue_autostart", params={})
+    assert resp1["success"] is False, f"resp={resp1}"
+    assert "Required 'enable' parameter is missing" in resp1["msg"]
+
+    resp2, _ = zmq_single_request("queue_autostart", params={"enable": 50})
+    assert resp2["success"] is False, f"resp={resp1}"
+    assert "Required 'enable' parameter must be boolean" in resp2["msg"]
+
+
+# fmt: off
+@pytest.mark.parametrize("open_env_first", [True, False])
+@pytest.mark.parametrize("autostart_first", [True, False])
+@pytest.mark.parametrize("batch_upload", [False, True])
+# fmt: on
+def test_zmq_api_queue_autostart_03(re_manager, open_env_first, autostart_first, batch_upload):  # noqa: F811
+    """
+    ``queue_autostart``: check that the queue is properly started in various scenarios.
+    The following scenarios are tested: start env/add plans/enable autostart in
+    any sequence. Check that the manager is in correct state and the plan is running.
+    """
+
+    def add_plan():
+        if batch_upload:
+            resp, _ = zmq_single_request(
+                "queue_item_add_batch", params={"items": [_plan3], "user": _user, "user_group": _user_group}
+            )
+        else:
+            resp, _ = zmq_single_request(
+                "queue_item_add", params={"item": _plan3, "user": _user, "user_group": _user_group}
+            )
+        assert resp["success"] is True
+
+    def open_environment():
+        resp, _ = zmq_single_request("environment_open")
+        assert resp["success"] is True
+        assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    def autostart():
+        resp, _ = zmq_single_request("queue_autostart", params={"enable": True})
+        assert resp["success"] is True, f"resp={resp}"
+
+    if autostart_first:
+        autostart()
+
+    if open_env_first:
+        open_environment()
+        add_plan()
+    else:
+        add_plan()
+        open_environment()
+
+    if not autostart_first:
+        autostart()
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True, pprint.pformat(status)
+    assert status["manager_state"] in ("starting_queue", "executing_queue"), pprint.pformat(status)
+
+    wait_for_condition(time=30, condition=condition_queue_processing_finished)
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True
+
+    resp, _ = zmq_single_request("environment_close")
+    assert resp["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_closed)
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True
+    assert status["items_in_queue"] == 0
+    assert status["items_in_history"] == 1
+
+
+# fmt: off
+@pytest.mark.parametrize("option", [
+    "normal",
+    "disable_autostart",  # Doesn't stop the queue
+    "stop_queue",
+    "stop_queue_2_plans",
+    "resume",
+    "stop",
+    "abort",
+    "halt",
+    "failed_plan"
+])
+# fmt: on
+def test_zmq_api_queue_autostart_04(re_manager, option):  # noqa: F811
+    """
+    ``queue_autostart``: check that autostart is manually and automatically disabled
+    in various scenarios.
+    """
+    failing_plan = {"name": "failing_plan", "item_type": "plan"}
+
+    def add_plan():
+        if option == "failed_plan":
+            items = [failing_plan]
+        elif option == "stop_queue_2_plans":
+            items = [_plan3, _plan3]
+        else:
+            items = [_plan3]
+
+        resp, _ = zmq_single_request(
+            "queue_item_add_batch", params={"items": items, "user": _user, "user_group": _user_group}
+        )
+        assert resp["success"] is True
+
+    resp, _ = zmq_single_request("environment_open")
+    assert resp["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    # Upload script with failing plan
+    resp, _ = zmq_single_request("script_upload", params={"script": _failing_plan_script})
+    assert resp["success"] is True
+    wait_for_condition(time=10, condition=condition_manager_idle)
+
+    add_plan()
+
+    resp, _ = zmq_single_request("queue_autostart", params={"enable": True})
+    assert resp["success"] is True, f"resp={resp}"
+
+    ttime.sleep(2)
+    if option in ("normal", "failed_plan"):
+        pass
+    elif option == "disable_autostart":
+        resp, _ = zmq_single_request("queue_autostart", params={"enable": False})
+        assert resp["success"] is True, f"resp={resp}"
+    elif option in ("stop_queue", "stop_queue_2_plans"):
+        resp, _ = zmq_single_request("queue_stop")
+        assert resp["success"] is True, f"resp={resp}"
+    elif option in ("resume", "stop", "abort", "halt"):
+        resp, _ = zmq_single_request("re_pause")
+        assert resp["success"] is True, f"resp={resp}"
+        wait_for_condition(time=10, condition=condition_manager_paused)
+        api_name = "re_" + option
+        resp, _ = zmq_single_request(api_name)
+        assert resp["success"] is True, f"resp={resp}"
+    else:
+        assert False, f"Unknown option {option!r}"
+
+    wait_for_condition(time=30, condition=condition_manager_idle)
+
+    add_plan()  # Add another plan after the queue stopped
+
+    wait_for_condition(time=30, condition=condition_manager_idle)
+
+    # Make sure that the queue is not restarted
+    ttime.sleep(1.5)
+    wait_for_condition(time=30, condition=condition_manager_idle)
+
+    expected_state = option in ("normal", "resume")
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] == expected_state
+
+    resp, _ = zmq_single_request("environment_close")
+    assert resp["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_closed)
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] == expected_state
+
+    if option in ("normal", "resume"):
+        assert status["items_in_queue"] == 0
+        assert status["items_in_history"] == 2
+    elif option in ("disable_autostart", "stop_queue", "stop"):
+        assert status["items_in_queue"] == 1
+        assert status["items_in_history"] == 1
+    elif option in ("stop_queue_2_plans"):
+        assert status["items_in_queue"] == 3
+        assert status["items_in_history"] == 1
+    elif option in ("abort", "halt", "failed_plan"):
+        assert status["items_in_queue"] == 2
+        assert status["items_in_history"] == 1
+    else:
+        assert False, f"Unknown option {option!r}"
+
+
+# fmt: off
+@pytest.mark.parametrize("option", [
+    "immediate_plan",
+    "script_function",
+])
+# fmt: on
+def test_zmq_api_queue_autostart_05(re_manager, option):  # noqa: F811
+    """
+    ``queue_autostart``: execute a plan in 'immediate' mode, a function and a script between
+    two plans while the queue is empty to make sure it does not affect the 'autostart' mode.
+    """
+
+    def add_plan():
+        resp, _ = zmq_single_request(
+            "queue_item_add", params={"item": _plan3, "user": _user, "user_group": _user_group}
+        )
+        assert resp["success"] is True
+
+    resp, _ = zmq_single_request("environment_open")
+    assert resp["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    add_plan()
+
+    resp, _ = zmq_single_request("queue_autostart", params={"enable": True})
+    assert resp["success"] is True, f"resp={resp}"
+
+    wait_for_condition(time=30, condition=condition_manager_idle)
+
+    if option == "immediate_plan":
+        resp, _ = zmq_single_request(
+            "queue_item_execute", params={"item": _plan3, "user": _user, "user_group": _user_group}
+        )
+        assert resp["success"] is True
+
+    elif option == "script_function":
+        # Run a script that defines function
+        script = "def func_for_test():\n    return 'Function result'"
+        resp, _ = zmq_single_request("script_upload", params={"script": script})
+        assert resp["success"] is True
+        task_uid = resp["task_uid"]
+
+        wait_for_condition(time=30, condition=condition_manager_idle)
+
+        resp, _ = zmq_single_request("task_result", params={"task_uid": task_uid})
+        assert resp["success"] is True
+        assert resp["status"] == "completed"
+        assert resp["result"]["success"] is True
+
+        func_info = {"name": "func_for_test", "item_type": "function"}
+        resp, _ = zmq_single_request(
+            "function_execute", params={"item": func_info, "user": _user, "user_group": _user_group}
+        )
+        assert resp["success"] is True, pprint.pformat(resp)
+        task_uid = resp["task_uid"]
+
+        wait_for_condition(time=30, condition=condition_manager_idle)
+
+        resp, _ = zmq_single_request("task_result", params={"task_uid": task_uid})
+        assert resp["success"] is True
+        assert resp["status"] == "completed"
+        assert resp["result"]["success"] is True
+        assert resp["result"]["return_value"] == "Function result"
+
+    else:
+        assert False, f"Unsupported option {option!r}"
+
+    wait_for_condition(time=30, condition=condition_manager_idle)
+
+    add_plan()
+
+    wait_for_condition(time=30, condition=condition_manager_idle)
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True
+
+    resp, _ = zmq_single_request("environment_close")
+    assert resp["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_closed)
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True
+
+    if option in "immediate_plan":
+        assert status["items_in_queue"] == 0
+        assert status["items_in_history"] == 3
+    else:
+        assert status["items_in_queue"] == 0
+        assert status["items_in_history"] == 2
+
+
+# fmt: off
+@pytest.mark.parametrize("autostart_on", [True, False])
+@pytest.mark.parametrize("option", [
+    "restart_middle",
+    "complete_during_restart",
+])
+@pytest.mark.parametrize("apply_queue_stop", [False, True])
+@pytest.mark.parametrize("n_plans", [1, 2])
+# fmt: on
+def test_zmq_api_queue_autostart_06(re_manager, option, autostart_on, apply_queue_stop, n_plans):  # noqa: F811
+    """
+    ``queue_autostart``: make sure the autostart persists thoughout restart of the manager process.
+    Test the following cases: enabled/disabled autostart, queue_stop is applied before restart,
+    cases of 1 and 2 plans added to queue before the restart.
+
+    This tests also verifies that 'queue_stop' persists through the restart. There is not separate test for this.
+    """
+
+    def add_plans(plans):
+        resp, _ = zmq_single_request(
+            "queue_item_add_batch", params={"items": plans, "user": _user, "user_group": _user_group}
+        )
+        assert resp["success"] is True
+
+    resp, _ = zmq_single_request("environment_open")
+    assert resp["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    plans = [_plan4] + [_plan1] * (n_plans - 1)
+    add_plans(plans)
+
+    if autostart_on:
+        resp, _ = zmq_single_request("queue_autostart", params={"enable": True})
+        assert resp["success"] is True, f"resp={resp}"
+    else:
+        resp, _ = zmq_single_request("queue_start")
+        assert resp["success"] is True, f"resp={resp}"
+
+    if apply_queue_stop:
+        ttime.sleep(0.1)
+        resp, _ = zmq_single_request("queue_stop")
+        assert resp["success"] is True, f"resp={resp}"
+
+    status = get_queue_state()
+    assert status["queue_stop_pending"] == apply_queue_stop
+
+    if option == "restart_middle":
+        ttime.sleep(1)
+    elif option == "complete_during_restart":
+        ttime.sleep(8)
+
+    resp, _ = zmq_single_request("manager_kill")
+    assert resp is None
+
+    ttime.sleep(6)
+
+    wait_for_condition(time=30, condition=condition_manager_idle)
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] == (autostart_on and not apply_queue_stop)
+    assert status["queue_stop_pending"] is False
+
+    add_plans([_plan1])
+
+    wait_for_condition(time=30, condition=condition_manager_idle)
+
+    # Make sure that the queue is not restarted
+    ttime.sleep(1.5)
+    wait_for_condition(time=30, condition=condition_manager_idle)
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] == (autostart_on and not apply_queue_stop)
+
+    resp, _ = zmq_single_request("environment_close")
+    assert resp["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_closed)
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] == (autostart_on and not apply_queue_stop)
+    assert status["queue_stop_pending"] is False
+
+    if n_plans == 1:
+        if autostart_on and not apply_queue_stop:
+            assert status["items_in_queue"] == 0
+            assert status["items_in_history"] == 2
+        else:
+            assert status["items_in_queue"] == 1
+            assert status["items_in_history"] == 1
+    elif n_plans == 2:
+        if autostart_on and not apply_queue_stop:
+            assert status["items_in_queue"] == 0
+            assert status["items_in_history"] == 3
+        elif not autostart_on and not apply_queue_stop:
+            assert status["items_in_queue"] == 1
+            assert status["items_in_history"] == 2
+        else:  # apply_queue_stop is True
+            assert status["items_in_queue"] == 2
+            assert status["items_in_history"] == 1
+    else:
+        assert False, f"Unsupported number of plans: {n_plans}"
+
+
+# fmt: off
+@pytest.mark.parametrize("autostart_on", [False, True])
+# fmt: on
+def test_zmq_api_queue_autostart_07(re_manager, autostart_on):  # noqa: F811
+    """
+    ``queue_autostart``: make sure the autostart persists thoughout restart of the manager process.
+    Test the following cases: enabled/disabled autostart, queue_stop is applied before restart,
+    cases of 1 and 2 plans added to queue before the restart.
+
+    This tests also verifies that 'queue_stop' persists through the restart. There is not separate test for this.
+    """
+
+    def add_plans(plans):
+        resp, _ = zmq_single_request(
+            "queue_item_add_batch", params={"items": plans, "user": _user, "user_group": _user_group}
+        )
+        assert resp["success"] is True
+
+    add_plans([_plan1, _instruction_stop, _plan1])
+
+    resp, _ = zmq_single_request("environment_open")
+    assert resp["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    if autostart_on:
+        resp, _ = zmq_single_request("queue_autostart", params={"enable": True})
+        assert resp["success"] is True, f"resp={resp}"
+    else:
+        resp, _ = zmq_single_request("queue_start")
+        assert resp["success"] is True, f"resp={resp}"
+
+    wait_for_condition(time=30, condition=condition_manager_idle)
+
+    # Make sure that the queue is not restarted
+    ttime.sleep(1.5)
+    wait_for_condition(time=30, condition=condition_manager_idle)
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is False
+    assert status["queue_stop_pending"] is False
+
+    resp, _ = zmq_single_request("environment_close")
+    assert resp["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_closed)
+
+    assert status["items_in_queue"] == 1
+    assert status["items_in_history"] == 1
+
+
+# =======================================================================================
 #                              Method 'permissions_reload'
 
 
@@ -4637,6 +5089,7 @@ def test_zmq_api_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_resta
             # Save full UID list (for all runs)
             if len(full_list) == 3:
                 full_uid_list = [_["uid"] for _ in full_list]
+                full_scan_id_list = [_["scan_id"] for _ in full_list]
 
             is_open_list = [_["is_open"] for _ in full_list]
             for n, state in enumerate(run_list_states):
@@ -4682,6 +5135,11 @@ def test_zmq_api_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_resta
     assert len(history_run_uids) == 3, str(resp5b)
     # Make sure that the list of UID in history matches the list of UIDs in the run list
     assert history_run_uids == full_uid_list
+
+    for scan_id in full_scan_id_list:
+        assert isinstance(scan_id, int)
+    history_scan_ids = history[0]["result"]["scan_ids"]
+    assert history_scan_ids == full_scan_id_list
 
     # Close the environment
     resp6, _ = zmq_single_request("environment_close")
@@ -5110,6 +5568,12 @@ def test_zmq_api_lock_7(re_manager, lock_options, is_locked, unlock):  # noqa: F
     cond = condition_environment_created if not is_locked or unlock else condition_manager_idle
     assert wait_for_condition(20, condition=cond)
 
+    # resp4a, _ = zmq_single_request("queue_autostart", params={"enable": True, **unlock_params})
+    # check_reply(resp4a)
+
+    # resp4b, _ = zmq_single_request("queue_autostart", params={"enable": False, **unlock_params})
+    # check_reply(resp4b)
+
     for api_to_test in ("re_resume", "re_stop", "re_abort", "re_halt"):
         # Always add the plan (not part of the test, but necessary for the test to complete)
         params = {"item": _plan3, "user": _user, "user_group": _user_group, "lock_key": custom_key}
@@ -5251,6 +5715,7 @@ def test_zmq_api_unsupported_parameters(re_manager):  # noqa: F811
         "queue_start",
         "queue_stop",
         "queue_stop_cancel",
+        "queue_autostart",
         "re_pause",
         "re_resume",
         "re_stop",

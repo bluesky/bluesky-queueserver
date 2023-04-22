@@ -80,7 +80,7 @@ class RunList:
             self._run_list.clear()
             self._list_changed = True
 
-    def add_run(self, *, uid):
+    def add_run(self, *, uid, scan_id):
         """
         Add run to the end of the list. The run is labeled as 'open' (``is_open`` is set ``True``).
 
@@ -93,7 +93,7 @@ class RunList:
             return
 
         with self._lock:
-            self._run_list.append({"uid": uid, "is_open": True, "exit_status": None})
+            self._run_list.append({"uid": uid, "scan_id": scan_id, "is_open": True, "exit_status": None})
             self._list_changed = True
 
     def set_run_closed(self, *, uid, exit_status):
@@ -143,6 +143,18 @@ class RunList:
                 self._list_changed = False
             return run_list_copy
 
+    def get_uids(self):
+        """
+        Return the list of run UIDs
+        """
+        return [_["uid"] for _ in self._run_list]
+
+    def get_scan_ids(self):
+        """
+        Return the list of scan IDs
+        """
+        return [_["scan_id"] for _ in self._run_list]
+
 
 class CallbackRegisterRun(CallbackBase):
     """
@@ -167,7 +179,14 @@ class CallbackRegisterRun(CallbackBase):
         """
         try:
             uid = doc["uid"]
-            self._run_list.add_run(uid=uid)
+            scan_id = doc.get("scan_id", None)
+            if scan_id is not None:
+                try:
+                    scan_id = int(scan_id)
+                except Exception:
+                    scan_id = None
+
+            self._run_list.add_run(uid=uid, scan_id=scan_id)
 
             logger.info("New run was open: %r", uid)
             logger.debug("Run list: %s", self._run_list.get_run_list())

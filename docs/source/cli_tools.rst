@@ -482,6 +482,10 @@ periodically requests and displays the status of Queue Server.
     qserver queue stop         # Request execition of the queue to stop after current plan
     qserver queue stop cancel  # Cancel request to stop execution of the queue
 
+    # Enable and disable autostart
+    qserver queue autostart enable
+    qserver queue autostart disable
+
     # Change the queue mode. Enable/disable LOOP and IGNORE_FAILURES modes:
     qserver queue mode set loop True
     qserver queue mode set loop False

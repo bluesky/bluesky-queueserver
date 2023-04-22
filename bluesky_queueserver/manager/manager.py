@@ -911,7 +911,7 @@ class RunEngineManager(Process):
 
         return success, err_msg, item, qsize
 
-    async def _start_plan_task(self, stop_queue=False, single_item=None):
+    async def _start_plan_task(self, stop_queue=False, autostart_disable=False, single_item=None):
         """
         Upload the plan to the worker process for execution.
         Plan in the queue is represented as a dictionary with the keys "name" (plan name),
@@ -933,7 +933,7 @@ class RunEngineManager(Process):
                 logger.info("No items are left in the queue.")
 
             if self.queue_stop_pending or stop_queue:
-                autostart_disable = self.queue_stop_pending
+                autostart_disable = self.queue_stop_pending or autostart_disable
                 self._loop.create_task(self._set_manager_state(MState.IDLE, autostart_disable=autostart_disable))
                 success, err_msg = False, "Queue is stopped."
                 logger.info(err_msg)
@@ -1011,7 +1011,7 @@ class RunEngineManager(Process):
                 if next_item["name"] == "queue_stop":
                     await self._plan_queue.process_next_item(item=single_item)
                     self._manager_state = MState.EXECUTING_QUEUE
-                    asyncio.ensure_future(self._start_plan_task(stop_queue=True))
+                    asyncio.ensure_future(self._start_plan_task(stop_queue=True, autostart_disable=True))
                     success, err_msg = True, ""
                 else:
                     success = False

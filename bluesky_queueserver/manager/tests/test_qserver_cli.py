@@ -603,6 +603,29 @@ def test_qserver_queue_mode_set_2_fail(re_manager, plist, exit_code):  # noqa F8
     assert subprocess.call(["qserver", "queue", "mode", *plist]) == exit_code, str(plist)
 
 
+def test_qserver_queue_autostart_1(re_manager):  # noqa F811
+    """
+    Basic test for ``qserver queue autostart`` command
+    """
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is False
+
+    assert subprocess.call(["qserver", "queue", "autostart", "enable"]) == SUCCESS
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True
+
+    assert subprocess.call(["qserver", "queue", "autostart", "disable"]) == SUCCESS
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is False
+
+
+def test_qserver_queue_autostart_2_fail(re_manager):  # noqa F811
+    """
+    Basic test for ``qserver queue autostart`` command: failing cases
+    """
+    assert subprocess.call(["qserver", "queue", "autostart", "unsupported"]) == PARAM_ERROR
+
+
 # fmt: off
 @pytest.mark.parametrize("pos, pos_result, success", [
     (None, 2, True),

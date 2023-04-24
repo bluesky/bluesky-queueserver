@@ -280,6 +280,28 @@ startup:
   user_group_permissions_reload: INVALID
 """
 
+config07_a = """
+worker:
+  use_ipython_kernel: True
+  ipython_kernel_ip: localhost
+  ipython_matplotlib: qt5
+"""
+
+config07_a_dict = {
+    "worker": {"use_ipython_kernel": True, "ipython_kernel_ip": "localhost", "ipython_matplotlib": "qt5"}
+}
+
+config07_b = """
+worker:
+  use_ipython_kernel: false
+  ipython_kernel_ip: 127.0.0.1
+  ipython_matplotlib: agg
+"""
+
+config07_b_dict = {
+    "worker": {"use_ipython_kernel": False, "ipython_kernel_ip": "127.0.0.1", "ipython_matplotlib": "agg"}
+}
+
 
 # fmt: off
 @pytest.mark.parametrize("config_str, config_dict, success", [
@@ -309,6 +331,8 @@ startup:
     ([config_01a_success, config_01b_success, config_01c_success, config_01d_success],
      config_01_dict, True),
     ([config_01a_success, config_01a_success], None, False),
+    ([config07_a], config07_a_dict, True),
+    ([config07_b], config07_b_dict, True),
 ])
 # fmt: on
 def test_config_schema_01(tmpdir, config_str, config_dict, success):

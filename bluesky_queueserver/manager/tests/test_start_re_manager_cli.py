@@ -469,6 +469,7 @@ def _get_expected_settings_default_1(tmpdir):
         "keep_re": False,
         "device_max_depth": 0,
         "use_ipython_kernel": use_ipython_kernel,
+        "ipython_kernel_ip": "localhost",
         "ipython_matplotlib": None,
         "print_console_output": True,
         "redis_addr": "localhost",
@@ -502,6 +503,7 @@ network:
   redis_addr: localhost:6379
 worker:
   use_ipython_kernel: true
+  ipython_kernel_ip: auto
   ipython_matplotlib: qt5
 startup:
   keep_re: false
@@ -542,6 +544,7 @@ def _get_expected_settings_config_2(tmpdir):
         "device_max_depth": 2,
         "ignore_invalid_plans": True,
         "use_ipython_kernel": True,
+        "ipython_kernel_ip": "auto",
         "ipython_matplotlib": "qt5",
         "print_console_output": True,
         "redis_addr": "localhost:6379",
@@ -580,6 +583,7 @@ def _get_cli_params_3(tmpdir):
         "--device-max-depth=5",
         "--ignore-invalid-plans=ON",
         "--use-ipython-kernel=ON",
+        "--ipython-kernel-ip=127.0.0.1",
         "--ipython-matplotlib=qt",
         "--zmq-data-proxy-addr=tcp://localhost:5571",
         "--databroker-config=NEW",
@@ -604,6 +608,7 @@ def _get_expected_settings_params_3(tmpdir):
         "device_max_depth": 5,
         "ignore_invalid_plans": True,
         "use_ipython_kernel": True,
+        "ipython_kernel_ip": "127.0.0.1",
         "ipython_matplotlib": "qt",
         "print_console_output": False,
         "redis_addr": "localhost:6379",

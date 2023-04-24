@@ -896,6 +896,15 @@ class RunEngineWorker(Process):
         }
         return msg_out
 
+    def _request_ip_connect_info(self):
+        """
+        Return IP connect info obtained from IPython kernel. Returns ``{}`` if
+        worker is using pure Python.
+        """
+        connect_info = copy.deepcopy(self._ip_connect_info)
+        connect_info["key"] = connect_info["key"].decode("utf-8")
+        return {"ip_connect_info": connect_info}
+
     def _request_plan_report_handler(self):
         """
         Returns the report on recently completed plan. Note that the report is `None` if
@@ -1267,6 +1276,7 @@ class RunEngineWorker(Process):
         self._comm_to_manager = PipeJsonRpcReceive(conn=self._conn, name="RE Worker-Manager Comm")
 
         self._comm_to_manager.add_method(self._request_state_handler, "request_state")
+        self._comm_to_manager.add_method(self._request_ip_connect_info, "request_ip_connect_info")
         self._comm_to_manager.add_method(self._request_plan_report_handler, "request_plan_report")
         self._comm_to_manager.add_method(self._request_run_list_handler, "request_run_list")
         self._comm_to_manager.add_method(

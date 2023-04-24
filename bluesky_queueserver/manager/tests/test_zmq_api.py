@@ -48,6 +48,7 @@ from .common import (  # noqa: F401
     re_manager,
     re_manager_cmd,
     re_manager_pc_copy,
+    use_ipykernel_for_tests,
     wait_for_condition,
     wait_for_task_result,
 )
@@ -5685,6 +5686,50 @@ def test_manager_kill_1(re_manager_pc_copy):  # noqa: F811
     # Close the environment
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+# =======================================================================================
+#                       Test if 'config_get' API
+
+
+def test_zmq_api_config_get_01(re_manager):  # noqa: F811
+    """
+    ``config_get``: basic tests.
+    """
+    resp, _ = zmq_single_request("config_get")
+    assert resp["success"] is True, pprint.pformat(resp)
+    assert "config" in resp, pprint.pformat(resp)
+    assert "ip_connect_info" in resp["config"], pprint.pformat(resp)
+    assert resp["config"]["ip_connect_info"] == {}, pprint.pformat(resp)
+
+    resp, _ = zmq_single_request("environment_open")
+    assert resp["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp, _ = zmq_single_request("config_get")
+    assert resp["success"] is True, pprint.pformat(resp)
+    assert "config" in resp, pprint.pformat(resp)
+    assert "ip_connect_info" in resp["config"], pprint.pformat(resp)
+
+    if use_ipykernel_for_tests():
+        ip_connect_info = resp["config"]["ip_connect_info"]
+
+        def check_key(key_name, key_type):
+            assert key_name in ip_connect_info, pprint.pformat(ip_connect_info)
+            assert isinstance(ip_connect_info[key_name], key_type), pprint.pformat(ip_connect_info)
+
+        for k in ("control_port", "hb_port", "iopub_port", "shell_port", "stdin_port"):
+            check_key(k, int)
+
+        for k in ("ip", "key", "signature_scheme", "transport"):
+            check_key(k, str)
+
+    else:
+        assert resp["config"]["ip_connect_info"] == {}, pprint.pformat(resp)
+
+    resp, _ = zmq_single_request("environment_close")
+    assert resp["success"] is True, f"resp={resp}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 

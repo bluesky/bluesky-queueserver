@@ -1730,69 +1730,89 @@ class RunEngineWorker(Process):
 
                 return port
 
+            def find_kernel_ip(ip_str):
+                if ip_str == "localhost":
+                    ip = "127.0.0.1"
+                elif ip_str == "auto":
+                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    s.connect(("8.8.8.8", 80))
+                    ip = s.getsockname()[0]
+                else:
+                    ip = ip_str
+                return ip
+
             logger.info("Generating random port numbers for IPython kernel ...")
-            self._ip_kernel_app.shell_port = generate_random_port()
-            self._ip_kernel_app.iopub_port = generate_random_port()
-            self._ip_kernel_app.stdin_port = generate_random_port()
-            self._ip_kernel_app.hb_port = generate_random_port()
-            self._ip_kernel_app.control_port = generate_random_port()
-            self._ip_connect_info = self._ip_kernel_app.get_connection_info()
-
-            def start_jupyter_client():
-                from jupyter_client import BlockingKernelClient
-
-                self._ip_kernel_client = BlockingKernelClient()
-                self._ip_kernel_client.load_connection_info(self._ip_connect_info)
-                logger.info(
-                    "Session ID for communication with IP kernel: %s", self._ip_kernel_client.session.session
-                )
-                self._ip_kernel_client.start_channels()
-
-                ip_kernel_iopub_monitor_thread = Thread(
-                    target=self._ip_kernel_iopub_monitor_thread,
-                    kwargs=dict(output_stream=out_stream, error_stream=err_stream),
-                    daemon=True,
-                )
-                ip_kernel_iopub_monitor_thread.start()
-
-            start_jupyter_client()
-
-            self._ip_kernel_monitor_always_allow_types = ["error"]
-            self._ip_kernel_monitor_collected_tracebacks = []
-
-            ttime.sleep(0.5)  # Wait unitl 0MQ monitor is connected to the kernel ports
-
-            logger.info("Initializing IPython kernel ...")
-            self._ip_kernel_app.initialize([])
-
-            ttime.sleep(0.2)  # Wait until the error message are delivered (if startup fails)
-
-            self._ip_kernel_monitor_always_allow_types = ["stream", "error", "execute_result"]
-            collected_tracebacks = self._ip_kernel_monitor_collected_tracebacks
-            self._ip_kernel_monitor_collected_tracebacks = None
-
-            self._ip_connect_file = self._ip_kernel_app.connection_file
-
-            # This is a very naive idea: if no exceptions were raised during kernel initialization
-            #   the we consider that startup code was loaded and the environment is fully functional
-            #   Otherwise we assume that loading failed and the collected tracebacks are used
-            #   to generate report (if needed). TODO: there could be some other non-obvious way to
-            #   detect if startup code was loaded. Ideas are appreciated.
-            if collected_tracebacks:
+            kernel_ip = self._config_dict["ipython_kernel_ip"]
+            try:
+                kernel_ip = find_kernel_ip(kernel_ip)
+                self._ip_kernel_app.ip = kernel_ip
+                self._ip_kernel_app.shell_port = generate_random_port(kernel_ip)
+                self._ip_kernel_app.iopub_port = generate_random_port(kernel_ip)
+                self._ip_kernel_app.stdin_port = generate_random_port(kernel_ip)
+                self._ip_kernel_app.hb_port = generate_random_port(kernel_ip)
+                self._ip_kernel_app.control_port = generate_random_port(kernel_ip)
+                self._ip_connect_info = self._ip_kernel_app.get_connection_info()
+            except Exception as ex:
                 self._success_startup = False
-                logger.error("The environment can not be opened: failed to load startup code.")
+                logger.error("Failed to generates kernel ports for IP %r: %s", kernel_ip, ex)
 
-            # Disable echoing, since startup code is already loaded
-            self._ip_kernel_app.quiet = True
-            self._ip_kernel_app.init_io()
+            if self._success_startup:
 
-            # Print connect info for the kernel (after kernel initialization)
-            cinfo = copy.deepcopy(self._ip_connect_info)
-            cinfo["key"] = cinfo["key"].decode("utf-8")
-            logger.info("IPython kernel connection info:\n %r", ppfl(cinfo))
+                def start_jupyter_client():
+                    from jupyter_client import BlockingKernelClient
 
-            th_abandoned_plans = threading.Thread(target=self._monitor_abandoned_plans_thread, daemon=True)
-            th_abandoned_plans.start()
+                    self._ip_kernel_client = BlockingKernelClient()
+                    self._ip_kernel_client.load_connection_info(self._ip_connect_info)
+                    logger.info(
+                        "Session ID for communication with IP kernel: %s", self._ip_kernel_client.session.session
+                    )
+                    self._ip_kernel_client.start_channels()
+
+                    ip_kernel_iopub_monitor_thread = Thread(
+                        target=self._ip_kernel_iopub_monitor_thread,
+                        kwargs=dict(output_stream=out_stream, error_stream=err_stream),
+                        daemon=True,
+                    )
+                    ip_kernel_iopub_monitor_thread.start()
+
+                start_jupyter_client()
+
+                self._ip_kernel_monitor_always_allow_types = ["error"]
+                self._ip_kernel_monitor_collected_tracebacks = []
+
+                ttime.sleep(0.5)  # Wait unitl 0MQ monitor is connected to the kernel ports
+
+                logger.info("Initializing IPython kernel ...")
+                self._ip_kernel_app.initialize([])
+
+                ttime.sleep(0.2)  # Wait until the error message are delivered (if startup fails)
+
+                self._ip_kernel_monitor_always_allow_types = ["stream", "error", "execute_result"]
+                collected_tracebacks = self._ip_kernel_monitor_collected_tracebacks
+                self._ip_kernel_monitor_collected_tracebacks = None
+
+                self._ip_connect_file = self._ip_kernel_app.connection_file
+
+                # This is a very naive idea: if no exceptions were raised during kernel initialization
+                #   the we consider that startup code was loaded and the environment is fully functional
+                #   Otherwise we assume that loading failed and the collected tracebacks are used
+                #   to generate report (if needed). TODO: there could be some other non-obvious way to
+                #   detect if startup code was loaded. Ideas are appreciated.
+                if collected_tracebacks:
+                    self._success_startup = False
+                    logger.error("The environment can not be opened: failed to load startup code.")
+
+                # Disable echoing, since startup code is already loaded
+                self._ip_kernel_app.quiet = True
+                self._ip_kernel_app.init_io()
+
+                # Print connect info for the kernel (after kernel initialization)
+                cinfo = copy.deepcopy(self._ip_connect_info)
+                cinfo["key"] = cinfo["key"].decode("utf-8")
+                logger.info("IPython kernel connection info:\n %r", ppfl(cinfo))
+
+                th_abandoned_plans = threading.Thread(target=self._monitor_abandoned_plans_thread, daemon=True)
+                th_abandoned_plans.start()
 
             # --------------------------------------------------------------------------
             #               Run startup code outside the IPython kernel1

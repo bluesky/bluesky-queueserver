@@ -799,3 +799,68 @@ def test_cli_device_max_depth_01(re_manager_cmd, tmp_path, device_max_depth, det
     assert desc1 == det_structure, pprint.pformat(desc1)
     assert desc2a == det_structure, pprint.pformat(desc2a)
     assert desc2b == det_structure, pprint.pformat(desc2b)
+
+
+_script_check_env = """
+def func_for_test_check_env():
+    from bluesky_queueserver import is_re_worker_active, is_ipython_mode
+    is_ipython = is_ipython_mode()
+    is_worker = is_re_worker_active()
+    return is_worker, is_ipython
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("use_ipython_kernel", [False, True, None])
+# fmt: on
+def test_cli_use_ipython_kernel_01(re_manager_cmd, use_ipython_kernel):  # noqa: F811
+    """
+    CLI parameter '--use-ipython-kernel': start the worker with IPython kernel.
+
+    The test designed to work correctly for tests with IP mode enabled and disabled
+    (by env variable USE_IPYKERNEL).
+    """
+    # Start the manager
+    params = []
+    if use_ipython_kernel is not None:
+        on_off = "ON" if use_ipython_kernel else "OFF"
+        params.extend([f"--use-ipython-kernel={on_off}"])
+    re_manager_cmd(params)
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp, _ = zmq_single_request("script_upload", params={"script": _script_check_env})
+    assert resp["success"] is True, pprint.pformat(resp)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_manager_idle)
+    task_uid = resp["task_uid"]
+
+    resp, _ = zmq_single_request("task_result", params={"task_uid": task_uid})
+    assert resp["success"] is True, pprint.pformat(resp)
+    assert resp["result"]["success"] is True, pprint.pformat(resp)
+
+    func_item = {"name": "func_for_test_check_env", "item_type": "function"}
+    params = {"user": _user, "user_group": _user_group}
+    resp, _ = zmq_single_request("function_execute", params={"item": func_item, **params})
+    assert resp["success"] is True, pprint.pformat(resp)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_manager_idle)
+    task_uid = resp["task_uid"]
+
+    resp, _ = zmq_single_request("task_result", params={"task_uid": task_uid})
+    assert resp["success"] is True, pprint.pformat(resp)
+    assert resp["result"]["success"] is True, pprint.pformat(resp)
+
+    if use_ipython_kernel is not None:
+        expected_use_ipython = use_ipython_kernel
+    else:
+        expected_use_ipython = bool(use_ipykernel_for_tests())
+    assert resp["result"]["return_value"] == [True, expected_use_ipython]
+
+    resp9, _ = zmq_single_request("environment_close")
+    assert resp9["success"] is True
+    assert resp9["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)

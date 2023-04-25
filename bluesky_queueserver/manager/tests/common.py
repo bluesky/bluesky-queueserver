@@ -435,7 +435,7 @@ class ReManager:
             params.append("--verbose")
 
         # Start the manager with IPython kernel if the
-        if ("--use-ipython-kernel" not in params) and use_ipykernel_for_tests():
+        if not any([_.startswith("--use-ipython-kernel") for _ in params]) and use_ipykernel_for_tests():
             params.append("--use-ipython-kernel=ON")
 
         if not self._p:

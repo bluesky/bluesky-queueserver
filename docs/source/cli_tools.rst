@@ -10,6 +10,7 @@ The CLI tools are installed with the *bluesky-queueserver* package:
 - :ref:`qserver_zmq_keys_cli` - generate key pair for encryption of 0MQ control channel.
 - :ref:`qserver_console_monitor_cli` - simple monitor of RE Manager console output.
 - :ref:`qserver_clear_lock_cli` - unlock RE Manager if the lock key is lost.
+- :ref:`qserver_console_cli` - start Jupyter Console connected to IPython kernel running in the worker.
 
 .. _start_re_manager_cli:
 

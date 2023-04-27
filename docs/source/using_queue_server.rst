@@ -524,3 +524,41 @@ The autostart may be also enabled and disabled using CLI interface::
   qserver queue autostart disable
 
 See documentation on :ref:`method_queue_autostart` API for more details.
+
+
+.. _worker_ipython_kernel:
+
+Running RE Worker with IPython Kernel
+-------------------------------------
+
+RE Manager can be configured to create worker execution environment in IPython kernel. 
+In this mode, RE Worker starts embedded IPython kernel, loading the startup code, IPython 
+configuration and IPython history during kernel initialization. The location of the
+startup code is determined based on ``--startup-profile``, ``--startup-module``,
+``--startup-script`` and ``--startup-dir`` parameters of ``start-re-manager`` 
+(``startup/startup_profile``, ``startup/startup_module``, ``startup/startup_script`` and 
+``startup/startup_dir`` parameters in the config file). The kernel looks for the startup
+code in ``<ipythondir>/profile_<profile_name>/startup``, where ``<ipythondir>`` is 
+the value of the environment variable ``IPYTHONDIR``, which determines the location of 
+IPython profiles (default location is ``~/.ipython``) and ``profile_name`` is 
+the name passed using ``--startup-profile`` parameter. The location of IPython profiles 
+may also be specified using ``--ipython-dir`` parameter, which overrides ``IPYTHONDIR`` 
+environment variable. Alternatively, the location of startup profile may be specified 
+using ``--startup-dir`` parameter. If RE Manager is configured to use IPython kernel, 
+the startup directory must match the standard pattern (``<ipythondir>/profile_<profile_name>/startup``),
+so that it could be successfully parsed to extract the profile name and IPython directory.
+
+In addition to the startup code in IPython profile, the IPython kernel may also load 
+a startup script or a startup module if path to a script or a path to a module is specified.
+This behavior is different from the behavior of the worker using pure Python. If loading of startup
+code is undesirable, create a profile with empty ``startup`` directory and pass the profile
+name to RE Manager. If ``--startup-script`` or ``--startup-module`` is specified, but no
+profile name is passed, then default IPython profile (``$IPYTHONDIR/profile_default``) is loaded.
+
+RE Manager is configured to use IPython kernel by passing ``--use-ipython-kernel=ON`` parameter
+to ``start-re-manager``, setting config parameter ``startup/use_ipython_kernel: True`` or 
+environment variable ``QSERVER_USE_IPYTHON_KERNEL=True``. Once in IPython mode,
+RE Worker will accept the startup code with IPython-specific features (e.g. magics, user_ns etc.).
+Client code may check if IPython mode is enabled by checking  ... parameter of status API 
+(add the parameter to the status API docs). The startup code running in the environment
+may check if IPython is used using ... API

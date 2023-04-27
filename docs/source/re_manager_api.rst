@@ -67,10 +67,11 @@ raise the exception (default) or return the error message. If reference to a cal
 is passed to `send_message` (in thread-based API), the communication error message will be
 passed as `msg_err` parameter of the callback function
 
-Get status information from RE Manager:
+Get status and configuration information from RE Manager:
 
 - :ref:`method_ping`
 - :ref:`method_status`
+- :ref:`method_config_get`
 
 Existing and allowed plans and devices:
 
@@ -308,6 +309,39 @@ Returns       **msg**: *str*
 
                   - **queue** (*boolean*) - indicates if the queue is locked. See the **lock** API
                     for details.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+
+.. _method_config_get:
+
+**'config_get'**
+^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'config_get'**
+------------  -----------------------------------------------------------------------------------------
+Description   Returns config info for RE Manager.
+
+              *The request always succeeds*.
+------------  -----------------------------------------------------------------------------------------
+Parameters    ---
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **config**: *dict*
+                  config information for RE Manager:
+
+                  - **'ip_connect_info'** (*dict*) - connect info for IPython kernel running in 
+                    the worker process, empty dictionary if IPython kernel is not running.
+                    The returned dictionary may be saved as JSON to create IPython kernel connection 
+                    file. The connection file may be passed to Jupyter Console with 
+                    **'--existing'** parameter.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================

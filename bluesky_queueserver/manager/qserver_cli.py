@@ -1445,7 +1445,8 @@ def qserver_console():
         "must be running (environment opened) and using IPython kernel. The address of 0MQ control port of\n"
         "RE Manager can be passed as a parameter or an environment variable. If encryption of the control\n"
         "channel is enabled, the public key can be passed by setting QSERVER_ZMQ_PUBLIC_KEY environment\n"
-        "variable.\n",
+        "variable. Use 'Ctrl-D' to exit the console. Typing 'quit' or 'exit' in the console will close\n"
+        "the worker environment.\n",
         formatter_class=formatter,
     )
 

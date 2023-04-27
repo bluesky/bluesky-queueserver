@@ -1441,7 +1441,11 @@ def qserver_console():
     parser = argparse.ArgumentParser(
         description="Bluesky-QServer: Start Jupyter console for IPython kernel running in the worker process.\n"
         f"bluesky-queueserver version {qserver_version}.\n\n"
-        "Requests IPython kernel connection info and starts Jupyter Console.\n",
+        "Requests IPython kernel connection info from RE Manager and starts Jupyter Console. The RE Worker\n"
+        "must be running (environment opened) and using IPython kernel. The address of 0MQ control port of\n"
+        "RE Manager can be passed as a parameter or an environment variable. If encryption of the control\n"
+        "channel is enabled, the public key can be passed by setting QSERVER_ZMQ_PUBLIC_KEY environment\n"
+        "variable.\n",
         formatter_class=formatter,
     )
 

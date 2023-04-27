@@ -1457,16 +1457,6 @@ def qserver_console():
         f"(default: {default_zmq_control_address!r}).",
     )
 
-    parser.add_argument(
-        "--lock-key",
-        "-k",
-        dest="lock_key",
-        action="store",
-        default=None,
-        help="Lock key. The key is an arbitrary string is used to lock and unlock RE Manager "
-        "('lock' and 'unlock' API) and control the manager when the environment or the queue is locked.",
-    )
-
     args = parser.parse_args()
 
     exit_code = QServerExitCodes.SUCCESS
@@ -1477,13 +1467,6 @@ def qserver_console():
         address = address or os.environ.get("QSERVER_ZMQ_CONTROL_ADDRESS", None)
         # If the address is not specified, then use the default address
         address = address or default_zmq_control_address
-
-        lock_key = args.lock_key
-        if lock_key is not None:
-            if not isinstance(lock_key, str) or not lock_key:
-                raise CommandParameterError(
-                    f"Lock key must be a non-empty string: submitted lock key is {lock_key!r}"
-                )
 
         # Read public key from the environment variable, then check if the CLI parameter exists
         zmq_public_key = os.environ.get("QSERVER_ZMQ_PUBLIC_KEY", None)

@@ -602,11 +602,16 @@ set of values as the ``--matplotlib`` parameter of ``ipython``. The backend is s
 by default, which disables plotting and should be used when running RE Manager on a remote server.
 Select another appriate backend (e.g. ``qt5``) to enable plotting.
 
-Checking if IPython Mode is Enabled
-***********************************
+Monitoring the State of IPython Kernel
+**************************************
 
-Once in IPython mode,
-RE Worker will accept the startup code with IPython-specific features (e.g. magics, user_ns etc.).
-Client code may check if IPython mode is enabled by checking  ... parameter of status API
-(add the parameter to the status API docs). The startup code running in the environment
-may check if IPython is used using ... API
+The state of the running IPython kernel can be monitored by checking ``ip_kernel_state``
+parameter of RE Manager status (see :ref:`method_status` API). The status parameter
+``ip_kernel_captured`` indicates if the running kernel is 'captured' by RE Manager.
+The parameter is ``True`` if the kernel is running foreground task started by
+the manager and ``False`` otherwise. External clients can not interact with the kernel
+while it is 'captured' by the manager. Both parameters are *None* if the environment is
+not running or the worker is not using IPython kernel.
+
+Loading Connection Info
+***********************

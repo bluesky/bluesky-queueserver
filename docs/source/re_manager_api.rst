@@ -262,10 +262,13 @@ Returns       **msg**: *str*
 
               **worker_environment_state**: *str*
                   current state of the worker environment. Supported states: *'initializing'*,
-                  *'idle'*, *'executing_plan'*, *'executing_task'*, *'closing'* and *'closed'*.
-                  Running background tasks does not influence the state (*'executing_task'* is
-                  not set). The environment state is different from Run Engine state (*re_state*),
-                  e.g. the environment is considered *idle* when the current plan is paused.
+                  *'failed'*, *'idle'*, *'executing_plan'*, *'executing_task'*, *'closing'*
+                  and *'closed'*. The *'failed'* state may be briefly reported during environment
+                  initialization in case startup failed, but the environment is not closed yet.
+                  Running background tasks does not influence the state
+                  (*'executing_task'* is not set). The environment state is different from
+                  Run Engine state (*re_state*), e.g. the environment is considered *idle* when
+                  the current plan is paused.
 
               **worker_background_tasks**: *int*
                   the number of background tasks, which are currently running in the worker environment.
@@ -286,7 +289,7 @@ Returns       **msg**: *str*
                   pending.
 
               **queue_autostart_enabled**: *boolean*
-                  indicates if the autostart queue mode is enabled, see 
+                  indicates if the autostart queue mode is enabled, see
                   :ref:`method_queue_autostart` API.
 
               **pause_pending**: *boolean*
@@ -296,6 +299,20 @@ Returns       **msg**: *str*
 
               **worker_environment_exists**: *boolean*
                   indicates if RE Worker environment was created and plans could be executed.
+
+              **ip_kernel_state**: *str* or *None*
+                  state of worker IPython kernel: *None* - environment is closed *'disabled'* -
+                  IP kernel is not started or not used, *'starting'* - startup in progress,
+                  *'idle'* - IP kernel is idle and ready to execute tasks, *'busy'* - kernel
+                  is busy executing a task started by the manager or another client client.
+
+              **ip_kernel_captured**: *boolean* or *None*
+                  indicates if the IPython kernel is 'captured' by RE Manager: *None* - the
+                  environment is closed or IP kernel is not used, *True/False* - indicates
+                  if IP kernel is running execution loop started by RE Manager. The loop
+                  is expected to run when the worker is executing foreground tasks (plans,
+                  functions, scripts). The kernel can not be accessed directly by clients
+                  (e.g. using Jupyter Console) while it is 'captured'.
 
               **lock_info_uid**: *str*
                   UID of **lock_info** (see **lock** and **lock_info** API). Reload *lock_info* using
@@ -337,10 +354,10 @@ Returns       **success**: *boolean*
               **config**: *dict*
                   config information for RE Manager:
 
-                  - **'ip_connect_info'** (*dict*) - connect info for IPython kernel running in 
+                  - **'ip_connect_info'** (*dict*) - connect info for IPython kernel running in
                     the worker process, empty dictionary if IPython kernel is not running.
-                    The returned dictionary may be saved as JSON to create IPython kernel connection 
-                    file. The connection file may be passed to Jupyter Console with 
+                    The returned dictionary may be saved as JSON to create IPython kernel connection
+                    file. The connection file may be passed to Jupyter Console with
                     **'--existing'** parameter.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
@@ -1446,13 +1463,13 @@ Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 Method        **'queue_autostart'**
 ------------  -----------------------------------------------------------------------------------------
-Description   Enable/disable autostart mode. In autostart mode, the queue execution is automatically 
+Description   Enable/disable autostart mode. In autostart mode, the queue execution is automatically
               started whenever the queue contains items and the manager and the environment are
               ready to execute plans. Client applications may check if the manager is in autostart
-              mode using *queue_autostart_enabled* parameter of RE Manager status 
+              mode using *queue_autostart_enabled* parameter of RE Manager status
               (see :ref:`method_status` API).The autostart mode is not disabled after the queue runs out of
               items, but is automatically restarted once new items are added. The autostart mode is
-              disabled if the API is called with *enable=False*, or if the queue or the running plan 
+              disabled if the API is called with *enable=False*, or if the queue or the running plan
               is stopped due to the following events:
 
               - *'queue_stop'* queue instruction was executed;
@@ -1463,7 +1480,7 @@ Description   Enable/disable autostart mode. In autostart mode, the queue execut
 
               - running plan was stopped/aborted/halted;
 
-              - running plan failed, unless the *'ignore_failures'* queue mode is enabled (see 
+              - running plan failed, unless the *'ignore_failures'* queue mode is enabled (see
                 :ref:`method_queue_mode_set` API).
 
               The autostart mode may be enabled/disabled at any time. If the queue contains items,
@@ -1471,9 +1488,9 @@ Description   Enable/disable autostart mode. In autostart mode, the queue execut
               the manager periodically checks the state of the manager and the worker and will attempt to
               start the queue once the manager and the worker are ready. If the queue runs
               out of items, the manager returns to IDLE state and will accept requests to execute
-              foreground tasks: run a plan (:ref:`method_queue_item_execute` API), a function 
-              (:ref:`method_function_execute` API) or a script (:ref:`method_script_upload` API). 
-              If plans are added to the queue while the manager is busy, the queue is 
+              foreground tasks: run a plan (:ref:`method_queue_item_execute` API), a function
+              (:ref:`method_function_execute` API) or a script (:ref:`method_script_upload` API).
+              If plans are added to the queue while the manager is busy, the queue is
               is automatically started once the task is complete.
 
               *The request always succeeds*.
@@ -1594,7 +1611,7 @@ Returns       **success**: *boolean*
 
               **run_list**: *list(dict)*
                   the requested list of runs, list items are dictionaries with keys 'uid' (str),
-                  'scan_id' (int), 'is_open' (boolean) and 'exit_status' (str or None). 
+                  'scan_id' (int), 'is_open' (boolean) and 'exit_status' (str or None).
                   See Bluesky documentation for 'exit_status' values.
 
               **run_list_uid**: str

@@ -20,5 +20,6 @@ from .manager.profile_ops import register_device  # noqa: E402, F401
 from .manager.profile_ops import register_plan  # noqa: E402, F401
 from .manager.profile_ops import validate_plan  # noqa: E402, F401
 from .manager.profile_tools import is_ipython_mode  # noqa: E402, F401
+from .manager.profile_tools import clear_ipython_mode, set_ipython_mode  # noqa: E402, F401
 from .manager.profile_tools import is_re_worker_active  # noqa: E402, F401
 from .manager.profile_tools import clear_re_worker_active, set_re_worker_active  # noqa: E402, F401

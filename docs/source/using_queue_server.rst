@@ -613,5 +613,42 @@ the manager and ``False`` otherwise. External clients can not interact with the 
 while it is 'captured' by the manager. Both parameters are *None* if the environment is
 not running or the worker is not using IPython kernel.
 
-Loading Connection Info
-***********************
+Downloading Kernel Connection Info
+**********************************
+
+Connection info for a running IPython kernel can be downloaded at any time by sending
+:ref:`method_config_get` API request to RE Manager (CLI command: ``qserver config``).
+The connection info (``ip_connect_info`` key) is a dictionary, which contains network
+IP address of the host running the kernel, numbers of 0MQ ports, etc. The connection
+info dictionary is empty if the kernel is not running for any reason. Since the old
+kernel is destroyed each time the environment is closed and a new kernel is created each
+time the environment is opened, the updated connection info must be downloaded again
+for the new environment. The ``qserver-console`` CLI tool automatically loads
+the connection info from RE Manager and starts Jupyter Console connected to the kernel.
+
+Connecting to Running IPython Kernel Using Jupyter Console
+**********************************************************
+
+Once IPython kernel is running in the worker process (RE Manager is started with
+enabled IPython option and the environment is open), users may connect to it directly
+using Jupyter Console by running :ref:`qserver_console_cli` CLI tool, which loads connection
+info from RE Manager and passes it to Jupyter Console application.
+
+.. note::
+
+    If the kernel is running any foreground tasks (plans, functions, scripts) started by
+    RE Manager, Jupyter Console will remain unresponsive until the task is complete
+    and the 'captured' kernel is freed.
+
+Jupyter Console works similarly to IPython terminal, except that closing the console
+does not interrupt tasks started from the console. For example, a plan started manually
+from the console will continue running after console is closed. The plan execution will not
+be managed by RE Manager, but the plan output will be included in RE Manager console output
+and streamed to all subscribed consumers.
+
+.. note::
+
+    Use ``Ctrl-D`` to close the Jupyter Console. Typing ``quit`` or ``exit`` in Jupyter
+    console will close the kernel and cause the worker environment to close.
+
+See documentation on :ref:`qserver_console_cli` for more information.

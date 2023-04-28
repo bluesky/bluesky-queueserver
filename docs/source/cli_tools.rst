@@ -415,6 +415,8 @@ periodically requests and displays the status of Queue Server.
     qserver ping     # Send 'ping' request to RE Manager via ZMQ
     qserver status   # Request status of RE Manager
 
+    qserver config   # Get RE Manager config
+
     qserver environment open         # Open RE environment
     qserver environment close        # Close RE environment
     qserver environment destroy      # Destroy RE environment (kill RE worker process)

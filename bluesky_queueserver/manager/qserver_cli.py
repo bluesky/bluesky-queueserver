@@ -58,6 +58,8 @@ qserver monitor  # Start 'qserver' in monitoring mode
 qserver ping     # Send 'ping' request to RE Manager via ZMQ
 qserver status   # Request status of RE Manager
 
+qserver config   # Get RE Manager config
+
 qserver environment open         # Open RE environment
 qserver environment close        # Close RE environment
 qserver environment destroy      # Destroy RE environment (kill RE worker process)
@@ -853,6 +855,12 @@ def create_msg(params, *, lock_key):
         if len(params) != 0:
             raise CommandParameterError(f"Parameters are not allowed for '{command}' request")
         method = command
+
+    # ----------- status ------------
+    elif command == "config":
+        if len(params) != 0:
+            raise CommandParameterError(f"Parameters are not allowed for '{command}' request")
+        method = "config_get"
 
     # ----------- environment ------------
     elif command == "environment":

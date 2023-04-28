@@ -1534,6 +1534,32 @@ def test_qserver_lock_01(re_manager):  # noqa: F811
     check_state(False, False)
 
 
+# fmt: off
+@pytest.mark.parametrize("env_open", [False, True])
+# fmt: on
+def test_qserver_config_01(re_manager, env_open):  # noqa: F811
+    """
+    ``qserver config``: basic test.
+    """
+    if env_open:
+        assert subprocess.call(["qserver", "environment", "open"]) == SUCCESS
+        assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    status = get_queue_state()
+    assert status["worker_environment_exists"] == env_open
+
+    assert subprocess.call(["qserver", "config"]) == SUCCESS
+    assert subprocess.call(["qserver", "config", "something"]) == PARAM_ERROR
+    assert subprocess.call(["qserver", "config"]) == SUCCESS
+
+    if env_open:
+        assert subprocess.call(["qserver", "environment", "close"]) == SUCCESS
+        assert wait_for_condition(time=timeout_env_open, condition=condition_environment_closed)
+
+    status = get_queue_state()
+    assert status["worker_environment_exists"] is False
+
+
 # ==================================================================================
 #                             qserver-clear-lock
 

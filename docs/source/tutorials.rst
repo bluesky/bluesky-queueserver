@@ -46,6 +46,7 @@ The following tutorials are available:
 - :ref:`tutorial_immediate_execution_of_plans`
 - :ref:`tutorial_executing_functions`
 - :ref:`tutorial_uploading_scripts`
+- :ref:`tutorial_queue_autostart_mode`
 - :ref:`tutorial_locking_re_manager`
 - :ref:`tutorial_changing_user_group_permissions`
 - :ref:`tutorial_running_custom_startup_code`
@@ -1165,6 +1166,114 @@ Now the plan ``count_test`` can be placed in the queue and executed by RE Manage
 
 API used in this tutorial: :ref:`method_script_upload`, :ref:`method_status`,
 :ref:`method_plans_allowed`, :ref:`method_task_status`, :ref:`method_task_result`.
+
+
+.. _tutorial_queue_autostart_mode:
+
+Queue Autostart Mode
+--------------------
+
+In autostart mode, the execution of the queue is started automatically if the queue
+is not empty and the state of the manager and the worker allows to execute plans.
+See :ref:`queue_autostart_mode` for more information.
+
+Start RE Manager using instructions given in :ref:`tutorial_starting_queue_server`.
+
+Part I
+******
+
+Make sure that the queue and the history are empty and the autostart mode is disabled::
+
+  $ qserver status
+  { ...
+  'items_in_queue': 0,
+  'items_in_history': 0,
+  ...
+  'queue_autostart_enabled': False,
+  ... }
+
+Clear the queue and the history if necessary::
+  $ qserver queue clear
+  $ qserver history clear
+
+Open the environment::
+
+  $ qserver environment open
+
+Enable the autostart mode::
+
+  $ qserver queue autostart enable
+
+Check the autostart mode is enabled::
+
+  $ qserver status
+  { ...
+  'queue_autostart_enabled': True,
+  ... }
+
+Add a plan to the queue:
+
+  $ qserver queue add plan '{"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}'
+
+Observe that the execution of the plan start automatically. Check status to see that the executed plan
+was added to the plan history and the autostart mode is still on::
+
+  $ qserver status
+  { ...
+  'items_in_queue': 0,
+  'items_in_history': 1,
+  ...
+  'queue_autostart_enabled': True,
+  ... }
+
+Close the environment:
+
+  $ qserver environment close
+
+
+Part II
+*******
+
+Autostart mode is automatically disabled whenever the queue is stopped (using :ref:`method_queue_stop`
+API or ``queue_stop`` instruction), currently running plan is stopped aborted or halted or current plan
+fails (unless ``ignore_failures`` queue mode is enabled, see :ref:`method_queue_mode_set` API).
+
+Verify that the queue is still in autostart mode::
+
+  $ qserver status
+  { ...
+  'queue_autostart_enabled': True,
+  ... }
+
+The environment is still closed. Add two plans to the queue::
+
+  $ qserver queue add plan '{"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}'
+  $ qserver queue add plan '{"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}'
+
+Now open the environment::
+
+  $ qserver environment open
+
+Observe that the manager automatically starts the queue. Send requests to pause and then stop the plan
+while the first plan is still running::
+
+  $ qserver re pause
+  $ qserver re stop
+
+Observer the RE Manager console output to make sure that the plan stops. Now check the status
+to make sure that one plan remains in the queue and autostart mode is disabled::
+
+  $ qserver status
+  { ...
+  'items_in_queue': 1,
+  'items_in_history': 2,
+  ...
+  'queue_autostart_enabled': False,
+  ... }
+
+API used in this tutorial: :ref:`method_queue_autostart`, :ref:`method_status`,
+:ref:`method_environment_open`, :ref:`method_environment_close`, :ref:`method_re_pause`,
+:ref:`method_re_resume_stop_abort_halt`.
 
 
 .. _tutorial_locking_re_manager:

@@ -27,6 +27,8 @@ properties:
     properties:
       use_ipython_kernel:
         type: boolean
+      ipython_kernel_ip:
+        type: string
       ipython_matplotlib:
         type: string
   startup:

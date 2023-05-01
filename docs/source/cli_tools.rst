@@ -10,6 +10,7 @@ The CLI tools are installed with the *bluesky-queueserver* package:
 - :ref:`qserver_zmq_keys_cli` - generate key pair for encryption of 0MQ control channel.
 - :ref:`qserver_console_monitor_cli` - simple monitor of RE Manager console output.
 - :ref:`qserver_clear_lock_cli` - unlock RE Manager if the lock key is lost.
+- :ref:`qserver_console_cli` - start Jupyter Console connected to IPython kernel running in the worker.
 
 .. _start_re_manager_cli:
 
@@ -414,6 +415,8 @@ periodically requests and displays the status of Queue Server.
     qserver ping     # Send 'ping' request to RE Manager via ZMQ
     qserver status   # Request status of RE Manager
 
+    qserver config   # Get RE Manager config
+
     qserver environment open         # Open RE environment
     qserver environment close        # Close RE environment
     qserver environment destroy      # Destroy RE environment (kill RE worker process)
@@ -732,3 +735,40 @@ address is different from default, the correct address must be passed using the 
     --redis-addr REDIS_ADDR
                       The address of Redis server, e.g. 'localhost', '127.0.0.1',
                       'localhost:6379' (default: localhost).
+
+
+.. _qserver_console_cli:
+
+qserver-console
+---------------
+
+Starts Jupyter Console connected to IPython kernel running in the worker process.
+RE Manager must be started with enabled ``--use-ipython-kernel`` option (using CLI
+parameter, config file parameter or the environment variable). The console can not
+be started if the worker environment is closed and the kernel is not running.
+Use ``Ctrl-D`` to exit the console. Typing ``quit`` or ``exit`` in the console will
+close the worker environment.
+
+.. code-block::
+
+  $ qserver-console -h
+  usage: qserver-console [-h] [--zmq-control-addr ZMQ_CONTROL_ADDR]
+
+  Bluesky-QServer: Start Jupyter console for IPython kernel running in the worker process.
+  bluesky-queueserver version 0.0.18.post117.dev0+ged01cde.
+
+  Requests IPython kernel connection info from RE Manager and starts Jupyter Console. The RE Worker
+  must be running (environment opened) and using IPython kernel. The address of 0MQ control port of
+  RE Manager can be passed as a parameter or an environment variable. If encryption of the control
+  channel is enabled, the public key can be passed by setting QSERVER_ZMQ_PUBLIC_KEY environment
+  variable. Use 'Ctrl-D' to exit the console. Typing 'quit' or 'exit' in the console will close
+  the worker environment.
+
+  options:
+    -h, --help        show this help message and exit
+    --zmq-control-addr ZMQ_CONTROL_ADDR, -a ZMQ_CONTROL_ADDR
+                      Address of the control socket of RE Manager. The parameter overrides
+                      the address set using the environment variable
+                      QSERVER_ZMQ_CONTROL_ADDRESS. The default value is used if the address
+                      is not set using the parameter or the environment variable. Address
+                      format: 'tcp://127.0.0.1:60615' (default: 'tcp://localhost:60615').

@@ -1328,6 +1328,14 @@ class RunEngineManager(Process):
             re_state, err_msg = None, "Timeout occurred while processing the request"
         return re_state, err_msg
 
+    async def _worker_request_ip_connect_info(self):
+        try:
+            ip_connect_info = await self._comm_to_worker.send_msg("request_ip_connect_info")
+            err_msg = ""
+        except CommTimeoutError:
+            ip_connect_info, err_msg = {}, "Timeout occurred while processing the request"
+        return ip_connect_info, err_msg
+
     async def _worker_request_plan_report(self):
         try:
             plan_report = await self._comm_to_worker.send_msg("request_plan_report")
@@ -1693,6 +1701,23 @@ class RunEngineManager(Process):
             # "worker_state_info": worker_state_info
         }
         return msg
+
+    async def _config_get_handler(self, request):
+        """
+        Returns config information.
+        """
+        success, msg = True, ""
+        if self._use_ipython_kernel and self._environment_exists:
+            payload, msg = await self._worker_request_ip_connect_info()
+            ip_connect_info = payload.get("ip_connect_info", {})
+        else:
+            ip_connect_info = {}
+
+        config = {
+            "ip_connect_info": ip_connect_info,
+        }
+
+        return {"success": success, "msg": msg, "config": config}
 
     async def _plans_allowed_handler(self, request):
         """
@@ -3298,6 +3323,7 @@ class RunEngineManager(Process):
         handler_dict = {
             "ping": "_ping_handler",
             "status": "_status_handler",
+            "config_get": "_config_get_handler",
             "queue_get": "_queue_get_handler",
             "plans_allowed": "_plans_allowed_handler",
             "plans_existing": "_plans_existing_handler",

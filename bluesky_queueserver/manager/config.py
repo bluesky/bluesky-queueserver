@@ -190,6 +190,7 @@ _key_mapping = {
     "ipython_dir": "startup/ipython_dir",
     "device_max_depth": "startup/device_max_depth",
     "use_ipython_kernel": "worker/use_ipython_kernel",
+    "ipython_kernel_ip": "worker/ipython_kernel_ip",
     "ipython_matplotlib": "worker/ipython_matplotlib",
     "print_console_output": "operation/print_console_output",
     "console_logging_level": "operation/console_logging_level",
@@ -341,6 +342,13 @@ class Settings:
             value_ev=os.environ.get("QSERVER_USE_IPYTHON_KERNEL", None),
             value_config=self._get_value_from_config("use_ipython_kernel"),
             value_cli=self._args_existing("use_ipython_kernel"),
+        )
+
+        self._settings["ipython_kernel_ip"] = self._get_param(
+            value_default=args.ipython_kernel_ip,
+            value_ev=os.environ.get("QSERVER_IPYTHON_KERNEL_IP", None),
+            value_config=self._get_value_from_config("ipython_kernel_ip"),
+            value_cli=self._args_existing("ipython_kernel_ip"),
         )
 
         self._settings["ipython_matplotlib"] = self._get_param(

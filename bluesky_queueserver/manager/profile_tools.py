@@ -349,7 +349,7 @@ def is_re_worker_active():
     return os.environ.get(_env_re_worker_active, "false").lower() not in _env_values_false
 
 
-def set_ipython_mode(ipython_kernel):
+def set_ipython_mode(using_ipython):
     """
     Set the environment variable used to determine if RE Manager is using IPython-based worker.
     The variable is used by ``is_ipython_mode()`` public API, which determines if the script
@@ -357,10 +357,10 @@ def set_ipython_mode(ipython_kernel):
 
     Parameters
     ----------
-    ipython_kernel: bool
+    using_ipython: bool
         Pass ``True`` if the worker is using IPython kernel, ``False`` otherwise.
     """
-    os.environ[_env_ipython_kernel] = "1"
+    os.environ[_env_ipython_kernel] = "1" if using_ipython else "0"
 
 
 def clear_ipython_mode():

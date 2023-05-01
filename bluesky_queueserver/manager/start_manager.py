@@ -2,6 +2,7 @@ import argparse
 import atexit
 import logging
 import os
+import re
 import threading
 import time as ttime
 from multiprocessing import Pipe, Queue
@@ -451,6 +452,19 @@ def start_manager():
     )
 
     parser.add_argument(
+        "--ipython-kernel-ip",
+        dest="ipython_kernel_ip",
+        type=str,
+        default="localhost",
+        help="IP address for IPython kernel. The IP is passed to the IPython kernel at startup and returned "
+        "to clients as part of kernel connection info ('config_get' API). Accepted values are 'localhost' "
+        "(sets IP to '127.0.0.1'), 'auto' (attempts to automatically find network IP address of the server), "
+        "or an explicitly specified IP address of the server. If the IP address is 'localhost' or '127.0.0.1', "
+        "the kernel can not be accessed from remote machines. The parameter is ignored if worker is not using "
+        "IPython. Default: %(default)s.",
+    )
+
+    parser.add_argument(
         "--use-persistent-metadata",
         dest="use_persistent_metadata",
         action="store_true",
@@ -635,6 +649,15 @@ def start_manager():
                 logger.error("The script '%s' is not found.", startup_script_path)
                 return 1
 
+    ipython_kernel_ip = settings.ipython_kernel_ip
+    if ipython_kernel_ip not in ("localhost", "auto") and not re.search(
+        r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$", ipython_kernel_ip
+    ):
+        logger.error(
+            f"Invalid IPython kernel IP Address {ipython_kernel_ip!r}. "
+            "Acceptable values: 'localhost', 'auto' or a string representing an IP address"
+        )
+
     config_worker["keep_re"] = settings.keep_re
     config_worker["device_max_depth"] = settings.device_max_depth
     config_worker["use_ipython_kernel"] = settings.use_ipython_kernel
@@ -649,6 +672,7 @@ def start_manager():
     config_worker["startup_module_name"] = startup_module_name
     config_worker["startup_script_path"] = startup_script_path
     config_worker["ipython_dir"] = ipython_dir
+    config_worker["ipython_kernel_ip"] = ipython_kernel_ip
     config_worker["ipython_matplotlib"] = settings.ipython_matplotlib
     config_worker["ignore_invalid_plans"] = settings.ignore_invalid_plans
 

@@ -46,6 +46,8 @@ The following tutorials are available:
 - :ref:`tutorial_immediate_execution_of_plans`
 - :ref:`tutorial_executing_functions`
 - :ref:`tutorial_uploading_scripts`
+- :ref:`tutorial_queue_autostart_mode`
+- :ref:`tutorial_start_queue_server_ipython`
 - :ref:`tutorial_locking_re_manager`
 - :ref:`tutorial_changing_user_group_permissions`
 - :ref:`tutorial_running_custom_startup_code`
@@ -1165,6 +1167,237 @@ Now the plan ``count_test`` can be placed in the queue and executed by RE Manage
 
 API used in this tutorial: :ref:`method_script_upload`, :ref:`method_status`,
 :ref:`method_plans_allowed`, :ref:`method_task_status`, :ref:`method_task_result`.
+
+
+.. _tutorial_queue_autostart_mode:
+
+Queue Autostart Mode
+--------------------
+
+In autostart mode, the execution of the queue is started automatically if the queue
+is not empty and the state of the manager and the worker allows to execute plans.
+See :ref:`queue_autostart_mode` for more information.
+
+Start RE Manager using instructions given in :ref:`tutorial_starting_queue_server`.
+
+Part I
+******
+
+Make sure that the queue and the history are empty and the autostart mode is disabled::
+
+  $ qserver status
+  { ...
+  'items_in_queue': 0,
+  'items_in_history': 0,
+  ...
+  'queue_autostart_enabled': False,
+  ... }
+
+Clear the queue and the history if necessary::
+
+  $ qserver queue clear
+  $ qserver history clear
+
+Open the environment::
+
+  $ qserver environment open
+
+Enable the autostart mode::
+
+  $ qserver queue autostart enable
+
+Check the autostart mode is enabled::
+
+  $ qserver status
+  { ...
+  'queue_autostart_enabled': True,
+  ... }
+
+Add a plan to the queue::
+
+  $ qserver queue add plan '{"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}'
+
+Observe that the execution of the plan starts automatically. Check the status to make sure that
+the executed plan was added to the plan history and the autostart mode is still on::
+
+  $ qserver status
+  { ...
+  'items_in_queue': 0,
+  'items_in_history': 1,
+  ...
+  'queue_autostart_enabled': True,
+  ... }
+
+Close the environment::
+
+  $ qserver environment close
+
+
+Part II
+*******
+
+Autostart mode is automatically disabled whenever the queue is stopped (using :ref:`method_queue_stop`
+API or ``queue_stop`` instruction), currently running plan is stopped aborted or halted or current plan
+fails (unless ``ignore_failures`` queue mode is enabled, see :ref:`method_queue_mode_set` API).
+
+Verify that the queue is still in autostart mode::
+
+  $ qserver status
+  { ...
+  'queue_autostart_enabled': True,
+  ... }
+
+The environment is still closed. Add two plans to the queue::
+
+  $ qserver queue add plan '{"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}'
+  $ qserver queue add plan '{"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}'
+
+Now open the environment::
+
+  $ qserver environment open
+
+Observe that the manager automatically starts the queue. Send requests to pause and then stop the plan
+while the first plan is still running::
+
+  $ qserver re pause
+  $ qserver re stop
+
+Observe the RE Manager console output to verify that the plan stops. Now check the status
+to make sure that one plan remains in the queue and autostart mode is disabled::
+
+  $ qserver status
+  { ...
+  'items_in_queue': 1,
+  'items_in_history': 2,
+  ...
+  'queue_autostart_enabled': False,
+  ... }
+
+API used in this tutorial: :ref:`method_queue_autostart`, :ref:`method_status`,
+:ref:`method_environment_open`, :ref:`method_environment_close`, :ref:`method_re_pause`,
+:ref:`method_re_resume_stop_abort_halt`.
+
+.. _tutorial_start_queue_server_ipython:
+
+Start Queue Server in IPython Mode
+----------------------------------
+
+Queue Server may be configured to run the worker environment in IPython kernel. In this mode,
+the worker accepts startup code and uploaded scripts that contain IPython-specific features,
+such as magics, ``user_ns``, etc. Users may also connect to the kernel directly using
+Jupyter Console and run plans and execute IPython commands interactively. This allows to
+implement dual workflows, that include API-based control of execution of typical plans
+(e.g. to support user-friendly GUI) and interactive IPython access to the environment
+for expert use.
+
+See more information on IPython mode in :ref:`worker_ipython_kernel`.
+
+RE Manager can be started in IPython mode using the parameter ``--use-ipython-kernel=ON``::
+
+  $ start-re-manager --use-ipython-kernel=ON
+
+By default, IPython kernel is using ``agg`` Matplotlib backend, which prevents Matplotlib
+plots from being displayed. To enable plotting, pass a different backend using
+``--ipython-matplotlib`` parameter::
+
+  $ start-re-manager --use-ipython-kernel=ON --ipython-matplotlib=qt5
+
+Now start RE Manager (with or without setting Matplotlib backend), then open the environment::
+
+  $ qserver environment open
+
+The console output of RE Manager will contain the following::
+
+  [I 2023-04-30 17:31:45,811 bluesky_queueserver.manager.worker] Initializing IPython kernel ...
+  NOTE: When using the `ipython kernel` entry point, Ctrl-C will not work.
+
+  To exit, you will have to explicitly quit this process, by either sending
+  "quit" from a client, or using Ctrl-\ in UNIX-like environments.
+
+  To read more about this, see https://github.com/ipython/ipython/issues/2049
+
+  To connect another client to this kernel, use:
+      --existing kernel-824988.json
+  Loading file '/tmp/qserver/ipython/profile_collection_sim/startup/00-ophyd.py'
+  Loading file '/tmp/qserver/ipython/profile_collection_sim/startup/15-plans.py'
+  Loading file '/tmp/qserver/ipython/profile_collection_sim/startup/99-custom.py'
+  [I 2023-04-30 17:31:46,817 bluesky_queueserver.manager.worker] IPython kernel connection info:
+  {'transport': 'tcp',
+  'ip': '127.0.0.1',
+  'shell_port': 45493,
+  'iopub_port': 34885,
+  'stdin_port': 43199,
+  'hb_port': 39801,
+  'control_port': 57395,
+  'signature_scheme': 'hmac-sha256',
+  'key': '070a4a0d-a4e8199193269ca4f2785595'}
+
+Check RE Manager status::
+
+  $ qserver status
+  { ...
+  'ip_kernel_state': 'idle',
+  'ip_kernel_captured': False,
+  ... }
+
+The kernel is in the ``'idle'`` state and ready to execute tasks, the
+parameter ``ip_kernel_captured`` indicates if the kernel is executing a foreground task
+(plan, function or script) started by RE Manager.
+
+Add a plan to the queue and start the queue::
+
+  $ qserver queue add plan '{"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 10, "delay": 1}}'
+  $ qserver queue start
+
+Check the status while the plan is running. The kernel state is now ``busy`` and the kernel is
+'captured' by RE Manager::
+
+  $ qserver status
+  { ...
+  'ip_kernel_state': 'busy',
+  'ip_kernel_captured': True,
+  ... }
+
+Now open another terminal and connect to the kernel using Jupyter Console.
+The ``qserver-console`` CLI tool downloads current kernel connection info from
+RE Manager and passes it to the Jupyter Console::
+
+  $ qserver-console
+
+Start a plan in the IPython prompt::
+
+  In [1]: RE(count([det1, det2], num=10, delay=1))
+
+As the plan is executed in Jupyter Console, the output is also displayed
+in RE Manager console output. Jupyter Console may be closed while the plan is running
+(Ctrl-C then Ctrl-D) but the plan will continue to run in the kernel. Check the status
+while the plan is running::
+
+  $ qserver status
+  { ...
+  'ip_kernel_state': 'busy',
+  'ip_kernel_captured': False,
+  ... }
+
+The kernel state is ``busy``, but it is not 'captured' by the manager. RE Manager can not
+start execution of a foreground task (plan/function/script) until the task started from
+the console is completed and the kernel is ``idle``.
+
+.. note::
+
+  Use ``Ctrl-D`` to exit Jupyter Console: typing ``quit`` or ``exit`` will close the kernel
+  and, respectively, the worker environment.
+
+Close the environment::
+
+  $ qserver environment close
+
+The environment can be closed only if the kernel is ``idle``. The operation of destroying
+the environment will kill the worker process and, respectively, the kernel independent
+of its state.
+
+API used in this tutorial: :ref:`method_status`, :ref:`method_queue_item_add`,
+:ref:`method_queue_start`, :ref:`method_environment_open`, :ref:`method_environment_close`.
 
 
 .. _tutorial_locking_re_manager:

@@ -3,9 +3,14 @@ import ast
 import asyncio
 import copy
 import enum
+import json
 import logging
 import os
+import pprint
+import subprocess
+import tempfile
 import time as ttime
+import uuid
 from datetime import datetime
 
 import yaml
@@ -37,6 +42,7 @@ class QServerExitCodes(enum.Enum):
     REQUEST_FAILED = 2
     COMMUNICATION_ERROR = 3
     EXCEPTION_OCCURRED = 4
+    OPERATION_FAILED = 5
 
 
 default_user = "qserver-cli"
@@ -51,6 +57,8 @@ qserver monitor  # Start 'qserver' in monitoring mode
 
 qserver ping     # Send 'ping' request to RE Manager via ZMQ
 qserver status   # Request status of RE Manager
+
+qserver config   # Get RE Manager config
 
 qserver environment open         # Open RE environment
 qserver environment close        # Close RE environment
@@ -848,6 +856,12 @@ def create_msg(params, *, lock_key):
             raise CommandParameterError(f"Parameters are not allowed for '{command}' request")
         method = command
 
+    # ----------- status ------------
+    elif command == "config":
+        if len(params) != 0:
+            raise CommandParameterError(f"Parameters are not allowed for '{command}' request")
+        method = "config_get"
+
     # ----------- environment ------------
     elif command == "environment":
         if len(params) != 1:
@@ -1422,3 +1436,113 @@ def qserver_clear_lock():
     asyncio.run(remove_lock())
 
     return exit_code
+
+
+def qserver_console():
+    logging.basicConfig(level=logging.WARNING)
+    logging.getLogger("bluesky_queueserver").setLevel("INFO")
+
+    def formatter(prog):
+        # Set maximum width such that printed help mostly fits in the RTD theme code block (documentation).
+        return argparse.RawDescriptionHelpFormatter(prog, max_help_position=20, width=90)
+
+    parser = argparse.ArgumentParser(
+        description="Bluesky-QServer: Start Jupyter console for IPython kernel running in the worker process.\n"
+        f"bluesky-queueserver version {qserver_version}.\n\n"
+        "Requests IPython kernel connection info from RE Manager and starts Jupyter Console. The RE Worker\n"
+        "must be running (environment opened) and using IPython kernel. The address of 0MQ control port of\n"
+        "RE Manager can be passed as a parameter or an environment variable. If encryption of the control\n"
+        "channel is enabled, the public key can be passed by setting QSERVER_ZMQ_PUBLIC_KEY environment\n"
+        "variable. Use 'Ctrl-D' to exit the console. Typing 'quit' or 'exit' in the console will close\n"
+        "the worker environment.\n",
+        formatter_class=formatter,
+    )
+
+    parser.add_argument(
+        "--zmq-control-addr",
+        "-a",
+        dest="zmq_control_addr",
+        action="store",
+        default=None,
+        help="Address of the control socket of RE Manager. The parameter overrides the address set using "
+        "the environment variable QSERVER_ZMQ_CONTROL_ADDRESS. The default value is used if the address is not "
+        "set using the parameter or the environment variable. Address format: 'tcp://127.0.0.1:60615' "
+        f"(default: {default_zmq_control_address!r}).",
+    )
+
+    args = parser.parse_args()
+
+    exit_code = QServerExitCodes.SUCCESS
+
+    try:
+        address = args.zmq_control_addr
+        # If the 0MQ server address is not specified, try reading it from the environment variable.
+        address = address or os.environ.get("QSERVER_ZMQ_CONTROL_ADDRESS", None)
+        # If the address is not specified, then use the default address
+        address = address or default_zmq_control_address
+
+        # Read public key from the environment variable, then check if the CLI parameter exists
+        zmq_public_key = os.environ.get("QSERVER_ZMQ_PUBLIC_KEY", None)
+        zmq_public_key = zmq_public_key if zmq_public_key else None  # Case of key==""
+        if zmq_public_key is not None:
+            try:
+                validate_zmq_key(zmq_public_key)
+            except Exception as ex:
+                raise CommandParameterError(f"ZMQ public key is improperly formatted: {ex}")
+
+        # Request connection info
+        msg, msg_err = zmq_single_request(
+            "config_get", zmq_server_address=address, server_public_key=zmq_public_key
+        )
+
+        now = datetime.now()
+        current_time = now.strftime("%H:%M:%S")
+
+        if not msg_err:
+            if isinstance(msg, dict) and ("success" in msg) and (msg["success"] is False):
+                print(f"{current_time} - MESSAGE: \n{prepare_qserver_output(msg)}")
+                exit_code = QServerExitCodes.REQUEST_FAILED
+            else:
+                exit_code = QServerExitCodes.SUCCESS
+        else:
+            print(f"{current_time} - ERROR: {msg_err}")
+            exit_code = QServerExitCodes.COMMUNICATION_ERROR
+
+        if exit_code == QServerExitCodes.SUCCESS:
+            connect_info = msg["config"]["ip_connect_info"]
+            if not connect_info:
+                exit_code = QServerExitCodes.OPERATION_FAILED
+                logger.error(
+                    "Failed to start the console: \nWorker environment is closed or RE Worker is configured "
+                    "to run in Python mode (without IPython kernel)."
+                )
+
+        if exit_code == QServerExitCodes.SUCCESS:
+            logger.info("IPython Kernel Connect Info: \n%s", pprint.pformat(connect_info))
+
+            file_dir = os.path.join(tempfile.gettempdir(), "qserver", "kernel_files")
+            file_name = "kernel-" + str(uuid.uuid4()).split("-")[0] + ".json"
+            file_path = os.path.join(file_dir, file_name)
+
+            logger.info("Creating kernel connection file %r", file_path)
+            os.makedirs(file_dir, exist_ok=True)
+            with open(file_path, "w") as f:
+                json.dump(connect_info, f)
+
+            logger.info("Starting Jupyter Console ...")
+            result = subprocess.run(["jupyter-console", f"--existing={file_path}"])
+            if result.returncode:
+                logger.error("Jupyter Console exited with return code %d", result.returncode)
+                exit_code = QServerExitCodes.OPERATION_FAILED
+
+    except CommandParameterError as ex:
+        logger.error("Invalid command or parameters: %s.", ex)
+        exit_code = QServerExitCodes.PARAMETER_ERROR
+    except Exception as ex:
+        logger.exception("Exception occurred: %s.", ex)
+        exit_code = QServerExitCodes.EXCEPTION_OCCURRED
+    except KeyboardInterrupt:
+        print("\nThe program was manually stopped.")
+        exit_code = QServerExitCodes.SUCCESS
+
+    return exit_code.value

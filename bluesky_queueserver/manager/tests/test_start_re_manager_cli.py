@@ -1,6 +1,7 @@
 import copy
 import os
 import pprint
+import re
 import subprocess
 
 import pytest
@@ -469,6 +470,7 @@ def _get_expected_settings_default_1(tmpdir):
         "keep_re": False,
         "device_max_depth": 0,
         "use_ipython_kernel": use_ipython_kernel,
+        "ipython_kernel_ip": "localhost",
         "ipython_matplotlib": None,
         "print_console_output": True,
         "redis_addr": "localhost",
@@ -502,6 +504,7 @@ network:
   redis_addr: localhost:6379
 worker:
   use_ipython_kernel: true
+  ipython_kernel_ip: auto
   ipython_matplotlib: qt5
 startup:
   keep_re: false
@@ -542,6 +545,7 @@ def _get_expected_settings_config_2(tmpdir):
         "device_max_depth": 2,
         "ignore_invalid_plans": True,
         "use_ipython_kernel": True,
+        "ipython_kernel_ip": "auto",
         "ipython_matplotlib": "qt5",
         "print_console_output": True,
         "redis_addr": "localhost:6379",
@@ -580,6 +584,7 @@ def _get_cli_params_3(tmpdir):
         "--device-max-depth=5",
         "--ignore-invalid-plans=ON",
         "--use-ipython-kernel=ON",
+        "--ipython-kernel-ip=127.0.0.1",
         "--ipython-matplotlib=qt",
         "--zmq-data-proxy-addr=tcp://localhost:5571",
         "--databroker-config=NEW",
@@ -604,6 +609,7 @@ def _get_expected_settings_params_3(tmpdir):
         "device_max_depth": 5,
         "ignore_invalid_plans": True,
         "use_ipython_kernel": True,
+        "ipython_kernel_ip": "127.0.0.1",
         "ipython_matplotlib": "qt",
         "print_console_output": False,
         "redis_addr": "localhost:6379",
@@ -794,3 +800,110 @@ def test_cli_device_max_depth_01(re_manager_cmd, tmp_path, device_max_depth, det
     assert desc1 == det_structure, pprint.pformat(desc1)
     assert desc2a == det_structure, pprint.pformat(desc2a)
     assert desc2b == det_structure, pprint.pformat(desc2b)
+
+
+_script_check_env = """
+def func_for_test_check_env():
+    from bluesky_queueserver import is_re_worker_active, is_ipython_mode
+    is_ipython = is_ipython_mode()
+    is_worker = is_re_worker_active()
+    return is_worker, is_ipython
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("use_ipython_kernel", [False, True, None])
+# fmt: on
+def test_cli_use_ipython_kernel_01(re_manager_cmd, use_ipython_kernel):  # noqa: F811
+    """
+    CLI parameter '--use-ipython-kernel': start the worker with IPython kernel.
+
+    The test designed to work correctly for tests with IP mode enabled and disabled
+    (by env variable USE_IPYKERNEL).
+    """
+    # Start the manager
+    params = []
+    if use_ipython_kernel is not None:
+        on_off = "ON" if use_ipython_kernel else "OFF"
+        params.extend([f"--use-ipython-kernel={on_off}"])
+    re_manager_cmd(params)
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp, _ = zmq_single_request("script_upload", params={"script": _script_check_env})
+    assert resp["success"] is True, pprint.pformat(resp)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_manager_idle)
+    task_uid = resp["task_uid"]
+
+    resp, _ = zmq_single_request("task_result", params={"task_uid": task_uid})
+    assert resp["success"] is True, pprint.pformat(resp)
+    assert resp["result"]["success"] is True, pprint.pformat(resp)
+
+    func_item = {"name": "func_for_test_check_env", "item_type": "function"}
+    params = {"user": _user, "user_group": _user_group}
+    resp, _ = zmq_single_request("function_execute", params={"item": func_item, **params})
+    assert resp["success"] is True, pprint.pformat(resp)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_manager_idle)
+    task_uid = resp["task_uid"]
+
+    resp, _ = zmq_single_request("task_result", params={"task_uid": task_uid})
+    assert resp["success"] is True, pprint.pformat(resp)
+    assert resp["result"]["success"] is True, pprint.pformat(resp)
+
+    if use_ipython_kernel is not None:
+        expected_use_ipython = use_ipython_kernel
+    else:
+        expected_use_ipython = bool(use_ipykernel_for_tests())
+    assert resp["result"]["return_value"] == [True, expected_use_ipython]
+
+    resp9, _ = zmq_single_request("environment_close")
+    assert resp9["success"] is True
+    assert resp9["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+
+# fmt: off
+@pytest.mark.parametrize("ipython_kernel_ip", ['localhost', 'auto', '127.0.0.1', None])
+# fmt: on
+@pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
+def test_cli_ipython_kernel_ip_01(re_manager_cmd, ipython_kernel_ip):  # noqa: F811
+    """
+    CLI parameter '--ipython-kernel-ip': check different options for IP. Verify that the kernel
+    is started with appropriate IP address.
+
+    Run this test only for IP kernel worker.
+    """
+    # Start the manager
+    params = []
+    if ipython_kernel_ip is not None:
+        params.extend([f"--ipython-kernel-ip={ipython_kernel_ip}"])
+    re_manager_cmd(params)
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp, _ = zmq_single_request("config_get")
+    assert resp["success"] is True
+
+    connect_info = resp["config"]["ip_connect_info"]
+    if ipython_kernel_ip in ("localhost", "127.0.0.1", None):
+        assert connect_info["ip"] == "127.0.0.1"
+    elif ipython_kernel_ip == "auto":
+        assert connect_info["ip"] != "127.0.0.1", pprint.pformat(connect_info)
+        assert re.search(r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$", connect_info["ip"]), pprint.pformat(connect_info)
+    else:
+        assert False, f"Unsupported value of ipython_kernel_ip: {ipython_kernel_ip!r}"
+
+    resp9, _ = zmq_single_request("environment_close")
+    assert resp9["success"] is True
+    assert resp9["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)

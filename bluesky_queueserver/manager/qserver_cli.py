@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import pprint
-import subprocess
+import shutil
 import tempfile
 import time as ttime
 import uuid
@@ -1530,10 +1530,12 @@ def qserver_console():
                 json.dump(connect_info, f)
 
             logger.info("Starting Jupyter Console ...")
-            result = subprocess.run(["jupyter-console", f"--existing={file_path}"])
-            if result.returncode:
-                logger.error("Jupyter Console exited with return code %d", result.returncode)
+            path_exec = shutil.which("jupyter-console")
+            if not path_exec:
+                logger.error("Jupyter Console is not installed.")
                 exit_code = QServerExitCodes.OPERATION_FAILED
+            else:
+                os.execl(path_exec, "jupyter-console", f"--existing={file_path}")
 
     except CommandParameterError as ex:
         logger.error("Invalid command or parameters: %s.", ex)

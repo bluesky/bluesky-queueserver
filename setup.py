@@ -54,6 +54,7 @@ setup(
             "qserver-zmq-keys = bluesky_queueserver.manager.qserver_cli:qserver_zmq_keys",
             "qserver-clear-lock = bluesky_queueserver.manager.qserver_cli:qserver_clear_lock",
             "qserver-console = bluesky_queueserver.manager.qserver_cli:qserver_console",
+            "qserver-qtconsole = bluesky_queueserver.manager.qserver_cli:qserver_qtconsole",
             "qserver-console-monitor = bluesky_queueserver.manager.output_streaming:qserver_console_monitor_cli",
         ],
     },

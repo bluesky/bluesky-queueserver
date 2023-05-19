@@ -1438,7 +1438,7 @@ def qserver_clear_lock():
     return exit_code
 
 
-def qserver_console():
+def qserver_console_base(*, app_name):
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger("bluesky_queueserver").setLevel("INFO")
 
@@ -1530,12 +1530,12 @@ def qserver_console():
                 json.dump(connect_info, f)
 
             logger.info("Starting Jupyter Console ...")
-            path_exec = shutil.which("jupyter-console")
+            path_exec = shutil.which(app_name)
             if not path_exec:
-                logger.error("Jupyter Console is not installed.")
+                logger.error(f"{app_name!r} is not installed.")
                 exit_code = QServerExitCodes.OPERATION_FAILED
             else:
-                os.execl(path_exec, "jupyter-console", f"--existing={file_path}")
+                os.execl(path_exec, app_name, f"--existing={file_path}")
 
     except CommandParameterError as ex:
         logger.error("Invalid command or parameters: %s.", ex)
@@ -1548,3 +1548,11 @@ def qserver_console():
         exit_code = QServerExitCodes.SUCCESS
 
     return exit_code.value
+
+
+def qserver_console():
+    return qserver_console_base(app_name="jupyter-console")
+
+
+def qserver_qtconsole():
+    return qserver_console_base(app_name="jupyter-qtconsole")

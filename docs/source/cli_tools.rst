@@ -11,6 +11,7 @@ The CLI tools are installed with the *bluesky-queueserver* package:
 - :ref:`qserver_console_monitor_cli` - simple monitor of RE Manager console output.
 - :ref:`qserver_clear_lock_cli` - unlock RE Manager if the lock key is lost.
 - :ref:`qserver_console_cli` - start Jupyter Console connected to IPython kernel running in the worker.
+- :ref:`qserver_qtconsole_cli` - start Jupyter Qt Console connected to IPython kernel running in the worker.
 
 .. _start_re_manager_cli:
 
@@ -772,3 +773,13 @@ close the worker environment.
                       QSERVER_ZMQ_CONTROL_ADDRESS. The default value is used if the address
                       is not set using the parameter or the environment variable. Address
                       format: 'tcp://127.0.0.1:60615' (default: 'tcp://localhost:60615').
+
+
+.. _qserver_qtconsole_cli:
+
+qserver-qtconsole
+-----------------
+
+Starts Jupyter Qt Console connected to the IPython kernel running in the worker process.
+Jupyter Qt Console is extended Qt-based version of Jupyter Console. The command behaves similarly
+to :ref:`qserver_console_cli`.

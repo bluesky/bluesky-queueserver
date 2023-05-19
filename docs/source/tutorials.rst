@@ -1364,6 +1364,10 @@ RE Manager and passes it to the Jupyter Console::
 
   $ qserver-console
 
+Alternatively, ``qserver-qtconsole`` may be used to start Jupyter Qt Console::
+
+  $ qserver-qtconsole
+
 Start a plan in the IPython prompt::
 
   In [1]: RE(count([det1, det2], num=10, delay=1))

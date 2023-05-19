@@ -541,7 +541,7 @@ Starting RE Manager in IPython Mode
 ***********************************
 
 RE Manager is configured to use IPython kernel by passing ``--use-ipython-kernel=ON`` parameter
-to ``start-re-manager``, setting config parameter ``startup/use_ipython_kernel: True`` or
+to ``start-re-manager``, setting config parameter ``worker/use_ipython_kernel: True`` or
 environment variable ``QSERVER_USE_IPYTHON_KERNEL=True``.
 
 Specifying IPython Kernel IP Address
@@ -549,7 +549,7 @@ Specifying IPython Kernel IP Address
 
 The IPython kernel IP address is set using ``--ipython-kernel-ip`` parameter of
 ``start-re-manager``, setting ``QSERVER_IPYTHON_KERNEL_IP`` environment variable or
-or by setting config parameter ``startup/ipython_kernel_ip``. The parameter values
+or by setting config parameter ``worker/ipython_kernel_ip``. The parameter values
 are ``'localhost'`` (default), ``'auto'`` or a string represting valid network
 IP address of the host running the kernel, such as ``127.0.0.1`` or ``192.168.50.49``.
 If the IP address is ``'localhost'`` (default) or ``127.0.0.1``, the kernel does not accept

@@ -108,7 +108,7 @@ def test_ip_kernel_loading_script_02(re_manager):  # noqa: F811
 @pytest.mark.parametrize("resume_option", ["resume", "stop", "halt", "abort"])
 @pytest.mark.parametrize("plan_option", ["queue", "plan"])
 # fmt: on
-def test_ip_kernel_loading_script_03(re_manager, plan_option, resume_option):  # noqa: F811
+def test_ip_kernel_run_plans_01(re_manager, plan_option, resume_option):  # noqa: F811
     """
     Test basic operations: execute a plan (as part of queue or individually), pause and
     resume/stop/halt/abort the plan. Check that ``ip_kernel_state`` and ``ip_kernel_captured``
@@ -204,7 +204,7 @@ def test_ip_kernel_loading_script_03(re_manager, plan_option, resume_option):  #
 @pytest.mark.parametrize("option", ["function", "script"])
 @pytest.mark.parametrize("run_in_background", [False, True])
 # fmt: on
-def test_ip_kernel_loading_script_04(re_manager, option, run_in_background):  # noqa: F811
+def test_ip_kernel_execute_tasks_01(re_manager, option, run_in_background):  # noqa: F811
     """
     Test basic operations: execute a function or a script as a foreground or background task.
     Check that ``ip_kernel_state`` and ``ip_kernel_captured`` are properly set at every stage.
@@ -290,6 +290,91 @@ def test_ip_kernel_loading_script_04(re_manager, option, run_in_background):  # 
         assert s["worker_environment_state"] == "idle"
 
     assert wait_for_task_result(10, task_uid)
+
+    s = check_status("idle" if using_ipython else "disabled", False if using_ipython else True)
+    assert s["manager_state"] == "idle"
+    assert s["worker_environment_state"] == "idle"
+
+    resp9, _ = zmq_single_request("environment_close")
+    assert resp9["success"] is True
+    assert resp9["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+    check_status(None, None)
+
+
+def test_ip_kernel_execute_tasks_02(re_manager):  # noqa: F811
+    """
+    Test basic operations: Execute multiple foreground tasks in a row.
+    Check that ``ip_kernel_state`` and ``ip_kernel_captured`` are properly set at every stage.
+    """
+    using_ipython = use_ipykernel_for_tests()
+
+    def check_status(ip_kernel_state, ip_kernel_captured):
+        # Returned status may be used to do additional checks
+        status = get_queue_state()
+        if isinstance(ip_kernel_state, (str, type(None))):
+            ip_kernel_state = [ip_kernel_state]
+        assert status["ip_kernel_state"] in ip_kernel_state
+        assert status["ip_kernel_captured"] == ip_kernel_captured
+        return status
+
+    check_status(None, None)
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    check_status("idle" if using_ipython else "disabled", False if using_ipython else True)
+
+    script = "test_v = 0\ndef func_for_test():\n    return test_v"
+    resp, _ = zmq_single_request("script_upload", params={"script": script})
+    assert resp["success"] is True
+    wait_for_condition(time=3, condition=condition_manager_idle)
+
+    for _ in range(3):
+        script = "test_v += 1"
+        resp, _ = zmq_single_request("script_upload", params={"script": script})
+        assert resp["success"] is True
+        wait_for_condition(time=3, condition=condition_manager_idle)
+
+    func_info = {"name": "func_for_test", "item_type": "function"}
+    resp, _ = zmq_single_request(
+        "function_execute",
+        params={"item": func_info, "user": _user, "user_group": _user_group},
+    )
+    assert resp["success"] is True, pprint.pformat(resp)
+    task_uid1 = resp["task_uid"]
+    wait_for_condition(time=3, condition=condition_manager_idle)
+
+    for _ in range(3):
+        script = "test_v += 1"
+        resp, _ = zmq_single_request("script_upload", params={"script": script})
+        assert resp["success"] is True
+        wait_for_condition(time=3, condition=condition_manager_idle)
+
+    resp, _ = zmq_single_request(
+        "function_execute",
+        params={"item": func_info, "user": _user, "user_group": _user_group},
+    )
+    assert resp["success"] is True, pprint.pformat(resp)
+    task_uid2 = resp["task_uid"]
+    wait_for_condition(time=3, condition=condition_manager_idle)
+
+    # Make sure that the tests were executed correctly
+    resp, _ = zmq_single_request("task_result", params={"task_uid": task_uid1})
+    assert resp["success"] is True
+    value1 = resp["result"]["return_value"]
+
+    resp, _ = zmq_single_request("task_result", params={"task_uid": task_uid2})
+    assert resp["success"] is True
+    value2 = resp["result"]["return_value"]
+
+    assert value1 == 3
+    assert value2 == 6
 
     s = check_status("idle" if using_ipython else "disabled", False if using_ipython else True)
     assert s["manager_state"] == "idle"

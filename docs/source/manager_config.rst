@@ -47,11 +47,20 @@ Several parameters can be passed to RE Manager using environment variables:
     Alternatively, the private key may be set in the config file by referencing a different
     environment variable. Explicitly listing security keys in the config file is not recommended.
 
+  - ``QSERVER_USE_IPYTHON_KERNEL`` - tells RE Manager whether to start tbe worker in IPython mode
+    (start IPython kernel) or use plain Python worker. Boolean value.
+
+  - ``QSERVER_IPYTHON_KERNEL_IP`` - sets IP address for IPython kernel opened in the worker process.
+    The values are ``localhost``, ``auto`` (automatically find network IP address of the host running
+    the worker) or valid network IP address of the host. If the address is ``localhost`` or
+    ``127.0.0.1``, the clients running on remote hosts will not be able to connect to the kernel.
+
+
 Configuration Files
 -------------------
 
-The example of a configuration file (e.g. ``qserver_config.yml``) that contains all supported
-parameters:
+The example of a configuration file (e.g. ``qserver_config.yml``) that contains all sections and
+most of the supported parameters:
 
 .. code-block::
 
@@ -72,6 +81,10 @@ parameters:
       update_existing_plans_and_devices: ENVIRONMENT_OPEN
       user_group_permissions_reload: ON_REQUEST
       emergency_lock_key: custom_lock_key
+    worker:
+      use_ipython_kernel: true
+      ipython_kernel_ip: auto
+      ipython_matplotlib: qt5
     run_engine:
       use_persistent_metadata: true
       kafka_server: 127.0.0.1:9092
@@ -176,6 +189,33 @@ The parameters that define run-time behavior of RE Manager:
 - ``emergency_lock_key`` - emergency lock key used to unlock RE Manager if the lock key set by
   a user is lost. The key may also be set using environment variable
   ``QSERVER_EMERGENCY_LOCK_KEY_FOR_SERVER``.
+
+.. _config_file_worker:
+
+worker
+++++++
+
+The parameters that define configuration of RE Worker.
+
+- ``use_ipython_kernel`` - enable/disable IPython mode (``true/false``, default ``false``).
+  In IPython mode the worker creates IPython kernel used to run the worker environment.
+  If IPython mode is disabled, the worker environment is run using plain Python. The option
+  can also be set using ``--use-ipython-kernel`` CLI parameter or ``QSERVER_USE_IPYTHON_KERNEL``
+  environment variable. See :ref:`worker_ipython_kernel` for more details.
+
+- ``ipython_kernel_ip`` - set IP address of IPython kernel. The option is ignored if worker
+  is running not in IPython mode. The supported values are ``localhost``, ``auto`` or valid
+  network IP address of the host. If the IP address is ``localhost`` (default) or ``127.0.0.1``,
+  the clients running on remote hosts can not connect to the kernel. If the value is ``auto``,
+  the worker attempts to find network address of the host. The option can also be set using
+  ``--ipython-kernel-ip`` CLI parameter or ``QSERVER_IPYTHON_KERNEL_IP`` environment variable.
+
+- ``ipython_matplotlib`` - set Matplotlib backend for IPython kernel. The parameter is ignored
+  if the worker is not in IPython mode. The parameter accepts the set of values identical to
+  the parameter ``--matplotlib`` of ``IPython``. Typical values are ``agg`` (default, disables
+  plotting) or ``qt5`` (plotting using Qt5 backend). The option can also be set using
+  ``--ipython-matplotlib`` CLI parameter.
+
 
 .. _config_file_run_engine:
 

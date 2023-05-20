@@ -387,3 +387,178 @@ def test_ip_kernel_execute_tasks_02(re_manager):  # noqa: F811
     assert wait_for_condition(time=3, condition=condition_environment_closed)
 
     check_status(None, None)
+
+
+class KernelClient:
+    """
+    The kernel must already exist (the environment must be opened) before
+    initializing the client.
+    """
+
+    def __init__(self):
+        resp, _ = zmq_single_request("config_get")
+        assert resp["success"] is True, pprint.pformat(resp)
+        assert "config" in resp, pprint.pformat(resp)
+        assert "ip_connect_info" in resp["config"], pprint.pformat(resp)
+        connect_info = resp["config"]["ip_connect_info"]
+
+        from jupyter_client import BlockingKernelClient
+
+        self.ip_kernel_client = BlockingKernelClient()
+        self.ip_kernel_client.load_connection_info(connect_info)
+        self.ip_kernel_client.start_channels()
+
+    def execute(self, command):
+        """
+        Run the command (execute a cell) in the remote client. Do not wait for completion.
+        Do not save to history.
+        """
+        self.ip_kernel_client.execute(command, reply=False, store_history=False)
+
+
+@pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
+def test_ip_kernel_direct_connection_01(re_manager):  # noqa: F811
+    """
+    Basic test: start a task by connecting directly to IP Kernel. Make sure that
+    status reflects 'busy' state of the kernel.
+    """
+    using_ipython = use_ipykernel_for_tests()
+    assert using_ipython, "The test can be run only in IPython mode"
+
+    def check_status(ip_kernel_state, ip_kernel_captured):
+        # Returned status may be used to do additional checks
+        status = get_queue_state()
+        if isinstance(ip_kernel_state, (str, type(None))):
+            ip_kernel_state = [ip_kernel_state]
+        assert status["ip_kernel_state"] in ip_kernel_state
+        assert status["ip_kernel_captured"] == ip_kernel_captured
+        return status
+
+    check_status(None, None)
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    ip_kernel_client = KernelClient()
+
+    command = "print('Started')\nimport time\ntime.sleep(3)\nprint('Finished')"
+    ip_kernel_client.execute(command)
+
+    ttime.sleep(1)
+
+    s = check_status("busy", False)
+    assert s["manager_state"] == "idle"
+    assert s["worker_environment_state"] == "idle"
+
+    ttime.sleep(3)
+
+    s = check_status("idle", False)
+    assert s["manager_state"] == "idle"
+    assert s["worker_environment_state"] == "idle"
+
+    resp9, _ = zmq_single_request("environment_close")
+    assert resp9["success"] is True
+    assert resp9["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+    check_status(None, None)
+
+
+# fmt: off
+@pytest.mark.parametrize("delay", [0, 0.1, 1])
+@pytest.mark.parametrize("plan_option", ["queue", "plan"])
+# fmt: on
+@pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
+def test_ip_kernel_direct_connection_02(re_manager, plan_option, delay):  # noqa: F811
+    """
+    Basic test: attempt to start a plan while the externally started task is running.
+    """
+    using_ipython = use_ipykernel_for_tests()
+    assert using_ipython, "The test can be run only in IPython mode"
+
+    def check_status(ip_kernel_state, ip_kernel_captured):
+        # Returned status may be used to do additional checks
+        status = get_queue_state()
+        if isinstance(ip_kernel_state, (str, type(None))):
+            ip_kernel_state = [ip_kernel_state]
+        assert status["ip_kernel_state"] in ip_kernel_state
+        assert status["ip_kernel_captured"] == ip_kernel_captured
+        return status
+
+    check_status(None, None)
+
+    if plan_option == "queue":
+        resp, _ = zmq_single_request(
+            "queue_item_add", {"item": _plan3, "user": _user, "user_group": _user_group}
+        )
+        assert resp["success"] is True
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    ip_kernel_client = KernelClient()
+
+    command = "print('Started')\nimport time\ntime.sleep(3)\nprint('Finished')"
+    ip_kernel_client.execute(command)
+
+    ttime.sleep(delay)
+
+    if plan_option == "queue":
+        resp, _ = zmq_single_request("queue_start")
+    elif plan_option == "plan":
+        resp, _ = zmq_single_request(
+            "queue_item_execute", {"item": _plan3, "user": _user, "user_group": _user_group}
+        )
+    else:
+        assert False, f"Unsupported option: {plan_option!r}"
+
+    n_history_items_expected = 1
+
+    if delay > 0.6:
+        assert resp["success"] is False
+        assert "IPython kernel (RE Worker) is busy" in resp["msg"]
+        check_status("busy", False)
+
+    else:
+        s = get_queue_state()
+        request_failed = resp["success"] is False
+        queue_not_started = s["manager_state"] != "executing_queue"
+        assert request_failed or not queue_not_started, (request_failed, queue_not_started)
+
+        if not request_failed:
+            n_history_items_expected = 2
+
+    ttime.sleep(4)
+
+    # External tasks are finished. Now try running the plan.
+    if plan_option == "queue":
+        resp, _ = zmq_single_request("queue_start")
+        assert resp["success"] is True, pprint.pformat(resp)
+    elif plan_option == "plan":
+        resp, _ = zmq_single_request(
+            "queue_item_execute", {"item": _plan1, "user": _user, "user_group": _user_group}
+        )
+        assert resp["success"] is True, pprint.pformat(resp)
+    else:
+        assert False, f"Unsupported option: {plan_option!r}"
+
+    assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+    s = check_status("idle", False)
+    assert s["items_in_queue"] == 0
+    assert s["items_in_history"] == n_history_items_expected
+
+    resp9, _ = zmq_single_request("environment_close")
+    assert resp9["success"] is True
+    assert resp9["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+    check_status(None, None)

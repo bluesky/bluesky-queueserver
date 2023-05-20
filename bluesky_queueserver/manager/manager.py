@@ -869,10 +869,14 @@ class RunEngineManager(Process):
         Initiate upload of next plan to the worker process for execution.
         """
         try:
+            ws = self._worker_state_info
+
             if not self._environment_exists:
                 raise RuntimeError("RE Worker environment does not exist.")
             elif self._manager_state != MState.IDLE:
                 raise RuntimeError("RE Manager is busy.")
+            elif self._use_ipython_kernel and ws["ip_kernel_state"] != "idle" and not ws["ip_kernel_captured"]:
+                raise RuntimeError("IPython kernel (RE Worker) is busy.")
             else:
                 await self._queue_stop_deactivate()  # Just in case
                 self._manager_state = MState.STARTING_QUEUE
@@ -891,10 +895,14 @@ class RunEngineManager(Process):
         qsize = None
 
         try:
+            ws = self._worker_state_info
+
             if not self._environment_exists:
                 raise RuntimeError("RE Worker environment does not exist.")
             elif self._manager_state != MState.IDLE:
                 raise RuntimeError("RE Manager is busy.")
+            elif self._use_ipython_kernel and ws["ip_kernel_state"] != "idle" and not ws["ip_kernel_captured"]:
+                raise RuntimeError("IPython kernel (RE Worker) is busy.")
             else:
                 await self._queue_stop_deactivate()  # Just in case
                 self._manager_state = MState.STARTING_QUEUE

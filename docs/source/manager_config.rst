@@ -47,6 +47,15 @@ Several parameters can be passed to RE Manager using environment variables:
     Alternatively, the private key may be set in the config file by referencing a different
     environment variable. Explicitly listing security keys in the config file is not recommended.
 
+  - ``QSERVER_USE_IPYTHON_KERNEL`` - tells RE Manager whether to start tbe worker in IPython mode
+    (start IPython kernel) or use plain Python worker. Boolean value.
+
+  - ``QSERVER_IPYTHON_KERNEL_IP`` - sets IP address for IPython kernel opened in the worker process.
+    The values are ``localhost``, ``auto`` (automatically find network IP address of the host running
+    the worker) or valid network IP address of the host. If the address is ``localhost`` or
+    ``127.0.0.1``, the clients running on remote hosts will not be able to connect to the kernel.
+
+
 Configuration Files
 -------------------
 

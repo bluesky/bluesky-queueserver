@@ -308,11 +308,12 @@ Returns       **msg**: *str*
 
               **ip_kernel_captured**: *boolean* or *None*
                   indicates if the IPython kernel is 'captured' by RE Manager: *None* - the
-                  environment is closed or IP kernel is not used, *True/False* - indicates
-                  if IP kernel is running execution loop started by RE Manager. The loop
-                  is expected to run when the worker is executing foreground tasks (plans,
-                  functions, scripts). The kernel can not be accessed directly by clients
-                  (e.g. using Jupyter Console) while it is 'captured'.
+                  environment is closed, *True/False* - indicates if IP kernel is running execution
+                  loop started by RE Manager. The loop is expected to run when the worker is executing
+                  foreground tasks (plans, functions, scripts). The kernel can not be accessed
+                  directly by clients (e.g. using Jupyter Console) while it is 'captured'.
+                  The parameter is always *True* if the environment is open, but the worker is not
+                  using IPython kernel (the execution loop is always running).
 
               **lock_info_uid**: *str*
                   UID of **lock_info** (see **lock** and **lock_info** API). Reload *lock_info* using

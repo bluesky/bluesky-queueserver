@@ -616,7 +616,7 @@ Returns       **success**: *boolean*
                     is successfully completed), **'failed'** (the plan execution failed; a plan can fail due to
                     multiple reasons, including internal error of RE Manager; see the error message to determine
                     the reason of failure), **'stopped'** (the plan was paused, then stopped; the plan is considered
-                    successfully executed), **'abort'** and **'halt'** (the plan was paused, then aborted or halted;
+                    successfully executed), **'aborted'** and **'halted'** (the plan was paused, then aborted or halted;
                     the plan is considered failed), **'unknown'** (the exit status information is lost, e.g. due
                     to restart of RE Manager process, but plan information still needs to be placed in the history;
                     this is very unlikely to happen in practice);

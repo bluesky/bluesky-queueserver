@@ -287,6 +287,14 @@ def condition_queue_processing_finished(msg):
     return (items_in_queue == 0) and manager_idle
 
 
+def condition_ip_kernel_idle(msg):
+    return msg["ip_kernel_state"] == "idle"
+
+
+def condition_ip_kernel_busy(msg):
+    return msg["ip_kernel_state"] == "busy"
+
+
 def wait_for_condition(time, condition):
     """
     Wait until queue is processed. Note: processing of TimeoutError is needed for

@@ -12,6 +12,8 @@ from .common import (
     append_code_to_last_startup_file,
     condition_environment_closed,
     condition_environment_created,
+    condition_ip_kernel_busy,
+    condition_ip_kernel_idle,
     condition_manager_idle,
     condition_manager_paused,
     copy_default_profile_collection,
@@ -41,6 +43,33 @@ def lmagic(line):
 def cmagic(line, cell):
     return line, cell
 """
+
+
+class KernelClient:
+    """
+    The kernel must already exist (the environment must be opened) before
+    initializing the client.
+    """
+
+    def __init__(self):
+        resp, _ = zmq_single_request("config_get")
+        assert resp["success"] is True, pprint.pformat(resp)
+        assert "config" in resp, pprint.pformat(resp)
+        assert "ip_connect_info" in resp["config"], pprint.pformat(resp)
+        connect_info = resp["config"]["ip_connect_info"]
+
+        from jupyter_client import BlockingKernelClient
+
+        self.ip_kernel_client = BlockingKernelClient()
+        self.ip_kernel_client.load_connection_info(connect_info)
+        self.ip_kernel_client.start_channels()
+
+    def execute(self, command):
+        """
+        Run the command (execute a cell) in the remote client. Do not wait for completion.
+        Do not save to history.
+        """
+        self.ip_kernel_client.execute(command, reply=False, store_history=False)
 
 
 def test_ip_kernel_loading_script_01(tmp_path, re_manager_cmd):  # noqa: F811
@@ -188,8 +217,250 @@ def test_ip_kernel_run_plans_01(re_manager, plan_option, resume_option):  # noqa
 
         assert wait_for_condition(time=20, condition=condition_manager_idle)
 
+        s = get_queue_state()
+        n_items_in_queue = 1 if resume_option in ["halt", "abort"] and plan_option == "queue" else 0
+        assert s["items_in_queue"] == n_items_in_queue
+        assert s["items_in_history"] == 1
+
+        resp, _ = zmq_single_request("history_get")
+        assert resp["success"] is True, pprint.pformat(resp)
+        history_items = resp["items"]
+        exit_status = history_items[0]["result"]["exit_status"]
+
+        es = {"resume": "completed", "stop": "stopped", "abort": "aborted", "halt": "halted"}
+        exit_status_expected = es[resume_option]
+
+        assert exit_status == exit_status_expected, pprint.pformat(history_items[0])
+
     else:
         assert False, f"Unsupported option: {plan_option!r}"
+
+    resp9, _ = zmq_single_request("environment_close")
+    assert resp9["success"] is True
+    assert resp9["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+    check_status(None, None)
+
+
+# fmt: off
+@pytest.mark.parametrize("resume_option", ["resume", "stop", "halt", "abort"])
+@pytest.mark.parametrize("plan_option", ["queue", "plan"])
+# fmt: on
+@pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
+def test_ip_kernel_run_plans_02(re_manager, plan_option, resume_option):  # noqa: F811
+    """
+    Start execute a plan in the manager, pause it, then resume/stop/halt/abort using
+    a client directly connected to the IPython kernel.
+    """
+    using_ipython = use_ipykernel_for_tests()
+    assert using_ipython, "The test can be run only in IPython mode"
+
+    def check_status(ip_kernel_state, ip_kernel_captured):
+        # Returned status may be used to do additional checks
+        status = get_queue_state()
+        if isinstance(ip_kernel_state, (str, type(None))):
+            ip_kernel_state = [ip_kernel_state]
+        assert status["ip_kernel_state"] in ip_kernel_state
+        assert status["ip_kernel_captured"] == ip_kernel_captured
+        return status
+
+    check_status(None, None)
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    check_status("idle" if using_ipython else "disabled", False if using_ipython else True)
+
+    item_params = {"item": _plan4, "user": _user, "user_group": _user_group}
+
+    if plan_option == "queue":
+        resp, _ = zmq_single_request("queue_item_add", item_params)
+        item_params2 = {"item": _plan1, "user": _user, "user_group": _user_group}
+        resp, _ = zmq_single_request("queue_item_add", item_params2)
+        assert resp["success"] is True
+        resp, _ = zmq_single_request("queue_start")
+        assert resp["success"] is True
+    elif plan_option == "plan":
+        resp, _ = zmq_single_request("queue_item_execute", item_params)
+        assert resp["success"] is True
+    else:
+        assert False, f"Unsupported option: {plan_option!r}"
+
+    ttime.sleep(1)
+
+    resp, _ = zmq_single_request("re_pause")
+    assert resp["success"] is True, pprint.pformat(resp)
+
+    wait_for_condition(time=10, condition=condition_manager_paused)
+
+    s = check_status("idle", False)
+    assert s["manager_state"] == "paused"
+    assert s["worker_environment_state"] == "idle"
+
+    ip_kernel_client = KernelClient()
+    command = f"RE.{resume_option}()"
+    ip_kernel_client.execute(command)
+
+    if resume_option == "resume":
+        ttime.sleep(1)
+        s = check_status("busy", False)
+        assert s["manager_state"] == "paused"
+        assert s["worker_environment_state"] == "idle"
+
+    assert wait_for_condition(time=20, condition=condition_manager_idle)
+
+    s = get_queue_state()
+    n_items_in_queue = 1 if resume_option in ["halt", "abort"] and plan_option == "queue" else 0
+    n_items_in_queue = n_items_in_queue if plan_option == "plan" else n_items_in_queue + 1
+    assert s["items_in_queue"] == n_items_in_queue
+    assert s["items_in_history"] == 1
+
+    resp, _ = zmq_single_request("history_get")
+    assert resp["success"] is True, pprint.pformat(resp)
+    history_items = resp["items"]
+    exit_status = history_items[0]["result"]["exit_status"]
+
+    # Different set of exit status values (from stop documents)
+    es = {"resume": "unknown", "stop": "unknown", "abort": "aborted", "halt": "aborted"}
+    exit_status_expected = es[resume_option]
+
+    assert exit_status == exit_status_expected, pprint.pformat(history_items[0])
+
+    resp9, _ = zmq_single_request("environment_close")
+    assert resp9["success"] is True
+    assert resp9["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+    check_status(None, None)
+
+
+# fmt: off
+@pytest.mark.parametrize("resume_option", ["resume", "stop", "halt", "abort"])
+@pytest.mark.parametrize("plan_option", ["queue", "plan"])
+# fmt: on
+@pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
+def test_ip_kernel_run_plans_03(re_manager, plan_option, resume_option):  # noqa: F811
+    """
+    Start a plan (as part of queue or individually), pause and resume it using IPython client,
+    then pause and resume/stop/halt/abort the plan from the manager.
+    """
+    using_ipython = use_ipykernel_for_tests()
+    assert using_ipython, "The test can be run only in IPython mode"
+
+    def check_status(ip_kernel_state, ip_kernel_captured):
+        # Returned status may be used to do additional checks
+        status = get_queue_state()
+        if isinstance(ip_kernel_state, (str, type(None))):
+            ip_kernel_state = [ip_kernel_state]
+        assert status["ip_kernel_state"] in ip_kernel_state
+        assert status["ip_kernel_captured"] == ip_kernel_captured
+        return status
+
+    check_status(None, None)
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    check_status("idle" if using_ipython else "disabled", False if using_ipython else True)
+
+    item_params = {"item": _plan4, "user": _user, "user_group": _user_group}
+
+    if plan_option == "queue":
+        resp, _ = zmq_single_request("queue_item_add", item_params)
+        item_params2 = {"item": _plan1, "user": _user, "user_group": _user_group}
+        resp, _ = zmq_single_request("queue_item_add", item_params2)
+        assert resp["success"] is True
+        resp, _ = zmq_single_request("queue_start")
+        assert resp["success"] is True
+    elif plan_option == "plan":
+        resp, _ = zmq_single_request("queue_item_execute", item_params)
+        assert resp["success"] is True
+    else:
+        assert False, f"Unsupported option: {plan_option!r}"
+
+    ttime.sleep(1)
+
+    resp, _ = zmq_single_request("re_pause")
+    assert resp["success"] is True, pprint.pformat(resp)
+
+    wait_for_condition(time=10, condition=condition_manager_paused)
+
+    s = check_status("idle", False)
+    assert s["manager_state"] == "paused"
+    assert s["worker_environment_state"] == "idle"
+
+    ip_kernel_client = KernelClient()
+    command = "RE.resume()"
+    ip_kernel_client.execute(command)
+
+    wait_for_condition(time=10, condition=condition_ip_kernel_busy)
+
+    s = check_status("busy", False)
+    assert s["manager_state"] == "paused"
+    assert s["worker_environment_state"] == "idle"
+
+    resp, _ = zmq_single_request("re_pause")
+    assert resp["success"] is True, pprint.pformat(resp)
+
+    wait_for_condition(time=10, condition=condition_ip_kernel_idle)
+
+    s = check_status("idle", False)
+    assert s["manager_state"] == "paused"
+    assert s["worker_environment_state"] == "idle"
+
+    resp, _ = zmq_single_request(f"re_{resume_option}")
+    assert resp["success"] is True, pprint.pformat(resp)
+
+    if resume_option == "resume":
+        s = get_queue_state()  # Kernel may not be 'captured' at this point
+        assert s["manager_state"] == "executing_queue"
+        assert s["worker_environment_state"] in ("idle", "executing_plan")
+
+        ttime.sleep(2)
+
+        s = check_status("busy", True)
+        assert s["manager_state"] == "executing_queue"
+        assert s["worker_environment_state"] == "executing_plan"
+
+    assert wait_for_condition(time=20, condition=condition_manager_idle)
+
+    s = get_queue_state()
+
+    if resume_option in ["halt", "abort"]:
+        n_items_in_queue = 0 if plan_option == "plan" else 2
+        n_items_in_history = 1
+    elif resume_option == "resume":
+        n_items_in_queue = 0
+        n_items_in_history = 1 if plan_option == "plan" else 2
+    elif resume_option == "stop":
+        n_items_in_queue = 0 if plan_option == "plan" else 1
+        n_items_in_history = 1
+    else:
+        assert False, f"Unknown resume option: {resume_option!r}"
+
+    # n_items_in_queue = 1 if resume_option in ["halt", "abort"] and plan_option == "queue" else 0
+    # n_items_in_queue = n_items_in_queue if plan_option == "plan" else n_items_in_queue + 1
+    assert s["items_in_queue"] == n_items_in_queue
+    assert s["items_in_history"] == n_items_in_history
+
+    resp, _ = zmq_single_request("history_get")
+    assert resp["success"] is True, pprint.pformat(resp)
+    history_items = resp["items"]
+    exit_status = history_items[0]["result"]["exit_status"]
+
+    es = {"resume": "completed", "stop": "stopped", "abort": "aborted", "halt": "halted"}
+    exit_status_expected = es[resume_option]
+
+    assert exit_status == exit_status_expected, pprint.pformat(history_items[0])
 
     resp9, _ = zmq_single_request("environment_close")
     assert resp9["success"] is True
@@ -387,33 +658,6 @@ def test_ip_kernel_execute_tasks_02(re_manager):  # noqa: F811
     assert wait_for_condition(time=3, condition=condition_environment_closed)
 
     check_status(None, None)
-
-
-class KernelClient:
-    """
-    The kernel must already exist (the environment must be opened) before
-    initializing the client.
-    """
-
-    def __init__(self):
-        resp, _ = zmq_single_request("config_get")
-        assert resp["success"] is True, pprint.pformat(resp)
-        assert "config" in resp, pprint.pformat(resp)
-        assert "ip_connect_info" in resp["config"], pprint.pformat(resp)
-        connect_info = resp["config"]["ip_connect_info"]
-
-        from jupyter_client import BlockingKernelClient
-
-        self.ip_kernel_client = BlockingKernelClient()
-        self.ip_kernel_client.load_connection_info(connect_info)
-        self.ip_kernel_client.start_channels()
-
-    def execute(self, command):
-        """
-        Run the command (execute a cell) in the remote client. Do not wait for completion.
-        Do not save to history.
-        """
-        self.ip_kernel_client.execute(command, reply=False, store_history=False)
 
 
 @pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")

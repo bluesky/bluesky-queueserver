@@ -869,13 +869,11 @@ class RunEngineManager(Process):
         Initiate upload of next plan to the worker process for execution.
         """
         try:
-            ws = self._worker_state_info
-
             if not self._environment_exists:
                 raise RuntimeError("RE Worker environment does not exist.")
             elif self._manager_state != MState.IDLE:
                 raise RuntimeError("RE Manager is busy.")
-            elif self._use_ipython_kernel and ws["ip_kernel_state"] != "idle" and not ws["ip_kernel_captured"]:
+            elif self._use_ipython_kernel and self._is_ipkernel_external_task():
                 raise RuntimeError("IPython kernel (RE Worker) is busy.")
             else:
                 await self._queue_stop_deactivate()  # Just in case
@@ -895,13 +893,11 @@ class RunEngineManager(Process):
         qsize = None
 
         try:
-            ws = self._worker_state_info
-
             if not self._environment_exists:
                 raise RuntimeError("RE Worker environment does not exist.")
             elif self._manager_state != MState.IDLE:
                 raise RuntimeError("RE Manager is busy.")
-            elif self._use_ipython_kernel and ws["ip_kernel_state"] != "idle" and not ws["ip_kernel_captured"]:
+            elif self._use_ipython_kernel and self._is_ipkernel_external_task():
                 raise RuntimeError("IPython kernel (RE Worker) is busy.")
             else:
                 await self._queue_stop_deactivate()  # Just in case
@@ -1145,6 +1141,14 @@ class RunEngineManager(Process):
 
         return success, msg
 
+    def _is_ipkernel_external_task(self):
+        """
+        Returns True if the worker exists, running in IPython mode and is currently busy executing
+        task started by external client (e.g. Jupyter Console).
+        """
+        ws = self._worker_state_info
+        return self._use_ipython_kernel and ws and ws["ip_kernel_state"] != "idle" and not ws["ip_kernel_captured"]
+
     async def _environment_upload_script(self, *, script, update_lists, update_re, run_in_background):
         """
         Upload Python script to RE Worker environment. The script is then executed into
@@ -1161,6 +1165,8 @@ class RunEngineManager(Process):
                 f"Current state: '{self._manager_state.value}'",
                 None,
             )
+        elif not run_in_background and self._is_ipkernel_external_task():
+            raise RuntimeError("Failed to start the task: IPython kernel (RE Worker) is busy.")
         else:
             try:
                 if not run_in_background:
@@ -1198,6 +1204,8 @@ class RunEngineManager(Process):
                 f"Current state: '{self._manager_state.value}'",
                 None,
             )
+        elif not run_in_background and self._is_ipkernel_external_task():
+            raise RuntimeError("Failed to start the task: IPython kernel (RE Worker) is busy.")
         else:
             try:
                 if not run_in_background:

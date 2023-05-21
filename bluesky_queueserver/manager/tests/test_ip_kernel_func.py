@@ -7,6 +7,7 @@ from ..comms import zmq_single_request
 from .common import re_manager  # noqa: F401
 from .common import re_manager_cmd  # noqa: F401
 from .common import (
+    IPKernelClient,
     _user,
     _user_group,
     append_code_to_last_startup_file,
@@ -43,33 +44,6 @@ def lmagic(line):
 def cmagic(line, cell):
     return line, cell
 """
-
-
-class KernelClient:
-    """
-    The kernel must already exist (the environment must be opened) before
-    initializing the client.
-    """
-
-    def __init__(self):
-        resp, _ = zmq_single_request("config_get")
-        assert resp["success"] is True, pprint.pformat(resp)
-        assert "config" in resp, pprint.pformat(resp)
-        assert "ip_connect_info" in resp["config"], pprint.pformat(resp)
-        connect_info = resp["config"]["ip_connect_info"]
-
-        from jupyter_client import BlockingKernelClient
-
-        self.ip_kernel_client = BlockingKernelClient()
-        self.ip_kernel_client.load_connection_info(connect_info)
-        self.ip_kernel_client.start_channels()
-
-    def execute(self, command):
-        """
-        Run the command (execute a cell) in the remote client. Do not wait for completion.
-        Do not save to history.
-        """
-        self.ip_kernel_client.execute(command, reply=False, store_history=False)
 
 
 def test_ip_kernel_loading_script_01(tmp_path, re_manager_cmd):  # noqa: F811
@@ -302,7 +276,7 @@ def test_ip_kernel_run_plans_02(re_manager, plan_option, resume_option):  # noqa
     assert s["manager_state"] == "paused"
     assert s["worker_environment_state"] == "idle"
 
-    ip_kernel_client = KernelClient()
+    ip_kernel_client = IPKernelClient()
     command = f"RE.{resume_option}()"
     ip_kernel_client.execute(command)
 
@@ -398,7 +372,7 @@ def test_ip_kernel_run_plans_03(re_manager, plan_option, resume_option):  # noqa
     assert s["manager_state"] == "paused"
     assert s["worker_environment_state"] == "idle"
 
-    ip_kernel_client = KernelClient()
+    ip_kernel_client = IPKernelClient()
     command = "RE.resume()"
     ip_kernel_client.execute(command)
 
@@ -686,7 +660,7 @@ def test_ip_kernel_direct_connection_01(re_manager):  # noqa: F811
 
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-    ip_kernel_client = KernelClient()
+    ip_kernel_client = IPKernelClient()
 
     command = "print('Started')\nimport time\ntime.sleep(3)\nprint('Finished')"
     ip_kernel_client.execute(command)
@@ -747,7 +721,7 @@ def test_ip_kernel_direct_connection_02(re_manager, plan_option, delay):  # noqa
 
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-    ip_kernel_client = KernelClient()
+    ip_kernel_client = IPKernelClient()
 
     command = "print('Started')\nimport time\ntime.sleep(3)\nprint('Finished')"
     ip_kernel_client.execute(command)
@@ -849,7 +823,7 @@ def test_ip_kernel_direct_connection_03(re_manager, option, delay):  # noqa: F81
     func_params_bckg = {"run_in_background": True}
     test_script = "ttime.sleep(0.5)"
 
-    ip_kernel_client = KernelClient()
+    ip_kernel_client = IPKernelClient()
 
     command = "print('Started')\nimport time\ntime.sleep(3)\nprint('Finished')"
     ip_kernel_client.execute(command)

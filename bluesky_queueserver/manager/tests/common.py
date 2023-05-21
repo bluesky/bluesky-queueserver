@@ -2,6 +2,7 @@ import asyncio
 import glob
 import logging
 import os
+import pprint
 import shutil
 import subprocess
 import sys
@@ -668,3 +669,36 @@ def reset_sys_modules():
         if key not in sys_modules:
             print(f"Deleting the key '{key}'")
             del sys.modules[key]
+
+
+class IPKernelClient:
+    """
+    Simplistic IPython Kernel Client that connects to a kernel running in the worker
+    and allows to run commands. The kernel must already exist (the environment must be opened)
+    before initializing the client.
+    """
+
+    def __init__(self):
+        resp, _ = zmq_single_request("config_get")
+        assert resp["success"] is True, pprint.pformat(resp)
+        assert "config" in resp, pprint.pformat(resp)
+        assert "ip_connect_info" in resp["config"], pprint.pformat(resp)
+        connect_info = resp["config"]["ip_connect_info"]
+
+        from jupyter_client import BlockingKernelClient
+
+        self.ip_kernel_client = BlockingKernelClient()
+        self.ip_kernel_client.load_connection_info(connect_info)
+        self.ip_kernel_client.start_channels()
+
+    def execute(self, command):
+        """
+        Run the command (execute a cell) in the remote client. The function does not wait
+        for completion. The command is not saved to IPython history.
+
+        Parameters
+        ----------
+        command: str
+            Python code to execute in IPython kernel.
+        """
+        self.ip_kernel_client.execute(command, reply=False, store_history=False)

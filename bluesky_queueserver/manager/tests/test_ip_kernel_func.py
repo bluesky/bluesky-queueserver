@@ -314,12 +314,127 @@ def test_ip_kernel_run_plans_02(re_manager, plan_option, resume_option):  # noqa
     check_status(None, None)
 
 
+_plan_for_test1 = """
+def plan_for_test_fail():
+    # Failing plan
+    n = 0
+    def f(detectors, step, pos_cache):
+        nonlocal n
+        yield from bps.one_nd_step(detectors, step, pos_cache)
+        if n >= 5:
+            raise Exception("This plan is designed to fail")
+        n += 1
+        yield from bps.sleep(1)
+
+    yield from scan([det1], motor1, 0, 10, 11, per_step=f)
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("plan_option", ["queue", "plan"])
+# fmt: on
+@pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
+def test_ip_kernel_run_plans_03(re_manager, plan_option):  # noqa: F811
+    """
+    Handling of a plan that fails (a run fails). Start execute a plan in the manager, pause it,
+    then resume using a client directly connected to the IPython kernel.
+    """
+    using_ipython = use_ipykernel_for_tests()
+    assert using_ipython, "The test can be run only in IPython mode"
+
+    def check_status(ip_kernel_state, ip_kernel_captured):
+        # Returned status may be used to do additional checks
+        status = get_queue_state()
+        if isinstance(ip_kernel_state, (str, type(None))):
+            ip_kernel_state = [ip_kernel_state]
+        assert status["ip_kernel_state"] in ip_kernel_state
+        assert status["ip_kernel_captured"] == ip_kernel_captured
+        return status
+
+    check_status(None, None)
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    # Add failing plan to the environment
+    resp, _ = zmq_single_request("script_upload", params={"script": _plan_for_test1})
+    assert resp["success"] is True
+    wait_for_condition(time=10, condition=condition_manager_idle)
+
+    check_status("idle", False)
+
+    plan_for_test = {"name": "plan_for_test_fail", "item_type": "plan"}
+    item_params = {"item": plan_for_test, "user": _user, "user_group": _user_group}
+
+    if plan_option == "queue":
+        resp, _ = zmq_single_request("queue_item_add", item_params)
+        assert resp["success"] is True
+        resp, _ = zmq_single_request("queue_item_add", item_params)
+        assert resp["success"] is True
+        resp, _ = zmq_single_request("queue_start")
+        assert resp["success"] is True
+    elif plan_option == "plan":
+        resp, _ = zmq_single_request("queue_item_execute", item_params)
+        assert resp["success"] is True
+    else:
+        assert False, f"Unsupported option: {plan_option!r}"
+
+    ttime.sleep(1)
+
+    resp, _ = zmq_single_request("re_pause")
+    assert resp["success"] is True, pprint.pformat(resp)
+
+    wait_for_condition(time=10, condition=condition_manager_paused)
+
+    s = check_status("idle", False)
+    assert s["manager_state"] == "paused"
+    assert s["worker_environment_state"] == "idle"
+
+    ip_kernel_client = IPKernelClient()
+    command = "RE.resume()"
+    ip_kernel_client.execute(command)
+
+    ttime.sleep(1)
+
+    s = check_status("busy", False)
+    assert s["manager_state"] == "paused"
+    assert s["worker_environment_state"] == "idle"
+
+    assert wait_for_condition(time=20, condition=condition_manager_idle)
+    assert wait_for_condition(time=20, condition=condition_ip_kernel_idle)
+
+    s = get_queue_state()
+    n_items_in_queue = 0 if plan_option == "plan" else 2
+    assert s["items_in_queue"] == n_items_in_queue
+    assert s["items_in_history"] == 1
+
+    resp, _ = zmq_single_request("history_get")
+    assert resp["success"] is True, pprint.pformat(resp)
+    history_items = resp["items"]
+    exit_status = history_items[0]["result"]["exit_status"]
+
+    exit_status_expected = "failed"
+
+    assert exit_status == exit_status_expected, pprint.pformat(history_items[0])
+
+    resp9, _ = zmq_single_request("environment_close")
+    assert resp9["success"] is True
+    assert resp9["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+    check_status(None, None)
+
+
 # fmt: off
 @pytest.mark.parametrize("resume_option", ["resume", "stop", "halt", "abort"])
 @pytest.mark.parametrize("plan_option", ["queue", "plan"])
 # fmt: on
 @pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
-def test_ip_kernel_run_plans_03(re_manager, plan_option, resume_option):  # noqa: F811
+def test_ip_kernel_run_plans_04(re_manager, plan_option, resume_option):  # noqa: F811
     """
     Start a plan (as part of queue or individually), pause and resume it using IPython client,
     then pause and resume/stop/halt/abort the plan from the manager.

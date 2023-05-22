@@ -274,6 +274,10 @@ def condition_manager_paused(msg):
     return msg["manager_state"] == "paused"
 
 
+def condition_manager_executing_queue(msg):
+    return ("manager_state" in msg) and (msg["manager_state"] == "executing_queue")
+
+
 def condition_environment_created(msg):
     return msg["worker_environment_exists"] and (msg["manager_state"] in ("idle", "executing_queue"))
 

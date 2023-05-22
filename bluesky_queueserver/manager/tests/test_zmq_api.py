@@ -34,11 +34,14 @@ from ..comms import (
     zmq_single_request,
 )
 from .common import (  # noqa: F401
+    IPKernelClient,
     _user,
     _user_group,
     append_code_to_last_startup_file,
     condition_environment_closed,
     condition_environment_created,
+    condition_ip_kernel_busy,
+    condition_manager_executing_queue,
     condition_manager_idle,
     condition_manager_paused,
     condition_queue_processing_finished,
@@ -3792,7 +3795,7 @@ def test_zmq_api_queue_autostart_02_fail(re_manager):  # noqa: F811
 @pytest.mark.parametrize("autostart_first", [True, False])
 @pytest.mark.parametrize("batch_upload", [False, True])
 # fmt: on
-def test_zmq_api_queue_autostart_03(re_manager, open_env_first, autostart_first, batch_upload):  # noqa: F811
+def test_zmq_api_queue_autostart_03a(re_manager, open_env_first, autostart_first, batch_upload):  # noqa: F811
     """
     ``queue_autostart``: check that the queue is properly started in various scenarios.
     The following scenarios are tested: start env/add plans/enable autostart in
@@ -3835,6 +3838,64 @@ def test_zmq_api_queue_autostart_03(re_manager, open_env_first, autostart_first,
     status = get_queue_state()
     assert status["queue_autostart_enabled"] is True, pprint.pformat(status)
     assert status["manager_state"] in ("starting_queue", "executing_queue"), pprint.pformat(status)
+
+    wait_for_condition(time=30, condition=condition_queue_processing_finished)
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True
+
+    resp, _ = zmq_single_request("environment_close")
+    assert resp["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_closed)
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True
+    assert status["items_in_queue"] == 0
+    assert status["items_in_history"] == 1
+
+
+@pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
+def test_zmq_api_queue_autostart_03b(re_manager):  # noqa: F811
+    """
+    ``queue_autostart``: check that the queue is properly started in various scenarios.
+    The following scenarios are tested: start env/add plans/enable autostart in
+    any sequence. Check that the manager is in correct state and the plan is running.
+    """
+    using_ipython = use_ipykernel_for_tests()
+    assert using_ipython, "The test can be run only in IPython mode"
+
+    resp, _ = zmq_single_request(
+        "queue_item_add", params={"item": _plan3, "user": _user, "user_group": _user_group}
+    )
+    assert resp["success"] is True
+
+    resp, _ = zmq_single_request("environment_open")
+    assert resp["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    ip_kernel_client = IPKernelClient()
+    ip_kernel_client.execute("ttime.sleep(3)")
+
+    assert wait_for_condition(10, condition_ip_kernel_busy)
+
+    resp, _ = zmq_single_request("queue_autostart", params={"enable": True})
+    assert resp["success"] is True, f"resp={resp}"
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True, pprint.pformat(status)
+    assert status["manager_state"] == "idle", pprint.pformat(status)
+    assert status["worker_environment_state"] == "idle", pprint.pformat(status)
+    assert status["ip_kernel_state"] == "busy", pprint.pformat(status)
+    assert status["ip_kernel_captured"] is False, pprint.pformat(status)
+
+    assert wait_for_condition(15, condition_manager_executing_queue)
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True, pprint.pformat(status)
+    assert status["manager_state"] == "executing_queue", pprint.pformat(status)
+    assert status["worker_environment_state"] == "executing_plan", pprint.pformat(status)
+    assert status["ip_kernel_state"] == "busy", pprint.pformat(status)
+    assert status["ip_kernel_captured"] is True, pprint.pformat(status)
 
     wait_for_condition(time=30, condition=condition_queue_processing_finished)
 

@@ -619,7 +619,11 @@ Returns       **success**: *boolean*
                     successfully executed), **'aborted'** and **'halted'** (the plan was paused, then aborted or halted;
                     the plan is considered failed), **'unknown'** (the exit status information is lost, e.g. due
                     to restart of RE Manager process, but plan information still needs to be placed in the history;
-                    this is very unlikely to happen in practice);
+                    this is very unlikely to happen in practice). IPython mode: if a plan is started by the manager,
+                    then paused and resumed by a client directly connected to IPython kernel (e.g. Jupyter Console),
+                    the exit status can be **unknown** (all runs are successfully completed or the plan opened no
+                    runs), **aborted** (at least one of the runs is aborted or halted) or **failed** (at least one
+                    of the runs failed);
 
                   - **run_uids** - list of UIDs (str) of runs executed by the plan;
 

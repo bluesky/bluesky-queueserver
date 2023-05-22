@@ -1,4 +1,3 @@
-aioredis
 bluesky>=1.7.0
 bluesky-kafka
 databroker
@@ -20,5 +19,6 @@ pydantic
 python-multipart
 pyyaml
 pyzmq
+redis[hiredis]
 requests
 typing-extensions;python_version<'3.8'

@@ -34,5 +34,6 @@ jobs:
       env:
         USE_IPYKERNEL: ${{ matrix.use-ipykernel }}
       run: |
+        # pytest -k test_ip_kernel_func -vvv
         coverage run -m pytest -vv
         coverage report -m

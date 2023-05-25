@@ -3,15 +3,18 @@ import glob
 import logging
 import os
 import pprint
+import queue
 import shutil
 import subprocess
 import sys
 import tempfile
 import time as ttime
+from threading import Thread
 
 import intake
 import pytest
 from databroker import catalog_search_path
+from jupyter_client import BlockingKernelClient
 
 from bluesky_queueserver.manager.comms import zmq_single_request
 from bluesky_queueserver.manager.config import to_boolean
@@ -683,17 +686,33 @@ class IPKernelClient:
     """
 
     def __init__(self):
+        self.ip_kernel_client = None
+
+    def start(self):
+        """
+        Load IPython kernel connection info from RE Manager and start the client.
+        """
+        if self.ip_kernel_client:
+            self.stop()
+
         resp, _ = zmq_single_request("config_get")
         assert resp["success"] is True, pprint.pformat(resp)
         assert "config" in resp, pprint.pformat(resp)
         assert "ip_connect_info" in resp["config"], pprint.pformat(resp)
         connect_info = resp["config"]["ip_connect_info"]
 
-        from jupyter_client import BlockingKernelClient
-
         self.ip_kernel_client = BlockingKernelClient()
         self.ip_kernel_client.load_connection_info(connect_info)
         self.ip_kernel_client.start_channels()
+
+    def stop(self):
+        """
+        Stop the client. Failing to stop the client is causing a leak of opened file
+        descriptors and eventually causes the tests fail.
+        """
+        if self.ip_kernel_client:
+            self.ip_kernel_client.stop_channels()
+            self.ip_kernel_client = None
 
     def execute(self, command):
         """
@@ -706,3 +725,67 @@ class IPKernelClient:
             Python code to execute in IPython kernel.
         """
         self.ip_kernel_client.execute(command, reply=False, store_history=False)
+
+    def execute_with_check(self, command, *, pause=1, timeout=10):
+        """
+        Run the command (execute a cell) in the remote client and wait until the kernel
+        starts execution of the command (execution state is changed to 'busy').
+
+        Parameters
+        ----------
+        command: str
+            Python code to execute in IPython kernel.
+        """
+
+        def func():
+            ttime.sleep(1)
+            print(f"Sending direct request to the kernel: command={command!r}")
+            self.execute(command)
+            print("Direct request is sent")
+
+        th = Thread(target=func)
+        th.start()
+
+        assert self.wait_for_execution_state_change(timeout=timeout) == "busy"
+        print("Execution of the command by IPython kernel was started.")
+        th.join()
+
+    def wait_for_execution_state_change(self, *, timeout=1):
+        """
+        Waits for change of execution state of the kernel. Returns the new state.
+
+        Parameters
+        ----------
+        timeout, float
+            Timeout in seconds.
+
+        Returns
+        -------
+        str
+            The new state of the kernel: 'busy' or 'idle'.
+        """
+        t0 = ttime.time()
+        while ttime.time() < t0 + timeout:
+            try:
+                msg = self.ip_kernel_client.get_iopub_msg(timeout=0.1)
+                if msg["header"]["msg_type"] == "status":
+                    return msg["content"]["execution_state"]
+            except queue.Empty:
+                pass
+
+        raise TimeoutError("Timeout occurred while waiting for change of the state of IPython kernel")
+
+
+@pytest.fixture
+def ip_kernel_simple_client():
+    """
+    Instantiates a simple IP kernel client for tests. The client connects to the running client
+    and allows to send commands to the kernel (``execute`` method) and wait for execution state changes
+    (``wait_for_execution_state_change`` method).
+
+    Use ``ip_kernel_simple_client.start()`` to connect to the running kernel. Repeated calls will make
+    the client reconnect to the kernel. The fixture automatically stops the client (closes 0MQ sockets).
+    """
+    client = IPKernelClient()
+    yield client
+    client.stop()

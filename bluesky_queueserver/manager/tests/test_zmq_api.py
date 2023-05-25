@@ -34,7 +34,6 @@ from ..comms import (
     zmq_single_request,
 )
 from .common import (  # noqa: F401
-    IPKernelClient,
     _user,
     _user_group,
     append_code_to_last_startup_file,
@@ -48,6 +47,7 @@ from .common import (  # noqa: F401
     copy_default_profile_collection,
     db_catalog,
     get_queue_state,
+    ip_kernel_simple_client,
     re_manager,
     re_manager_cmd,
     re_manager_pc_copy,
@@ -3855,7 +3855,7 @@ def test_zmq_api_queue_autostart_03a(re_manager, open_env_first, autostart_first
 
 
 @pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
-def test_zmq_api_queue_autostart_03b(re_manager):  # noqa: F811
+def test_zmq_api_queue_autostart_03b(re_manager, ip_kernel_simple_client):  # noqa: F811
     """
     ``queue_autostart``: check that the queue is properly started in various scenarios.
     The following scenarios are tested: start env/add plans/enable autostart in
@@ -3873,8 +3873,10 @@ def test_zmq_api_queue_autostart_03b(re_manager):  # noqa: F811
     assert resp["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-    ip_kernel_client = IPKernelClient()
-    ip_kernel_client.execute("ttime.sleep(3)")
+    ip_kernel_simple_client.start()
+
+    command = "print('Start sleep')\nimport time\ntime.sleep(3)\nprint('Sleep finished')"
+    ip_kernel_simple_client.execute_with_check(command)
 
     assert wait_for_condition(10, condition_ip_kernel_busy)
 
@@ -3889,6 +3891,12 @@ def test_zmq_api_queue_autostart_03b(re_manager):  # noqa: F811
     assert status["ip_kernel_captured"] is False, pprint.pformat(status)
 
     assert wait_for_condition(15, condition_manager_executing_queue)
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True, pprint.pformat(status)
+    assert status["manager_state"] in ("starting_queue", "executing_queue"), pprint.pformat(status)
+
+    ttime.sleep(1)
 
     status = get_queue_state()
     assert status["queue_autostart_enabled"] is True, pprint.pformat(status)

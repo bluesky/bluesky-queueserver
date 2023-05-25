@@ -1468,7 +1468,11 @@ class RunEngineWorker(Process):
 
                 self._execution_queue = queue.Queue()
 
-                self._env_state = EState.IDLE
+                # If IPython kernel is used, then the environment state should be updated
+                #     once the kernel is 'idle'
+                if not self._use_ipython_kernel:
+                    self._env_state = EState.IDLE
+
                 logger.info("RE Environment is ready")
 
             except BaseException as ex:
@@ -1567,6 +1571,10 @@ class RunEngineWorker(Process):
                     ):
                         self._ip_kernel_captured = False
 
+                    if (self._env_state == EState.INITIALIZING) and (self._ip_kernel_state == IPKernelState.IDLE):
+                        logger.info("IPython kernel is in 'idle' state")
+                        self._env_state = EState.IDLE
+
                 try:
                     discard = msg["header"]["msg_type"] not in self._ip_kernel_monitor_always_allow_types
                     if discard and "parent_header" in msg and msg["parent_header"]:
@@ -1634,8 +1642,8 @@ class RunEngineWorker(Process):
         while not self._ip_kernel_is_shut_down_event.wait(1):
             if ttime.time() > t_stop:
                 break
-            logger.debug("Sending '' (empty string) command to IP kernel")
-            self._ip_kernel_execute_command(command="")
+            logger.debug("Sending 'quit' command to IP kernel")
+            self._ip_kernel_execute_command(command="quit")
 
         if not self._ip_kernel_is_shut_down_event.is_set():
             logger.info("Kernel failed to stop normaly. Killing the ioloop ...")
@@ -1784,6 +1792,7 @@ class RunEngineWorker(Process):
 
                 logger.info("Initializing IPython kernel ...")
                 self._ip_kernel_app.initialize([])
+                logger.info("IPython kernel initialization is complete.")
 
                 ttime.sleep(0.2)  # Wait until the error message are delivered (if startup fails)
 

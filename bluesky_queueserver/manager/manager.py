@@ -974,8 +974,6 @@ class RunEngineManager(Process):
                     logger.error(err_msg)
                     return success, err_msg
 
-                self._manager_state = MState.EXECUTING_QUEUE
-
                 new_plan = await self._plan_queue.process_next_item(item=single_item)
 
                 plan_name = new_plan["name"]
@@ -1007,6 +1005,8 @@ class RunEngineManager(Process):
                     self._manager_state = MState.IDLE
                     logger.error("Failed to start the plan %s.\nError: %s", ppfl(plan_info), err_msg)
                     err_msg = f"Failed to start the plan: {err_msg}"
+                else:
+                    self._manager_state = MState.EXECUTING_QUEUE
 
             # The next items is INSTRUCTION
             elif next_item["item_type"] == "instruction":

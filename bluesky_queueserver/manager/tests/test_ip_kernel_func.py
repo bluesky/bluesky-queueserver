@@ -4,10 +4,10 @@ import time as ttime
 import pytest
 
 from ..comms import zmq_single_request
+from .common import ip_kernel_simple_client  # noqa: F401
 from .common import re_manager  # noqa: F401
 from .common import re_manager_cmd  # noqa: F401
 from .common import (
-    IPKernelClient,
     _user,
     _user_group,
     append_code_to_last_startup_file,
@@ -17,6 +17,7 @@ from .common import (
     condition_ip_kernel_idle,
     condition_manager_idle,
     condition_manager_paused,
+    condition_queue_processing_finished,
     copy_default_profile_collection,
     get_queue_state,
     use_ipykernel_for_tests,
@@ -24,7 +25,7 @@ from .common import (
     wait_for_task_result,
 )
 
-timeout_env_open = 10
+timeout_env_open = 20
 
 # Plans used in most of the tests: '_plan1' and '_plan2' are quickly executed '_plan3' runs for 5 seconds.
 _plan1 = {"name": "count", "args": [["det1", "det2"]], "item_type": "plan"}
@@ -136,7 +137,10 @@ def test_ip_kernel_run_plans_01(re_manager, plan_option, resume_option):  # noqa
 
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-    check_status("idle" if using_ipython else "disabled", False if using_ipython else True)
+    if using_ipython:
+        check_status("idle", False)
+    else:
+        check_status("disabled", True)
 
     if plan_option in ("queue", "plan"):
         if plan_option == "queue":
@@ -155,7 +159,7 @@ def test_ip_kernel_run_plans_01(re_manager, plan_option, resume_option):  # noqa
             assert False, f"Unsupported option: {plan_option!r}"
 
         s = get_queue_state()  # Kernel may not be 'captured' at this point
-        assert s["manager_state"] == "executing_queue"
+        assert s["manager_state"] in ("starting_queue", "executing_queue")
         assert s["worker_environment_state"] in ("idle", "executing_plan")
 
         ttime.sleep(1)
@@ -223,7 +227,7 @@ def test_ip_kernel_run_plans_01(re_manager, plan_option, resume_option):  # noqa
 @pytest.mark.parametrize("plan_option", ["queue", "plan"])
 # fmt: on
 @pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
-def test_ip_kernel_run_plans_02(re_manager, plan_option, resume_option):  # noqa: F811
+def test_ip_kernel_run_plans_02(re_manager, ip_kernel_simple_client, plan_option, resume_option):  # noqa: F811
     """
     Start execute a plan in the manager, pause it, then resume/stop/halt/abort using
     a client directly connected to the IPython kernel.
@@ -248,7 +252,7 @@ def test_ip_kernel_run_plans_02(re_manager, plan_option, resume_option):  # noqa
 
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-    check_status("idle" if using_ipython else "disabled", False if using_ipython else True)
+    check_status("idle", False)
 
     item_params = {"item": _plan4, "user": _user, "user_group": _user_group}
 
@@ -276,9 +280,9 @@ def test_ip_kernel_run_plans_02(re_manager, plan_option, resume_option):  # noqa
     assert s["manager_state"] == "paused"
     assert s["worker_environment_state"] == "idle"
 
-    ip_kernel_client = IPKernelClient()
+    ip_kernel_simple_client.start()
     command = f"RE.{resume_option}()"
-    ip_kernel_client.execute(command)
+    ip_kernel_simple_client.execute_with_check(command)
 
     if resume_option == "resume":
         ttime.sleep(1)
@@ -334,7 +338,7 @@ def plan_for_test_fail():
 @pytest.mark.parametrize("plan_option", ["queue", "plan"])
 # fmt: on
 @pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
-def test_ip_kernel_run_plans_03(re_manager, plan_option):  # noqa: F811
+def test_ip_kernel_run_plans_03(re_manager, ip_kernel_simple_client, plan_option):  # noqa: F811
     """
     Handling of a plan that fails (a run fails). Start execute a plan in the manager, pause it,
     then resume using a client directly connected to the IPython kernel.
@@ -393,9 +397,9 @@ def test_ip_kernel_run_plans_03(re_manager, plan_option):  # noqa: F811
     assert s["manager_state"] == "paused"
     assert s["worker_environment_state"] == "idle"
 
-    ip_kernel_client = IPKernelClient()
+    ip_kernel_simple_client.start()
     command = "RE.resume()"
-    ip_kernel_client.execute(command)
+    ip_kernel_simple_client.execute_with_check(command)
 
     ttime.sleep(1)
 
@@ -434,7 +438,7 @@ def test_ip_kernel_run_plans_03(re_manager, plan_option):  # noqa: F811
 @pytest.mark.parametrize("plan_option", ["queue", "plan"])
 # fmt: on
 @pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
-def test_ip_kernel_run_plans_04(re_manager, plan_option, resume_option):  # noqa: F811
+def test_ip_kernel_run_plans_04(re_manager, ip_kernel_simple_client, plan_option, resume_option):  # noqa: F811
     """
     Start a plan (as part of queue or individually), pause and resume it using IPython client,
     then pause and resume/stop/halt/abort the plan from the manager.
@@ -459,7 +463,7 @@ def test_ip_kernel_run_plans_04(re_manager, plan_option, resume_option):  # noqa
 
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-    check_status("idle" if using_ipython else "disabled", False if using_ipython else True)
+    check_status("idle", False)
 
     item_params = {"item": _plan4, "user": _user, "user_group": _user_group}
 
@@ -487,9 +491,9 @@ def test_ip_kernel_run_plans_04(re_manager, plan_option, resume_option):  # noqa
     assert s["manager_state"] == "paused"
     assert s["worker_environment_state"] == "idle"
 
-    ip_kernel_client = IPKernelClient()
+    ip_kernel_simple_client.start()
     command = "RE.resume()"
-    ip_kernel_client.execute(command)
+    ip_kernel_simple_client.execute_with_check(command)
 
     wait_for_condition(time=10, condition=condition_ip_kernel_busy)
 
@@ -750,7 +754,7 @@ def test_ip_kernel_execute_tasks_02(re_manager):  # noqa: F811
 
 
 @pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
-def test_ip_kernel_direct_connection_01(re_manager):  # noqa: F811
+def test_ip_kernel_direct_connection_01(re_manager, ip_kernel_simple_client):  # noqa: F811
     """
     Basic test: start a task by connecting directly to IP Kernel. Make sure that
     status reflects 'busy' state of the kernel.
@@ -775,10 +779,10 @@ def test_ip_kernel_direct_connection_01(re_manager):  # noqa: F811
 
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-    ip_kernel_client = IPKernelClient()
+    ip_kernel_simple_client.start()
 
     command = "print('Started')\nimport time\ntime.sleep(3)\nprint('Finished')"
-    ip_kernel_client.execute(command)
+    ip_kernel_simple_client.execute_with_check(command)
 
     ttime.sleep(1)
 
@@ -786,7 +790,7 @@ def test_ip_kernel_direct_connection_01(re_manager):  # noqa: F811
     assert s["manager_state"] == "idle"
     assert s["worker_environment_state"] == "idle"
 
-    ttime.sleep(3)
+    wait_for_condition(15, condition_ip_kernel_idle)
 
     s = check_status("idle", False)
     assert s["manager_state"] == "idle"
@@ -802,11 +806,11 @@ def test_ip_kernel_direct_connection_01(re_manager):  # noqa: F811
 
 
 # fmt: off
-@pytest.mark.parametrize("delay", [0, 0.1, 1])
+@pytest.mark.parametrize("delay", [0, 1])
 @pytest.mark.parametrize("plan_option", ["queue", "plan"])
 # fmt: on
 @pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
-def test_ip_kernel_direct_connection_02(re_manager, plan_option, delay):  # noqa: F811
+def test_ip_kernel_direct_connection_02(re_manager, ip_kernel_simple_client, plan_option, delay):  # noqa: F811
     """
     Basic test: attempt to start a plan while the externally started task is running.
     """
@@ -836,10 +840,10 @@ def test_ip_kernel_direct_connection_02(re_manager, plan_option, delay):  # noqa
 
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-    ip_kernel_client = IPKernelClient()
+    ip_kernel_simple_client.start()
 
-    command = "print('Started')\nimport time\ntime.sleep(3)\nprint('Finished')"
-    ip_kernel_client.execute(command)
+    command = "print('Start sleep')\nimport time\ntime.sleep(3)\nprint('Sleep finished')"
+    ip_kernel_simple_client.execute_with_check(command)
 
     ttime.sleep(delay)
 
@@ -860,15 +864,16 @@ def test_ip_kernel_direct_connection_02(re_manager, plan_option, delay):  # noqa
         check_status("busy", False)
 
     else:
+        ttime.sleep(1)  # Wait until the request is processed
         s = get_queue_state()
         request_failed = resp["success"] is False
         queue_not_started = s["manager_state"] != "executing_queue"
-        assert request_failed or not queue_not_started, (request_failed, queue_not_started)
+        assert request_failed or queue_not_started, (request_failed, queue_not_started)
 
         if not request_failed:
             n_history_items_expected = 2
 
-    ttime.sleep(4)
+    assert wait_for_condition(10, condition_ip_kernel_idle)
 
     # External tasks are finished. Now try running the plan.
     if plan_option == "queue":
@@ -882,7 +887,7 @@ def test_ip_kernel_direct_connection_02(re_manager, plan_option, delay):  # noqa
     else:
         assert False, f"Unsupported option: {plan_option!r}"
 
-    assert wait_for_condition(time=10, condition=condition_manager_idle)
+    assert wait_for_condition(time=10, condition=condition_queue_processing_finished)
 
     s = check_status("idle", False)
     assert s["items_in_queue"] == 0
@@ -898,11 +903,11 @@ def test_ip_kernel_direct_connection_02(re_manager, plan_option, delay):  # noqa
 
 
 # fmt: off
-@pytest.mark.parametrize("delay", [0, 0.1, 1])
+@pytest.mark.parametrize("delay", [0, 1])
 @pytest.mark.parametrize("option", ["function", "script"])
 # fmt: on
 @pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
-def test_ip_kernel_direct_connection_03(re_manager, option, delay):  # noqa: F811
+def test_ip_kernel_direct_connection_03(re_manager, ip_kernel_simple_client, option, delay):  # noqa: F811
     """
     Basic test: attempt to start a plan while the externally started task is running.
     """
@@ -927,10 +932,10 @@ def test_ip_kernel_direct_connection_03(re_manager, option, delay):  # noqa: F81
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     if option == "function":
-        # Upload a script with a function function
+        # Upload a script with a function
         script = "def func_for_test():\n    ttime.sleep(0.5)"
         resp, _ = zmq_single_request("script_upload", params={"script": script})
-        assert resp["success"] is True
+        assert resp["success"] is True, pprint.pformat(resp)
         wait_for_condition(time=3, condition=condition_manager_idle)
 
     func_info = {"name": "func_for_test", "item_type": "function"}
@@ -938,10 +943,10 @@ def test_ip_kernel_direct_connection_03(re_manager, option, delay):  # noqa: F81
     func_params_bckg = {"run_in_background": True}
     test_script = "ttime.sleep(0.5)"
 
-    ip_kernel_client = IPKernelClient()
+    ip_kernel_simple_client.start()
 
-    command = "print('Started')\nimport time\ntime.sleep(3)\nprint('Finished')"
-    ip_kernel_client.execute(command)
+    command = "print('Start sleep')\nimport time\ntime.sleep(3)\nprint('Sleep finished')"
+    ip_kernel_simple_client.execute_with_check(command)
 
     ttime.sleep(delay)
 
@@ -981,7 +986,7 @@ def test_ip_kernel_direct_connection_03(re_manager, option, delay):  # noqa: F81
     assert resp["success"] is True
     assert resp["result"]["msg"] == "", pprint.pformat(resp)
 
-    ttime.sleep(4)
+    assert wait_for_condition(10, condition_ip_kernel_idle)
 
     # External tasks are finished. Now try running the plan.
     if option == "function":

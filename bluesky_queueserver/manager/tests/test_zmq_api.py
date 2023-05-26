@@ -3923,13 +3923,14 @@ def test_zmq_api_queue_autostart_04(re_manager, ip_kernel_simple_client):  # noq
 
 # fmt: off
 @pytest.mark.parametrize("option", ["resume", "stop", "abort", "halt"])
+@pytest.mark.parametrize("ignore_failures", [False, True])
 # fmt: on
 @pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
-def test_zmq_api_queue_autostart_05(re_manager, ip_kernel_simple_client, option):  # noqa: F811
+def test_zmq_api_queue_autostart_05(re_manager, ip_kernel_simple_client, option, ignore_failures):  # noqa: F811
     """
-    ``queue_autostart``: check that the queue is properly started in various scenarios.
-    The following scenarios are tested: start env/add plans/enable autostart in
-    any sequence. Check that the manager is in correct state and the plan is running.
+    ``queue_autostart``: check that if the plan is resumed or stopped in Jupyter Console,
+    then the autostart is not disabled, but if it is aborted or halted, then autostart is
+    disabled. This should work with the queue mode ``ignore_failures`` both True and False.
     """
     using_ipython = use_ipykernel_for_tests()
     assert using_ipython, "The test can be run only in IPython mode"
@@ -3942,6 +3943,10 @@ def test_zmq_api_queue_autostart_05(re_manager, ip_kernel_simple_client, option)
     resp, _ = zmq_single_request("environment_open")
     assert resp["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    if ignore_failures:
+        resp, _ = zmq_single_request("queue_mode_set", params={"mode": {"ignore_failures": True}})
+        assert resp["success"] is True, str(resp)
 
     resp, _ = zmq_single_request("queue_autostart", params={"enable": True})
     assert resp["success"] is True, f"resp={resp}"
@@ -3957,7 +3962,6 @@ def test_zmq_api_queue_autostart_05(re_manager, ip_kernel_simple_client, option)
     command = f"print('Continuing the plan ...')\nRE.{option}()\nprint('Sleep finished')"
     ip_kernel_simple_client.execute_with_check(command)
 
-    # assert wait_for_condition(time=10, condition=condition_ip_kernel_idle)
     assert wait_for_condition(time=10, condition=condition_manager_idle)
 
     expected_autostart = True if option in ("resume", "stop") else False
@@ -3969,7 +3973,8 @@ def test_zmq_api_queue_autostart_05(re_manager, ip_kernel_simple_client, option)
     assert status["ip_kernel_state"] == "idle", pprint.pformat(status)
     assert status["ip_kernel_captured"] is False, pprint.pformat(status)
 
-    assert status["items_in_queue"] == 0 if option in ("resume", "stop") else 1
+    items_in_queue = 0 if option in ("resume", "stop") else 1
+    assert status["items_in_queue"] == items_in_queue
     assert status["items_in_history"] == 1
 
     resp, _ = zmq_single_request("environment_close")

@@ -904,12 +904,104 @@ def test_ip_kernel_direct_connection_02(re_manager, ip_kernel_simple_client, pla
 
 # fmt: off
 @pytest.mark.parametrize("delay", [0, 1])
-@pytest.mark.parametrize("option", ["function", "script"])
+@pytest.mark.parametrize("option", ["resume", "stop", "abort", "halt"])
 # fmt: on
 @pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
 def test_ip_kernel_direct_connection_03(re_manager, ip_kernel_simple_client, option, delay):  # noqa: F811
     """
-    Basic test: attempt to start a plan while the externally started task is running.
+    Basic test: attempt to resume/stop/abort/halt a paused plan while the externally started task is running.
+    """
+    using_ipython = use_ipykernel_for_tests()
+    assert using_ipython, "The test can be run only in IPython mode"
+
+    def check_status(ip_kernel_state, ip_kernel_captured):
+        # Returned status may be used to do additional checks
+        status = get_queue_state()
+        if isinstance(ip_kernel_state, (str, type(None))):
+            ip_kernel_state = [ip_kernel_state]
+        assert status["ip_kernel_state"] in ip_kernel_state
+        assert status["ip_kernel_captured"] == ip_kernel_captured
+        return status
+
+    check_status(None, None)
+
+    resp, _ = zmq_single_request(
+        "queue_item_add", {"item": _plan3, "user": _user, "user_group": _user_group}
+    )
+    assert resp["success"] is True
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp, _ = zmq_single_request("queue_start")
+    assert resp["success"] is True, pprint.pformat(resp)
+
+    ttime.sleep(1)
+
+    resp, _ = zmq_single_request("re_pause")
+    assert resp["success"] is True, pprint.pformat(resp)
+
+    assert wait_for_condition(time=5, condition=condition_manager_paused)
+
+    ip_kernel_simple_client.start()
+    command = "print('Start sleep')\nimport time\ntime.sleep(3)\nprint('Sleep finished')"
+    ip_kernel_simple_client.execute_with_check(command)
+
+    ttime.sleep(delay)
+
+    n_history_items_expected = 1
+
+    resp, _ = zmq_single_request(f"re_{option}")
+    if delay > 0.6:
+        assert resp["success"] is False
+        assert "IPython kernel (RE Worker) is busy" in resp["msg"]
+        check_status("busy", False)
+
+    else:
+        ttime.sleep(1)  # Wait until the request is processed
+        s = get_queue_state()
+        request_failed = resp["success"] is False
+        queue_not_started = s["manager_state"] != "executing_queue"
+        assert request_failed or queue_not_started, (request_failed, queue_not_started)
+
+        if not request_failed:
+            n_history_items_expected = 2
+
+    s = check_status("busy", False)
+    s["manager_state"] == "paused"
+
+    assert wait_for_condition(10, condition_ip_kernel_idle)
+
+    # External tasks are finished. Now try running the plan.
+    resp, _ = zmq_single_request(f"re_{option}")
+    assert resp["success"] is True, pprint.pformat(resp)
+
+    assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+    s = check_status("idle", False)
+    assert s["items_in_queue"] == 0 if option in ("resume", "stop") else 1
+    assert s["items_in_history"] == n_history_items_expected
+
+    resp9, _ = zmq_single_request("environment_close")
+    assert resp9["success"] is True
+    assert resp9["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+    check_status(None, None)
+
+
+# fmt: off
+@pytest.mark.parametrize("delay", [0, 1])
+@pytest.mark.parametrize("option", ["function", "script"])
+# fmt: on
+@pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
+def test_ip_kernel_direct_connection_04(re_manager, ip_kernel_simple_client, option, delay):  # noqa: F811
+    """
+    Basic test: attempt to start a task while the externally started task is running.
     """
     using_ipython = use_ipykernel_for_tests()
     assert using_ipython, "The test can be run only in IPython mode"

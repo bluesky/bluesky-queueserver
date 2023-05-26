@@ -1070,6 +1070,9 @@ class RunEngineManager(Process):
             #   It should make the unit tests fail.
             raise ValueError(f"Option '{option}' is not supported. Available options: {available_options}")
 
+        elif self._use_ipython_kernel and self._is_ipkernel_external_task():
+            raise RuntimeError("IPython kernel (RE Worker) is busy.")
+
         elif self._environment_exists:
             success, err_msg = await self._worker_command_continue_plan(option)
             success = bool(success)  # Convert 'None' to False

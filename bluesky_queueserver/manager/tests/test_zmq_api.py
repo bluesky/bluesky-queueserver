@@ -40,6 +40,7 @@ from .common import (  # noqa: F401
     condition_environment_closed,
     condition_environment_created,
     condition_ip_kernel_busy,
+    condition_ip_kernel_idle,
     condition_manager_executing_queue,
     condition_manager_idle,
     condition_manager_paused,
@@ -3795,7 +3796,7 @@ def test_zmq_api_queue_autostart_02_fail(re_manager):  # noqa: F811
 @pytest.mark.parametrize("autostart_first", [True, False])
 @pytest.mark.parametrize("batch_upload", [False, True])
 # fmt: on
-def test_zmq_api_queue_autostart_03a(re_manager, open_env_first, autostart_first, batch_upload):  # noqa: F811
+def test_zmq_api_queue_autostart_03(re_manager, open_env_first, autostart_first, batch_upload):  # noqa: F811
     """
     ``queue_autostart``: check that the queue is properly started in various scenarios.
     The following scenarios are tested: start env/add plans/enable autostart in
@@ -3855,7 +3856,7 @@ def test_zmq_api_queue_autostart_03a(re_manager, open_env_first, autostart_first
 
 
 @pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
-def test_zmq_api_queue_autostart_03b(re_manager, ip_kernel_simple_client):  # noqa: F811
+def test_zmq_api_queue_autostart_04(re_manager, ip_kernel_simple_client):  # noqa: F811
     """
     ``queue_autostart``: check that the queue is properly started in various scenarios.
     The following scenarios are tested: start env/add plans/enable autostart in
@@ -3921,6 +3922,62 @@ def test_zmq_api_queue_autostart_03b(re_manager, ip_kernel_simple_client):  # no
 
 
 # fmt: off
+@pytest.mark.parametrize("option", ["resume", "stop", "abort", "halt"])
+# fmt: on
+@pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
+def test_zmq_api_queue_autostart_05(re_manager, ip_kernel_simple_client, option):  # noqa: F811
+    """
+    ``queue_autostart``: check that the queue is properly started in various scenarios.
+    The following scenarios are tested: start env/add plans/enable autostart in
+    any sequence. Check that the manager is in correct state and the plan is running.
+    """
+    using_ipython = use_ipykernel_for_tests()
+    assert using_ipython, "The test can be run only in IPython mode"
+
+    resp, _ = zmq_single_request(
+        "queue_item_add", params={"item": _plan3, "user": _user, "user_group": _user_group}
+    )
+    assert resp["success"] is True
+
+    resp, _ = zmq_single_request("environment_open")
+    assert resp["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp, _ = zmq_single_request("queue_autostart", params={"enable": True})
+    assert resp["success"] is True, f"resp={resp}"
+
+    wait_for_condition(time=5, condition=condition_manager_executing_queue)
+
+    resp, _ = zmq_single_request("re_pause")
+    assert resp["success"] is True, f"resp={resp}"
+
+    wait_for_condition(time=5, condition=condition_manager_paused)
+
+    ip_kernel_simple_client.start()
+    command = f"print('Continuing the plan ...')\nRE.{option}()\nprint('Sleep finished')"
+    ip_kernel_simple_client.execute_with_check(command)
+
+    # assert wait_for_condition(time=10, condition=condition_ip_kernel_idle)
+    assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+    expected_autostart = True if option in ("resume", "stop") else False
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is expected_autostart, pprint.pformat(status)
+    assert status["manager_state"] == "idle", pprint.pformat(status)
+    assert status["worker_environment_state"] == "idle", pprint.pformat(status)
+    assert status["ip_kernel_state"] == "idle", pprint.pformat(status)
+    assert status["ip_kernel_captured"] is False, pprint.pformat(status)
+
+    assert status["items_in_queue"] == 0 if option in ("resume", "stop") else 1
+    assert status["items_in_history"] == 1
+
+    resp, _ = zmq_single_request("environment_close")
+    assert resp["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_closed)
+
+
+# fmt: off
 @pytest.mark.parametrize("option", [
     "normal",
     "disable_autostart",  # Doesn't stop the queue
@@ -3933,7 +3990,7 @@ def test_zmq_api_queue_autostart_03b(re_manager, ip_kernel_simple_client):  # no
     "failed_plan"
 ])
 # fmt: on
-def test_zmq_api_queue_autostart_04(re_manager, option):  # noqa: F811
+def test_zmq_api_queue_autostart_06(re_manager, option):  # noqa: F811
     """
     ``queue_autostart``: check that autostart is manually and automatically disabled
     in various scenarios.
@@ -4029,7 +4086,7 @@ def test_zmq_api_queue_autostart_04(re_manager, option):  # noqa: F811
     "script_function",
 ])
 # fmt: on
-def test_zmq_api_queue_autostart_05(re_manager, option):  # noqa: F811
+def test_zmq_api_queue_autostart_07(re_manager, option):  # noqa: F811
     """
     ``queue_autostart``: execute a plan in 'immediate' mode, a function and a script between
     two plans while the queue is empty to make sure it does not affect the 'autostart' mode.
@@ -4123,7 +4180,7 @@ def test_zmq_api_queue_autostart_05(re_manager, option):  # noqa: F811
 @pytest.mark.parametrize("apply_queue_stop", [False, True])
 @pytest.mark.parametrize("n_plans", [1, 2])
 # fmt: on
-def test_zmq_api_queue_autostart_06(re_manager, option, autostart_on, apply_queue_stop, n_plans):  # noqa: F811
+def test_zmq_api_queue_autostart_08(re_manager, option, autostart_on, apply_queue_stop, n_plans):  # noqa: F811
     """
     ``queue_autostart``: make sure the autostart persists thoughout restart of the manager process.
     Test the following cases: enabled/disabled autostart, queue_stop is applied before restart,
@@ -4219,7 +4276,7 @@ def test_zmq_api_queue_autostart_06(re_manager, option, autostart_on, apply_queu
 # fmt: off
 @pytest.mark.parametrize("autostart_on", [False, True])
 # fmt: on
-def test_zmq_api_queue_autostart_07(re_manager, autostart_on):  # noqa: F811
+def test_zmq_api_queue_autostart_09(re_manager, autostart_on):  # noqa: F811
     """
     ``queue_autostart``: make sure the autostart persists thoughout restart of the manager process.
     Test the following cases: enabled/disabled autostart, queue_stop is applied before restart,

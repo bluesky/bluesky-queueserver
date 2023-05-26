@@ -1498,6 +1498,11 @@ Description   Enable/disable autostart mode. In autostart mode, the queue execut
               If plans are added to the queue while the manager is busy, the queue is
               is automatically started once the task is complete.
 
+              If a plan is paused by the manager and resumed (and runs to completion) or stopped in
+              Jupyter console, the autostart mode is not disabled and the next plan is started.
+              If the plan is aborted or halted in Jupyter Console, then the autostart is disabled.
+              This behavior may change in the future.
+
               *The request always succeeds*.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **enable**: *boolean*

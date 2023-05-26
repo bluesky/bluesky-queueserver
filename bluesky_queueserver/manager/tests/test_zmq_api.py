@@ -3939,6 +3939,10 @@ def test_zmq_api_queue_autostart_05(re_manager, ip_kernel_simple_client, option,
         "queue_item_add", params={"item": _plan3, "user": _user, "user_group": _user_group}
     )
     assert resp["success"] is True
+    resp, _ = zmq_single_request(
+        "queue_item_add", params={"item": _plan1, "user": _user, "user_group": _user_group}
+    )
+    assert resp["success"] is True
 
     resp, _ = zmq_single_request("environment_open")
     assert resp["success"] is True
@@ -3962,7 +3966,8 @@ def test_zmq_api_queue_autostart_05(re_manager, ip_kernel_simple_client, option,
     command = f"print('Continuing the plan ...')\nRE.{option}()\nprint('Sleep finished')"
     ip_kernel_simple_client.execute_with_check(command)
 
-    assert wait_for_condition(time=10, condition=condition_manager_idle)
+    condition = condition_queue_processing_finished if option in ("resume", "stop") else condition_manager_idle
+    assert wait_for_condition(time=10, condition=condition)
 
     expected_autostart = True if option in ("resume", "stop") else False
 
@@ -3973,9 +3978,10 @@ def test_zmq_api_queue_autostart_05(re_manager, ip_kernel_simple_client, option,
     assert status["ip_kernel_state"] == "idle", pprint.pformat(status)
     assert status["ip_kernel_captured"] is False, pprint.pformat(status)
 
-    items_in_queue = 0 if option in ("resume", "stop") else 1
+    items_in_queue = 0 if option in ("resume", "stop") else 2
+    items_in_history = 2 if option in ("resume", "stop") else 1
     assert status["items_in_queue"] == items_in_queue
-    assert status["items_in_history"] == 1
+    assert status["items_in_history"] == items_in_history
 
     resp, _ = zmq_single_request("environment_close")
     assert resp["success"] is True

@@ -3827,31 +3827,41 @@ def test_build_plan_name_list_2_fail(plan_def, exception_type, msg):
     ("sim_bundle_A.mtrs.a", False, False, False),
     ("sim_bundle_A.unknown.z", False, False, False),
 ])
+@pytest.mark.parametrize("from_nspace", [False, True])
 # fmt: on
-def test_get_nspace_object_1(object_name, exists_in_plans, exists_in_devices, exists_in_all):
+def test_get_nspace_object_1(object_name, exists_in_plans, exists_in_devices, exists_in_all, from_nspace):
     pc_path = get_default_startup_dir()
     nspace = load_profile_collection(pc_path)
     plans = plans_from_nspace(nspace)
     devices = devices_from_nspace(nspace)
 
+    if from_nspace:
+        # The objects references from nspace are going to be used. The objects
+        #   in 'plans' and 'devices' must still exist, but they could point to anything.
+        plans["count"] = None
+        devices["det"] = None
+        devices["sim_bundle_A"] = None
+
     all_objects = plans.copy()
     all_objects.update(devices)
 
-    object_ref = _get_nspace_object(object_name, objects_in_nspace=all_objects)
+    pp = dict(nspace=nspace) if from_nspace else {}
+
+    object_ref = _get_nspace_object(object_name, objects_in_nspace=all_objects, **pp)
     if exists_in_all:
-        assert not isinstance(object_ref, str)
+        assert isinstance(object_ref, (ophyd.OphydObject, Callable))
     else:
         assert isinstance(object_ref, str)
 
-    object_ref = _get_nspace_object(object_name, objects_in_nspace=plans)
+    object_ref = _get_nspace_object(object_name, objects_in_nspace=plans, **pp)
     if exists_in_plans:
-        assert not isinstance(object_ref, str)
+        assert isinstance(object_ref, Callable)
     else:
         assert isinstance(object_ref, str)
 
-    object_ref = _get_nspace_object(object_name, objects_in_nspace=devices)
+    object_ref = _get_nspace_object(object_name, objects_in_nspace=devices, **pp)
     if exists_in_devices:
-        assert not isinstance(object_ref, str)
+        assert isinstance(object_ref, ophyd.OphydObject)
     else:
         assert isinstance(object_ref, str)
 

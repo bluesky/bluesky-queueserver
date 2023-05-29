@@ -44,6 +44,7 @@ from bluesky_queueserver.manager.profile_ops import (
     clear_registered_items,
     construct_parameters,
     devices_from_nspace,
+    existing_plans_and_devices_from_nspace,
     extract_script_root_path,
     format_text_descriptions,
     gen_list_of_plans_and_devices,
@@ -3866,6 +3867,12 @@ def test_get_nspace_object_1(object_name, exists_in_plans, exists_in_devices, ex
         assert isinstance(object_ref, str)
 
 
+_script_test_plan_5 = """
+def test_plan(param):
+    yield from bps.sleep(1)
+"""
+
+
 # fmt: off
 @pytest.mark.parametrize(
     "plan, exp_args, exp_kwargs, success, err_msg",
@@ -3898,10 +3905,13 @@ def test_get_nspace_object_1(object_name, exists_in_plans, exists_in_devices, ex
          "Plan 'countABC' is not in the list of allowed plans"),
     ],
 )
+@pytest.mark.parametrize("from_nspace", [False, True])
 # fmt: on
-def test_prepare_plan_1(plan, exp_args, exp_kwargs, success, err_msg):
+def test_prepare_plan_1(plan, exp_args, exp_kwargs, success, err_msg, from_nspace):
     """
     Basic test for ``prepare_plan``: test main features using the simulated profile collection.
+    The parameter 'from_nspace' is used here to check that the produced results are the same
+    for both cases. The plans in the namespace are not changed.
     """
     pc_path = get_default_startup_dir()
     nspace = load_profile_collection(pc_path)
@@ -3914,6 +3924,8 @@ def test_prepare_plan_1(plan, exp_args, exp_kwargs, success, err_msg):
         path_existing_plans_and_devices=path_allowed_plans, path_user_group_permissions=path_permissions
     )
 
+    pp = dict(nspace=nspace) if from_nspace else {}
+
     if success:
         plan_parsed = prepare_plan(
             plan,
@@ -3921,6 +3933,7 @@ def test_prepare_plan_1(plan, exp_args, exp_kwargs, success, err_msg):
             devices_in_nspace=devices,
             allowed_plans=allowed_plans,
             allowed_devices=allowed_devices,
+            **pp,
         )
         expected_keys = ("callable", "args", "kwargs")
         for k in expected_keys:
@@ -3935,6 +3948,7 @@ def test_prepare_plan_1(plan, exp_args, exp_kwargs, success, err_msg):
                 devices_in_nspace=devices,
                 allowed_plans=allowed_plans,
                 allowed_devices=allowed_devices,
+                **pp,
             )
 
 
@@ -4650,6 +4664,78 @@ def test_prepare_plan_4(ignore_invalid_plans):
     else:
         with pytest.raises(ValueError, match="Failed to create description of plan 'plan1'"):
             _prepare_plans(plans_in_nspace, existing_devices=existing_devices, **kwargs)
+
+
+# fmt: off
+@pytest.mark.parametrize(
+    "plan",
+    [
+        {"name": "test_plan", "user_group": _user_group, "args": [["det1", "det2"]]},
+        {"name": "test_plan", "user_group": _user_group, "args": [["motor1.velocity"]]},
+        {"name": "test_plan", "user_group": _user_group, "args": [["move_then_count", "test_plan"]]},
+        {"name": "test_plan", "user_group": _user_group, "kwargs": {"param": ["det1", "det2"]}},
+        {"name": "test_plan", "user_group": _user_group, "kwargs": {"param": ["motor1.velocity"]}},
+        {"name": "test_plan", "user_group": _user_group, "kwargs": {"param": ["move_then_count", "test_plan"]}},
+    ],
+)
+@pytest.mark.parametrize("from_nspace", [False, True])
+# fmt: on
+def test_prepare_plan_5(plan, from_nspace):
+    """
+    ``prepare_plan``: test if callable and objects passed as plan parameters (devices and plans) are
+    loaded directly from the namespace if parameter ``nspace`` is passed.
+    """
+    pc_path = get_default_startup_dir()
+    nspace = load_profile_collection(pc_path)
+    exec(_script_test_plan_5, nspace, nspace)
+
+    existing_plans, existing_devices, plans, devices = existing_plans_and_devices_from_nspace(nspace=nspace)
+
+    nspace2 = load_profile_collection(pc_path)
+    exec(_script_test_plan_5, nspace2, nspace2)
+
+    # path_allowed_plans = os.path.join(pc_path, "existing_plans_and_devices.yaml")
+    path_permissions = os.path.join(pc_path, "user_group_permissions.yaml")
+    existing_plans_and_devices_from_nspace
+
+    allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+        path_existing_plans_and_devices=None,
+        path_user_group_permissions=path_permissions,
+        existing_plans=existing_plans,
+        existing_devices=existing_devices,
+    )
+
+    pp = dict(nspace=nspace2) if from_nspace else {}
+
+    plan_parsed = prepare_plan(
+        plan,
+        plans_in_nspace=plans,
+        devices_in_nspace=devices,
+        allowed_plans=allowed_plans,
+        allowed_devices=allowed_devices,
+        **pp,
+    )
+
+    ns_source = nspace2 if from_nspace else nspace
+    ns_other = nspace if from_nspace else nspace2
+
+    expected_keys = ("callable", "args", "kwargs")
+    for k in expected_keys:
+        assert k in plan_parsed, f"Key '{k}' does not exist: {plan_parsed.keys()}"
+
+    assert plan_parsed["callable"] == eval(plan["name"], ns_source, ns_source)
+    assert plan_parsed["callable"] != eval(plan["name"], ns_other, ns_other)
+
+    if "args" in plan:
+        for n, v in enumerate(plan["args"][0]):
+            obj = plan_parsed["args"][0][n]
+            assert obj == eval(v, ns_source, ns_source)
+            assert obj != eval(v, ns_other, ns_other)
+    else:
+        for n, v in enumerate(plan["kwargs"]["param"]):
+            obj = plan_parsed["args"][0][n]
+            assert obj == eval(v, ns_source, ns_source)
+            assert obj != eval(v, ns_other, ns_other)
 
 
 # fmt: off

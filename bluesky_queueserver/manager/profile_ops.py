@@ -914,31 +914,6 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
     if not success:
         raise RuntimeError(f"Validation of plan parameters failed: {errmsg}")
 
-    # Create the signature based on EXISTING plan from the workspace
-    signature = inspect.signature(plans_in_nspace[plan_name])
-
-    # Compare parameters in the signature and in the list of allowed plans. Make sure that the parameters
-    #   in the list of allowed plans are a subset of the existing parameters (otherwise the plan can not
-    #   be started). This not full validation.
-    existing_names = set([_.name for _ in signature.parameters.values()])
-    allowed_names = set([_["name"] for _ in group_plans[plan_name]["parameters"]])
-    extra_names = allowed_names - existing_names
-    if extra_names:
-        raise RuntimeError(f"Plan description in the list of allowed plans has extra parameters {extra_names}")
-
-    # Bind arguments of the plan
-    bound_args = signature.bind(*plan_args, **plan_kwargs)
-    # Separate dictionary for the default values define in the annotation decorator
-    default_params = {}
-
-    # Apply the default values defined in the annotation decorator. Default values defined in
-    #   the decorator may still be converted to device references (e.g. str->ophyd.Device).
-    for p in group_plans[plan_name]["parameters"]:
-        if ("default" in p) and p.get("default_defined_in_decorator", False):
-            if p["name"] not in bound_args.arguments:
-                default_value = _process_default_value(p["default"])
-                default_params.update({p["name"]: default_value})
-
     def ref_from_name(v, objects_in_nspace, sel_object_names, selected_object_tree, nspace):
         if isinstance(v, str):
             if (v in sel_object_names) or _is_object_name_in_list(v, allowed_objects=selected_object_tree):
@@ -1005,6 +980,31 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
             value = process_argument(value, objects_in_nspace, sel_object_names, selected_object_tree, nspace)
 
         return value
+
+    # Create the signature based on EXISTING plan from the workspace
+    signature = inspect.signature(plans_in_nspace[plan_name])
+
+    # Compare parameters in the signature and in the list of allowed plans. Make sure that the parameters
+    #   in the list of allowed plans are a subset of the existing parameters (otherwise the plan can not
+    #   be started). This not full validation.
+    existing_names = set([_.name for _ in signature.parameters.values()])
+    allowed_names = set([_["name"] for _ in group_plans[plan_name]["parameters"]])
+    extra_names = allowed_names - existing_names
+    if extra_names:
+        raise RuntimeError(f"Plan description in the list of allowed plans has extra parameters {extra_names}")
+
+    # Bind arguments of the plan
+    bound_args = signature.bind(*plan_args, **plan_kwargs)
+    # Separate dictionary for the default values define in the annotation decorator
+    default_params = {}
+
+    # Apply the default values defined in the annotation decorator. Default values defined in
+    #   the decorator may still be converted to device references (e.g. str->ophyd.Device).
+    for p in group_plans[plan_name]["parameters"]:
+        if ("default" in p) and p.get("default_defined_in_decorator", False):
+            if p["name"] not in bound_args.arguments:
+                default_value = _process_default_value(p["default"])
+                default_params.update({p["name"]: default_value})
 
     # Existing items include existing devices and existing plans
     items_in_nspace = devices_in_nspace.copy()

@@ -26,6 +26,7 @@ from .common import (
     set_qserver_zmq_public_key,
     use_ipykernel_for_tests,
     wait_for_condition,
+    wait_for_task_result,
 )
 
 # Plans used in most of the tests: '_plan1' and '_plan2' are quickly executed '_plan3' runs for 5 seconds.
@@ -923,7 +924,8 @@ def test_plan_failing(dets=det1):
 # fmt: on
 def test_cli_ignore_invalid_plans_01(tmp_path, re_manager_cmd, ignore_invalid_plans):  # noqa: F811
     """
-    CLI parameter '--ignore-invalid-plans'.
+    CLI parameter '--ignore-invalid-plans'. Verify, that invalid plans (with signatures that are
+    not accepted by the queue server) are properly handled during startup.
     """
 
     pc_path = copy_default_profile_collection(tmp_path, copy_yaml=True)
@@ -959,5 +961,61 @@ def test_cli_ignore_invalid_plans_01(tmp_path, re_manager_cmd, ignore_invalid_pl
         resp9, _ = zmq_single_request("environment_close")
         assert resp9["success"] is True
         assert resp9["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+
+# fmt: off
+@pytest.mark.parametrize("ignore_invalid_plans", [False, True, None])
+# fmt: on
+def test_cli_ignore_invalid_plans_02(tmp_path, re_manager_cmd, ignore_invalid_plans):  # noqa: F811
+    """
+    CLI parameter '--ignore-invalid-plans'. Verify, that invalid plans (with signatures that are
+    not accepted by the queue server) are properly handled when uploading scripts.
+    """
+    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=True)
+
+    # Start the manager
+    params = [f"--startup-dir={pc_path}"]
+    if ignore_invalid_plans is not None:
+        on_off = "ON" if ignore_invalid_plans else "OFF"
+        params.extend([f"--ignore-invalid-plans={on_off}"])
+    re_manager_cmd(params)
+
+    resp, _ = zmq_single_request("environment_open")
+    assert resp["success"] is True
+    assert resp["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+    status = get_queue_state()
+    assert status["worker_environment_exists"] is True
+    assert status["worker_environment_state"] == "idle"
+
+    resp, _ = zmq_single_request("script_upload", params=dict(script=_script_test_plan_invalid_1))
+    assert resp["success"] is True
+    assert resp["msg"] == ""
+
+    task_uid = resp["task_uid"]
+    result = wait_for_task_result(10, task_uid)
+
+    if not ignore_invalid_plans:
+        assert result["success"] is False, pprint.pformat(result)
+        assert "Failed to create description of plan 'test_plan_failing'" in result["msg"]
+        assert "Failed to create description of plan 'test_plan_failing'" in result["traceback"]
+    else:
+        assert result["success"] is True, pprint.pformat(result)
+        assert result["msg"] == ""
+        assert result["traceback"] == ""
+
+    assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+    resp, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
+    assert resp["success"] is True, pprint.pformat(resp)
+    plans_allowed = resp["plans_allowed"]
+    assert "test_plan_failing" not in plans_allowed
+
+    resp9, _ = zmq_single_request("environment_close")
+    assert resp9["success"] is True
+    assert resp9["msg"] == ""
 
     assert wait_for_condition(time=3, condition=condition_environment_closed)

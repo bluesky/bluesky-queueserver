@@ -14,12 +14,14 @@ from .common import re_manager_cmd  # noqa: F401
 from .common import (
     _user,
     _user_group,
+    append_code_to_last_startup_file,
     clear_redis_pool,
     condition_environment_closed,
     condition_environment_created,
     condition_manager_idle,
     condition_queue_processing_finished,
     copy_default_profile_collection,
+    get_queue_state,
     set_qserver_zmq_address,
     set_qserver_zmq_public_key,
     use_ipykernel_for_tests,
@@ -905,5 +907,57 @@ def test_cli_ipython_kernel_ip_01(re_manager_cmd, ipython_kernel_ip):  # noqa: F
     resp9, _ = zmq_single_request("environment_close")
     assert resp9["success"] is True
     assert resp9["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+
+_script_test_plan_invalid_1 = """
+def test_plan_failing(dets=det1):
+    # The default value is a detector, which can not be included in the plan description.
+    yield from []
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("ignore_invalid_plans", [False, True, None])
+# fmt: on
+def test_cli_ignore_invalid_plans_01(tmp_path, re_manager_cmd, ignore_invalid_plans):  # noqa: F811
+    """
+    CLI parameter '--ignore-invalid-plans'.
+    """
+
+    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=True)
+    append_code_to_last_startup_file(pc_path, _script_test_plan_invalid_1)
+
+    # Start the manager
+    params = [f"--startup-dir={pc_path}"]
+    if ignore_invalid_plans is not None:
+        on_off = "ON" if ignore_invalid_plans else "OFF"
+        params.extend([f"--ignore-invalid-plans={on_off}"])
+    re_manager_cmd(params)
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    if not ignore_invalid_plans:
+        assert wait_for_condition(time=timeout_env_open, condition=condition_manager_idle)
+        status = get_queue_state()
+        assert status["worker_environment_exists"] is False
+        assert status["worker_environment_state"] == "closed"
+    else:
+        assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+        status = get_queue_state()
+        assert status["worker_environment_exists"] is True
+        assert status["worker_environment_state"] == "idle"
+
+        resp, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
+        assert resp["success"] is True, pprint.pformat(resp)
+        plans_allowed = resp["plans_allowed"]
+        assert "test_plan_failing" not in plans_allowed
+
+        resp9, _ = zmq_single_request("environment_close")
+        assert resp9["success"] is True
+        assert resp9["msg"] == ""
 
     assert wait_for_condition(time=3, condition=condition_environment_closed)

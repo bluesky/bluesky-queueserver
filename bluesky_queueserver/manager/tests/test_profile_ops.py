@@ -3857,9 +3857,15 @@ def test_get_nspace_object_1(object_name, exists_in_plans, exists_in_devices, ex
 
     pp = dict(nspace=nspace) if from_nspace else {}
 
+    try:
+        from ophyd import OphydObject
+    except ImportError:
+        # Ophyd 1.6.4 or older
+        from ophyd.ophydobj import OphydObject
+
     object_ref = _get_nspace_object(object_name, objects_in_nspace=all_objects, **pp)
     if exists_in_all:
-        assert isinstance(object_ref, (ophyd.OphydObject, Callable))
+        assert isinstance(object_ref, (OphydObject, Callable))
     else:
         assert isinstance(object_ref, str)
 
@@ -3871,7 +3877,7 @@ def test_get_nspace_object_1(object_name, exists_in_plans, exists_in_devices, ex
 
     object_ref = _get_nspace_object(object_name, objects_in_nspace=devices, **pp)
     if exists_in_devices:
-        assert isinstance(object_ref, ophyd.OphydObject)
+        assert isinstance(object_ref, OphydObject)
     else:
         assert isinstance(object_ref, str)
 

@@ -1504,8 +1504,11 @@ def test_load_startup_module_4(tmp_path, monkeypatch, reset_sys_modules):  # noq
 # fmt: off
 @pytest.mark.parametrize("option", ["startup_dir", "script", "module"])
 @pytest.mark.parametrize("keep_re", [True, False])
+@pytest.mark.parametrize("pass_nspace", [False, True])
 # fmt: on
-def test_load_worker_startup_code_1(tmp_path, monkeypatch, keep_re, option, reset_sys_modules):  # noqa: F811
+def test_load_worker_startup_code_1(
+    tmp_path, monkeypatch, keep_re, option, pass_nspace, reset_sys_modules  # noqa: F811
+):
     """
     Test for `load_worker_startup_code` function.
     """
@@ -1516,21 +1519,27 @@ def test_load_worker_startup_code_1(tmp_path, monkeypatch, keep_re, option, rese
     with open(script_path, "w") as f:
         f.write(_startup_script_1)
 
+    pp = dict(nspace={"test_value_": 50}) if pass_nspace else {}
+
     if option == "startup_dir":
-        nspace = load_worker_startup_code(startup_dir=script_dir, keep_re=keep_re)
+        nspace = load_worker_startup_code(startup_dir=script_dir, keep_re=keep_re, **pp)
 
     elif option == "script":
-        nspace = load_worker_startup_code(startup_script_path=script_path, keep_re=keep_re)
+        nspace = load_worker_startup_code(startup_script_path=script_path, keep_re=keep_re, **pp)
 
     elif option == "module":
         # Temporarily add module to the search path
         sys_path = sys.path
         monkeypatch.setattr(sys, "path", [str(tmp_path)] + sys_path)
 
-        nspace = load_worker_startup_code(startup_module_name="script_dir1.startup_script", keep_re=keep_re)
+        nspace = load_worker_startup_code(startup_module_name="script_dir1.startup_script", keep_re=keep_re, **pp)
 
     else:
         assert False, f"Unknown option '{option}'"
+
+    if pass_nspace:
+        assert "test_value_" in nspace
+        assert nspace["test_value_"] == 50
 
     assert isinstance(nspace, dict), str(type(nspace))
     assert len(nspace) > 0
@@ -4696,7 +4705,6 @@ def test_prepare_plan_5(plan, from_nspace):
 
     # path_allowed_plans = os.path.join(pc_path, "existing_plans_and_devices.yaml")
     path_permissions = os.path.join(pc_path, "user_group_permissions.yaml")
-    existing_plans_and_devices_from_nspace
 
     allowed_plans, allowed_devices = load_allowed_plans_and_devices(
         path_existing_plans_and_devices=None,
@@ -5140,7 +5148,7 @@ def test_prepare_function_2(func_info, except_type, msg):
         prepare_function(func_info=func_info, nspace=nspace, user_group_permissions=_prep_func_permissions)
 
 
-def test_gen_list_of_plans_and_devices_1(tmp_path):
+def test_gen_list_of_plans_and_devices_01(tmp_path):
     """
     Copy simulated profile collection and generate the list of allowed (in this case available)
     plans and devices based on the profile collection
@@ -5157,6 +5165,38 @@ def test_gen_list_of_plans_and_devices_1(tmp_path):
 
     # Allow file overwrite
     gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml, overwrite=True)
+
+
+_script_test_plan_invalid_1 = """
+def test_plan_failing(dets=det1):
+    # The default value is a detector, which can not be included in the plan description.
+    yield from []
+"""
+
+
+def test_gen_list_of_plans_and_devices_02(tmp_path):
+    """
+    ``gen_list_of_plans_and_devices``: parameter ``ignore_invalid_plans``
+    """
+    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
+    append_code_to_last_startup_file(pc_path, _script_test_plan_invalid_1)
+
+    fln_yaml = "list.yaml"
+    fln_yaml_path = os.path.join(pc_path, fln_yaml)
+    with pytest.raises(RuntimeError, match="The expression .* can not be evaluated"):
+        gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml)
+    assert not os.path.exists(fln_yaml_path)
+
+    with pytest.raises(RuntimeError, match="The expression .* can not be evaluated"):
+        gen_list_of_plans_and_devices(
+            startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml, ignore_invalid_plans=False
+        )
+    assert not os.path.exists(fln_yaml_path)
+
+    gen_list_of_plans_and_devices(
+        startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml, ignore_invalid_plans=True
+    )
+    assert os.path.isfile(os.path.join(pc_path, fln_yaml)), "List of plans and devices was not created"
 
 
 # fmt: off

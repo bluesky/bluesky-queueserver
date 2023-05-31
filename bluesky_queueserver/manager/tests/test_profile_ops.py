@@ -5378,6 +5378,53 @@ def test_gen_list_of_plans_and_devices_cli_02(tmp_path, ignore_invalid_plans):
         assert not os.path.isfile(os.path.join(pc_path, fln_yaml))
 
 
+# fmt: off
+@pytest.mark.parametrize("device_max_depth, det_structure", [
+    (None, _sim_bundle_A_depth_0),
+    (0, _sim_bundle_A_depth_0),
+    (1, _sim_bundle_A_depth_1),
+    (2, _sim_bundle_A_depth_2),
+])
+# fmt: on
+def test_gen_list_of_plans_and_devices_cli_03(tmp_path, device_max_depth, det_structure):
+    """
+    ``qserver-list-plans-devices``: tests for '--device-max-depth' parameter.
+    """
+    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
+
+    params = ["qserver-list-plans-devices", "--startup-dir", pc_path, "--file-dir", pc_path]
+    if device_max_depth is not None:
+        params.append(f"--device-max-depth={device_max_depth}")
+
+    fln_yaml = "existing_plans_and_devices.yaml"
+    fln_yaml_path = os.path.join(pc_path, fln_yaml)
+
+    # Make sure that .yaml file does not exist
+    assert not os.path.isfile(os.path.join(pc_path, fln_yaml))
+
+    os.chdir(tmp_path)
+
+    exit_code = 0
+    assert subprocess.call(params) == exit_code
+    assert os.path.isfile(os.path.join(pc_path, fln_yaml))
+
+    _, devices = load_existing_plans_and_devices(fln_yaml_path)
+
+    def reduce_device_description(description):
+        def inner(dev, dev_out):
+            if "components" in dev:
+                for name in dev["components"]:
+                    dev_out[name] = {}
+                    inner(dev["components"][name], dev_out[name])
+
+        dev_out = {}
+        inner(description, dev_out)
+        return dev_out
+
+    desc = reduce_device_description(devices["sim_bundle_A"])
+    assert desc == det_structure, pprint.pformat(desc)
+
+
 def test_load_existing_plans_and_devices_1():
     """
     Loads the list of allowed plans and devices from simulated profile collection.

@@ -5205,6 +5205,61 @@ def test_gen_list_of_plans_and_devices_02(tmp_path):
     assert os.path.isfile(os.path.join(pc_path, fln_yaml)), "List of plans and devices was not created"
 
 
+_sim_bundle_A_depth_0 = {
+    "dets": {
+        "det_A": {"Imax": {}, "center": {}, "noise": {}, "noise_multiplier": {}, "sigma": {}, "val": {}},
+        "det_B": {"Imax": {}, "center": {}, "noise": {}, "noise_multiplier": {}, "sigma": {}, "val": {}},
+    },
+    "mtrs": {
+        "x": {"acceleration": {}, "readback": {}, "setpoint": {}, "unused": {}, "velocity": {}},
+        "y": {"acceleration": {}, "readback": {}, "setpoint": {}, "unused": {}, "velocity": {}},
+        "z": {"acceleration": {}, "readback": {}, "setpoint": {}, "unused": {}, "velocity": {}},
+    },
+}
+
+_sim_bundle_A_depth_1 = {}
+
+_sim_bundle_A_depth_2 = {"dets": {}, "mtrs": {}}
+
+
+# fmt: off
+@pytest.mark.parametrize("device_max_depth, det_structure", [
+    (None, _sim_bundle_A_depth_0),
+    (0, _sim_bundle_A_depth_0),
+    (1, _sim_bundle_A_depth_1),
+    (2, _sim_bundle_A_depth_2),
+])
+# fmt: on
+def test_gen_list_of_plans_and_devices_03(tmp_path, device_max_depth, det_structure):
+    """
+    ``gen_list_of_plans_and_devices``: parameter ``device_max_depth``.
+    """
+    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
+
+    pp = dict(device_max_depth=device_max_depth) if device_max_depth else {}
+
+    fln_yaml = "list.yaml"
+    fln_yaml_path = os.path.join(pc_path, fln_yaml)
+    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml, **pp)
+    assert os.path.isfile(fln_yaml_path)
+
+    _, devices = load_existing_plans_and_devices(fln_yaml_path)
+
+    def reduce_device_description(description):
+        def inner(dev, dev_out):
+            if "components" in dev:
+                for name in dev["components"]:
+                    dev_out[name] = {}
+                    inner(dev["components"][name], dev_out[name])
+
+        dev_out = {}
+        inner(description, dev_out)
+        return dev_out
+
+    desc = reduce_device_description(devices["sim_bundle_A"])
+    assert desc == det_structure, pprint.pformat(desc)
+
+
 # fmt: off
 @pytest.mark.parametrize("test, exit_code", [
     ("startup_collection_at_current_dir", 0),

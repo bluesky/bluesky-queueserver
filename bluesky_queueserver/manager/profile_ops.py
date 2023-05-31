@@ -3270,14 +3270,17 @@ def save_existing_plans_and_devices(
 
 def gen_list_of_plans_and_devices(
     *,
+    startup_profile=None,
     startup_dir=None,
     startup_module_name=None,
     startup_script_path=None,
     file_dir=None,
     file_name=None,
+    ipython_dir=None,
     overwrite=False,
     ignore_invalid_plans=False,
     device_max_depth=0,
+    use_ipython_kernel=False,
 ):
     """
     Generate the list of plans and devices from a collection of startup files, python module or
@@ -3290,12 +3293,18 @@ def gen_list_of_plans_and_devices(
 
     Parameters
     ----------
+    startup_profile: str or None
+        name of IPython profile to load. The code is expected to be found in ``startup`` directory
+        inside the profile directory.
     startup_dir: str or None
         path to the directory that contains a collection of startup files (IPython-style)
     startup_module_name: str or None
         name of the startup module to load
     startup_script_path: str or None
         name of the startup script
+    ipython_dir: str or None
+        The path to IPython root directory, which contains profiles. Overrides IPYTHONDIR environment
+        variable. The parameter is ignored if IPython kernel is not used.
     file_dir: str or None
         path to the directory where the file is to be created. None - create file in current directory.
     file_name: str
@@ -3309,7 +3318,10 @@ def gen_list_of_plans_and_devices(
         Default maximum depth for devices included in the list of existing devices:
         0 - unlimited depth (full tree of subdevices is included for all devices except areadetectors),
         1 - only top level devices are included, 2 - top level devices and subdevices are included, etc.
-
+    use_ipython_kernel: boolean
+        Select between loading startup code using pure Python (``False``) or use IPython (``True``).
+        IPython mode allows to load the code that contains IPython features.
+        
     Returns
     -------
     None

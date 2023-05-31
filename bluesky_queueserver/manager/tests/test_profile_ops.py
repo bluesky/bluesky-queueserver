@@ -5218,9 +5218,9 @@ def test_gen_list_of_plans_and_devices_02(tmp_path):
     ("file_incorrect_path", 1),
 ])
 # fmt: on
-def test_gen_list_of_plans_and_devices_cli(tmp_path, monkeypatch, test, exit_code):
+def test_gen_list_of_plans_and_devices_cli_01(tmp_path, monkeypatch, test, exit_code):
     """
-    Test for ``qserver-list-plans_devices`` CLI tool for generating list of plans and devices.
+    Test for ``qserver-list-plans-devices`` CLI tool for generating list of plans and devices.
     Copy simulated profile collection and generate the list of allowed (in this case available)
     plans and devices based on the profile collection.
     """
@@ -5284,6 +5284,37 @@ def test_gen_list_of_plans_and_devices_cli(tmp_path, monkeypatch, test, exit_cod
     else:
         assert False, f"Unknown test '{test}'"
 
+    assert subprocess.call(params) == exit_code
+
+    if exit_code == 0:
+        assert os.path.isfile(os.path.join(pc_path, fln_yaml))
+    else:
+        assert not os.path.isfile(os.path.join(pc_path, fln_yaml))
+
+
+# fmt: off
+@pytest.mark.parametrize("ignore_invalid_plans", [False, True, None])
+# fmt: on
+def test_gen_list_of_plans_and_devices_cli_02(tmp_path, ignore_invalid_plans):
+    """
+    ``qserver-list-plans-devices``: tests for '--ignore-invalid-plans' parameter.
+    """
+    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
+    append_code_to_last_startup_file(pc_path, _script_test_plan_invalid_1)
+
+    params = ["qserver-list-plans-devices", "--startup-dir", pc_path, "--file-dir", pc_path]
+    if ignore_invalid_plans is not None:
+        _ = "ON" if ignore_invalid_plans else "OFF"
+        params.append(f"--ignore-invalid-plans={_}")
+
+    fln_yaml = "existing_plans_and_devices.yaml"
+
+    # Make sure that .yaml file does not exist
+    assert not os.path.isfile(os.path.join(pc_path, fln_yaml))
+
+    os.chdir(tmp_path)
+
+    exit_code = 0 if ignore_invalid_plans else 1
     assert subprocess.call(params) == exit_code
 
     if exit_code == 0:

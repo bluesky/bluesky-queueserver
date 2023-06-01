@@ -71,6 +71,7 @@ from .common import (
     append_code_to_last_startup_file,
     copy_default_profile_collection,
     patch_first_startup_file,
+    use_ipykernel_for_tests,
 )
 
 python_version = sys.version_info  # Can be compare to tuples (such as 'python_version >= (3, 9)')
@@ -5159,18 +5160,21 @@ def test_gen_list_of_plans_and_devices_01(tmp_path):
     Copy simulated profile collection and generate the list of allowed (in this case available)
     plans and devices based on the profile collection
     """
+    using_ipython = use_ipykernel_for_tests()
+    pp = dict(use_ipython_kernel=using_ipython) if using_ipython else {}
+
     pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
 
     fln_yaml = "list.yaml"
-    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml)
+    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml, **pp)
     assert os.path.isfile(os.path.join(pc_path, fln_yaml)), "List of plans and devices was not created"
 
     # Attempt to overwrite the file
     with pytest.raises(RuntimeError, match="already exists. File overwriting is disabled."):
-        gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml)
+        gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml, **pp)
 
     # Allow file overwrite
-    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml, overwrite=True)
+    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml, overwrite=True, **pp)
 
 
 _script_test_plan_invalid_1 = """

@@ -3331,55 +3331,214 @@ def gen_list_of_plans_and_devices(
     RuntimeError
         Error occurred while creating or saving the lists.
     """
-    from .profile_tools import clear_ipython_mode, clear_re_worker_active, set_ipython_mode, set_re_worker_active
-    from .config import profile_name_to_startup_dir, get_profile_name_from_path
 
-    file_name = file_name or "existing_plans_and_devices.yaml"
+    startup_profile = startup_profile or None
+    startup_dir = startup_dir or None
+    startup_module_name = startup_module_name or None
+    startup_script_path = startup_script_path or None
+    ipython_dir = ipython_dir or None
+
     try:
-        if not any([startup_profile, startup_dir, startup_module_name, startup_script_path]):
-            raise ValueError(f"The location of startup code is not specified")
+        # process_kwargs = dict(
+        #     startup_profile=startup_profile,
+        #     startup_dir=startup_dir,
+        #     startup_module_name=startup_module_name,
+        #     startup_script_path=startup_script_path,
+        #     ipython_dir=ipython_dir,
+        #     file_dir=file_dir,
+        #     file_name=file_name,
+        #     overwrite=overwrite,
+        #     ignore_invalid_plans=ignore_invalid_plans,
+        #     device_max_depth=device_max_depth,
+        #     use_ipython_kernel=use_ipython_kernel,
+        # )
 
-        if profile_name and startup_dir:
-            raise ValueError(f"Both 'profile_name' and 'startup_dir' are specified")
+        import multiprocessing
 
-        if use_ipython_kernel:
-            profile_name = profile_name or get_profile_name_from_path(startup_dir)
-        else:
-            startup_dir = startup_dir or profile_name_to_startup_dir(startup_profile, ipython_dir=ipython_dir)
+        class GenLists(multiprocessing.Process):
+            def __init__(self):
+                super().__init__()
+                self._pconn, self._cconn = multiprocessing.Pipe()
+                self._exception = None
 
-        if file_dir is None:
-            file_dir = os.getcwd()
+                self._startup_profile = startup_profile
+                self._startup_dir = startup_dir
+                self._startup_module_name = startup_module_name
+                self._startup_script_path = startup_script_path
+                self._ipython_dir = ipython_dir
+                self._file_dir = file_dir
+                self._file_name = file_name
+                self._overwrite = overwrite
+                self._ignore_invalid_plans = ignore_invalid_plans
+                self._device_max_depth = device_max_depth
+                self._use_ipython_kernel = use_ipython_kernel
 
-        if sum([_ is None for _ in [startup_dir, startup_module_name, startup_script_path]]) != 2:
-            raise ValueError("Source of the startup code was not specified or multiple sources were specified.")
+            @property
+            def exception(self):
+                if self._pconn.poll():
+                    self._exception = self._pconn.recv()
+                return self._exception
 
-        set_re_worker_active()
-        set_ipython_mode(use_ipython_kernel)
+            def run(self):
+                try:
+                    startup_profile = self._startup_profile
+                    startup_dir = self._startup_dir
+                    startup_module_name = self._startup_module_name
+                    startup_script_path = self._startup_script_path
+                    ipython_dir = self._ipython_dir
+                    file_dir = self._file_dir
+                    file_name = self._file_name
+                    overwrite = self._overwrite
+                    ignore_invalid_plans = self._ignore_invalid_plans
+                    device_max_depth = self._device_max_depth
+                    use_ipython_kernel = self._use_ipython_kernel
 
-        nspace = load_worker_startup_code(
-            startup_dir=startup_dir,
-            startup_module_name=startup_module_name,
-            startup_script_path=startup_script_path,
-        )
+                    # import traceback
+                    from .config import get_profile_name_from_path, profile_name_to_startup_dir
+                    from .profile_tools import (
+                        clear_ipython_mode,
+                        clear_re_worker_active,
+                        set_ipython_mode,
+                        set_re_worker_active,
+                    )
 
-        existing_plans, existing_devices, _, _ = existing_plans_and_devices_from_nspace(
-            nspace=nspace, ignore_invalid_plans=ignore_invalid_plans, max_depth=device_max_depth
-        )
+                    file_name = file_name or "existing_plans_and_devices.yaml"
+                    msg_multiple_sources = (
+                        "Source of the startup code was not specified or multiple sources were specified."
+                    )
 
-        save_existing_plans_and_devices(
-            existing_plans=existing_plans,
-            existing_devices=existing_devices,
-            file_dir=file_dir,
-            file_name=file_name,
-            overwrite=overwrite,
-        )
+                    if file_dir is None:
+                        file_dir = os.getcwd()
+
+                    set_re_worker_active()
+                    set_ipython_mode(use_ipython_kernel)
+
+                    if use_ipython_kernel:
+                        if startup_dir:
+                            if startup_profile or ipython_dir:
+                                raise ValueError(msg_multiple_sources)
+                            else:
+                                startup_profile, ipython_dir = get_profile_name_from_path(startup_dir)
+
+                        import socket
+                        from jupyter_client.localinterfaces import localhost
+
+                        from ipykernel.kernelapp import IPKernelApp
+
+                        # from IPython.core.application import BaseIPythonApplication
+                        # from IPython.core.shellapp import InteractiveShellApp
+
+                        # class IPApp(BaseIPythonApplication, InteractiveShellApp):
+                        #     def initialize(self, argv=None):
+                        #         super().initialize(argv)
+
+                        #     def init_shell(self):
+                        #         """Initialize the shell channel."""
+                        #         self.shell = getattr(self.kernel, "shell", None)
+                        #         if self.shell:
+                        #             self.shell.configurables.append(self)
+
+                        nspace = {}
+                        # ip_kernel_app = IPApp(user_ns=nspace)
+
+                        # ip_kernel_app = IPKernelApp.instance(user_ns=nspace)
+                        ip_kernel_app = IPKernelApp(user_ns=nspace)
+
+                        if startup_profile:
+                            ip_kernel_app.profile = startup_profile
+                        if startup_module_name:
+                            # NOTE: Startup files are still loaded.
+                            ip_kernel_app.module_to_run = startup_module_name
+                        if startup_script_path:
+                            # NOTE: Startup files are still loaded.
+                            ip_kernel_app.file_to_run = startup_script_path
+                        if ipython_dir:
+                            ip_kernel_app.ipython_dir = ipython_dir
+
+                        # def generate_random_port(ip=None):
+                        #     """
+                        #     Generate random port number for a free port. The code is vendored from here:
+                        #     https://github.com/jupyter/jupyter_client/blob/58017fc04199ab012ad2b6f5a01b8d3e11698e7c/
+                        #     jupyter_client/connect.py#L102-L112
+                        #     """
+                        #     ip = ip or localhost()
+                        #     sock = socket.socket()
+                        #     sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, b"\0" * 8)
+                        #     sock.bind((ip, 0))
+                        #     port = sock.getsockname()[1]
+                        #     sock.close()
+
+                        #     return port
+
+                        # ip_kernel_app.shell_port = generate_random_port()
+                        # ip_kernel_app.iopub_port = generate_random_port()
+                        # ip_kernel_app.stdin_port = generate_random_port()
+                        # ip_kernel_app.hb_port = generate_random_port()
+                        # ip_kernel_app.control_port = generate_random_port()
+
+                        logger.info("Initializing IPython kernel ...")
+                        ip_kernel_app.initialize([])
+                        # ip_kernel_app.init_path()
+                        # ip_kernel_app.init_shell()
+                        # ip_kernel_app.init_code()
+                        logger.info("IPython kernel initialization is complete.")
+                        # ip_kernel_app.close()
+                        # del ip_kernel_app
+                        # nspace = ip_kernel_app.user_ns
+
+                    else:
+                        if not startup_dir and (startup_profile or ipython_dir):
+                            startup_dir = profile_name_to_startup_dir(
+                                startup_profile or "default", ipython_dir=ipython_dir
+                            )
+
+                        if sum([_ is None for _ in [startup_dir, startup_module_name, startup_script_path]]) != 2:
+                            raise ValueError(msg_multiple_sources)
+
+                        nspace = load_worker_startup_code(
+                            startup_dir=startup_dir,
+                            startup_module_name=startup_module_name,
+                            startup_script_path=startup_script_path,
+                        )
+
+                    print(f"============================== INNER FUNCTION")
+
+                    existing_plans, existing_devices, _, _ = existing_plans_and_devices_from_nspace(
+                        nspace=nspace, ignore_invalid_plans=ignore_invalid_plans, max_depth=device_max_depth
+                    )
+
+                    # raise Exception("HELLO============================")
+
+                    save_existing_plans_and_devices(
+                        existing_plans=existing_plans,
+                        existing_devices=existing_devices,
+                        file_dir=file_dir,
+                        file_name=file_name,
+                        overwrite=overwrite,
+                    )
+                    print(f"============================== File saved: {file_dir!r} {file_name!r}")
+
+                except Exception as ex:
+                    # tb = traceback.format_exc()
+                    # self._cconn.send((ex, tb))
+                    self._cconn.send((ex,))
+
+                finally:
+                    clear_re_worker_active()
+                    clear_ipython_mode()
+
+        p = GenLists()
+        p.start()
+        p.join()
+        if p.exception:
+            # error, traceback = p.exception
+            (error,) = p.exception
+            # print(f"Exception:::::: {traceback}")
+            raise error
 
     except Exception as ex:
+        logger.exception(ex)
         raise RuntimeError(f"Failed to create the list of plans and devices: {str(ex)}") from ex
-
-    finally:
-        clear_re_worker_active()
-        clear_ipython_mode()
 
 
 def gen_list_of_plans_and_devices_cli():

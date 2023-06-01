@@ -3321,7 +3321,7 @@ def gen_list_of_plans_and_devices(
     use_ipython_kernel: boolean
         Select between loading startup code using pure Python (``False``) or use IPython (``True``).
         IPython mode allows to load the code that contains IPython features.
-        
+
     Returns
     -------
     None
@@ -3332,11 +3332,21 @@ def gen_list_of_plans_and_devices(
         Error occurred while creating or saving the lists.
     """
     from .profile_tools import clear_ipython_mode, clear_re_worker_active, set_ipython_mode, set_re_worker_active
-
-    use_ipython_kernel = False  # TODO: Make this a parameter, but it requires extension of functionality
+    from .config import profile_name_to_startup_dir, get_profile_name_from_path
 
     file_name = file_name or "existing_plans_and_devices.yaml"
     try:
+        if not any([startup_profile, startup_dir, startup_module_name, startup_script_path]):
+            raise ValueError(f"The location of startup code is not specified")
+
+        if profile_name and startup_dir:
+            raise ValueError(f"Both 'profile_name' and 'startup_dir' are specified")
+
+        if use_ipython_kernel:
+            profile_name = profile_name or get_profile_name_from_path(startup_dir)
+        else:
+            startup_dir = startup_dir or profile_name_to_startup_dir(startup_profile, ipython_dir=ipython_dir)
+
         if file_dir is None:
             file_dir = os.getcwd()
 

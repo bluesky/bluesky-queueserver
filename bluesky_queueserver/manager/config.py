@@ -258,7 +258,7 @@ class _ArgsExisting:
             return getattr(self._args, param_name)
 
 
-def _profile_name_to_startup_dir(profile_name, ipython_dir=None):
+def profile_name_to_startup_dir(profile_name, ipython_dir=None):
     """
     Finds and returns full path to startup directory based on the profile name.
     """
@@ -274,6 +274,29 @@ def _profile_name_to_startup_dir(profile_name, ipython_dir=None):
     ipython_dir = os.path.abspath(path_to_ipython)
     profile_name_full = f"profile_{profile_name}"
     return os.path.join(ipython_dir, profile_name_full, "startup")
+
+
+def get_profile_name_from_path(startup_dir):
+    """
+    Returns name of profile and ipython path based on path to startup directory.
+    """
+    sd = os.path.abspath(os.path.expanduser(startup_dir))
+
+    profile_name, ip_dir = None, None
+    p, d = os.path.split(sd)
+    if d == "startup":
+        ipd, pr = os.path.split(p)
+        if pr.startswith("profile_"):
+            profile_name = pr[len("profile_") :]
+            ip_dir = ipd
+
+    if not profile_name or not ip_dir:
+        raise ConfigError(
+            "Failed to extract IPython directory and profile "
+            f"name from startup directory name: {startup_dir!r}."
+        )
+
+    return profile_name, ip_dir
 
 
 class Settings:
@@ -554,28 +577,6 @@ class Settings:
 
         use_ipk = self.use_ipython_kernel
 
-        def get_profile_from_path(startup_dir):
-            """
-            Returns name of profile and ipython path based on path to startup directory.
-            """
-            sd = os.path.abspath(os.path.expanduser(startup_dir))
-
-            profile_name, ip_dir = None, None
-            p, d = os.path.split(sd)
-            if d == "startup":
-                ipd, pr = os.path.split(p)
-                if pr.startswith("profile_"):
-                    profile_name = pr[len("profile_") :]
-                    ip_dir = ipd
-
-            if not profile_name or not ip_dir:
-                raise ConfigError(
-                    "Failed to extract IPython directory and profile "
-                    f"name from startup directory name: {startup_dir!r}."
-                )
-
-            return profile_name, ip_dir
-
         _cfg_dir = self._get_value_from_config("startup_dir")
         _cfg_module = self._get_value_from_config("startup_module")
         _cfg_script = self._get_value_from_config("startup_script")
@@ -606,7 +607,7 @@ class Settings:
             if _cfg_profile:
                 cfg_profile, cfg_ipdir = _cfg_profile, _cfg_ipdir
             elif _cfg_dir:
-                cfg_profile, cfg_ipdir = get_profile_from_path(_cfg_dir)
+                cfg_profile, cfg_ipdir = get_profile_name_from_path(_cfg_dir)
 
             if _cfg_module:
                 cfg_module = _cfg_module
@@ -635,7 +636,7 @@ class Settings:
             if _cli_profile:
                 cli_profile, cli_ipdir = _cli_profile, _cli_ipdir
             elif _cli_dir:
-                cli_profile, cli_ipdir = get_profile_from_path(_cli_dir)
+                cli_profile, cli_ipdir = get_profile_name_from_path(_cli_dir)
 
             if _cli_module:
                 cli_module = _cli_module
@@ -655,7 +656,7 @@ class Settings:
                 demo_mode = True
 
             # We still need to set startup directory. It is used to locate config files.
-            startup_dir = _profile_name_to_startup_dir(startup_profile, ipython_dir)
+            startup_dir = profile_name_to_startup_dir(startup_profile, ipython_dir)
         else:
             # Process config parameters
             cfg_dir, cfg_module, cfg_script = None, None, None
@@ -672,7 +673,7 @@ class Settings:
             elif _cfg_script:
                 cfg_script = os.path.abspath(os.path.expanduser(_cfg_script))
             elif _cfg_profile:
-                cfg_dir = _profile_name_to_startup_dir(_cfg_profile, _cfg_ipdir)
+                cfg_dir = profile_name_to_startup_dir(_cfg_profile, _cfg_ipdir)
             elif _cfg_dir:
                 cfg_dir = os.path.abspath(os.path.expanduser(_cfg_dir))
 
@@ -694,7 +695,7 @@ class Settings:
             elif _cli_script:
                 cli_script = os.path.abspath(os.path.expanduser(_cli_script))
             elif _cli_profile:
-                cli_dir = _profile_name_to_startup_dir(_cli_profile, _cli_ipdir)
+                cli_dir = profile_name_to_startup_dir(_cli_profile, _cli_ipdir)
             elif _cli_dir:
                 cli_dir = os.path.abspath(os.path.expanduser(_cli_dir))
 

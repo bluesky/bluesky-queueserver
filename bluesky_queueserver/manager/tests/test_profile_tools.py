@@ -4,7 +4,8 @@ import sys
 
 import pytest
 
-from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices, load_profile_collection
+from bluesky_queueserver.manager.gen_lists import gen_list_of_plans_and_devices
+from bluesky_queueserver.manager.profile_ops import load_profile_collection
 from bluesky_queueserver.manager.profile_tools import (
     clear_ipython_mode,
     clear_re_worker_active,

@@ -5,7 +5,6 @@ import os
 import pprint
 import re
 import shutil
-import subprocess
 import sys
 import time as ttime
 import typing
@@ -20,6 +19,7 @@ from bluesky import protocols
 
 from bluesky_queueserver import register_device, register_plan
 from bluesky_queueserver.manager.annotation_decorator import parameter_annotation_decorator
+from bluesky_queueserver.manager.gen_lists import gen_list_of_plans_and_devices
 from bluesky_queueserver.manager.profile_ops import (
     ScriptLoadingError,
     _build_device_name_list,
@@ -47,7 +47,6 @@ from bluesky_queueserver.manager.profile_ops import (
     existing_plans_and_devices_from_nspace,
     extract_script_root_path,
     format_text_descriptions,
-    gen_list_of_plans_and_devices,
     get_default_startup_dir,
     load_allowed_plans_and_devices,
     load_existing_plans_and_devices,
@@ -71,7 +70,6 @@ from .common import (
     append_code_to_last_startup_file,
     copy_default_profile_collection,
     patch_first_startup_file,
-    use_ipykernel_for_tests,
 )
 
 python_version = sys.version_info  # Can be compare to tuples (such as 'python_version >= (3, 9)')
@@ -5153,280 +5151,6 @@ def test_prepare_function_2(func_info, except_type, msg):
     _validate_user_group_permissions_schema(_prep_func_permissions)
     with pytest.raises(except_type, match=msg):
         prepare_function(func_info=func_info, nspace=nspace, user_group_permissions=_prep_func_permissions)
-
-
-def test_gen_list_of_plans_and_devices_01(tmp_path):
-    """
-    Copy simulated profile collection and generate the list of allowed (in this case available)
-    plans and devices based on the profile collection
-    """
-    using_ipython = use_ipykernel_for_tests()
-    pp = dict(use_ipython_kernel=using_ipython) if using_ipython else {}
-
-    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
-
-    fln_yaml = "list.yaml"
-    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml, **pp)
-    assert os.path.isfile(os.path.join(pc_path, fln_yaml)), "List of plans and devices was not created"
-
-    # Attempt to overwrite the file
-    with pytest.raises(RuntimeError, match="already exists. File overwriting is disabled."):
-        gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml, **pp)
-
-    # Allow file overwrite
-    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml, overwrite=True, **pp)
-
-
-_script_test_plan_invalid_1 = """
-def test_plan_failing(dets=det1):
-    # The default value is a detector, which can not be included in the plan description.
-    yield from []
-"""
-
-
-def test_gen_list_of_plans_and_devices_02(tmp_path):
-    """
-    ``gen_list_of_plans_and_devices``: parameter ``ignore_invalid_plans``
-    """
-    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
-    append_code_to_last_startup_file(pc_path, _script_test_plan_invalid_1)
-
-    fln_yaml = "list.yaml"
-    fln_yaml_path = os.path.join(pc_path, fln_yaml)
-    with pytest.raises(RuntimeError, match="The expression .* can not be evaluated"):
-        gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml)
-    assert not os.path.exists(fln_yaml_path)
-
-    with pytest.raises(RuntimeError, match="The expression .* can not be evaluated"):
-        gen_list_of_plans_and_devices(
-            startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml, ignore_invalid_plans=False
-        )
-    assert not os.path.exists(fln_yaml_path)
-
-    gen_list_of_plans_and_devices(
-        startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml, ignore_invalid_plans=True
-    )
-    assert os.path.isfile(os.path.join(pc_path, fln_yaml)), "List of plans and devices was not created"
-
-
-_sim_bundle_A_depth_0 = {
-    "dets": {
-        "det_A": {"Imax": {}, "center": {}, "noise": {}, "noise_multiplier": {}, "sigma": {}, "val": {}},
-        "det_B": {"Imax": {}, "center": {}, "noise": {}, "noise_multiplier": {}, "sigma": {}, "val": {}},
-    },
-    "mtrs": {
-        "x": {"acceleration": {}, "readback": {}, "setpoint": {}, "unused": {}, "velocity": {}},
-        "y": {"acceleration": {}, "readback": {}, "setpoint": {}, "unused": {}, "velocity": {}},
-        "z": {"acceleration": {}, "readback": {}, "setpoint": {}, "unused": {}, "velocity": {}},
-    },
-}
-
-_sim_bundle_A_depth_1 = {}
-
-_sim_bundle_A_depth_2 = {"dets": {}, "mtrs": {}}
-
-
-# fmt: off
-@pytest.mark.parametrize("device_max_depth, det_structure", [
-    (None, _sim_bundle_A_depth_0),
-    (0, _sim_bundle_A_depth_0),
-    (1, _sim_bundle_A_depth_1),
-    (2, _sim_bundle_A_depth_2),
-])
-# fmt: on
-def test_gen_list_of_plans_and_devices_03(tmp_path, device_max_depth, det_structure):
-    """
-    ``gen_list_of_plans_and_devices``: parameter ``device_max_depth``.
-    """
-    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
-
-    pp = dict(device_max_depth=device_max_depth) if device_max_depth else {}
-
-    fln_yaml = "list.yaml"
-    fln_yaml_path = os.path.join(pc_path, fln_yaml)
-    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml, **pp)
-    assert os.path.isfile(fln_yaml_path)
-
-    _, devices = load_existing_plans_and_devices(fln_yaml_path)
-
-    def reduce_device_description(description):
-        def inner(dev, dev_out):
-            if "components" in dev:
-                for name in dev["components"]:
-                    dev_out[name] = {}
-                    inner(dev["components"][name], dev_out[name])
-
-        dev_out = {}
-        inner(description, dev_out)
-        return dev_out
-
-    desc = reduce_device_description(devices["sim_bundle_A"])
-    assert desc == det_structure, pprint.pformat(desc)
-
-
-# fmt: off
-@pytest.mark.parametrize("test, exit_code", [
-    ("startup_collection_at_current_dir", 0),
-    ("startup_collection_dir", 0),
-    ("startup_collection_incorrect_path_A", 1),
-    ("startup_collection_incorrect_path_B", 1),
-    ("startup_script_path", 0),
-    ("startup_script_path_incorrect", 1),
-    ("startup_module_name", 0),
-    ("startup_module_name_incorrect", 1),
-    ("file_incorrect_path", 1),
-])
-# fmt: on
-def test_gen_list_of_plans_and_devices_cli_01(tmp_path, monkeypatch, test, exit_code):
-    """
-    Test for ``qserver-list-plans-devices`` CLI tool for generating list of plans and devices.
-    Copy simulated profile collection and generate the list of allowed (in this case available)
-    plans and devices based on the profile collection.
-    """
-    pc_path = os.path.join(tmp_path, "script_dir1")
-    script_path = os.path.join(pc_path, "startup_script.py")
-
-    os.makedirs(pc_path, exist_ok=True)
-    with open(script_path, "w") as f:
-        f.write(_startup_script_1)
-
-    fln_yaml = "existing_plans_and_devices.yaml"
-
-    # Make sure that .yaml file does not exist
-    assert not os.path.isfile(os.path.join(pc_path, fln_yaml))
-
-    os.chdir(tmp_path)
-
-    if test == "startup_collection_at_current_dir":
-        os.chdir(pc_path)
-        params = ["qserver-list-plans-devices", "--startup-dir", "."]
-
-    elif test == "startup_collection_dir":
-        params = ["qserver-list-plans-devices", "--startup-dir", pc_path, "--file-dir", pc_path]
-
-    elif test == "startup_collection_incorrect_path_A":
-        # Path exists (default path is used), but there are no startup files (fails)
-        params = ["qserver-list-plans-devices", "--startup-dir", "."]
-
-    elif test == "startup_collection_incorrect_path_B":
-        # Path does not exist
-        path_nonexisting = os.path.join(tmp_path, "abcde")
-        params = ["qserver-list-plans-devices", "--startup-dir", path_nonexisting, "--file-dir", pc_path]
-
-    elif test == "startup_script_path":
-        params = ["qserver-list-plans-devices", "--startup-script", script_path, "--file-dir", pc_path]
-
-    elif test == "startup_script_path_incorrect":
-        params = [
-            "qserver-list-plans-devices",
-            "--startup-script",
-            "non_existing_path",
-            "--file-dir",
-            pc_path,
-        ]
-
-    elif test == "startup_module_name":
-        monkeypatch.setenv("PYTHONPATH", os.path.split(pc_path)[0])
-        s_name = "script_dir1.startup_script"
-        params = ["qserver-list-plans-devices", "--startup-module", s_name, "--file-dir", pc_path]
-
-    elif test == "startup_module_name_incorrect":
-        monkeypatch.setenv("PYTHONPATH", os.path.split(pc_path)[0])
-        s_name = "incorrect.module.name"
-        params = ["qserver-list-plans-devices", "--startup-module", s_name, "--file-dir", pc_path]
-
-    elif test == "file_incorrect_path":
-        # Path does not exist
-        path_nonexisting = os.path.join(tmp_path, "abcde")
-        params = ["qserver-list-plans-devices", "--startup-dir", pc_path, "--file-dir", path_nonexisting]
-
-    else:
-        assert False, f"Unknown test '{test}'"
-
-    assert subprocess.call(params) == exit_code
-
-    if exit_code == 0:
-        assert os.path.isfile(os.path.join(pc_path, fln_yaml))
-    else:
-        assert not os.path.isfile(os.path.join(pc_path, fln_yaml))
-
-
-# fmt: off
-@pytest.mark.parametrize("ignore_invalid_plans", [False, True, None])
-# fmt: on
-def test_gen_list_of_plans_and_devices_cli_02(tmp_path, ignore_invalid_plans):
-    """
-    ``qserver-list-plans-devices``: tests for '--ignore-invalid-plans' parameter.
-    """
-    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
-    append_code_to_last_startup_file(pc_path, _script_test_plan_invalid_1)
-
-    params = ["qserver-list-plans-devices", "--startup-dir", pc_path, "--file-dir", pc_path]
-    if ignore_invalid_plans is not None:
-        _ = "ON" if ignore_invalid_plans else "OFF"
-        params.append(f"--ignore-invalid-plans={_}")
-
-    fln_yaml = "existing_plans_and_devices.yaml"
-
-    # Make sure that .yaml file does not exist
-    assert not os.path.isfile(os.path.join(pc_path, fln_yaml))
-
-    os.chdir(tmp_path)
-
-    exit_code = 0 if ignore_invalid_plans else 1
-    assert subprocess.call(params) == exit_code
-
-    if exit_code == 0:
-        assert os.path.isfile(os.path.join(pc_path, fln_yaml))
-    else:
-        assert not os.path.isfile(os.path.join(pc_path, fln_yaml))
-
-
-# fmt: off
-@pytest.mark.parametrize("device_max_depth, det_structure", [
-    (None, _sim_bundle_A_depth_0),
-    (0, _sim_bundle_A_depth_0),
-    (1, _sim_bundle_A_depth_1),
-    (2, _sim_bundle_A_depth_2),
-])
-# fmt: on
-def test_gen_list_of_plans_and_devices_cli_03(tmp_path, device_max_depth, det_structure):
-    """
-    ``qserver-list-plans-devices``: tests for '--device-max-depth' parameter.
-    """
-    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
-
-    params = ["qserver-list-plans-devices", "--startup-dir", pc_path, "--file-dir", pc_path]
-    if device_max_depth is not None:
-        params.append(f"--device-max-depth={device_max_depth}")
-
-    fln_yaml = "existing_plans_and_devices.yaml"
-    fln_yaml_path = os.path.join(pc_path, fln_yaml)
-
-    # Make sure that .yaml file does not exist
-    assert not os.path.isfile(os.path.join(pc_path, fln_yaml))
-
-    os.chdir(tmp_path)
-
-    exit_code = 0
-    assert subprocess.call(params) == exit_code
-    assert os.path.isfile(os.path.join(pc_path, fln_yaml))
-
-    _, devices = load_existing_plans_and_devices(fln_yaml_path)
-
-    def reduce_device_description(description):
-        def inner(dev, dev_out):
-            if "components" in dev:
-                for name in dev["components"]:
-                    dev_out[name] = {}
-                    inner(dev["components"][name], dev_out[name])
-
-        dev_out = {}
-        inner(description, dev_out)
-        return dev_out
-
-    desc = reduce_device_description(devices["sim_bundle_A"])
-    assert desc == det_structure, pprint.pformat(desc)
 
 
 def test_load_existing_plans_and_devices_1():

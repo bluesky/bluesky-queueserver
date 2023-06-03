@@ -8,7 +8,7 @@ import time as ttime
 import pytest
 
 from bluesky_queueserver.manager.comms import zmq_single_request
-from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
+from bluesky_queueserver.manager.gen_lists import gen_list_of_plans_and_devices
 
 from .common import re_manager_cmd  # noqa: F401
 from .common import (

@@ -1688,7 +1688,8 @@ class RunEngineWorker(Process):
             import socket
 
             from ipykernel.kernelapp import IPKernelApp
-            from jupyter_client.localinterfaces import localhost
+
+            from .utils import generate_random_port
 
             self._re_namespace["___ip_execution_loop_start___"] = self._run_loop_ipython
             self._re_namespace["___ip_kernel_startup_init___"] = self._ip_kernel_startup_init
@@ -1722,21 +1723,6 @@ class RunEngineWorker(Process):
 
             # Echo all the output to sys.__stdout__ and sys.__stderr__ during kernel initialization
             self._ip_kernel_app.quiet = False
-
-            def generate_random_port(ip=None):
-                """
-                Generate random port number for a free port. The code is vendored from here:
-                https://github.com/jupyter/jupyter_client/blob/58017fc04199ab012ad2b6f5a01b8d3e11698e7c/
-                jupyter_client/connect.py#L102-L112
-                """
-                ip = ip or localhost()
-                sock = socket.socket()
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, b"\0" * 8)
-                sock.bind((ip, 0))
-                port = sock.getsockname()[1]
-                sock.close()
-
-                return port
 
             def find_kernel_ip(ip_str):
                 if ip_str == "localhost":

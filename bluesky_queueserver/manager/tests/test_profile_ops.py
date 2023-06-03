@@ -17,9 +17,8 @@ import pytest
 import yaml
 from bluesky import protocols
 
-from bluesky_queueserver import register_device, register_plan
+from bluesky_queueserver import gen_list_of_plans_and_devices, register_device, register_plan
 from bluesky_queueserver.manager.annotation_decorator import parameter_annotation_decorator
-from bluesky_queueserver.manager.gen_lists import gen_list_of_plans_and_devices
 from bluesky_queueserver.manager.profile_ops import (
     ScriptLoadingError,
     _build_device_name_list,

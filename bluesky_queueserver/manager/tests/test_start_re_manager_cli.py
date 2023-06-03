@@ -7,7 +7,7 @@ import subprocess
 import pytest
 import yaml
 
-from bluesky_queueserver.manager.gen_lists import gen_list_of_plans_and_devices
+from bluesky_queueserver import gen_list_of_plans_and_devices
 
 from ..comms import zmq_single_request
 from .common import re_manager_cmd  # noqa: F401

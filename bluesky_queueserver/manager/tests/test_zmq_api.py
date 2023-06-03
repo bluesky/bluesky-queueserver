@@ -14,7 +14,7 @@ import yaml
 import zmq
 
 import bluesky_queueserver
-from bluesky_queueserver.manager.gen_lists import gen_list_of_plans_and_devices
+from bluesky_queueserver import gen_list_of_plans_and_devices
 from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
 from bluesky_queueserver.manager.profile_ops import (
     _prepare_devices,

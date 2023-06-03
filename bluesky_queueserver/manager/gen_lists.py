@@ -249,8 +249,13 @@ def gen_list_of_plans_and_devices(
     Parameters
     ----------
     startup_profile: str or None
-        name of IPython profile to load. The code is expected to be found in ``startup`` directory
-        inside the profile directory.
+        name of IPython profile to load. The startup code is expected to be located in
+        ``<ipython_dir>/<startup_profile>/startup`` directory. If ``use_ipython_kernel=False``
+        and one of the parameters ``startup_dir``, ``startup_module_name`` or
+        ``startup_script_path`` are specified, then the parameter is ignored.
+        If ``use_ipython_kernel=True``, then the profile is always loaded.
+        The function fails if both ``startup_dir`` and ``startup_profile`` are specified
+        (ambiguous location of the startup code).
     startup_dir: str or None
         path to the directory that contains a collection of startup files (IPython-style)
     startup_module_name: str or None
@@ -259,7 +264,8 @@ def gen_list_of_plans_and_devices(
         name of the startup script
     ipython_dir: str or None
         The path to IPython root directory, which contains profiles. Overrides IPYTHONDIR environment
-        variable. The parameter is ignored if IPython kernel is not used.
+        variable. The parameter is used to compute the location of startup code based on
+        ``startup_profile``. The parameters ``ipython_dir`` and ``startup_dir`` are mutually exclusive.
     file_dir: str or None
         path to the directory where the file is to be created. None - create file in current directory.
     file_name: str
@@ -359,6 +365,18 @@ def gen_list_of_plans_and_devices_cli():
         "'existing_plans_and_devices.yaml'.",
     )
 
+    parser.add_argument(
+        "--startup-profile",
+        dest="startup_profile",
+        type=str,
+        help="The name of IPython profile used to find the location of startup files. Example: if IPython is "
+        "configured to look for profiles in '~/.ipython' directory (default behavior) and the profile "
+        "name is 'testing', then RE Manager will look for startup files in "
+        "'~/.ipython/profile_testing/startup' directory. If IPython-based worker is used, the code in "
+        "the startup profile or the default profile is always executed before running "
+        "a startup module or a script",
+    )
+
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--startup-dir",
@@ -390,6 +408,24 @@ def gen_list_of_plans_and_devices_cli():
         "'qserver-list-plans-devices --startup-script ~/startup/scripts/script.py' loads "
         "startup code from the script and saves the results to the file in the current directory.",
     )
+
+    parser.add_argument(
+        "--ipython-dir",
+        dest="ipython_dir",
+        type=str,
+        help="The path to IPython root directory, which contains profiles. Overrides IPYTHONDIR environment "
+        "variable.",
+    )
+
+    parser.add_argument(
+        "--use-ipython-kernel",
+        dest="use_ipython_kernel",
+        type=str,
+        choices=["ON", "OFF"],
+        default="OFF",
+        help="Run the Run Engine worker in IPython kernel (default: %(default)s).",
+    )
+
     parser.add_argument(
         "--ignore-invalid-plans",
         dest="ignore_invalid_plans",
@@ -415,26 +451,36 @@ def gen_list_of_plans_and_devices_cli():
     args = parser.parse_args()
     file_dir = args.file_dir
     file_name = args.file_name
+    startup_profile = args.startup_profile
     startup_dir = args.startup_dir
     startup_module_name = args.startup_module_name
     startup_script_path = args.startup_script_path
+    ipython_dir = args.ipython_dir
+    use_ipython_kernel = args.use_ipython_kernel
     ignore_invalid_plans = to_boolean(args.ignore_invalid_plans)
     device_max_depth = int(args.device_max_depth)
 
+    use_ipython_kernel = use_ipython_kernel == "ON"
+
+    if ipython_dir is not None:
+        ipython_dir = os.path.abspath(os.path.expand_user(ipython_dir))
+
     if file_dir is not None:
-        file_dir = os.path.expanduser(file_dir)
-        file_dir = os.path.abspath(file_dir)
+        file_dir = os.path.abspath(os.path.expanduser(file_dir))
 
     try:
         gen_list_of_plans_and_devices(
+            startup_profile=startup_profile,
             startup_dir=startup_dir,
             startup_module_name=startup_module_name,
             startup_script_path=startup_script_path,
             file_dir=file_dir,
             file_name=file_name,
+            ipython_dir=ipython_dir,
             overwrite=True,
             ignore_invalid_plans=ignore_invalid_plans,
             device_max_depth=device_max_depth,
+            use_ipython_kernel=use_ipython_kernel,
         )
         print("The list of existing plans and devices was created successfully.")
         exit_code = 0

@@ -429,6 +429,8 @@ def test_gen_list_of_plans_and_devices_cli_02(tmp_path, ignore_invalid_plans):
     """
     ``qserver-list-plans-devices``: tests for '--ignore-invalid-plans' parameter.
     """
+    using_ipython = use_ipykernel_for_tests()
+
     pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
     append_code_to_last_startup_file(pc_path, _script_test_plan_invalid_1)
 
@@ -443,6 +445,9 @@ def test_gen_list_of_plans_and_devices_cli_02(tmp_path, ignore_invalid_plans):
     assert not os.path.isfile(os.path.join(pc_path, fln_yaml))
 
     os.chdir(tmp_path)
+
+    if using_ipython:
+        params.append("--use-ipython-kernel=ON")
 
     exit_code = 0 if ignore_invalid_plans else 1
     assert subprocess.call(params) == exit_code
@@ -465,6 +470,8 @@ def test_gen_list_of_plans_and_devices_cli_03(tmp_path, device_max_depth, det_st
     """
     ``qserver-list-plans-devices``: tests for '--device-max-depth' parameter.
     """
+    using_ipython = use_ipykernel_for_tests()
+
     pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
 
     params = ["qserver-list-plans-devices", "--startup-dir", pc_path, "--file-dir", pc_path]
@@ -478,6 +485,9 @@ def test_gen_list_of_plans_and_devices_cli_03(tmp_path, device_max_depth, det_st
     assert not os.path.isfile(os.path.join(pc_path, fln_yaml))
 
     os.chdir(tmp_path)
+
+    if using_ipython:
+        params.append("--use-ipython-kernel=ON")
 
     exit_code = 0
     assert subprocess.call(params) == exit_code
@@ -498,3 +508,37 @@ def test_gen_list_of_plans_and_devices_cli_03(tmp_path, device_max_depth, det_st
 
     desc = reduce_device_description(devices["sim_bundle_A"])
     assert desc == det_structure, pprint.pformat(desc)
+
+
+# fmt: off
+@pytest.mark.parametrize("use_ip_kernel", [False, True, None])
+# fmt: on
+def test_gen_list_of_plans_and_devices_cli_04(tmp_path, use_ip_kernel):
+    """
+    ``qserver-list-plans-devices``: parameter ``--use-ipython-kernel``. Check that
+    IPython-specific code is loaded only if ``--use-ipython-kernel=ON``.
+    """
+    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
+    append_code_to_last_startup_file(pc_path, _script_test_gen_list_05)
+
+    fln_yaml = "list.yaml"
+    fln_yaml_path = os.path.join(pc_path, fln_yaml)
+
+    params = [
+        "qserver-list-plans-devices",
+        f"--startup-dir={pc_path}",
+        f"--file-dir={pc_path}",
+        f"--file-name={fln_yaml}",
+    ]
+    if use_ip_kernel is not None:
+        _ = "ON" if use_ip_kernel else "OFF"
+        params.append(f"--use-ipython-kernel={_}")
+
+    assert not os.path.exists(fln_yaml_path)
+    exit_code = 0 if use_ip_kernel else 1
+    assert subprocess.call(params) == exit_code
+
+    if use_ip_kernel:
+        assert os.path.isfile(fln_yaml_path)
+    else:
+        assert not os.path.exists(fln_yaml_path)

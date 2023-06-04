@@ -1,4 +1,5 @@
 import argparse
+import importlib
 import logging
 import multiprocessing
 import os
@@ -292,14 +293,26 @@ def gen_list_of_plans_and_devices(
     RuntimeError
         Error occurred while creating or saving the lists.
     """
-
     startup_profile = startup_profile or None
     startup_dir = startup_dir or None
     startup_module_name = startup_module_name or None
     startup_script_path = startup_script_path or None
     ipython_dir = ipython_dir or None
 
+    if startup_dir is not None:
+        startup_dir = os.path.abspath(os.path.expanduser(startup_dir))
+    if startup_script_path is not None:
+        startup_script_path = os.path.abspath(os.path.expanduser(startup_script_path))
+    if ipython_dir is not None:
+        ipython_dir = os.path.abspath(os.path.expanduser(ipython_dir))
+
     try:
+        if startup_script_path and not os.path.isfile(startup_script_path):
+            raise IOError(f"Startup script {startup_script_path!r} is not found")
+
+        if startup_module_name and importlib.util.find_spec(startup_module_name) is None:
+            raise ImportError(f"Startup module {startup_module_name!r} is not found")
+
         gen_lists_kwargs = dict(
             startup_profile=startup_profile,
             startup_dir=startup_dir,
@@ -462,9 +475,6 @@ def gen_list_of_plans_and_devices_cli():
 
     use_ipython_kernel = use_ipython_kernel == "ON"
 
-    if ipython_dir is not None:
-        ipython_dir = os.path.abspath(os.path.expand_user(ipython_dir))
-
     if file_dir is not None:
         file_dir = os.path.abspath(os.path.expanduser(file_dir))
 
@@ -485,6 +495,7 @@ def gen_list_of_plans_and_devices_cli():
         print("The list of existing plans and devices was created successfully.")
         exit_code = 0
     except BaseException as ex:
-        logger.exception("Failed to create the list of plans and devices: %s", str(ex))
+        # Error message contains full traceback!!!
+        logger.error("Operation failed ...\n%s", str(ex))
         exit_code = 1
     return exit_code

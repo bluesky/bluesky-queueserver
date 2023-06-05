@@ -262,6 +262,8 @@ def profile_name_to_startup_dir(profile_name, ipython_dir=None):
     """
     Finds and returns full path to startup directory based on the profile name.
     """
+    profile_name = profile_name or "default"
+
     if ipython_dir:
         path_to_ipython = ipython_dir
     elif find_spec("IPython"):
@@ -399,13 +401,18 @@ class Settings:
         self._settings["user_group_permissions_path"] = user_group_permissions_path
 
         res = self._get_startup_options()
-        startup_dir, startup_module, startup_script, startup_profile, ipython_dir, demo_mode = res
+        startup_dir, startup_module, startup_script, startup_profile, ipython_dir, aux_dir, demo_mode = res
         self._settings["startup_dir"] = startup_dir
         self._settings["startup_module"] = startup_module
         self._settings["startup_script"] = startup_script
         self._settings["startup_profile"] = startup_profile
         self._settings["ipython_dir"] = ipython_dir
         self._settings["demo_mode"] = demo_mode
+
+        if not self._settings["existing_plans_and_devices_path"]:
+            self._settings["existing_plans_and_devices_path"] = aux_dir
+        if not self._settings["user_group_permissions_path"]:
+            self._settings["user_group_permissions_path"] = aux_dir
 
         self._settings["print_console_output"] = self._get_param_boolean(
             value_default=args.console_output,
@@ -573,6 +580,7 @@ class Settings:
 
         ipython_dir, startup_profile = None, None
         startup_dir, startup_module, startup_script = None, None, None
+        aux_dir = None  # Default directory for lists and permissions (unless explicitly specified)
         demo_mode = False
 
         use_ipk = self.use_ipython_kernel
@@ -598,6 +606,7 @@ class Settings:
                     f"Ambiguous location of startup code is specified in the config file: "
                     f"startup_dir={_cfg_dir!r} startup_profile={_cfg_profile!r} ipython_dir={_cfg_ipdir!r}"
                 )
+            # if sum([bool(_) for _ in [_cfg_dir, _cfg_module, _cfg_script]]):
             if _cfg_module and _cfg_script:
                 raise ConfigError(
                     f"Ambiguous location of startup code is specified in the config file: "
@@ -650,13 +659,13 @@ class Settings:
 
             # If no location of startup code was specified, then load the default
             #   simulated ipython_sim/profile_collection_sim
-            if not any([ipython_dir, startup_profile, startup_module, ipython_dir]):
+            if not any([startup_script, startup_module, startup_profile, ipython_dir]):
                 ipython_dir = os.path.join(tempfile.gettempdir(), "qserver", "ipython")
                 startup_profile = default_startup_profile
                 demo_mode = True
 
             # We still need to set startup directory. It is used to locate config files.
-            startup_dir = profile_name_to_startup_dir(startup_profile, ipython_dir)
+            # startup_dir = profile_name_to_startup_dir(startup_profile, ipython_dir)
         else:
             # Process config parameters
             cfg_dir, cfg_module, cfg_script = None, None, None
@@ -708,7 +717,12 @@ class Settings:
             # Demo mode: the code is loaded from the built-in startup dir.
             demo_mode = startup_dir == default_startup_dir
 
-        return startup_dir, startup_module, startup_script, startup_profile, ipython_dir, demo_mode
+        if startup_dir:
+            aux_dir = startup_dir
+        elif startup_profile or ipython_dir:
+            aux_dir = profile_name_to_startup_dir(startup_profile, ipython_dir)
+
+        return startup_dir, startup_module, startup_script, startup_profile, ipython_dir, aux_dir, demo_mode
 
     def _get_zmq_control_addr(self):
         """

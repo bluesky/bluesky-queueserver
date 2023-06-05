@@ -1,5 +1,6 @@
 import argparse
 import atexit
+import importlib
 import logging
 import os
 import re
@@ -9,7 +10,7 @@ from multiprocessing import Pipe, Queue
 
 from .. import __version__
 from .comms import PipeJsonRpcReceive, default_zmq_control_address_for_server
-from .config import Settings, save_settings_to_file
+from .config import Settings, profile_name_to_startup_dir, save_settings_to_file
 from .logging_setup import setup_loggers
 from .manager import RunEngineManager
 from .output_streaming import (
@@ -606,48 +607,63 @@ def start_manager():
     use_ipython_kernel = settings.use_ipython_kernel
     demo_mode = settings.demo_mode
 
+    sdir = startup_dir or profile_name_to_startup_dir(startup_profile, ipython_dir)
+
     if demo_mode and use_ipython_kernel:
         # Create demo profile for IPython with simulated startup files
         try:
-            create_demo_ipython_profile(startup_dir)
-            logger.info("Temporary IPython profile was created (%r)", startup_dir)
+            create_demo_ipython_profile(sdir)
+            logger.info("Temporary IPython profile was created (%r)", sdir)
         except Exception as ex:
             logger.exception(ex)
             return 1
 
     # Primitive error processing: make sure that all essential data exists.
-    if startup_dir is not None:
-        if not os.path.exists(startup_dir):
-            logger.error("Startup directory '%s' does not exist", startup_dir)
+    if sdir is not None:
+        if not os.path.exists(sdir):
+            logger.error("Startup directory '%s' does not exist", sdir)
             ttime.sleep(0.01)
             return 1
-        if not os.path.isdir(startup_dir):
-            logger.error("Startup directory '%s' is not a directory", startup_dir)
+        if not os.path.isdir(sdir):
+            logger.error("Startup directory '%s' is not a directory", sdir)
             ttime.sleep(0.01)
             return 1
-    elif (startup_module_name is not None) or (startup_script_path is not None):
-        # startup_module_name or startup_script_path is set. This option requires
-        #   the paths to existing plans and devices and user group permissions to be set.
-        #   (The default directory can not be used in this case).
-        if not settings.existing_plans_and_devices_path:
-            logger.error(
-                "The path to the list of existing plans and devices (--existing-plans-and-devices) "
-                "is not specified."
-            )
+
+    # Check if startup script exists (if it is specified)
+    if startup_script_path is not None:
+        if not os.path.isfile(startup_script_path):
+            logger.error("The startup script '%s' is not found.", startup_script_path)
             ttime.sleep(0.01)
             return 1
-        if not settings.user_group_permissions_path:
-            logger.error(
-                "The path to the file containing user group permissions (--user-group-permissions) "
-                "is not specified."
-            )
+
+    if startup_module_name is not None:
+        if importlib.util.find_spec(startup_module_name) is None:
+            logger.error("The startup module '%s' is not found.", startup_module_name)
             ttime.sleep(0.01)
             return 1
-        # Check if startup script exists (if it is specified)
-        if startup_script_path is not None:
-            if not os.path.isfile(startup_script_path):
-                logger.error("The script '%s' is not found.", startup_script_path)
-                return 1
+
+    # Check if startup script exists (if it is specified)
+    if startup_script_path is not None:
+        if not os.path.isfile(startup_script_path):
+            logger.error("The script '%s' is not found.", startup_script_path)
+            ttime.sleep(0.01)
+            return 1
+
+    if not settings.existing_plans_and_devices_path:
+        logger.error(
+            "The path to the list of existing plans and devices (--existing-plans-and-devices) "
+            "is not specified."
+        )
+        ttime.sleep(0.01)
+        return 1
+
+    if not settings.user_group_permissions_path:
+        logger.error(
+            "The path to the file containing user group permissions (--user-group-permissions) "
+            "is not specified."
+        )
+        ttime.sleep(0.01)
+        return 1
 
     ipython_kernel_ip = settings.ipython_kernel_ip
     if ipython_kernel_ip not in ("localhost", "auto") and not re.search(

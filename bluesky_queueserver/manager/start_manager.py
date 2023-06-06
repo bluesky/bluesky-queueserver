@@ -1,6 +1,5 @@
 import argparse
 import atexit
-import importlib
 import logging
 import os
 import re
@@ -629,25 +628,19 @@ def start_manager():
             ttime.sleep(0.01)
             return 1
 
-    # Check if startup script exists (if it is specified)
-    if startup_script_path is not None:
-        if not os.path.isfile(startup_script_path):
-            logger.error("The startup script '%s' is not found.", startup_script_path)
-            ttime.sleep(0.01)
-            return 1
+    # # Check if startup script exists (if it is specified)
+    # if startup_script_path is not None:
+    #     if not os.path.isfile(startup_script_path):
+    #         logger.error("The startup script '%s' is not found.", startup_script_path)
+    #         ttime.sleep(0.01)
+    #         return 1
 
-    if startup_module_name is not None:
-        if importlib.util.find_spec(startup_module_name) is None:
-            logger.error("The startup module '%s' is not found.", startup_module_name)
-            ttime.sleep(0.01)
-            return 1
-
-    # Check if startup script exists (if it is specified)
-    if startup_script_path is not None:
-        if not os.path.isfile(startup_script_path):
-            logger.error("The script '%s' is not found.", startup_script_path)
-            ttime.sleep(0.01)
-            return 1
+    # # Check if startup script exists (if it is specified)
+    # if startup_module_name is not None:
+    #     if importlib.util.find_spec(startup_module_name) is None:
+    #         logger.error("The startup module '%s' is not found.", startup_module_name)
+    #         ttime.sleep(0.01)
+    #         return 1
 
     if not settings.existing_plans_and_devices_path:
         logger.error(

@@ -539,6 +539,7 @@ def test_is_re_worker_active_2(re_manager_cmd, tmp_path, monkeypatch, option):  
         # Temporarily add module to the search path
         sys_path = sys.path
         monkeypatch.setattr(sys, "path", [str(module_dir)] + sys_path)
+        # monkeypatch.setenv("PYTHONPATH", str(module_dir))
         gen_list_of_plans_and_devices(
             startup_module_name="script.startup_script", file_dir=startup_dir, overwrite=True
         )

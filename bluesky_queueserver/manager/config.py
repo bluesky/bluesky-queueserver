@@ -272,7 +272,7 @@ def profile_name_to_startup_dir(profile_name, ipython_dir=None):
         path_to_ipython = IPython.paths.get_ipython_dir()
     else:
         raise ConfigError("IPython is not installed. Specify directory using CLI parameters or in config file.")
-        return 1
+
     ipython_dir = os.path.abspath(path_to_ipython)
     profile_name_full = f"profile_{profile_name}"
     return os.path.join(ipython_dir, profile_name_full, "startup")
@@ -664,13 +664,21 @@ class Settings:
                 startup_profile = default_startup_profile
                 demo_mode = True
 
+            aux_dir = profile_name_to_startup_dir(startup_profile, ipython_dir)
+
             # We still need to set startup directory. It is used to locate config files.
             # startup_dir = profile_name_to_startup_dir(startup_profile, ipython_dir)
         else:
             # Process config parameters
             cfg_dir, cfg_module, cfg_script = None, None, None
+            cfg_profile, cfg_ipdir = None, None  # profile name and IP dir may be used to set 'aux_dir'.
 
             # We ignore profile name if other location is specified
+            if _cfg_dir and (_cfg_profile or _cfg_ipdir):
+                raise ConfigError(
+                    f"Ambiguous location of startup code is specified in the config file: "
+                    f"startup_dir={_cfg_dir!r} startup_profile={_cfg_profile!r} ipython_dir={_cfg_ipdir!r}"
+                )
             if sum([_ is not None for _ in [_cfg_dir, _cfg_module, _cfg_script]]) > 1:
                 raise ConfigError(
                     f"Ambiguous location of startup code is specified in the config file: "
@@ -681,18 +689,26 @@ class Settings:
                 cfg_module = _cfg_module
             elif _cfg_script:
                 cfg_script = os.path.abspath(os.path.expanduser(_cfg_script))
-            elif _cfg_profile:
-                cfg_dir = profile_name_to_startup_dir(_cfg_profile, _cfg_ipdir)
             elif _cfg_dir:
                 cfg_dir = os.path.abspath(os.path.expanduser(_cfg_dir))
+            elif _cfg_profile or _cfg_ipdir:
+                cfg_dir = profile_name_to_startup_dir(_cfg_profile, _cfg_ipdir)
+
+            cfg_profile, cfg_ipdir = _cfg_profile or None, _cfg_ipdir or None
 
             if any([cfg_dir, cfg_module, cfg_script]):
                 startup_dir, startup_module, startup_script = cfg_dir, cfg_module, cfg_script
 
             # Process CLI parameters
             cli_dir, cli_module, cli_script = None, None, None
+            cli_profile, cli_ipdir = None, None  # profile name and IP dir may be used to set 'aux_dir'.
 
             # We ignore profile name if other location is specified
+            if _cli_dir and (_cli_profile or _cli_ipdir):
+                raise ConfigError(
+                    f"Ambiguous location of startup code is specified in the CLI parameters: "
+                    f"startup_dir={_cli_dir!r} startup_profile={_cli_profile!r} ipython_dir={_cli_ipdir!r}"
+                )
             if sum([_ is not None for _ in [_cli_dir, _cli_module, _cli_script]]) > 1:
                 raise ConfigError(
                     f"Ambiguous location of startup code is specified in the CLI parameters: "
@@ -703,10 +719,12 @@ class Settings:
                 cli_module = _cli_module
             elif _cli_script:
                 cli_script = os.path.abspath(os.path.expanduser(_cli_script))
-            elif _cli_profile:
-                cli_dir = profile_name_to_startup_dir(_cli_profile, _cli_ipdir)
             elif _cli_dir:
                 cli_dir = os.path.abspath(os.path.expanduser(_cli_dir))
+            elif _cli_profile or _cli_ipdir:
+                cli_dir = profile_name_to_startup_dir(_cli_profile, _cli_ipdir)
+
+            cli_profile, cli_ipdir = _cli_profile or None, _cli_ipdir or None
 
             if any([cli_dir, cli_module, cli_script]):
                 startup_dir, startup_module, startup_script = cli_dir, cli_module, cli_script
@@ -717,10 +735,13 @@ class Settings:
             # Demo mode: the code is loaded from the built-in startup dir.
             demo_mode = startup_dir == default_startup_dir
 
-        if startup_dir:
-            aux_dir = startup_dir
-        elif startup_profile or ipython_dir:
-            aux_dir = profile_name_to_startup_dir(startup_profile, ipython_dir)
+            if startup_dir:
+                aux_dir = startup_dir
+            else:
+                _profile = cli_profile or cfg_profile
+                _ip_dir = cli_ipdir or cfg_ipdir
+                if _profile or _ip_dir:
+                    aux_dir = profile_name_to_startup_dir(_profile, _ip_dir)
 
         return startup_dir, startup_module, startup_script, startup_profile, ipython_dir, aux_dir, demo_mode
 

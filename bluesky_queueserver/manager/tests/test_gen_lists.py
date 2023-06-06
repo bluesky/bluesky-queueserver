@@ -269,7 +269,6 @@ def test_gen_list_of_plans_and_devices_06(monkeypatch, tmp_path, option, use_ip_
             f.write(_startup_script_1)
 
         fln_yaml_path = os.path.join(script_dir, fln_yaml)
-        print(f"{fln_yaml_path=}")
 
         pp = dict(
             startup_module_name=module_name,

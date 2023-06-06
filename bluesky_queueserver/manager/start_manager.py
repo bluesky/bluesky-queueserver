@@ -685,50 +685,82 @@ def start_manager():
     config_worker["ipython_matplotlib"] = settings.ipython_matplotlib
     config_worker["ignore_invalid_plans"] = settings.ignore_invalid_plans
 
-    default_existing_pd_fln = "existing_plans_and_devices.yaml"
-    if settings.existing_plans_and_devices_path:
-        existing_pd_path = os.path.expanduser(settings.existing_plans_and_devices_path)
-        if not os.path.isabs(existing_pd_path) and startup_dir:
-            existing_pd_path = os.path.join(startup_dir, existing_pd_path)
-        if not existing_pd_path.endswith(".yaml"):
-            existing_pd_path = os.path.join(existing_pd_path, default_existing_pd_fln)
-    else:
-        existing_pd_path = os.path.join(startup_dir, default_existing_pd_fln)
-    # The file may not exist, but the directory MUST exist
-    pd_dir = os.path.dirname(existing_pd_path) or "."
-    if not os.path.isdir(os.path.dirname(existing_pd_path)):
-        logger.error(
-            "The directory for list of plans and devices ('%s')does not exist. "
-            "Create the directory manually and restart RE Manager.",
-            pd_dir,
-        )
+    existing_pd_path = settings.existing_plans_and_devices_path
+    if not existing_pd_path:
+        logger.error("The location for list of plans and devices is not specified.")
         ttime.sleep(0.01)
         return 1
-    if not os.path.isfile(existing_pd_path):
-        logger.warning(
-            "The file with the list of allowed plans and devices ('%s') does not exist. "
-            "The manager will be started with empty list. The list will be populated after "
-            "RE worker environment is opened the first time.",
-            existing_pd_path,
-        )
-
-    default_user_group_pd_fln = "user_group_permissions.yaml"
-    if settings.user_group_permissions_path:
-        user_group_pd_path = os.path.expanduser(settings.user_group_permissions_path)
-        if not os.path.isabs(user_group_pd_path) and startup_dir:
-            user_group_pd_path = os.path.join(startup_dir, user_group_pd_path)
-        if not user_group_pd_path.endswith(".yaml"):
-            user_group_pd_path = os.path.join(user_group_pd_path, default_user_group_pd_fln)
     else:
-        user_group_pd_path = os.path.join(startup_dir, default_user_group_pd_fln)
-    if not os.path.isfile(user_group_pd_path):
+        dname, _ = os.path.split(existing_pd_path)
+        if not os.path.isdir(dname):
+            logger.error(
+                "The directory for list of plans and devices ('%s') does not exist. "
+                "Create the directory manually and restart RE Manager.",
+                dname,
+            )
+            ttime.sleep(0.01)
+            return 1
+        elif not os.path.isfile(existing_pd_path):
+            logger.warning(
+                "The file with the list of allowed plans and devices ('%s') does not exist. "
+                "The manager will be started with empty list. The list will be populated after "
+                "RE worker environment is opened the first time.",
+                existing_pd_path,
+            )
+
+    user_group_pd_path = settings.user_group_permissions_path
+    if not user_group_pd_path:
         logger.error(
             "The file with user permissions was not found at "
             "'%s'. User groups are not defined. USERS WILL NOT BE ABLE TO SUBMIT PLANS OR "
             "EXECUTE ANY OTHER OPERATIONS THAT REQUIRE PERMISSIONS.",
             user_group_pd_path,
         )
-        user_group_pd_path = None
+
+    # default_existing_pd_fln = "existing_plans_and_devices.yaml"
+    # if settings.existing_plans_and_devices_path:
+    #     existing_pd_path = os.path.expanduser(settings.existing_plans_and_devices_path)
+    #     if not os.path.isabs(existing_pd_path) and startup_dir:
+    #         existing_pd_path = os.path.join(startup_dir, existing_pd_path)
+    #     if not existing_pd_path.endswith(".yaml"):
+    #         existing_pd_path = os.path.join(existing_pd_path, default_existing_pd_fln)
+    # else:
+    #     existing_pd_path = os.path.join(startup_dir, default_existing_pd_fln)
+    # # The file may not exist, but the directory MUST exist
+    # pd_dir = os.path.dirname(existing_pd_path) or "."
+    # if not os.path.isdir(os.path.dirname(existing_pd_path)):
+    #     logger.error(
+    #         "The directory for list of plans and devices ('%s')does not exist. "
+    #         "Create the directory manually and restart RE Manager.",
+    #         pd_dir,
+    #     )
+    #     ttime.sleep(0.01)
+    #     return 1
+    # if not os.path.isfile(existing_pd_path):
+    #     logger.warning(
+    #         "The file with the list of allowed plans and devices ('%s') does not exist. "
+    #         "The manager will be started with empty list. The list will be populated after "
+    #         "RE worker environment is opened the first time.",
+    #         existing_pd_path,
+    #     )
+
+    # default_user_group_pd_fln = "user_group_permissions.yaml"
+    # if settings.user_group_permissions_path:
+    #     user_group_pd_path = os.path.expanduser(settings.user_group_permissions_path)
+    #     if not os.path.isabs(user_group_pd_path) and startup_dir:
+    #         user_group_pd_path = os.path.join(startup_dir, user_group_pd_path)
+    #     if not user_group_pd_path.endswith(".yaml"):
+    #         user_group_pd_path = os.path.join(user_group_pd_path, default_user_group_pd_fln)
+    # else:
+    #     user_group_pd_path = os.path.join(startup_dir, default_user_group_pd_fln)
+    # if not os.path.isfile(user_group_pd_path):
+    #     logger.error(
+    #         "The file with user permissions was not found at "
+    #         "'%s'. User groups are not defined. USERS WILL NOT BE ABLE TO SUBMIT PLANS OR "
+    #         "EXECUTE ANY OTHER OPERATIONS THAT REQUIRE PERMISSIONS.",
+    #         user_group_pd_path,
+    #     )
+    #     user_group_pd_path = None
 
     config_worker["existing_plans_and_devices_path"] = existing_pd_path
     config_manager["existing_plans_and_devices_path"] = existing_pd_path

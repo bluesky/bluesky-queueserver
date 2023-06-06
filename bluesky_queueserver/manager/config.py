@@ -27,6 +27,9 @@ logger = logging.getLogger(__name__)
 
 SERVICE_CONFIGURATION_FILE_NAME = "config_schema.yml"
 
+default_existing_pd_fln = "existing_plans_and_devices.yaml"
+default_user_group_pd_fln = "user_group_permissions.yaml"
+
 
 def expand_environment_variables(config):
     """Expand environment variables in a nested config dictionary
@@ -387,8 +390,6 @@ class Settings:
             value_config=self._get_value_from_config("existing_plans_and_devices_path"),
             value_cli=self._args_existing("existing_plans_and_devices_path"),
         )
-        if isinstance(existing_plans_and_devices_path, str):
-            existing_plans_and_devices_path = os.path.expanduser(existing_plans_and_devices_path)
         self._settings["existing_plans_and_devices_path"] = existing_plans_and_devices_path
 
         user_group_permissions_path = self._get_param(
@@ -396,8 +397,6 @@ class Settings:
             value_config=self._get_value_from_config("user_group_permissions_path"),
             value_cli=self._args_existing("user_group_permissions_path"),
         )
-        if isinstance(user_group_permissions_path, str):
-            user_group_permissions_path = os.path.expanduser(user_group_permissions_path)
         self._settings["user_group_permissions_path"] = user_group_permissions_path
 
         res = self._get_startup_options()
@@ -413,6 +412,28 @@ class Settings:
             self._settings["existing_plans_and_devices_path"] = aux_dir
         if not self._settings["user_group_permissions_path"]:
             self._settings["user_group_permissions_path"] = aux_dir
+
+        existing_plans_and_devices_path = self._settings["existing_plans_and_devices_path"]
+        if isinstance(existing_plans_and_devices_path, str):
+            existing_plans_and_devices_path = os.path.expanduser(existing_plans_and_devices_path)
+            existing_plans_and_devices_path = os.path.abspath(existing_plans_and_devices_path)
+            if not existing_plans_and_devices_path.endswith(".yaml"):
+                existing_plans_and_devices_path = os.path.join(
+                    existing_plans_and_devices_path, default_existing_pd_fln
+                )
+        else:
+            existing_plans_and_devices_path = None
+        self._settings["existing_plans_and_devices_path"] = existing_plans_and_devices_path
+
+        user_group_permissions_path = self._settings["user_group_permissions_path"]
+        if isinstance(user_group_permissions_path, str):
+            user_group_permissions_path = os.path.expanduser(user_group_permissions_path)
+            user_group_permissions_path = os.path.abspath(user_group_permissions_path)
+            if not user_group_permissions_path.endswith(".yaml"):
+                user_group_permissions_path = os.path.join(user_group_permissions_path, default_user_group_pd_fln)
+        else:
+            user_group_permissions_path = None
+        self._settings["user_group_permissions_path"] = user_group_permissions_path
 
         self._settings["print_console_output"] = self._get_param_boolean(
             value_default=args.console_output,

@@ -633,11 +633,11 @@ def load_script_into_existing_nspace(
         if "db" in nspace:
             object_backup["db"] = nspace["db"]
 
-    saved__file__ = None
+    # saved__file__ = None
     try:
         # Set '__name__' variables. NOTE: '__file__' variable is undefined (difference!!!)
         script_path = os.path.join(script_root_path, "script") if script_root_path else "script"
-        saved__file__ = nspace["__file__"] if "__file__" in nspace else None
+        # saved__file__ = nspace["__file__"] if "__file__" in nspace else None
         patch = f"__name__ = '__main__'\n__file__ = '{script_path}'\n"
         exec(patch, nspace, nspace)
 
@@ -653,12 +653,12 @@ def load_script_into_existing_nspace(
         raise ScriptLoadingError(msg, ex_str) from ex
 
     finally:
-        if saved__file__ is None:
-            patch = "del __file__\n"  # Do not delete '__name__'
-        else:
-            # Restore the original value
-            patch = f"__file__ = '{saved__file__}'"
-        exec(patch, nspace, nspace)
+        # if saved__file__ is None:
+        #     patch = "del __file__\n"  # Do not delete '__name__'
+        # else:
+        #     # Restore the original value
+        #     patch = f"__file__ = '{saved__file__}'"
+        # exec(patch, nspace, nspace)
 
         if not update_re:
             # Remove references for 'RE' and 'db' from the namespace

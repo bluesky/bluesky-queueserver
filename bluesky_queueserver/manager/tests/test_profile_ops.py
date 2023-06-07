@@ -1310,25 +1310,29 @@ def test_load_script_into_existing_nspace_10(tmp_path, reset_sys_modules):  # no
     load_script_into_existing_nspace(script=code_script_upload_test10_1, nspace=nspace)
 
     assert nspace["mod_name1"] == "__main__"
-
-    assert "__file__" not in nspace
     assert nspace["__name__"] == "__main__"
+    assert nspace["__file__"] == "script"
 
 
 def test_load_script_into_existing_nspace_11(tmp_path, reset_sys_modules):  # noqa: F811
     """
     ``load_script_into_existing_nspace``: test that if ``__file__`` is defined in namespace,
-    it remains defined.
+    it is replaced by the new file name.
     """
     initial__file__ = "abcde"
+    new__file__ = "/tmp/script"
+
     nspace = {"__file__": initial__file__}  # Namespace already has '__file__' defined.
-    load_script_into_existing_nspace(script=code_script_upload_test10_1, nspace=nspace)
+
+    load_script_into_existing_nspace(
+        script=code_script_upload_test10_1,
+        nspace=nspace,
+        script_root_path=os.path.dirname(new__file__),
+    )
 
     assert nspace["mod_name1"] == "__main__"
-
-    assert "__file__" in nspace
-    assert nspace["__file__"] == initial__file__
     assert nspace["__name__"] == "__main__"
+    assert nspace["__file__"] == new__file__
 
 
 code_script_upload_test12_1 = """

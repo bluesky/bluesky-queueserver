@@ -606,11 +606,10 @@ def start_manager():
     use_ipython_kernel = settings.use_ipython_kernel
     demo_mode = settings.demo_mode
 
-    sdir = startup_dir or profile_name_to_startup_dir(startup_profile, ipython_dir)
-
     if demo_mode and use_ipython_kernel:
         # Create demo profile for IPython with simulated startup files
         try:
+            sdir = startup_dir or profile_name_to_startup_dir(startup_profile, ipython_dir)
             create_demo_ipython_profile(sdir)
             logger.info("Temporary IPython profile was created (%r)", sdir)
         except Exception as ex:
@@ -618,13 +617,13 @@ def start_manager():
             return 1
 
     # Primitive error processing: make sure that all essential data exists.
-    if sdir is not None:
-        if not os.path.exists(sdir):
-            logger.error("Startup directory '%s' does not exist", sdir)
+    if startup_dir is not None:
+        if not os.path.exists(startup_dir):
+            logger.error("Startup directory '%s' does not exist", startup_dir)
             ttime.sleep(0.01)
             return 1
-        if not os.path.isdir(sdir):
-            logger.error("Startup directory '%s' is not a directory", sdir)
+        if not os.path.isdir(startup_dir):
+            logger.error("Startup directory '%s' is not a directory", startup_dir)
             ttime.sleep(0.01)
             return 1
 

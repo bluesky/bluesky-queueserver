@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 from bluesky_queueserver import gen_list_of_plans_and_devices
+from bluesky_queueserver.manager.config import default_existing_pd_fln, default_user_group_pd_fln
 
 from ..comms import zmq_single_request
 from .common import re_manager_cmd  # noqa: F401
@@ -460,8 +461,10 @@ def _get_expected_settings_default_1(tmpdir):
         startup_dir = "/bluesky_queueserver/profile_collection_sim/"
         ipython_dir = None
         startup_profile = None
-        user_group_permissions_path = "/bluesky_queueserver/profile_collection_sim/"
-        existing_plans_and_devices_path = "/bluesky_queueserver/profile_collection_sim/"
+        user_group_permissions_path = "/bluesky_queueserver/profile_collection_sim"
+        existing_plans_and_devices_path = "/bluesky_queueserver/profile_collection_sim"
+    user_group_permissions_path += "/" + default_user_group_pd_fln
+    existing_plans_and_devices_path += "/" + default_existing_pd_fln
 
     return {
         "console_logging_level": 10,
@@ -553,6 +556,9 @@ def _get_expected_settings_config_2(tmpdir):
         user_group_permissions_path = file_dir
         existing_plans_and_devices_path = file_dir
 
+    user_group_permissions_path += "/" + default_user_group_pd_fln
+    existing_plans_and_devices_path += "/" + default_existing_pd_fln
+
     return {
         "console_logging_level": 10,
         "databroker_config": "DIF",
@@ -632,6 +638,9 @@ def _get_expected_settings_params_3(tmpdir):
         startup_profile = None
         user_group_permissions_path = file_dir
         existing_plans_and_devices_path = file_dir
+
+    user_group_permissions_path += "/" + default_user_group_pd_fln
+    existing_plans_and_devices_path += "/" + default_existing_pd_fln
 
     return {
         "console_logging_level": 10,

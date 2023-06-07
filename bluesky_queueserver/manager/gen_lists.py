@@ -119,9 +119,17 @@ class GenLists(multiprocessing.Process):
             set_ipython_mode(use_ipython_kernel)
 
             if use_ipython_kernel:
+                # Make sure that there is an even loop in the main thread
+                # (otherwise IP Kernel may not initialize)
+                import asyncio
+
+                from bluesky.run_engine import get_bluesky_event_loop
                 from ipykernel.kernelapp import IPKernelApp
 
                 from .utils import generate_random_port
+
+                loop = get_bluesky_event_loop() or asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
 
                 if startup_dir:
                     if startup_profile or ipython_dir:
@@ -133,14 +141,18 @@ class GenLists(multiprocessing.Process):
                 ip_kernel_app = IPKernelApp(user_ns=nspace)
 
                 if startup_profile:
+                    logger.info("IP Kernel: startup profile: '%s'", startup_profile)
                     ip_kernel_app.profile = startup_profile
                 if startup_module_name:
                     # NOTE: Startup files are still loaded.
+                    logger.info("IP Kernel: startup module: '%s'", startup_module_name)
                     ip_kernel_app.module_to_run = startup_module_name
                 if startup_script_path:
                     # NOTE: Startup files are still loaded.
+                    logger.info("IP Kernel: startup script: '%s'", startup_script_path)
                     ip_kernel_app.file_to_run = startup_script_path
                 if ipython_dir:
+                    logger.info("IP Kernel: IPython directory: '%s'", ipython_dir)
                     ip_kernel_app.ipython_dir = ipython_dir
 
                 ip_kernel_app.capture_fd_output = False

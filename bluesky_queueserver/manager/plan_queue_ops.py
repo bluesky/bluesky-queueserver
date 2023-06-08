@@ -1110,9 +1110,7 @@ class PlanQueueOperations:
 
         # Insert the new item after the old one and remove the old one. At this point it is guaranteed
         #   that they are not equal.
-        await self._r_pool.linsert(
-            self._name_plan_queue, "AFTER", json.dumps(item_to_replace), json.dumps(item)
-        )
+        await self._r_pool.linsert(self._name_plan_queue, "AFTER", json.dumps(item_to_replace), json.dumps(item))
 
         await self._remove_item(item_to_replace)
 

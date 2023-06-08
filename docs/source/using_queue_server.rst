@@ -338,6 +338,19 @@ on running and monitoring tasks.
   completed as a foreground task, bypassing all mechanisms for queue management, but it is
   not advised to do so.
 
+Uploaded scripts may import modules available on the server. Scripts may also contain
+'local' imports. For example, if root directory contains a subdirectory ``mod`` with
+a Python file ``my_module.py``, the code may be imported as
+
+.. code-block:: python
+
+  import mod.my_module
+
+The root directory is the startup directory (directly passed to ``start-re-manager`` or
+determined based on passed or default IPython directory and/or profile name) or the directory
+that contains startup script if the server was started with the respective option.
+Relative imports (e.g. ``from .mod import my_module``) are not supported in the uploaded scripts.
+
 See the tutorial :ref:`tutorial_uploading_scripts`.
 
 .. _running_tasks:

@@ -6,7 +6,6 @@ import time as ttime
 import uuid
 
 import redis.asyncio
-from packaging import version
 
 logger = logging.getLogger(__name__)
 

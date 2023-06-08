@@ -5,13 +5,9 @@ import logging
 import time as ttime
 import uuid
 
-import aioredis
-from packaging import version
+import redis.asyncio
 
 logger = logging.getLogger(__name__)
-
-# Check if 'aioredis' v2 is installed. TODO: remove support for 'aioredis' v1 when it is deprecated.
-aioredis_v2 = version.parse(aioredis.__version__) >= version.parse("2.0.0")
 
 
 class PlanQueueOperations:
@@ -246,11 +242,8 @@ class PlanQueueOperations:
             async with self._lock:
                 try:
                     host = f"redis://{self._redis_host}"
-                    if aioredis_v2:
-                        self._r_pool = aioredis.from_url(host, encoding="utf-8", decode_responses=True)
-                        await self._r_pool.ping()
-                    else:
-                        self._r_pool = await aioredis.create_redis_pool(host, encoding="utf8")
+                    self._r_pool = redis.asyncio.from_url(host, encoding="utf-8", decode_responses=True)
+                    await self._r_pool.ping()
                 except Exception as ex:
                     error_msg = (
                         f"Failed to create the Redis pool: "
@@ -904,16 +897,11 @@ class PlanQueueOperations:
                     qsize = await self._r_pool.lpush(self._name_plan_queue, json.dumps(item))
             else:
                 item_to_displace = self._uid_dict_get_item(uid)
-                if aioredis_v2:
-                    where = "BEFORE" if (uid == before_uid) else "AFTER"
-                    qsize = await self._r_pool.linsert(
-                        self._name_plan_queue, where, json.dumps(item_to_displace), json.dumps(item)
-                    )
-                else:
-                    before = uid == before_uid
-                    qsize = await self._r_pool.linsert(
-                        self._name_plan_queue, json.dumps(item_to_displace), json.dumps(item), before=before
-                    )
+                where = "BEFORE" if (uid == before_uid) else "AFTER"
+                qsize = await self._r_pool.linsert(
+                    self._name_plan_queue, where, json.dumps(item_to_displace), json.dumps(item)
+                )
+
         elif pos == "back":
             qsize = await self._r_pool.rpush(self._name_plan_queue, json.dumps(item))
         elif pos == "front":
@@ -923,14 +911,9 @@ class PlanQueueOperations:
 
             item_to_displace = await self._get_item(pos=pos_reference)
             if item_to_displace:
-                if aioredis_v2:
-                    qsize = await self._r_pool.linsert(
-                        self._name_plan_queue, "BEFORE", json.dumps(item_to_displace), json.dumps(item)
-                    )
-                else:
-                    qsize = await self._r_pool.linsert(
-                        self._name_plan_queue, json.dumps(item_to_displace), json.dumps(item), before=True
-                    )
+                qsize = await self._r_pool.linsert(
+                    self._name_plan_queue, "BEFORE", json.dumps(item_to_displace), json.dumps(item)
+                )
             else:
                 raise RuntimeError(f"Could not find an existing plan at {pos}. Queue size: {qsize0}")
         else:
@@ -1126,12 +1109,8 @@ class PlanQueueOperations:
 
         # Insert the new item after the old one and remove the old one. At this point it is guaranteed
         #   that they are not equal.
-        if aioredis_v2:
-            await self._r_pool.linsert(
-                self._name_plan_queue, "AFTER", json.dumps(item_to_replace), json.dumps(item)
-            )
-        else:
-            await self._r_pool.linsert(self._name_plan_queue, json.dumps(item_to_replace), json.dumps(item))
+        await self._r_pool.linsert(self._name_plan_queue, "AFTER", json.dumps(item_to_replace), json.dumps(item))
+
         await self._remove_item(item_to_replace)
 
         # Update self._uid_dict

@@ -20,6 +20,7 @@ import msgpack_numpy as mpn
 from event_model import RunRouter
 
 from .comms import PipeJsonRpcReceive
+from .config import profile_name_to_startup_dir
 from .logging_setup import PPrintForLogging as ppfl
 from .logging_setup import setup_loggers
 from .output_streaming import setup_console_output_redirection
@@ -765,11 +766,16 @@ class RunEngineWorker(Process):
         startup_module_name = self._config_dict.get("startup_module_name", None)
         startup_script_path = self._config_dict.get("startup_script_path", None)
 
+        startup_profile = self._config_dict.get("startup_profile", None)
+        ipython_dir = self._config_dict.get("ipython_dir", None)
+
         script_root_path = extract_script_root_path(
             startup_dir=startup_dir,
             startup_module_name=startup_module_name,
             startup_script_path=startup_script_path,
         )
+
+        script_root_path = script_root_path or profile_name_to_startup_dir(startup_profile, ipython_dir)
 
         load_script_into_existing_nspace(
             script=script,
@@ -1468,7 +1474,11 @@ class RunEngineWorker(Process):
 
                 self._execution_queue = queue.Queue()
 
-                self._env_state = EState.IDLE
+                # If IPython kernel is used, then the environment state should be updated
+                #     once the kernel is 'idle'
+                if not self._use_ipython_kernel:
+                    self._env_state = EState.IDLE
+
                 logger.info("RE Environment is ready")
 
             except BaseException as ex:
@@ -1567,6 +1577,10 @@ class RunEngineWorker(Process):
                     ):
                         self._ip_kernel_captured = False
 
+                    if (self._env_state == EState.INITIALIZING) and (self._ip_kernel_state == IPKernelState.IDLE):
+                        logger.info("IPython kernel is in 'idle' state")
+                        self._env_state = EState.IDLE
+
                 try:
                     discard = msg["header"]["msg_type"] not in self._ip_kernel_monitor_always_allow_types
                     if discard and "parent_header" in msg and msg["parent_header"]:
@@ -1634,8 +1648,8 @@ class RunEngineWorker(Process):
         while not self._ip_kernel_is_shut_down_event.wait(1):
             if ttime.time() > t_stop:
                 break
-            logger.debug("Sending '' (empty string) command to IP kernel")
-            self._ip_kernel_execute_command(command="")
+            logger.debug("Sending 'quit' command to IP kernel")
+            self._ip_kernel_execute_command(command="quit")
 
         if not self._ip_kernel_is_shut_down_event.is_set():
             logger.info("Kernel failed to stop normaly. Killing the ioloop ...")
@@ -1680,7 +1694,8 @@ class RunEngineWorker(Process):
             import socket
 
             from ipykernel.kernelapp import IPKernelApp
-            from jupyter_client.localinterfaces import localhost
+
+            from .utils import generate_random_port
 
             self._re_namespace["___ip_execution_loop_start___"] = self._run_loop_ipython
             self._re_namespace["___ip_kernel_startup_init___"] = self._ip_kernel_startup_init
@@ -1714,21 +1729,6 @@ class RunEngineWorker(Process):
 
             # Echo all the output to sys.__stdout__ and sys.__stderr__ during kernel initialization
             self._ip_kernel_app.quiet = False
-
-            def generate_random_port(ip=None):
-                """
-                Generate random port number for a free port. The code is vendored from here:
-                https://github.com/jupyter/jupyter_client/blob/58017fc04199ab012ad2b6f5a01b8d3e11698e7c/
-                jupyter_client/connect.py#L102-L112
-                """
-                ip = ip or localhost()
-                sock = socket.socket()
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, b"\0" * 8)
-                sock.bind((ip, 0))
-                port = sock.getsockname()[1]
-                sock.close()
-
-                return port
 
             def find_kernel_ip(ip_str):
                 if ip_str == "localhost":
@@ -1784,6 +1784,7 @@ class RunEngineWorker(Process):
 
                 logger.info("Initializing IPython kernel ...")
                 self._ip_kernel_app.initialize([])
+                logger.info("IPython kernel initialization is complete.")
 
                 ttime.sleep(0.2)  # Wait until the error message are delivered (if startup fails)
 

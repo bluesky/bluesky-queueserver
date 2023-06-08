@@ -14,12 +14,13 @@ import yaml
 import zmq
 
 import bluesky_queueserver
+from bluesky_queueserver import gen_list_of_plans_and_devices
+from bluesky_queueserver.manager.config import get_profile_name_from_path, profile_name_to_startup_dir
 from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
 from bluesky_queueserver.manager.profile_ops import (
     _prepare_devices,
     _prepare_plans,
     devices_from_nspace,
-    gen_list_of_plans_and_devices,
     get_default_startup_dir,
     load_allowed_plans_and_devices,
     load_profile_collection,
@@ -39,12 +40,16 @@ from .common import (  # noqa: F401
     append_code_to_last_startup_file,
     condition_environment_closed,
     condition_environment_created,
+    condition_ip_kernel_busy,
+    condition_ip_kernel_idle,
+    condition_manager_executing_queue,
     condition_manager_idle,
     condition_manager_paused,
     condition_queue_processing_finished,
     copy_default_profile_collection,
     db_catalog,
     get_queue_state,
+    ip_kernel_simple_client,
     re_manager,
     re_manager_cmd,
     re_manager_pc_copy,
@@ -1637,6 +1642,12 @@ def sleep_for_a_few_sec(tt=1):
     yield from bps.sleep(tt)
 """
 
+_script_to_upload_2 = """
+# Trivial plan
+def plan_for_test(tt=1):
+    yield from bps.sleep(tt)
+"""
+
 
 # fmt: off
 @pytest.mark.parametrize("run_in_background", [None, False, True])
@@ -2174,7 +2185,12 @@ def test_zmq_api_script_upload_06(tmp_path, re_manager_cmd):  # noqa: F811
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_script_upload_07(tmp_path, re_manager_cmd):  # noqa: F811
+# fmt: off
+@pytest.mark.parametrize("option", [
+    "profile", "ip-dir", "startup-dir", "script", "module"
+])
+# fmt: on
+def test_zmq_api_script_upload_07(tmp_path, monkeypatch, re_manager_cmd, option):  # noqa: F811
     """
     'script_upload' API: Check that local imports work.
     """
@@ -2182,23 +2198,61 @@ def test_zmq_api_script_upload_07(tmp_path, re_manager_cmd):  # noqa: F811
     os.remove(os.path.join(pc_path, "existing_plans_and_devices.yaml"))
     # Only 'user_group_permissions.yaml' is left in the directory
 
-    mod_dir = os.path.join(pc_path, "mod")
-    os.makedirs(os.path.join(pc_path, "mod"))
+    startup_profile, ipython_dir = get_profile_name_from_path(pc_path)
+    default_pc_path = profile_name_to_startup_dir("default", ipython_dir)
+    os.makedirs(default_pc_path)
+
+    if option in ("profile", "startup-dir"):
+        script_root = pc_path
+    elif option in ("ip-dir", "module"):
+        script_root = default_pc_path
+    elif option == "script":
+        script_root = os.path.join(ipython_dir, "scripts")
+    else:
+        assert False, f"Unknown option {option!r}"
+
+    mod_dir = os.path.join(script_root, "mod")
+    os.makedirs(os.path.join(script_root, "mod"))
 
     # Create an empty startup script
-    with open(os.path.join(pc_path, "00-startup.py"), "w"):
-        pass
+    if option == "ip-dir":
+        code_dir = default_pc_path
+    elif option == "script":
+        code_dir = script_root
+    else:
+        code_dir = pc_path
+    startup_script_path = os.path.join(code_dir, "startup_code.py")
+    with open(startup_script_path, "w") as f:
+        f.writelines(_script_to_upload_2)
+
+    if option == "startup-dir":
+        params = ["--startup-dir", pc_path]
+    elif option == "profile":
+        params = ["--startup-profile", startup_profile, "--ipython-dir", ipython_dir]
+    elif option == "ip-dir":
+        params = ["--ipython-dir", ipython_dir]
+    elif option == "module":
+        monkeypatch.setenv("PYTHONPATH", os.path.split(pc_path)[0])
+        startup_module = "startup.startup_code"
+        params = ["--startup-module", startup_module, "--ipython-dir", ipython_dir]
+    elif option == "script":
+        # The root directory of the startup script should be used for local imports
+        params = ["--startup-script", startup_script_path, "--ipython-dir", ipython_dir]
+    else:
+        assert False, f"Unknown option {option!r}"
+
+    params.extend(["--existing-plans-devices", pc_path, "--user-group-permissions", pc_path])
+
+    re_manager_cmd(params)
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     # Create a module
     mod_fln = os.path.join(mod_dir, "mod_file.py")
     with open(os.path.join(mod_fln), "w") as f:
         f.writelines(_script_to_upload_1)
-
-    re_manager_cmd(["--startup-dir", pc_path])
-
-    resp1, _ = zmq_single_request("environment_open")
-    assert resp1["success"] is True
-    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     # Upload the module that uses local imports
     script = "from mod.mod_file import *\n"
@@ -2214,6 +2268,9 @@ def test_zmq_api_script_upload_07(tmp_path, re_manager_cmd):  # noqa: F811
     resp4b, _ = zmq_single_request("devices_existing")
     assert resp4b["success"] is True, pprint.pformat(resp4a)
     assert "dev_test" in resp4b["devices_existing"]
+
+    # Check that the startup script was loaded (plan is included in the list)
+    assert "plan_for_test" in resp4a["plans_existing"]
 
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
@@ -3851,6 +3908,139 @@ def test_zmq_api_queue_autostart_03(re_manager, open_env_first, autostart_first,
     assert status["items_in_history"] == 1
 
 
+@pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
+def test_zmq_api_queue_autostart_04(re_manager, ip_kernel_simple_client):  # noqa: F811
+    """
+    ``queue_autostart``: check that the queue is properly started in various scenarios.
+    The following scenarios are tested: start env/add plans/enable autostart in
+    any sequence. Check that the manager is in correct state and the plan is running.
+    """
+    using_ipython = use_ipykernel_for_tests()
+    assert using_ipython, "The test can be run only in IPython mode"
+
+    resp, _ = zmq_single_request(
+        "queue_item_add", params={"item": _plan3, "user": _user, "user_group": _user_group}
+    )
+    assert resp["success"] is True
+
+    resp, _ = zmq_single_request("environment_open")
+    assert resp["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    ip_kernel_simple_client.start()
+
+    command = "print('Start sleep')\nimport time\ntime.sleep(3)\nprint('Sleep finished')"
+    ip_kernel_simple_client.execute_with_check(command)
+
+    assert wait_for_condition(10, condition_ip_kernel_busy)
+
+    resp, _ = zmq_single_request("queue_autostart", params={"enable": True})
+    assert resp["success"] is True, f"resp={resp}"
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True, pprint.pformat(status)
+    assert status["manager_state"] == "idle", pprint.pformat(status)
+    assert status["worker_environment_state"] == "idle", pprint.pformat(status)
+    assert status["ip_kernel_state"] == "busy", pprint.pformat(status)
+    assert status["ip_kernel_captured"] is False, pprint.pformat(status)
+
+    assert wait_for_condition(15, condition_manager_executing_queue)
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True, pprint.pformat(status)
+    assert status["manager_state"] in ("starting_queue", "executing_queue"), pprint.pformat(status)
+
+    ttime.sleep(1)
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True, pprint.pformat(status)
+    assert status["manager_state"] == "executing_queue", pprint.pformat(status)
+    assert status["worker_environment_state"] == "executing_plan", pprint.pformat(status)
+    assert status["ip_kernel_state"] == "busy", pprint.pformat(status)
+    assert status["ip_kernel_captured"] is True, pprint.pformat(status)
+
+    wait_for_condition(time=30, condition=condition_queue_processing_finished)
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True
+
+    resp, _ = zmq_single_request("environment_close")
+    assert resp["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_closed)
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is True
+    assert status["items_in_queue"] == 0
+    assert status["items_in_history"] == 1
+
+
+# fmt: off
+@pytest.mark.parametrize("option", ["resume", "stop", "abort", "halt"])
+@pytest.mark.parametrize("ignore_failures", [False, True])
+# fmt: on
+@pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
+def test_zmq_api_queue_autostart_05(re_manager, ip_kernel_simple_client, option, ignore_failures):  # noqa: F811
+    """
+    ``queue_autostart``: check that if the plan is resumed or stopped in Jupyter Console,
+    then the autostart is not disabled, but if it is aborted or halted, then autostart is
+    disabled. This should work with the queue mode ``ignore_failures`` both True and False.
+    """
+    using_ipython = use_ipykernel_for_tests()
+    assert using_ipython, "The test can be run only in IPython mode"
+
+    resp, _ = zmq_single_request(
+        "queue_item_add", params={"item": _plan3, "user": _user, "user_group": _user_group}
+    )
+    assert resp["success"] is True
+    resp, _ = zmq_single_request(
+        "queue_item_add", params={"item": _plan1, "user": _user, "user_group": _user_group}
+    )
+    assert resp["success"] is True
+
+    resp, _ = zmq_single_request("environment_open")
+    assert resp["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    if ignore_failures:
+        resp, _ = zmq_single_request("queue_mode_set", params={"mode": {"ignore_failures": True}})
+        assert resp["success"] is True, str(resp)
+
+    resp, _ = zmq_single_request("queue_autostart", params={"enable": True})
+    assert resp["success"] is True, f"resp={resp}"
+
+    wait_for_condition(time=5, condition=condition_manager_executing_queue)
+
+    resp, _ = zmq_single_request("re_pause")
+    assert resp["success"] is True, f"resp={resp}"
+
+    wait_for_condition(time=5, condition=condition_manager_paused)
+
+    ip_kernel_simple_client.start()
+    command = f"print('Continuing the plan ...')\nRE.{option}()\nprint('Sleep finished')"
+    ip_kernel_simple_client.execute_with_check(command)
+
+    condition = condition_queue_processing_finished if option in ("resume", "stop") else condition_manager_idle
+    assert wait_for_condition(time=10, condition=condition)
+
+    expected_autostart = True if option in ("resume", "stop") else False
+
+    status = get_queue_state()
+    assert status["queue_autostart_enabled"] is expected_autostart, pprint.pformat(status)
+    assert status["manager_state"] == "idle", pprint.pformat(status)
+    assert status["worker_environment_state"] == "idle", pprint.pformat(status)
+    assert status["ip_kernel_state"] == "idle", pprint.pformat(status)
+    assert status["ip_kernel_captured"] is False, pprint.pformat(status)
+
+    items_in_queue = 0 if option in ("resume", "stop") else 2
+    items_in_history = 2 if option in ("resume", "stop") else 1
+    assert status["items_in_queue"] == items_in_queue
+    assert status["items_in_history"] == items_in_history
+
+    resp, _ = zmq_single_request("environment_close")
+    assert resp["success"] is True
+    assert wait_for_condition(time=10, condition=condition_environment_closed)
+
+
 # fmt: off
 @pytest.mark.parametrize("option", [
     "normal",
@@ -3864,7 +4054,7 @@ def test_zmq_api_queue_autostart_03(re_manager, open_env_first, autostart_first,
     "failed_plan"
 ])
 # fmt: on
-def test_zmq_api_queue_autostart_04(re_manager, option):  # noqa: F811
+def test_zmq_api_queue_autostart_06(re_manager, option):  # noqa: F811
     """
     ``queue_autostart``: check that autostart is manually and automatically disabled
     in various scenarios.
@@ -3960,7 +4150,7 @@ def test_zmq_api_queue_autostart_04(re_manager, option):  # noqa: F811
     "script_function",
 ])
 # fmt: on
-def test_zmq_api_queue_autostart_05(re_manager, option):  # noqa: F811
+def test_zmq_api_queue_autostart_07(re_manager, option):  # noqa: F811
     """
     ``queue_autostart``: execute a plan in 'immediate' mode, a function and a script between
     two plans while the queue is empty to make sure it does not affect the 'autostart' mode.
@@ -4054,7 +4244,7 @@ def test_zmq_api_queue_autostart_05(re_manager, option):  # noqa: F811
 @pytest.mark.parametrize("apply_queue_stop", [False, True])
 @pytest.mark.parametrize("n_plans", [1, 2])
 # fmt: on
-def test_zmq_api_queue_autostart_06(re_manager, option, autostart_on, apply_queue_stop, n_plans):  # noqa: F811
+def test_zmq_api_queue_autostart_08(re_manager, option, autostart_on, apply_queue_stop, n_plans):  # noqa: F811
     """
     ``queue_autostart``: make sure the autostart persists thoughout restart of the manager process.
     Test the following cases: enabled/disabled autostart, queue_stop is applied before restart,
@@ -4150,7 +4340,7 @@ def test_zmq_api_queue_autostart_06(re_manager, option, autostart_on, apply_queu
 # fmt: off
 @pytest.mark.parametrize("autostart_on", [False, True])
 # fmt: on
-def test_zmq_api_queue_autostart_07(re_manager, autostart_on):  # noqa: F811
+def test_zmq_api_queue_autostart_09(re_manager, autostart_on):  # noqa: F811
     """
     ``queue_autostart``: make sure the autostart persists thoughout restart of the manager process.
     Test the following cases: enabled/disabled autostart, queue_stop is applied before restart,

@@ -873,6 +873,8 @@ class RunEngineManager(Process):
                 raise RuntimeError("RE Worker environment does not exist.")
             elif self._manager_state != MState.IDLE:
                 raise RuntimeError("RE Manager is busy.")
+            elif self._use_ipython_kernel and self._is_ipkernel_external_task():
+                raise RuntimeError("IPython kernel (RE Worker) is busy.")
             else:
                 await self._queue_stop_deactivate()  # Just in case
                 self._manager_state = MState.STARTING_QUEUE
@@ -895,6 +897,8 @@ class RunEngineManager(Process):
                 raise RuntimeError("RE Worker environment does not exist.")
             elif self._manager_state != MState.IDLE:
                 raise RuntimeError("RE Manager is busy.")
+            elif self._use_ipython_kernel and self._is_ipkernel_external_task():
+                raise RuntimeError("IPython kernel (RE Worker) is busy.")
             else:
                 await self._queue_stop_deactivate()  # Just in case
                 self._manager_state = MState.STARTING_QUEUE
@@ -970,8 +974,6 @@ class RunEngineManager(Process):
                     logger.error(err_msg)
                     return success, err_msg
 
-                self._manager_state = MState.EXECUTING_QUEUE
-
                 new_plan = await self._plan_queue.process_next_item(item=single_item)
 
                 plan_name = new_plan["name"]
@@ -1003,6 +1005,8 @@ class RunEngineManager(Process):
                     self._manager_state = MState.IDLE
                     logger.error("Failed to start the plan %s.\nError: %s", ppfl(plan_info), err_msg)
                     err_msg = f"Failed to start the plan: {err_msg}"
+                else:
+                    self._manager_state = MState.EXECUTING_QUEUE
 
             # The next items is INSTRUCTION
             elif next_item["item_type"] == "instruction":
@@ -1065,6 +1069,9 @@ class RunEngineManager(Process):
             # This function is called only within the class: allow exception to be raised.
             #   It should make the unit tests fail.
             raise ValueError(f"Option '{option}' is not supported. Available options: {available_options}")
+
+        elif self._use_ipython_kernel and self._is_ipkernel_external_task():
+            raise RuntimeError("IPython kernel (RE Worker) is busy.")
 
         elif self._environment_exists:
             success, err_msg = await self._worker_command_continue_plan(option)
@@ -1137,6 +1144,14 @@ class RunEngineManager(Process):
 
         return success, msg
 
+    def _is_ipkernel_external_task(self):
+        """
+        Returns True if the worker exists, running in IPython mode and is currently busy executing
+        task started by external client (e.g. Jupyter Console).
+        """
+        ws = self._worker_state_info
+        return self._use_ipython_kernel and ws and ws["ip_kernel_state"] != "idle" and not ws["ip_kernel_captured"]
+
     async def _environment_upload_script(self, *, script, update_lists, update_re, run_in_background):
         """
         Upload Python script to RE Worker environment. The script is then executed into
@@ -1153,6 +1168,8 @@ class RunEngineManager(Process):
                 f"Current state: '{self._manager_state.value}'",
                 None,
             )
+        elif not run_in_background and self._is_ipkernel_external_task():
+            raise RuntimeError("Failed to start the task: IPython kernel (RE Worker) is busy.")
         else:
             try:
                 if not run_in_background:
@@ -1190,6 +1207,8 @@ class RunEngineManager(Process):
                 f"Current state: '{self._manager_state.value}'",
                 None,
             )
+        elif not run_in_background and self._is_ipkernel_external_task():
+            raise RuntimeError("Failed to start the task: IPython kernel (RE Worker) is busy.")
         else:
             try:
                 if not run_in_background:

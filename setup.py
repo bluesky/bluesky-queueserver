@@ -50,7 +50,7 @@ setup(
             "qserver = bluesky_queueserver.manager.qserver_cli:qserver",
             "start-re-manager = bluesky_queueserver.manager.start_manager:start_manager",
             "qserver-list-plans-devices = bluesky_queueserver.manager."
-            "profile_ops:gen_list_of_plans_and_devices_cli",
+            "gen_lists:gen_list_of_plans_and_devices_cli",
             "qserver-zmq-keys = bluesky_queueserver.manager.qserver_cli:qserver_zmq_keys",
             "qserver-clear-lock = bluesky_queueserver.manager.qserver_cli:qserver_clear_lock",
             "qserver-console = bluesky_queueserver.manager.qserver_cli:qserver_console",

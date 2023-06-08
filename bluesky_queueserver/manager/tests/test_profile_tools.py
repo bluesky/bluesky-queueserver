@@ -4,12 +4,16 @@ import sys
 
 import pytest
 
-from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices, load_profile_collection
+from bluesky_queueserver import gen_list_of_plans_and_devices
+from bluesky_queueserver.manager.profile_ops import load_profile_collection
 from bluesky_queueserver.manager.profile_tools import (
+    clear_ipython_mode,
     clear_re_worker_active,
     global_user_namespace,
+    is_ipython_mode,
     is_re_worker_active,
     load_devices_from_happi,
+    set_ipython_mode,
     set_re_worker_active,
 )
 
@@ -379,6 +383,30 @@ def test_is_re_worker_active_1(monkeypatch):  # noqa: F811
     assert is_re_worker_active() is False
 
 
+def test_is_ipython_mode_1(monkeypatch):  # noqa: F811
+    """
+    Basic tests for ``set_ipython_mode``, ``clear_ipython_mode`` and ``is_ipython_mode`` functions.
+    If the code is not executed in the worker (worker is not active), then the function checks if
+    it is called from IPython kernel, otherwise the returned value depends on the value of
+    the respective environment variable.
+    """
+    monkeypatch.setattr(os, "environ", os.environ.copy())
+    assert is_ipython_mode() is False
+
+    set_re_worker_active()
+    set_ipython_mode(True)
+    assert is_ipython_mode() is True
+    set_ipython_mode(False)
+    assert is_ipython_mode() is False
+    set_ipython_mode(True)
+    assert is_ipython_mode() is True
+    clear_ipython_mode()
+    assert is_ipython_mode() is False
+
+    clear_re_worker_active()
+    assert is_ipython_mode() is False
+
+
 # Minimalistic user permissions sufficient to start RE Manager
 _user_groups_text = r"""user_groups:
   root:  # The group includes all available plan and devices
@@ -511,6 +539,7 @@ def test_is_re_worker_active_2(re_manager_cmd, tmp_path, monkeypatch, option):  
         # Temporarily add module to the search path
         sys_path = sys.path
         monkeypatch.setattr(sys, "path", [str(module_dir)] + sys_path)
+        # monkeypatch.setenv("PYTHONPATH", str(module_dir))
         gen_list_of_plans_and_devices(
             startup_module_name="script.startup_script", file_dir=startup_dir, overwrite=True
         )

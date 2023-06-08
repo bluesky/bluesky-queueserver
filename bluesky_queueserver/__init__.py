@@ -12,6 +12,7 @@ from .manager.comms import (  # noqa: E402, F401
     generate_zmq_public_key,
     validate_zmq_key,
 )
+from .manager.gen_lists import gen_list_of_plans_and_devices  # noqa: E402, F401
 from .manager.output_streaming import ReceiveConsoleOutput, ReceiveConsoleOutputAsync  # noqa: E402, F401
 from .manager.profile_ops import bind_plan_arguments  # noqa: E402, F401
 from .manager.profile_ops import construct_parameters  # noqa: E402, F401

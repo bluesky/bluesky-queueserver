@@ -5,7 +5,6 @@ import os
 import pprint
 import re
 import shutil
-import subprocess
 import sys
 import time as ttime
 import typing
@@ -18,7 +17,7 @@ import pytest
 import yaml
 from bluesky import protocols
 
-from bluesky_queueserver import register_device, register_plan
+from bluesky_queueserver import gen_list_of_plans_and_devices, register_device, register_plan
 from bluesky_queueserver.manager.annotation_decorator import parameter_annotation_decorator
 from bluesky_queueserver.manager.profile_ops import (
     ScriptLoadingError,
@@ -44,9 +43,9 @@ from bluesky_queueserver.manager.profile_ops import (
     clear_registered_items,
     construct_parameters,
     devices_from_nspace,
+    existing_plans_and_devices_from_nspace,
     extract_script_root_path,
     format_text_descriptions,
-    gen_list_of_plans_and_devices,
     get_default_startup_dir,
     load_allowed_plans_and_devices,
     load_existing_plans_and_devices,
@@ -1311,25 +1310,29 @@ def test_load_script_into_existing_nspace_10(tmp_path, reset_sys_modules):  # no
     load_script_into_existing_nspace(script=code_script_upload_test10_1, nspace=nspace)
 
     assert nspace["mod_name1"] == "__main__"
-
-    assert "__file__" not in nspace
     assert nspace["__name__"] == "__main__"
+    assert nspace["__file__"] == "script"
 
 
 def test_load_script_into_existing_nspace_11(tmp_path, reset_sys_modules):  # noqa: F811
     """
     ``load_script_into_existing_nspace``: test that if ``__file__`` is defined in namespace,
-    it remains defined.
+    it is replaced by the new file name.
     """
     initial__file__ = "abcde"
+    new__file__ = "/tmp/script"
+
     nspace = {"__file__": initial__file__}  # Namespace already has '__file__' defined.
-    load_script_into_existing_nspace(script=code_script_upload_test10_1, nspace=nspace)
+
+    load_script_into_existing_nspace(
+        script=code_script_upload_test10_1,
+        nspace=nspace,
+        script_root_path=os.path.dirname(new__file__),
+    )
 
     assert nspace["mod_name1"] == "__main__"
-
-    assert "__file__" in nspace
-    assert nspace["__file__"] == initial__file__
     assert nspace["__name__"] == "__main__"
+    assert nspace["__file__"] == new__file__
 
 
 code_script_upload_test12_1 = """
@@ -1503,8 +1506,11 @@ def test_load_startup_module_4(tmp_path, monkeypatch, reset_sys_modules):  # noq
 # fmt: off
 @pytest.mark.parametrize("option", ["startup_dir", "script", "module"])
 @pytest.mark.parametrize("keep_re", [True, False])
+@pytest.mark.parametrize("pass_nspace", [False, True])
 # fmt: on
-def test_load_worker_startup_code_1(tmp_path, monkeypatch, keep_re, option, reset_sys_modules):  # noqa: F811
+def test_load_worker_startup_code_1(
+    tmp_path, monkeypatch, keep_re, option, pass_nspace, reset_sys_modules  # noqa: F811
+):
     """
     Test for `load_worker_startup_code` function.
     """
@@ -1515,21 +1521,27 @@ def test_load_worker_startup_code_1(tmp_path, monkeypatch, keep_re, option, rese
     with open(script_path, "w") as f:
         f.write(_startup_script_1)
 
+    pp = dict(nspace={"test_value_": 50}) if pass_nspace else {}
+
     if option == "startup_dir":
-        nspace = load_worker_startup_code(startup_dir=script_dir, keep_re=keep_re)
+        nspace = load_worker_startup_code(startup_dir=script_dir, keep_re=keep_re, **pp)
 
     elif option == "script":
-        nspace = load_worker_startup_code(startup_script_path=script_path, keep_re=keep_re)
+        nspace = load_worker_startup_code(startup_script_path=script_path, keep_re=keep_re, **pp)
 
     elif option == "module":
         # Temporarily add module to the search path
         sys_path = sys.path
         monkeypatch.setattr(sys, "path", [str(tmp_path)] + sys_path)
 
-        nspace = load_worker_startup_code(startup_module_name="script_dir1.startup_script", keep_re=keep_re)
+        nspace = load_worker_startup_code(startup_module_name="script_dir1.startup_script", keep_re=keep_re, **pp)
 
     else:
         assert False, f"Unknown option '{option}'"
+
+    if pass_nspace:
+        assert "test_value_" in nspace
+        assert nspace["test_value_"] == 50
 
     assert isinstance(nspace, dict), str(type(nspace))
     assert len(nspace) > 0
@@ -3827,33 +3839,55 @@ def test_build_plan_name_list_2_fail(plan_def, exception_type, msg):
     ("sim_bundle_A.mtrs.a", False, False, False),
     ("sim_bundle_A.unknown.z", False, False, False),
 ])
+@pytest.mark.parametrize("from_nspace", [False, True])
 # fmt: on
-def test_get_nspace_object_1(object_name, exists_in_plans, exists_in_devices, exists_in_all):
+def test_get_nspace_object_1(object_name, exists_in_plans, exists_in_devices, exists_in_all, from_nspace):
     pc_path = get_default_startup_dir()
     nspace = load_profile_collection(pc_path)
     plans = plans_from_nspace(nspace)
     devices = devices_from_nspace(nspace)
 
+    if from_nspace:
+        # The objects references from nspace are going to be used. The objects
+        #   in 'plans' and 'devices' must still exist, but they could point to anything.
+        plans["count"] = None
+        devices["det"] = None
+        devices["sim_bundle_A"] = None
+
     all_objects = plans.copy()
     all_objects.update(devices)
 
-    object_ref = _get_nspace_object(object_name, objects_in_nspace=all_objects)
+    pp = dict(nspace=nspace) if from_nspace else {}
+
+    try:
+        from ophyd import OphydObject
+    except ImportError:
+        # Ophyd 1.6.4 or older
+        from ophyd.ophydobj import OphydObject
+
+    object_ref = _get_nspace_object(object_name, objects_in_nspace=all_objects, **pp)
     if exists_in_all:
-        assert not isinstance(object_ref, str)
+        assert isinstance(object_ref, (OphydObject, Callable))
     else:
         assert isinstance(object_ref, str)
 
-    object_ref = _get_nspace_object(object_name, objects_in_nspace=plans)
+    object_ref = _get_nspace_object(object_name, objects_in_nspace=plans, **pp)
     if exists_in_plans:
-        assert not isinstance(object_ref, str)
+        assert isinstance(object_ref, Callable)
     else:
         assert isinstance(object_ref, str)
 
-    object_ref = _get_nspace_object(object_name, objects_in_nspace=devices)
+    object_ref = _get_nspace_object(object_name, objects_in_nspace=devices, **pp)
     if exists_in_devices:
-        assert not isinstance(object_ref, str)
+        assert isinstance(object_ref, OphydObject)
     else:
         assert isinstance(object_ref, str)
+
+
+_script_test_plan_5 = """
+def test_plan(param):
+    yield from bps.sleep(1)
+"""
 
 
 # fmt: off
@@ -3888,10 +3922,13 @@ def test_get_nspace_object_1(object_name, exists_in_plans, exists_in_devices, ex
          "Plan 'countABC' is not in the list of allowed plans"),
     ],
 )
+@pytest.mark.parametrize("from_nspace", [False, True])
 # fmt: on
-def test_prepare_plan_1(plan, exp_args, exp_kwargs, success, err_msg):
+def test_prepare_plan_1(plan, exp_args, exp_kwargs, success, err_msg, from_nspace):
     """
     Basic test for ``prepare_plan``: test main features using the simulated profile collection.
+    The parameter 'from_nspace' is used here to check that the produced results are the same
+    for both cases. The plans in the namespace are not changed.
     """
     pc_path = get_default_startup_dir()
     nspace = load_profile_collection(pc_path)
@@ -3904,6 +3941,8 @@ def test_prepare_plan_1(plan, exp_args, exp_kwargs, success, err_msg):
         path_existing_plans_and_devices=path_allowed_plans, path_user_group_permissions=path_permissions
     )
 
+    pp = dict(nspace=nspace) if from_nspace else {}
+
     if success:
         plan_parsed = prepare_plan(
             plan,
@@ -3911,6 +3950,7 @@ def test_prepare_plan_1(plan, exp_args, exp_kwargs, success, err_msg):
             devices_in_nspace=devices,
             allowed_plans=allowed_plans,
             allowed_devices=allowed_devices,
+            **pp,
         )
         expected_keys = ("callable", "args", "kwargs")
         for k in expected_keys:
@@ -3925,6 +3965,7 @@ def test_prepare_plan_1(plan, exp_args, exp_kwargs, success, err_msg):
                 devices_in_nspace=devices,
                 allowed_plans=allowed_plans,
                 allowed_devices=allowed_devices,
+                **pp,
             )
 
 
@@ -4643,6 +4684,77 @@ def test_prepare_plan_4(ignore_invalid_plans):
 
 
 # fmt: off
+@pytest.mark.parametrize(
+    "plan",
+    [
+        {"name": "test_plan", "user_group": _user_group, "args": [["det1", "det2"]]},
+        {"name": "test_plan", "user_group": _user_group, "args": [["motor1.velocity"]]},
+        {"name": "test_plan", "user_group": _user_group, "args": [["move_then_count", "test_plan"]]},
+        {"name": "test_plan", "user_group": _user_group, "kwargs": {"param": ["det1", "det2"]}},
+        {"name": "test_plan", "user_group": _user_group, "kwargs": {"param": ["motor1.velocity"]}},
+        {"name": "test_plan", "user_group": _user_group, "kwargs": {"param": ["move_then_count", "test_plan"]}},
+    ],
+)
+@pytest.mark.parametrize("from_nspace", [False, True])
+# fmt: on
+def test_prepare_plan_5(plan, from_nspace):
+    """
+    ``prepare_plan``: test if callable and objects passed as plan parameters (devices and plans) are
+    loaded directly from the namespace if parameter ``nspace`` is passed.
+    """
+    pc_path = get_default_startup_dir()
+    nspace = load_profile_collection(pc_path)
+    exec(_script_test_plan_5, nspace, nspace)
+
+    existing_plans, existing_devices, plans, devices = existing_plans_and_devices_from_nspace(nspace=nspace)
+
+    nspace2 = load_profile_collection(pc_path)
+    exec(_script_test_plan_5, nspace2, nspace2)
+
+    # path_allowed_plans = os.path.join(pc_path, "existing_plans_and_devices.yaml")
+    path_permissions = os.path.join(pc_path, "user_group_permissions.yaml")
+
+    allowed_plans, allowed_devices = load_allowed_plans_and_devices(
+        path_existing_plans_and_devices=None,
+        path_user_group_permissions=path_permissions,
+        existing_plans=existing_plans,
+        existing_devices=existing_devices,
+    )
+
+    pp = dict(nspace=nspace2) if from_nspace else {}
+
+    plan_parsed = prepare_plan(
+        plan,
+        plans_in_nspace=plans,
+        devices_in_nspace=devices,
+        allowed_plans=allowed_plans,
+        allowed_devices=allowed_devices,
+        **pp,
+    )
+
+    ns_source = nspace2 if from_nspace else nspace
+    ns_other = nspace if from_nspace else nspace2
+
+    expected_keys = ("callable", "args", "kwargs")
+    for k in expected_keys:
+        assert k in plan_parsed, f"Key '{k}' does not exist: {plan_parsed.keys()}"
+
+    assert plan_parsed["callable"] == eval(plan["name"], ns_source, ns_source)
+    assert plan_parsed["callable"] != eval(plan["name"], ns_other, ns_other)
+
+    if "args" in plan:
+        for n, v in enumerate(plan["args"][0]):
+            obj = plan_parsed["args"][0][n]
+            assert obj == eval(v, ns_source, ns_source)
+            assert obj != eval(v, ns_other, ns_other)
+    else:
+        for n, v in enumerate(plan["kwargs"]["param"]):
+            obj = plan_parsed["args"][0][n]
+            assert obj == eval(v, ns_source, ns_source)
+            assert obj != eval(v, ns_other, ns_other)
+
+
+# fmt: off
 _det_components = {
     "components": {
         "Imax": {}, "center": {}, "noise": {},
@@ -5042,112 +5154,6 @@ def test_prepare_function_2(func_info, except_type, msg):
     _validate_user_group_permissions_schema(_prep_func_permissions)
     with pytest.raises(except_type, match=msg):
         prepare_function(func_info=func_info, nspace=nspace, user_group_permissions=_prep_func_permissions)
-
-
-def test_gen_list_of_plans_and_devices_1(tmp_path):
-    """
-    Copy simulated profile collection and generate the list of allowed (in this case available)
-    plans and devices based on the profile collection
-    """
-    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
-
-    fln_yaml = "list.yaml"
-    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml)
-    assert os.path.isfile(os.path.join(pc_path, fln_yaml)), "List of plans and devices was not created"
-
-    # Attempt to overwrite the file
-    with pytest.raises(RuntimeError, match="already exists. File overwriting is disabled."):
-        gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml)
-
-    # Allow file overwrite
-    gen_list_of_plans_and_devices(startup_dir=pc_path, file_dir=pc_path, file_name=fln_yaml, overwrite=True)
-
-
-# fmt: off
-@pytest.mark.parametrize("test, exit_code", [
-    ("startup_collection_at_current_dir", 0),
-    ("startup_collection_dir", 0),
-    ("startup_collection_incorrect_path_A", 1),
-    ("startup_collection_incorrect_path_B", 1),
-    ("startup_script_path", 0),
-    ("startup_script_path_incorrect", 1),
-    ("startup_module_name", 0),
-    ("startup_module_name_incorrect", 1),
-    ("file_incorrect_path", 1),
-])
-# fmt: on
-def test_gen_list_of_plans_and_devices_cli(tmp_path, monkeypatch, test, exit_code):
-    """
-    Test for ``qserver-list-plans_devices`` CLI tool for generating list of plans and devices.
-    Copy simulated profile collection and generate the list of allowed (in this case available)
-    plans and devices based on the profile collection.
-    """
-    pc_path = os.path.join(tmp_path, "script_dir1")
-    script_path = os.path.join(pc_path, "startup_script.py")
-
-    os.makedirs(pc_path, exist_ok=True)
-    with open(script_path, "w") as f:
-        f.write(_startup_script_1)
-
-    fln_yaml = "existing_plans_and_devices.yaml"
-
-    # Make sure that .yaml file does not exist
-    assert not os.path.isfile(os.path.join(pc_path, fln_yaml))
-
-    os.chdir(tmp_path)
-
-    if test == "startup_collection_at_current_dir":
-        os.chdir(pc_path)
-        params = ["qserver-list-plans-devices", "--startup-dir", "."]
-
-    elif test == "startup_collection_dir":
-        params = ["qserver-list-plans-devices", "--startup-dir", pc_path, "--file-dir", pc_path]
-
-    elif test == "startup_collection_incorrect_path_A":
-        # Path exists (default path is used), but there are no startup files (fails)
-        params = ["qserver-list-plans-devices", "--startup-dir", "."]
-
-    elif test == "startup_collection_incorrect_path_B":
-        # Path does not exist
-        path_nonexisting = os.path.join(tmp_path, "abcde")
-        params = ["qserver-list-plans-devices", "--startup-dir", path_nonexisting, "--file-dir", pc_path]
-
-    elif test == "startup_script_path":
-        params = ["qserver-list-plans-devices", "--startup-script", script_path, "--file-dir", pc_path]
-
-    elif test == "startup_script_path_incorrect":
-        params = [
-            "qserver-list-plans-devices",
-            "--startup-script",
-            "non_existing_path",
-            "--file-dir",
-            pc_path,
-        ]
-
-    elif test == "startup_module_name":
-        monkeypatch.setenv("PYTHONPATH", os.path.split(pc_path)[0])
-        s_name = "script_dir1.startup_script"
-        params = ["qserver-list-plans-devices", "--startup-module", s_name, "--file-dir", pc_path]
-
-    elif test == "startup_module_name_incorrect":
-        monkeypatch.setenv("PYTHONPATH", os.path.split(pc_path)[0])
-        s_name = "incorrect.module.name"
-        params = ["qserver-list-plans-devices", "--startup-module", s_name, "--file-dir", pc_path]
-
-    elif test == "file_incorrect_path":
-        # Path does not exist
-        path_nonexisting = os.path.join(tmp_path, "abcde")
-        params = ["qserver-list-plans-devices", "--startup-dir", pc_path, "--file-dir", path_nonexisting]
-
-    else:
-        assert False, f"Unknown test '{test}'"
-
-    assert subprocess.call(params) == exit_code
-
-    if exit_code == 0:
-        assert os.path.isfile(os.path.join(pc_path, fln_yaml))
-    else:
-        assert not os.path.isfile(os.path.join(pc_path, fln_yaml))
 
 
 def test_load_existing_plans_and_devices_1():

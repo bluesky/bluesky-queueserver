@@ -2,15 +2,19 @@ import asyncio
 import glob
 import logging
 import os
+import pprint
+import queue
 import shutil
 import subprocess
 import sys
 import tempfile
 import time as ttime
+from threading import Thread
 
 import intake
 import pytest
 from databroker import catalog_search_path
+from jupyter_client import BlockingKernelClient
 
 from bluesky_queueserver.manager.comms import zmq_single_request
 from bluesky_queueserver.manager.config import to_boolean
@@ -273,6 +277,10 @@ def condition_manager_paused(msg):
     return msg["manager_state"] == "paused"
 
 
+def condition_manager_executing_queue(msg):
+    return ("manager_state" in msg) and (msg["manager_state"] == "executing_queue")
+
+
 def condition_environment_created(msg):
     return msg["worker_environment_exists"] and (msg["manager_state"] in ("idle", "executing_queue"))
 
@@ -285,6 +293,14 @@ def condition_queue_processing_finished(msg):
     items_in_queue = msg["items_in_queue"]
     manager_idle = msg["manager_state"] == "idle"
     return (items_in_queue == 0) and manager_idle
+
+
+def condition_ip_kernel_idle(msg):
+    return msg["ip_kernel_state"] == "idle"
+
+
+def condition_ip_kernel_busy(msg):
+    return msg["ip_kernel_state"] == "busy"
 
 
 def wait_for_condition(time, condition):
@@ -660,3 +676,116 @@ def reset_sys_modules():
         if key not in sys_modules:
             print(f"Deleting the key '{key}'")
             del sys.modules[key]
+
+
+class IPKernelClient:
+    """
+    Simplistic IPython Kernel Client that connects to a kernel running in the worker
+    and allows to run commands. The kernel must already exist (the environment must be opened)
+    before initializing the client.
+    """
+
+    def __init__(self):
+        self.ip_kernel_client = None
+
+    def start(self):
+        """
+        Load IPython kernel connection info from RE Manager and start the client.
+        """
+        if self.ip_kernel_client:
+            self.stop()
+
+        resp, _ = zmq_single_request("config_get")
+        assert resp["success"] is True, pprint.pformat(resp)
+        assert "config" in resp, pprint.pformat(resp)
+        assert "ip_connect_info" in resp["config"], pprint.pformat(resp)
+        connect_info = resp["config"]["ip_connect_info"]
+
+        self.ip_kernel_client = BlockingKernelClient()
+        self.ip_kernel_client.load_connection_info(connect_info)
+        self.ip_kernel_client.start_channels()
+
+    def stop(self):
+        """
+        Stop the client. Failing to stop the client is causing a leak of opened file
+        descriptors and eventually causes the tests fail.
+        """
+        if self.ip_kernel_client:
+            self.ip_kernel_client.stop_channels()
+            self.ip_kernel_client = None
+
+    def execute(self, command):
+        """
+        Run the command (execute a cell) in the remote client. The function does not wait
+        for completion. The command is not saved to IPython history.
+
+        Parameters
+        ----------
+        command: str
+            Python code to execute in IPython kernel.
+        """
+        self.ip_kernel_client.execute(command, reply=False, store_history=False)
+
+    def execute_with_check(self, command, *, pause=1, timeout=10):
+        """
+        Run the command (execute a cell) in the remote client and wait until the kernel
+        starts execution of the command (execution state is changed to 'busy').
+
+        Parameters
+        ----------
+        command: str
+            Python code to execute in IPython kernel.
+        """
+
+        def func():
+            ttime.sleep(1)
+            print(f"Sending direct request to the kernel: command={command!r}")
+            self.execute(command)
+            print("Direct request is sent")
+
+        th = Thread(target=func)
+        th.start()
+
+        assert self.wait_for_execution_state_change(timeout=timeout) == "busy"
+        print("Execution of the command by IPython kernel was started.")
+        th.join()
+
+    def wait_for_execution_state_change(self, *, timeout=1):
+        """
+        Waits for change of execution state of the kernel. Returns the new state.
+
+        Parameters
+        ----------
+        timeout, float
+            Timeout in seconds.
+
+        Returns
+        -------
+        str
+            The new state of the kernel: 'busy' or 'idle'.
+        """
+        t0 = ttime.time()
+        while ttime.time() < t0 + timeout:
+            try:
+                msg = self.ip_kernel_client.get_iopub_msg(timeout=0.1)
+                if msg["header"]["msg_type"] == "status":
+                    return msg["content"]["execution_state"]
+            except queue.Empty:
+                pass
+
+        raise TimeoutError("Timeout occurred while waiting for change of the state of IPython kernel")
+
+
+@pytest.fixture
+def ip_kernel_simple_client():
+    """
+    Instantiates a simple IP kernel client for tests. The client connects to the running client
+    and allows to send commands to the kernel (``execute`` method) and wait for execution state changes
+    (``wait_for_execution_state_change`` method).
+
+    Use ``ip_kernel_simple_client.start()`` to connect to the running kernel. Repeated calls will make
+    the client reconnect to the kernel. The fixture automatically stops the client (closes 0MQ sockets).
+    """
+    client = IPKernelClient()
+    yield client
+    client.stop()

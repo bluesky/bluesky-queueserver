@@ -5,8 +5,8 @@ import time as ttime
 import pytest
 import yaml
 
+from bluesky_queueserver import gen_list_of_plans_and_devices
 from bluesky_queueserver.manager.comms import generate_zmq_keys
-from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
 
 from ..qserver_cli import QServerExitCodes
 from .common import (  # noqa: F401

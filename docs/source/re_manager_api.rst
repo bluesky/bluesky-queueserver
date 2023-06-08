@@ -308,11 +308,12 @@ Returns       **msg**: *str*
 
               **ip_kernel_captured**: *boolean* or *None*
                   indicates if the IPython kernel is 'captured' by RE Manager: *None* - the
-                  environment is closed or IP kernel is not used, *True/False* - indicates
-                  if IP kernel is running execution loop started by RE Manager. The loop
-                  is expected to run when the worker is executing foreground tasks (plans,
-                  functions, scripts). The kernel can not be accessed directly by clients
-                  (e.g. using Jupyter Console) while it is 'captured'.
+                  environment is closed, *True/False* - indicates if IP kernel is running execution
+                  loop started by RE Manager. The loop is expected to run when the worker is executing
+                  foreground tasks (plans, functions, scripts). The kernel can not be accessed
+                  directly by clients (e.g. using Jupyter Console) while it is 'captured'.
+                  The parameter is always *True* if the environment is open, but the worker is not
+                  using IPython kernel (the execution loop is always running).
 
               **lock_info_uid**: *str*
                   UID of **lock_info** (see **lock** and **lock_info** API). Reload *lock_info* using
@@ -615,10 +616,14 @@ Returns       **success**: *boolean*
                     is successfully completed), **'failed'** (the plan execution failed; a plan can fail due to
                     multiple reasons, including internal error of RE Manager; see the error message to determine
                     the reason of failure), **'stopped'** (the plan was paused, then stopped; the plan is considered
-                    successfully executed), **'abort'** and **'halt'** (the plan was paused, then aborted or halted;
+                    successfully executed), **'aborted'** and **'halted'** (the plan was paused, then aborted or halted;
                     the plan is considered failed), **'unknown'** (the exit status information is lost, e.g. due
                     to restart of RE Manager process, but plan information still needs to be placed in the history;
-                    this is very unlikely to happen in practice);
+                    this is very unlikely to happen in practice). IPython mode: if a plan is started by the manager,
+                    then paused and resumed by a client directly connected to IPython kernel (e.g. Jupyter Console),
+                    the exit status can be **unknown** (all runs are successfully completed or the plan opened no
+                    runs), **aborted** (at least one of the runs is aborted or halted) or **failed** (at least one
+                    of the runs failed);
 
                   - **run_uids** - list of UIDs (str) of runs executed by the plan;
 
@@ -1492,6 +1497,11 @@ Description   Enable/disable autostart mode. In autostart mode, the queue execut
               (:ref:`method_function_execute` API) or a script (:ref:`method_script_upload` API).
               If plans are added to the queue while the manager is busy, the queue is
               is automatically started once the task is complete.
+
+              If a plan is paused by the manager and resumed (and runs to completion) or stopped in
+              Jupyter console, the autostart mode is not disabled and the next plan is started.
+              If the plan is aborted or halted in Jupyter Console, then the autostart is disabled.
+              This behavior may change in the future.
 
               *The request always succeeds*.
 ------------  -----------------------------------------------------------------------------------------

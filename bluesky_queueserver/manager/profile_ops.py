@@ -1,4 +1,3 @@
-import argparse
 import ast
 import copy
 import enum
@@ -26,7 +25,6 @@ from numpydoc.docscrape import NumpyDocString
 import bluesky_queueserver
 
 from .logging_setup import PPrintForLogging as ppfl
-from .utils import to_boolean
 
 logger = logging.getLogger(__name__)
 qserver_version = bluesky_queueserver.__version__
@@ -635,11 +633,11 @@ def load_script_into_existing_nspace(
         if "db" in nspace:
             object_backup["db"] = nspace["db"]
 
-    saved__file__ = None
+    # saved__file__ = None
     try:
         # Set '__name__' variables. NOTE: '__file__' variable is undefined (difference!!!)
         script_path = os.path.join(script_root_path, "script") if script_root_path else "script"
-        saved__file__ = nspace["__file__"] if "__file__" in nspace else None
+        # saved__file__ = nspace["__file__"] if "__file__" in nspace else None
         patch = f"__name__ = '__main__'\n__file__ = '{script_path}'\n"
         exec(patch, nspace, nspace)
 
@@ -655,12 +653,12 @@ def load_script_into_existing_nspace(
         raise ScriptLoadingError(msg, ex_str) from ex
 
     finally:
-        if saved__file__ is None:
-            patch = "del __file__\n"  # Do not delete '__name__'
-        else:
-            # Restore the original value
-            patch = f"__file__ = '{saved__file__}'"
-        exec(patch, nspace, nspace)
+        # if saved__file__ is None:
+        #     patch = "del __file__\n"  # Do not delete '__name__'
+        # else:
+        #     # Restore the original value
+        #     patch = f"__file__ = '{saved__file__}'"
+        # exec(patch, nspace, nspace)
 
         if not update_re:
             # Remove references for 'RE' and 'db' from the namespace
@@ -914,31 +912,6 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
     if not success:
         raise RuntimeError(f"Validation of plan parameters failed: {errmsg}")
 
-    # Create the signature based on EXISTING plan from the workspace
-    signature = inspect.signature(plans_in_nspace[plan_name])
-
-    # Compare parameters in the signature and in the list of allowed plans. Make sure that the parameters
-    #   in the list of allowed plans are a subset of the existing parameters (otherwise the plan can not
-    #   be started). This not full validation.
-    existing_names = set([_.name for _ in signature.parameters.values()])
-    allowed_names = set([_["name"] for _ in group_plans[plan_name]["parameters"]])
-    extra_names = allowed_names - existing_names
-    if extra_names:
-        raise RuntimeError(f"Plan description in the list of allowed plans has extra parameters {extra_names}")
-
-    # Bind arguments of the plan
-    bound_args = signature.bind(*plan_args, **plan_kwargs)
-    # Separate dictionary for the default values define in the annotation decorator
-    default_params = {}
-
-    # Apply the default values defined in the annotation decorator. Default values defined in
-    #   the decorator may still be converted to device references (e.g. str->ophyd.Device).
-    for p in group_plans[plan_name]["parameters"]:
-        if ("default" in p) and p.get("default_defined_in_decorator", False):
-            if p["name"] not in bound_args.arguments:
-                default_value = _process_default_value(p["default"])
-                default_params.update({p["name"]: default_value})
-
     def ref_from_name(v, objects_in_nspace, sel_object_names, selected_object_tree, nspace):
         if isinstance(v, str):
             if (v in sel_object_names) or _is_object_name_in_list(v, allowed_objects=selected_object_tree):
@@ -1005,6 +978,31 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
             value = process_argument(value, objects_in_nspace, sel_object_names, selected_object_tree, nspace)
 
         return value
+
+    # Create the signature based on EXISTING plan from the workspace
+    signature = inspect.signature(plans_in_nspace[plan_name])
+
+    # Compare parameters in the signature and in the list of allowed plans. Make sure that the parameters
+    #   in the list of allowed plans are a subset of the existing parameters (otherwise the plan can not
+    #   be started). This not full validation.
+    existing_names = set([_.name for _ in signature.parameters.values()])
+    allowed_names = set([_["name"] for _ in group_plans[plan_name]["parameters"]])
+    extra_names = allowed_names - existing_names
+    if extra_names:
+        raise RuntimeError(f"Plan description in the list of allowed plans has extra parameters {extra_names}")
+
+    # Bind arguments of the plan
+    bound_args = signature.bind(*plan_args, **plan_kwargs)
+    # Separate dictionary for the default values define in the annotation decorator
+    default_params = {}
+
+    # Apply the default values defined in the annotation decorator. Default values defined in
+    #   the decorator may still be converted to device references (e.g. str->ophyd.Device).
+    for p in group_plans[plan_name]["parameters"]:
+        if ("default" in p) and p.get("default_defined_in_decorator", False):
+            if p["name"] not in bound_args.arguments:
+                default_value = _process_default_value(p["default"])
+                default_params.update({p["name"]: default_value})
 
     # Existing items include existing devices and existing plans
     items_in_nspace = devices_in_nspace.copy()
@@ -3266,223 +3264,6 @@ def save_existing_plans_and_devices(
     with open(file_path, "w") as stream:
         stream.write("# This file is automatically generated. Edit at your own risk.\n")
         yaml.dump(existing_plans_and_devices, stream)
-
-
-def gen_list_of_plans_and_devices(
-    *,
-    startup_dir=None,
-    startup_module_name=None,
-    startup_script_path=None,
-    file_dir=None,
-    file_name=None,
-    overwrite=False,
-    ignore_invalid_plans=False,
-    device_max_depth=0,
-):
-    """
-    Generate the list of plans and devices from a collection of startup files, python module or
-    a script. Only one source of startup code should be specified, otherwise an exception will be
-    raised.
-
-    If ``file_name`` is specified, it is used as a name for the output file, otherwise
-    the default file name ``existing_plans_and_devices.yaml`` is used. The file will be saved
-    to ``file_dir`` or current directory if ``file_dir`` is not specified or ``None``.
-
-    Parameters
-    ----------
-    startup_dir: str or None
-        path to the directory that contains a collection of startup files (IPython-style)
-    startup_module_name: str or None
-        name of the startup module to load
-    startup_script_path: str or None
-        name of the startup script
-    file_dir: str or None
-        path to the directory where the file is to be created. None - create file in current directory.
-    file_name: str
-        name of the output YAML file, None - default file name is used
-    overwrite: boolean
-        overwrite the file if it already exists
-    ignore_invalid_plans: bool
-        Ignore plans with unsupported signatures. If the argument is ``False`` (default), then
-        an exception is raised otherwise a message is printed and the plan is not included in the list.
-    device_max_depth: int
-        Default maximum depth for devices included in the list of existing devices:
-        0 - unlimited depth (full tree of subdevices is included for all devices except areadetectors),
-        1 - only top level devices are included, 2 - top level devices and subdevices are included, etc.
-
-    Returns
-    -------
-    None
-
-    Raises
-    ------
-    RuntimeError
-        Error occurred while creating or saving the lists.
-    """
-    from .profile_tools import clear_ipython_mode, clear_re_worker_active, set_ipython_mode, set_re_worker_active
-
-    use_ipython_kernel = False  # TODO: Make this a parameter, but it requires extension of functionality
-
-    file_name = file_name or "existing_plans_and_devices.yaml"
-    try:
-        if file_dir is None:
-            file_dir = os.getcwd()
-
-        if sum([_ is None for _ in [startup_dir, startup_module_name, startup_script_path]]) != 2:
-            raise ValueError("Source of the startup code was not specified or multiple sources were specified.")
-
-        set_re_worker_active()
-        set_ipython_mode(use_ipython_kernel)
-
-        nspace = load_worker_startup_code(
-            startup_dir=startup_dir,
-            startup_module_name=startup_module_name,
-            startup_script_path=startup_script_path,
-        )
-
-        existing_plans, existing_devices, _, _ = existing_plans_and_devices_from_nspace(
-            nspace=nspace, ignore_invalid_plans=ignore_invalid_plans, max_depth=device_max_depth
-        )
-
-        save_existing_plans_and_devices(
-            existing_plans=existing_plans,
-            existing_devices=existing_devices,
-            file_dir=file_dir,
-            file_name=file_name,
-            overwrite=overwrite,
-        )
-
-    except Exception as ex:
-        raise RuntimeError(f"Failed to create the list of plans and devices: {str(ex)}") from ex
-
-    finally:
-        clear_re_worker_active()
-        clear_ipython_mode()
-
-
-def gen_list_of_plans_and_devices_cli():
-    """
-    'qserver-list-plans-devices'
-    CLI tool for generating the list of existing plans and devices based on profile collection.
-    The tool is supposed to be called as 'qserver-list-plans-devices' from command line.
-    The function will ALWAYS overwrite the existing list of plans and devices (the list
-    is automatically generated, so overwriting (updating) should be a safe operation that doesn't
-    lead to loss configuration data.
-    """
-    logging.basicConfig(level=logging.WARNING)
-    logging.getLogger("bluesky_queueserver").setLevel("INFO")
-
-    def formatter(prog):
-        # Set maximum width such that printed help mostly fits in the RTD theme code block (documentation).
-        return argparse.RawDescriptionHelpFormatter(prog, max_help_position=20, width=90)
-
-    parser = argparse.ArgumentParser(
-        description="Bluesky-QServer:\nCLI tool for generating the list of plans and devices "
-        f"from beamline startup scripts.\nbluesky-queueserver version {qserver_version}\n",
-        formatter_class=formatter,
-    )
-    parser.add_argument(
-        "--file-dir",
-        dest="file_dir",
-        action="store",
-        required=False,
-        default=None,
-        help="Directory name where the list of plans and devices is saved. By default, the list is saved "
-        "to the file 'existing_plans_and_devices.yaml' in the current directory.",
-    )
-    parser.add_argument(
-        "--file-name",
-        dest="file_name",
-        action="store",
-        required=False,
-        default=None,
-        help="Name of the file where the list of plans and devices is saved. Default file name: "
-        "'existing_plans_and_devices.yaml'.",
-    )
-
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "--startup-dir",
-        dest="startup_dir",
-        type=str,
-        default=None,
-        help="Path to directory that contains a set of startup files (*.py and *.ipy). All the scripts "
-        "in the directory will be sorted in alphabetical order of their names and loaded in "
-        "the Run Engine Worker environment. The set of startup files may be located in any accessible "
-        "directory. For example, 'qserver-list-plans-devices --startup-dir .' loads startup "
-        "files from the current directory and saves the lists to the file in current directory.",
-    )
-    group.add_argument(
-        "--startup-module",
-        dest="startup_module_name",
-        type=str,
-        default=None,
-        help="The name of the module that contains the startup code. The module must be installed "
-        " in the current environment For example, 'qserver-list-plans-devices "
-        "--startup-module some.startup.module' loads startup code from the module 'some.startup.module' "
-        "and saves results to the file in the current directory.",
-    )
-    group.add_argument(
-        "--startup-script",
-        dest="startup_script_path",
-        type=str,
-        default=None,
-        help="The path to the script with startup code. For example, "
-        "'qserver-list-plans-devices --startup-script ~/startup/scripts/script.py' loads "
-        "startup code from the script and saves the results to the file in the current directory.",
-    )
-    parser.add_argument(
-        "--ignore-invalid-plans",
-        dest="ignore_invalid_plans",
-        type=str,
-        choices=["ON", "OFF"],
-        default="OFF",
-        help="Ignore plans with unsupported signatures When loading startup code or executing scripts. "
-        "The default behavior is to raise an exception. If the parameter is set, the message is printed for each "
-        "invalid plan and only plans that were processed correctly are included in the list of existing plans "
-        "(default: %(default)s).",
-    )
-    parser.add_argument(
-        "--device-max-depth",
-        dest="device_max_depth",
-        type=int,
-        default=0,
-        help="Default maximum depth for devices included in the list of existing devices: "
-        "0 - unlimited depth (full tree of subdevices is included for all devices except areadetectors), "
-        "1 - only top level devices are included, 2 - top level devices and subdevices are included, etc. "
-        "(default: %(default)s).",
-    )
-
-    args = parser.parse_args()
-    file_dir = args.file_dir
-    file_name = args.file_name
-    startup_dir = args.startup_dir
-    startup_module_name = args.startup_module_name
-    startup_script_path = args.startup_script_path
-    ignore_invalid_plans = to_boolean(args.ignore_invalid_plans)
-    device_max_depth = int(args.device_max_depth)
-
-    if file_dir is not None:
-        file_dir = os.path.expanduser(file_dir)
-        file_dir = os.path.abspath(file_dir)
-
-    try:
-        gen_list_of_plans_and_devices(
-            startup_dir=startup_dir,
-            startup_module_name=startup_module_name,
-            startup_script_path=startup_script_path,
-            file_dir=file_dir,
-            file_name=file_name,
-            overwrite=True,
-            ignore_invalid_plans=ignore_invalid_plans,
-            device_max_depth=device_max_depth,
-        )
-        print("The list of existing plans and devices was created successfully.")
-        exit_code = 0
-    except BaseException as ex:
-        logger.exception("Failed to create the list of plans and devices: %s", str(ex))
-        exit_code = 1
-    return exit_code
 
 
 def load_existing_plans_and_devices(path_to_file=None):

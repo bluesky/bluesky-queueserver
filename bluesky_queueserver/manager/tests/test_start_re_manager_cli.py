@@ -7,23 +7,27 @@ import subprocess
 import pytest
 import yaml
 
-from bluesky_queueserver.manager.profile_ops import gen_list_of_plans_and_devices
+from bluesky_queueserver import gen_list_of_plans_and_devices
+from bluesky_queueserver.manager.config import default_existing_pd_fln, default_user_group_pd_fln
 
 from ..comms import zmq_single_request
 from .common import re_manager_cmd  # noqa: F401
 from .common import (
     _user,
     _user_group,
+    append_code_to_last_startup_file,
     clear_redis_pool,
     condition_environment_closed,
     condition_environment_created,
     condition_manager_idle,
     condition_queue_processing_finished,
     copy_default_profile_collection,
+    get_queue_state,
     set_qserver_zmq_address,
     set_qserver_zmq_public_key,
     use_ipykernel_for_tests,
     wait_for_condition,
+    wait_for_task_result,
 )
 
 # Plans used in most of the tests: '_plan1' and '_plan2' are quickly executed '_plan3' runs for 5 seconds.
@@ -446,30 +450,35 @@ def test_cli_parameters_zmq_server_address_1(monkeypatch, re_manager_cmd, test_m
 
 
 def _get_expected_settings_default_1(tmpdir):
-    if use_ipykernel_for_tests():
-        startup_dir = "/tmp/qserver/ipython/profile_collection_sim/startup"
-        ipython_dir = "/tmp/ipython"
+    use_ip_kernel = use_ipykernel_for_tests()
+    if use_ip_kernel:
+        startup_dir = None
+        ipython_dir = "/tmp/qserver/ipython"
         startup_profile = "collection_sim"
-        use_ipython_kernel = True
+        user_group_permissions_path = "/tmp/qserver/ipython/profile_collection_sim/startup"
+        existing_plans_and_devices_path = "/tmp/qserver/ipython/profile_collection_sim/startup"
     else:
         startup_dir = "/bluesky_queueserver/profile_collection_sim/"
         ipython_dir = None
         startup_profile = None
-        use_ipython_kernel = False
+        user_group_permissions_path = "/bluesky_queueserver/profile_collection_sim"
+        existing_plans_and_devices_path = "/bluesky_queueserver/profile_collection_sim"
+    user_group_permissions_path += "/" + default_user_group_pd_fln
+    existing_plans_and_devices_path += "/" + default_existing_pd_fln
 
     return {
         "console_logging_level": 10,
         "databroker_config": None,
         "demo_mode": True,
         "emergency_lock_key": None,
-        "existing_plans_and_devices_path": None,
+        "existing_plans_and_devices_path": existing_plans_and_devices_path,
         "ignore_invalid_plans": False,
         "ipython_dir": ipython_dir,
         "kafka_server": "127.0.0.1:9092",
         "kafka_topic": None,
         "keep_re": False,
         "device_max_depth": 0,
-        "use_ipython_kernel": use_ipython_kernel,
+        "use_ipython_kernel": bool(use_ip_kernel),
         "ipython_kernel_ip": "localhost",
         "ipython_matplotlib": None,
         "print_console_output": True,
@@ -480,7 +489,7 @@ def _get_expected_settings_default_1(tmpdir):
         "startup_script": None,
         "update_existing_plans_devices": "ENVIRONMENT_OPEN",
         "use_persistent_metadata": False,
-        "user_group_permissions_path": None,
+        "user_group_permissions_path": user_group_permissions_path,
         "user_group_permissions_reload": "ON_STARTUP",
         "zmq_control_addr": "tcp://*:60615",
         "zmq_data_proxy_addr": None,
@@ -503,7 +512,7 @@ network:
   zmq_publish_console: true
   redis_addr: localhost:6379
 worker:
-  use_ipython_kernel: true
+  use_ipython_kernel: {4}
   ipython_kernel_ip: auto
   ipython_matplotlib: qt5
 startup:
@@ -527,35 +536,53 @@ run_engine:
   databroker_config: DIF
 """
     file_dir = os.path.join(tmpdir, _dir_2)
-    return s.format("Ue=.po0aQ9.}<Xvrny+f{V04XMc6JZ9ufKf5aeFy", file_dir, file_dir, file_dir)
+    use_ip_kernel = "true" if use_ipykernel_for_tests() else "false"
+    return s.format("Ue=.po0aQ9.}<Xvrny+f{V04XMc6JZ9ufKf5aeFy", file_dir, file_dir, file_dir, use_ip_kernel)
 
 
 def _get_expected_settings_config_2(tmpdir):
     file_dir = os.path.join(tmpdir, _dir_2)
+    use_ip_kernel = use_ipykernel_for_tests()
+    if use_ip_kernel:
+        startup_dir = None
+        ipython_dir = os.path.join(tmpdir, "ipython_test")
+        startup_profile = "collection_test"
+        user_group_permissions_path = file_dir
+        existing_plans_and_devices_path = file_dir
+    else:
+        startup_dir = file_dir
+        ipython_dir = None
+        startup_profile = None
+        user_group_permissions_path = file_dir
+        existing_plans_and_devices_path = file_dir
+
+    user_group_permissions_path += "/" + default_user_group_pd_fln
+    existing_plans_and_devices_path += "/" + default_existing_pd_fln
+
     return {
         "console_logging_level": 10,
         "databroker_config": "DIF",
         "demo_mode": False,
         "emergency_lock_key": "different_lock_key",
-        "existing_plans_and_devices_path": f"{file_dir}",
-        "ipython_dir": "/tmp/pytest-of-dgavrilov/pytest-33/test_manager_with_config_file_1/ipython_test",
+        "existing_plans_and_devices_path": existing_plans_and_devices_path,
+        "ipython_dir": ipython_dir,
         "kafka_server": "127.0.0.1:9095",
         "kafka_topic": "different_topic_name",
         "keep_re": False,
         "device_max_depth": 2,
         "ignore_invalid_plans": True,
-        "use_ipython_kernel": True,
+        "use_ipython_kernel": bool(use_ip_kernel),
         "ipython_kernel_ip": "auto",
         "ipython_matplotlib": "qt5",
         "print_console_output": True,
         "redis_addr": "localhost:6379",
-        "startup_dir": f"{file_dir}",
+        "startup_dir": startup_dir,
         "startup_module": None,
-        "startup_profile": "collection_test",
+        "startup_profile": startup_profile,
         "startup_script": None,
         "update_existing_plans_devices": "ALWAYS",
         "use_persistent_metadata": True,
-        "user_group_permissions_path": f"{file_dir}",
+        "user_group_permissions_path": user_group_permissions_path,
         "user_group_permissions_reload": "ON_REQUEST",
         "zmq_control_addr": "tcp://*:60617",
         "zmq_data_proxy_addr": "tcp://localhost:5569",
@@ -570,6 +597,7 @@ _dir_3 = os.path.join("ipython_test2", "profile_collection_test", "startup")
 
 def _get_cli_params_3(tmpdir):
     file_dir = os.path.join(tmpdir, _dir_3)
+    use_ip_kernel = "ON" if use_ipykernel_for_tests() else "OFF"
     return [
         "--zmq-control-addr=tcp://*:60619",
         f"--startup-dir={file_dir}",
@@ -583,7 +611,7 @@ def _get_cli_params_3(tmpdir):
         "--keep-re",
         "--device-max-depth=5",
         "--ignore-invalid-plans=ON",
-        "--use-ipython-kernel=ON",
+        f"--use-ipython-kernel={use_ip_kernel}",
         "--ipython-kernel-ip=127.0.0.1",
         "--ipython-matplotlib=qt",
         "--zmq-data-proxy-addr=tcp://localhost:5571",
@@ -596,30 +624,48 @@ def _get_cli_params_3(tmpdir):
 
 def _get_expected_settings_params_3(tmpdir):
     file_dir = os.path.join(tmpdir, _dir_3)
+
+    use_ip_kernel = use_ipykernel_for_tests()
+    if use_ip_kernel:
+        startup_dir = None
+        ipython_dir = os.path.join(tmpdir, "ipython_test2")
+        startup_profile = "collection_test"
+        user_group_permissions_path = file_dir
+        existing_plans_and_devices_path = file_dir
+    else:
+        startup_dir = file_dir
+        ipython_dir = None
+        startup_profile = None
+        user_group_permissions_path = file_dir
+        existing_plans_and_devices_path = file_dir
+
+    user_group_permissions_path += "/" + default_user_group_pd_fln
+    existing_plans_and_devices_path += "/" + default_existing_pd_fln
+
     return {
         "console_logging_level": 10,
         "databroker_config": "NEW",
         "demo_mode": False,
         "emergency_lock_key": "different_lock_key",
-        "existing_plans_and_devices_path": f"{file_dir}",
-        "ipython_dir": "/tmp/pytest-of-dgavrilov/pytest-33/test_manager_with_config_file_1/ipython_test2",
+        "existing_plans_and_devices_path": existing_plans_and_devices_path,
+        "ipython_dir": ipython_dir,
         "kafka_server": "127.0.0.1:9099",
         "kafka_topic": "yet_another_topic",
         "keep_re": True,
         "device_max_depth": 5,
         "ignore_invalid_plans": True,
-        "use_ipython_kernel": True,
+        "use_ipython_kernel": bool(use_ip_kernel),
         "ipython_kernel_ip": "127.0.0.1",
         "ipython_matplotlib": "qt",
         "print_console_output": False,
         "redis_addr": "localhost:6379",
-        "startup_dir": f"{file_dir}",
+        "startup_dir": startup_dir,
         "startup_module": None,
-        "startup_profile": "collection_test",
+        "startup_profile": startup_profile,
         "startup_script": None,
         "update_existing_plans_devices": "NEVER",
         "use_persistent_metadata": True,
-        "user_group_permissions_path": f"{file_dir}",
+        "user_group_permissions_path": user_group_permissions_path,
         "user_group_permissions_reload": "NEVER",
         "zmq_control_addr": "tcp://*:60619",
         "zmq_data_proxy_addr": "tcp://localhost:5571",
@@ -686,29 +732,48 @@ def test_manager_with_config_file_01(
     with open(save_settings_path, "r") as f:
         current_settings = yaml.load(f, Loader=yaml.FullLoader)
 
-    print(pprint.pformat(current_settings))  # Useful in case of failure
-
     # Remove 'startup_dir' from the settings dictionaries and compare them
     #   separately. This is needed because the default startup directory
     #   returned by 'get_default_startup_dir()` is different for the manager
     #   and the testing code when the test is running on CI.
     expected_settings = copy.deepcopy(get_expected_settings(tmpdir))
-    expected_startup_dir_suffix = expected_settings.pop("startup_dir")
+
+    print("Current_settings:\n" + pprint.pformat(current_settings))  # Useful in case of failure
+    print("Expected settings:\n" + pprint.pformat(expected_settings))  # Useful in case of failure
+
     startup_dir = current_settings.pop("startup_dir")
-    assert isinstance(startup_dir, str), startup_dir
-    assert isinstance(expected_startup_dir_suffix, str), expected_startup_dir_suffix
-    assert startup_dir.endswith(expected_startup_dir_suffix), (startup_dir, expected_startup_dir_suffix)
+    suffix = expected_settings.pop("startup_dir")
+    if isinstance(suffix, str):
+        assert isinstance(startup_dir, str), startup_dir
+        assert startup_dir.endswith(suffix), (startup_dir, suffix)
+    else:  # Could be None
+        assert startup_dir == suffix
 
-    cs_idir = current_settings["ipython_dir"]
-    cs_idir = os.path.split(cs_idir)[1] if isinstance(cs_idir, str) else cs_idir
-    es_idir = expected_settings["ipython_dir"]
-    es_idir = os.path.split(es_idir)[1] if isinstance(es_idir, str) else es_idir
-    assert cs_idir == es_idir
+    user_group_permissions_path = current_settings.pop("user_group_permissions_path")
+    suffix = expected_settings.pop("user_group_permissions_path")
+    if isinstance(suffix, str):
+        assert isinstance(user_group_permissions_path, str), user_group_permissions_path
+        assert user_group_permissions_path.endswith(suffix), (user_group_permissions_path, suffix)
+    else:  # Could be None
+        assert user_group_permissions_path == suffix
 
-    cs, es = copy.copy(current_settings), copy.copy(expected_settings)
-    cs.pop("ipython_dir")
-    es.pop("ipython_dir")
-    assert cs == es
+    existing_plans_and_devices_path = current_settings.pop("existing_plans_and_devices_path")
+    suffix = expected_settings.pop("existing_plans_and_devices_path")
+    if isinstance(suffix, str):
+        assert isinstance(existing_plans_and_devices_path, str), existing_plans_and_devices_path
+        assert existing_plans_and_devices_path.endswith(suffix), (existing_plans_and_devices_path, suffix)
+    else:  # Could be None
+        assert existing_plans_and_devices_path == suffix
+
+    ipython_dir = current_settings.pop("ipython_dir")
+    suffix = expected_settings.pop("ipython_dir")
+    if isinstance(suffix, str):
+        assert isinstance(ipython_dir, str), ipython_dir
+        assert ipython_dir.endswith(suffix), (ipython_dir, suffix)
+    else:  # Could be None
+        assert ipython_dir == suffix
+
+    assert current_settings == expected_settings
 
 
 _sim_bundle_A_depth_0 = {
@@ -901,6 +966,115 @@ def test_cli_ipython_kernel_ip_01(re_manager_cmd, ipython_kernel_ip):  # noqa: F
         assert re.search(r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$", connect_info["ip"]), pprint.pformat(connect_info)
     else:
         assert False, f"Unsupported value of ipython_kernel_ip: {ipython_kernel_ip!r}"
+
+    resp9, _ = zmq_single_request("environment_close")
+    assert resp9["success"] is True
+    assert resp9["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+
+_script_test_plan_invalid_1 = """
+def test_plan_failing(dets=det1):
+    # The default value is a detector, which can not be included in the plan description.
+    yield from []
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("ignore_invalid_plans", [False, True, None])
+# fmt: on
+def test_cli_ignore_invalid_plans_01(tmp_path, re_manager_cmd, ignore_invalid_plans):  # noqa: F811
+    """
+    CLI parameter '--ignore-invalid-plans'. Verify, that invalid plans (with signatures that are
+    not accepted by the queue server) are properly handled during startup.
+    """
+
+    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=True)
+    append_code_to_last_startup_file(pc_path, _script_test_plan_invalid_1)
+
+    # Start the manager
+    params = [f"--startup-dir={pc_path}"]
+    if ignore_invalid_plans is not None:
+        on_off = "ON" if ignore_invalid_plans else "OFF"
+        params.extend([f"--ignore-invalid-plans={on_off}"])
+    re_manager_cmd(params)
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    if not ignore_invalid_plans:
+        assert wait_for_condition(time=timeout_env_open, condition=condition_manager_idle)
+        status = get_queue_state()
+        assert status["worker_environment_exists"] is False
+        assert status["worker_environment_state"] == "closed"
+    else:
+        assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+        status = get_queue_state()
+        assert status["worker_environment_exists"] is True
+        assert status["worker_environment_state"] == "idle"
+
+        resp, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
+        assert resp["success"] is True, pprint.pformat(resp)
+        plans_allowed = resp["plans_allowed"]
+        assert "test_plan_failing" not in plans_allowed
+
+        resp9, _ = zmq_single_request("environment_close")
+        assert resp9["success"] is True
+        assert resp9["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+
+# fmt: off
+@pytest.mark.parametrize("ignore_invalid_plans", [False, True, None])
+# fmt: on
+def test_cli_ignore_invalid_plans_02(tmp_path, re_manager_cmd, ignore_invalid_plans):  # noqa: F811
+    """
+    CLI parameter '--ignore-invalid-plans'. Verify, that invalid plans (with signatures that are
+    not accepted by the queue server) are properly handled when uploading scripts.
+    """
+    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=True)
+
+    # Start the manager
+    params = [f"--startup-dir={pc_path}"]
+    if ignore_invalid_plans is not None:
+        on_off = "ON" if ignore_invalid_plans else "OFF"
+        params.extend([f"--ignore-invalid-plans={on_off}"])
+    re_manager_cmd(params)
+
+    resp, _ = zmq_single_request("environment_open")
+    assert resp["success"] is True
+    assert resp["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+    status = get_queue_state()
+    assert status["worker_environment_exists"] is True
+    assert status["worker_environment_state"] == "idle"
+
+    resp, _ = zmq_single_request("script_upload", params=dict(script=_script_test_plan_invalid_1))
+    assert resp["success"] is True
+    assert resp["msg"] == ""
+
+    task_uid = resp["task_uid"]
+    result = wait_for_task_result(10, task_uid)
+
+    if not ignore_invalid_plans:
+        assert result["success"] is False, pprint.pformat(result)
+        assert "Failed to create description of plan 'test_plan_failing'" in result["msg"]
+        assert "Failed to create description of plan 'test_plan_failing'" in result["traceback"]
+    else:
+        assert result["success"] is True, pprint.pformat(result)
+        assert result["msg"] == ""
+        assert result["traceback"] == ""
+
+    assert wait_for_condition(time=10, condition=condition_manager_idle)
+
+    resp, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
+    assert resp["success"] is True, pprint.pformat(resp)
+    plans_allowed = resp["plans_allowed"]
+    assert "test_plan_failing" not in plans_allowed
 
     resp9, _ = zmq_single_request("environment_close")
     assert resp9["success"] is True

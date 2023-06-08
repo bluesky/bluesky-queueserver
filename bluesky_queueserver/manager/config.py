@@ -634,7 +634,7 @@ class Settings:
                     f"startup_module={_cfg_module!r} startup_script={_cfg_script!r}"
                 )
 
-            if _cfg_profile:
+            if _cfg_profile or _cfg_ipdir:
                 cfg_profile, cfg_ipdir = _cfg_profile, _cfg_ipdir
             elif _cfg_dir:
                 cfg_profile, cfg_ipdir = get_profile_name_from_path(_cfg_dir)
@@ -644,10 +644,11 @@ class Settings:
             elif _cfg_script:
                 cfg_script = os.path.abspath(os.path.expanduser(_cfg_script))
 
-            if any([cfg_profile, cfg_ipdir]):
-                startup_profile, ipython_dir = cfg_profile, cfg_ipdir
             if any([cfg_module, cfg_script]):
                 startup_module, startup_script = cfg_module, cfg_script
+
+            startup_profile = cfg_profile or startup_profile
+            ipython_dir = cfg_ipdir or ipython_dir
 
             # Process CLI parameters
             cli_module, cli_script, cli_profile, cli_ipdir = None, None, None, None
@@ -663,7 +664,7 @@ class Settings:
                     f"startup_module={_cli_module!r} startup_script={_cli_script!r}"
                 )
 
-            if _cli_profile:
+            if _cli_profile or _cli_ipdir:
                 cli_profile, cli_ipdir = _cli_profile, _cli_ipdir
             elif _cli_dir:
                 cli_profile, cli_ipdir = get_profile_name_from_path(_cli_dir)
@@ -673,10 +674,11 @@ class Settings:
             elif _cli_script:
                 cli_script = os.path.abspath(os.path.expanduser(_cli_script))
 
-            if any([cli_profile, cli_ipdir]):
-                startup_profile, ipython_dir = cli_profile, cli_ipdir
             if any([cli_module, cli_script]):
                 startup_module, startup_script = cli_module, cli_script
+
+            startup_profile = cli_profile or startup_profile
+            ipython_dir = cli_ipdir or ipython_dir
 
             # If no location of startup code was specified, then load the default
             #   simulated ipython_sim/profile_collection_sim
@@ -720,6 +722,9 @@ class Settings:
             if any([cfg_dir, cfg_module, cfg_script]):
                 startup_dir, startup_module, startup_script = cfg_dir, cfg_module, cfg_script
 
+            startup_profile = cfg_profile or startup_profile
+            ipython_dir = cfg_ipdir or ipython_dir
+
             # Process CLI parameters
             cli_dir, cli_module, cli_script = None, None, None
             cli_profile, cli_ipdir = None, None  # profile name and IP dir may be used to set 'aux_dir'.
@@ -753,16 +758,16 @@ class Settings:
             if not any([startup_dir, startup_module, startup_script]):
                 startup_dir = default_startup_dir
 
+            startup_profile = cli_profile or startup_profile
+            ipython_dir = cli_ipdir or ipython_dir
+
             # Demo mode: the code is loaded from the built-in startup dir.
             demo_mode = startup_dir == default_startup_dir
 
             if startup_dir:
                 aux_dir = startup_dir
-            else:
-                _profile = cli_profile or cfg_profile
-                _ip_dir = cli_ipdir or cfg_ipdir
-                if _profile or _ip_dir:
-                    aux_dir = profile_name_to_startup_dir(_profile, _ip_dir)
+            elif startup_profile or ipython_dir:
+                aux_dir = profile_name_to_startup_dir(startup_profile, ipython_dir)
 
         return startup_dir, startup_module, startup_script, startup_profile, ipython_dir, aux_dir, demo_mode
 

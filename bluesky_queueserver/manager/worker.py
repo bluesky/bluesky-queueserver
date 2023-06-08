@@ -20,6 +20,7 @@ import msgpack_numpy as mpn
 from event_model import RunRouter
 
 from .comms import PipeJsonRpcReceive
+from .config import profile_name_to_startup_dir
 from .logging_setup import PPrintForLogging as ppfl
 from .logging_setup import setup_loggers
 from .output_streaming import setup_console_output_redirection
@@ -765,11 +766,16 @@ class RunEngineWorker(Process):
         startup_module_name = self._config_dict.get("startup_module_name", None)
         startup_script_path = self._config_dict.get("startup_script_path", None)
 
+        startup_profile = self._config_dict.get("startup_profile", None)
+        ipython_dir = self._config_dict.get("ipython_dir", None)
+
         script_root_path = extract_script_root_path(
             startup_dir=startup_dir,
             startup_module_name=startup_module_name,
             startup_script_path=startup_script_path,
         )
+
+        script_root_path = script_root_path or profile_name_to_startup_dir(startup_profile, ipython_dir)
 
         load_script_into_existing_nspace(
             script=script,

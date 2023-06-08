@@ -15,6 +15,7 @@ import zmq
 
 import bluesky_queueserver
 from bluesky_queueserver import gen_list_of_plans_and_devices
+from bluesky_queueserver.manager.config import get_profile_name_from_path, profile_name_to_startup_dir
 from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
 from bluesky_queueserver.manager.profile_ops import (
     _prepare_devices,
@@ -1641,6 +1642,12 @@ def sleep_for_a_few_sec(tt=1):
     yield from bps.sleep(tt)
 """
 
+_script_to_upload_2 = """
+# Trivial plan
+def plan_for_test(tt=1):
+    yield from bps.sleep(tt)
+"""
+
 
 # fmt: off
 @pytest.mark.parametrize("run_in_background", [None, False, True])
@@ -2178,7 +2185,12 @@ def test_zmq_api_script_upload_06(tmp_path, re_manager_cmd):  # noqa: F811
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_script_upload_07(tmp_path, re_manager_cmd):  # noqa: F811
+# fmt: off
+@pytest.mark.parametrize("option", [
+    "profile", "ip-dir", "startup-dir", "script", "module"
+])
+# fmt: on
+def test_zmq_api_script_upload_07(tmp_path, monkeypatch, re_manager_cmd, option):  # noqa: F811
     """
     'script_upload' API: Check that local imports work.
     """
@@ -2186,23 +2198,61 @@ def test_zmq_api_script_upload_07(tmp_path, re_manager_cmd):  # noqa: F811
     os.remove(os.path.join(pc_path, "existing_plans_and_devices.yaml"))
     # Only 'user_group_permissions.yaml' is left in the directory
 
-    mod_dir = os.path.join(pc_path, "mod")
-    os.makedirs(os.path.join(pc_path, "mod"))
+    startup_profile, ipython_dir = get_profile_name_from_path(pc_path)
+    default_pc_path = profile_name_to_startup_dir("default", ipython_dir)
+    os.makedirs(default_pc_path)
+
+    if option in ("profile", "startup-dir"):
+        script_root = pc_path
+    elif option in ("ip-dir", "module"):
+        script_root = default_pc_path
+    elif option == "script":
+        script_root = os.path.join(ipython_dir, "scripts")
+    else:
+        assert False, f"Unknown option {option!r}"
+
+    mod_dir = os.path.join(script_root, "mod")
+    os.makedirs(os.path.join(script_root, "mod"))
 
     # Create an empty startup script
-    with open(os.path.join(pc_path, "00-startup.py"), "w"):
-        pass
+    if option == "ip-dir":
+        code_dir = default_pc_path
+    elif option == "script":
+        code_dir = script_root
+    else:
+        code_dir = pc_path
+    startup_script_path = os.path.join(code_dir, "startup_code.py")
+    with open(startup_script_path, "w") as f:
+        f.writelines(_script_to_upload_2)
+
+    if option == "startup-dir":
+        params = ["--startup-dir", pc_path]
+    elif option == "profile":
+        params = ["--startup-profile", startup_profile, "--ipython-dir", ipython_dir]
+    elif option == "ip-dir":
+        params = ["--ipython-dir", ipython_dir]
+    elif option == "module":
+        monkeypatch.setenv("PYTHONPATH", os.path.split(pc_path)[0])
+        startup_module = "startup.startup_code"
+        params = ["--startup-module", startup_module, "--ipython-dir", ipython_dir]
+    elif option == "script":
+        # The root directory of the startup script should be used for local imports
+        params = ["--startup-script", startup_script_path, "--ipython-dir", ipython_dir]
+    else:
+        assert False, f"Unknown option {option!r}"
+
+    params.extend(["--existing-plans-devices", pc_path, "--user-group-permissions", pc_path])
+
+    re_manager_cmd(params)
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     # Create a module
     mod_fln = os.path.join(mod_dir, "mod_file.py")
     with open(os.path.join(mod_fln), "w") as f:
         f.writelines(_script_to_upload_1)
-
-    re_manager_cmd(["--startup-dir", pc_path])
-
-    resp1, _ = zmq_single_request("environment_open")
-    assert resp1["success"] is True
-    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     # Upload the module that uses local imports
     script = "from mod.mod_file import *\n"
@@ -2218,6 +2268,9 @@ def test_zmq_api_script_upload_07(tmp_path, re_manager_cmd):  # noqa: F811
     resp4b, _ = zmq_single_request("devices_existing")
     assert resp4b["success"] is True, pprint.pformat(resp4a)
     assert "dev_test" in resp4b["devices_existing"]
+
+    # Check that the startup script was loaded (plan is included in the list)
+    assert "plan_for_test" in resp4a["plans_existing"]
 
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"

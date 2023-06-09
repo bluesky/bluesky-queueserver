@@ -47,6 +47,7 @@ class EState(enum.Enum):
     INITIALIZING = "initializing"
     IDLE = "idle"
     FAILED = "failed"
+    RESERVED = "reserved"
     EXECUTING_PLAN = "executing_plan"
     EXECUTING_TASK = "executing_task"
     CLOSING = "closing"
@@ -197,6 +198,11 @@ class RunEngineWorker(Process):
 
         # The event is used to monitor shutdown of IPython kernel.
         self._ip_kernel_is_shut_down_event = None
+
+        # Timeout after which the reserved kernel is released unless a plan or a task is started
+        self._ip_kernel_reserve_timeout = 2.0
+        # Time when reservation will expire
+        self._ip_kernel_reserve_expiration = 0
 
         # The list of runs that were opened as part of execution of the currently running plan.
         # Initialized with 'RunList()' in 'run()' method.
@@ -1017,6 +1023,14 @@ class RunEngineWorker(Process):
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
 
+    def _command_kernel_reserve_handler(self):
+        status, err_msg = "accepted", ""
+        logger.debug("Attempting to reserve (capture) IPython kernel ...")
+        if not self._ip_kernel_capture():
+            status, err_msg = "failed", "Failed to reserve IPython kernel"
+        msg_out = {"status": status, "err_msg": err_msg}
+        return msg_out
+
     def _command_run_plan_handler(self, *, plan_info):
         """
         Initiate execution of a new plan.
@@ -1240,14 +1254,19 @@ class RunEngineWorker(Process):
             while True:
                 # Polling 10 times per second. This is fast enough for slowly executed plans.
                 ttime.sleep(0.1)
-                # Exit the thread if the Event is set (necessary to gracefully close the process)
-                if self._exit_event.is_set() or self._exit_main_loop_event.is_set():
-                    break
+
                 try:
                     parameters, plan_exec_option = self._execution_queue.get(False)
                     self._execute_plan_or_task(parameters, plan_exec_option)
                 except queue.Empty:
                     pass
+
+                # Exit the thread if the Event is set (necessary to gracefully close the process)
+                if self._exit_event.is_set() or self._exit_main_loop_event.is_set():
+                    break
+                if (self._env_state == EState.RESERVED) and (self._ip_kernel_reserve_expiration < ttime.time()):
+                    self._env_state = EState.IDLE
+                    break
         finally:
             with self._exec_loop_active_cnd:
                 if not self._use_ipython_kernel:
@@ -1529,6 +1548,8 @@ class RunEngineWorker(Process):
         Run loop (IPython kernel). The loop is blocking IPython kernel main thread while the queue
         (or other foreground task) is running, 'capturing' the kernel.
         """
+        self._ip_kernel_reserve_expiration = ttime.time() + self._ip_kernel_reserve_timeout
+        self._env_state = EState.RESERVED
         self._execute_in_main_thread()
 
     def _ip_kernel_capture(self, timeout=0.5):
@@ -1541,7 +1562,12 @@ class RunEngineWorker(Process):
         if not self._use_ipython_kernel:
             return True
         if self._ip_kernel_state != IPKernelState.IDLE:
-            return False
+            if self._env_state == EState.RESERVED:
+                self._ip_kernel_reserve_expiration = ttime.time() + self._ip_kernel_reserve_timeout
+                return True
+            else:
+                return False
+
         start_loop_task = "___ip_execution_loop_start___()"
         self._ip_kernel_execute_command(command=start_loop_task)
         with self._exec_loop_active_cnd:

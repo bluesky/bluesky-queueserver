@@ -1028,7 +1028,7 @@ class RunEngineWorker(Process):
         status, err_msg = "accepted", ""
         logger.debug("Attempting to reserve (capture) IPython kernel ...")
         if not self._ip_kernel_capture(timeout=0.2):
-            status, err_msg = "failed", "Failed to reserve IPython kernel"
+            status, err_msg = "failed", "Timeout occurred while trying to reserve IPython kernel"
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
 

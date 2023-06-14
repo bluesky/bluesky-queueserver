@@ -1088,6 +1088,8 @@ class RunEngineManager(Process):
             success, err_msg = await self._worker_command_reserve_kernel()
             if success:
                 success, err_msg = await self._worker_command_continue_plan(option)
+            else:
+                err_msg = f"Failed to capture IPython kernel: {err_msg}"
 
             success = bool(success)  # Convert 'None' to False
             if success:

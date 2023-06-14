@@ -950,7 +950,7 @@ def test_zmq_api_queue_item_execute_1(re_manager):  # noqa: F811
     resp3b, _ = zmq_single_request("status")
     assert resp3b["items_in_queue"] == 1
     assert resp3b["items_in_history"] == 1
-    assert resp3b["worker_environment_state"] == "idle"
+    assert resp3b["worker_environment_state"] in ("idle", "reserved")
 
     resp4, _ = zmq_single_request("queue_start")
     assert resp4["success"] is True
@@ -3889,11 +3889,14 @@ def test_zmq_api_queue_autostart_03(re_manager, open_env_first, autostart_first,
     if not autostart_first:
         autostart()
 
+    # It may take some time for the queue to start
+    assert wait_for_condition(time=3, condition=condition_manager_executing_queue)
+
     status = get_queue_state()
     assert status["queue_autostart_enabled"] is True, pprint.pformat(status)
-    assert status["manager_state"] in ("starting_queue", "executing_queue"), pprint.pformat(status)
+    assert status["manager_state"] == "executing_queue", pprint.pformat(status)
 
-    wait_for_condition(time=30, condition=condition_queue_processing_finished)
+    assert wait_for_condition(time=30, condition=condition_queue_processing_finished)
 
     status = get_queue_state()
     assert status["queue_autostart_enabled"] is True

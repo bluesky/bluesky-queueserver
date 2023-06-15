@@ -876,6 +876,11 @@ class RunEngineManager(Process):
             elif self._use_ipython_kernel and self._is_ipkernel_external_task():
                 raise RuntimeError("IPython kernel (RE Worker) is busy.")
             else:
+                # Attempt to reserve IPython kernel.
+                _success, _msg = await self._worker_command_reserve_kernel()
+                if not _success:
+                    raise RuntimeError(f"Failed to capture IPython kernel: {_msg}")
+
                 await self._queue_stop_deactivate()  # Just in case
                 self._manager_state = MState.STARTING_QUEUE
                 asyncio.ensure_future(self._execute_background_task(self._start_plan_task()))
@@ -900,6 +905,11 @@ class RunEngineManager(Process):
             elif self._use_ipython_kernel and self._is_ipkernel_external_task():
                 raise RuntimeError("IPython kernel (RE Worker) is busy.")
             else:
+                # Attempt to reserve IPython kernel.
+                _success, _msg = await self._worker_command_reserve_kernel()
+                if not _success:
+                    raise RuntimeError(f"Failed to capture IPython kernel: {_msg}")
+
                 await self._queue_stop_deactivate()  # Just in case
                 self._manager_state = MState.STARTING_QUEUE
 
@@ -1074,12 +1084,18 @@ class RunEngineManager(Process):
             raise RuntimeError("IPython kernel (RE Worker) is busy.")
 
         elif self._environment_exists:
-            success, err_msg = await self._worker_command_continue_plan(option)
+            # Attempt to reserve IPython kernel.
+            success, err_msg = await self._worker_command_reserve_kernel()
+            if success:
+                success, err_msg = await self._worker_command_continue_plan(option)
+            else:
+                err_msg = f"Failed to capture IPython kernel: {err_msg}"
+
             success = bool(success)  # Convert 'None' to False
             if success:
                 self._manager_state = MState.EXECUTING_QUEUE
             else:
-                logger.error("Failed to pause the running plan: %s", err_msg)
+                logger.error("Failed to continue or stop the running plan: %s", err_msg)
 
         else:
             success, err_msg = (
@@ -1174,6 +1190,12 @@ class RunEngineManager(Process):
             try:
                 if not run_in_background:
                     self._manager_state = MState.EXECUTING_TASK
+
+                    # Attempt to reserve IPython kernel.
+                    _success, _msg = await self._worker_command_reserve_kernel()
+                    if not _success:
+                        raise RuntimeError(f"Failed to capture IPython kernel: {_msg}")
+
                 success, err_msg, task_uid = await self._worker_command_load_script(
                     script=script,
                     update_lists=update_lists,
@@ -1213,6 +1235,11 @@ class RunEngineManager(Process):
             try:
                 if not run_in_background:
                     self._manager_state = MState.EXECUTING_TASK
+
+                    # Attempt to reserve IPython kernel.
+                    _success, _msg = await self._worker_command_reserve_kernel()
+                    if not _success:
+                        raise RuntimeError(f"Failed to capture IPython kernel: {_msg}")
 
                 func_name = item["name"]
                 args = item.get("args", [])
@@ -1408,6 +1435,19 @@ class RunEngineManager(Process):
     async def _worker_command_confirm_exit(self):
         try:
             response = await self._comm_to_worker.send_msg("command_confirm_exit")
+            success = response["status"] == "accepted"
+            err_msg = response["err_msg"]
+        except CommTimeoutError:
+            success, err_msg = None, "Timeout occurred while processing the request"
+        return success, err_msg
+
+    async def _worker_command_reserve_kernel(self):
+        """
+        Initiate stopping the execution loop. Call fails if the worker is running on Python
+        (not IPython kernel).
+        """
+        try:
+            response = await self._comm_to_worker.send_msg("command_reserve_kernel")
             success = response["status"] == "accepted"
             err_msg = response["err_msg"]
         except CommTimeoutError:
@@ -3324,6 +3364,8 @@ class RunEngineManager(Process):
         Testing API: blocks event loop of RE Manager process forever and
         causes Watchdog process to restart RE Manager.
         """
+        success, msg = True, ""
+
         try:
             # Verification of parameters are mostly for consistency with other API.
             # This API is expected to be used exclusively for testing and debugging.
@@ -3333,6 +3375,43 @@ class RunEngineManager(Process):
             # Block the event loop forever. The manager process should be automatically restarted.
             while True:
                 ttime.sleep(10)
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg}
+
+    async def _manager_test_handler(self, request):
+        """
+        This API is intended exclusively for unit testing. Available tests (selected using 'test_name'):
+
+        - ``reserve_kernel`` - calls the function that reserves kernel running in the worker space.
+
+        """
+        success, msg = True, ""
+
+        try:
+            test_name = request.get("test_name", None)
+
+            supported_param_names = ["test_name"]
+            known_tests = ["reserve_kernel"]
+
+            if test_name == "reserve_kernel":
+                self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+                if not self._use_ipython_kernel:
+                    raise RuntimeError("IPython kernel mode is not enabled")
+
+                if not self._environment_exists:
+                    raise RuntimeError("Worker environment does not exist")
+
+                # Attempt to reserve IPython kernel.
+                _success, _msg = await self._worker_command_reserve_kernel()
+                if not _success:
+                    raise RuntimeError(f"Failed to capture IPython kernel: {_msg}")
+
+            else:
+                raise ValueError(f"Unknown test: {test_name!r}. Known tests: {known_tests}")
+
         except Exception as ex:
             success, msg = False, f"Error: {ex}"
 
@@ -3386,6 +3465,7 @@ class RunEngineManager(Process):
             "unlock": "_unlock_handler",
             "manager_stop": "_manager_stop_handler",
             "manager_kill": "_manager_kill_handler",
+            "manager_test": "_manager_test_handler",
         }
 
         try:

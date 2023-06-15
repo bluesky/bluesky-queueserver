@@ -125,8 +125,8 @@ def test_ip_kernel_run_plans_01(re_manager, plan_option, resume_option):  # noqa
         status = get_queue_state()
         if isinstance(ip_kernel_state, (str, type(None))):
             ip_kernel_state = [ip_kernel_state]
-        assert status["ip_kernel_state"] in ip_kernel_state
-        assert status["ip_kernel_captured"] == ip_kernel_captured
+        assert status["ip_kernel_state"] in ip_kernel_state, pprint.pformat(status)
+        assert status["ip_kernel_captured"] == ip_kernel_captured, pprint.pformat(status)
         return status
 
     check_status(None, None)
@@ -165,8 +165,8 @@ def test_ip_kernel_run_plans_01(re_manager, plan_option, resume_option):  # noqa
         ttime.sleep(1)
 
         s = check_status("busy" if using_ipython else "disabled", True)
-        assert s["manager_state"] == "executing_queue"
-        assert s["worker_environment_state"] == "executing_plan"
+        assert s["manager_state"] == "executing_queue", pprint.pformat(s)
+        assert s["worker_environment_state"] == "executing_plan", pprint.pformat(s)
 
         ttime.sleep(1)
 
@@ -858,20 +858,12 @@ def test_ip_kernel_direct_connection_02(re_manager, ip_kernel_simple_client, pla
 
     n_history_items_expected = 1
 
-    if delay > 0.6:
-        assert resp["success"] is False
-        assert "IPython kernel (RE Worker) is busy" in resp["msg"]
-        check_status("busy", False)
+    assert resp["success"] is False
+    msg = resp["msg"]
+    assert "IPython kernel (RE Worker) is busy" in msg or "Failed to capture IPython kernel" in msg
 
-    else:
-        ttime.sleep(1)  # Wait until the request is processed
-        s = get_queue_state()
-        request_failed = resp["success"] is False
-        queue_not_started = s["manager_state"] != "executing_queue"
-        assert request_failed or queue_not_started, (request_failed, queue_not_started)
-
-        if not request_failed:
-            n_history_items_expected = 2
+    ttime.sleep(1)
+    check_status("busy", False)
 
     assert wait_for_condition(10, condition_ip_kernel_idle)
 
@@ -955,20 +947,13 @@ def test_ip_kernel_direct_connection_03(re_manager, ip_kernel_simple_client, opt
     n_history_items_expected = 1
 
     resp, _ = zmq_single_request(f"re_{option}")
-    if delay > 0.6:
-        assert resp["success"] is False
-        assert "IPython kernel (RE Worker) is busy" in resp["msg"]
-        check_status("busy", False)
 
-    else:
-        ttime.sleep(1)  # Wait until the request is processed
-        s = get_queue_state()
-        request_failed = resp["success"] is False
-        queue_not_started = s["manager_state"] != "executing_queue"
-        assert request_failed or queue_not_started, (request_failed, queue_not_started)
+    assert resp["success"] is False
+    msg = resp["msg"]
+    assert "IPython kernel (RE Worker) is busy" in msg or "Failed to capture IPython kernel" in msg
 
-        if not request_failed:
-            n_history_items_expected = 2
+    ttime.sleep(1)
+    check_status("busy", False)
 
     s = check_status("busy", False)
     s["manager_state"] == "paused"
@@ -1051,28 +1036,17 @@ def test_ip_kernel_direct_connection_04(re_manager, ip_kernel_simple_client, opt
     else:
         assert False, f"Unsupported option: {option!r}"
 
-    task_uid1 = None
+    assert resp2["success"] is True
     task_uid2 = resp2["task_uid"]
-    if delay > 0.6:
-        assert resp1["success"] is False
-        assert "IPython kernel (RE Worker) is busy" in resp1["msg"]
-        check_status("busy", False)
 
-    else:
-        s = get_queue_state()
-        request_failed = resp1["success"] is False
-        queue_not_started = s["manager_state"] != "executing_task"
-        assert request_failed or not queue_not_started, (request_failed, queue_not_started)
+    assert resp1["success"] is False
+    msg = resp1["msg"]
+    assert "IPython kernel (RE Worker) is busy" in msg or "Failed to capture IPython kernel" in msg
 
-        if not request_failed:
-            task_uid1 = resp1["task_uid"]
+    ttime.sleep(1)
+    check_status("busy", False)
 
     assert wait_for_task_result(10, task_uid2)
-
-    if task_uid1:
-        resp, _ = zmq_single_request("task_result", params={"task_uid": task_uid1})
-        assert resp["success"] is True
-        assert resp["result"]["msg"] != "", pprint.pformat(resp)
 
     resp, _ = zmq_single_request("task_result", params={"task_uid": task_uid2})
     assert resp["success"] is True
@@ -1096,6 +1070,75 @@ def test_ip_kernel_direct_connection_04(re_manager, ip_kernel_simple_client, opt
     resp, _ = zmq_single_request("task_result", params={"task_uid": task_uid3})
     assert resp["success"] is True
     assert resp["result"]["msg"] == "", pprint.pformat(resp)
+
+    resp9, _ = zmq_single_request("environment_close")
+    assert resp9["success"] is True
+    assert resp9["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+    check_status(None, None)
+
+
+# fmt: off
+@pytest.mark.parametrize("option", ["single", "repeated"])
+# fmt: on
+@pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
+def test_ip_kernel_reserve_01(re_manager, ip_kernel_simple_client, option):  # noqa: F811
+    """
+    Test if the internal functionality for reserving IPython kernel works as expected:
+    kernel is reserved upon request and stayed reserved for preset period; repeated
+    calls to reserve kernel are successful and extend reservation time.
+    """
+    using_ipython = use_ipykernel_for_tests()
+    assert using_ipython, "The test can be run only in IPython mode"
+
+    t_reserve = 2  # Reservation time (hardcoded in the manager)
+
+    def check_status(ip_kernel_state, ip_kernel_captured):
+        # Returned status may be used to do additional checks
+        status = get_queue_state()
+        if isinstance(ip_kernel_state, (str, type(None))):
+            ip_kernel_state = [ip_kernel_state]
+        assert status["ip_kernel_state"] in ip_kernel_state
+        assert status["ip_kernel_captured"] == ip_kernel_captured
+        return status
+
+    check_status(None, None)
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    check_status("idle", False)
+
+    resp3, _ = zmq_single_request("manager_test", params=dict(test_name="reserve_kernel"))
+    assert resp3["success"] is True, pprint.pformat(resp3)
+    assert resp3["msg"] == "", pprint.pformat(resp3)
+
+    ttime.sleep(1)
+
+    check_status("busy", True)
+
+    if option == "single":
+        ttime.sleep(t_reserve)
+        check_status("idle", False)
+    elif option == "repeated":
+        ttime.sleep(0.5)
+
+        resp4, _ = zmq_single_request("manager_test", params=dict(test_name="reserve_kernel"))
+        assert resp4["success"] is True, pprint.pformat(resp4)
+        assert resp4["msg"] == "", pprint.pformat(resp4)
+
+        check_status("busy", True)
+        ttime.sleep(t_reserve - 0.5)
+        check_status("busy", True)
+        ttime.sleep(1)
+        check_status("idle", False)
+    else:
+        assert False, f"Unknown option: {option!r}"
 
     resp9, _ = zmq_single_request("environment_close")
     assert resp9["success"] is True

@@ -1078,3 +1078,72 @@ def test_ip_kernel_direct_connection_04(re_manager, ip_kernel_simple_client, opt
     assert wait_for_condition(time=3, condition=condition_environment_closed)
 
     check_status(None, None)
+
+
+# fmt: off
+@pytest.mark.parametrize("option", ["single", "repeated"])
+# fmt: on
+@pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
+def test_ip_kernel_reserve_01(re_manager, ip_kernel_simple_client, option):  # noqa: F811
+    """
+    Test if the internal functionality for reserving IPython kernel works as expected:
+    kernel is reserved upon request and stayed reserved for preset period; repeated
+    calls to reserve kernel are successful and extend reservation time.
+    """
+    using_ipython = use_ipykernel_for_tests()
+    assert using_ipython, "The test can be run only in IPython mode"
+
+    t_reserve = 2  # Reservation time (hardcoded in the manager)
+
+    def check_status(ip_kernel_state, ip_kernel_captured):
+        # Returned status may be used to do additional checks
+        status = get_queue_state()
+        if isinstance(ip_kernel_state, (str, type(None))):
+            ip_kernel_state = [ip_kernel_state]
+        assert status["ip_kernel_state"] in ip_kernel_state
+        assert status["ip_kernel_captured"] == ip_kernel_captured
+        return status
+
+    check_status(None, None)
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    check_status("idle", False)
+
+    resp3, _ = zmq_single_request("manager_test", params=dict(test_name="reserve_kernel"))
+    assert resp3["success"] is True, pprint.pformat(resp3)
+    assert resp3["msg"] == "", pprint.pformat(resp3)
+
+    ttime.sleep(1)
+
+    check_status("busy", True)
+
+    if option == "single":
+        ttime.sleep(t_reserve)
+        check_status("idle", False)
+    elif option == "repeated":
+        ttime.sleep(0.5)
+
+        resp4, _ = zmq_single_request("manager_test", params=dict(test_name="reserve_kernel"))
+        assert resp4["success"] is True, pprint.pformat(resp4)
+        assert resp4["msg"] == "", pprint.pformat(resp4)
+
+        check_status("busy", True)
+        ttime.sleep(t_reserve - 0.5)
+        check_status("busy", True)
+        ttime.sleep(1)
+        check_status("idle", False)
+    else:
+        assert False, f"Unknown option: {option!r}"
+
+    resp9, _ = zmq_single_request("environment_close")
+    assert resp9["success"] is True
+    assert resp9["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+    check_status(None, None)

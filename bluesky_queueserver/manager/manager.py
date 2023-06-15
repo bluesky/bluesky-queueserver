@@ -3364,6 +3364,8 @@ class RunEngineManager(Process):
         Testing API: blocks event loop of RE Manager process forever and
         causes Watchdog process to restart RE Manager.
         """
+        success, msg = True, ""
+
         try:
             # Verification of parameters are mostly for consistency with other API.
             # This API is expected to be used exclusively for testing and debugging.
@@ -3373,6 +3375,43 @@ class RunEngineManager(Process):
             # Block the event loop forever. The manager process should be automatically restarted.
             while True:
                 ttime.sleep(10)
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg}
+
+    async def _manager_test_handler(self, request):
+        """
+        This API is intended exclusively for unit testing. Available tests (selected using 'test_name'):
+
+        - ``reserve_kernel`` - calls the function that reserves kernel running in the worker space.
+
+        """
+        success, msg = True, ""
+
+        try:
+            test_name = request.get("test_name", None)
+
+            supported_param_names = ["test_name"]
+            known_tests = ["reserve_kernel"]
+
+            if test_name == "reserve_kernel":
+                self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+                if not self._use_ipython_kernel:
+                    raise RuntimeError("IPython kernel mode is not enabled")
+
+                if not self._environment_exists:
+                    raise RuntimeError("Worker environment does not exist")
+
+                # Attempt to reserve IPython kernel.
+                _success, _msg = await self._worker_command_reserve_kernel()
+                if not _success:
+                    raise RuntimeError(f"Failed to capture IPython kernel: {_msg}")
+
+            else:
+                raise ValueError(f"Unknown test: {test_name!r}. Known tests: {known_tests}")
+
         except Exception as ex:
             success, msg = False, f"Error: {ex}"
 
@@ -3426,6 +3465,7 @@ class RunEngineManager(Process):
             "unlock": "_unlock_handler",
             "manager_stop": "_manager_stop_handler",
             "manager_kill": "_manager_kill_handler",
+            "manager_test": "_manager_test_handler",
         }
 
         try:

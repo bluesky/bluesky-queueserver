@@ -1147,3 +1147,33 @@ def test_ip_kernel_reserve_01(re_manager, ip_kernel_simple_client, option):  # n
     assert wait_for_condition(time=3, condition=condition_environment_closed)
 
     check_status(None, None)
+
+
+def test_ip_kernel_interrupt_01(re_manager):  # noqa: F811
+    """
+    "kernel_interrupt": basic test. API call succeeds if IP kernel is active and fails otherwise.
+    """
+    using_ipython = use_ipykernel_for_tests()
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp2, _ = zmq_single_request("kernel_interrupt")
+    if using_ipython:
+        assert resp2["success"] is True, pprint.pformat(resp2)
+        assert resp2["msg"] == "", pprint.pformat(resp2)
+    else:
+        assert resp2["success"] is False, pprint.pformat(resp2)
+        assert "RE Manager is not in IPython mode: IPython kernel is not used" in resp2["msg"]
+
+    if using_ipython:
+        ttime.sleep(0.5)  # Short pause may be needed
+
+    resp9, _ = zmq_single_request("environment_close")
+    assert resp9["success"] is True
+    assert resp9["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)

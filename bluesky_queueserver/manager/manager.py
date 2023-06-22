@@ -1363,6 +1363,30 @@ class RunEngineManager(Process):
         except Exception as ex:
             raise Exception(f"Error occurred while loading lock info from Redis: {ex}") from ex
 
+    async def _kernel_interrupt_send(self, *, interrupt_task, interrupt_plan):
+        success, msg = True, ""
+        try:
+            if not self._use_ipython_kernel:
+                raise RuntimeError("RE Manager is not in IPython mode: IPython kernel is not used")
+
+            if not self._environment_exists:
+                raise RuntimeError("Worker environment does not exist")
+
+            if not interrupt_plan and self._manager_state in (MState.STARTING_QUEUE, MState.EXECUTING_QUEUE):
+                raise RuntimeError("Not allowed to interrupt running plan")
+
+            if not interrupt_plan and self._manager_state == MState.EXECUTING_TASK:
+                raise RuntimeError("Not allowed to interrupt running task")
+
+            success, msg = await self._worker_command_kernel_interrupt(
+                interrupt_task=interrupt_task, interrupt_plan=interrupt_plan
+            )
+
+        except Exception as ex:
+            success, msg = False, f"Failed to interrupt IPython kernel: {str(ex)}"
+
+        return success, msg
+
     # ===============================================================================
     #         Functions that send commands/request data from Worker process
 
@@ -1561,6 +1585,18 @@ class RunEngineManager(Process):
         except CommTimeoutError:
             success, err_msg, task_uid = (None, "Timeout occurred while processing the request", None)
         return success, err_msg, func_info, task_uid
+
+    async def _worker_command_kernel_interrupt(self, *, interrupt_task, interrupt_plan):
+        try:
+            response = await self._comm_to_worker.send_msg(
+                "command_interrupt_kernel",
+                params={"interrupt_task": interrupt_task, "interrupt_plan": interrupt_plan},
+            )
+            success = response["status"] == "accepted"
+            err_msg = response["err_msg"]
+        except CommTimeoutError:
+            success, err_msg = (None, "Timeout occurred while processing the request")
+        return success, err_msg
 
     # ===============================================================================
     #         Functions that send commands/request data from Watchdog process
@@ -3024,6 +3060,34 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg}
 
+    async def _kernel_interrupt_handler(self, request):
+        """
+        Unlock RE Manager using ``lock_key``. The ``lock_key`` must match the key used to lock
+        the environment and/or the queue. Optionally, RE Manager may be unlocked with
+        the emergency lock key (set using  ``QSERVER_EMERGENCY_LOCK_KEY_FOR_SERVER`` environment
+        variable).
+        """
+        logger.info("Processing request to interrupt IPython kernel ...")
+        success, msg, lock_info, lock_info_uid = True, "", {}, None
+
+        try:
+            supported_param_names = ["lock_key", "interrupt_task", "interrupt_plan"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
+
+            interrupt_task = request.get("interrupt_task", False)
+            interrupt_plan = request.get("interrupt_plan", False)
+
+            success, msg = await self._kernel_interrupt_send(
+                interrupt_task=interrupt_task, interrupt_plan=interrupt_plan
+            )
+
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg, "lock_info": lock_info, "lock_info_uid": lock_info_uid}
+
     async def _re_pause_handler(self, request):
         """
         Pause Run Engine. The options of immediate and deferred pause is supported.
@@ -3485,6 +3549,7 @@ class RunEngineManager(Process):
             "queue_stop": "_queue_stop_handler",
             "queue_stop_cancel": "_queue_stop_cancel_handler",
             "queue_autostart": "_queue_autostart_handler",
+            "kernel_interrupt": "_kernel_interrupt_handler",
             "re_pause": "_re_pause_handler",
             "re_resume": "_re_resume_handler",
             "re_stop": "_re_stop_handler",

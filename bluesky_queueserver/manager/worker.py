@@ -1257,6 +1257,31 @@ class RunEngineWorker(Process):
 
         return {"status": status, "err_msg": err_msg}
 
+    def _command_interrupt_kernel_handler(self, interrupt_task, interrupt_plan):
+        """
+        Initiate stopping the execution loop. Call fails if the worker is running on Python
+        (not IPython kernel).
+        """
+        logger.debug("Interrupting kernel ...")
+        try:
+            status, err_msg = "accepted", ""
+
+            # The same checks are already performed in the manager, but we repeat them here with
+            #   more up-to-date information
+            if not interrupt_plan and self._env_state == EState.EXECUTING_PLAN:
+                raise RuntimeError("Not allowed to interrupt running plan")
+
+            if not interrupt_task and self._env_state == EState.EXECUTING_TASK:
+                raise RuntimeError("Not allowed to interrupt running task")
+
+            msg = self._ip_kernel_client.session.msg("interrupt_request", content={})
+            self._ip_kernel_client.control_channel.send(msg)
+
+        except Exception as ex:
+            status, err_msg = "rejected", f"Error: {ex}"
+
+        return {"status": status, "err_msg": err_msg}
+
     # ------------------------------------------------------------
 
     def _execute_in_main_thread(self):
@@ -1342,6 +1367,7 @@ class RunEngineWorker(Process):
 
         self._comm_to_manager.add_method(self._command_reserve_kernel_handler, "command_reserve_kernel")
         self._comm_to_manager.add_method(self._command_exec_loop_stop_handler, "command_exec_loop_stop")
+        self._comm_to_manager.add_method(self._command_interrupt_kernel_handler, "command_interrupt_kernel")
 
         self._comm_to_manager.add_method(self._command_load_script, "command_load_script")
         self._comm_to_manager.add_method(self._command_execute_function, "command_execute_function")

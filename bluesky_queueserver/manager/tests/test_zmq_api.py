@@ -2449,6 +2449,149 @@ def test_zmq_api_script_upload_11_fail(re_manager, test_with_plan):  # noqa: F81
 
 
 # ===========================================================================================
+#                                'environment_update' API
+
+_script_to_upload_eu2 = """
+# Device
+from ophyd import Device
+dev_test = Device(name="dev_test")
+
+# Trivial plan
+def sleep_for_a_few_sec(tt=1):
+    yield from bps.sleep(tt)
+"""
+
+# fmt: off
+@pytest.mark.parametrize("use_bg_task", [False, True])
+# fmt: on
+def test_zmq_api_environment_update_01(re_manager, use_bg_task):  # noqa: F811
+    """
+    'environment_update' API: basic test - upload a script, update environment,
+    then check that the plan and the device are in the lists.
+    """
+
+    def get_plans_devices():
+        resp, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
+        assert resp["success"] is True, resp
+        plans_allowed = resp["plans_allowed"]
+
+        resp, _ = zmq_single_request("devices_allowed", params={"user_group": _user_group})
+        assert resp["success"] is True, resp
+        devices_allowed = resp["devices_allowed"]
+
+        return plans_allowed, devices_allowed
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    params={"script": _script_to_upload_eu2, "update_lists": False}
+    resp2, _ = zmq_single_request("script_upload", params=params)
+    assert resp2["success"] is True, pprint.pformat(resp2)
+    assert resp2["msg"] == ""
+    task_uid = resp2["task_uid"]
+
+    result = wait_for_task_result(10, task_uid)
+    assert result["return_value"] is None
+
+    plans_allowed, devices_allowed = get_plans_devices()
+    assert "sleep_for_a_few_sec" not in plans_allowed
+    assert "dev_test" not in devices_allowed
+
+    params = {}
+    resp6, _ = zmq_single_request("environment_update", params=params)
+    assert resp6["success"] is True, pprint.pformat(resp6)
+    assert resp6["msg"] == ""
+
+    task_uid = resp6["task_uid"]
+
+    result = wait_for_task_result(10, task_uid)
+    assert result["return_value"] is None
+
+    plans_allowed, devices_allowed = get_plans_devices()
+    assert "sleep_for_a_few_sec" in plans_allowed
+    assert "dev_test" in devices_allowed
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+_script_to_upload_eu_re1 = """
+# Replace RE with junk
+RE = "junk"
+"""
+
+_script_to_upload_eu_re2 = """
+# Restore valid RE
+from bluesky import RunEngine
+RE = RunEngine()
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("use_bg_task", [False, True])
+# fmt: on
+def test_zmq_api_environment_update_02(re_manager, ip_kernel_simple_client, use_bg_task):  # noqa: F811
+    """
+    'environment_update' API: basic test - upload a script, update environment,
+    then check that the plan and the device are in the lists.
+    """
+    using_ipython = use_ipykernel_for_tests()
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    if using_ipython:
+        ip_kernel_simple_client.start()
+        ip_kernel_simple_client.execute_with_check(_script_to_upload_eu_re1)
+        assert wait_for_condition(10, condition_ip_kernel_idle)
+
+    else:
+        params={"script": _script_to_upload_eu_re1, "update_re": True}
+        resp, _ = zmq_single_request("script_upload", params=params)
+        assert resp["success"] is True, pprint.pformat(resp)
+        assert resp["msg"] == ""
+        task_uid = resp["task_uid"]
+
+        result = wait_for_task_result(10, task_uid)
+        assert result["return_value"] is None
+
+    params = {}
+    resp, _ = zmq_single_request("environment_update", params=params)
+    assert resp["success"] is True, pprint.pformat(resp)
+    assert resp["msg"] == ""
+    task_uid = resp["task_uid"]
+
+    result = wait_for_task_result(10, task_uid)
+    assert result["return_value"] is None
+
+    # Get 're_state' in status (it should be 'None', because RE is not RunEngine object)
+    status, _ = zmq_single_request("status")
+    assert status["re_state"] is None, pprint.pformat(status)
+
+    assert status["items_in_queue"] == 1, pprint.pformat(status)
+    assert status["items_in_history"] == 0, pprint.pformat(status)
+
+
+    # Try to run a plan (it should fail)
+    params = {"item": _plan1, "user": _user, "user_group": _user_group}
+    resp, _ = zmq_single_request("queue_item_add", params=params)
+    assert resp["success"] is True, str(resp)
+
+    resp, _ = zmq_single_request("queue_start")
+    assert resp["success"] is True, str(resp)
+
+    assert wait_for_condition(10, condition_ip_kernel_idle)
+
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+# ===========================================================================================
 #                                'task_status' API
 
 

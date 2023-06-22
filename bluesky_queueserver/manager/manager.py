@@ -2746,6 +2746,36 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg}
 
+    async def _environment_update_handler(self, request):
+        """
+        Update the environment (lists of existing and allowed plans and devices and RE) based
+        on the currents contents of the worker namespace. The namespace could be changed
+        by uploading scripts (``script_upload`` API), running a function (``function_execute``)
+        or executing commands using Jupyter Console (only IPython kernel mode). This API
+        creates new lists of existing plans and devices and updates cached reference to RE object.
+
+        By default, the operation is performed as a foreground task and the API call fails
+        unless RE Manager is idle. To run the update in the background thread, call the API with
+        ``run_in_background=True``.
+        """
+        logger.info("Uploading RE environment ...")
+        try:
+            supported_param_names = ["run_in_background", "lock_key"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
+
+            run_in_background = request.get("run_in_background", False)
+
+            success, msg, task_uid = await self._environment_upload_script(
+                script="", update_lists=True, update_re=True, run_in_background=run_in_background
+            )
+
+        except Exception as ex:
+            success, msg, task_uid = False, f"Error: {ex}", None
+
+        return {"success": success, "msg": msg, "task_uid": task_uid}
+
     async def _script_upload_handler(self, request):
         """
         Upload script to RE worker environment. If ``update_lists==True`` (default), then lists
@@ -3435,6 +3465,7 @@ class RunEngineManager(Process):
             "environment_open": "_environment_open_handler",
             "environment_close": "_environment_close_handler",
             "environment_destroy": "_environment_destroy_handler",
+            "environment_update": "_environment_update_handler",
             "script_upload": "_script_upload_handler",
             "function_execute": "_function_execute_handler",
             "task_result": "_task_result_handler",

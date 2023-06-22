@@ -245,16 +245,6 @@ class RunEngineWorker(Process):
 
         return value
 
-    def _re_subscribe_run_reg_cb(self):
-        """
-        Subscribe RE to ``CallbackRegisterRun``. The callback is used internally by the worker
-        process to keep track of the runs that are open and closed (generate active run list).
-        """
-        try:
-            self._RE.subscribe(self._run_reg_cb)
-        except AttributeError:
-            logger.error("Failed to subscribe Run Engine to run monitoring callback")
-
     def _execute_plan_or_task(self, parameters, exec_option):
         """
         Execute a plan or a task pulled from ``self._execution_queue``. Note, that the queue
@@ -285,13 +275,6 @@ class RunEngineWorker(Process):
                 ExecOption.HALT,
                 ExecOption.ABORT,
             )
-
-            # Subscribe RE to CallbackRegisterRun (repeated subscriptions should not add callbacks).
-            #   Potentially it is possible that callback is unsubscribed or RE is replaced by
-            #   running a script or by executing commands via Jupyter Console.
-            # TODO: repeated subscriptions will cause 'RE._token_mapping' dictionary to grow,
-            #   which is not good. There should be a mechanism to check scibscription.
-            # self._re_subscribe_run_reg_cb()
 
             if exec_option == ExecOption.NEW:
                 func = self._generate_new_plan(parameters)
@@ -481,6 +464,8 @@ class RunEngineWorker(Process):
         plan_info = parameters
 
         try:
+            from bluesky.preprocessors import subs_wrapper
+
             with self._allowed_items_lock:
                 allowed_plans, allowed_devices = self._allowed_plans, self._allowed_devices
 
@@ -508,7 +493,8 @@ class RunEngineWorker(Process):
 
             def get_start_plan_func(plan_func, plan_args, plan_kwargs, plan_meta):
                 def start_plan_func():
-                    return self._RE(plan_func(*plan_args, **plan_kwargs), **plan_meta)
+                    g = subs_wrapper(plan_func(*plan_args, **plan_kwargs), {"all": [self._run_reg_cb]})
+                    return self._RE(g, **plan_meta)
 
                 return start_plan_func
 
@@ -841,7 +827,6 @@ class RunEngineWorker(Process):
         if update_re:
             if ("RE" in self._re_namespace) and (self._RE != self._re_namespace["RE"]):
                 self._RE = self._re_namespace["RE"]
-                self._re_subscribe_run_reg_cb()
                 logger.info("Run Engine instance ('RE') was replaced while executing the uploaded script.")
 
             if ("db" in self._re_namespace) and (self._db != self._re_namespace["db"]):
@@ -1502,8 +1487,6 @@ class RunEngineWorker(Process):
                             self._re_namespace["db"] = self._db
 
                             self._RE.subscribe(self._db.insert)
-
-                self._re_subscribe_run_reg_cb()
 
                 if "kafka" in self._config_dict:
                     logger.info(

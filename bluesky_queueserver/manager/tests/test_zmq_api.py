@@ -2532,8 +2532,11 @@ RE = RunEngine()
 
 def test_zmq_api_environment_update_02(re_manager, ip_kernel_simple_client):  # noqa: F811
     """
-    'environment_update' API: basic test - upload a script, update environment,
-    then check that the plan and the device are in the lists.
+    'environment_update' API: test that RE can be replaced by executing a script using
+    'scipt_upload' API or by executing a cell in the IPython kernel. Test that if RE
+    is not a valid RunEngine object, the Queue Server is still functional, though it can
+    not execute plans. If RE is restored to a valid object, then Queue Server becomes
+    fully functional.
     """
     using_ipython = use_ipykernel_for_tests()
 

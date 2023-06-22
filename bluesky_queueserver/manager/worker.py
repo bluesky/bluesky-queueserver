@@ -250,7 +250,10 @@ class RunEngineWorker(Process):
         Subscribe RE to ``CallbackRegisterRun``. The callback is used internally by the worker
         process to keep track of the runs that are open and closed (generate active run list).
         """
-        self._RE.subscribe(self._run_reg_cb)
+        try:
+            self._RE.subscribe(self._run_reg_cb)
+        except AttributeError:
+            logger.error("Failed to subscribe Run Engine to run monitoring callback")
 
     def _execute_plan_or_task(self, parameters, exec_option):
         """
@@ -500,7 +503,7 @@ class RunEngineWorker(Process):
                     "Run Engine is in the 'panicked' state. The environment must be "
                     "closed and opened again before plans could be executed."
                 )
-            elif self.re_state != "idle":
+            elif self.re_state not in ("idle", None):
                 raise RuntimeError(f"Run Engine is in {self.re_state!r} state. Stop or finish any running plan.")
 
             def get_start_plan_func(plan_func, plan_args, plan_kwargs, plan_meta):
@@ -1193,7 +1196,7 @@ class RunEngineWorker(Process):
         Reset state of RE Worker environment (prepare for execution of a new plan)
         """
         err_msg = ""
-        if self.re_state == "idle":
+        if self.re_state in ("idle", None):
             self._running_plan_info = None
             self._running_plan_exec_state = PlanExecState.RESET
             with self._re_report_lock:
@@ -1316,8 +1319,8 @@ class RunEngineWorker(Process):
         """
         Operations necessary to prepare for worker startup (before loading)
         """
-        from .profile_tools import set_ipython_mode, set_re_worker_active
         from .plan_monitoring import CallbackRegisterRun
+        from .profile_tools import set_ipython_mode, set_re_worker_active
 
         self._ip_kernel_is_shut_down_event = threading.Event()  # Used with IPython kernel
 
@@ -1386,7 +1389,6 @@ class RunEngineWorker(Process):
         from bluesky.utils import PersistentDict
         from bluesky_kafka import Publisher as kafkaPublisher
 
-        from .plan_monitoring import CallbackRegisterRun
         from .profile_tools import global_user_namespace
 
         try:

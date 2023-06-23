@@ -451,7 +451,7 @@ class RunEngineWorker(Process):
             #   exceptions and handling execution results.
             func()
 
-        except Exception as ex:
+        except BaseException as ex:
             # The exception was raised while preparing the function for execution.
             logger.exception("Failed to execute task in main thread: %s", ex)
         else:
@@ -564,7 +564,7 @@ class RunEngineWorker(Process):
                     raise ValueError(f"Task result can not be serialized as JSON: {ex_json}") from ex_json
 
                 success, err_msg, err_tb = True, "", ""
-            except Exception as ex:
+            except BaseException as ex:
                 s = f"Error occurred while executing {name!r}"
                 err_msg = f"{s}: {str(ex)}"
                 if hasattr(ex, "tb"):  # ScriptLoadingError
@@ -740,7 +740,7 @@ class RunEngineWorker(Process):
 
         except RejectedError as ex:
             status, msg = "rejected", f"Task {name!r} was rejected by RE Worker process: {ex}"
-        except Exception as ex:
+        except BaseException as ex:
             status, msg = "error", f"Error occurred while starting the task {name!r}: {ex}"
 
         logger.debug(
@@ -1452,7 +1452,7 @@ class RunEngineWorker(Process):
 
             logger.info("Startup code was successfully loaded.")
 
-        except Exception as ex:
+        except BaseException as ex:
             s = "Failed to start RE Worker environment. Error while loading startup code"
             if hasattr(ex, "tb"):  # ScriptLoadingError
                 logger.error("%s:\n%s\n", s, ex.tb)
@@ -1682,7 +1682,7 @@ class RunEngineWorker(Process):
                     pass
             except queue.Empty:
                 pass
-            except Exception as ex:
+            except BaseException as ex:
                 logger.exception(ex)
 
     def _ip_kernel_execute_command(self, *, command: str, except_on: bool = False):

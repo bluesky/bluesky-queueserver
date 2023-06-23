@@ -277,6 +277,10 @@ def condition_manager_paused(msg):
     return msg["manager_state"] == "paused"
 
 
+def condition_manager_idle_or_paused(msg):
+    return ("manager_state" in msg) and (msg["manager_state"] in ("idle", "paused"))
+
+
 def condition_manager_executing_queue(msg):
     return ("manager_state" in msg) and (msg["manager_state"] == "executing_queue")
 

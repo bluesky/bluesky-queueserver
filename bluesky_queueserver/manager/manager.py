@@ -1375,7 +1375,7 @@ class RunEngineManager(Process):
             if not interrupt_plan and self._manager_state in (MState.STARTING_QUEUE, MState.EXECUTING_QUEUE):
                 raise RuntimeError("Not allowed to interrupt running plan")
 
-            if not interrupt_plan and self._manager_state == MState.EXECUTING_TASK:
+            if not interrupt_task and self._manager_state == MState.EXECUTING_TASK:
                 raise RuntimeError("Not allowed to interrupt running task")
 
             success, msg = await self._worker_command_kernel_interrupt(
@@ -3076,8 +3076,8 @@ class RunEngineManager(Process):
 
             self._validate_lock_key(request.get("lock_key", None), check_environment=True)
 
-            interrupt_task = request.get("interrupt_task", False)
-            interrupt_plan = request.get("interrupt_plan", False)
+            interrupt_task = bool(request.get("interrupt_task", False))
+            interrupt_plan = bool(request.get("interrupt_plan", False))
 
             success, msg = await self._kernel_interrupt_send(
                 interrupt_task=interrupt_task, interrupt_plan=interrupt_plan

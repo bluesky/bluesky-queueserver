@@ -1802,15 +1802,21 @@ class RunEngineManager(Process):
         Returns config information.
         """
         success, msg = True, ""
-        if self._use_ipython_kernel and self._environment_exists:
-            payload, msg = await self._worker_request_ip_connect_info()
-            ip_connect_info = payload.get("ip_connect_info", {})
-        else:
-            ip_connect_info = {}
+        try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
-        config = {
-            "ip_connect_info": ip_connect_info,
-        }
+            if self._use_ipython_kernel and self._environment_exists:
+                payload, msg = await self._worker_request_ip_connect_info()
+                ip_connect_info = payload.get("ip_connect_info", {})
+            else:
+                ip_connect_info = {}
+
+            config = {
+                "ip_connect_info": ip_connect_info,
+            }
+        except Exception as ex:
+            success, msg, config = False, str(ex), {}
 
         return {"success": success, "msg": msg, "config": config}
 

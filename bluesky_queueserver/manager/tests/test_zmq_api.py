@@ -6101,6 +6101,8 @@ def test_zmq_api_unsupported_parameters(re_manager):  # noqa: F811
         "plans_allowed",
         "devices_allowed",
         "permissions_reload",
+        "permissions_get",
+        "permissions_set",
         "queue_get",
         "queue_mode_set",
         "queue_item_add",
@@ -6118,10 +6120,12 @@ def test_zmq_api_unsupported_parameters(re_manager):  # noqa: F811
         "environment_open",
         "environment_close",
         "environment_destroy",
+        "environment_update",
         "queue_start",
         "queue_stop",
         "queue_stop_cancel",
         "queue_autostart",
+        "kernel_interrupt",
         "re_pause",
         "re_resume",
         "re_stop",
@@ -6133,6 +6137,7 @@ def test_zmq_api_unsupported_parameters(re_manager):  # noqa: F811
         "lock",
         "lock_info",
         "unlock",
+        "config_get",
     )
     unsupported_param = {"unsupported_param": 10}
 

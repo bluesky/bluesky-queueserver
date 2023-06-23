@@ -1386,3 +1386,111 @@ def test_ip_kernel_interrupt_03(
     assert resp9["msg"] == ""
 
     assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+
+# fmt: off
+@pytest.mark.parametrize("option, int_params, success, msg", [
+    ("ip_client", {}, True, ""),
+    ("ip_client", {"interrupt_task": True}, True, ""),
+    ("ip_client", {"interrupt_plan": True}, True, ""),
+    ("ip_client", {"interrupt_task": True, "interrupt_plan": True}, True, ""),
+    ("ip_client", {"unknown_param": True}, False, "API request contains unsupported parameters: 'unknown_param'"),
+    ("script", {"interrupt_task": True}, True, ""),
+    ("script", {"interrupt_task": True, "interrupt_plan": True}, True, ""),
+    ("script", {}, False, "Not allowed to interrupt running task"),
+    ("script", {"interrupt_plan": True}, False, "Not allowed to interrupt running task"),
+    ("func", {"interrupt_task": True}, True, ""),
+    ("func", {"interrupt_task": True, "interrupt_plan": True}, True, ""),
+    ("func", {}, False, "Not allowed to interrupt running task"),
+    ("func", {"interrupt_plan": True}, False, "Not allowed to interrupt running task"),
+    ("plan", {"interrupt_plan": True}, True, ""),
+    ("plan", {"interrupt_task": True, "interrupt_plan": True}, True, ""),
+    ("plan", {}, False, "Not allowed to interrupt running plan"),
+    ("plan", {"interrupt_task": True}, False, "Not allowed to interrupt running plan"),
+
+])
+# fmt: on
+@pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
+def test_ip_kernel_interrupt_04(
+    re_manager, ip_kernel_simple_client, option, int_params, success, msg  # noqa: F811
+):
+    """
+    "kernel_interrupt": test that the API with different combinations of parameters. Make sure
+    that API call fails if the operation is not allowed.
+    """
+    using_ipython = use_ipykernel_for_tests()
+    assert using_ipython, "The test can be run only in IPython mode"
+
+    def check_status(ip_kernel_state, ip_kernel_captured):
+        # Returned status may be used to do additional checks
+        status = get_queue_state()
+        if isinstance(ip_kernel_state, (str, type(None))):
+            ip_kernel_state = [ip_kernel_state]
+        assert status["ip_kernel_state"] in ip_kernel_state
+        assert status["ip_kernel_captured"] == ip_kernel_captured
+        return status
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    if option == "ip_client":
+        ip_kernel_simple_client.start()
+        ip_kernel_simple_client.execute_with_check(_busy_script_01)
+    elif option == "script":
+        resp, _ = zmq_single_request("script_upload", params=dict(script=_busy_script_01))
+        assert resp["success"] is True, pprint.pformat(resp)
+    elif option == "func":
+        resp, _ = zmq_single_request("script_upload", params=dict(script=_busy_script_02))
+        assert resp["success"] is True, pprint.pformat(resp)
+        assert wait_for_condition(3, condition_manager_idle)
+
+        func_item = {"name": "func_for_test_sleep", "item_type": "function"}
+        params = {"item": func_item, "user": _user, "user_group": _user_group}
+        resp, _ = zmq_single_request("function_execute", params=params)
+        assert resp["success"] is True, pprint.pformat(resp)
+    elif option == "plan":
+        params = {"item": _plan3, "user": _user, "user_group": _user_group}
+        resp, _ = zmq_single_request("queue_item_add", params)
+        assert resp["success"] is True
+        resp, _ = zmq_single_request("queue_start")
+        assert resp["success"] is True
+    else:
+        assert False, f"Unknown option {option!r}"
+
+    ttime.sleep(2)
+
+    ip_kernel_captured = (option != "ip_client")
+    check_status("busy", ip_kernel_captured)
+
+    resp2, _ = zmq_single_request("kernel_interrupt", params=int_params)
+    if success:
+        assert resp2["success"] is True, pprint.pformat(resp2)
+        assert resp2["msg"] == "", pprint.pformat(resp2)
+    else:
+        assert resp2["success"] is False, pprint.pformat(resp2)
+        assert msg in resp2["msg"], pprint.pformat(resp2)
+
+        resp, _ = zmq_single_request(
+            "kernel_interrupt", params={"interrupt_task": True, "interrupt_plan": True}
+        )
+        assert resp["success"] is True, pprint.pformat(resp)
+
+    if option == "ip_client":
+        assert wait_for_condition(3, condition_ip_kernel_idle)
+    else:
+        assert wait_for_condition(3, condition_manager_idle_or_paused)
+
+    status = check_status("idle", False)
+    if status["manager_state"] == "paused":
+        resp, _ = zmq_single_request("re_stop")
+        assert resp["success"] is True, pprint.pformat(resp)
+        assert wait_for_condition(3, condition_manager_idle)
+
+    resp9, _ = zmq_single_request("environment_close")
+    assert resp9["success"] is True
+    assert resp9["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)

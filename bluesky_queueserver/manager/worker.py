@@ -827,11 +827,11 @@ class RunEngineWorker(Process):
         if update_re:
             if ("RE" in self._re_namespace) and (self._RE != self._re_namespace["RE"]):
                 self._RE = self._re_namespace["RE"]
-                logger.info("Run Engine instance ('RE') was replaced while executing the uploaded script.")
+                logger.info("Run Engine instance ('RE') was replaced.")
 
             if ("db" in self._re_namespace) and (self._db != self._re_namespace["db"]):
                 self._db = self._re_namespace["db"]
-                logger.info("Data Broker instance ('db') was replaced while executing the uploaded script.")
+                logger.info("Data Broker instance ('db') was replaced.")
 
         if update_lists:
             logger.info("Updating lists of existing and available plans and devices ...")
@@ -862,7 +862,10 @@ class RunEngineWorker(Process):
                 self._generate_lists_of_allowed_plans_and_devices()
                 self._update_existing_pd_file(options=("ALWAYS",))
 
-            logger.info("The script was successfully loaded into RE environment")
+            if script:
+                logger.info("The script was successfully loaded into RE environment")
+            else:
+                logger.info("RE environment was successfully updated")
 
         else:
             # The script was executed, but the lists were not updated and may be out of sync.

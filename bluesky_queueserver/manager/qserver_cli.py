@@ -64,6 +64,9 @@ qserver environment open         # Open RE environment
 qserver environment close        # Close RE environment
 qserver environment destroy      # Destroy RE environment (kill RE worker process)
 
+qserver environment update             # Update the worker state based on contents of worker namespace
+qserver environment update background  # Update the worker state as a background task
+
 qserver existing plans           # Request the list of existing plans
 qserver existing devices         # Request the list of existing devices
 qserver allowed plans            # Request the list of allowed plans
@@ -864,10 +867,23 @@ def create_msg(params, *, lock_key):
 
     # ----------- environment ------------
     elif command == "environment":
-        if len(params) != 1:
-            raise CommandParameterError(f"Request '{command}' must include only one parameter")
-        supported_params = ("open", "close", "destroy")
+        if len(params) not in (1, 2):
+            raise CommandParameterError(f"Request '{command}' must include at one or two parameters")
+        supported_params = ("open", "close", "destroy", "update")
         if params[0] in supported_params:
+            if params[0] == "update":
+                if len(params) == 2:
+                    if params[1] == "background":
+                        prms["run_in_background"] = True
+                    else:
+                        raise CommandParameterError(
+                            f"Request '{command} {params[0]} {params[1]}' is not supported"
+                        )
+            else:
+                if len(params) == 2:
+                    raise CommandParameterError(
+                        f"Request '{command} {params[1]}' may have no additional parameters"
+                    )
             method = f"{command}_{params[0]}"
             if lock_key:
                 prms["lock_key"] = lock_key

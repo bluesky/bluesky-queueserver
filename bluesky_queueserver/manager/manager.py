@@ -2800,7 +2800,7 @@ class RunEngineManager(Process):
         unless RE Manager is idle. To run the update in the background thread, call the API with
         ``run_in_background=True``.
         """
-        logger.info("Uploading RE environment ...")
+        logger.info("Updating RE environment ...")
         try:
             supported_param_names = ["run_in_background", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)

@@ -1617,8 +1617,7 @@ for n in range(30):
 @pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
 def test_qserver_kernel_interrupt_01(re_manager, ip_kernel_simple_client, option):  # noqa: F811
     """
-    "kernel_interrupt": test that the API interrupts a command started using IP client, an upload
-    of a script ('script_upload' API) or execution of a function ('function_execute' API).
+    "qserver kernel interrupt":  basic test.
     """
     using_ipython = use_ipykernel_for_tests()
     assert using_ipython, "The test can be run only in IPython mode"

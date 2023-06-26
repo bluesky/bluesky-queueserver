@@ -140,6 +140,10 @@ Lock/unlock RE Manager:
 - :ref:`method_lock_info`
 - :ref:`method_unlock`
 
+Management of IPython kernel (IPython mode):
+
+- :ref:`method_kernel_interrupt`
+
 Stopping RE Manager (mostly used in testing):
 
 - :ref:`method_manager_stop`
@@ -2102,6 +2106,46 @@ Returns       **success**: *boolean*
               **lock_info_uid**: *str*
                   UID of *lock_info*. The UID is also returned in RE Manager status and could be
                   monitored to detect updates of *lock_info*.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+
+.. _method_kernel_interrupt:
+
+**'kernel_interrupt'**
+^^^^^^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'kernel_interrupt'**
+------------  -----------------------------------------------------------------------------------------
+Description   Send interrupt request (Ctrl-C) to the running IPython kernel. The API call fails if
+              IPython mode is not enabled or environment does not exist (there is no IPython kernel).
+              The API is primarily intended to interrupt tasks started by clients connected directly
+              to IPython kernel (such as Jupyter Console) and by default it fails if the manager is
+              executing a plan or a task. Set the **interrupt_task** and/or **interrupt_plan**
+              parameters *True* in order to be able to interrupt a running foreground task or a plan
+              (single interrupt initiates deferred pause, two consecutive interrupts initiate immediate
+              pause). Note, that :ref:`method_re_pause` API is more reliable method of pausing the plan. 
+------------  -----------------------------------------------------------------------------------------
+Parameters    **interrupt_task**: *boolean* (optional, default: *False*)
+                  Allow interrupting a foreground task (e.g. a function or a script) started by RE Manager.
+            
+              **interrupt_plan**: *boolean* (optional, default: *False*)
+                  Allow interrupting a running plan. By default the API fails if a plan is running in 
+                  the worker environment (Run Engine is in the *'running'* state), whether the plan
+                  was started by RE Manager or by connecting directly to the kernel (e.g. using Jupyter Console).
+                  Note, that using :ref:`method_re_pause` API is the preferred way of pausing a running plan
+                  even if the plan was started bypassing the manager.
+
+              **task_uid**: *str*
+                  Task UID.
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================

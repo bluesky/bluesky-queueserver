@@ -3074,7 +3074,7 @@ class RunEngineManager(Process):
         variable).
         """
         logger.info("Processing request to interrupt IPython kernel ...")
-        success, msg, lock_info, lock_info_uid = True, "", {}, None
+        success, msg = True, ""
 
         try:
             supported_param_names = ["lock_key", "interrupt_task", "interrupt_plan"]
@@ -3092,7 +3092,7 @@ class RunEngineManager(Process):
         except Exception as ex:
             success, msg = False, f"Error: {ex}"
 
-        return {"success": success, "msg": msg, "lock_info": lock_info, "lock_info_uid": lock_info_uid}
+        return {"success": success, "msg": msg}
 
     async def _re_pause_handler(self, request):
         """

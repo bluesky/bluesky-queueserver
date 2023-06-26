@@ -1,4 +1,5 @@
 import os
+import pprint
 import subprocess
 import time as ttime
 
@@ -13,12 +14,15 @@ from .common import (  # noqa: F401
     append_code_to_last_startup_file,
     condition_environment_closed,
     condition_environment_created,
+    condition_ip_kernel_idle,
     condition_manager_idle,
+    condition_manager_idle_or_paused,
     condition_manager_paused,
     condition_queue_processing_finished,
     get_manager_status,
     get_queue,
     get_queue_state,
+    ip_kernel_simple_client,
     patch_first_startup_file,
     patch_first_startup_file_undo,
     re_manager,
@@ -26,6 +30,7 @@ from .common import (  # noqa: F401
     re_manager_pc_copy,
     set_qserver_zmq_address,
     set_qserver_zmq_public_key,
+    use_ipykernel_for_tests,
     wait_for_condition,
     zmq_single_request,
 )
@@ -1597,6 +1602,77 @@ def test_qserver_config_01(re_manager, env_open):  # noqa: F811
 
     status = get_manager_status()
     assert status["worker_environment_exists"] is False
+
+
+_busy_script_01 = """
+import time
+for n in range(30):
+    time.sleep(1)
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("option", ["ip_client", "script", "plan"])
+# fmt: on
+@pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
+def test_qserver_kernel_interrupt_01(re_manager, ip_kernel_simple_client, option):  # noqa: F811
+    """
+    "kernel_interrupt": test that the API interrupts a command started using IP client, an upload
+    of a script ('script_upload' API) or execution of a function ('function_execute' API).
+    """
+    using_ipython = use_ipykernel_for_tests()
+    assert using_ipython, "The test can be run only in IPython mode"
+
+    def check_status(ip_kernel_state, ip_kernel_captured):
+        # Returned status may be used to do additional checks
+        status = get_manager_status()
+        if isinstance(ip_kernel_state, (str, type(None))):
+            ip_kernel_state = [ip_kernel_state]
+        assert status["ip_kernel_state"] in ip_kernel_state
+        assert status["ip_kernel_captured"] == ip_kernel_captured
+        return status
+
+    assert subprocess.call(["qserver", "environment", "open"]) == SUCCESS
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    kernel_int_params = ["qserver", "kernel", "interrupt"]
+
+    if option == "ip_client":
+        ip_kernel_simple_client.start()
+        ip_kernel_simple_client.execute_with_check(_busy_script_01)
+    elif option == "script":
+        resp, _ = zmq_single_request("script_upload", params=dict(script=_busy_script_01))
+        assert resp["success"] is True, pprint.pformat(resp)
+        kernel_int_params.append("task")
+    elif option == "plan":
+        plan = "{'name':'count', 'args':[['det1', 'det2']], 'kwargs':{'num': 5, 'delay': 1}}"
+        assert subprocess.call(["qserver", "queue", "add", "plan", plan]) == SUCCESS
+        assert subprocess.call(["qserver", "queue", "start"]) == SUCCESS
+        kernel_int_params.append("plan")
+    else:
+        assert False, f"Unknown option {option!r}"
+
+    ttime.sleep(2)
+
+    ip_kernel_captured = (option != "ip_client")
+    check_status("busy", ip_kernel_captured)
+
+    assert subprocess.call(kernel_int_params) == SUCCESS
+
+    if option == "ip_client":
+        assert wait_for_condition(3, condition_ip_kernel_idle)
+    else:
+        assert wait_for_condition(3, condition_manager_idle_or_paused)
+
+    check_status("idle", False)
+
+    status = get_manager_status()
+    if status["re_state"] == "paused":
+        assert subprocess.call(["qserver", "re", "stop"]) == SUCCESS
+        assert wait_for_condition(10, condition_manager_idle)
+
+    assert subprocess.call(["qserver", "environment", "close"]) == SUCCESS
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
 
 
 # ==================================================================================

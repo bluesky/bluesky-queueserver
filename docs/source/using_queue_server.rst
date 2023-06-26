@@ -665,3 +665,26 @@ and streamed to all subscribed consumers.
     console will close the kernel and cause the worker environment to close.
 
 See documentation on :ref:`qserver_console_cli` for more information.
+
+Updating the Worker Environment Cache
+*************************************
+
+Users connected directly to the IPython kernel via Jupyter Console may change the contents
+of the worker namespace, including operations such as adding, deleting or modifying plans 
+and devices in the namespace. To make RE Manager aware of the changes and make the updated
+plans and devices reflected in the lists of existing/allowed plans and devices call the 
+:ref:`method_environment_update` API. 
+
+Interrupting the IPython Kernel
+*******************************
+
+The IPython kernel can be interrupted (equivalent to ``Ctrl-C``) using :ref:`method_kernel_interrupt`
+API. By default, the API fails if called while the RE Manager is executing a plan or a foreground task
+(a script or a function) started via the manager. The API parameters ``interrupt_plan`` and 
+``interrupt_task`` of the API can be used to override the default behavior.
+
+.. note::
+      
+      Though a plan can be paused by sending the interrupt once (deferred pause) or twice (immediate pause),
+      using :ref:`method_re_pause` API is a preferable way to pause a plan started via RE Manager or directly
+      using Jupyter Console.

@@ -242,7 +242,7 @@ def zmq_secure_request(method, params=None, *, zmq_server_address=None, server_p
     )
 
 
-def get_queue_state():
+def get_manager_status():
     method, params = "status", None
     msg, _ = zmq_secure_request(method, params)
     if msg is None:
@@ -261,8 +261,8 @@ def get_queue():
     return msg
 
 
-def get_reduced_state_info():
-    msg = get_queue_state()
+def get_queue_state():
+    msg = get_manager_status()
     items_in_queue = msg["items_in_queue"]
     queue_is_running = msg["manager_state"] == "executing_queue"
     items_in_history = msg["items_in_history"]
@@ -317,7 +317,7 @@ def wait_for_condition(time, condition):
     while ttime.time() < time_stop:
         ttime.sleep(dt / 2)
         try:
-            msg = get_queue_state()
+            msg = get_manager_status()
             if condition(msg):
                 return True
         except TimeoutError:

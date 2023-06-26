@@ -22,7 +22,7 @@ from .common import (
     condition_manager_idle,
     condition_queue_processing_finished,
     copy_default_profile_collection,
-    get_queue_state,
+    get_manager_status,
     set_qserver_zmq_address,
     set_qserver_zmq_public_key,
     use_ipykernel_for_tests,
@@ -1006,12 +1006,12 @@ def test_cli_ignore_invalid_plans_01(tmp_path, re_manager_cmd, ignore_invalid_pl
 
     if not ignore_invalid_plans:
         assert wait_for_condition(time=timeout_env_open, condition=condition_manager_idle)
-        status = get_queue_state()
+        status = get_manager_status()
         assert status["worker_environment_exists"] is False
         assert status["worker_environment_state"] == "closed"
     else:
         assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
-        status = get_queue_state()
+        status = get_manager_status()
         assert status["worker_environment_exists"] is True
         assert status["worker_environment_state"] == "idle"
 
@@ -1049,7 +1049,7 @@ def test_cli_ignore_invalid_plans_02(tmp_path, re_manager_cmd, ignore_invalid_pl
     assert resp["msg"] == ""
 
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["worker_environment_exists"] is True
     assert status["worker_environment_state"] == "idle"
 

@@ -20,7 +20,7 @@ from .common import (
     condition_manager_paused,
     condition_queue_processing_finished,
     copy_default_profile_collection,
-    get_queue_state,
+    get_manager_status,
     use_ipykernel_for_tests,
     wait_for_condition,
     wait_for_task_result,
@@ -123,7 +123,7 @@ def test_ip_kernel_run_plans_01(re_manager, plan_option, resume_option):  # noqa
 
     def check_status(ip_kernel_state, ip_kernel_captured):
         # Returned status may be used to do additional checks
-        status = get_queue_state()
+        status = get_manager_status()
         if isinstance(ip_kernel_state, (str, type(None))):
             ip_kernel_state = [ip_kernel_state]
         assert status["ip_kernel_state"] in ip_kernel_state, pprint.pformat(status)
@@ -159,7 +159,7 @@ def test_ip_kernel_run_plans_01(re_manager, plan_option, resume_option):  # noqa
         else:
             assert False, f"Unsupported option: {plan_option!r}"
 
-        s = get_queue_state()  # Kernel may not be 'captured' at this point
+        s = get_manager_status()  # Kernel may not be 'captured' at this point
         assert s["manager_state"] in ("starting_queue", "executing_queue")
         assert s["worker_environment_state"] in ("idle", "executing_plan")
 
@@ -184,7 +184,7 @@ def test_ip_kernel_run_plans_01(re_manager, plan_option, resume_option):  # noqa
         assert resp["success"] is True, pprint.pformat(resp)
 
         if resume_option == "resume":
-            s = get_queue_state()  # Kernel may not be 'captured' at this point
+            s = get_manager_status()  # Kernel may not be 'captured' at this point
             assert s["manager_state"] == "executing_queue"
             assert s["worker_environment_state"] in ("idle", "executing_plan")
 
@@ -196,7 +196,7 @@ def test_ip_kernel_run_plans_01(re_manager, plan_option, resume_option):  # noqa
 
         assert wait_for_condition(time=20, condition=condition_manager_idle)
 
-        s = get_queue_state()
+        s = get_manager_status()
         n_items_in_queue = 1 if resume_option in ["halt", "abort"] and plan_option == "queue" else 0
         assert s["items_in_queue"] == n_items_in_queue
         assert s["items_in_history"] == 1
@@ -238,7 +238,7 @@ def test_ip_kernel_run_plans_02(re_manager, ip_kernel_simple_client, plan_option
 
     def check_status(ip_kernel_state, ip_kernel_captured):
         # Returned status may be used to do additional checks
-        status = get_queue_state()
+        status = get_manager_status()
         if isinstance(ip_kernel_state, (str, type(None))):
             ip_kernel_state = [ip_kernel_state]
         assert status["ip_kernel_state"] in ip_kernel_state
@@ -293,7 +293,7 @@ def test_ip_kernel_run_plans_02(re_manager, ip_kernel_simple_client, plan_option
 
     assert wait_for_condition(time=20, condition=condition_manager_idle)
 
-    s = get_queue_state()
+    s = get_manager_status()
     n_items_in_queue = 1 if resume_option in ["halt", "abort"] and plan_option == "queue" else 0
     n_items_in_queue = n_items_in_queue if plan_option == "plan" else n_items_in_queue + 1
     assert s["items_in_queue"] == n_items_in_queue
@@ -349,7 +349,7 @@ def test_ip_kernel_run_plans_03(re_manager, ip_kernel_simple_client, plan_option
 
     def check_status(ip_kernel_state, ip_kernel_captured):
         # Returned status may be used to do additional checks
-        status = get_queue_state()
+        status = get_manager_status()
         if isinstance(ip_kernel_state, (str, type(None))):
             ip_kernel_state = [ip_kernel_state]
         assert status["ip_kernel_state"] in ip_kernel_state
@@ -411,7 +411,7 @@ def test_ip_kernel_run_plans_03(re_manager, ip_kernel_simple_client, plan_option
     assert wait_for_condition(time=20, condition=condition_manager_idle)
     assert wait_for_condition(time=20, condition=condition_ip_kernel_idle)
 
-    s = get_queue_state()
+    s = get_manager_status()
     n_items_in_queue = 0 if plan_option == "plan" else 2
     assert s["items_in_queue"] == n_items_in_queue
     assert s["items_in_history"] == 1
@@ -449,7 +449,7 @@ def test_ip_kernel_run_plans_04(re_manager, ip_kernel_simple_client, plan_option
 
     def check_status(ip_kernel_state, ip_kernel_captured):
         # Returned status may be used to do additional checks
-        status = get_queue_state()
+        status = get_manager_status()
         if isinstance(ip_kernel_state, (str, type(None))):
             ip_kernel_state = [ip_kernel_state]
         assert status["ip_kernel_state"] in ip_kernel_state
@@ -515,7 +515,7 @@ def test_ip_kernel_run_plans_04(re_manager, ip_kernel_simple_client, plan_option
     assert resp["success"] is True, pprint.pformat(resp)
 
     if resume_option == "resume":
-        s = get_queue_state()  # Kernel may not be 'captured' at this point
+        s = get_manager_status()  # Kernel may not be 'captured' at this point
         assert s["manager_state"] == "executing_queue"
         assert s["worker_environment_state"] in ("idle", "executing_plan")
 
@@ -527,7 +527,7 @@ def test_ip_kernel_run_plans_04(re_manager, ip_kernel_simple_client, plan_option
 
     assert wait_for_condition(time=20, condition=condition_manager_idle)
 
-    s = get_queue_state()
+    s = get_manager_status()
 
     if resume_option in ["halt", "abort"]:
         n_items_in_queue = 0 if plan_option == "plan" else 2
@@ -578,7 +578,7 @@ def test_ip_kernel_execute_tasks_01(re_manager, option, run_in_background):  # n
 
     def check_status(ip_kernel_state, ip_kernel_captured):
         # Returned status may be used to do additional checks
-        status = get_queue_state()
+        status = get_manager_status()
         if isinstance(ip_kernel_state, (str, type(None))):
             ip_kernel_state = [ip_kernel_state]
         assert status["ip_kernel_state"] in ip_kernel_state
@@ -634,7 +634,7 @@ def test_ip_kernel_execute_tasks_01(re_manager, option, run_in_background):  # n
         assert False, f"Unsupported option: {option!r}"
 
     if not run_in_background:
-        s = get_queue_state()  # Kernel may or may not be captured at this point
+        s = get_manager_status()  # Kernel may or may not be captured at this point
         assert s["manager_state"] == "executing_task"
         assert s["worker_environment_state"] in ("idle", "executing_task")
 
@@ -678,7 +678,7 @@ def test_ip_kernel_execute_tasks_02(re_manager):  # noqa: F811
 
     def check_status(ip_kernel_state, ip_kernel_captured):
         # Returned status may be used to do additional checks
-        status = get_queue_state()
+        status = get_manager_status()
         if isinstance(ip_kernel_state, (str, type(None))):
             ip_kernel_state = [ip_kernel_state]
         assert status["ip_kernel_state"] in ip_kernel_state
@@ -765,7 +765,7 @@ def test_ip_kernel_direct_connection_01(re_manager, ip_kernel_simple_client):  #
 
     def check_status(ip_kernel_state, ip_kernel_captured):
         # Returned status may be used to do additional checks
-        status = get_queue_state()
+        status = get_manager_status()
         if isinstance(ip_kernel_state, (str, type(None))):
             ip_kernel_state = [ip_kernel_state]
         assert status["ip_kernel_state"] in ip_kernel_state
@@ -820,7 +820,7 @@ def test_ip_kernel_direct_connection_02(re_manager, ip_kernel_simple_client, pla
 
     def check_status(ip_kernel_state, ip_kernel_captured):
         # Returned status may be used to do additional checks
-        status = get_queue_state()
+        status = get_manager_status()
         if isinstance(ip_kernel_state, (str, type(None))):
             ip_kernel_state = [ip_kernel_state]
         assert status["ip_kernel_state"] in ip_kernel_state
@@ -909,7 +909,7 @@ def test_ip_kernel_direct_connection_03(re_manager, ip_kernel_simple_client, opt
 
     def check_status(ip_kernel_state, ip_kernel_captured):
         # Returned status may be used to do additional checks
-        status = get_queue_state()
+        status = get_manager_status()
         if isinstance(ip_kernel_state, (str, type(None))):
             ip_kernel_state = [ip_kernel_state]
         assert status["ip_kernel_state"] in ip_kernel_state
@@ -994,7 +994,7 @@ def test_ip_kernel_direct_connection_04(re_manager, ip_kernel_simple_client, opt
 
     def check_status(ip_kernel_state, ip_kernel_captured):
         # Returned status may be used to do additional checks
-        status = get_queue_state()
+        status = get_manager_status()
         if isinstance(ip_kernel_state, (str, type(None))):
             ip_kernel_state = [ip_kernel_state]
         assert status["ip_kernel_state"] in ip_kernel_state
@@ -1098,7 +1098,7 @@ def test_ip_kernel_reserve_01(re_manager, option):  # noqa: F811
 
     def check_status(ip_kernel_state, ip_kernel_captured):
         # Returned status may be used to do additional checks
-        status = get_queue_state()
+        status = get_manager_status()
         if isinstance(ip_kernel_state, (str, type(None))):
             ip_kernel_state = [ip_kernel_state]
         assert status["ip_kernel_state"] in ip_kernel_state
@@ -1210,7 +1210,7 @@ def test_ip_kernel_interrupt_02(re_manager, ip_kernel_simple_client, option):  #
 
     def check_status(ip_kernel_state, ip_kernel_captured):
         # Returned status may be used to do additional checks
-        status = get_queue_state()
+        status = get_manager_status()
         if isinstance(ip_kernel_state, (str, type(None))):
             ip_kernel_state = [ip_kernel_state]
         assert status["ip_kernel_state"] in ip_kernel_state
@@ -1318,7 +1318,7 @@ def test_ip_kernel_interrupt_03(
 
     def check_status(ip_kernel_state, ip_kernel_captured):
         # Returned status may be used to do additional checks
-        status = get_queue_state()
+        status = get_manager_status()
         if isinstance(ip_kernel_state, (str, type(None))):
             ip_kernel_state = [ip_kernel_state]
         assert status["ip_kernel_state"] in ip_kernel_state
@@ -1353,7 +1353,7 @@ def test_ip_kernel_interrupt_03(
 
     assert wait_for_condition(5, condition_manager_idle_or_paused)
 
-    status = get_queue_state()
+    status = get_manager_status()
     if is_paused:
         assert status["manager_state"] == "paused"
 
@@ -1366,7 +1366,7 @@ def test_ip_kernel_interrupt_03(
         # Plan was completed
         assert status["manager_state"] == "idle"
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["items_in_queue"] == 0
     assert status["items_in_history"] == 1
 
@@ -1423,7 +1423,7 @@ def test_ip_kernel_interrupt_04(
 
     def check_status(ip_kernel_state, ip_kernel_captured):
         # Returned status may be used to do additional checks
-        status = get_queue_state()
+        status = get_manager_status()
         if isinstance(ip_kernel_state, (str, type(None))):
             ip_kernel_state = [ip_kernel_state]
         assert status["ip_kernel_state"] in ip_kernel_state

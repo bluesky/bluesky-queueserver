@@ -189,9 +189,11 @@ Other Configuration Parameters
 
     $ start-re-manager -h
     usage: start-re-manager [-h] [--config CONFIG_PATH] [--zmq-control-addr ZMQ_CONTROL_ADDR]
-                            [--zmq-addr ZMQ_ADDR]
-                            [--startup-dir STARTUP_DIR | --startup-profile PROFILE_NAME |
-                             --startup-module STARTUP_MODULE_NAME | --startup-script STARTUP_SCRIPT_PATH]
+                            [--zmq-addr ZMQ_ADDR] [--startup-profile STARTUP_PROFILE]
+                            [--startup-module STARTUP_MODULE | --startup-script STARTUP_SCRIPT | 
+                             --startup-dir STARTUP_DIR]
+                            [--ignore-invalid-plans {ON,OFF}]
+                            [--device-max-depth DEVICE_MAX_DEPTH]
                             [--existing-plans-devices EXISTING_PLANS_AND_DEVICES_PATH]
                             [--update-existing-plans-devices {NEVER,ENVIRONMENT_OPEN,ALWAYS}]
                             [--user-group-permissions USER_GROUP_PERMISSIONS_PATH]
@@ -199,6 +201,9 @@ Other Configuration Parameters
                             [--redis-addr REDIS_ADDR] [--kafka-topic KAFKA_TOPIC]
                             [--kafka-server KAFKA_SERVER]
                             [--zmq-data-proxy-addr ZMQ_DATA_PROXY_ADDR] [--keep-re]
+                            [--use-ipython-kernel {ON,OFF}] [--ipython-dir IPYTHON_DIR]
+                            [--ipython-matplotlib IPYTHON_MATPLOTLIB]
+                            [--ipython-kernel-ip IPYTHON_KERNEL_IP]
                             [--use-persistent-metadata]
                             [--databroker-config DATABROKER_CONFIG]
                             [--zmq-info-addr ZMQ_INFO_ADDR]
@@ -207,7 +212,7 @@ Other Configuration Parameters
                             [--verbose | --quiet | --silent]
 
     Start Run Engine (RE) Manager
-    bluesky-queueserver version 0.0.17.post32.dev0+ga4ba9d1
+    bluesky-queueserver version 0.0.19
 
     Encryption for ZeroMQ communication server may be enabled by setting the value of
     'QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER' environment variable to a valid private key
@@ -219,7 +224,7 @@ Other Configuration Parameters
     configured to use encrypted channel, the encryption must also be enabled at the client side
     using the public key from the generated pair. Encryption is disabled by default.
 
-    optional arguments:
+    options:
       -h, --help        show this help message and exit
       --config CONFIG_PATH
                         Path to a YML config file or a directory containing multiple config
@@ -236,32 +241,46 @@ Other Configuration Parameters
       --zmq-addr ZMQ_ADDR
                         The parameter is deprecated and will be removed in future releases.
                         Use --zmq-control-addr instead.
-      --startup-dir STARTUP_DIR
-                        Path to directory that contains a set of startup files (*.py and
-                        *.ipy). All the scripts in the directory will be sorted in
-                        alphabetical order of their names and loaded in the Run Engine Worker
-                        environment. The set of startup files may be located in any accessible
-                        directory.
-      --startup-profile PROFILE_NAME
+      --startup-profile STARTUP_PROFILE
                         The name of IPython profile used to find the location of startup
                         files. Example: if IPython is configured to look for profiles in
                         '~/.ipython' directory (default behavior) and the profile name is
                         'testing', then RE Manager will look for startup files in
-                        '~/.ipython/profile_testing/startup' directory.
-      --startup-module STARTUP_MODULE_NAME
+                        '~/.ipython/profile_testing/startup' directory. If IPython-based
+                        worker is used, the code in the startup profile or the default profile
+                        is always executed before running a startup module or a script
+      --startup-module STARTUP_MODULE
                         The name of the module with startup code. The module is imported each
                         time the RE Worker environment is opened. Example:
                         'some.startup.module'. Paths to the list of existing plans and devices
                         (--existing-plans-and-devices) and user group permissions (--user-
                         group-permissions) must be explicitly specified if this option is
                         used.
-      --startup-script STARTUP_SCRIPT_PATH
+      --startup-script STARTUP_SCRIPT
                         The path to the script with startup code. The script is loaded each
                         time the RE Worker environment is opened. Example:
                         '~/startup/scripts/scripts.py'. Paths to the list of existing plans
                         and devices (--existing-plans-and-devices) and user group permissions
                         (--user-group-permissions) must be explicitly specified if this option
                         is used.
+      --startup-dir STARTUP_DIR
+                        Path to directory that contains a set of startup files (*.py and
+                        *.ipy). All the scripts in the directory will be sorted in
+                        alphabetical order of their names and loaded in the Run Engine Worker
+                        environment. The set of startup files may be located in any accessible
+                        directory. The value is ignored if --startup-profile is specified.
+      --ignore-invalid-plans {ON,OFF}
+                        Ignore plans with unsupported signatures When loading startup code or
+                        executing scripts. The default behavior is to raise an exception. If
+                        the parameter is set, the message is printed for each invalid plan and
+                        only plans that were processed correctly are included in the list of
+                        existing plans (default: OFF).
+      --device-max-depth DEVICE_MAX_DEPTH
+                        Default maximum depth for devices included in the list of existing
+                        devices: 0 - unlimited depth (full tree of subdevices is included for
+                        all devices except areadetectors), 1 - only top level devices are
+                        included, 2 - top level devices and subdevices are included, etc.
+                        (default: 0).
       --existing-plans-devices EXISTING_PLANS_AND_DEVICES_PATH
                         Path to file that contains the list of existing plans and devices. The
                         path may be a relative path to the profile collection directory. If
@@ -308,6 +327,27 @@ Other Configuration Parameters
                         keep all its subscriptions. Also must be subscribed to the Data Broker
                         inside the profile collection, since '--databroker-config' argument is
                         ignored.
+      --use-ipython-kernel {ON,OFF}
+                        Run the Run Engine worker in IPython kernel (default: OFF).
+      --ipython-dir IPYTHON_DIR
+                        The path to IPython root directory, which contains profiles. Overrides
+                        IPYTHONDIR environment variable. The parameter is ignored if IPython
+                        kernel is not used.
+      --ipython-matplotlib IPYTHON_MATPLOTLIB
+                        Default Matplotlib backend, typically 'qt5'. The parameter have the
+                        same meaning and accepts the same values as --matplotlib parameter of
+                        IPython. The value is passed directly to IPython kernel. The parameter
+                        is ignored if the worker is running pure Python (--use-ipython-kernel
+                        is OFF).
+      --ipython-kernel-ip IPYTHON_KERNEL_IP
+                        IP address for IPython kernel. The IP is passed to the IPython kernel
+                        at startup and returned to clients as part of kernel connection info
+                        ('config_get' API). Accepted values are 'localhost' (sets IP to
+                        '127.0.0.1'), 'auto' (attempts to automatically find network IP
+                        address of the server), or an explicitly specified IP address of the
+                        server. If the IP address is 'localhost' or '127.0.0.1', the kernel
+                        can not be accessed from remote machines. The parameter is ignored if
+                        worker is not using IPython. Default: localhost.
       --use-persistent-metadata
                         Use msgpack-based persistent storage for scan metadata. Currently this
                         is the preferred method to keep continuously incremented sequence of
@@ -372,13 +412,13 @@ periodically requests and displays the status of Queue Server.
 
 .. code-block::
 
-    qserver -h
+    $ qserver -h
     usage: qserver [-h] [--zmq-control-addr ZMQ_CONTROL_ADDR] [--address ADDRESS]
                   [--lock-key LOCK_KEY]
                   command [command ...]
 
     Command-line tool for communicating with RE Monitor.
-    bluesky-queueserver version 0.0.19.
+    bluesky-queueserver version 0.0.18.
 
     positional arguments:
       command           a sequence of keywords and parameters that define the command
@@ -421,6 +461,9 @@ periodically requests and displays the status of Queue Server.
     qserver environment open         # Open RE environment
     qserver environment close        # Close RE environment
     qserver environment destroy      # Destroy RE environment (kill RE worker process)
+
+    qserver environment update             # Update the worker state based on contents of worker namespace
+    qserver environment update background  # Update the worker state as a background task
 
     qserver existing plans           # Request the list of existing plans
     qserver existing devices         # Request the list of existing devices
@@ -528,6 +571,11 @@ periodically requests and displays the status of Queue Server.
     qserver task result <task-uid>  # Load status or result of a task with the given UID
     qserver task status <task-uid>  # Check status of a task with the given UID
 
+    qserver kernel interrupt            # Send interrupt (Ctrl-C) to IPython kernel
+    qserver kernel interrupt task       # ... if the manager is executing a task
+    qserver kernel interrupt plan       # ... if the manager is executing a plan
+    qserver kernel interrupt task plan  # ... if the manager is executing a plan or a task
+
     qserver lock environment  -k 90g94                   # Lock the environment
     qserver lock environment "Locked for 1 hr" -k 90g94  # Add a text note
     qserver lock queue -k 90g94                          # Lock the queue
@@ -582,13 +630,19 @@ the path to the directory with startup files, the path to a startup script or mo
 
     $ qserver-list-plans-devices -h
     usage: qserver-list-plans-devices [-h] [--file-dir FILE_DIR] [--file-name FILE_NAME]
-                                      [--startup-dir STARTUP_DIR | --startup-module STARTUP_MODULE_NAME | --startup-script STARTUP_SCRIPT_PATH]
+                                      [--startup-profile STARTUP_PROFILE]
+                                      [--startup-dir STARTUP_DIR | --startup-module STARTUP_MODULE_NAME | 
+                                      --startup-script STARTUP_SCRIPT_PATH]
+                                      [--ipython-dir IPYTHON_DIR]
+                                      [--use-ipython-kernel {ON,OFF}]
+                                      [--ignore-invalid-plans {ON,OFF}]
+                                      [--device-max-depth DEVICE_MAX_DEPTH]
 
     Bluesky-QServer:
     CLI tool for generating the list of plans and devices from beamline startup scripts.
-    bluesky-queueserver version 0.0.3.post61.dev0+g45f1afb
+    bluesky-queueserver version 0.0.19
 
-    optional arguments:
+    options:
       -h, --help        show this help message and exit
       --file-dir FILE_DIR
                         Directory name where the list of plans and devices is saved. By
@@ -597,6 +651,14 @@ the path to the directory with startup files, the path to a startup script or mo
       --file-name FILE_NAME
                         Name of the file where the list of plans and devices is saved. Default
                         file name: 'existing_plans_and_devices.yaml'.
+      --startup-profile STARTUP_PROFILE
+                        The name of IPython profile used to find the location of startup
+                        files. Example: if IPython is configured to look for profiles in
+                        '~/.ipython' directory (default behavior) and the profile name is
+                        'testing', then RE Manager will look for startup files in
+                        '~/.ipython/profile_testing/startup' directory. If IPython-based
+                        worker is used, the code in the startup profile or the default profile
+                        is always executed before running a startup module or a script
       --startup-dir STARTUP_DIR
                         Path to directory that contains a set of startup files (*.py and
                         *.ipy). All the scripts in the directory will be sorted in
@@ -616,6 +678,23 @@ the path to the directory with startup files, the path to a startup script or mo
                         plans-devices --startup-script ~/startup/scripts/script.py' loads
                         startup code from the script and saves the results to the file in the
                         current directory.
+      --ipython-dir IPYTHON_DIR
+                        The path to IPython root directory, which contains profiles. Overrides
+                        IPYTHONDIR environment variable.
+      --use-ipython-kernel {ON,OFF}
+                        Run the Run Engine worker in IPython kernel (default: OFF).
+      --ignore-invalid-plans {ON,OFF}
+                        Ignore plans with unsupported signatures When loading startup code or
+                        executing scripts. The default behavior is to raise an exception. If
+                        the parameter is set, the message is printed for each invalid plan and
+                        only plans that were processed correctly are included in the list of
+                        existing plans (default: OFF).
+      --device-max-depth DEVICE_MAX_DEPTH
+                        Default maximum depth for devices included in the list of existing
+                        devices: 0 - unlimited depth (full tree of subdevices is included for
+                        all devices except areadetectors), 1 - only top level devices are
+                        included, 2 - top level devices and subdevices are included, etc.
+                        (default: 0).
 
 .. _qserver_zmq_keys_cli:
 
@@ -690,7 +769,7 @@ to 0MQ socket by default. Publishing can be enabled by starting RE Manager with 
 
     Queue Server Console Monitor:
     CLI tool for remote monitoring of console output published by RE Manager.
-    bluesky-queueserver version 0.0.15
+    bluesky-queueserver version 0.0.19
 
     optional arguments:
       -h, --help        show this help message and exit
@@ -725,7 +804,7 @@ address is different from default, the correct address must be passed using the 
   usage: qserver-clear-lock [-h] [--redis-addr REDIS_ADDR]
 
   Bluesky-QServer: Clear RE Manager lock.
-  bluesky-queueserver version 0.0.16.
+  bluesky-queueserver version 0.0.19.
 
   Recover locked RE Manager if the lock key is lost. The utility requires access to Redis
   used by RE Manager. Provide the address of Redis service using '--redis-addr' parameter.
@@ -756,7 +835,7 @@ close the worker environment.
   usage: qserver-console [-h] [--zmq-control-addr ZMQ_CONTROL_ADDR]
 
   Bluesky-QServer: Start Jupyter console for IPython kernel running in the worker process.
-  bluesky-queueserver version 0.0.18.post117.dev0+ged01cde.
+  bluesky-queueserver version 0.0.19.
 
   Requests IPython kernel connection info from RE Manager and starts Jupyter Console. The RE Worker
   must be running (environment opened) and using IPython kernel. The address of 0MQ control port of

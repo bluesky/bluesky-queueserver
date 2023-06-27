@@ -1136,7 +1136,7 @@ def test_ip_kernel_reserve_01(re_manager, option):  # noqa: F811
         check_status("busy", True)
         ttime.sleep(t_reserve - 0.5)
         check_status("busy", True)
-        ttime.sleep(1)
+        ttime.sleep(2)
         check_status("idle", False)
     else:
         assert False, f"Unknown option: {option!r}"
@@ -1273,6 +1273,8 @@ def test_ip_kernel_interrupt_02(re_manager, ip_kernel_simple_client, option):  #
         result = resp["result"]
         assert result["success"] is False, pprint.pformat(result)
         assert "KeyboardInterrupt" in result["traceback"], pprint.pformat(result)
+
+    ttime.sleep(1)  # The pause makes it more reliable on CI
 
     # Now run a simple plan to make sure the worker is still functional
     params = {"item": _plan1, "user": _user, "user_group": _user_group}

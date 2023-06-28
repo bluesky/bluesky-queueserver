@@ -2,6 +2,96 @@
 Release History
 ===============
 
+v0.0.19 (2023-06-28)
+====================
+
+Added
+-----
+
+- New CLI parameters for 'start-re-manager' (and matching parameters for 'qserver-list-plans-devices'):
+  ``--use-python-kernel`` (values ON/OFF, config file parameter ``worker/use_ipython_kernel``, boolean,
+  env. variable ``QSERVER_USE_IPYTHON_KERNEL``, boolean); ``--ipython-dir`` (IPython directory, overrides default
+  directory or IPYTHONDIR, config file parameter ``startup/ipython_dir``);  ``--ipython-matplotlib``
+  (accepts the same values as ``--matplotlib`` parameter of IPython, config file parameter ``worker/ipython_matplotlib``,
+  used only in the IPython kernel mode); ``--ignore-invalid-plans`` (values ON/OFF, boolean config file parameter
+  ``startup/ignore_invalid_plans``); ``--device-max-depth`` (integer, config file parameter ``startup/device_max_depth``,
+  restricts maximum depth for device components included in the list of existing devices).
+
+- An option to start IPython kernel in the worker process. The option is selected by starting RE Manager with 
+  the option ``--use-ipython-kernel=ON``, setting config file parameter ``worker/use_ipython_kernel=True`` or 
+  environment variable ``QSERVER_USE_IPYTHON_KERNEL=true``. Users may connect to the kernel directly using
+  Jupyter console. The mode may be useful when transitioning from the existing IPython workflow or for
+  debugging purposes.
+
+- New RE Manager status parameters: ``ip_kernel_state`` (None - environment is closed, ``disabled`` - IP kernel 
+  is not started or not used in the current mode, ``starting`` - startup in progress, ``idle``, ``busy``); 
+  ``ip_kernel_captured`` (None - environment is closed or the kernel is not used, True/False - 
+  indicates if the kernel is running tasks started by RE Manager, clients may connect to IP kernel 
+  directly and start tasks only when the kernel is not captured);
+
+- New worker environment state (``env_state`` status parameter): ``failed``. Indicates that the environment 
+  failed to start and will be closed. The state is used internally and is unlikely to be reported.
+
+- ``is_ipython_mode()`` function may be used in startup code to detect if the code is executed in IPython 
+  environment. The function returns correct result even if the code is running in the Python-based worker 
+  environment with monkeypatched IPython package. The use cases are similar ``is_re_worker_active()``.
+
+- ``register_plan`` and ``register_device`` functions for using in startup code. Currently, 
+  ``register_plan`` allows to explicitly exclude a given plan from processing by Queue Server 
+  (may be useful for problematic plans) and ``register_device`` allows to exclude a given device or 
+  set maximum depth for the device. This is experimental feature. Functionality may be added in the future.
+
+- RE Manager status returns the new ``plan_queue_mode/ignore_failures`` boolean parameter, which indicates
+  if the mode is enabled.
+
+- ``queue_mode_set`` API now accepts a value for ``ignore_failures`` mode.
+
+- The ``ignore_failures`` mode may be enabled/disabled using ``qserver`` CLI tool 
+  (``qserver queue mode set ignore_failures True`` and ``qserver queue mode set ignore_failures False``).
+
+- New ``queue_autostart`` API (enable/disable AUTOSTART mode by passing ``True``/``False`` with the ``enable`` parameter).
+
+- New ``queue_autostart_enabled`` status parameter, which indicates if the queue is in the 'autostart' mode.
+
+- CLI options to enable/disable autostart: ``qserver queue autostart enable/disable``.
+
+- Each item in the list of current runs (``re_runs`` API) now contains ``scan_id`` (integer) of the current scan.
+
+- The history items (``history_get`` API) now contains a list of scan IDS (``scan_ids``, ``list(int)``) in 
+  addition to the list of ``uids``.
+
+- New ``config_get`` API. Currently returns IPython kernel connect info (``ip_connect_info`` key).
+
+- New parameter of ``start-re-manager``: ``--ipython-kernel-ip`` sets IP address of the kernel, the respective 
+  config file parameter is ``worker/ipython_kernel_ip`` and environment variable ``QSERVER_IPYTHON_KERNEL_IP``.
+
+- ``qserver-console`` CLI tool, which downloads kernel connection info and starts Jupyter Console.
+
+- ``qserver config`` option for ``qserver`` CLI tool.
+
+- ``qserver-qtconsole`` entry point (starts Jupyter Qt Console).
+
+- New CLI parameters for ``qserver-list-plans-devices``: ``--startup-profile``, ``--use-ipython-kernel`` 
+  and ``--ipython-dir``. If ``--use-ipython-kernel=ON``, then the startup code is loaded as part of 
+  initializing IPython kernel. The IPython kernel is created in a separate process and initialized 
+  to load startup code (same as in the worker process of RE Manager), but never started.
+
+- Changed handling of CLI parameters by ``qserver-list-plans-devices``. The parameters ``--startup-dir``, 
+  ``--startup-script``, ``--startup-module``, ``--startup-profile`` and ``--ipython-dir`` are now 
+  handled identically to ``start-re-manager``.
+
+- New API: ``environment_open`` and ``kernel_interrupt``.
+
+- CLI implementation: ``qserver environment open`` and ``kernel_interrupt``.
+
+Changed
+-------
+
+- ``re_pause`` API calls are now accepted whenever Run Engine is in the ``running`` state. For example, 
+  the API may be used to pause the plan that was started in IPython kernel directly using Jupyter 
+  console and not managed by RE Manager.
+
+
 v0.0.18 (2022-10-31)
 ====================
 

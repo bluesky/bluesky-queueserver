@@ -93,6 +93,7 @@ Open and close RE Worker environment:
 - :ref:`method_environment_open`
 - :ref:`method_environment_close`
 - :ref:`method_environment_destroy`
+- :ref:`method_environment_update`
 
 
 Operations with the plan queue:
@@ -138,6 +139,10 @@ Lock/unlock RE Manager:
 - :ref:`method_lock`
 - :ref:`method_lock_info`
 - :ref:`method_unlock`
+
+Management of IPython kernel (IPython mode):
+
+- :ref:`method_kernel_interrupt`
 
 Stopping RE Manager (mostly used in testing):
 
@@ -763,6 +768,46 @@ Execution     The request initiates the sequence of destroying the environment.
               'destroying_environment' while operation is in progress and switch to 'idle' when
               the operation completes and 'worker_environment_exists' is set False if environment
               was destroyed successfully.
+============  =========================================================================================
+
+
+.. _method_environment_update:
+
+**'environment_update'**
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'environment_update'**
+------------  -----------------------------------------------------------------------------------------
+Description   Update the state and cached parameters of the worker environment based on contents of the 
+              worker namespace. The updated parameters include the reference to the Run Engine and lists of
+              existing and available plans and devices. The API is intended for using in cases when 
+              users bypass RE Manager to modify contents of the namespace, for example by connecting 
+              directly to IPython kernel (IPython mode) and executing commands via Jupyter Console.
+------------  -----------------------------------------------------------------------------------------
+Parameters    **run_in_background**: *boolean* (optional, default *False*)
+                  Set this parameter *True* to execute the update in the background thread (while a plan or 
+                  another foreground task is running). Generally, it is recommended to run the update 
+                  in the main thread. **Developers of data acquisition workflows and/or user specific code 
+                  are responsible for thread safety.**
+
+              **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the environment** is locked and no valid key is submitted
+                  with the request. See documentation on :ref:`method_lock` API for more details.
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **task_uid**: *str* or *None*
+                  Task UID can be used to check status of the task and download results once the task
+                  is completed (see *task_result* API).
+------------  -----------------------------------------------------------------------------------------
+Execution     The request initiates the update. The update is not instant, especially if the namespace
+              is large. Monitor 'manager_state' (foreground task) or use 'task_uid' to check if 
+              the task execution is completed or the update is successful.
 ============  =========================================================================================
 
 
@@ -2061,6 +2106,46 @@ Returns       **success**: *boolean*
               **lock_info_uid**: *str*
                   UID of *lock_info*. The UID is also returned in RE Manager status and could be
                   monitored to detect updates of *lock_info*.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+
+.. _method_kernel_interrupt:
+
+**'kernel_interrupt'**
+^^^^^^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'kernel_interrupt'**
+------------  -----------------------------------------------------------------------------------------
+Description   Send interrupt request (Ctrl-C) to the running IPython kernel. The API call fails if
+              IPython mode is not enabled or environment does not exist (there is no IPython kernel).
+              The API is primarily intended to interrupt tasks started by clients connected directly
+              to IPython kernel (such as Jupyter Console) and by default it fails if the manager is
+              executing a plan or a task. Set the **interrupt_task** and/or **interrupt_plan**
+              parameters *True* in order to be able to interrupt a running foreground task or a plan
+              (single interrupt initiates deferred pause, two consecutive interrupts initiate immediate
+              pause). Note, that :ref:`method_re_pause` API is more reliable method of pausing the plan. 
+------------  -----------------------------------------------------------------------------------------
+Parameters    **interrupt_task**: *boolean* (optional, default: *False*)
+                  Allow interrupting a foreground task (e.g. a function or a script) started by RE Manager.
+            
+              **interrupt_plan**: *boolean* (optional, default: *False*)
+                  Allow interrupting a running plan. By default the API fails if a plan is running in 
+                  the worker environment (Run Engine is in the *'running'* state), whether the plan
+                  was started by RE Manager or by connecting directly to the kernel (e.g. using Jupyter Console).
+                  Note, that using :ref:`method_re_pause` API is the preferred way of pausing a running plan
+                  even if the plan was started bypassing the manager.
+
+              **task_uid**: *str*
+                  Task UID.
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================

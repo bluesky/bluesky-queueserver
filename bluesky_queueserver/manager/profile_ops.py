@@ -612,6 +612,12 @@ def load_script_into_existing_nspace(
     """
     global _n_running_scripts
 
+    # There is nothing to do if the script is an empty string or None
+    if not script:
+        return
+    elif not isinstance(script, str):
+        ScriptLoadingError(f"Script must be a string: (type(script)={type(script)!r})", "")
+
     importlib.invalidate_caches()
 
     root_path_exists = script_root_path and os.path.isdir(script_root_path)

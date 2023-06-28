@@ -64,6 +64,9 @@ qserver environment open         # Open RE environment
 qserver environment close        # Close RE environment
 qserver environment destroy      # Destroy RE environment (kill RE worker process)
 
+qserver environment update             # Update the worker state based on contents of worker namespace
+qserver environment update background  # Update the worker state as a background task
+
 qserver existing plans           # Request the list of existing plans
 qserver existing devices         # Request the list of existing devices
 qserver allowed plans            # Request the list of allowed plans
@@ -169,6 +172,11 @@ qserver script upload <path-to-file> keep-lists   # ... leave lists of allowed a
 
 qserver task result <task-uid>  # Load status or result of a task with the given UID
 qserver task status <task-uid>  # Check status of a task with the given UID
+
+qserver kernel interrupt            # Send interrupt (Ctrl-C) to IPython kernel
+qserver kernel interrupt task       # ... if the manager is executing a task
+qserver kernel interrupt plan       # ... if the manager is executing a plan
+qserver kernel interrupt task plan  # ... if the manager is executing a plan or a task
 
 qserver lock environment  -k 90g94                   # Lock the environment
 qserver lock environment "Locked for 1 hr" -k 90g94  # Add a text note
@@ -864,10 +872,23 @@ def create_msg(params, *, lock_key):
 
     # ----------- environment ------------
     elif command == "environment":
-        if len(params) != 1:
-            raise CommandParameterError(f"Request '{command}' must include only one parameter")
-        supported_params = ("open", "close", "destroy")
+        if len(params) not in (1, 2):
+            raise CommandParameterError(f"Request '{command}' must include at one or two parameters")
+        supported_params = ("open", "close", "destroy", "update")
         if params[0] in supported_params:
+            if params[0] == "update":
+                if len(params) == 2:
+                    if params[1] == "background":
+                        prms["run_in_background"] = True
+                    else:
+                        raise CommandParameterError(
+                            f"Request '{command} {params[0]} {params[1]}' is not supported"
+                        )
+            else:
+                if len(params) == 2:
+                    raise CommandParameterError(
+                        f"Request '{command} {params[1]}' may have no additional parameters"
+                    )
             method = f"{command}_{params[0]}"
             if lock_key:
                 prms["lock_key"] = lock_key
@@ -1126,6 +1147,22 @@ def create_msg(params, *, lock_key):
                 raise CommandParameterError(
                     f"Unsupported number or combination of parameters: {format_list_as_command(params)}"
                 )
+        else:
+            raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
+
+    elif command == "kernel":
+        if len(params) < 1:
+            raise CommandParameterError(f"Request '{command}' must include at least one parameter")
+        if params[0] == "interrupt":
+            method = f"{command}_{params[0]}"
+            prms = {}
+            for p in params[1:]:
+                if p not in ("task", "plan"):
+                    raise CommandParameterError(f"Unsupported parameter {p!r}: {format_list_as_command(params)}")
+                if p == "task":
+                    prms.update(dict(interrupt_task=True))
+                elif p == "plan":
+                    prms.update(dict(interrupt_plan=True))
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
 

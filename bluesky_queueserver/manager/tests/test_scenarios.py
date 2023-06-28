@@ -16,7 +16,7 @@ from .common import (  # noqa: F401
     condition_manager_paused,
     condition_queue_processing_finished,
     db_catalog,
-    get_queue_state,
+    get_manager_status,
     re_manager,
     re_manager_cmd,
     re_manager_pc_copy,
@@ -125,7 +125,7 @@ class UidChecker:
         self.pq_uid, self.ph_uid = self.get_queue_uids()
 
     def get_queue_uids(self):
-        status = get_queue_state()
+        status = get_manager_status()
         return status["plan_queue_uid"], status["plan_history_uid"]
 
     def verify_uid_changes(self, *, pq_changed, ph_changed):
@@ -426,7 +426,7 @@ def test_blocking_plan_01(re_manager):  # noqa: F811
     resp6, _ = zmq_single_request("re_pause")
     assert resp6["success"] is True, resp6
 
-    state = get_queue_state()
+    state = get_manager_status()
     assert state["pause_pending"] is True
 
     ttime.sleep(1)
@@ -540,7 +540,7 @@ def test_large_datasets_01(re_manager, background):  # noqa: F811
 
     assert wait_for_condition(time=30, condition=condition_manager_idle)
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["items_in_queue"] == 0
     assert status["items_in_history"] == (1 if background else 0)
 
@@ -597,7 +597,7 @@ def test_large_datasets_02(re_manager):  # noqa: F811
 
     assert wait_for_condition(time=30, condition=condition_manager_idle)
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["items_in_queue"] == 0
     assert status["items_in_history"] == 1
 
@@ -632,7 +632,7 @@ def test_large_datasets_03(re_manager, plan, n_plans, timeout_ms):  # noqa: F811
     assert "success" in resp, pprint.pformat(resp)
     assert resp["success"] is True, pprint.pformat(resp)
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["items_in_queue"] == n_plans
     assert status["items_in_history"] == 0
 
@@ -645,6 +645,6 @@ def test_large_datasets_03(re_manager, plan, n_plans, timeout_ms):  # noqa: F811
     assert "success" in resp, pprint.pformat(resp)
     assert resp["success"] is True, pprint.pformat(resp)
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["items_in_queue"] == 0
     assert status["items_in_history"] == 0

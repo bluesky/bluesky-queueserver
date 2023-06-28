@@ -48,7 +48,7 @@ from .common import (  # noqa: F401
     condition_queue_processing_finished,
     copy_default_profile_collection,
     db_catalog,
-    get_queue_state,
+    get_manager_status,
     ip_kernel_simple_client,
     re_manager,
     re_manager_cmd,
@@ -259,7 +259,7 @@ def test_zmq_api_environment_open_close_1(re_manager):  # noqa F811
     """
     Basic test for `environment_open` and `environment_close` methods.
     """
-    state = get_queue_state()
+    state = get_manager_status()
     assert state["re_state"] is None
     assert state["worker_environment_state"] == "closed"
 
@@ -269,7 +269,7 @@ def test_zmq_api_environment_open_close_1(re_manager):  # noqa F811
 
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-    state = get_queue_state()
+    state = get_manager_status()
     assert state["re_state"] == "idle"
     assert state["worker_environment_state"] == "idle"
 
@@ -279,7 +279,7 @@ def test_zmq_api_environment_open_close_1(re_manager):  # noqa F811
 
     assert wait_for_condition(time=3, condition=condition_environment_closed)
 
-    state = get_queue_state()
+    state = get_manager_status()
     assert state["re_state"] is None
     assert state["worker_environment_state"] == "closed"
 
@@ -359,7 +359,7 @@ def test_zmq_api_queue_item_add_01(re_manager):  # noqa F811
     """
     Basic test for `queue_item_add` method.
     """
-    status0 = get_queue_state()
+    status0 = get_manager_status()
 
     resp1, _ = zmq_single_request("queue_item_add", {"item": _plan1, "user": _user, "user_group": _user_group})
     assert resp1["success"] is True
@@ -370,7 +370,7 @@ def test_zmq_api_queue_item_add_01(re_manager):  # noqa F811
     assert resp1["item"]["user_group"] == _user_group
     assert "item_uid" in resp1["item"]
 
-    status1 = get_queue_state()
+    status1 = get_manager_status()
     assert status1["plan_queue_uid"] != status0["plan_queue_uid"]
     assert status1["plan_history_uid"] == status0["plan_history_uid"]
 
@@ -533,7 +533,7 @@ def test_zmq_api_queue_item_add_04(re_manager):  # noqa F811
         time=20, condition=condition_queue_processing_finished
     ), "Timeout while waiting for environment to be opened"
 
-    state = get_queue_state()
+    state = get_manager_status()
     assert state["items_in_queue"] == 0
     assert state["items_in_history"] == 3
 
@@ -609,7 +609,7 @@ def test_zmq_api_queue_item_add_05(re_manager, plan_to_add, ugroup, success_subm
     assert resp0a["success"] is success_submit
     response_msg = resp0a["msg"]
 
-    state = get_queue_state()
+    state = get_manager_status()
     assert state["items_in_queue"] == (1 if success_submit else 0)
     assert state["items_in_history"] == 0
 
@@ -629,7 +629,7 @@ def test_zmq_api_queue_item_add_05(re_manager, plan_to_add, ugroup, success_subm
 
         assert wait_for_condition(time=10, condition=condition_manager_idle)
 
-        state = get_queue_state()
+        state = get_manager_status()
         assert state["items_in_queue"] == (0 if success_run else 1)
         assert state["items_in_history"] == 1
 
@@ -680,7 +680,7 @@ def test_zmq_api_queue_item_add_06(re_manager, value, err_msg):  # noqa: F811
     resp3, _ = zmq_single_request("queue_item_add", params=params)
     assert resp3["success"] is True, resp3
 
-    state = get_queue_state()
+    state = get_manager_status()
     assert state["items_in_queue"] == 1
     assert state["items_in_history"] == 0
 
@@ -688,7 +688,7 @@ def test_zmq_api_queue_item_add_06(re_manager, value, err_msg):  # noqa: F811
     assert resp4["success"] is True
     assert wait_for_condition(time=10, condition=condition_manager_idle)
 
-    state = get_queue_state()
+    state = get_manager_status()
     assert state["items_in_queue"] == 1
     assert state["items_in_history"] == 1
 
@@ -1172,7 +1172,7 @@ def test_zmq_api_queue_item_add_batch_1(
         resp1a, _ = zmq_single_request("queue_item_add", params)
         assert resp1a["success"] is True
 
-    state = get_queue_state()
+    state = get_manager_status()
     assert state["items_in_queue"] == len(queue_seq)
     assert state["items_in_history"] == 0
 
@@ -1243,7 +1243,7 @@ def test_zmq_api_queue_item_add_batch_1(
     queue_final_seq = "".join(queue_final_seq)
     assert queue_final_seq == expected_seq
 
-    state = get_queue_state()
+    state = get_manager_status()
     assert state["items_in_queue"] == len(expected_seq)
     assert state["items_in_history"] == 0
 
@@ -1273,7 +1273,7 @@ def test_zmq_api_queue_item_add_batch_2(re_manager):  # noqa: F811
         resp1a, _ = zmq_single_request("queue_item_add", params)
         assert resp1a["success"] is True
 
-    state = get_queue_state()
+    state = get_manager_status()
     assert state["items_in_queue"] == len(queue_seq)
     assert state["items_in_history"] == 0
 
@@ -1340,7 +1340,7 @@ def test_zmq_api_queue_item_add_batch_3(re_manager):  # noqa: F811
         else:
             assert "kwargs" not in item_res
 
-    state = get_queue_state()
+    state = get_manager_status()
     assert state["items_in_queue"] == 4
     assert state["items_in_history"] == 0
 
@@ -1352,7 +1352,7 @@ def test_zmq_api_queue_item_add_batch_3(re_manager):  # noqa: F811
     assert resp3["success"] is True
     assert wait_for_condition(time=30, condition=condition_manager_idle)
 
-    state = get_queue_state()
+    state = get_manager_status()
     assert state["items_in_queue"] == 1
     assert state["items_in_history"] == 2
 
@@ -1360,7 +1360,7 @@ def test_zmq_api_queue_item_add_batch_3(re_manager):  # noqa: F811
     assert resp4["success"] is True
     assert wait_for_condition(time=10, condition=condition_queue_processing_finished)
 
-    state = get_queue_state()
+    state = get_manager_status()
     assert state["items_in_queue"] == 0
     assert state["items_in_history"] == 3
 
@@ -1396,7 +1396,7 @@ def test_zmq_api_queue_item_add_batch_4_fail(re_manager):  # noqa: F811
         assert res["success"] == success_expected[n], str(res)
         assert msg_expected[n] in res["msg"], str(res)
 
-    state = get_queue_state()
+    state = get_manager_status()
     assert state["items_in_queue"] == 0
     assert state["items_in_history"] == 0
 
@@ -1434,7 +1434,7 @@ def test_zmq_api_queue_item_update_1(re_manager, replace):  # noqa F811
     if replace is not None:
         params["replace"] = replace
 
-    status1 = get_queue_state()
+    status1 = get_manager_status()
 
     resp2, _ = zmq_single_request("queue_item_update", params)
     assert resp2["success"] is True
@@ -1449,7 +1449,7 @@ def test_zmq_api_queue_item_update_1(re_manager, replace):  # noqa F811
     else:
         assert resp2["item"]["item_uid"] == uid
 
-    status2 = get_queue_state()
+    status2 = get_manager_status()
     assert status2["plan_queue_uid"] != status1["plan_queue_uid"]
     assert status2["plan_history_uid"] == status1["plan_history_uid"]
 
@@ -2449,6 +2449,174 @@ def test_zmq_api_script_upload_11_fail(re_manager, test_with_plan):  # noqa: F81
 
 
 # ===========================================================================================
+#                                'environment_update' API
+
+_script_to_upload_eu2 = """
+# Device
+from ophyd import Device
+dev_test = Device(name="dev_test")
+
+# Trivial plan
+def sleep_for_a_few_sec(tt=1):
+    yield from bps.sleep(tt)
+"""
+
+
+# fmt: off
+@pytest.mark.parametrize("use_bg_task", [False, True])
+# fmt: on
+def test_zmq_api_environment_update_01(re_manager, use_bg_task):  # noqa: F811
+    """
+    'environment_update' API: basic test - upload a script, update environment,
+    then check that the plan and the device are in the lists.
+    """
+
+    def get_plans_devices():
+        resp, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
+        assert resp["success"] is True, resp
+        plans_allowed = resp["plans_allowed"]
+
+        resp, _ = zmq_single_request("devices_allowed", params={"user_group": _user_group})
+        assert resp["success"] is True, resp
+        devices_allowed = resp["devices_allowed"]
+
+        return plans_allowed, devices_allowed
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    params = {"script": _script_to_upload_eu2, "update_lists": False}
+    resp2, _ = zmq_single_request("script_upload", params=params)
+    assert resp2["success"] is True, pprint.pformat(resp2)
+    assert resp2["msg"] == ""
+    task_uid = resp2["task_uid"]
+
+    result = wait_for_task_result(10, task_uid)
+    assert result["return_value"] is None
+
+    plans_allowed, devices_allowed = get_plans_devices()
+    assert "sleep_for_a_few_sec" not in plans_allowed
+    assert "dev_test" not in devices_allowed
+
+    params = {}
+    resp6, _ = zmq_single_request("environment_update", params=params)
+    assert resp6["success"] is True, pprint.pformat(resp6)
+    assert resp6["msg"] == ""
+
+    task_uid = resp6["task_uid"]
+
+    result = wait_for_task_result(10, task_uid)
+    assert result["return_value"] is None
+
+    plans_allowed, devices_allowed = get_plans_devices()
+    assert "sleep_for_a_few_sec" in plans_allowed
+    assert "dev_test" in devices_allowed
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+_script_to_upload_eu_re1 = """
+# Replace RE with junk
+RE = "junk"
+"""
+
+_script_to_upload_eu_re2 = """
+# Restore valid RE
+from bluesky import RunEngine
+RE = RunEngine()
+"""
+
+
+def test_zmq_api_environment_update_02(re_manager, ip_kernel_simple_client):  # noqa: F811
+    """
+    'environment_update' API: test that RE can be replaced by executing a script using
+    'scipt_upload' API or by executing a cell in the IPython kernel. Test that if RE
+    is not a valid RunEngine object, the Queue Server is still functional, though it can
+    not execute plans. If RE is restored to a valid object, then Queue Server becomes
+    fully functional.
+    """
+    using_ipython = use_ipykernel_for_tests()
+
+    def execute_script(script):
+        if using_ipython:
+            ip_kernel_simple_client.start()
+            ip_kernel_simple_client.execute_with_check(script)
+            assert wait_for_condition(10, condition_ip_kernel_idle)
+
+        else:
+            params = {"script": script, "update_re": True}
+            resp, _ = zmq_single_request("script_upload", params=params)
+            assert resp["success"] is True, pprint.pformat(resp)
+            assert resp["msg"] == ""
+            task_uid = resp["task_uid"]
+
+            result = wait_for_task_result(10, task_uid)
+            assert result["success"] is True
+
+        params = {}
+        resp, _ = zmq_single_request("environment_update", params=params)
+        assert resp["success"] is True, pprint.pformat(resp)
+        assert resp["msg"] == ""
+        task_uid = resp["task_uid"]
+
+        result = wait_for_task_result(10, task_uid)
+        assert result["success"] is True
+
+    params = {"item": _plan1, "user": _user, "user_group": _user_group}
+    resp, _ = zmq_single_request("queue_item_add", params=params)
+    assert resp["success"] is True, str(resp)
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    execute_script(_script_to_upload_eu_re1)
+
+    # Get 're_state' in status (it should be 'None', because RE is not RunEngine object)
+    status, _ = zmq_single_request("status")
+    assert status["re_state"] is None, pprint.pformat(status)
+    assert status["queue_stop_pending"] is False, pprint.pformat(status)
+    assert status["items_in_queue"] == 1, pprint.pformat(status)
+    assert status["items_in_history"] == 0, pprint.pformat(status)
+
+    # Try to run a plan (it should fail)
+    resp, _ = zmq_single_request("queue_start")
+    assert resp["success"] is True, str(resp)
+    assert wait_for_condition(10, condition_manager_idle)
+
+    status, _ = zmq_single_request("status")
+    assert status["re_state"] is None, pprint.pformat(status)
+    assert status["queue_stop_pending"] is False, pprint.pformat(status)
+    assert status["items_in_queue"] == 1, pprint.pformat(status)
+    assert status["items_in_history"] == 1, pprint.pformat(status)
+
+    execute_script(_script_to_upload_eu_re2)
+
+    status, _ = zmq_single_request("status")
+    assert status["re_state"] == "idle", pprint.pformat(status)
+    assert status["queue_stop_pending"] is False, pprint.pformat(status)
+    assert status["items_in_queue"] == 1, pprint.pformat(status)
+    assert status["items_in_history"] == 1, pprint.pformat(status)
+
+    resp, _ = zmq_single_request("queue_start")
+    assert resp["success"] is True, str(resp)
+    assert wait_for_condition(10, condition_manager_idle)
+
+    status, _ = zmq_single_request("status")
+    assert status["re_state"] == "idle", pprint.pformat(status)
+    assert status["queue_stop_pending"] is False, pprint.pformat(status)
+    assert status["items_in_queue"] == 0, pprint.pformat(status)
+    assert status["items_in_history"] == 2, pprint.pformat(status)
+
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+# ===========================================================================================
 #                                'task_status' API
 
 
@@ -3113,7 +3281,7 @@ def test_zmq_api_queue_item_get_remove_1(re_manager):  # noqa F811
         resp0, _ = zmq_single_request("queue_item_add", {"item": plan, "user": _user, "user_group": _user_group})
         assert resp0["success"] is True
 
-    status0 = get_queue_state()
+    status0 = get_manager_status()
 
     resp1, _ = zmq_single_request("queue_get")
     assert resp1["items"] != []
@@ -3138,7 +3306,7 @@ def test_zmq_api_queue_item_get_remove_1(re_manager):  # noqa F811
     assert resp2["item"]["kwargs"] == _plan3["kwargs"]
     assert "item_uid" in resp3["item"]
 
-    status1 = get_queue_state()
+    status1 = get_manager_status()
     assert status1["plan_queue_uid"] != status0["plan_queue_uid"]
 
 
@@ -3268,7 +3436,7 @@ def test_zmq_api_queue_item_get_remove_3(re_manager):  # noqa F811
         time=10, condition=condition_queue_processing_finished
     ), "Timeout while waiting for environment to be opened"
 
-    state = get_queue_state()
+    state = get_manager_status()
     assert state["items_in_queue"] == 0
     assert state["items_in_history"] == 1
 
@@ -3332,7 +3500,7 @@ def test_zmq_api_item_remove_batch_1(
         resp1a, _ = zmq_single_request("queue_item_add", params)
         assert resp1a["success"] is True
 
-    state = get_queue_state()
+    state = get_manager_status()
     assert state["items_in_queue"] == len(queue_seq)
     assert state["items_in_history"] == 0
 
@@ -3380,7 +3548,7 @@ def test_zmq_api_item_remove_batch_1(
     queue_final_seq = "".join(queue_final_seq)
     assert queue_final_seq == expected_seq
 
-    state = get_queue_state()
+    state = get_manager_status()
     assert state["items_in_queue"] == len(expected_seq)
     assert state["items_in_history"] == 0
 
@@ -3474,7 +3642,7 @@ def test_zmq_api_item_move_1(re_manager, params, src, order, success, msg):  # n
 
         assert item_uids_from_queue == item_uids_reordered
 
-        status = get_queue_state()
+        status = get_manager_status()
         if order != [0, 1, 2]:
             # The queue actually changed, so UID is expected to change
             assert status["plan_queue_uid"] != pq_uid
@@ -3488,7 +3656,7 @@ def test_zmq_api_item_move_1(re_manager, params, src, order, success, msg):  # n
         assert resp2["item"] == {}
         assert msg in resp2["msg"]
 
-        status = get_queue_state()
+        status = get_manager_status()
         # Queue did not change, so UID should remain the same
         assert status["plan_queue_uid"] == pq_uid
 
@@ -3554,7 +3722,7 @@ def test_zmq_api_item_move_batch_1(
         resp1a, _ = zmq_single_request("queue_item_add", params)
         assert resp1a["success"] is True
 
-    state = get_queue_state()
+    state = get_manager_status()
     assert state["items_in_queue"] == len(queue_seq)
     assert state["items_in_history"] == 0
 
@@ -3610,7 +3778,7 @@ def test_zmq_api_item_move_batch_1(
     queue_final_seq = "".join(queue_final_seq)
     assert queue_final_seq == expected_seq
 
-    state = get_queue_state()
+    state = get_manager_status()
     assert state["items_in_queue"] == len(expected_seq)
     assert state["items_in_history"] == 0
 
@@ -3630,20 +3798,20 @@ def test_zmq_api_queue_mode_set_1(re_manager):  # noqa: F811
     """
     Basic tests for ``queue_mode_set`` API
     """
-    status = get_queue_state()
+    status = get_manager_status()
     queue_mode_default = status["plan_queue_mode"]
 
     # Send empty dictionary, this should not change the mode
     resp1, _ = zmq_single_request("queue_mode_set", params={"mode": {}})
     assert resp1["success"] is True, str(resp1)
     assert resp1["msg"] == ""
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["plan_queue_mode"] == queue_mode_default
 
     # Meaningful change: enable the LOOP mode
     resp2, _ = zmq_single_request("queue_mode_set", params={"mode": {"loop": True}})
     assert resp2["success"] is True, str(resp2)
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["plan_queue_mode"] != queue_mode_default
     queue_mode_expected = queue_mode_default.copy()
     queue_mode_expected["loop"] = True
@@ -3652,14 +3820,14 @@ def test_zmq_api_queue_mode_set_1(re_manager):  # noqa: F811
     # Enable 'ignore_failures'
     resp3, _ = zmq_single_request("queue_mode_set", params={"mode": {"ignore_failures": True}})
     assert resp3["success"] is True, str(resp3)
-    status = get_queue_state()
+    status = get_manager_status()
     queue_mode_expected["ignore_failures"] = True
     assert status["plan_queue_mode"] == queue_mode_expected
 
     # Reset to default
     resp4, _ = zmq_single_request("queue_mode_set", params={"mode": "default"})
     assert resp4["success"] is True, str(resp4)
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["plan_queue_mode"] == queue_mode_default
 
 
@@ -3676,14 +3844,14 @@ def test_zmq_api_queue_mode_set_2_fail(re_manager, mode, msg_expected):  # noqa:
     """
     Failing cases for ``queue_mode_set`` API
     """
-    status = get_queue_state()
+    status = get_manager_status()
     queue_mode_default = status["plan_queue_mode"]
 
     resp, _ = zmq_single_request("queue_mode_set", params={"mode": mode})
     assert resp["success"] is False
     assert msg_expected in resp["msg"]
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["plan_queue_mode"] == queue_mode_default
 
 
@@ -3712,7 +3880,7 @@ def test_zmq_api_queue_mode_set_3_loop_mode(re_manager):  # noqa: F811
         resp2, _ = zmq_single_request("queue_mode_set", params={"mode": {"loop": loop_mode}})
         assert resp2["success"] is True
 
-        status = get_queue_state()
+        status = get_manager_status()
         assert status["items_in_queue"] == 3, f"loop_mode={loop_mode}"
         assert status["items_in_history"] == (0 if loop_mode else 4), f"loop_mode={loop_mode}"
 
@@ -3721,7 +3889,7 @@ def test_zmq_api_queue_mode_set_3_loop_mode(re_manager):  # noqa: F811
 
         assert wait_for_condition(time=10, condition=condition_manager_idle)
 
-        status = get_queue_state()
+        status = get_manager_status()
         assert status["items_in_queue"] == (3 if loop_mode else 0), f"loop_mode={loop_mode}"
         assert status["items_in_history"] == (2 if loop_mode else 6), f"loop_mode={loop_mode}"
 
@@ -3730,7 +3898,7 @@ def test_zmq_api_queue_mode_set_3_loop_mode(re_manager):  # noqa: F811
 
         assert wait_for_condition(time=10, condition=condition_manager_idle)
 
-        status = get_queue_state()
+        status = get_manager_status()
         assert status["items_in_queue"] == (3 if loop_mode else 0), f"loop_mode={loop_mode}"
         assert status["items_in_history"] == (4 if loop_mode else 6), f"loop_mode={loop_mode}"
 
@@ -3788,7 +3956,7 @@ def test_zmq_api_queue_mode_set_4_ignore_failures(re_manager):  # noqa: F811
 
         assert wait_for_condition(time=10, condition=condition_manager_idle)
 
-        status = get_queue_state()
+        status = get_manager_status()
         if ignore_failures:
             assert status["items_in_queue"] == 0
             assert status["items_in_history"] == 3
@@ -3813,7 +3981,7 @@ def test_zmq_api_queue_autostart_01(re_manager):  # noqa: F811
     resp1, _ = zmq_single_request("queue_autostart", params={"enable": True})
     assert resp1["success"] is True, f"resp={resp1}"
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["queue_autostart_enabled"] is True
 
     # The second call must return 'success'
@@ -3823,7 +3991,7 @@ def test_zmq_api_queue_autostart_01(re_manager):  # noqa: F811
     resp2, _ = zmq_single_request("queue_autostart", params={"enable": False})
     assert resp2["success"] is True, f"resp={resp2}"
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["queue_autostart_enabled"] is False
 
     # The second call must return 'success'
@@ -3892,20 +4060,20 @@ def test_zmq_api_queue_autostart_03(re_manager, open_env_first, autostart_first,
     # It may take some time for the queue to start
     assert wait_for_condition(time=3, condition=condition_manager_executing_queue)
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["queue_autostart_enabled"] is True, pprint.pformat(status)
     assert status["manager_state"] == "executing_queue", pprint.pformat(status)
 
     assert wait_for_condition(time=30, condition=condition_queue_processing_finished)
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["queue_autostart_enabled"] is True
 
     resp, _ = zmq_single_request("environment_close")
     assert resp["success"] is True
     assert wait_for_condition(time=10, condition=condition_environment_closed)
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["queue_autostart_enabled"] is True
     assert status["items_in_queue"] == 0
     assert status["items_in_history"] == 1
@@ -3940,7 +4108,7 @@ def test_zmq_api_queue_autostart_04(re_manager, ip_kernel_simple_client):  # noq
     resp, _ = zmq_single_request("queue_autostart", params={"enable": True})
     assert resp["success"] is True, f"resp={resp}"
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["queue_autostart_enabled"] is True, pprint.pformat(status)
     assert status["manager_state"] == "idle", pprint.pformat(status)
     assert status["worker_environment_state"] == "idle", pprint.pformat(status)
@@ -3949,13 +4117,13 @@ def test_zmq_api_queue_autostart_04(re_manager, ip_kernel_simple_client):  # noq
 
     assert wait_for_condition(15, condition_manager_executing_queue)
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["queue_autostart_enabled"] is True, pprint.pformat(status)
     assert status["manager_state"] in ("starting_queue", "executing_queue"), pprint.pformat(status)
 
     ttime.sleep(1)
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["queue_autostart_enabled"] is True, pprint.pformat(status)
     assert status["manager_state"] == "executing_queue", pprint.pformat(status)
     assert status["worker_environment_state"] == "executing_plan", pprint.pformat(status)
@@ -3964,14 +4132,14 @@ def test_zmq_api_queue_autostart_04(re_manager, ip_kernel_simple_client):  # noq
 
     wait_for_condition(time=30, condition=condition_queue_processing_finished)
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["queue_autostart_enabled"] is True
 
     resp, _ = zmq_single_request("environment_close")
     assert resp["success"] is True
     assert wait_for_condition(time=10, condition=condition_environment_closed)
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["queue_autostart_enabled"] is True
     assert status["items_in_queue"] == 0
     assert status["items_in_history"] == 1
@@ -4027,7 +4195,7 @@ def test_zmq_api_queue_autostart_05(re_manager, ip_kernel_simple_client, option,
 
     expected_autostart = True if option in ("resume", "stop") else False
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["queue_autostart_enabled"] is expected_autostart, pprint.pformat(status)
     assert status["manager_state"] == "idle", pprint.pformat(status)
     assert status["worker_environment_state"] == "idle", pprint.pformat(status)
@@ -4121,14 +4289,14 @@ def test_zmq_api_queue_autostart_06(re_manager, option):  # noqa: F811
     wait_for_condition(time=30, condition=condition_manager_idle)
 
     expected_state = option in ("normal", "resume")
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["queue_autostart_enabled"] == expected_state
 
     resp, _ = zmq_single_request("environment_close")
     assert resp["success"] is True
     assert wait_for_condition(time=10, condition=condition_environment_closed)
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["queue_autostart_enabled"] == expected_state
 
     if option in ("normal", "resume"):
@@ -4220,14 +4388,14 @@ def test_zmq_api_queue_autostart_07(re_manager, option):  # noqa: F811
 
     wait_for_condition(time=30, condition=condition_manager_idle)
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["queue_autostart_enabled"] is True
 
     resp, _ = zmq_single_request("environment_close")
     assert resp["success"] is True
     assert wait_for_condition(time=10, condition=condition_environment_closed)
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["queue_autostart_enabled"] is True
 
     if option in "immediate_plan":
@@ -4281,7 +4449,7 @@ def test_zmq_api_queue_autostart_08(re_manager, option, autostart_on, apply_queu
         resp, _ = zmq_single_request("queue_stop")
         assert resp["success"] is True, f"resp={resp}"
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["queue_stop_pending"] == apply_queue_stop
 
     if option == "restart_middle":
@@ -4296,7 +4464,7 @@ def test_zmq_api_queue_autostart_08(re_manager, option, autostart_on, apply_queu
 
     wait_for_condition(time=30, condition=condition_manager_idle)
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["queue_autostart_enabled"] == (autostart_on and not apply_queue_stop)
     assert status["queue_stop_pending"] is False
 
@@ -4308,14 +4476,14 @@ def test_zmq_api_queue_autostart_08(re_manager, option, autostart_on, apply_queu
     ttime.sleep(1.5)
     wait_for_condition(time=30, condition=condition_manager_idle)
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["queue_autostart_enabled"] == (autostart_on and not apply_queue_stop)
 
     resp, _ = zmq_single_request("environment_close")
     assert resp["success"] is True
     assert wait_for_condition(time=10, condition=condition_environment_closed)
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["queue_autostart_enabled"] == (autostart_on and not apply_queue_stop)
     assert status["queue_stop_pending"] is False
 
@@ -4377,7 +4545,7 @@ def test_zmq_api_queue_autostart_09(re_manager, autostart_on):  # noqa: F811
     ttime.sleep(1.5)
     wait_for_condition(time=30, condition=condition_manager_idle)
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["queue_autostart_enabled"] is False
     assert status["queue_stop_pending"] is False
 
@@ -4593,7 +4761,7 @@ def test_permissions_reload_3(re_manager_pc_copy, allow_count_plan):  # noqa: F8
 
     # Attempt to add the second plan
     resp4, _ = zmq_single_request("queue_item_add", {"item": _plan1, "user": _user, "user_group": _user_group})
-    status = get_queue_state()
+    status = get_manager_status()
 
     # The following checks verify that the permissions are properly reloaded by the manager process
     if allow_count_plan:
@@ -4612,7 +4780,7 @@ def test_permissions_reload_3(re_manager_pc_copy, allow_count_plan):  # noqa: F8
 
     assert wait_for_condition(time=30, condition=condition_manager_idle)
 
-    status = get_queue_state()
+    status = get_manager_status()
 
     if allow_count_plan:
         assert status["items_in_queue"] == 0
@@ -4656,7 +4824,7 @@ def test_permissions_set_get_1(re_manager, restart_manager):  # noqa: F811
     the last set of permissions is loaded from Redis and the correct list of available plans
     is generated.
     """
-    status = get_queue_state()
+    status = get_manager_status()
     plans_allowed_uid_1 = status["plans_allowed_uid"]
 
     resp1, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
@@ -4674,7 +4842,7 @@ def test_permissions_set_get_1(re_manager, restart_manager):  # noqa: F811
         assert err_msg != ""
         ttime.sleep(6)
 
-    status = get_queue_state()
+    status = get_manager_status()
     plans_allowed_uid2 = status["plans_allowed_uid"]
     assert plans_allowed_uid2 != plans_allowed_uid_1
 
@@ -4695,7 +4863,7 @@ def test_permissions_set_get_2(re_manager):  # noqa: F811
     Test that repeatedly uploading the same permissions dictionary does not update
     the lists of allowed plans and devices (UIDs)
     """
-    status = get_queue_state()
+    status = get_manager_status()
     plans_allowed_uid_0 = status["plans_allowed_uid"]
     devices_allowed_uid_0 = status["devices_allowed_uid"]
 
@@ -4705,7 +4873,7 @@ def test_permissions_set_get_2(re_manager):  # noqa: F811
     )
     assert resp1["success"] is True, pprint.pformat(resp1)
 
-    status = get_queue_state()
+    status = get_manager_status()
     plans_allowed_uid_1 = status["plans_allowed_uid"]
     devices_allowed_uid_1 = status["devices_allowed_uid"]
 
@@ -4725,7 +4893,7 @@ def test_permissions_set_get_2(re_manager):  # noqa: F811
     )
     assert resp3["success"] is True, pprint.pformat(resp3)
 
-    status = get_queue_state()
+    status = get_manager_status()
     plans_allowed_uid_2 = status["plans_allowed_uid"]
     devices_allowed_uid_2 = status["devices_allowed_uid"]
 
@@ -4786,12 +4954,12 @@ def test_zmq_api_environment_destroy_01(re_manager, destroy_while_opening, delay
     assert resp1["success"] is True
     if not destroy_while_opening:
         assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
-        status = get_queue_state()
+        status = get_manager_status()
         assert status["manager_state"] == "idle"
         assert status["worker_environment_exists"] is True
     else:
         ttime.sleep(delay)
-        status = get_queue_state()
+        status = get_manager_status()
         assert status["manager_state"] == "creating_environment"
         assert status["worker_environment_exists"] is False
 
@@ -4815,7 +4983,7 @@ def test_zmq_api_environment_destroy_02(re_manager):  # noqa: F811
     """
     resp0, _ = zmq_single_request("queue_item_add", {"item": _plan3, "user": _user, "user_group": _user_group})
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["items_in_queue"] == 1, "Incorrect number of plans in the queue"
     assert status["running_item_uid"] is None
     assert status["re_state"] is None
@@ -4827,14 +4995,14 @@ def test_zmq_api_environment_destroy_02(re_manager):  # noqa: F811
     assert resp1["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["re_state"] == "idle"
 
     resp2, _ = zmq_single_request("queue_start")
     assert resp2["success"] is True
 
     ttime.sleep(2)
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["items_in_queue"] == 0, "Incorrect number of plans in the queue"
     assert status["running_item_uid"] is not None
     assert status["re_state"] == "running"
@@ -4843,7 +5011,7 @@ def test_zmq_api_environment_destroy_02(re_manager):  # noqa: F811
     assert resp1["success"] is True
     assert wait_for_condition(time=10, condition=condition_environment_closed)
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["items_in_queue"] == 1, "Incorrect number of plans in the queue"
     assert status["items_in_history"] == 1, "Incorrect number of plans in the history"
     assert status["running_item_uid"] is None
@@ -4856,21 +5024,21 @@ def test_zmq_api_environment_destroy_02(re_manager):  # noqa: F811
     assert resp4["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["re_state"] == "idle"
 
     resp5, _ = zmq_single_request("queue_start")
     assert resp5["success"] is True
 
     ttime.sleep(2)
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["items_in_queue"] == 0, "Incorrect number of plans in the queue"
     assert status["running_item_uid"] is not None
     assert status["re_state"] == "running"
 
     assert wait_for_condition(time=60, condition=condition_queue_processing_finished)
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["items_in_queue"] == 0, "Incorrect number of plans in the queue"
     assert status["items_in_history"] == 2, "Incorrect number of plans in the history"
     assert status["running_item_uid"] is None
@@ -5371,7 +5539,7 @@ def test_zmq_api_lock_1(monkeypatch, re_manager_cmd, em_lock_code):  # noqa: F81
         assert lock_info["emergency_lock_key_is_set"] == em_lock_key
 
     def check_status(environment, queue, uid):
-        status = get_queue_state()
+        status = get_manager_status()
         assert status["lock"]["environment"] == environment
         assert status["lock"]["queue"] == queue
         if uid:
@@ -5865,7 +6033,7 @@ def test_manager_kill_1(re_manager_pc_copy):  # noqa: F811
     ttime.sleep(1)
     # Verify that the manager is not responsive
     with pytest.raises(TimeoutError):
-        get_queue_state()
+        get_manager_status()
     ttime.sleep(7)  # Wait until the manager is back online
 
     # Attempt to add 'count' plan. RE Manager is expected to use user group permissions and
@@ -5873,7 +6041,7 @@ def test_manager_kill_1(re_manager_pc_copy):  # noqa: F811
     resp3, _ = zmq_single_request("queue_item_add", params2)
     assert resp3["success"] is True, f"resp={resp3}"
 
-    status = get_queue_state()
+    status = get_manager_status()
     assert status["items_in_queue"] == 2
 
     # Close the environment
@@ -5933,6 +6101,8 @@ def test_zmq_api_unsupported_parameters(re_manager):  # noqa: F811
         "plans_allowed",
         "devices_allowed",
         "permissions_reload",
+        "permissions_get",
+        "permissions_set",
         "queue_get",
         "queue_mode_set",
         "queue_item_add",
@@ -5950,10 +6120,12 @@ def test_zmq_api_unsupported_parameters(re_manager):  # noqa: F811
         "environment_open",
         "environment_close",
         "environment_destroy",
+        "environment_update",
         "queue_start",
         "queue_stop",
         "queue_stop_cancel",
         "queue_autostart",
+        "kernel_interrupt",
         "re_pause",
         "re_resume",
         "re_stop",
@@ -5965,6 +6137,7 @@ def test_zmq_api_unsupported_parameters(re_manager):  # noqa: F811
         "lock",
         "lock_info",
         "unlock",
+        "config_get",
     )
     unsupported_param = {"unsupported_param": 10}
 

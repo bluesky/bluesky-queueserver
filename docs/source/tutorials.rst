@@ -48,6 +48,8 @@ The following tutorials are available:
 - :ref:`tutorial_uploading_scripts`
 - :ref:`tutorial_queue_autostart_mode`
 - :ref:`tutorial_start_queue_server_ipython`
+- :ref:`tutorial_ipython_mode_interrupting_kernel`
+- :ref:`tutorial_ipython_mode_updating_environment`
 - :ref:`tutorial_locking_re_manager`
 - :ref:`tutorial_changing_user_group_permissions`
 - :ref:`tutorial_running_custom_startup_code`
@@ -1402,6 +1404,231 @@ of its state.
 
 API used in this tutorial: :ref:`method_status`, :ref:`method_queue_item_add`,
 :ref:`method_queue_start`, :ref:`method_environment_open`, :ref:`method_environment_close`.
+
+
+.. _tutorial_ipython_mode_interrupting_kernel:
+
+IPython Mode: Interrupting Kernel
+---------------------------------
+
+At this moment there is no way to send interrupts to kernel from Jupyter Console (by pressing **Ctrl-C**).
+This tutorial demonstrates how to pause a plan using :ref:`method_re_pause` API or interrupt a task 
+using :ref:`method_kernel_interrupt` API. While a plan can be paused by sending :ref:`method_kernel_interrupt`
+API request once or twice, it is recommended that :ref:`method_re_pause` API is used. 
+
+The tutorial illustrates how to initiate the interrupts using command line, which is impractical in
+production deployments. It is assumed that the API will accessed via GUI components for convenience.
+
+Start RE Manager in IPython mode::
+
+  $ start-re-manager --use-ipython-kernel=ON --ipython-matplotlib=qt5
+
+Open a separate terminal for executing ``qserver`` commands and open the environment::
+
+  $ qserver environment open
+
+Start Jupyter Console in a separate terminal::
+
+  $ qserver-console
+
+A. Pausing a plan
+*****************
+
+Start a plan in a console::
+
+  In [1]: RE(count([det1, det2], num=20, delay=1))
+
+While the plan is running in the console, pause the plan using :ref:`method_re_pause` API::
+
+  $ qserver re pause
+
+Observe the plan output in the Jupyter Console to make sure the plan is paused. Check the status::
+
+  $ qserver status
+  { ...
+  'items_in_queue': 0,
+  'items_in_history': 0,
+  'running_item_uid': None,
+  'manager_state': 'idle',
+  ...
+  'worker_environment_exists': True,
+  'worker_environment_state': 'idle',
+  're_state': 'paused',
+  'ip_kernel_state': 'idle',
+  'ip_kernel_captured': False,
+  ... }
+
+Note, that both RE Manager and Worker Environment states are *'idle'*, so RE Manager is not aware 
+of the paused plan. Now resume the plan in Jupyter console and let it run to completion::
+
+  In [2]: RE.resume()
+
+B. Sending Interrupt (Ctrl-C)
+*****************************
+
+In Jupyter Console start a long running task::
+
+  In [3]: for n in range(30):
+     ...:     print(f"n = {n}")
+     ...:     ttime.sleep(1)
+
+
+Send :ref:`method_kernel_interrupt` API request from the terminal::
+
+  $ qserver kernel interrupt
+
+Observe the output in Jupyter Console to make sure the task was interrupted::
+
+  In [5]: for n in range(30):
+    ...:     print(f"n = {n}")
+    ...:     ttime.sleep(1)
+    ...: 
+  n = 0
+  n = 1
+  n = 2
+  n = 3
+  n = 4
+  n = 5
+  n = 6
+  n = 7
+  n = 8
+  ---------------------------------------------------------------------------
+  KeyboardInterrupt                         Traceback (most recent call last)
+  Cell In[5], line 3
+        1 for n in range(30):
+        2     print(f"n = {n}")
+  ----> 3     ttime.sleep(1)
+
+
+Close the environment::
+
+  $ qserver environment close
+
+
+API used in this tutorial: :ref:`method_status`, :ref:`method_environment_open`,
+:ref:`method_re_pause`, :ref:`method_kernel_interrupt`, :ref:`method_environment_close`.
+
+
+.. _tutorial_ipython_mode_updating_environment:
+
+IPython Mode: Updating Environment
+----------------------------------
+
+Users may use direct connection to IPython kernel via Jupyter Console to add, remove or
+modify plans and devices in the worker namespace. RE Manager is not immediately aware
+of changes to the namespace. To make new or modified plans or devices visible client
+applications, the lists of existing/allowed plans and devices can be updated using
+:ref:`method_environment_update` API.
+
+Start RE Manager in IPython mode::
+
+  $ start-re-manager --use-ipython-kernel=ON --ipython-matplotlib=qt5
+
+Open a separate terminal for executing ``qserver`` commands and open the environment::
+
+  $ qserver environment open
+
+Start Jupyter Console in a separate terminal::
+
+  $ qserver-console
+
+In Jupyter Console add a new (trivial) plan::
+
+  In [6]: def my_plan():
+    ...:     yield from bps.sleep(1)
+
+In the terminal check the list of allowed plans. The plan ``my_plan`` is not in the list::
+
+  $ qserver allowed plans
+  {'success': True,
+  'msg': '',
+  'plans_allowed': {'adaptive_scan': '{...}',
+                    'count': '{...}',
+                    'count_bundle_test': '{...}',
+                    'fly': '{...}',
+                    'grid_scan': '{...}',
+                    'inner_product_scan': '{...}',
+                    'list_grid_scan': '{...}',
+                    'list_scan': '{...}',
+                    'log_scan': '{...}',
+                    'marked_up_count': '{...}',
+                    'move_then_count': '{...}',
+                    'plan_test_progress_bars': '{...}',
+                    'ramp_plan': '{...}',
+                    'rel_adaptive_scan': '{...}',
+                    'rel_grid_scan': '{...}',
+                    'rel_list_grid_scan': '{...}',
+                    'rel_list_scan': '{...}',
+                    'rel_log_scan': '{...}',
+                    'rel_scan': '{...}',
+                    'rel_spiral': '{...}',
+                    'rel_spiral_fermat': '{...}',
+                    'rel_spiral_square': '{...}',
+                    'relative_inner_product_scan': '{...}',
+                    'scan': '{...}',
+                    'scan_nd': '{...}',
+                    'sim_multirun_plan_nested': '{...}',
+                    'spiral': '{...}',
+                    'spiral_fermat': '{...}',
+                    'spiral_square': '{...}',
+                    'tune_centroid': '{...}',
+                    'tweak': '{...}',
+                    'x2x_scan': '{...}'},
+  'plans_allowed_uid': '7eb1e35c-08a2-418e-9a99-2ae1a3fb99f6'}
+
+
+Now update the environment by sending :ref:`method_environment_update` API request::
+
+  $ qserver environment update
+
+and check the list of allowed plans::
+
+  $ qserver allowed plans
+  {'success': True,
+  'msg': '',
+  'plans_allowed': {'scan': '{...}',
+                    'relative_inner_product_scan': '{...}',
+                    'move_then_count': '{...}',
+                    'spiral_square': '{...}',
+                    'rel_log_scan': '{...}',
+                    'inner_product_scan': '{...}',
+                    'count': '{...}',
+                    'log_scan': '{...}',
+                    'spiral': '{...}',
+                    'adaptive_scan': '{...}',
+                    'fly': '{...}',
+                    'ramp_plan': '{...}',
+                    'sim_multirun_plan_nested': '{...}',
+                    'spiral_fermat': '{...}',
+                    'list_scan': '{...}',
+                    'rel_list_grid_scan': '{...}',
+                    'plan_test_progress_bars': '{...}',
+                    'rel_adaptive_scan': '{...}',
+                    'grid_scan': '{...}',
+                    'my_plan': '{...}',
+                    'marked_up_count': '{...}',
+                    'rel_spiral': '{...}',
+                    'x2x_scan': '{...}',
+                    'rel_grid_scan': '{...}',
+                    'rel_list_scan': '{...}',
+                    'tweak': '{...}',
+                    'tune_centroid': '{...}',
+                    'rel_spiral_square': '{...}',
+                    'rel_spiral_fermat': '{...}',
+                    'rel_scan': '{...}',
+                    'scan_nd': '{...}',
+                    'count_bundle_test': '{...}',
+                    'list_grid_scan': '{...}'},
+  'plans_allowed_uid': '3f4b9289-379c-4d6c-a230-f6db8c08712e'}
+
+Note that the ``plans_allowed_uid`` changed and the ``my_plan`` plan is in the list now.
+
+Close the environment::
+
+  $ qserver environment close
+
+API used in this tutorial: :ref:`method_environment_open`, :ref:`method_plans_allowed`,
+:ref:`method_environment_update`, :ref:`method_environment_close`.
 
 
 .. _tutorial_locking_re_manager:

@@ -1363,6 +1363,30 @@ class RunEngineManager(Process):
         except Exception as ex:
             raise Exception(f"Error occurred while loading lock info from Redis: {ex}") from ex
 
+    async def _kernel_interrupt_send(self, *, interrupt_task, interrupt_plan):
+        success, msg = True, ""
+        try:
+            if not self._use_ipython_kernel:
+                raise RuntimeError("RE Manager is not in IPython mode: IPython kernel is not used")
+
+            if not self._environment_exists:
+                raise RuntimeError("Worker environment does not exist")
+
+            if not interrupt_plan and self._manager_state in (MState.STARTING_QUEUE, MState.EXECUTING_QUEUE):
+                raise RuntimeError("Not allowed to interrupt running plan")
+
+            if not interrupt_task and self._manager_state == MState.EXECUTING_TASK:
+                raise RuntimeError("Not allowed to interrupt running task")
+
+            success, msg = await self._worker_command_kernel_interrupt(
+                interrupt_task=interrupt_task, interrupt_plan=interrupt_plan
+            )
+
+        except Exception as ex:
+            success, msg = False, f"Failed to interrupt IPython kernel: {str(ex)}"
+
+        return success, msg
+
     # ===============================================================================
     #         Functions that send commands/request data from Worker process
 
@@ -1561,6 +1585,18 @@ class RunEngineManager(Process):
         except CommTimeoutError:
             success, err_msg, task_uid = (None, "Timeout occurred while processing the request", None)
         return success, err_msg, func_info, task_uid
+
+    async def _worker_command_kernel_interrupt(self, *, interrupt_task, interrupt_plan):
+        try:
+            response = await self._comm_to_worker.send_msg(
+                "command_interrupt_kernel",
+                params={"interrupt_task": interrupt_task, "interrupt_plan": interrupt_plan},
+            )
+            success = response["status"] == "accepted"
+            err_msg = response["err_msg"]
+        except CommTimeoutError:
+            success, err_msg = (None, "Timeout occurred while processing the request")
+        return success, err_msg
 
     # ===============================================================================
     #         Functions that send commands/request data from Watchdog process
@@ -1766,15 +1802,21 @@ class RunEngineManager(Process):
         Returns config information.
         """
         success, msg = True, ""
-        if self._use_ipython_kernel and self._environment_exists:
-            payload, msg = await self._worker_request_ip_connect_info()
-            ip_connect_info = payload.get("ip_connect_info", {})
-        else:
-            ip_connect_info = {}
+        try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
-        config = {
-            "ip_connect_info": ip_connect_info,
-        }
+            if self._use_ipython_kernel and self._environment_exists:
+                payload, msg = await self._worker_request_ip_connect_info()
+                ip_connect_info = payload.get("ip_connect_info", {})
+            else:
+                ip_connect_info = {}
+
+            config = {
+                "ip_connect_info": ip_connect_info,
+            }
+        except Exception as ex:
+            success, msg, config = False, str(ex), {}
 
         return {"success": success, "msg": msg, "config": config}
 
@@ -2746,6 +2788,36 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg}
 
+    async def _environment_update_handler(self, request):
+        """
+        Update the environment (lists of existing and allowed plans and devices and RE) based
+        on the currents contents of the worker namespace. The namespace could be changed
+        by uploading scripts (``script_upload`` API), running a function (``function_execute``)
+        or executing commands using Jupyter Console (only IPython kernel mode). This API
+        creates new lists of existing plans and devices and updates cached reference to RE object.
+
+        By default, the operation is performed as a foreground task and the API call fails
+        unless RE Manager is idle. To run the update in the background thread, call the API with
+        ``run_in_background=True``.
+        """
+        logger.info("Updating RE environment ...")
+        try:
+            supported_param_names = ["run_in_background", "lock_key"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
+
+            run_in_background = request.get("run_in_background", False)
+
+            success, msg, task_uid = await self._environment_upload_script(
+                script="", update_lists=True, update_re=True, run_in_background=run_in_background
+            )
+
+        except Exception as ex:
+            success, msg, task_uid = False, f"Error: {ex}", None
+
+        return {"success": success, "msg": msg, "task_uid": task_uid}
+
     async def _script_upload_handler(self, request):
         """
         Upload script to RE worker environment. If ``update_lists==True`` (default), then lists
@@ -2988,6 +3060,34 @@ class RunEngineManager(Process):
                 success, msg = await self._autostart_enable()
             else:
                 success, msg = await self._autostart_disable()
+
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg}
+
+    async def _kernel_interrupt_handler(self, request):
+        """
+        Unlock RE Manager using ``lock_key``. The ``lock_key`` must match the key used to lock
+        the environment and/or the queue. Optionally, RE Manager may be unlocked with
+        the emergency lock key (set using  ``QSERVER_EMERGENCY_LOCK_KEY_FOR_SERVER`` environment
+        variable).
+        """
+        logger.info("Processing request to interrupt IPython kernel ...")
+        success, msg = True, ""
+
+        try:
+            supported_param_names = ["lock_key", "interrupt_task", "interrupt_plan"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
+
+            interrupt_task = bool(request.get("interrupt_task", False))
+            interrupt_plan = bool(request.get("interrupt_plan", False))
+
+            success, msg = await self._kernel_interrupt_send(
+                interrupt_task=interrupt_task, interrupt_plan=interrupt_plan
+            )
 
         except Exception as ex:
             success, msg = False, f"Error: {ex}"
@@ -3435,6 +3535,7 @@ class RunEngineManager(Process):
             "environment_open": "_environment_open_handler",
             "environment_close": "_environment_close_handler",
             "environment_destroy": "_environment_destroy_handler",
+            "environment_update": "_environment_update_handler",
             "script_upload": "_script_upload_handler",
             "function_execute": "_function_execute_handler",
             "task_result": "_task_result_handler",
@@ -3454,6 +3555,7 @@ class RunEngineManager(Process):
             "queue_stop": "_queue_stop_handler",
             "queue_stop_cancel": "_queue_stop_cancel_handler",
             "queue_autostart": "_queue_autostart_handler",
+            "kernel_interrupt": "_kernel_interrupt_handler",
             "re_pause": "_re_pause_handler",
             "re_resume": "_re_resume_handler",
             "re_stop": "_re_stop_handler",

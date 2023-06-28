@@ -207,6 +207,7 @@ class RunEngineWorker(Process):
         # The list of runs that were opened as part of execution of the currently running plan.
         # Initialized with 'RunList()' in 'run()' method.
         self._active_run_list = None
+        self._run_reg_cb = None  # Callback for RE
 
         self._re_namespace, self._plans_in_nspace, self._devices_in_nspace = {}, {}, {}
 
@@ -214,6 +215,35 @@ class RunEngineWorker(Process):
         self._unexpected_shutdown = False  # Indicates if shutdown is in progress, but it was not requested
 
         self._success_startup = True  # Indicates if worker startup is proceding successfully
+
+    @property
+    def re_state(self):
+        """
+        Returns RE state if possible (RE is a RunEngine object), otherwise returns ``None``.
+        """
+        try:
+            state = str(self._RE.state)
+        except Exception:
+            state = None
+        return state
+
+    @property
+    def re_deferred_pause_requested(self):
+        """
+        Indicates whether the deferred pause was requested if RE is a valid RunEngine object,
+        otherwise returns ``False``.
+        """
+        try:
+            try:
+                value = self._RE.deferred_pause_requested if self._RE else False
+            except AttributeError:
+                # TODO: delete this branch once Bluesky supporting
+                #   ``RunEngine.deferred_pause_pending``` is widely deployed.
+                value = self._RE._deferred_pause_requested if self._RE else False
+        except Exception:
+            value = False
+
+        return value
 
     def _execute_plan_or_task(self, parameters, exec_option):
         """
@@ -295,7 +325,7 @@ class RunEngineWorker(Process):
                     self._running_plan_exec_state = PlanExecState.COMPLETED
 
                 # Include RE state
-                self._re_report["re_state"] = str(self._RE._state)
+                self._re_report["re_state"] = self.re_state
 
                 # Clear the list of active runs
                 self._active_run_list.clear()
@@ -316,7 +346,7 @@ class RunEngineWorker(Process):
                     "stop_queue": False,  # True - request manager not to start the next plan
                 }
 
-                if self._RE._state == "paused":
+                if self.re_state == "paused":
                     # Run Engine was paused
                     self._re_report["plan_state"] = "paused"
                     self._re_report["success"] = True
@@ -338,7 +368,7 @@ class RunEngineWorker(Process):
                     logger.error("The plan failed: %s", self._re_report["err_msg"])
 
                 # Include RE state
-                self._re_report["re_state"] = str(self._RE.state)
+                self._re_report["re_state"] = self.re_state
 
         self._env_state = EState.IDLE
         logger.debug("Plan execution is completed or interrupted")
@@ -374,7 +404,7 @@ class RunEngineWorker(Process):
                 "err_msg": "The plan is completed outside RE Manager",  # List of UIDs
                 "traceback": "",
                 "stop_queue": True,  # True - request manager not to start the next plan
-                "re_state": str(self._RE.state),
+                "re_state": self.re_state,
             }
 
         self._running_plan_exec_state = PlanExecState.COMPLETED
@@ -394,9 +424,9 @@ class RunEngineWorker(Process):
             # Exit the thread if the Event is set (necessary to gracefully close the process)
             if self._exit_event.is_set():
                 break
-            if self._use_ipython_kernel and not self._exec_loop_active and self._RE:
+            if self._use_ipython_kernel and not self._exec_loop_active:
                 plan_is_running = self._running_plan_exec_state == PlanExecState.RUNNING
-                if plan_is_running and self._RE.state in ("idle", "panicked"):
+                if plan_is_running and self.re_state in ("idle", "panicked"):
                     self._generate_report_for_abandoned_plan()
 
     def _execute_task(self, parameters, exec_option):
@@ -421,7 +451,7 @@ class RunEngineWorker(Process):
             #   exceptions and handling execution results.
             func()
 
-        except Exception as ex:
+        except BaseException as ex:
             # The exception was raised while preparing the function for execution.
             logger.exception("Failed to execute task in main thread: %s", ex)
         else:
@@ -434,6 +464,8 @@ class RunEngineWorker(Process):
         plan_info = parameters
 
         try:
+            from bluesky.preprocessors import subs_wrapper
+
             with self._allowed_items_lock:
                 allowed_plans, allowed_devices = self._allowed_plans, self._allowed_devices
 
@@ -451,17 +483,18 @@ class RunEngineWorker(Process):
             plan_kwargs_parsed = plan_parsed["kwargs"]
             plan_meta_parsed = plan_parsed["meta"]
 
-            if self._RE._state == "panicked":
+            if self.re_state == "panicked":
                 raise RuntimeError(
                     "Run Engine is in the 'panicked' state. The environment must be "
                     "closed and opened again before plans could be executed."
                 )
-            elif self._RE._state != "idle":
-                raise RuntimeError(f"Run Engine is in '{self._RE._state}' state. Stop or finish any running plan.")
+            elif self.re_state not in ("idle", None):
+                raise RuntimeError(f"Run Engine is in {self.re_state!r} state. Stop or finish any running plan.")
 
             def get_start_plan_func(plan_func, plan_args, plan_kwargs, plan_meta):
                 def start_plan_func():
-                    return self._RE(plan_func(*plan_args, **plan_kwargs), **plan_meta)
+                    g = subs_wrapper(plan_func(*plan_args, **plan_kwargs), {"all": [self._run_reg_cb]})
+                    return self._RE(g, **plan_meta)
 
                 return start_plan_func
 
@@ -480,13 +513,13 @@ class RunEngineWorker(Process):
         option = parameters["option"]
         available_options = ("resume", "abort", "stop", "halt")
 
-        if self._RE._state == "panicked":
+        if self.re_state == "panicked":
             raise RuntimeError(
                 "Run Engine is in the 'panicked' state. "
                 "The worker environment must be closed and reopened before plans could be executed."
             )
-        elif self._RE._state != "paused":
-            raise RuntimeError(f"Run Engine is in '{self._RE._state}' state. Only 'paused' plan can be continued.")
+        elif self.re_state != "paused":
+            raise RuntimeError(f"Run Engine is in {self.re_state!r} state. Only 'paused' plan can be continued.")
         elif option not in available_options:
             raise RuntimeError(f"Option '{option}' is not supported. Supported options: {available_options}")
 
@@ -517,7 +550,7 @@ class RunEngineWorker(Process):
             # This is the function executed in a separate thread
             try:
                 # Use set Run Engine event loop as a current loop for this thread
-                if (run_in_background or run_in_separate_thread) and self._RE:
+                if (run_in_background or run_in_separate_thread) and hasattr(self._RE, "loop"):
                     asyncio.set_event_loop(self._RE.loop)
 
                 return_value = target(*target_args, **target_kwargs)
@@ -531,7 +564,7 @@ class RunEngineWorker(Process):
                     raise ValueError(f"Task result can not be serialized as JSON: {ex_json}") from ex_json
 
                 success, err_msg, err_tb = True, "", ""
-            except Exception as ex:
+            except BaseException as ex:
                 s = f"Error occurred while executing {name!r}"
                 err_msg = f"{s}: {str(ex)}"
                 if hasattr(ex, "tb"):  # ScriptLoadingError
@@ -707,7 +740,7 @@ class RunEngineWorker(Process):
 
         except RejectedError as ex:
             status, msg = "rejected", f"Task {name!r} was rejected by RE Worker process: {ex}"
-        except Exception as ex:
+        except BaseException as ex:
             status, msg = "error", f"Error occurred while starting the task {name!r}: {ex}"
 
         logger.debug(
@@ -794,17 +827,11 @@ class RunEngineWorker(Process):
         if update_re:
             if ("RE" in self._re_namespace) and (self._RE != self._re_namespace["RE"]):
                 self._RE = self._re_namespace["RE"]
-
-                from .plan_monitoring import CallbackRegisterRun
-
-                run_reg_cb = CallbackRegisterRun(run_list=self._active_run_list)
-                self._RE.subscribe(run_reg_cb)
-
-                logger.info("Run Engine instance ('RE') was replaced while executing the uploaded script.")
+                logger.info("Run Engine instance ('RE') was replaced.")
 
             if ("db" in self._re_namespace) and (self._db != self._re_namespace["db"]):
                 self._db = self._re_namespace["db"]
-                logger.info("Data Broker instance ('db') was replaced while executing the uploaded script.")
+                logger.info("Data Broker instance ('db') was replaced.")
 
         if update_lists:
             logger.info("Updating lists of existing and available plans and devices ...")
@@ -835,7 +862,10 @@ class RunEngineWorker(Process):
                 self._generate_lists_of_allowed_plans_and_devices()
                 self._update_existing_pd_file(options=("ALWAYS",))
 
-            logger.info("The script was successfully loaded into RE environment")
+            if script:
+                logger.info("The script was successfully loaded into RE environment")
+            else:
+                logger.info("RE environment was successfully updated")
 
         else:
             # The script was executed, but the lists were not updated and may be out of sync.
@@ -874,14 +904,8 @@ class RunEngineWorker(Process):
         item_uid = self._running_plan_info["item_uid"] if self._running_plan_info else None
         task_uid = self._running_task_uid
         plan_completed = self._running_plan_exec_state == PlanExecState.COMPLETED
-        # TODO: replace RE._state with RE.state property in the worker code (improve code style).
-        re_state = str(self._RE._state) if self._RE else "null"
-        try:
-            re_deferred_pause_requested = self._RE.deferred_pause_requested if self._RE else False
-        except AttributeError:
-            # TODO: delete this branch once Bluesky supporting
-            #   ``RunEngine.deferred_pause_pending``` is widely deployed.
-            re_deferred_pause_requested = self._RE._deferred_pause_requested if self._RE else False
+        re_state = self.re_state
+        re_deferred_pause_requested = self.re_deferred_pause_requested
         env_state_str = self._env_state.value
         re_report_available = self._re_report is not None
         run_list_updated = self._active_run_list.is_changed()  # True - updates are available
@@ -984,7 +1008,7 @@ class RunEngineWorker(Process):
             # The condition for IP Kernel 'busy' state accounts for the case when IP is not used.
             status = "rejected"
             err_msg = "IPython kernel is busy and can not be stopped."
-        elif (self._RE is not None) and (self._RE._state == "running"):
+        elif self.re_state == "running":
             status = "rejected"
             err_msg = "Run Engine is executing a plan.Stop the running plan and try again."
         else:
@@ -1041,7 +1065,7 @@ class RunEngineWorker(Process):
         invalid_state = 0
         if not self._execution_queue.empty():
             invalid_state = 1
-        elif self._RE.state == "running":
+        elif self.re_state == "running":
             invalid_state = 2
         elif self._running_plan_info or (self._running_plan_exec_state != PlanExecState.RESET):
             invalid_state = 3
@@ -1070,7 +1094,7 @@ class RunEngineWorker(Process):
             #   invalid, but is likely to occur during normal use. There is no need to print
             #   scary error message.
             status = "rejected"
-            err_msg = f"Run Engine must be in 'idle' state to start plans. Current state: {self._RE.state!r}"
+            err_msg = f"Run Engine must be in 'idle' state to start plans. Current state: {self.re_state!r}"
         else:
             status = "rejected"
             msg_list = [
@@ -1102,7 +1126,7 @@ class RunEngineWorker(Process):
         # TODO: the question is whether it is possible or should be allowed to pause a plan in
         #       any other state than 'running'???
         err_msg = ""
-        if self._RE._state == "running":
+        if self.re_state == "running":
             try:
                 if option not in pausing_options:
                     raise RuntimeError(f"Option '{option}' is not supported. Available options: {pausing_options}")
@@ -1119,7 +1143,7 @@ class RunEngineWorker(Process):
                 err_msg = str(ex)
         else:
             status = "rejected"
-            err_msg = "Run engine can be paused only in 'running' state. " f"Current state: '{self._RE._state}'"
+            err_msg = "Run engine can be paused only in 'running' state. " f"Current state: '{self.re_state}'"
 
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
@@ -1131,9 +1155,9 @@ class RunEngineWorker(Process):
         # Continue execution of the plan
         status, err_msg = "accepted", ""
 
-        if self._RE.state != "paused":
+        if self.re_state != "paused":
             status = "rejected"
-            err_msg = f"Run Engine must be in 'paused' state to continue. The state is '{self._RE._state}'"
+            err_msg = f"Run Engine must be in 'paused' state to continue. The state is {self.re_state!r}"
         else:
             if self._use_ipython_kernel and not self._exec_loop_active:
                 if not self._ip_kernel_capture():
@@ -1160,7 +1184,7 @@ class RunEngineWorker(Process):
         Reset state of RE Worker environment (prepare for execution of a new plan)
         """
         err_msg = ""
-        if self._RE._state == "idle":
+        if self.re_state in ("idle", None):
             self._running_plan_info = None
             self._running_plan_exec_state = PlanExecState.RESET
             with self._re_report_lock:
@@ -1168,7 +1192,7 @@ class RunEngineWorker(Process):
             status = "accepted"
         else:
             status = "rejected"
-            err_msg = f"Run Engine must be in 'idle' state to continue. The state is '{self._RE._state}'"
+            err_msg = f"Run Engine must be in 'idle' state to continue. The state is {self.re_state!r}"
 
         msg_out = {"status": status, "err_msg": err_msg}
         return msg_out
@@ -1236,6 +1260,31 @@ class RunEngineWorker(Process):
 
         return {"status": status, "err_msg": err_msg}
 
+    def _command_interrupt_kernel_handler(self, interrupt_task, interrupt_plan):
+        """
+        Initiate stopping the execution loop. Call fails if the worker is running on Python
+        (not IPython kernel).
+        """
+        logger.debug("Interrupting kernel ...")
+        try:
+            status, err_msg = "accepted", ""
+
+            # The same checks are already performed in the manager, but we repeat them here with
+            #   more up-to-date information
+            if not interrupt_plan and self._env_state == EState.EXECUTING_PLAN:
+                raise RuntimeError("Not allowed to interrupt running plan")
+
+            if not interrupt_task and self._env_state == EState.EXECUTING_TASK:
+                raise RuntimeError("Not allowed to interrupt running task")
+
+            msg = self._ip_kernel_client.session.msg("interrupt_request", content={})
+            self._ip_kernel_client.control_channel.send(msg)
+
+        except Exception as ex:
+            status, err_msg = "rejected", f"Error: {ex}"
+
+        return {"status": status, "err_msg": err_msg}
+
     # ------------------------------------------------------------
 
     def _execute_in_main_thread(self):
@@ -1283,6 +1332,7 @@ class RunEngineWorker(Process):
         """
         Operations necessary to prepare for worker startup (before loading)
         """
+        from .plan_monitoring import CallbackRegisterRun
         from .profile_tools import set_ipython_mode, set_re_worker_active
 
         self._ip_kernel_is_shut_down_event = threading.Event()  # Used with IPython kernel
@@ -1297,6 +1347,7 @@ class RunEngineWorker(Process):
         from .plan_monitoring import RunList
 
         self._active_run_list = RunList()  # Initialization should be done before communication is enabled.
+        self._run_reg_cb = CallbackRegisterRun(run_list=self._active_run_list)
 
         # Class that supports communication over the pipe
         self._comm_to_manager = PipeJsonRpcReceive(conn=self._conn, name="RE Worker-Manager Comm")
@@ -1319,6 +1370,7 @@ class RunEngineWorker(Process):
 
         self._comm_to_manager.add_method(self._command_reserve_kernel_handler, "command_reserve_kernel")
         self._comm_to_manager.add_method(self._command_exec_loop_stop_handler, "command_exec_loop_stop")
+        self._comm_to_manager.add_method(self._command_interrupt_kernel_handler, "command_interrupt_kernel")
 
         self._comm_to_manager.add_method(self._command_load_script, "command_load_script")
         self._comm_to_manager.add_method(self._command_execute_function, "command_execute_function")
@@ -1351,7 +1403,6 @@ class RunEngineWorker(Process):
         from bluesky.utils import PersistentDict
         from bluesky_kafka import Publisher as kafkaPublisher
 
-        from .plan_monitoring import CallbackRegisterRun
         from .profile_tools import global_user_namespace
 
         try:
@@ -1404,7 +1455,7 @@ class RunEngineWorker(Process):
 
             logger.info("Startup code was successfully loaded.")
 
-        except Exception as ex:
+        except BaseException as ex:
             s = "Failed to start RE Worker environment. Error while loading startup code"
             if hasattr(ex, "tb"):  # ScriptLoadingError
                 logger.error("%s:\n%s\n", s, ex.tb)
@@ -1465,11 +1516,6 @@ class RunEngineWorker(Process):
                             self._re_namespace["db"] = self._db
 
                             self._RE.subscribe(self._db.insert)
-
-                # Subscribe Run Engine to 'CallbackRegisterRun'. This callback is used internally
-                #   by the worker process to keep track of the runs that are open and closed.
-                run_reg_cb = CallbackRegisterRun(run_list=self._active_run_list)
-                self._RE.subscribe(run_reg_cb)
 
                 if "kafka" in self._config_dict:
                     logger.info(
@@ -1639,7 +1685,7 @@ class RunEngineWorker(Process):
                     pass
             except queue.Empty:
                 pass
-            except Exception as ex:
+            except BaseException as ex:
                 logger.exception(ex)
 
     def _ip_kernel_execute_command(self, *, command: str, except_on: bool = False):

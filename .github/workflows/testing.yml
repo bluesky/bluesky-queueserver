@@ -9,7 +9,8 @@ jobs:
     strategy:
       matrix:
         use-ipykernel: [false, true]
-        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11"]
+        group: [1, 2, 3]
       fail-fast: false
 
     steps:
@@ -35,5 +36,5 @@ jobs:
         USE_IPYKERNEL: ${{ matrix.use-ipykernel }}
       run: |
         # pytest -k test_ip_kernel_func -vvv
-        coverage run -m pytest -vv
+        coverage run -m pytest -vv --splits 3 --group ${{ matrix.group }}
         coverage report -m

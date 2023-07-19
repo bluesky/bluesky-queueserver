@@ -17,7 +17,7 @@ import typing
 from collections.abc import Iterable
 
 import jsonschema
-import pkg_resources
+import importlib.resources
 import pydantic
 import yaml
 from numpydoc.docscrape import NumpyDocString
@@ -173,7 +173,7 @@ def get_default_startup_dir():
     Returns the path to the default profile collection that is distributed with the package.
     The function does not guarantee that the directory exists. Used for demo with Python-based worker.
     """
-    pc_path = pkg_resources.resource_filename("bluesky_queueserver", "profile_collection_sim/")
+    pc_path = os.path.join(importlib.resources.files("bluesky_queueserver"), "profile_collection_sim", "")
     return pc_path
 
 

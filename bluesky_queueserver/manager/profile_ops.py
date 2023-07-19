@@ -3,6 +3,7 @@ import copy
 import enum
 import glob
 import importlib
+import importlib.resources
 import inspect
 import logging
 import numbers
@@ -17,7 +18,6 @@ import typing
 from collections.abc import Iterable
 
 import jsonschema
-import importlib.resources
 import pydantic
 import yaml
 from numpydoc.docscrape import NumpyDocString

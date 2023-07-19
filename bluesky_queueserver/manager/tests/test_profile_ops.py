@@ -16,6 +16,7 @@ import ophyd.sim
 import pytest
 import yaml
 from bluesky import protocols
+from packaging import version
 
 from bluesky_queueserver import gen_list_of_plans_and_devices, register_device, register_plan
 from bluesky_queueserver.manager.annotation_decorator import parameter_annotation_decorator
@@ -3098,7 +3099,12 @@ def _create_schema_for_testing(annotation_type):
 
     model_kwargs = {"par": (annotation_type, ...)}
     func_model = pydantic.create_model("func_model", **model_kwargs)
-    schema = func_model.schema()
+
+    if version.parse(pydantic.__version__) < version.parse("2.0.0"):
+        schema = func_model.schema()
+    else:
+        schema = func_model.model_json_schema()
+
     return schema
 
 

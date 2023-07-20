@@ -10,7 +10,13 @@ jobs:
       matrix:
         use-ipykernel: [false, true]
         python-version: ["3.9", "3.10", "3.11"]
+        pydantic-version: ["<2.0.0", ">=2.0.0"]
         group: [1, 2, 3]
+        exclude:
+          - python-version: "3.9"
+            pydantic-version: "<2.0.0"
+          - python-version: "3.10"
+            pydantic-version: "<2.0.0"
       fail-fast: false
 
     steps:
@@ -30,6 +36,7 @@ jobs:
 
         pip install .
         pip install -r requirements-dev.txt
+        pip install "pydantic${{ matrix.pydantic-version }}"
         pip list
     - name: Test with pytest
       env:

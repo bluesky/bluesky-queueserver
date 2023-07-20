@@ -3898,7 +3898,7 @@ def test_plan(param):
 
 # Error messages may be different for Pydantic 1 and 2
 if pydantic_version_major == 2:
-    err_msg_tpp1 = "Input should be 'det1','det2' or 'det3'"
+    err_msg_tpp1 = r"Input should be 'det1','det2' or 'det3' \[type=enum, input_value='det4', input_type=str\]"
 else:
     err_msg_tpp1 = "value is not a valid enumeration member; permitted: 'det1', 'det2', 'det3'"
 
@@ -6703,7 +6703,10 @@ if pydantic_version_major == 2:
     err_msg_tvp3c = "Input should be an instance of Motors [type=is_instance_of, input_value='m2', input_type=str]"
     err_msg_tvp3d = "Input should be an instance of Motors [type=is_instance_of, input_value='m2', input_type=str]"
     err_msg_tvp3e = "Input should be a valid list [type=list_type, input_value='m2', input_type=str]"
-    err_msg_tvp3f = "Input should be a valid list [type=list_type, input_value='d4', input_type=str]"
+    err_msg_tvp3f = (
+        "Input should be an instance of Detectors2 [type=is_instance_of, input_value='d4', input_type=str]"
+    )
+    err_msg_tvp3f1 = "Input should be 'd5' [type=enum, input_value='d4', input_type=str]"
     err_msg_tvp3g = "Input should be a valid list [type=list_type, input_value='d2', input_type=str]"
     err_msg_tvp3h = "Input should be 'd1' or 'd2' [type=enum, input_value='d4', input_type=str]"
     err_msg_tvp3i = "Input should be 'p1' [type=enum, input_value='p3', input_type=str]"
@@ -6717,6 +6720,7 @@ else:
     err_msg_tvp3d = "value is not a valid enumeration member; permitted:"
     err_msg_tvp3e = "value is not a valid list"
     err_msg_tvp3f = "value is not a valid enumeration member; permitted:"
+    err_msg_tvp3f1 = "value is not a valid enumeration member; permitted:"
     err_msg_tvp3g = "value is not a valid list"
     err_msg_tvp3h = "value is not a valid enumeration member; permitted: 'd1', 'd2'"
     err_msg_tvp3i = "value is not a valid enumeration member; permitted: 'p1'"
@@ -6767,9 +6771,13 @@ else:
     # Pass single detector (allowed).
     (_vp3a, {"args": [("m1", "m2"), "d4", ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2", "d4"), True, ""),
-    # Pass single detector from 'Detectors2' group, which is not in the list of allowed devices.
+    # Pass single detector from 'Detectors2' group, no devices from 'Detector2' group are allowed.
     (_vp3a, {"args": [("m1", "m2"), "d4", ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), False, err_msg_tvp3f),
+    # Pass single detector from 'Detectors2' group, which is not in the list of allowed devices.
+    #   Detector2 group is not empty.
+    (_vp3a, {"args": [("m1", "m2"), "d4", ("p1",), (10.0, 20.0)], "kwargs": {}},
+     ("m1", "m2", "d1", "d2", "d5"), False, err_msg_tvp3f1),
     # Pass single detector from 'Detectors1' group (not allowed).
     (_vp3a, {"args": [("m1", "m2"), "d2", ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2", "d4"), False, err_msg_tvp3g),

@@ -2180,6 +2180,7 @@ def _process_annotation(encoded_annotation, *, ns=None):
             for d in items[item_name]:
                 type_code += f"'{d}': '{d}',"
             type_code += "})"
+
             ns[type_name] = eval(type_code, ns, ns)
 
         # Once all the types are created,  execute the code for annotation.

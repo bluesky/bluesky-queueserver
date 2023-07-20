@@ -5,6 +5,7 @@ coverage
 flake8
 isort
 happi>=1.14.0
+pre-commit
 pytest
 pytest-xprocess
 pytest-split

@@ -1412,9 +1412,9 @@ IPython Mode: Interrupting Kernel
 ---------------------------------
 
 At this moment there is no way to send interrupts to kernel from Jupyter Console (by pressing **Ctrl-C**).
-This tutorial demonstrates how to pause a plan using :ref:`method_re_pause` API or interrupt a task 
+This tutorial demonstrates how to pause a plan using :ref:`method_re_pause` API or interrupt a task
 using :ref:`method_kernel_interrupt` API. While a plan can be paused by sending :ref:`method_kernel_interrupt`
-API request once or twice, it is recommended that :ref:`method_re_pause` API is used. 
+API request once or twice, it is recommended that :ref:`method_re_pause` API is used.
 
 The tutorial illustrates how to initiate the interrupts using command line, which is impractical in
 production deployments. It is assumed that the API will accessed via GUI components for convenience.
@@ -1458,7 +1458,7 @@ Observe the plan output in the Jupyter Console to make sure the plan is paused. 
   'ip_kernel_captured': False,
   ... }
 
-Note, that both RE Manager and Worker Environment states are *'idle'*, so RE Manager is not aware 
+Note, that both RE Manager and Worker Environment states are *'idle'*, so RE Manager is not aware
 of the paused plan. Now resume the plan in Jupyter console and let it run to completion::
 
   In [2]: RE.resume()
@@ -1482,7 +1482,7 @@ Observe the output in Jupyter Console to make sure the task was interrupted::
   In [5]: for n in range(30):
     ...:     print(f"n = {n}")
     ...:     ttime.sleep(1)
-    ...: 
+    ...:
   n = 0
   n = 1
   n = 2

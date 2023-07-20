@@ -23,7 +23,7 @@ user_groups:
       - null  # Nothing is forbidden
     allowed_functions:
       - "function_sleep"  # Explicitly listed name
-      - ":^func_for_test"  
+      - ":^func_for_test"
   test_user:  # Another group used for unit tests.
     allowed_plans:
       - ":^count"  # Use regular expression patterns

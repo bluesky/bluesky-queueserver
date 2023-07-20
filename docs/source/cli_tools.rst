@@ -190,7 +190,7 @@ Other Configuration Parameters
     $ start-re-manager -h
     usage: start-re-manager [-h] [--config CONFIG_PATH] [--zmq-control-addr ZMQ_CONTROL_ADDR]
                             [--zmq-addr ZMQ_ADDR] [--startup-profile STARTUP_PROFILE]
-                            [--startup-module STARTUP_MODULE | --startup-script STARTUP_SCRIPT | 
+                            [--startup-module STARTUP_MODULE | --startup-script STARTUP_SCRIPT |
                              --startup-dir STARTUP_DIR]
                             [--ignore-invalid-plans {ON,OFF}]
                             [--device-max-depth DEVICE_MAX_DEPTH]
@@ -631,7 +631,7 @@ the path to the directory with startup files, the path to a startup script or mo
     $ qserver-list-plans-devices -h
     usage: qserver-list-plans-devices [-h] [--file-dir FILE_DIR] [--file-name FILE_NAME]
                                       [--startup-profile STARTUP_PROFILE]
-                                      [--startup-dir STARTUP_DIR | --startup-module STARTUP_MODULE_NAME | 
+                                      [--startup-dir STARTUP_DIR | --startup-module STARTUP_MODULE_NAME |
                                       --startup-script STARTUP_SCRIPT_PATH]
                                       [--ipython-dir IPYTHON_DIR]
                                       [--use-ipython-kernel {ON,OFF}]

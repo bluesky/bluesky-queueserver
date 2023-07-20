@@ -13,6 +13,7 @@ from typing import Dict, Optional
 
 import ophyd
 import ophyd.sim
+import pydantic
 import pytest
 import yaml
 from bluesky import protocols
@@ -73,6 +74,7 @@ from .common import (
 )
 
 python_version = sys.version_info  # Can be compare to tuples (such as 'python_version >= (3, 9)')
+pydantic_version_major = version.parse(pydantic.__version__).major
 
 
 def test_get_default_startup_dir():
@@ -3095,15 +3097,13 @@ def test_find_and_replace_built_in_types_1(
 
 
 def _create_schema_for_testing(annotation_type):
-    import pydantic
-
     model_kwargs = {"par": (annotation_type, ...)}
     func_model = pydantic.create_model("func_model", **model_kwargs)
 
-    if version.parse(pydantic.__version__) < version.parse("2.0.0"):
-        schema = func_model.schema()
-    else:
+    if pydantic_version_major == 2:
         schema = func_model.model_json_schema()
+    else:
+        schema = func_model.schema()
 
     return schema
 
@@ -3896,6 +3896,13 @@ def test_plan(param):
 """
 
 
+# Error messages may be different for Pydantic 1 and 2
+if pydantic_version_major == 2:
+    err_msg_tpp1 = "Input should be 'det1','det2' or 'det3'"
+else:
+    err_msg_tpp1 = "value is not a valid enumeration member; permitted: 'det1', 'det2', 'det3'"
+
+
 # fmt: off
 @pytest.mark.parametrize(
     "plan, exp_args, exp_kwargs, success, err_msg",
@@ -3916,8 +3923,7 @@ def test_plan(param):
         ({"name": "move_then_count", "user_group": _user_group,
           "args": [["motor1"], ["det1", "det4"]],
           "kwargs": {"positions": [5, 7]}},
-         [[ophyd.sim.motor1], [ophyd.sim.det1], [5, 7]], {}, False,
-         "value is not a valid enumeration member; permitted: 'det1', 'det2', 'det3'"),
+         [[ophyd.sim.motor1], [ophyd.sim.det1], [5, 7]], {}, False, err_msg_tpp1),
         # Use default value for 'detectors' defined in parameter annotation
         ({"name": "move_then_count", "user_group": _user_group, "args": [["motor1"]],
           "kwargs": {"positions": [5, 7]}},
@@ -4266,6 +4272,29 @@ def _gen_environment_pp2():
     return plans_in_nspace, devices_in_nspace, allowed_plans, allowed_devices
 
 
+# Error messages may be different for Pydantic 1 and 2
+if pydantic_version_major == 2:
+    err_msg_tpp2a = (
+        r"Input should be a valid integer, got a number with a fractional part "
+        r"\[type=int_from_float, input_value=2.6, input_type=float\]"
+    )
+    err_msg_tpp2b = (
+        r"Input should be a valid integer, got a number with a fractional part "
+        r"\[type=int_from_float, input_value=2.8, input_type=float\]"
+    )
+    err_msg_tpp2c = "Input should be '_pp_dev1','_pp_dev2' or '_pp_dev3'"
+    err_msg_tpp2d = "Input should be '_pp_p1','_pp_p2' or '_pp_p3'"
+    err_msg_tpp2e = "Input should be 'one','two' or 'three'"
+    err_msg_tpp2f = r"Input should be a valid string \[type=string_type, input_value=50, input_type=int\]"
+else:
+    err_msg_tpp2a = "Incorrect parameter type: key='a', value='2.6'"
+    err_msg_tpp2b = "Incorrect parameter type: key='b', value='2.8'"
+    err_msg_tpp2c = "value is not a valid enumeration member"
+    err_msg_tpp2d = "value is not a valid enumeration member"
+    err_msg_tpp2e = "value is not a valid enumeration member"
+    err_msg_tpp2f = "Incorrect parameter type: key='b', value='50'"
+
+
 # fmt: off
 @pytest.mark.parametrize(
     "plan_name, plan, remove_objs, exp_args, exp_kwargs, exp_meta, success, err_msg",
@@ -4290,7 +4319,7 @@ def _gen_environment_pp2():
         ("plan2", {"user_group": _user_group, "args": [3, 2.6]}, [],
          [3, 2.6], {}, {}, True, ""),
         ("plan2", {"user_group": _user_group, "args": [2.6, 3]}, [],
-         [2.6, 3], {}, {}, False, " Incorrect parameter type: key='a', value='2.6'"),
+         [2.6, 3], {}, {}, False, err_msg_tpp2a),
         ("plan2", {"user_group": _user_group, "kwargs": {"b": 9.9, "s": "def"}}, [],
          [], {"b": 9.9, "s": "def"}, {}, True, ""),
 
@@ -4305,7 +4334,7 @@ def _gen_environment_pp2():
         ("plan3", {"user_group": _user_group, "args": [], "kwargs": {"b": 30}}, [],
          [], {'a': 0.5, 'b': 30, 's': 50}, {}, True, ""),
         ("plan3", {"user_group": _user_group, "args": [], "kwargs": {"b": 2.8}}, [],
-         [], {'a': 0.5, 'b': 2.8, 's': 50}, {}, False, "Incorrect parameter type: key='b', value='2.8'"),
+         [], {'a': 0.5, 'b': 2.8, 's': 50}, {}, False, err_msg_tpp2b),
 
         # Plan with a single parameter, which is a list of detector. The list of detector names (enum)
         #   and default value (list of detectors) is specified in 'parameter_annotation_decorator'.
@@ -4318,7 +4347,7 @@ def _gen_environment_pp2():
         ("plan4", {"user_group": _user_group, "kwargs": {"detectors": ["_pp_dev1", "_pp_dev3"]}}, [],
          [[_pp_dev1, _pp_dev3]], {}, {}, True, ""),
         ("plan4", {"user_group": _user_group, "kwargs": {"detectors": ["nonexisting_dev", "_pp_dev3"]}}, [],
-         [[_pp_dev1, _pp_dev3]], {}, {}, False, "value is not a valid enumeration member"),
+         [[_pp_dev1, _pp_dev3]], {}, {}, False, err_msg_tpp2c),
 
         # Passing subdevice names to plans. Parameter annotation contains fixed lists of device names,
         #   so the passed devices should be converted to objects or parameter validation should fail
@@ -4465,7 +4494,7 @@ def _gen_environment_pp2():
         ("plan5", {"user_group": _user_group, "kwargs": {"plan_to_execute": "_pp_p3"}}, [],
          [_pp_p3], {}, {}, True, ""),
         ("plan5", {"user_group": _user_group, "args": ["nonexisting_plan"]}, [],
-         [_pp_p3], {}, {}, False, "value is not a valid enumeration member"),
+         [_pp_p3], {}, {}, False, err_msg_tpp2d),
         # Remove plan from the list of allowed plans
         ("plan5", {"user_group": _user_group}, ["_pp_p2"],
          [], {"plan_to_execute": "_pp_p2"}, {}, True, ""),
@@ -4529,7 +4558,7 @@ def _gen_environment_pp2():
         ("plan6", {"user_group": _user_group, "args": [("one", "two")]}, [],
          [("one", "two")], {}, {}, True, ""),
         ("plan6", {"user_group": _user_group, "args": [("one", "nonexisting")]}, [],
-         [("one", "two")], {}, {}, False, "value is not a valid enumeration member"),
+         [("one", "two")], {}, {}, False, err_msg_tpp2e),
 
         # Plan has no custom annotation. All strings must be converted to objects whenever possible.
         ("plan1", {"user_group": _user_group, "args": ["a", ":a*", "a-b-c"]}, [],
@@ -4543,8 +4572,7 @@ def _gen_environment_pp2():
         ("plan7", {"user_group": _user_group, "args": [["_pp_dev1", "_pp_dev3", "some_str"], "_pp_dev2"]}, [],
          [[_pp_dev1, _pp_dev3, "some_str"], "_pp_dev2"], {}, {}, True, ""),
         ("plan7", {"user_group": _user_group, "args": [["_pp_dev1", "_pp_dev3", "some_str"], 50]}, [],
-         [[_pp_dev1, _pp_dev3, "some_str"], "_pp_dev2"], {}, {}, False,
-         "Incorrect parameter type: key='b', value='50'"),
+         [[_pp_dev1, _pp_dev3, "some_str"], "_pp_dev2"], {}, {}, False, err_msg_tpp2f),
 
         # General failing cases
         ("nonexisting_plan", {"user_group": _user_group}, [],
@@ -6668,8 +6696,38 @@ def _vp3a(
     yield from ["one", "two", "three"]
 
 
+# Error messages may be different for Pydantic 1 and 2
+if pydantic_version_major == 2:
+    err_msg_tvp3a = "Input should be 'm2' [type=enum, input_value='m4', input_type=str]"
+    err_msg_tvp3b = "Input should be 'm2' [type=enum, input_value='m3', input_type=str]"
+    err_msg_tvp3c = "Input should be an instance of Motors [type=is_instance_of, input_value='m2', input_type=str]"
+    err_msg_tvp3d = "Input should be an instance of Motors [type=is_instance_of, input_value='m2', input_type=str]"
+    err_msg_tvp3e = "Input should be a valid list [type=list_type, input_value='m2', input_type=str]"
+    err_msg_tvp3f = "Input should be a valid list [type=list_type, input_value='d4', input_type=str]"
+    err_msg_tvp3g = "Input should be a valid list [type=list_type, input_value='d2', input_type=str]"
+    err_msg_tvp3h = "Input should be 'd1' or 'd2' [type=enum, input_value='d4', input_type=str]"
+    err_msg_tvp3i = "Input should be 'p1' [type=enum, input_value='p3', input_type=str]"
+    err_msg_tvp3j = "Input should be 'p1' [type=enum, input_value='p2', input_type=str]"
+    err_msg_tvp3k = "Input should be 'p1' [type=enum, input_value='p2', input_type=str]"
+    err_msg_tvp3l = "Input should be 'm1' or 'm2' [type=enum, input_value=0, input_type=int]"
+else:
+    err_msg_tvp3a = "value is not a valid enumeration member; permitted: 'm2'"
+    err_msg_tvp3b = "value is not a valid enumeration member; permitted: 'm2'"
+    err_msg_tvp3c = "value is not a valid enumeration member; permitted:"
+    err_msg_tvp3d = "value is not a valid enumeration member; permitted:"
+    err_msg_tvp3e = "value is not a valid list"
+    err_msg_tvp3f = "value is not a valid enumeration member; permitted:"
+    err_msg_tvp3g = "value is not a valid list"
+    err_msg_tvp3h = "value is not a valid enumeration member; permitted: 'd1', 'd2'"
+    err_msg_tvp3i = "value is not a valid enumeration member; permitted: 'p1'"
+    err_msg_tvp3j = "value is not a valid enumeration member; permitted: 'p1'"
+    err_msg_tvp3k = "value is not a valid enumeration member; permitted: 'p1'"
+    err_msg_tvp3l = "value is not a valid enumeration member"
+
+
 # fmt: off
 @pytest.mark.parametrize("plan_func, plan, allowed_devices, success, errmsg", [
+
     # Basic use of the function.
     (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), True, ""),
@@ -6692,42 +6750,42 @@ def _vp3a(
 
     # Use motor that is not listed in the annotation (but exists in the list of allowed devices).
     (_vp3a, {"args": [("m2", "m4"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
-     ("m2", "m4", "d1", "d2"), False, "value is not a valid enumeration member; permitted: 'm2'"),
+     ("m2", "m4", "d1", "d2"), False, err_msg_tvp3a),
     # The motor is not in the list of allowed devices.
     (_vp3a, {"args": [("m2", "m3"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
-     ("m2", "m4", "d1", "d2"), False, "value is not a valid enumeration member; permitted: 'm2'"),
+     ("m2", "m4", "d1", "d2"), False, err_msg_tvp3b),
     # Both motors are not in the list of allowed devices.
     (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
-     ("m4", "m5", "d1", "d2"), False, "value is not a valid enumeration member; permitted:"),
+     ("m4", "m5", "d1", "d2"), False, err_msg_tvp3c),
     # Empty list of allowed devices (should be the same result as above).
     (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
-     (), False, "value is not a valid enumeration member; permitted:"),
+     (), False, err_msg_tvp3d),
     # Single motor is passed as a scalar (instead of a list element)
     (_vp3a, {"args": ["m2", ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
-     ("m2", "m4", "d1", "d2"), False, "value is not a valid list"),
+     ("m2", "m4", "d1", "d2"), False, err_msg_tvp3e),
 
     # Pass single detector (allowed).
     (_vp3a, {"args": [("m1", "m2"), "d4", ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2", "d4"), True, ""),
     # Pass single detector from 'Detectors2' group, which is not in the list of allowed devices.
     (_vp3a, {"args": [("m1", "m2"), "d4", ("p1",), (10.0, 20.0)], "kwargs": {}},
-     ("m1", "m2", "d1", "d2"), False, "value is not a valid enumeration member; permitted:"),
+     ("m1", "m2", "d1", "d2"), False, err_msg_tvp3f),
     # Pass single detector from 'Detectors1' group (not allowed).
     (_vp3a, {"args": [("m1", "m2"), "d2", ("p1",), (10.0, 20.0)], "kwargs": {}},
-     ("m1", "m2", "d1", "d2", "d4"), False, " value is not a valid list"),
+     ("m1", "m2", "d1", "d2", "d4"), False, err_msg_tvp3g),
     # Pass a detector from a group 'Detector2' as a list element.
     (_vp3a, {"args": [("m1", "m2"), ("d4",), ("p1",), (10.0, 20.0)], "kwargs": {}},
-     ("m1", "m2", "d1", "d2", "d4"), False, "value is not a valid enumeration member; permitted: 'd1', 'd2'"),
+     ("m1", "m2", "d1", "d2", "d4"), False, err_msg_tvp3h),
 
     # Plan 'p3' is not in the list of allowed plans
     (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p3",), (10.0, 20.0)], "kwargs": {}},
-     ("m1", "m2", "d1", "d2"), False, "value is not a valid enumeration member; permitted: 'p1'"),
+     ("m1", "m2", "d1", "d2"), False, err_msg_tvp3i),
     # Plan 'p2' is in the list of allowed plans, but not listed in the annotation.
     (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p2",), (10.0, 20.0)], "kwargs": {}},
-     ("m1", "m2", "d1", "d2"), False, "value is not a valid enumeration member; permitted: 'p1'"),
+     ("m1", "m2", "d1", "d2"), False, err_msg_tvp3j),
     # Plan 'p2' is in the list of allowed plans, but not listed in the annotation.
     (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1", "p2"), (10.0, 20.0)], "kwargs": {}},
-     ("m1", "m2", "d1", "d2"), False, "value is not a valid enumeration member; permitted: 'p1'"),
+     ("m1", "m2", "d1", "d2"), False, err_msg_tvp3k),
     # Single plan is passed as a scalar (allowed in the annotation).
     (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), "p1", (10.0, 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), True, ""),
@@ -6737,7 +6795,7 @@ def _vp3a(
      ("m1", "m2", "d1", "d2"), False, "Incorrect parameter type"),
     # Int instead of a motor name (validation should fail)
     (_vp3a, {"args": [(0, "m2"), ("d1", "d2"), ("p1",), ("10.0", 20.0)], "kwargs": {}},
-     ("m1", "m2", "d1", "d2"), False, "value is not a valid enumeration member"),
+     ("m1", "m2", "d1", "d2"), False, err_msg_tvp3l),
 ])
 # fmt: on
 def test_validate_plan_3(plan_func, plan, allowed_devices, success, errmsg):

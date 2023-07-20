@@ -2420,6 +2420,8 @@ def _validate_plan_parameters(param_list, call_args, call_kwargs):
         #   recommended 'm.dict()', because 'm.dict()' was causing performance problems
         #   when validating large batches of plans. Based on testing, 'm.__dict__' seems
         #   to work fine in this application.
+        # NOTE: the following step may not be needed once Pydantic 1 is deprecated,
+        #   because Pydantic 2 performs strict type checking.
         success, msg = _compare_in_out(bound_args.arguments, m.__dict__)
         if not success:
             raise ValueError(f"Error in argument types: {msg}")

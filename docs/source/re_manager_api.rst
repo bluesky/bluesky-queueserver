@@ -779,16 +779,16 @@ Execution     The request initiates the sequence of destroying the environment.
 ============  =========================================================================================
 Method        **'environment_update'**
 ------------  -----------------------------------------------------------------------------------------
-Description   Update the state and cached parameters of the worker environment based on contents of the 
+Description   Update the state and cached parameters of the worker environment based on contents of the
               worker namespace. The updated parameters include the reference to the Run Engine and lists of
-              existing and available plans and devices. The API is intended for using in cases when 
-              users bypass RE Manager to modify contents of the namespace, for example by connecting 
+              existing and available plans and devices. The API is intended for using in cases when
+              users bypass RE Manager to modify contents of the namespace, for example by connecting
               directly to IPython kernel (IPython mode) and executing commands via Jupyter Console.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **run_in_background**: *boolean* (optional, default *False*)
-                  Set this parameter *True* to execute the update in the background thread (while a plan or 
-                  another foreground task is running). Generally, it is recommended to run the update 
-                  in the main thread. **Developers of data acquisition workflows and/or user specific code 
+                  Set this parameter *True* to execute the update in the background thread (while a plan or
+                  another foreground task is running). Generally, it is recommended to run the update
+                  in the main thread. **Developers of data acquisition workflows and/or user specific code
                   are responsible for thread safety.**
 
               **lock_key**: *str* (optional)
@@ -806,7 +806,7 @@ Returns       **success**: *boolean*
                   is completed (see *task_result* API).
 ------------  -----------------------------------------------------------------------------------------
 Execution     The request initiates the update. The update is not instant, especially if the namespace
-              is large. Monitor 'manager_state' (foreground task) or use 'task_uid' to check if 
+              is large. Monitor 'manager_state' (foreground task) or use 'task_uid' to check if
               the task execution is completed or the update is successful.
 ============  =========================================================================================
 
@@ -2126,13 +2126,13 @@ Description   Send interrupt request (Ctrl-C) to the running IPython kernel. The
               executing a plan or a task. Set the **interrupt_task** and/or **interrupt_plan**
               parameters *True* in order to be able to interrupt a running foreground task or a plan
               (single interrupt initiates deferred pause, two consecutive interrupts initiate immediate
-              pause). Note, that :ref:`method_re_pause` API is more reliable method of pausing the plan. 
+              pause). Note, that :ref:`method_re_pause` API is more reliable method of pausing the plan.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **interrupt_task**: *boolean* (optional, default: *False*)
                   Allow interrupting a foreground task (e.g. a function or a script) started by RE Manager.
-            
+
               **interrupt_plan**: *boolean* (optional, default: *False*)
-                  Allow interrupting a running plan. By default the API fails if a plan is running in 
+                  Allow interrupting a running plan. By default the API fails if a plan is running in
                   the worker environment (Run Engine is in the *'running'* state), whether the plan
                   was started by RE Manager or by connecting directly to the kernel (e.g. using Jupyter Console).
                   Note, that using :ref:`method_re_pause` API is the preferred way of pausing a running plan

@@ -1,4 +1,5 @@
 import copy
+import getpass
 import os
 import pprint
 import re
@@ -451,12 +452,13 @@ def test_cli_parameters_zmq_server_address_1(monkeypatch, re_manager_cmd, test_m
 
 def _get_expected_settings_default_1(tmpdir):
     use_ip_kernel = use_ipykernel_for_tests()
+    username = getpass.getuser()
     if use_ip_kernel:
         startup_dir = None
-        ipython_dir = "/tmp/qserver/ipython"
+        ipython_dir = f"/tmp/qserver_{username}/ipython"
         startup_profile = "collection_sim"
-        user_group_permissions_path = "/tmp/qserver/ipython/profile_collection_sim/startup"
-        existing_plans_and_devices_path = "/tmp/qserver/ipython/profile_collection_sim/startup"
+        user_group_permissions_path = f"/tmp/qserver_{username}/ipython/profile_collection_sim/startup"
+        existing_plans_and_devices_path = f"/tmp/qserver_{username}/ipython/profile_collection_sim/startup"
     else:
         startup_dir = "/bluesky_queueserver/profile_collection_sim/"
         ipython_dir = None

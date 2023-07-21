@@ -5,6 +5,7 @@ See profiles.py for client configuration.
 """
 import builtins
 import copy
+import getpass
 import logging
 import os
 import sys
@@ -683,7 +684,7 @@ class Settings:
             # If no location of startup code was specified, then load the default
             #   simulated ipython_sim/profile_collection_sim
             if not any([startup_script, startup_module, startup_profile, ipython_dir]):
-                ipython_dir = os.path.join(tempfile.gettempdir(), "qserver", "ipython")
+                ipython_dir = os.path.join(tempfile.gettempdir(), f"qserver_{getpass.getuser()}", "ipython")
                 startup_profile = default_startup_profile
                 demo_mode = True
 

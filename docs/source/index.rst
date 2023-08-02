@@ -13,6 +13,7 @@ Bluesky-QueueServer Documentation
    installation
    tutorials
    release_history
+   contributing
    Source Code on GitHub <https://github.com/bluesky/bluesky-queueserver>
 
 .. toctree::

@@ -162,7 +162,7 @@ def test_read_cell_parameter(val_in, val_out, val_type, success, errmsg):
         val_result = _read_cell_parameter(val_in)
         assert val_result == val_out
         if val_type:
-            assert type(val_result) == val_type
+            assert isinstance(val_result, val_type)
     else:
         with pytest.raises(Exception, match=errmsg):
             _read_cell_parameter(val_in)

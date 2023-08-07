@@ -2017,11 +2017,12 @@ def _check_ranges(kwargs_in, param_list):
 def _find_and_replace_built_in_types(annotation_type_str, *, plans=None, devices=None, enums=None):
     """
     Find and replace built-in types in parameter annotation type string. Built-in types are
-    ``__PLAN__``, ``__DEVICE__``, ``__PLAN_OR_DEVICE__``. Since plan and device names are passed
-    as strings and then converted to respective object, the built-in plan names are replaced by ``str``
-    type, which is then used in parameter validation. The function also determines whether plans, devices
-    or both plans and devices need to be converted. If the name of the built-in type is redefined
-    in ``plans``, ``devices`` or ``enums`` section, then the keyword is ignored.
+    ``__PLAN__``, ``__DEVICE__``, ``__PLAN_OR_DEVICE__``, ``__READABLE__``, ``__MOVABLE__``, ``__FLYABLE__``.
+    Since plan and device names are passed as strings and then converted to respective object,
+    the built-in plan names are replaced by ``str`` type, which is then used in parameter validation.
+    The function also determines whether plans, devices or both plans and devices need to be converted.
+    If the name of the built-in type is redefined in ``plans``, ``devices`` or ``enums`` section,
+    then the keyword is ignored.
 
     Parameters
     ----------
@@ -2053,6 +2054,9 @@ def _find_and_replace_built_in_types(annotation_type_str, *, plans=None, devices
         "__PLAN__": ("str", True, False),
         "__DEVICE__": ("str", False, True),
         "__PLAN_OR_DEVICE__": ("str", True, True),
+        "__READABLE__": ("str", False, True),
+        "__MOVABLE__": ("str", False, True),
+        "__FLYABLE__": ("str", False, True),
     }
     convert_plan_names = False
     convert_device_names = False
@@ -2074,10 +2078,10 @@ def _process_annotation(encoded_annotation, *, ns=None):
     Processed annotation is encoded the same way as in the descriptions of existing plans.
     Returns reference to the annotation (type object) and the list of temporary types
     that needs to be deleted once the processing (parameter validation) is complete.
-    The built-in type names (__DEVICE__, __PLAN__, __PLAN_OR_DEVICE__) are replaced with ``str``
-    unless types with the same name are defined in ``plans``, ``devices`` or
-    ``enums`` sections of the annotation. Explicitly defined the types with the same names
-    as built-in types are treated as regular types.
+    The built-in type names (__DEVICE__, __PLAN__, __PLAN_OR_DEVICE__, ``__READABLE__``,
+    ``__MOVABLE__``, ``__FLYABLE__``) are replaced with ``str`` unless types with
+    the same name are defined in ``plans``, ``devices`` or ``enums`` sections of the annotation.
+    Explicitly defined the types with the same names as built-in types are treated as regular types.
 
     The function validates annotation and raises exceptions in the following cases:
     the types defined in 'plans', 'devices' or 'enums' sections are not lists or tuples;
@@ -2106,8 +2110,8 @@ def _process_annotation(encoded_annotation, *, ns=None):
         Indicates if __PLAN__ or __PLAN_OR_DEVICE__ built-in type was detected and matching
         strings should be converted to plan objects.
     convert_device_names: bool
-        Indicates if __DEVICE__ or __PLAN_OR_DEVICE__ built-in type was detected and matching
-        strings should be converted to devuce objects.
+        Indicates if __DEVICE__, __PLAN_OR_DEVICE__, ``__READABLE__``, ``__MOVABLE__``, ``__FLYABLE__``
+        built-in type was detected and matching strings should be converted to devuce objects.
     ns: dict
         Namespace dictionary with created types.
     """
@@ -2810,7 +2814,12 @@ def _process_plan(plan, *, existing_devices, existing_plans):
         """
         Ignore the type if it can not be properly reconstructed using 'eval'
         """
-        ns = {"typing": typing, "NoneType": type(None)}
+        from bluesky.protocols import Flyable, Movable, Readable
+
+        protocols_mapping = {"__READABLE__": Readable, "__MOVABLE__": Movable, "__FLYABLE": Flyable}
+        protocols_inv = {v: k for k, v in protocols_mapping.items()}
+
+        ns = {"typing": typing, "NoneType": type(None), **protocols_mapping}
 
         # This will work for generic types like 'typing.List[int]'
         a_str = f"{annotation!r}"
@@ -2821,6 +2830,13 @@ def _process_plan(plan, *, existing_devices, existing_plans):
             # Note, that starting with Python 3.10 parameter annotation always have
             #   '__name__', which is meaningless for types other than base types.
             a_str = annotation.__name__
+            mapping = {k.__name__: v for k, v in protocols_inv.items()}
+            if a_str in mapping:
+                a_str = mapping[a_str]
+        else:
+            mapping = {f"bluesky.protocols.{k.__name__}": v for k, v in protocols_inv.items()}
+            for pattern, replacement in mapping.items():
+                a_str = re.sub(pattern, replacement, a_str)
 
         # Verify if the type could be recreated by evaluating the string during validation.
         try:

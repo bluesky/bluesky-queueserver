@@ -1,4 +1,5 @@
 import ast
+import collections
 import copy
 import enum
 import glob
@@ -2017,7 +2018,8 @@ def _check_ranges(kwargs_in, param_list):
 def _find_and_replace_built_in_types(annotation_type_str, *, plans=None, devices=None, enums=None):
     """
     Find and replace built-in types in parameter annotation type string. Built-in types are
-    ``__PLAN__``, ``__DEVICE__``, ``__PLAN_OR_DEVICE__``, ``__READABLE__``, ``__MOVABLE__``, ``__FLYABLE__``.
+    ``__PLAN__``, ``__DEVICE__``, ``__PLAN_OR_DEVICE__``, ``__READABLE__``, ``__MOVABLE__``,
+    ``__FLYABLE__``, ``__CALLABLE__``.
     Since plan and device names are passed as strings and then converted to respective object,
     the built-in plan names are replaced by ``str`` type, which is then used in parameter validation.
     The function also determines whether plans, devices or both plans and devices need to be converted.
@@ -2039,10 +2041,9 @@ def _find_and_replace_built_in_types(annotation_type_str, *, plans=None, devices
     -------
     annotation_type_str: str
         Modified parameter type
-    convert_plan_names: boolean
-        Indicates whether the plan names need to be converted based on the parameter type.
-    convert_device_names: boolean
-        Indicates whether the devices names need to be converted based on the parameter type.
+    convert_values: dict
+        Dictionary that contains information on how the parameter values should be processed.
+        Keys: ``convert_plan_names``, ``convert_device_names``, ``eval_expressions``.
     """
     # Built-in types that may be contained in 'annotation_type_str' and
     #   should be converted to another known type
@@ -2051,17 +2052,19 @@ def _find_and_replace_built_in_types(annotation_type_str, *, plans=None, devices
     enums = enums or {}
 
     built_in_types = {
-        "__PLAN__": ("str", True, False),
-        "__DEVICE__": ("str", False, True),
-        "__PLAN_OR_DEVICE__": ("str", True, True),
-        "__READABLE__": ("str", False, True),
-        "__MOVABLE__": ("str", False, True),
-        "__FLYABLE__": ("str", False, True),
+        "__PLAN__": ("str", True, False, False),
+        "__DEVICE__": ("str", False, True, False),
+        "__PLAN_OR_DEVICE__": ("str", True, True, False),
+        "__READABLE__": ("str", False, True, False),
+        "__MOVABLE__": ("str", False, True, False),
+        "__FLYABLE__": ("str", False, True, False),
+        "__CALLABLE__": ("str", False, False, True),
     }
     convert_plan_names = False
     convert_device_names = False
+    eval_expressions = False
 
-    for btype, (btype_replace, pl, dev) in built_in_types.items():
+    for btype, (btype_replace, pl, dev, ev_expr) in built_in_types.items():
         # If 'plans', 'devices' or 'enums' contains the type name, then leave it as is
         if (btype in plans) or (btype in devices) or (btype in enums):
             continue
@@ -2069,8 +2072,14 @@ def _find_and_replace_built_in_types(annotation_type_str, *, plans=None, devices
             annotation_type_str = re.sub(btype, btype_replace, annotation_type_str)
             convert_plan_names = convert_plan_names or pl
             convert_device_names = convert_device_names or dev
+            eval_expressions = eval_expressions or ev_expr
 
-    return annotation_type_str, convert_plan_names, convert_device_names
+    convert_values = dict(
+        convert_plan_names=convert_plan_names,
+        convert_device_names=convert_device_names,
+        eval_expressions=eval_expressions,
+    )
+    return annotation_type_str, convert_values
 
 
 def _process_annotation(encoded_annotation, *, ns=None):
@@ -2079,7 +2088,7 @@ def _process_annotation(encoded_annotation, *, ns=None):
     Returns reference to the annotation (type object) and the list of temporary types
     that needs to be deleted once the processing (parameter validation) is complete.
     The built-in type names (__DEVICE__, __PLAN__, __PLAN_OR_DEVICE__, ``__READABLE__``,
-    ``__MOVABLE__``, ``__FLYABLE__``) are replaced with ``str`` unless types with
+    ``__MOVABLE__``, ``__FLYABLE__``, ``__CALLABLE__``) are replaced with ``str`` unless types with
     the same name are defined in ``plans``, ``devices`` or ``enums`` sections of the annotation.
     Explicitly defined the types with the same names as built-in types are treated as regular types.
 
@@ -2106,12 +2115,9 @@ def _process_annotation(encoded_annotation, *, ns=None):
     -------
     annotation_type: type
         Type reconstructed from annotation.
-    convert_plan_names: bool
-        Indicates if __PLAN__ or __PLAN_OR_DEVICE__ built-in type was detected and matching
-        strings should be converted to plan objects.
-    convert_device_names: bool
-        Indicates if __DEVICE__, __PLAN_OR_DEVICE__, ``__READABLE__``, ``__MOVABLE__``, ``__FLYABLE__``
-        built-in type was detected and matching strings should be converted to devuce objects.
+    convert_values: dict
+        Dictionary that contains information on how the parameter values should be processed.
+        Keys: ``convert_plan_names``, ``convert_device_names``, ``eval_expressions``.
     ns: dict
         Namespace dictionary with created types.
     """
@@ -2150,7 +2156,7 @@ def _process_annotation(encoded_annotation, *, ns=None):
         items.update(plans)
         items.update(enums)
 
-        annotation_type_str, convert_plan_names, convert_device_names = _find_and_replace_built_in_types(
+        annotation_type_str, convert_values = _find_and_replace_built_in_types(
             annotation_type_str, plans=plans, devices=devices, enums=enums
         )
 
@@ -2193,7 +2199,7 @@ def _process_annotation(encoded_annotation, *, ns=None):
     except Exception as ex:
         raise TypeError(f"Failed to process annotation '{annotation_type_str}': {ex}'")
 
-    return annotation_type, convert_plan_names, convert_device_names, ns
+    return annotation_type, convert_values, ns
 
 
 def _process_default_value(encoded_default_value):
@@ -2248,7 +2254,7 @@ def _decode_parameter_types_and_defaults(param_list):
             raise KeyError(f"No 'name' key in the parameter description {p}")
 
         if "annotation" in p:
-            p_type, _, _, _ = _process_annotation(p["annotation"])
+            p_type, _, _ = _process_annotation(p["annotation"])
         else:
             p_type = typing.Any
 
@@ -2816,13 +2822,26 @@ def _process_plan(plan, *, existing_devices, existing_plans):
         """
         from bluesky.protocols import Flyable, Movable, Readable
 
+        # Patterns for callables: support for multiple `typing.Callable[[...], ...]` or
+        #   `collections.abc.Callable[[...], ...]` in a single expression. Also must support
+        #   simple `typing.Callable` or `collections.abc.Callable, without parameters, which
+        #   is incorrect, but is still used :(
+        callables_patterns = (
+            r"typing.Callable\[\[.+?\].+?\]",
+            r"collections.abc.Callable\[\[.+?\].+?\]",
+            r"typing.Callable",
+            r"collections.abc.Callable",
+        )
+        n_callables = 0  # Number of detected callables
+
         protocols_mapping = {"__READABLE__": Readable, "__MOVABLE__": Movable, "__FLYABLE__": Flyable}
         protocols_inv = {v: k for k, v in protocols_mapping.items()}
 
-        ns = {"typing": typing, "NoneType": type(None), **protocols_mapping}
+        ns = {"typing": typing, "collections": collections, "NoneType": type(None), **protocols_mapping}
 
         # This will work for generic types like 'typing.List[int]'
         a_str = f"{annotation!r}"
+        print(f"========== a_str={a_str} ==========") ##
         # The following takes care of Python base types, such as 'int', 'float'
         #   expressed as "<class 'int'>", but have valid '__name__' attribute
         #   containing type name, such as "int".
@@ -2834,15 +2853,42 @@ def _process_plan(plan, *, existing_devices, existing_plans):
             if a_str in mapping:
                 a_str = mapping[a_str]
         else:
+            # Replace each expression with a unique string in the form of '__CALLABLE<n>__'
+            for pattern in callables_patterns:
+                patterns_found = re.findall(pattern, a_str)
+                if patterns_found:
+                    for p in patterns_found:
+                        try:
+                            print(f"========== p={p} ==========") ##
+                            p_type = eval(p, ns, ns)
+                        except Exception:
+                            p_type = None
+                        p_str = f"__CALLABLE{n_callables + 1}__"
+                        a_str = re.sub(re.escape(p), p_str, a_str)
+                        if p_type:
+                            # Evaluation of the annotation will fail later and the parameter
+                            #   will have no type annotation
+                            ns[p_str] = p_type
+                        n_callables += 1
+
             mapping = {f"bluesky.protocols.{k.__name__}": v for k, v in protocols_inv.items()}
             for pattern, replacement in mapping.items():
                 a_str = re.sub(pattern, replacement, a_str)
 
         # Verify if the type could be recreated by evaluating the string during validation.
         try:
+            print(f"==========++ a_str={a_str} ==========") ##
+            print(f"==========++ ns={list(ns.keys())} ==========") ##
             an = eval(a_str, ns, ns)
             if an != annotation:
                 raise Exception()
+
+            # Replace all callables ('__CALLABLE1__', '__CALLABLE2__', etc.) with '__CALLABLE__' string
+            for n in range(n_callables):
+                p_str = f"__CALLABLE{n + 1}__"
+                print(f"========== p_str={p_str} a_str={a_str} ==========") ##
+                a_str = re.sub(p_str, "__CALLABLE__", a_str)
+
         except Exception:
             # Ignore the type if it can not be recreated.
             a_str = None
@@ -3001,14 +3047,17 @@ def _process_plan(plan, *, existing_devices, existing_plans):
 
             if annotation:
                 # Verify that the encoded type could be decoded (raises an exception if fails)
-                _, convert_plan_names, convert_device_names, _ = _process_annotation(annotation)
+                _, convert_values, _ = _process_annotation(annotation)
+                # _, convert_plan_names, convert_device_names, _ = _process_annotation(annotation)
                 working_dict["annotation"] = annotation
 
                 # Set the following parameters True only if they do not already exist (ignore if False)
-                if convert_plan_names and ("convert_plan_names" not in working_dict):
+                if convert_values["convert_plan_names"] and ("convert_plan_names" not in working_dict):
                     working_dict["convert_plan_names"] = True
-                if convert_device_names and ("convert_device_names" not in working_dict):
+                if convert_values["convert_device_names"] and ("convert_device_names" not in working_dict):
                     working_dict["convert_device_names"] = True
+                if convert_values["eval_expressions"] and ("eval_expressions" not in working_dict):
+                    working_dict["eval_expressions"] = True
 
             if default:
                 # Verify that the encoded representation of the default can be decoded.

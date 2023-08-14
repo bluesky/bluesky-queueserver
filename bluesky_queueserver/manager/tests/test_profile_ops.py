@@ -1989,6 +1989,86 @@ _pf2g_processed = {
     "properties": {"is_generator": True},
 }
 
+import bluesky.protocols
+import collections.abc
+
+def _pf2h(
+    val1: bluesky.protocols.Readable,
+    val2: typing.List[bluesky.protocols.Readable],
+    val3: list[bluesky.protocols.Readable],  
+):
+    yield from [val1, val2, val3]
+
+_pf2h_processed = {
+    "parameters": [
+        {'annotation': {'type': '__READABLE__'},
+         'convert_device_names': True,
+         'kind': {'name': 'POSITIONAL_OR_KEYWORD', 'value': 1},
+         'name': 'val1'},
+        {'annotation': {'type': 'typing.List[__READABLE__]'},
+         'convert_device_names': True,
+         'kind': {'name': 'POSITIONAL_OR_KEYWORD', 'value': 1},
+         'name': 'val2'},
+        {'annotation': {'type': 'list[__READABLE__]'},
+         'convert_device_names': True,
+         'kind': {'name': 'POSITIONAL_OR_KEYWORD', 'value': 1},
+         'name': 'val3'}        
+    ],
+    "properties": {"is_generator": True},
+}
+
+def _pf2i(
+    val1: bluesky.protocols.Readable,
+    val2: bluesky.protocols.Movable,
+    val3: bluesky.protocols.Flyable,  
+):
+    yield from [val1, val2, val3]
+
+_pf2i_processed = {
+    "parameters": [
+        {'annotation': {'type': '__READABLE__'},
+         'convert_device_names': True,
+         'kind': {'name': 'POSITIONAL_OR_KEYWORD', 'value': 1},
+         'name': 'val1'},
+        {'annotation': {'type': '__MOVABLE__'},
+         'convert_device_names': True,
+         'kind': {'name': 'POSITIONAL_OR_KEYWORD', 'value': 1},
+         'name': 'val2'},
+        {'annotation': {'type': '__FLYABLE__'},
+         'convert_device_names': True,
+         'kind': {'name': 'POSITIONAL_OR_KEYWORD', 'value': 1},
+         'name': 'val3'},
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+def _pf2j(
+    val1: typing.Callable,
+    val2: typing.Callable[[int, float], str],
+    val3: typing.Union[typing.Callable[[int, float], typing.Tuple[str, str]],
+                       typing.List[typing.Callable[[int, float], str]]],  
+):
+    yield from [val1, val2, val3]
+
+_pf2j_processed = {
+    "parameters": [
+        {'annotation': {'type': '__READABLE__'},
+         'convert_device_names': True,
+         'kind': {'name': 'POSITIONAL_OR_KEYWORD', 'value': 1},
+         'name': 'val1'},
+        {'annotation': {'type': '__MOVABLE__'},
+         'convert_device_names': True,
+         'kind': {'name': 'POSITIONAL_OR_KEYWORD', 'value': 1},
+         'name': 'val2'},
+        {'annotation': {'type': '__FLYABLE__'},
+         'convert_device_names': True,
+         'kind': {'name': 'POSITIONAL_OR_KEYWORD', 'value': 1},
+         'name': 'val3'},
+    ],
+    "properties": {"is_generator": True},
+}
+
 
 # fmt: off
 @pytest.mark.parametrize("plan_func, plan_info_expected", [
@@ -1999,6 +2079,9 @@ _pf2g_processed = {
     (_pf2e, _pf2e_processed),
     (_pf2f, _pf2f_processed),
     (_pf2g, _pf2g_processed),
+    (_pf2h, _pf2h_processed),
+    (_pf2i, _pf2i_processed),
+    (_pf2j, _pf2j_processed),
 ])
 # fmt: on
 def test_process_plan_2(plan_func, plan_info_expected):
@@ -3064,32 +3147,38 @@ def test_process_plan_5_fail(plan_func, err_msg):
 
 
 # fmt: off
-@pytest.mark.parametrize("type_str_in, plans, devices, enums, type_str_out, convert_plans, convert_devices", [
-    ("some_type", None, None, None, "some_type", False, False),
-    ("some_type", {}, {}, {}, "some_type", False, False),
-    ("__PLAN__", {}, {}, {}, "str", True, False),
-    ("__DEVICE__", {}, {}, {}, "str", False, True),
-    ("__PLAN_OR_DEVICE__", {}, {}, {}, "str", True, True),
-    ("typing.List[__PLAN__]", {}, {}, {}, "typing.List[str]", True, False),
+@pytest.mark.parametrize(
+        "type_str_in, plans, devices, enums, type_str_out, convert_plans, convert_devices, ev_expr", [
+    ("some_type", None, None, None, "some_type", False, False, False),
+    ("some_type", {}, {}, {}, "some_type", False, False, False),
+    ("__PLAN__", {}, {}, {}, "str", True, False, False),
+    ("__DEVICE__", {}, {}, {}, "str", False, True, False),
+    ("__PLAN_OR_DEVICE__", {}, {}, {}, "str", True, True, False),
+    ("__READABLE__", {}, {}, {}, "str", False, True, False),
+    ("__MOVABLE__", {}, {}, {}, "str", False, True, False),
+    ("__FLYABLE__", {}, {}, {}, "str", False, True, False),
+    ("__CALLABLE__", {}, {}, {}, "str", False, False, True),
+    ("typing.List[__PLAN__]", {}, {}, {}, "typing.List[str]", True, False, False),
     ("typing.Union[typing.List[__PLAN__], typing.List[__DEVICE__]]", {}, {}, {},
-     "typing.Union[typing.List[str], typing.List[str]]", True, True),
-    ("__PLAN__", {"__PLAN__": {}}, {}, {}, "__PLAN__", False, False),
-    ("__DEVICE__", {}, {"__DEVICE__": {}}, {}, "__DEVICE__", False, False),
-    ("__PLAN_OR_DEVICE__", {}, {}, {"__PLAN_OR_DEVICE__": {}}, "__PLAN_OR_DEVICE__", False, False),
+     "typing.Union[typing.List[str], typing.List[str]]", True, True, False),
+    ("__PLAN__", {"__PLAN__": {}}, {}, {}, "__PLAN__", False, False, False),
+    ("__DEVICE__", {}, {"__DEVICE__": {}}, {}, "__DEVICE__", False, False, False),
+    ("__PLAN_OR_DEVICE__", {}, {}, {"__PLAN_OR_DEVICE__": {}}, "__PLAN_OR_DEVICE__", False, False, False),
 ])
 # fmt: on
 def test_find_and_replace_built_in_types_1(
-    type_str_in, plans, devices, enums, type_str_out, convert_plans, convert_devices
+    type_str_in, plans, devices, enums, type_str_out, convert_plans, convert_devices, ev_expr
 ):
     """
     ``_find_and_replace_built_in_types``: basic tests
     """
-    annotation_type_str, convert_plan_names, convert_device_names = _find_and_replace_built_in_types(
+    annotation_type_str, convert_values = _find_and_replace_built_in_types(
         type_str_in, plans=plans, devices=devices, enums=enums
     )
     assert annotation_type_str == type_str_out
-    assert convert_plan_names == convert_plans
-    assert convert_device_names == convert_devices
+    assert convert_values["convert_plan_names"] == convert_plans
+    assert convert_values["convert_device_names"] == convert_devices
+    assert convert_values["eval_expressions"] == ev_expr
 
 
 # ---------------------------------------------------------------------------------
@@ -3109,37 +3198,47 @@ def _create_schema_for_testing(annotation_type):
 
 
 # fmt: off
-@pytest.mark.parametrize("encoded_annotation, type_expected, built_in_plans, built_in_devices, success, errmsg", [
-    ({"type": "int"}, int, False, False, True, ""),
-    ({"type": "str"}, str, False, False, True, ""),
-    ({"type": "typing.List[int]"}, typing.List[int], False, False, True, ""),
+@pytest.mark.parametrize(
+        "encoded_annotation, type_expected, built_in_plans, built_in_devices, eval_expr, success, errmsg", [
+    ({"type": "int"}, int, False, False, False, True, ""),
+    ({"type": "str"}, str, False, False, False, True, ""),
+    ({"type": "typing.List[int]"}, typing.List[int], False, False, False, True, ""),
     ({"type": "typing.List[typing.Union[int, float]]"},
-     typing.List[typing.Union[int, float]], False, False, True, ""),
-    ({"type": "List[int]"}, typing.List[int], False, False, False, "name 'List' is not defined"),
+     typing.List[typing.Union[int, float]], False, False, False, True, ""),
+    ({"type": "List[int]"}, typing.List[int], False, False, False, False, "name 'List' is not defined"),
 
     #  Built-in types: allow any value to pass
-    ({"type": "__PLAN__"}, str, True, False, True, ""),
-    ({"type": "typing.List[__PLAN__]"}, typing.List[str], True, False, True, ""),
-    ({"type": "__DEVICE__"}, str, False, True, True, ""),
-    ({"type": "typing.List[__DEVICE__]"}, typing.List[str], False, True, True, ""),
-    ({"type": "__PLAN_OR_DEVICE__"}, str, True, True, True, ""),
-    ({"type": "typing.List[__PLAN_OR_DEVICE__]"}, typing.List[str], True, True, True, ""),
+    ({"type": "__PLAN__"}, str, True, False, False, True, ""),
+    ({"type": "typing.List[__PLAN__]"}, typing.List[str], True, False, False, True, ""),
+    ({"type": "__DEVICE__"}, str, False, True, False, True, ""),
+    ({"type": "typing.List[__DEVICE__]"}, typing.List[str], False, True, False, True, ""),
+    ({"type": "__READABLE__"}, str, False, True, False, True, ""),
+    ({"type": "typing.List[__READABLE__]"}, typing.List[str], False, True, False, True, ""),
+    ({"type": "__MOVABLE__"}, str, False, True, False, True, ""),
+    ({"type": "typing.List[__MOVABLE__]"}, typing.List[str], False, True, False, True, ""),
+    ({"type": "__FLYABLE__"}, str, False, True, False, True, ""),
+    ({"type": "typing.List[__FLYABLE__]"}, typing.List[str], False, True, False, True, ""),
+    ({"type": "__PLAN_OR_DEVICE__"}, str, True, True, False, True, ""),
+    ({"type": "typing.List[__PLAN_OR_DEVICE__]"}, typing.List[str], True, True, False, True, ""),
     ({"type": "typing.Union[typing.List[__PLAN__], __DEVICE__]"},
-     typing.Union[typing.List[str], str], True, True, True, ""),
+     typing.Union[typing.List[str], str], True, True, False, True, ""),
+
+    ({"type": "__CALLABLE__"}, str, False, False, True, True, ""),
+    ({"type": "typing.List[__CALLABLE__]"}, typing.List[str], False, False, True, True, ""),
 
     # Errors
     ({"type": "typing.Union[typing.List[Device1], Device2]", "devices": {"Device1": []}},
-     typing.Union[typing.List[str], str], False, False, False, "name 'Device2' is not defined"),
-    ({"type": "Enum1", "unknown": {"Enum1": []}}, str, False, False, False,
+     typing.Union[typing.List[str], str], False, False, False, False, "name 'Device2' is not defined"),
+    ({"type": "Enum1", "unknown": {"Enum1": []}}, str, False, False, False, False,
      r"Annotation contains unsupported keys: \['unknown'\]"),
-    ({"type": "str", "devices": {"Device1": []}}, str, False, False, False,
+    ({"type": "str", "devices": {"Device1": []}}, str, False, False, False, False,
      r"Type 'Device1' is defined in the annotation, but not used"),
-    ({"type": "Device1", "devices": {"Device1": None}}, str, False, False, False,
+    ({"type": "Device1", "devices": {"Device1": None}}, str, False, False, False, False,
      r"The list of items \('Device1': None\) must be a list of a tuple"),
 ])
 # fmt: on
 def test_process_annotation_1(
-    encoded_annotation, type_expected, built_in_plans, built_in_devices, success, errmsg
+    encoded_annotation, type_expected, built_in_plans, built_in_devices, eval_expr, success, errmsg
 ):
     """
     Function ``_process_annotation``: generate type based on annotation and compare it with the expected type.
@@ -3147,10 +3246,11 @@ def test_process_annotation_1(
     """
     if success:
         # Compare types directly
-        type_recovered, conv_plan_nms, conv_dev_nms, ns = _process_annotation(encoded_annotation)
+        type_recovered, convert_values, ns = _process_annotation(encoded_annotation)
         assert type_recovered == type_expected
-        assert conv_plan_nms == built_in_plans
-        assert conv_dev_nms == built_in_devices
+        assert convert_values["convert_plan_names"] == built_in_plans
+        assert convert_values["convert_device_names"] == built_in_devices
+        assert convert_values["eval_expressions"] == eval_expr
 
         # Compare generated JSON schemas
         schema_recovered = _create_schema_for_testing(type_recovered)
@@ -3227,7 +3327,7 @@ def test_process_annotation_2(encoded_annotation, type_expected, success, errmsg
     a meaningful test.
     """
     if success:
-        type_recovered, _, _, ns = _process_annotation(encoded_annotation)
+        type_recovered, _, ns = _process_annotation(encoded_annotation)
 
         schema_recovered = _create_schema_for_testing(type_recovered)
         schema_expected = _create_schema_for_testing(type_expected)
@@ -3262,7 +3362,7 @@ def test_process_annotation_3(encoded_annotation, type_expected, success, errmsg
     type definitions are different.
     """
     if success:
-        type_recovered, _, _, ns = _process_annotation(encoded_annotation)
+        type_recovered, _, ns = _process_annotation(encoded_annotation)
 
         schema_recovered = _create_schema_for_testing(type_recovered)
         schema_expected = _create_schema_for_testing(type_expected)

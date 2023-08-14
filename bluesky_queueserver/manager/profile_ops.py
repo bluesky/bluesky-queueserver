@@ -2816,7 +2816,7 @@ def _process_plan(plan, *, existing_devices, existing_plans):
         """
         from bluesky.protocols import Flyable, Movable, Readable
 
-        protocols_mapping = {"__READABLE__": Readable, "__MOVABLE__": Movable, "__FLYABLE": Flyable}
+        protocols_mapping = {"__READABLE__": Readable, "__MOVABLE__": Movable, "__FLYABLE__": Flyable}
         protocols_inv = {v: k for k, v in protocols_mapping.items()}
 
         ns = {"typing": typing, "NoneType": type(None), **protocols_mapping}

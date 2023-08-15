@@ -823,22 +823,51 @@ def unit_test_read_counter():
 
 def custom_count(
     detectors: typing.List[bluesky.protocols.Readable],
-    num: int=1, delay: typing.Optional[float]=None,
+    num: int=1,
+    delay: typing.Optional[float]=None,
     *,
     per_shot: typing.Optional[typing.Callable]=None,
     md: typing.Optional[dict]=None
 ):
     yield from count(detectors, num=num, delay=delay, per_shot=per_shot, md=md)
 
+@parameter_annotation_decorator(
+    {
+        "description": "Custom 'count' plan with annotated parameters.",
+        "parameters": {
+            "detectors": {
+                "annotation": "typing.List[__READABLE__]",
+            },
+            "num": {
+                "annotation": "int",
+                "default": 1,
+            },
+            "delay": {
+                "annotation": "typing.Optional[float]",
+                "default": None,
+            },
+            "per_shot": {
+                "annotation": "typing.Optional[__CALLABLE__]",
+                "default": None,
+            },
+        },
+    }
+)
+def custom_count2(detectors, num=1, delay=None, *, per_shot=None, md=None):
+    yield from count(detectors, num=num, delay=delay, per_shot=per_shot, md=md)
 """
 
 
-def test_zmq_api_queue_item_add_10(re_manager):  # noqa: F811
+# fmt: off
+@pytest.mark.parametrize("plan_name", ["custom_count", "custom_count2"])
+# fmt: on
+def test_zmq_api_queue_item_add_10(re_manager, plan_name):  # noqa: F811
     """
-    Add and execute custom 'count' plan with custom 'per_shot' plan.
+    Add and execute custom 'count' plan with custom 'per_shot' plan. Test plans with
+    annotations in the header and in the ``parameter_annotation_decorator``.
     """
     _plan_custom = {
-        "name": "custom_count",
+        "name": plan_name,
         "args": [["det1", "det2"]],
         "kwargs": {"num": 5, "per_shot": "custom_one_shot", "delay": 1},
         "item_type": "plan",

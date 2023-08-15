@@ -2993,6 +2993,68 @@ _pf4d_processed = {
 }
 
 
+@parameter_annotation_decorator(
+    {
+        "parameters": {
+            "p1": {
+                "annotation": "__DEVICE__",
+            },
+            "p2": {
+                "annotation": "__READABLE__",
+            },
+            "p3": {
+                "annotation": "__MOVABLE__",
+            },
+            "p4": {
+                "annotation": "__FLYABLE__",
+            },
+            "p5": {
+                "annotation": "__CALLABLE__",
+            },
+        }
+    }
+)
+def _pf4e(p1, p2, p3, p4, p5):
+    yield from [p1, p2, p3, p4, p5]
+
+
+_pf4e_processed = {
+    "parameters": [
+        {
+            "annotation": {"type": "__DEVICE__"},
+            "convert_device_names": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "p1",
+        },
+        {
+            "annotation": {"type": "__READABLE__"},
+            "convert_device_names": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "p2",
+        },
+        {
+            "annotation": {"type": "__MOVABLE__"},
+            "convert_device_names": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "p3",
+        },
+        {
+            "annotation": {"type": "__FLYABLE__"},
+            "convert_device_names": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "p4",
+        },
+        {
+            "annotation": {"type": "__CALLABLE__"},
+            "eval_expressions": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "p5",
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
 # fmt: off
 _pp4_allowed_devices_dict_1 = {
     "da0_motor": {
@@ -3046,6 +3108,7 @@ _pp4_allowed_plans_set_1 = {"plan1", "count", "count_modified", "count2"}
     (_pf4b, _pp4_allowed_devices_dict_1, _pf4b_processed),
     (_pf4c, _pp4_allowed_devices_dict_1, _pf4c_processed),
     (_pf4d, _pp4_allowed_devices_dict_1, _pf4d_processed),
+    (_pf4e, _pp4_allowed_devices_dict_1, _pf4e_processed),
 ])
 # fmt: on
 def test_process_plan_4(plan_func, existing_devices, plan_info_expected):

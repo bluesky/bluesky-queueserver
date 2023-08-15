@@ -1,3 +1,4 @@
+import collections.abc
 import copy
 import enum
 import inspect
@@ -11,6 +12,7 @@ import typing
 from collections.abc import Callable
 from typing import Dict, Optional
 
+import bluesky.protocols
 import ophyd
 import ophyd.sim
 import pydantic
@@ -1989,55 +1991,68 @@ _pf2g_processed = {
     "properties": {"is_generator": True},
 }
 
-import bluesky.protocols
-import collections.abc
 
 def _pf2h(
     val1: bluesky.protocols.Readable,
     val2: typing.List[bluesky.protocols.Readable],
-    val3: list[bluesky.protocols.Readable],  
+    val3: list[bluesky.protocols.Readable],
 ):
     yield from [val1, val2, val3]
 
+
 _pf2h_processed = {
     "parameters": [
-        {'annotation': {'type': '__READABLE__'},
-         'convert_device_names': True,
-         'kind': {'name': 'POSITIONAL_OR_KEYWORD', 'value': 1},
-         'name': 'val1'},
-        {'annotation': {'type': 'typing.List[__READABLE__]'},
-         'convert_device_names': True,
-         'kind': {'name': 'POSITIONAL_OR_KEYWORD', 'value': 1},
-         'name': 'val2'},
-        {'annotation': {'type': 'list[__READABLE__]'},
-         'convert_device_names': True,
-         'kind': {'name': 'POSITIONAL_OR_KEYWORD', 'value': 1},
-         'name': 'val3'}        
+        {
+            "annotation": {"type": "__READABLE__"},
+            "convert_device_names": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val1",
+        },
+        {
+            "annotation": {"type": "typing.List[__READABLE__]"},
+            "convert_device_names": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val2",
+        },
+        {
+            "annotation": {"type": "list[__READABLE__]"},
+            "convert_device_names": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val3",
+        },
     ],
     "properties": {"is_generator": True},
 }
 
+
 def _pf2i(
     val1: bluesky.protocols.Readable,
     val2: bluesky.protocols.Movable,
-    val3: bluesky.protocols.Flyable,  
+    val3: bluesky.protocols.Flyable,
 ):
     yield from [val1, val2, val3]
 
+
 _pf2i_processed = {
     "parameters": [
-        {'annotation': {'type': '__READABLE__'},
-         'convert_device_names': True,
-         'kind': {'name': 'POSITIONAL_OR_KEYWORD', 'value': 1},
-         'name': 'val1'},
-        {'annotation': {'type': '__MOVABLE__'},
-         'convert_device_names': True,
-         'kind': {'name': 'POSITIONAL_OR_KEYWORD', 'value': 1},
-         'name': 'val2'},
-        {'annotation': {'type': '__FLYABLE__'},
-         'convert_device_names': True,
-         'kind': {'name': 'POSITIONAL_OR_KEYWORD', 'value': 1},
-         'name': 'val3'},
+        {
+            "annotation": {"type": "__READABLE__"},
+            "convert_device_names": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val1",
+        },
+        {
+            "annotation": {"type": "__MOVABLE__"},
+            "convert_device_names": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val2",
+        },
+        {
+            "annotation": {"type": "__FLYABLE__"},
+            "convert_device_names": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val3",
+        },
     ],
     "properties": {"is_generator": True},
 }
@@ -2046,25 +2061,43 @@ _pf2i_processed = {
 def _pf2j(
     val1: typing.Callable,
     val2: typing.Callable[[int, float], str],
-    val3: typing.Union[typing.Callable[[int, float], typing.Tuple[str, str]],
-                       typing.List[typing.Callable[[int, float], str]]],  
+    val3: typing.Union[
+        typing.Callable[[int, float], typing.Tuple[str, str]], typing.List[typing.Callable[[int, float], str]]
+    ],
+    val4: typing.Union[
+        collections.abc.Callable[[int, float], typing.Tuple[str, str]],
+        list[collections.abc.Callable[[int, float], str]],
+    ],
 ):
-    yield from [val1, val2, val3]
+    yield from [val1, val2, val3, val4]
+
 
 _pf2j_processed = {
     "parameters": [
-        {'annotation': {'type': '__READABLE__'},
-         'convert_device_names': True,
-         'kind': {'name': 'POSITIONAL_OR_KEYWORD', 'value': 1},
-         'name': 'val1'},
-        {'annotation': {'type': '__MOVABLE__'},
-         'convert_device_names': True,
-         'kind': {'name': 'POSITIONAL_OR_KEYWORD', 'value': 1},
-         'name': 'val2'},
-        {'annotation': {'type': '__FLYABLE__'},
-         'convert_device_names': True,
-         'kind': {'name': 'POSITIONAL_OR_KEYWORD', 'value': 1},
-         'name': 'val3'},
+        {
+            "annotation": {"type": "__CALLABLE__"},
+            "eval_expressions": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val1",
+        },
+        {
+            "annotation": {"type": "__CALLABLE__"},
+            "eval_expressions": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val2",
+        },
+        {
+            "annotation": {"type": "typing.Union[__CALLABLE__, " "typing.List[__CALLABLE__]]"},
+            "eval_expressions": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val3",
+        },
+        {
+            "annotation": {"type": "typing.Union[__CALLABLE__, " "list[__CALLABLE__]]"},
+            "eval_expressions": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val4",
+        },
     ],
     "properties": {"is_generator": True},
 }
@@ -3148,23 +3181,23 @@ def test_process_plan_5_fail(plan_func, err_msg):
 
 # fmt: off
 @pytest.mark.parametrize(
-        "type_str_in, plans, devices, enums, type_str_out, convert_plans, convert_devices, ev_expr", [
-    ("some_type", None, None, None, "some_type", False, False, False),
-    ("some_type", {}, {}, {}, "some_type", False, False, False),
-    ("__PLAN__", {}, {}, {}, "str", True, False, False),
-    ("__DEVICE__", {}, {}, {}, "str", False, True, False),
-    ("__PLAN_OR_DEVICE__", {}, {}, {}, "str", True, True, False),
-    ("__READABLE__", {}, {}, {}, "str", False, True, False),
-    ("__MOVABLE__", {}, {}, {}, "str", False, True, False),
-    ("__FLYABLE__", {}, {}, {}, "str", False, True, False),
-    ("__CALLABLE__", {}, {}, {}, "str", False, False, True),
-    ("typing.List[__PLAN__]", {}, {}, {}, "typing.List[str]", True, False, False),
-    ("typing.Union[typing.List[__PLAN__], typing.List[__DEVICE__]]", {}, {}, {},
-     "typing.Union[typing.List[str], typing.List[str]]", True, True, False),
-    ("__PLAN__", {"__PLAN__": {}}, {}, {}, "__PLAN__", False, False, False),
-    ("__DEVICE__", {}, {"__DEVICE__": {}}, {}, "__DEVICE__", False, False, False),
-    ("__PLAN_OR_DEVICE__", {}, {}, {"__PLAN_OR_DEVICE__": {}}, "__PLAN_OR_DEVICE__", False, False, False),
-])
+    "type_str_in, plans, devices, enums, type_str_out, convert_plans, convert_devices, ev_expr", [
+        ("some_type", None, None, None, "some_type", False, False, False),
+        ("some_type", {}, {}, {}, "some_type", False, False, False),
+        ("__PLAN__", {}, {}, {}, "str", True, False, False),
+        ("__DEVICE__", {}, {}, {}, "str", False, True, False),
+        ("__PLAN_OR_DEVICE__", {}, {}, {}, "str", True, True, False),
+        ("__READABLE__", {}, {}, {}, "str", False, True, False),
+        ("__MOVABLE__", {}, {}, {}, "str", False, True, False),
+        ("__FLYABLE__", {}, {}, {}, "str", False, True, False),
+        ("__CALLABLE__", {}, {}, {}, "str", False, False, True),
+        ("typing.List[__PLAN__]", {}, {}, {}, "typing.List[str]", True, False, False),
+        ("typing.Union[typing.List[__PLAN__], typing.List[__DEVICE__]]", {}, {}, {},
+            "typing.Union[typing.List[str], typing.List[str]]", True, True, False),
+        ("__PLAN__", {"__PLAN__": {}}, {}, {}, "__PLAN__", False, False, False),
+        ("__DEVICE__", {}, {"__DEVICE__": {}}, {}, "__DEVICE__", False, False, False),
+        ("__PLAN_OR_DEVICE__", {}, {}, {"__PLAN_OR_DEVICE__": {}}, "__PLAN_OR_DEVICE__", False, False, False),
+    ])
 # fmt: on
 def test_find_and_replace_built_in_types_1(
     type_str_in, plans, devices, enums, type_str_out, convert_plans, convert_devices, ev_expr
@@ -3199,43 +3232,43 @@ def _create_schema_for_testing(annotation_type):
 
 # fmt: off
 @pytest.mark.parametrize(
-        "encoded_annotation, type_expected, built_in_plans, built_in_devices, eval_expr, success, errmsg", [
-    ({"type": "int"}, int, False, False, False, True, ""),
-    ({"type": "str"}, str, False, False, False, True, ""),
-    ({"type": "typing.List[int]"}, typing.List[int], False, False, False, True, ""),
-    ({"type": "typing.List[typing.Union[int, float]]"},
-     typing.List[typing.Union[int, float]], False, False, False, True, ""),
-    ({"type": "List[int]"}, typing.List[int], False, False, False, False, "name 'List' is not defined"),
+    "encoded_annotation, type_expected, built_in_plans, built_in_devices, eval_expr, success, errmsg", [
+        ({"type": "int"}, int, False, False, False, True, ""),
+        ({"type": "str"}, str, False, False, False, True, ""),
+        ({"type": "typing.List[int]"}, typing.List[int], False, False, False, True, ""),
+        ({"type": "typing.List[typing.Union[int, float]]"},
+         typing.List[typing.Union[int, float]], False, False, False, True, ""),
+        ({"type": "List[int]"}, typing.List[int], False, False, False, False, "name 'List' is not defined"),
 
-    #  Built-in types: allow any value to pass
-    ({"type": "__PLAN__"}, str, True, False, False, True, ""),
-    ({"type": "typing.List[__PLAN__]"}, typing.List[str], True, False, False, True, ""),
-    ({"type": "__DEVICE__"}, str, False, True, False, True, ""),
-    ({"type": "typing.List[__DEVICE__]"}, typing.List[str], False, True, False, True, ""),
-    ({"type": "__READABLE__"}, str, False, True, False, True, ""),
-    ({"type": "typing.List[__READABLE__]"}, typing.List[str], False, True, False, True, ""),
-    ({"type": "__MOVABLE__"}, str, False, True, False, True, ""),
-    ({"type": "typing.List[__MOVABLE__]"}, typing.List[str], False, True, False, True, ""),
-    ({"type": "__FLYABLE__"}, str, False, True, False, True, ""),
-    ({"type": "typing.List[__FLYABLE__]"}, typing.List[str], False, True, False, True, ""),
-    ({"type": "__PLAN_OR_DEVICE__"}, str, True, True, False, True, ""),
-    ({"type": "typing.List[__PLAN_OR_DEVICE__]"}, typing.List[str], True, True, False, True, ""),
-    ({"type": "typing.Union[typing.List[__PLAN__], __DEVICE__]"},
-     typing.Union[typing.List[str], str], True, True, False, True, ""),
+        #  Built-in types: allow any value to pass
+        ({"type": "__PLAN__"}, str, True, False, False, True, ""),
+        ({"type": "typing.List[__PLAN__]"}, typing.List[str], True, False, False, True, ""),
+        ({"type": "__DEVICE__"}, str, False, True, False, True, ""),
+        ({"type": "typing.List[__DEVICE__]"}, typing.List[str], False, True, False, True, ""),
+        ({"type": "__READABLE__"}, str, False, True, False, True, ""),
+        ({"type": "typing.List[__READABLE__]"}, typing.List[str], False, True, False, True, ""),
+        ({"type": "__MOVABLE__"}, str, False, True, False, True, ""),
+        ({"type": "typing.List[__MOVABLE__]"}, typing.List[str], False, True, False, True, ""),
+        ({"type": "__FLYABLE__"}, str, False, True, False, True, ""),
+        ({"type": "typing.List[__FLYABLE__]"}, typing.List[str], False, True, False, True, ""),
+        ({"type": "__PLAN_OR_DEVICE__"}, str, True, True, False, True, ""),
+        ({"type": "typing.List[__PLAN_OR_DEVICE__]"}, typing.List[str], True, True, False, True, ""),
+        ({"type": "typing.Union[typing.List[__PLAN__], __DEVICE__]"},
+         typing.Union[typing.List[str], str], True, True, False, True, ""),
 
-    ({"type": "__CALLABLE__"}, str, False, False, True, True, ""),
-    ({"type": "typing.List[__CALLABLE__]"}, typing.List[str], False, False, True, True, ""),
+        ({"type": "__CALLABLE__"}, str, False, False, True, True, ""),
+        ({"type": "typing.List[__CALLABLE__]"}, typing.List[str], False, False, True, True, ""),
 
-    # Errors
-    ({"type": "typing.Union[typing.List[Device1], Device2]", "devices": {"Device1": []}},
-     typing.Union[typing.List[str], str], False, False, False, False, "name 'Device2' is not defined"),
-    ({"type": "Enum1", "unknown": {"Enum1": []}}, str, False, False, False, False,
-     r"Annotation contains unsupported keys: \['unknown'\]"),
-    ({"type": "str", "devices": {"Device1": []}}, str, False, False, False, False,
-     r"Type 'Device1' is defined in the annotation, but not used"),
-    ({"type": "Device1", "devices": {"Device1": None}}, str, False, False, False, False,
-     r"The list of items \('Device1': None\) must be a list of a tuple"),
-])
+        # Errors
+        ({"type": "typing.Union[typing.List[Device1], Device2]", "devices": {"Device1": []}},
+         typing.Union[typing.List[str], str], False, False, False, False, "name 'Device2' is not defined"),
+        ({"type": "Enum1", "unknown": {"Enum1": []}}, str, False, False, False, False,
+         r"Annotation contains unsupported keys: \['unknown'\]"),
+        ({"type": "str", "devices": {"Device1": []}}, str, False, False, False, False,
+         r"Type 'Device1' is defined in the annotation, but not used"),
+        ({"type": "Device1", "devices": {"Device1": None}}, str, False, False, False, False,
+         r"The list of items \('Device1': None\) must be a list of a tuple"),
+    ])
 # fmt: on
 def test_process_annotation_1(
     encoded_annotation, type_expected, built_in_plans, built_in_devices, eval_expr, success, errmsg

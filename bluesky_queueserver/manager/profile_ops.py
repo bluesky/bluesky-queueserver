@@ -2816,22 +2816,73 @@ def _process_plan(plan, *, existing_devices, existing_plans):
         Error occurred while creating plan description.
     """
 
+    def _get_full_type_name(patterns, s):
+        """
+        Returns the full name of the type with parameters. The function tries to find the name
+        of the type in the string ``s`` using the list of regular expressions ``patterns``.
+        For example, if the list of patterns is ``["typing.Callable", "collections.abc.Callable"]``
+        the function will find both isolated ``typing.Callable`` and ``collections.abc.Callable``
+        and the types with parameters such as ``typing.Callable[[int, str], float]``, whichever
+        comes first in the string ``s``.
+
+        Parameters
+        ----------
+        patterns : list
+            List of regular expressions to find the type name in the string ``s``.
+        s : str
+            String to search for the type name.
+
+        Returns
+        -------
+        str or None
+            Full name of the type with parameters or ``None`` if the type name was not found.
+        """
+        if not s:
+            return None
+
+        # Try all patterns. Use the first pattern that matches.
+        matches = [re.search(p, s) for p in patterns]
+        match = None
+        for m in matches:
+            if m:
+                if not match or m.start() < match.start():
+                    match = m
+
+        # No patterns were found.
+        if not match:
+            return None
+
+        name = match[0]
+        start_ind, end_name_ind = match.span()
+
+        # The type has no parameters
+        if end_name_ind == len(s) or s[end_name_ind] != "[":
+            return name
+
+        # Find full name with parameters (find the closing bracket)
+        end_ind, n_brackets = -1, 0
+        for n in range(end_name_ind, len(s)):
+            if s[n] == "[":
+                n_brackets += 1
+            elif s[n] == "]":
+                n_brackets -= 1
+                if n_brackets == 0:
+                    end_ind = n + 1
+                    break
+
+        if end_ind < 0:
+            return name
+
+        return s[start_ind:end_ind]
+
     def convert_annotation_to_string(annotation):
         """
         Ignore the type if it can not be properly reconstructed using 'eval'
         """
         from bluesky.protocols import Flyable, Movable, Readable
 
-        # Patterns for callables: support for multiple `typing.Callable[[...], ...]` or
-        #   `collections.abc.Callable[[...], ...]` in a single expression. Also must support
-        #   simple `typing.Callable` or `collections.abc.Callable, without parameters, which
-        #   is incorrect, but is still used :(
-        callables_patterns = (
-            r"typing.Callable\[\[.+?\].+?\]",
-            r"collections.abc.Callable\[\[.+?\].+?\]",
-            r"typing.Callable",
-            r"collections.abc.Callable",
-        )
+        # Patterns for callables
+        callables_patterns = (r"typing.Callable", r"collections.abc.Callable")
         n_callables = 0  # Number of detected callables
 
         protocols_mapping = {"__READABLE__": Readable, "__MOVABLE__": Movable, "__FLYABLE__": Flyable}
@@ -2841,7 +2892,6 @@ def _process_plan(plan, *, existing_devices, existing_plans):
 
         # This will work for generic types like 'typing.List[int]'
         a_str = f"{annotation!r}"
-        print(f"========== a_str={a_str} ==========") ##
         # The following takes care of Python base types, such as 'int', 'float'
         #   expressed as "<class 'int'>", but have valid '__name__' attribute
         #   containing type name, such as "int".
@@ -2854,22 +2904,21 @@ def _process_plan(plan, *, existing_devices, existing_plans):
                 a_str = mapping[a_str]
         else:
             # Replace each expression with a unique string in the form of '__CALLABLE<n>__'
-            for pattern in callables_patterns:
-                patterns_found = re.findall(pattern, a_str)
-                if patterns_found:
-                    for p in patterns_found:
-                        try:
-                            print(f"========== p={p} ==========") ##
-                            p_type = eval(p, ns, ns)
-                        except Exception:
-                            p_type = None
-                        p_str = f"__CALLABLE{n_callables + 1}__"
-                        a_str = re.sub(re.escape(p), p_str, a_str)
-                        if p_type:
-                            # Evaluation of the annotation will fail later and the parameter
-                            #   will have no type annotation
-                            ns[p_str] = p_type
-                        n_callables += 1
+            while True:
+                pattern = _get_full_type_name(callables_patterns, a_str)
+                if not pattern:
+                    break
+                try:
+                    p_type = eval(pattern, ns, ns)
+                except Exception:
+                    p_type = None
+                p_str = f"__CALLABLE{n_callables + 1}__"
+                a_str = re.sub(re.escape(pattern), p_str, a_str)
+                if p_type:
+                    # Evaluation of the annotation will fail later and the parameter
+                    #   will have no type annotation
+                    ns[p_str] = p_type
+                n_callables += 1
 
             mapping = {f"bluesky.protocols.{k.__name__}": v for k, v in protocols_inv.items()}
             for pattern, replacement in mapping.items():
@@ -2877,8 +2926,6 @@ def _process_plan(plan, *, existing_devices, existing_plans):
 
         # Verify if the type could be recreated by evaluating the string during validation.
         try:
-            print(f"==========++ a_str={a_str} ==========") ##
-            print(f"==========++ ns={list(ns.keys())} ==========") ##
             an = eval(a_str, ns, ns)
             if an != annotation:
                 raise Exception()
@@ -2886,7 +2933,6 @@ def _process_plan(plan, *, existing_devices, existing_plans):
             # Replace all callables ('__CALLABLE1__', '__CALLABLE2__', etc.) with '__CALLABLE__' string
             for n in range(n_callables):
                 p_str = f"__CALLABLE{n + 1}__"
-                print(f"========== p_str={p_str} a_str={a_str} ==========") ##
                 a_str = re.sub(p_str, "__CALLABLE__", a_str)
 
         except Exception:

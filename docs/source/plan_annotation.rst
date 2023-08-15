@@ -285,10 +285,18 @@ if the default value defined in the plan header or in the decorator has unsuppor
 
 **Supported types for type annotations.** Type annotations may be native Python types
 (such as ``int``, ``float``, ``str``, etc.), ``NoneType``, or generic types that are based
-on native Python types (such as ``typing.List[typing.Union[int, str]]``). Technically the type will
-be accepted if the operation of recreating the type object from its string representation
-using ``eval`` function is successful with the namespace that contains imported ``typing``
-module and ``NoneType`` type.
+on native Python types (such as ``list[int]``, ``typing.List[typing.Union[int, str]]``).
+Technically the type will be accepted if the operation of recreating the type object
+from its string representation using ``eval`` function is successful with the namespace
+that contains imported ``typing`` and ``collections.abc`` modules and ``NoneType`` type.
+The server can recognize and properly handle the following types used in the plan headers
+(see :ref:`defining_types_in_plan_header` and :ref:`parameter_annotation_decorator_parameter_types`):
+
+* ``bluesky.protocols.Readable`` (replaced by ``__READABLE__`` built-in type);
+* ``bluesky.protocols.Movable`` (replaced by ``__MOVABLE__`` built-in type);
+* ``bluesky.protocols.Flyable`` (replaced by ``__FLYABLE__`` built-in type);
+* ``collections.abc.Callable`` (replaced by ``__CALLABLE__`` built-in type);
+* ``typing.Callable`` (replaced by ``__CALLABLE__`` built-in type).
 
 **Supported types of default values.** The default values can be objects of native Python
 types and literal expressions with objects of native Python types. The default value should
@@ -324,6 +332,8 @@ using ``parameter_annotation_decorator`` (:ref:`parameter_annotation_decorator`)
      <code implementing the plan>
 
 
+.. _defining_types_in_plan_header:
+
 Defining Types in Plan Header
 -----------------------------
 
@@ -339,8 +349,9 @@ as having no type hints (unless type annotations for those parameters are define
   Queue Server ignores type hints defined in the plan signature for parameters that have
   type annotations defined in ``parameter_annotation_decorator``.
 
-The acceptable types include Python base types, ``NoneType`` and imports from ``typing`` module
-(see :ref:`supported_types`). Following are the examples of plans with type hints:
+The acceptable types include Python base types, ``NoneType`` and imports from ``typing``
+and ``collections.abc`` modules (see :ref:`supported_types`). Following are the examples
+of plans with type hints:
 
 .. code-block:: python
 
@@ -363,6 +374,13 @@ The acceptable types include Python base types, ``NoneType`` and imports from ``
       #   converted to 'typing.Union[typing.List[float], NoneType]' and
       #   correctly processed by the Queue Server.
       <code implementing the plan>
+
+The server can process the annotations containing Bluesky protocols ``bluesky.protocols.Readable``,
+``bluesky.protocols.Movable`` and ``bluesky.protocols.flyable`` and callable types
+``collections.abc.Callable`` and ``typing.Callable`` with or without type parameters.
+Those types are replaced with ``__READABLE__``, ``__MOVABLE__``, ``__FLYABLE__``
+and ``__CALLABLE__`` built-in types respectively. See the details on built-in types in
+:ref:`parameter_annotation_decorator_parameter_types`.
 
 
 Defining Default Values in Plan Header
@@ -485,6 +503,7 @@ example, the description for the parameter `npts` is not overridden in the decor
       """
       <code implementing the plan>
 
+.. _parameter_annotation_decorator_parameter_types:
 
 Parameter Types
 +++++++++++++++
@@ -575,12 +594,18 @@ The lists of plan and device may contain a mix of explicitly listed plan/device 
 regular expressions used to select plans and devices. See :ref:`lists_of_device_and_plan_names`
 for detailed reference to writing lists of devices and plans.
 
-The decorator supports three built-in types: ``__PLAN__``, ``__DEVICE__`` and
-``__PLAN_OR_DEVICE__``. The built-in types are replaced by ``str`` for type validation and
+The decorator supports the following built-in types: ``__PLAN__``, ``__DEVICE__``,
+``__READABLE__``, ``__MOVABLE__``, ``__FLYABLE__``, ``__PLAN_OR_DEVICE__`` and
+``__CALLABLE__``. The types ``__DEVICES__``, ``__READABLE__``, ``__MOVABLE__`` and ``__FLYABLE__``
+are treated identically by the server, but additional type checks could be added in the future.
+The built-in types are replaced by ``str`` for type validation and
 conversion of plan and/or device names enabled for this parameter. No plan/device lists
 are generated and plan/device name is not validated. The built-in types should not be
 defined in ``devices``, ``plans`` or ``enum`` sections of the parameter annotation, since
-it is going to be treated as a regular custom enum type.
+it is going to be treated as a regular custom enum type. The ``__CALLABLE__`` type is
+treated similary to the other built-in types during parameter validation. The strings
+passed as the parameter values and representing names of python variables or class object
+attributes are converted to references to the respective objects from the worker namespace.
 
 .. code-block:: python
 

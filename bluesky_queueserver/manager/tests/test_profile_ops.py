@@ -4526,9 +4526,9 @@ else:
     err_msg_tpp2d = "value is not a valid enumeration member"
     err_msg_tpp2e = "value is not a valid enumeration member"
     err_msg_tpp2f = "Incorrect parameter type: key='b', value='50'"
-    err_msg_tpp2g = "Incorrect parameter type"
+    err_msg_tpp2g = r"value is not a valid list \(type=type_error.list\)"
     err_msg_tpp2h = "Incorrect parameter type"
-    err_msg_tpp2i = "Incorrect parameter type"
+    err_msg_tpp2i = r"value is not a valid list \(type=type_error.list\)"
 
 
 # fmt: off

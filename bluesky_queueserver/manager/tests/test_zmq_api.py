@@ -807,7 +807,89 @@ def test_zmq_api_queue_item_add_09(db_catalog, re_manager_cmd, meta_param, meta_
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_queue_item_add_10_fail(re_manager):  # noqa F811
+_custom_count_with_per_shot = """
+tick_counter = 0
+
+def custom_one_shot(detectors, take_reading=None):
+    global tick_counter
+    print("RUNNING CUSTOM ONE SHOT")
+    tick_counter += 1
+    take_reading = bps.trigger_and_read if take_reading is None else take_reading
+    yield bluesky.utils.Msg('checkpoint')
+    yield from take_reading(list(detectors))
+
+def unit_test_read_counter():
+    return tick_counter
+
+def custom_count(
+    detectors: typing.List[bluesky.protocols.Readable],
+    num: int=1, delay: typing.Optional[float]=None,
+    *,
+    per_shot: typing.Optional[typing.Callable]=None,
+    md: typing.Optional[dict]=None
+):
+    yield from count(detectors, num=num, delay=delay, per_shot=per_shot, md=md)
+
+"""
+
+
+def test_zmq_api_queue_item_add_10(re_manager):  # noqa: F811
+    """
+    Add and execute custom 'count' plan with custom 'per_shot' plan.
+    """
+    _plan_custom = {
+        "name": "custom_count",
+        "args": [["det1", "det2"]],
+        "kwargs": {"num": 5, "per_shot": "custom_one_shot", "delay": 1},
+        "item_type": "plan",
+    }
+
+    # Open the environment.
+    resp3, _ = zmq_single_request("environment_open")
+    assert resp3["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp4, _ = zmq_single_request("script_upload", dict(script=_custom_count_with_per_shot))
+    assert resp4["success"] is True, pprint.pformat(resp4)
+    task_uid = resp4["task_uid"]
+    result = wait_for_task_result(10, task_uid)
+    assert result["success"] is True, pprint.pformat(result)
+
+    params5 = {"item": _plan_custom, "user": _user, "user_group": _user_group}
+    resp5, _ = zmq_single_request("queue_item_add", params5)
+    assert resp5["success"] is True, f"resp={resp5}"
+
+    status = get_manager_status()
+    assert status["items_in_queue"] == 1
+    assert status["items_in_history"] == 0
+
+    resp6, _ = zmq_single_request("queue_start")
+    assert resp6["success"] is True, f"resp={resp6}"
+
+    assert wait_for_condition(time=20, condition=condition_manager_idle)
+
+    status = get_manager_status()
+    assert status["items_in_queue"] == 0
+    assert status["items_in_history"] == 1
+
+    # The custom 'per_shot' function increases the counter by 1 for each shot.
+    #   Check that the counter was modified ('per_shot' was called).
+    func_item = {"name": "unit_test_read_counter", "item_type": "function"}
+    params = {"item": func_item, "user": _user, "user_group": _test_user_group}
+    resp7, _ = zmq_single_request("function_execute", params=params)
+    assert resp7["success"] is True
+    task_uid = resp7["task_uid"]
+    result = wait_for_task_result(10, task_uid)
+    assert result["success"] is True
+    assert result["return_value"] == 5
+
+    # Close the environment.
+    resp8, _ = zmq_single_request("environment_close")
+    assert resp8["success"] is True, f"resp={resp8}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_queue_item_add_11_fail(re_manager):  # noqa F811
     # Unknown plan name
     plan1 = {"name": "count_test", "args": [["det1", "det2"]], "item_type": "plan"}
     params1 = {"item": plan1, "user": _user, "user_group": _user_group}

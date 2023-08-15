@@ -919,24 +919,42 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
     if not success:
         raise RuntimeError(f"Validation of plan parameters failed: {errmsg}")
 
-    def ref_from_name(v, objects_in_nspace, sel_object_names, selected_object_tree, nspace):
+    def ref_from_name(v, objects_in_nspace, sel_object_names, selected_object_tree, nspace, eval_expressions):
         if isinstance(v, str):
             if (v in sel_object_names) or _is_object_name_in_list(v, allowed_objects=selected_object_tree):
                 v = _get_nspace_object(v, objects_in_nspace=objects_in_nspace, nspace=nspace)
+            elif eval_expressions and re.search(r"^[_A-Za-z][_A-Za-z0-9]*(\.[_A-Za-z][_A-Za-z0-9]*)*$", v):
+                try:
+                    v = eval(v, nspace, nspace)
+                except Exception:
+                    pass
         return v
 
-    def process_argument(v, objects_in_nspace, sel_object_names, selected_object_tree, nspace):
+    def process_argument(v, objects_in_nspace, sel_object_names, selected_object_tree, nspace, eval_expressions):
         # Recursively process lists (iterables) and dictionaries
         if isinstance(v, str):
-            v = ref_from_name(v, objects_in_nspace, sel_object_names, selected_object_tree, nspace)
+            v = ref_from_name(
+                v, objects_in_nspace, sel_object_names, selected_object_tree, nspace, eval_expressions
+            )
         elif isinstance(v, dict):
             for key, value in v.copy().items():
-                v[key] = process_argument(value, objects_in_nspace, sel_object_names, selected_object_tree, nspace)
+                v[key] = process_argument(
+                    value, objects_in_nspace, sel_object_names, selected_object_tree, nspace, eval_expressions
+                )
         elif isinstance(v, Iterable):
             v_original = v
             v = list()
             for item in v_original:
-                v.append(process_argument(item, objects_in_nspace, sel_object_names, selected_object_tree, nspace))
+                v.append(
+                    process_argument(
+                        item,
+                        objects_in_nspace,
+                        sel_object_names,
+                        selected_object_tree,
+                        nspace,
+                        eval_expressions,
+                    )
+                )
         return v
 
     def process_parameter_value(value, pp, objects_in_nspace, group_plans, group_devices, nspace):
@@ -948,6 +966,7 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
         # Include/exclude all devices/plans if required
         convert_all_plan_names = pp.get("convert_plan_names", None)  # None - not defined
         convert_all_device_names = pp.get("convert_device_names", None)
+        eval_all_expressions = pp.get("eval_expressions", False)
 
         # A set of the selected device names (device names are listed explicitly, not as a tree)
         sel_object_names, pname_list, dname_list = set(), set(), set()
@@ -981,8 +1000,10 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
 
         sel_object_names = pname_list.union(dname_list)
 
-        if sel_object_names or selected_object_tree:
-            value = process_argument(value, objects_in_nspace, sel_object_names, selected_object_tree, nspace)
+        if sel_object_names or selected_object_tree or eval_all_expressions:
+            value = process_argument(
+                value, objects_in_nspace, sel_object_names, selected_object_tree, nspace, eval_all_expressions
+            )
 
         return value
 
@@ -1015,7 +1036,7 @@ def prepare_plan(plan, *, plans_in_nspace, devices_in_nspace, allowed_plans, all
     items_in_nspace = devices_in_nspace.copy()
     items_in_nspace.update(plans_in_nspace)
 
-    plan_func = process_argument(plan_name, plans_in_nspace, set(), group_plans, nspace)
+    plan_func = process_argument(plan_name, plans_in_nspace, set(), group_plans, nspace, False)
     if isinstance(plan_func, str):
         success = False
         err_msg = f"Plan '{plan_name}' is not allowed or does not exist"

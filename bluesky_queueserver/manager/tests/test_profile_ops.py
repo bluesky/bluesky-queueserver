@@ -2068,8 +2068,12 @@ def _pf2j(
         collections.abc.Callable[[int, float], typing.Tuple[str, str]],
         list[collections.abc.Callable[[int, float], str]],
     ],
+    val5: typing.Union[
+        collections.abc.Callable[[int, typing.Callable[[int], int]], typing.Tuple[str, str]],
+        list[collections.abc.Callable[[int, float], str]],
+    ],
 ):
-    yield from [val1, val2, val3, val4]
+    yield from [val1, val2, val3, val4, val5]
 
 
 _pf2j_processed = {
@@ -2087,16 +2091,22 @@ _pf2j_processed = {
             "name": "val2",
         },
         {
-            "annotation": {"type": "typing.Union[__CALLABLE__, " "typing.List[__CALLABLE__]]"},
+            "annotation": {"type": "typing.Union[__CALLABLE__, typing.List[__CALLABLE__]]"},
             "eval_expressions": True,
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "name": "val3",
         },
         {
-            "annotation": {"type": "typing.Union[__CALLABLE__, " "list[__CALLABLE__]]"},
+            "annotation": {"type": "typing.Union[__CALLABLE__, list[__CALLABLE__]]"},
             "eval_expressions": True,
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "name": "val4",
+        },
+        {
+            "annotation": {"type": "typing.Union[__CALLABLE__, list[__CALLABLE__]]"},
+            "eval_expressions": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val5",
         },
     ],
     "properties": {"is_generator": True},
@@ -4190,6 +4200,18 @@ def _pp_generate_stage_devs():
 _pp_stg_A, _pp_stg_B = _pp_generate_stage_devs()
 
 
+def _pp_callable1():
+    pass
+
+
+class _pp_callable2_cls:
+    def f(self, a):
+        return a
+
+
+_pp_callable2 = _pp_callable2_cls()
+
+
 def _gen_environment_pp2():
     def plan1(a, b, c):
         yield from [a, b, c]
@@ -4374,10 +4396,19 @@ def _gen_environment_pp2():
         #   Strings passed to 'b' should not be converted.
         yield from [a, b]
 
+    def plan8(a: bluesky.protocols.Readable, b: list[bluesky.protocols.Movable]):
+        # All strings passed as 'a' and 'b' should be converted to devices/plans when possible.
+        yield from [a, b]
+
+    def plan9(a: typing.Callable, b: list[collections.abc.Callable[[int], int]]):
+        # All strings passed as 'a' and 'b' should be converted to devices/plans when possible.
+        yield from [a, b]
+
     # Create namespace
     nspace = {"_pp_dev1": _pp_dev1, "_pp_dev2": _pp_dev2, "_pp_dev3": _pp_dev3}
     nspace.update({"_pp_stg_A": _pp_stg_A, "_pp_stg_B": _pp_stg_B})
     nspace.update({"_pp_p1": _pp_p1, "_pp_p2": _pp_p2, "_pp_p3": _pp_p3})
+    nspace.update({"_pp_callable1": _pp_callable1, "_pp_callable2": _pp_callable2})
     nspace.update({"plan1": plan1})
     nspace.update({"plan2": plan2})
     nspace.update({"plan3": plan3})
@@ -4392,6 +4423,8 @@ def _gen_environment_pp2():
     nspace.update({"plan5d": plan5d})
     nspace.update({"plan6": plan6})
     nspace.update({"plan7": plan7})
+    nspace.update({"plan8": plan8})
+    nspace.update({"plan9": plan9})
 
     plans_in_nspace = plans_from_nspace(nspace)
     devices_in_nspace = devices_from_nspace(nspace)
@@ -4402,7 +4435,7 @@ def _gen_environment_pp2():
     allowed_plans["root"], allowed_devices["root"] = existing_plans.copy(), existing_devices.copy()
     allowed_plans[_user_group], allowed_devices[_user_group] = existing_plans.copy(), existing_devices.copy()
 
-    return plans_in_nspace, devices_in_nspace, allowed_plans, allowed_devices
+    return plans_in_nspace, devices_in_nspace, allowed_plans, allowed_devices, nspace
 
 
 # Error messages may be different for Pydantic 1 and 2
@@ -4419,6 +4452,10 @@ if pydantic_version_major == 2:
     err_msg_tpp2d = "Input should be '_pp_p1','_pp_p2' or '_pp_p3'"
     err_msg_tpp2e = "Input should be 'one','two' or 'three'"
     err_msg_tpp2f = r"Input should be a valid string \[type=string_type, input_value=50, input_type=int\]"
+    err_msg_tpp2g = r"Input should be a valid list \[type=list_type, input_value='_pp_dev3', input_type=str\]"
+    err_msg_tpp2h = r"Input should be a valid string \[type=string_type, input_value=10, input_type=int\]"
+    err_msg_tpp2i = r"Input should be a valid list \[type=list_type, input_value='_pp_callable2.f',"
+
 else:
     err_msg_tpp2a = "Incorrect parameter type: key='a', value='2.6'"
     err_msg_tpp2b = "Incorrect parameter type: key='b', value='2.8'"
@@ -4426,6 +4463,9 @@ else:
     err_msg_tpp2d = "value is not a valid enumeration member"
     err_msg_tpp2e = "value is not a valid enumeration member"
     err_msg_tpp2f = "Incorrect parameter type: key='b', value='50'"
+    err_msg_tpp2g = "Incorrect parameter type"
+    err_msg_tpp2h = "Incorrect parameter type"
+    err_msg_tpp2i = "Incorrect parameter type"
 
 
 # fmt: off
@@ -4707,6 +4747,24 @@ else:
         ("plan7", {"user_group": _user_group, "args": [["_pp_dev1", "_pp_dev3", "some_str"], 50]}, [],
          [[_pp_dev1, _pp_dev3, "some_str"], "_pp_dev2"], {}, {}, False, err_msg_tpp2f),
 
+        ("plan8", {"user_group": _user_group, "args": ["_pp_dev3", ["_pp_dev3"]]}, [],
+         [_pp_dev3, [_pp_dev3]], {}, {}, True, ""),
+        ("plan8", {"user_group": _user_group, "args": ["_pp_dev3", ["_pp_dev3"]]}, ["_pp_dev3"],
+         ["_pp_dev3", ["_pp_dev3"]], {}, {}, True, ""),
+        ("plan8", {"user_group": _user_group, "args": ["_pp_dev3", "_pp_dev3"]}, [],
+         [_pp_dev3, [_pp_dev3]], {}, {}, False, err_msg_tpp2g),
+        ("plan8", {"user_group": _user_group, "args": ["_pp_dev3", [10]]}, [],
+         [_pp_dev3, [_pp_dev3]], {}, {}, False, err_msg_tpp2h),
+
+        ("plan9", {"user_group": _user_group, "args": ["_pp_callable1", ["_pp_callable2.f"]]}, [],
+         [_pp_callable1, [_pp_callable2.f]], {}, {}, True, ""),
+        ("plan9", {"user_group": _user_group, "args": ["_pp_missing", ["_pp_callable2.missing"]]}, [],
+         ["_pp_missing", ["_pp_callable2.missing"]], {}, {}, True, ""),
+        ("plan9", {"user_group": _user_group, "args": ["_pp_callable1", "_pp_callable2.f"]}, [],
+         [], {}, {}, False, err_msg_tpp2i),
+        ("plan9", {"user_group": _user_group, "args": ["_pp_callable1", [10]]}, [],
+         [], {}, {}, False, err_msg_tpp2h),
+
         # General failing cases
         ("nonexisting_plan", {"user_group": _user_group}, [],
          [], {}, {}, False, "Plan 'nonexisting_plan' is not in the list of allowed plans"),
@@ -4721,7 +4779,7 @@ def test_prepare_plan_2(plan_name, plan, remove_objs, exp_args, exp_kwargs, exp_
     Detailed tests for ``prepare_plan``. Preparation of plan parameters before execution
     is one of the key features, so unit tests are needed for all use cases.
     """
-    plans_in_nspace, devices_in_nspace, allowed_plans, allowed_devices = _gen_environment_pp2()
+    plans_in_nspace, devices_in_nspace, allowed_plans, allowed_devices, nspace = _gen_environment_pp2()
 
     if remove_objs and isinstance(remove_objs[-1], bool):
         use_exclude = remove_objs.pop()
@@ -4764,6 +4822,7 @@ def test_prepare_plan_2(plan_name, plan, remove_objs, exp_args, exp_kwargs, exp_
             devices_in_nspace=devices_in_nspace,
             allowed_plans=allowed_plans,
             allowed_devices=allowed_devices,
+            nspace=nspace,
         )
         expected_keys = ("callable", "args", "kwargs", "meta")
         for k in expected_keys:
@@ -4780,6 +4839,7 @@ def test_prepare_plan_2(plan_name, plan, remove_objs, exp_args, exp_kwargs, exp_
                 devices_in_nspace=devices_in_nspace,
                 allowed_plans=allowed_plans,
                 allowed_devices=allowed_devices,
+                nspace=nspace,
             )
 
 
@@ -4804,7 +4864,7 @@ def test_prepare_plan_3(registered_plans, excluded_plans, existing_plans, missin
             kwargs.update({"exclude": True})
         register_plan(name, **kwargs)
 
-    plans_in_nspace, _, allowed_plans, _ = _gen_environment_pp2()
+    plans_in_nspace, _, allowed_plans, _, _ = _gen_environment_pp2()
 
     for name in existing_plans:
         assert name in plans_in_nspace
@@ -5043,7 +5103,7 @@ def test_prepare_devices_1(max_depth, registered_devices, expected_devices):
     for name, p in registered_devices.items():
         register_device(name, **p)
 
-    _, devices_in_nspace, _, _ = _gen_environment_pp2()
+    _, devices_in_nspace, _, _, _ = _gen_environment_pp2()
 
     params = {}
     if max_depth is not None:

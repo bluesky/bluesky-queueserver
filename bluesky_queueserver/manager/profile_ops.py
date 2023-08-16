@@ -22,6 +22,7 @@ import jsonschema
 import pydantic
 import yaml
 from numpydoc.docscrape import NumpyDocString
+from packaging import version
 
 import bluesky_queueserver
 
@@ -29,6 +30,8 @@ from .logging_setup import PPrintForLogging as ppfl
 
 logger = logging.getLogger(__name__)
 qserver_version = bluesky_queueserver.__version__
+
+pydantic_version_major = version.parse(pydantic.__version__).major
 
 
 class ScriptLoadingError(Exception):
@@ -2142,10 +2145,16 @@ def _process_annotation(encoded_annotation, *, ns=None):
     ns: dict
         Namespace dictionary with created types.
     """
+    import bluesky
+
     # Namespace that contains the types created in the process of processing the annotation
     ns = ns or {}
     if "typing" not in ns:
         ns.update({"typing": typing})
+    if "collections" not in ns:
+        ns.update({"collections": collections})
+    if "bluesky" not in ns:
+        ns.update({"bluesky": bluesky})
     if "enum" not in ns:
         ns.update({"enum": enum})
     if "NoneType" not in ns:
@@ -2454,9 +2463,10 @@ def _validate_plan_parameters(param_list, call_args, call_kwargs):
         #   to work fine in this application.
         # NOTE: the following step may not be needed once Pydantic 1 is deprecated,
         #   because Pydantic 2 performs strict type checking.
-        success, msg = _compare_in_out(bound_args.arguments, m.__dict__)
-        if not success:
-            raise ValueError(f"Error in argument types: {msg}")
+        if pydantic_version_major == 1:
+            success, msg = _compare_in_out(bound_args.arguments, m.__dict__)
+            if not success:
+                raise ValueError(f"Error in argument types: {msg}")
 
         # Finally check the ranges of parameters that have min. and max. are defined
         success, msg = _check_ranges(bound_args.arguments, param_list)
@@ -2900,6 +2910,7 @@ def _process_plan(plan, *, existing_devices, existing_plans):
         """
         Ignore the type if it can not be properly reconstructed using 'eval'
         """
+        import bluesky
         from bluesky.protocols import Flyable, Movable, Readable
 
         # Patterns for callables
@@ -2909,7 +2920,13 @@ def _process_plan(plan, *, existing_devices, existing_plans):
         protocols_mapping = {"__READABLE__": Readable, "__MOVABLE__": Movable, "__FLYABLE__": Flyable}
         protocols_inv = {v: k for k, v in protocols_mapping.items()}
 
-        ns = {"typing": typing, "collections": collections, "NoneType": type(None), **protocols_mapping}
+        ns = {
+            "typing": typing,
+            "collections": collections,
+            "bluesky": bluesky,
+            "NoneType": type(None),
+            **protocols_mapping,
+        }
 
         # This will work for generic types like 'typing.List[int]'
         a_str = f"{annotation!r}"

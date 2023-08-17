@@ -16,7 +16,7 @@ import sys
 import tempfile
 import traceback
 import typing
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 
 import jsonschema
 import pydantic
@@ -1935,17 +1935,25 @@ def _compare_types(object_in, object_out):
     then the function is recursively called for each element. A set of rules is
     applied to types to determine if the types are matching.
     """
-    if isinstance(object_in, (list, tuple)) and isinstance(object_out, (list, tuple)):
+
+    def both_iterables(x, y):
+        return isinstance(x, Iterable) and isinstance(y, Iterable) and not isinstance(x, str)
+
+    def both_mappings(x, y):
+        return isinstance(x, Mapping) and isinstance(y, Mapping)
+
+    if both_iterables(object_in, object_out):
         match = True
-        if len(object_in) == len(object_out):
-            for o_in, o_out in zip(object_in, object_out):
-                if not _compare_types(o_in, o_out):
-                    match = False
-        else:
-            # This should never happen, since 'object_out' is obtained by
-            #   applying transformations on 'object_in', but it is still
-            #   good to check to avoid exceptions.
-            match = False
+        for o_in, o_out in zip(object_in, object_out):
+            if not _compare_types(o_in, o_out):
+                match = False
+    elif both_mappings(object_in, object_out):
+        match = True
+        for k in object_in.keys():
+            if k not in object_out:
+                match = False
+            if not _compare_types(object_in[k], object_out[k]):
+                match = False
     else:
         match = False
         # This is the set of rules used to determine if types are matching.
@@ -2461,12 +2469,11 @@ def _validate_plan_parameters(param_list, call_args, call_kwargs):
         #   recommended 'm.dict()', because 'm.dict()' was causing performance problems
         #   when validating large batches of plans. Based on testing, 'm.__dict__' seems
         #   to work fine in this application.
-        # NOTE: the following step may not be needed once Pydantic 1 is deprecated,
-        #   because Pydantic 2 performs strict type checking.
-        if pydantic_version_major == 1:
-            success, msg = _compare_in_out(bound_args.arguments, m.__dict__)
-            if not success:
-                raise ValueError(f"Error in argument types: {msg}")
+        # NOTE: Pydantic 2 performs strict type checking and some checks performed by
+        #   '_compare_in_out' may not be needed.
+        success, msg = _compare_in_out(bound_args.arguments, m.__dict__)
+        if not success:
+            raise ValueError(f"Error in argument types: {msg}")
 
         # Finally check the ranges of parameters that have min. and max. are defined
         success, msg = _check_ranges(bound_args.arguments, param_list)

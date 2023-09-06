@@ -2059,6 +2059,88 @@ _pf2i_processed = {
 
 
 def _pf2j(
+    val1: bluesky.protocols.Configurable,
+    val2: bluesky.protocols.Triggerable,
+    val3: bluesky.protocols.Locatable,
+    val4: bluesky.protocols.Stageable,
+    val5: bluesky.protocols.Pausable,
+    val6: bluesky.protocols.Stoppable,
+    val7: bluesky.protocols.Subscribable,
+    val8: bluesky.protocols.Checkable,
+    val9: Optional[bluesky.protocols.Configurable],
+    val10: typing.Union[bluesky.protocols.Triggerable, list[bluesky.protocols.Locatable]],
+):
+    yield from [val1, val2, val3, val4, val5, val6, val7, val8]
+
+
+_pf2j_processed = {
+    "parameters": [
+        {
+            "annotation": {"type": "__DEVICE__"},
+            "convert_device_names": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val1",
+        },
+        {
+            "annotation": {"type": "__DEVICE__"},
+            "convert_device_names": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val2",
+        },
+        {
+            "annotation": {"type": "__DEVICE__"},
+            "convert_device_names": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val3",
+        },
+        {
+            "annotation": {"type": "__DEVICE__"},
+            "convert_device_names": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val4",
+        },
+        {
+            "annotation": {"type": "__DEVICE__"},
+            "convert_device_names": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val5",
+        },
+        {
+            "annotation": {"type": "__DEVICE__"},
+            "convert_device_names": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val6",
+        },
+        {
+            "annotation": {"type": "__DEVICE__"},
+            "convert_device_names": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val7",
+        },
+        {
+            "annotation": {"type": "__DEVICE__"},
+            "convert_device_names": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val8",
+        },
+        {
+            "annotation": {"type": "typing.Optional[__DEVICE__]"},
+            "convert_device_names": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val9",
+        },
+        {
+            "annotation": {"type": "typing.Union[__DEVICE__, list[__DEVICE__]]"},
+            "convert_device_names": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val10",
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
+def _pf2k(
     val1: typing.Callable,
     val2: typing.Callable[[int, float], str],
     val3: typing.Union[
@@ -2076,7 +2158,7 @@ def _pf2j(
     yield from [val1, val2, val3, val4, val5]
 
 
-_pf2j_processed = {
+_pf2k_processed = {
     "parameters": [
         {
             "annotation": {"type": "__CALLABLE__"},
@@ -2125,6 +2207,7 @@ _pf2j_processed = {
     (_pf2h, _pf2h_processed),
     (_pf2i, _pf2i_processed),
     (_pf2j, _pf2j_processed),
+    (_pf2k, _pf2k_processed),
 ])
 # fmt: on
 def test_process_plan_2(plan_func, plan_info_expected):

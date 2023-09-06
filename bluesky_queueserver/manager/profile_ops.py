@@ -2953,6 +2953,7 @@ def _process_plan(plan, *, existing_devices, existing_plans):
             k: [f"bluesky.protocols.{_.__name__}" for _ in v] for k, v in protocols_mapping.items()
         }
         callables_patterns = {"__CALLABLE__": [r"typing.Callable", r"collections.abc.Callable"]}
+        # Patterns for Callable MUST go first
         type_patterns = {**callables_patterns, **protocols_patterns}
 
         ns = {
@@ -2960,10 +2961,6 @@ def _process_plan(plan, *, existing_devices, existing_plans):
             "collections": collections,
             "bluesky": bluesky,
             "NoneType": type(None),
-            "__READABLE__": Readable,
-            "__MOVABLE__": Movable,
-            "__FLYABLE__": Flyable,
-            "__DEVICE__": Movable,  # It doesn't matter what type is assigned
         }
 
         substitutions_dict = {}
@@ -2980,6 +2977,7 @@ def _process_plan(plan, *, existing_devices, existing_plans):
             mapping = {k.__name__: v for k, v in protocols_inv.items()}
             if a_str in mapping:
                 a_str = mapping[a_str]
+                ns[a_str] = annotation  # 'a_str' is __DEVICE__, __READABLE__ or similar
         else:
             # Replace each expression with a unique string in the form of '__CALLABLE<n>__'
             n_patterns = 0  # Number of detected callables

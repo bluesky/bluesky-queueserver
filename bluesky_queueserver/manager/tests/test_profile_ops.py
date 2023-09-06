@@ -6952,6 +6952,13 @@ def _vp3a(
     yield from ["one", "two", "three"]
 
 
+def _vp3b(detectors: typing.Iterable[protocols.Readable]):
+    """
+    Test if type Iterable can be used for the detector (device) list.
+    """
+    yield from ["one", "two", "three"]
+
+
 # Error messages may be different for Pydantic 1 and 2
 if pydantic_version_major == 2:
     err_msg_tvp3a = "Input should be 'm2' [type=enum, input_value='m4', input_type=str]"
@@ -7060,6 +7067,19 @@ else:
     # Int instead of a motor name (validation should fail)
     (_vp3a, {"args": [(0, "m2"), ("d1", "d2"), ("p1",), ("10.0", 20.0)], "kwargs": {}},
      ("m1", "m2", "d1", "d2"), False, err_msg_tvp3l),
+
+    # Parameter "detectors" is 'typing.Iterable[protocols.Readable]'
+    (_vp3b, {"args": [("d1", "d2")], "kwargs": {}},
+     ("d1", "d2"), True, ""),
+    (_vp3b, {"args": [], "kwargs": {"detectors": ("d1", "d2")}},
+     ("d1", "d2"), True, ""),
+    (_vp3b, {"args": [("d1",)], "kwargs": {}},
+     ("d1", "d2"), True, ""),
+    (_vp3b, {"args": ["d1"], "kwargs": {}},
+     ("d1", "d2"), False, "Incorrect parameter type: key='detectors'"),
+    (_vp3b, {"args": [], "kwargs": {"detectors": 'd1'}},
+     ("d1", "d2"), False, "Incorrect parameter type: key='detectors'"),
+
 ])
 # fmt: on
 def test_validate_plan_3(plan_func, plan, allowed_devices, success, errmsg):
@@ -7070,6 +7090,7 @@ def test_validate_plan_3(plan_func, plan, allowed_devices, success, errmsg):
     plan["name"] = plan_func.__name__
     allowed_plans = {
         "_vp3a": _process_plan(_vp3a, existing_devices={}, existing_plans={}),
+        "_vp3b": _process_plan(_vp3b, existing_devices={}, existing_plans={}),
         "p1": {},  # The plan is used only as a parameter value
         "p2": {},  # The plan is used only as a parameter value
     }

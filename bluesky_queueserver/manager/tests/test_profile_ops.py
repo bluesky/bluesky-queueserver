@@ -6952,7 +6952,10 @@ def _vp3a(
     yield from ["one", "two", "three"]
 
 
-def _vp3b(detectors: typing.Iterable[protocols.Readable]):
+def _vp3b(
+    detectors: typing.Iterable[protocols.Readable],
+    motors: typing.Optional[typing.Union[protocols.Movable, typing.Iterable[protocols.Movable]]] = None,
+):
     """
     Test if type Iterable can be used for the detector (device) list.
     """
@@ -7079,6 +7082,13 @@ else:
      ("d1", "d2"), False, "Incorrect parameter type: key='detectors'"),
     (_vp3b, {"args": [], "kwargs": {"detectors": 'd1'}},
      ("d1", "d2"), False, "Incorrect parameter type: key='detectors'"),
+
+    (_vp3b, {"args": [], "kwargs": {"detectors": [], "motors": ("m1", "m2")}},
+     ("m1", "m2"), True, ""),
+    (_vp3b, {"args": [], "kwargs": {"detectors": [], "motors": ("m1",)}},
+     ("m1", "m2"), True, ""),
+    (_vp3b, {"args": [], "kwargs": {"detectors": [], "motors": "m1"}},  # String IS allowed !!
+     ("m1", "m2"), True, ""),
 
 ])
 # fmt: on

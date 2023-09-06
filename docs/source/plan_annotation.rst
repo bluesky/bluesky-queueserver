@@ -295,8 +295,26 @@ The server can recognize and properly handle the following types used in the pla
 * ``bluesky.protocols.Readable`` (replaced by ``__READABLE__`` built-in type);
 * ``bluesky.protocols.Movable`` (replaced by ``__MOVABLE__`` built-in type);
 * ``bluesky.protocols.Flyable`` (replaced by ``__FLYABLE__`` built-in type);
+* ``bluesky.protocols.Configurable`` (replaced by ``__DEVICE__`` built-in type);
+* ``bluesky.protocols.Triggerable`` (replaced by ``__DEVICE__`` built-in type);
+* ``bluesky.protocols.Locatable`` (replaced by ``__DEVICE__`` built-in type);
+* ``bluesky.protocols.Stageable`` (replaced by ``__DEVICE__`` built-in type);
+* ``bluesky.protocols.Pausable`` (replaced by ``__DEVICE__`` built-in type);
+* ``bluesky.protocols.Stoppable`` (replaced by ``__DEVICE__`` built-in type);
+* ``bluesky.protocols.Subscribable`` (replaced by ``__DEVICE__`` built-in type);
+* ``bluesky.protocols.Checkable`` (replaced by ``__DEVICE__`` built-in type);
 * ``collections.abc.Callable`` (replaced by ``__CALLABLE__`` built-in type);
 * ``typing.Callable`` (replaced by ``__CALLABLE__`` built-in type).
+
+.. note::
+
+  Note, that ``typing.Iterable`` can be used with the types listed above with certain restrictions.
+  If a parameter is annotated as ``typing.Iterable[bluesky.protocols.Readable]``, then the validation
+  will succeed for a list of devices (names of devices), but fails if a single device name is
+  passed to a plan. If a parameter is expected to accept a single device or a list (iterable) of devices,
+  the parameter should be annotated as
+  ``typing.Union[bluesky.protocols.Readable, typing.Iterable[bluesky.protocols.Readable]]``.
+  Validation will fail for a single device if the order of types in the union is reversed.
 
 **Supported types of default values.** The default values can be objects of native Python
 types and literal expressions with objects of native Python types. The default value should
@@ -375,9 +393,9 @@ of plans with type hints:
       #   correctly processed by the Queue Server.
       <code implementing the plan>
 
-The server can process the annotations containing Bluesky protocols ``bluesky.protocols.Readable``,
-``bluesky.protocols.Movable`` and ``bluesky.protocols.flyable`` and callable types
-``collections.abc.Callable`` and ``typing.Callable`` with or without type parameters.
+The server can process the annotations containing Bluesky protocols such as
+``bluesky.protocols.Readable``, ```bluesky.protocols.Movable`` and ``bluesky.protocols.Flyable``
+and callable types ``collections.abc.Callable`` and ``typing.Callable`` with or without type parameters.
 Those types are replaced with ``__READABLE__``, ``__MOVABLE__``, ``__FLYABLE__``
 and ``__CALLABLE__`` built-in types respectively. See the details on built-in types in
 :ref:`parameter_annotation_decorator_parameter_types`.

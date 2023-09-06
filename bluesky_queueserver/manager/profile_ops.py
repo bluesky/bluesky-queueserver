@@ -2918,22 +2918,55 @@ def _process_plan(plan, *, existing_devices, existing_plans):
         Ignore the type if it can not be properly reconstructed using 'eval'
         """
         import bluesky
-        from bluesky.protocols import Flyable, Movable, Readable
+        from bluesky.protocols import (
+            Checkable,
+            Configurable,
+            Flyable,
+            Locatable,
+            Movable,
+            Pausable,
+            Readable,
+            Stageable,
+            Stoppable,
+            Subscribable,
+            Triggerable,
+        )
 
-        # Patterns for callables
-        callables_patterns = (r"typing.Callable", r"collections.abc.Callable")
-        n_callables = 0  # Number of detected callables
+        protocols_mapping = {
+            "__READABLE__": [Readable],
+            "__MOVABLE__": [Movable],
+            "__FLYABLE__": [Flyable],
+            "__DEVICE__": [
+                Configurable,
+                Triggerable,
+                Locatable,
+                Stageable,
+                Pausable,
+                Stoppable,
+                Subscribable,
+                Checkable,
+            ],
+        }
+        protocols_inv = {_: k for k, v in protocols_mapping.items() for _ in v}
 
-        protocols_mapping = {"__READABLE__": Readable, "__MOVABLE__": Movable, "__FLYABLE__": Flyable}
-        protocols_inv = {v: k for k, v in protocols_mapping.items()}
+        protocols_patterns = {
+            k: [f"bluesky.protocols.{_.__name__}" for _ in v] for k, v in protocols_mapping.items()
+        }
+        callables_patterns = {"__CALLABLE__": [r"typing.Callable", r"collections.abc.Callable"]}
+        type_patterns = {**callables_patterns, **protocols_patterns}
 
         ns = {
             "typing": typing,
             "collections": collections,
             "bluesky": bluesky,
             "NoneType": type(None),
-            **protocols_mapping,
+            "__READABLE__": Readable,
+            "__MOVABLE__": Movable,
+            "__FLYABLE__": Flyable,
+            "__DEVICE__": Movable,  # It doesn't matter what type is assigned
         }
+
+        substitutions_dict = {}
 
         # This will work for generic types like 'typing.List[int]'
         a_str = f"{annotation!r}"
@@ -2949,25 +2982,25 @@ def _process_plan(plan, *, existing_devices, existing_plans):
                 a_str = mapping[a_str]
         else:
             # Replace each expression with a unique string in the form of '__CALLABLE<n>__'
-            while True:
-                pattern = _get_full_type_name(callables_patterns, a_str)
-                if not pattern:
-                    break
-                try:
-                    p_type = eval(pattern, ns, ns)
-                except Exception:
-                    p_type = None
-                p_str = f"__CALLABLE{n_callables + 1}__"
-                a_str = re.sub(re.escape(pattern), p_str, a_str)
-                if p_type:
-                    # Evaluation of the annotation will fail later and the parameter
-                    #   will have no type annotation
-                    ns[p_str] = p_type
-                n_callables += 1
-
-            mapping = {f"bluesky.protocols.{k.__name__}": v for k, v in protocols_inv.items()}
-            for pattern, replacement in mapping.items():
-                a_str = re.sub(pattern, replacement, a_str)
+            n_patterns = 0  # Number of detected callables
+            for type_name, type_patterns in type_patterns.items():
+                while True:
+                    pattern = _get_full_type_name(type_patterns, a_str)
+                    if not pattern:
+                        break
+                    try:
+                        p_type = eval(pattern, ns, ns)
+                    except Exception:
+                        p_type = None
+                    p_str_prefix, p_str_suffix = re.findall(r".*[a-zA-Z0-9]|__$", type_name)
+                    p_str = f"{p_str_prefix}{n_patterns + 1}{p_str_suffix}"
+                    a_str = re.sub(re.escape(pattern), p_str, a_str)
+                    if p_type:
+                        # Evaluation of the annotation will fail later and the parameter
+                        #   will have no type annotation
+                        ns[p_str] = p_type
+                    substitutions_dict[p_str] = type_name
+                    n_patterns += 1
 
         # Verify if the type could be recreated by evaluating the string during validation.
         try:
@@ -2976,9 +3009,8 @@ def _process_plan(plan, *, existing_devices, existing_plans):
                 raise Exception()
 
             # Replace all callables ('__CALLABLE1__', '__CALLABLE2__', etc.) with '__CALLABLE__' string
-            for n in range(n_callables):
-                p_str = f"__CALLABLE{n + 1}__"
-                a_str = re.sub(p_str, "__CALLABLE__", a_str)
+            for k, v in substitutions_dict.items():
+                a_str = re.sub(k, v, a_str)
 
         except Exception:
             # Ignore the type if it can not be recreated.

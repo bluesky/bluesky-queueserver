@@ -4187,7 +4187,7 @@ def test_plan(param):
 
 # Error messages may be different for Pydantic 1 and 2
 if pydantic_version_major == 2:
-    err_msg_tpp1 = r"Input should be 'det1','det2' or 'det3' \[type=enum, input_value='det4', input_type=str\]"
+    err_msg_tpp1 = r"Input should be 'det1', 'det2' or 'det3' \[type=enum, input_value='det4', input_type=str\]"
 else:
     err_msg_tpp1 = "value is not a valid enumeration member; permitted: 'det1', 'det2', 'det3'"
 
@@ -4594,9 +4594,9 @@ if pydantic_version_major == 2:
         r"Input should be a valid integer, got a number with a fractional part "
         r"\[type=int_from_float, input_value=2.8, input_type=float\]"
     )
-    err_msg_tpp2c = "Input should be '_pp_dev1','_pp_dev2' or '_pp_dev3'"
-    err_msg_tpp2d = "Input should be '_pp_p1','_pp_p2' or '_pp_p3'"
-    err_msg_tpp2e = "Input should be 'one','two' or 'three'"
+    err_msg_tpp2c = "Input should be '_pp_dev1', '_pp_dev2' or '_pp_dev3'"
+    err_msg_tpp2d = "Input should be '_pp_p1', '_pp_p2' or '_pp_p3'"
+    err_msg_tpp2e = "Input should be 'one', 'two' or 'three'"
     err_msg_tpp2f = r"Input should be a valid string \[type=string_type, input_value=50, input_type=int\]"
     err_msg_tpp2g = r"Input should be a valid list \[type=list_type, input_value='_pp_dev3', input_type=str\]"
     err_msg_tpp2h = r"Input should be a valid string \[type=string_type, input_value=10, input_type=int\]"

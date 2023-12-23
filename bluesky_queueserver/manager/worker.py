@@ -1609,6 +1609,8 @@ class RunEngineWorker(Process):
         """
         if not self._use_ipython_kernel:
             return True
+
+        logger.debug("Capturing IPython kernel started")
         if self._ip_kernel_state != IPKernelState.IDLE:
             if self._env_state == EState.RESERVED:
                 self._ip_kernel_reserve_expire_at = ttime.time() + self._ip_kernel_reserve_timeout
@@ -1620,6 +1622,8 @@ class RunEngineWorker(Process):
         self._ip_kernel_execute_command(command=start_loop_task)
         with self._exec_loop_active_cnd:
             success = self._exec_loop_active_cnd.wait_for(lambda: self._exec_loop_active, timeout=timeout)
+
+        logger.debug("Capturing IPython kernel completed: success=%r", success)
         return success
 
     def _ip_kernel_release(self):

@@ -1614,8 +1614,14 @@ class RunEngineWorker(Process):
         if self._ip_kernel_state != IPKernelState.IDLE:
             if self._env_state == EState.RESERVED:
                 self._ip_kernel_reserve_expire_at = ttime.time() + self._ip_kernel_reserve_timeout
+                logger.debug("IPython kernel is already captured. Expiration time is extended.")
                 return True
             else:
+                logger.debug(
+                    "IPython kernel can't be captured: IPython kernel state = %r, env. state=%r",
+                    self._ip_kernel_state,
+                    self._env_state,
+                )
                 return False
 
         start_loop_task = "___ip_execution_loop_start___()"

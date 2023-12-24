@@ -1108,9 +1108,7 @@ class RunEngineWorker(Process):
             except Exception:
                 s = "UNKNOWN CONDITION IS DETECTED IN THE WORKER PROCESS"  # Shouldn't ever be printed
             err_msg = (
-                f"Attempt to start a plan (Run Engine) while {s}.\n"
-                "This may indicate a serious issue with the plan queue execution mechanism.\n"
-                "Please report the issue to developer team."
+                f"Attempt to start a plan (Run Engine) while {s}.\nPlease report this issue to developer team."
             )
 
         msg_out = {"status": status, "err_msg": err_msg}

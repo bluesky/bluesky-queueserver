@@ -213,7 +213,6 @@
     "bluesky_queueserver/manager/tests/test_conversions.py::test_spreadsheet_to_plan_list_2_fail[extra_plan2-Plan name .*10.*row 9.* is not a valid plan name-.xlsx]": 0.020134378981310874,
     "bluesky_queueserver/manager/tests/test_conversions.py::test_spreadsheet_to_plan_list_2_fail[extra_plan3-Plan name .*co unt.*row 9.* is not a valid plan name-.csv]": 0.006877814012113959,
     "bluesky_queueserver/manager/tests/test_conversions.py::test_spreadsheet_to_plan_list_2_fail[extra_plan3-Plan name .*co unt.*row 9.* is not a valid plan name-.xlsx]": 0.01843679099692963,
-    "bluesky_queueserver/manager/tests/test_fixtures.py::test_fixture_db_catalog": 2.2897534540097695,
     "bluesky_queueserver/manager/tests/test_fixtures.py::test_fixture_re_manager_cmd_1": 1.9968571169883944,
     "bluesky_queueserver/manager/tests/test_fixtures.py::test_fixture_re_manager_cmd_2": 5.893113110010745,
     "bluesky_queueserver/manager/tests/test_gen_lists.py::test_gen_list_of_plans_and_devices_01": 6.275994260999141,

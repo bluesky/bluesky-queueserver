@@ -15,7 +15,6 @@ from .common import (  # noqa: F401
     condition_manager_idle,
     condition_manager_paused,
     condition_queue_processing_finished,
-    db_catalog,
     get_manager_status,
     re_manager,
     re_manager_cmd,

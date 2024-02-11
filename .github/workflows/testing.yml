@@ -37,6 +37,10 @@ jobs:
         pip install .
         pip install -r requirements-dev.txt
         pip install "pydantic${{ matrix.pydantic-version }}"
+
+        # Install Bluesky from fixed branch (remove when the PR is merged)
+        pip install git+https://github.com/tacaswell/bluesky@fix/1event_rewind
+
         pip list
     - name: Test with pytest
       env:

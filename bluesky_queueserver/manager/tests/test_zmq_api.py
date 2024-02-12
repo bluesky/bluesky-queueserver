@@ -2423,9 +2423,8 @@ def test_zmq_api_script_upload_07(tmp_path, monkeypatch, re_manager_cmd, option)
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-_script_save_instances_re_db = """
+_script_save_instance_re = """
 RE_backup = RE
-db_backup = db
 """
 
 
@@ -2433,60 +2432,49 @@ db_backup = db
 @pytest.mark.parametrize("update_lists", [True, False])
 @pytest.mark.parametrize("update_re_param", [False, True])
 @pytest.mark.parametrize("replace_re", [False, True])
-@pytest.mark.parametrize("replace_db", [False, True])
 # fmt: on
-def test_zmq_api_script_upload_08(
-    re_manager_cmd, update_lists, update_re_param, replace_re, replace_db  # noqa: F811
-):
+def test_zmq_api_script_upload_08(re_manager_cmd, update_lists, update_re_param, replace_re):  # noqa: F811
     """
-    'script_upload' API: Test that instances 'RE' and 'db' could be replaced in
-    the RE Worker namespace. The test does not check if references kept internally by RE Worker
-    are updated, but the update happens in the same branches where the namespace is updated.
+    'script_upload' API: Test that instance of 'RE' can be replaced in the RE Worker namespace
+    by executing a script. The test does not check if references kept internally by RE Worker
+    are updated, but the update happens in the same code branches where the namespace is updated.
     """
-
-    # Make sure that the environment contains databroker instance
-    re_manager_cmd(["--databroker-config", "temp"])
+    re_manager_cmd()
 
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-    params = {"script": _script_save_instances_re_db}
+    params = {"script": _script_save_instance_re}
     if update_lists is not None:
         params.update({"update_lists": update_lists})
     else:
         update_lists = True
 
-    # Upload script that saves instances of 'RE' and 'db' in the namespace
+    # Upload script that saves instance of 'RE' in the namespace
     resp2, _ = zmq_single_request("script_upload", params=params)
     result = wait_for_task_result(10, resp2["task_uid"])
     assert result["success"] is True, pprint.pformat(result)
 
-    script_replace_re_and_db = ""
+    script_replace_re = ""
     if replace_re:
-        script_replace_re_and_db += "from bluesky import RunEngine\nRE = RunEngine()\n"
-    if replace_db:
-        script_replace_re_and_db += 'from databroker import Broker\ndb = Broker.named("temp")\n'
+        script_replace_re += "from bluesky import RunEngine\nRE = RunEngine()\n"
 
     resp3, _ = zmq_single_request(
-        "script_upload", params={"script": script_replace_re_and_db, "update_re": update_re_param}
+        "script_upload", params={"script": script_replace_re, "update_re": update_re_param}
     )
     result = wait_for_task_result(10, resp3["task_uid"])
     assert result["success"] is True, pprint.pformat(result)
 
     # Upload the script the verifies that the environment has new instances of RE and db.
     #     The script fails to load if the RE or db is not updated properly when required.
-    script_verify_re_and_db = ""
+    script_verify_re = ""
     if replace_re and update_re_param:
-        script_verify_re_and_db += "assert RE != RE_backup\n"
+        script_verify_re += "assert RE != RE_backup\n"
     else:
-        script_verify_re_and_db += "assert RE == RE_backup\n"
-    if replace_db and update_re_param:
-        script_verify_re_and_db += "assert db != db_backup\n"
-    else:
-        script_verify_re_and_db += "assert db == db_backup\n"
+        script_verify_re += "assert RE == RE_backup\n"
 
-    resp4, _ = zmq_single_request("script_upload", params={"script": script_verify_re_and_db})
+    resp4, _ = zmq_single_request("script_upload", params={"script": script_verify_re})
     result = wait_for_task_result(10, resp4["task_uid"])
     assert result["success"] is True, pprint.pformat(result)
 

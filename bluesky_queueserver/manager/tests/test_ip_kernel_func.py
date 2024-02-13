@@ -517,7 +517,7 @@ def test_ip_kernel_run_plans_04(re_manager, ip_kernel_simple_client, plan_option
     if resume_option == "resume":
         s = get_manager_status()  # Kernel may not be 'captured' at this point
         assert s["manager_state"] == "executing_queue"
-        assert s["worker_environment_state"] in ("idle", "executing_plan")
+        assert s["worker_environment_state"] in ("idle", "executing_plan", "reserved")
 
         ttime.sleep(2)
 

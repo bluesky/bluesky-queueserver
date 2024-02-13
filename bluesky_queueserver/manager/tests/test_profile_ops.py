@@ -7063,10 +7063,10 @@ if pydantic_version_major == 2:
 else:
     err_msg_tvp3a = "value is not a valid enumeration member; permitted: 'm2'"
     err_msg_tvp3b = "value is not a valid enumeration member; permitted: 'm2'"
-    err_msg_tvp3c = "value is not a valid enumeration member; permitted:"
-    err_msg_tvp3d = "value is not a valid enumeration member; permitted:"
+    err_msg_tvp3c = "has no members defined (type=type_error)"
+    err_msg_tvp3d = "has no members defined (type=type_error)"
     err_msg_tvp3e = "value is not a valid list"
-    err_msg_tvp3f = "value is not a valid enumeration member; permitted:"
+    err_msg_tvp3f = "has no members defined (type=type_error)"
     err_msg_tvp3f1 = "value is not a valid enumeration member; permitted:"
     err_msg_tvp3g = "value is not a valid list"
     err_msg_tvp3h = "value is not a valid enumeration member; permitted: 'd1', 'd2'"
@@ -7108,6 +7108,12 @@ else:
     # Both motors are not in the list of allowed devices.
     (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m4", "m5", "d1", "d2"), False, err_msg_tvp3c),
+    # The list of motors is empty, but validation succeeds, since no motors are passed
+    (_vp3a, {"args": [tuple(), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
+     ("d1", "d2"), True, ""),
+    # Same, but there are some non-existing motors in the list of allowed devices
+    (_vp3a, {"args": [tuple(), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
+     ("m4", "m5", "d1", "d2"), True, ""),
     # Empty list of allowed devices (should be the same result as above).
     (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
      (), False, err_msg_tvp3d),

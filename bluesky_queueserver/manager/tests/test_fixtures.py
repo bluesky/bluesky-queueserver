@@ -1,5 +1,3 @@
-import pytest
-
 from bluesky_queueserver.manager.comms import zmq_single_request
 
 from .common import (  # noqa: F401
@@ -8,32 +6,9 @@ from .common import (  # noqa: F401
     condition_environment_closed,
     condition_environment_created,
     condition_manager_idle,
-    db_catalog,
     re_manager_cmd,
     wait_for_condition,
 )
-
-
-@pytest.mark.xfail(reason="For some reason the test fails when run on CI, but expected to pass locally")
-def test_fixture_db_catalog(db_catalog):  # noqa F811
-    """
-    Basic test for the fixture `db_catalog`.
-    """
-    assert db_catalog["catalog_name"] == "qserver_tests"
-    # Catalog does not necessarily need to be empty, since it will accumulate results of
-    #   all the tests in the current session.
-    list(db_catalog["catalog"])
-
-    # Try to instantiate the Data Broker
-    from databroker import Broker
-
-    Broker.named(db_catalog["catalog_name"])
-
-    # Try to access the catalog in 'standard' way
-    from databroker import catalog
-
-    catalog.force_reload()
-    assert list(catalog[db_catalog["catalog_name"]]) == list(db_catalog["catalog"])
 
 
 def test_fixture_re_manager_cmd_1(re_manager_cmd):  # noqa F811
@@ -46,17 +21,11 @@ def test_fixture_re_manager_cmd_1(re_manager_cmd):  # noqa F811
     re_manager_cmd([])
 
 
-def test_fixture_re_manager_cmd_2(re_manager_cmd, db_catalog):  # noqa F811
+def test_fixture_re_manager_cmd_2(re_manager_cmd):  # noqa F811
     """
-    Test for the fixture ``re_manager_cmd``: start RE Manager with command line parameters.
-    Subscribe RE to databroker (created by ``db_catalog``, execute the plan and make sure
-    that the run is recorded by the databroker by comparing Run UIDs from history and
-    start document.
+    Test for the fixture ``re_manager_cmd``: test if the plans are properly executed.
     """
-    db_name = db_catalog["catalog_name"]
-    re_manager_cmd(["--databroker-config", db_name])
-
-    cat = db_catalog["catalog"]
+    re_manager_cmd()
 
     plan = {"name": "scan", "args": [["det1", "det2"], "motor", -1, 1, 10], "item_type": "plan"}
 
@@ -86,10 +55,6 @@ def test_fixture_re_manager_cmd_2(re_manager_cmd, db_catalog):  # noqa F811
     resp6, _ = zmq_single_request("history_get")
     history = resp6["items"]
     assert len(history) == 1
-
-    uid = history[-1]["result"]["run_uids"][0]
-    start_doc = cat[uid].metadata["start"]
-    assert start_doc["uid"] == uid
 
     # Close the environment.
     resp7, _ = zmq_single_request("environment_close")

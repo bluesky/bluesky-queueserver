@@ -88,8 +88,7 @@ _plan_exit_status_expected = {
 }
 
 
-class RejectedError(RuntimeError):
-    ...
+class RejectedError(RuntimeError): ...
 
 
 class RunEngineWorker(Process):

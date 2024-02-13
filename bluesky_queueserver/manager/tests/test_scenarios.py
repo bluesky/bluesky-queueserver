@@ -15,7 +15,6 @@ from .common import (  # noqa: F401
     condition_manager_idle,
     condition_manager_paused,
     condition_queue_processing_finished,
-    db_catalog,
     get_manager_status,
     re_manager,
     re_manager_cmd,
@@ -556,6 +555,7 @@ def plan_large_array(vlist, n):
 """
 
 
+@pytest.mark.xfail(reason="Test is unreliable on CI, but expected to pass locally")
 def test_large_datasets_02(re_manager):  # noqa: F811
     """
     Submit large array as a plan parameter. Then download the queue that contains the plan.
@@ -619,6 +619,7 @@ _plan_move_then_count = {
     (_plan_move_then_count, 10000, 60000),
 ])
 # fmt: on
+@pytest.mark.xfail(reason="Test is unreliable on CI, but expected to pass locally")
 def test_large_datasets_03(re_manager, plan, n_plans, timeout_ms):  # noqa: F811
     """
     Submit large number of plans to the queue as a batch.

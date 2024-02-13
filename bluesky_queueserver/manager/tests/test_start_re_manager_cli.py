@@ -148,7 +148,9 @@ def test_start_re_manager_console_output_1(re_manager_cmd, console_print, consol
         assert "generator count" in collected_stdout
         assert "Run was closed:" in collected_stdout
 
-    assert re_manager_stderr == ""
+    # The following error is added when tests are executed in WSL environment
+    wsl_err = "QStandardPaths: wrong permissions on runtime directory"
+    assert re_manager_stderr == "" or wsl_err in re_manager_stderr, re_manager_stderr
     assert "bluesky_queueserver.manager.output_streaming" in streamed_stderr
 
     if console_print:

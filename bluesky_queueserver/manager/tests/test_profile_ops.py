@@ -2473,7 +2473,7 @@ _pf3e_processed = {
 
 
 class _Pf3f_val1:
-    ...
+    pass
 
 
 @parameter_annotation_decorator(
@@ -3212,8 +3212,7 @@ def test_process_plan_4(plan_func, existing_devices, plan_info_expected):
 def _pf5a_factory():
     """Arbitrary classes are not supported"""
 
-    class SomeClass:
-        ...
+    class SomeClass: ...
 
     def f(val1, *, val2, val3=SomeClass()):
         yield from [val1, val2, val3]
@@ -3257,8 +3256,7 @@ def _pf5c(detector: Optional[ophyd.Device]):
 def _pf5d_factory():
     """Arbitrary classes are not supported"""
 
-    class SomeClass:
-        ...
+    class SomeClass: ...
 
     @parameter_annotation_decorator({"parameters": {"val1": {"default": SomeClass()}}})
     def f(val1):
@@ -4187,7 +4185,7 @@ def test_plan(param):
 
 # Error messages may be different for Pydantic 1 and 2
 if pydantic_version_major == 2:
-    err_msg_tpp1 = r"Input should be 'det1','det2' or 'det3' \[type=enum, input_value='det4', input_type=str\]"
+    err_msg_tpp1 = r"Input should be 'det1', 'det2' or 'det3' \[type=enum, input_value='det4', input_type=str\]"
 else:
     err_msg_tpp1 = "value is not a valid enumeration member; permitted: 'det1', 'det2', 'det3'"
 
@@ -4594,9 +4592,9 @@ if pydantic_version_major == 2:
         r"Input should be a valid integer, got a number with a fractional part "
         r"\[type=int_from_float, input_value=2.8, input_type=float\]"
     )
-    err_msg_tpp2c = "Input should be '_pp_dev1','_pp_dev2' or '_pp_dev3'"
-    err_msg_tpp2d = "Input should be '_pp_p1','_pp_p2' or '_pp_p3'"
-    err_msg_tpp2e = "Input should be 'one','two' or 'three'"
+    err_msg_tpp2c = "Input should be '_pp_dev1', '_pp_dev2' or '_pp_dev3'"
+    err_msg_tpp2d = "Input should be '_pp_p1', '_pp_p2' or '_pp_p3'"
+    err_msg_tpp2e = "Input should be 'one', 'two' or 'three'"
     err_msg_tpp2f = r"Input should be a valid string \[type=string_type, input_value=50, input_type=int\]"
     err_msg_tpp2g = r"Input should be a valid list \[type=list_type, input_value='_pp_dev3', input_type=str\]"
     err_msg_tpp2h = r"Input should be a valid string \[type=string_type, input_value=10, input_type=int\]"
@@ -7065,10 +7063,10 @@ if pydantic_version_major == 2:
 else:
     err_msg_tvp3a = "value is not a valid enumeration member; permitted: 'm2'"
     err_msg_tvp3b = "value is not a valid enumeration member; permitted: 'm2'"
-    err_msg_tvp3c = "value is not a valid enumeration member; permitted:"
-    err_msg_tvp3d = "value is not a valid enumeration member; permitted:"
+    err_msg_tvp3c = "has no members defined (type=type_error)"
+    err_msg_tvp3d = "has no members defined (type=type_error)"
     err_msg_tvp3e = "value is not a valid list"
-    err_msg_tvp3f = "value is not a valid enumeration member; permitted:"
+    err_msg_tvp3f = "has no members defined (type=type_error)"
     err_msg_tvp3f1 = "value is not a valid enumeration member; permitted:"
     err_msg_tvp3g = "value is not a valid list"
     err_msg_tvp3h = "value is not a valid enumeration member; permitted: 'd1', 'd2'"
@@ -7110,6 +7108,12 @@ else:
     # Both motors are not in the list of allowed devices.
     (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
      ("m4", "m5", "d1", "d2"), False, err_msg_tvp3c),
+    # The list of motors is empty, but validation succeeds, since no motors are passed
+    (_vp3a, {"args": [tuple(), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
+     ("d1", "d2"), True, ""),
+    # Same, but there are some non-existing motors in the list of allowed devices
+    (_vp3a, {"args": [tuple(), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
+     ("m4", "m5", "d1", "d2"), True, ""),
     # Empty list of allowed devices (should be the same result as above).
     (_vp3a, {"args": [("m1", "m2"), ("d1", "d2"), ("p1",), (10.0, 20.0)], "kwargs": {}},
      (), False, err_msg_tvp3d),

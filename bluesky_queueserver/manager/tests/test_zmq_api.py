@@ -47,7 +47,6 @@ from .common import (  # noqa: F401
     condition_manager_paused,
     condition_queue_processing_finished,
     copy_default_profile_collection,
-    db_catalog,
     get_manager_status,
     ip_kernel_simple_client,
     re_manager,
@@ -747,6 +746,25 @@ def test_zmq_api_queue_item_add_08(re_manager):  # noqa: F811
     assert resp2["items"][2]["item_type"] == "plan"
 
 
+_script_save_start_docs = """
+start_docs = []
+
+def unit_test_get_start_docs():
+    # Call this function to return saved start docs
+    return start_docs
+
+from bluesky.callbacks.core import CallbackBase
+
+class CallbackSaveStartDocs(CallbackBase):
+    def start(self, doc):
+        start_docs.append(doc)
+
+cb_save_start_docs = CallbackSaveStartDocs()
+
+RE.subscribe(cb_save_start_docs)
+"""
+
+
 # fmt: off
 @pytest.mark.parametrize("meta_param, meta_saved", [
     # 'meta' is dictionary, all keys are saved
@@ -757,12 +775,11 @@ def test_zmq_api_queue_item_add_08(re_manager):  # noqa: F811
     ([{"test_key": 10}, {"test_key": 20}], {"test_key": 10}),
 ])
 # fmt: on
-def test_zmq_api_queue_item_add_09(db_catalog, re_manager_cmd, meta_param, meta_saved):  # noqa: F811
+def test_zmq_api_queue_item_add_09(tmp_path, re_manager_cmd, meta_param, meta_saved):  # noqa: F811
     """
     Add plan with metadata.
     """
-    re_manager_cmd(["--databroker-config", db_catalog["catalog_name"]])
-    cat = db_catalog["catalog"]
+    re_manager_cmd()
 
     # Plan
     plan = copy.deepcopy(_plan2)
@@ -780,6 +797,10 @@ def test_zmq_api_queue_item_add_09(db_catalog, re_manager_cmd, meta_param, meta_
     assert resp3["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
+    resp, _ = zmq_single_request("script_upload", params={"script": _script_save_start_docs})
+    assert resp["success"] is True, pprint.pformat(resp)
+    assert wait_for_condition(time=3, condition=condition_manager_idle)
+
     resp4, _ = zmq_single_request("queue_start")
     assert resp4["success"] is True
 
@@ -793,13 +814,27 @@ def test_zmq_api_queue_item_add_09(db_catalog, re_manager_cmd, meta_param, meta_
     history = resp6["items"]
     assert len(history) == 1
 
+    # Load saved start documents
+    func_item = {"name": "unit_test_get_start_docs", "item_type": "function"}
+    params = {"item": func_item, "user": _user, "user_group": _test_user_group}
+    resp, _ = zmq_single_request("function_execute", params=params)
+    assert resp["success"] is True, pprint.pformat(resp)
+    task_uid = resp["task_uid"]
+    result = wait_for_task_result(10, task_uid)
+    assert result["success"] is True
+    start_docs = result["return_value"]
+
+    assert len(start_docs) == 1, pprint.pformat(start_docs)
+    assert isinstance(start_docs[0], dict), pprint.pformat(start_docs)
+
     # Check if metadata was recorded in the start document.
     uid = history[-1]["result"]["run_uids"][0]
-    start_doc = cat[uid].metadata["start"]
-    assert start_doc["scan_id"] == history[-1]["result"]["scan_ids"][0]
+    assert start_docs[0]["uid"] == uid
+
+    assert start_docs[0]["scan_id"] == history[-1]["result"]["scan_ids"][0]
     for key in meta_saved:
-        assert key in start_doc, str(start_doc)
-        assert meta_saved[key] == start_doc[key], str(start_doc)
+        assert key in start_docs[0], str(start_docs[0])
+        assert meta_saved[key] == start_docs[0][key], str(start_docs[0])
 
     # Close the environment.
     resp7, _ = zmq_single_request("environment_close")
@@ -2388,9 +2423,8 @@ def test_zmq_api_script_upload_07(tmp_path, monkeypatch, re_manager_cmd, option)
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-_script_save_instances_re_db = """
+_script_save_instance_re = """
 RE_backup = RE
-db_backup = db
 """
 
 
@@ -2398,60 +2432,49 @@ db_backup = db
 @pytest.mark.parametrize("update_lists", [True, False])
 @pytest.mark.parametrize("update_re_param", [False, True])
 @pytest.mark.parametrize("replace_re", [False, True])
-@pytest.mark.parametrize("replace_db", [False, True])
 # fmt: on
-def test_zmq_api_script_upload_08(
-    re_manager_cmd, update_lists, update_re_param, replace_re, replace_db  # noqa: F811
-):
+def test_zmq_api_script_upload_08(re_manager_cmd, update_lists, update_re_param, replace_re):  # noqa: F811
     """
-    'script_upload' API: Test that instances 'RE' and 'db' could be replaced in
-    the RE Worker namespace. The test does not check if references kept internally by RE Worker
-    are updated, but the update happens in the same branches where the namespace is updated.
+    'script_upload' API: Test that instance of 'RE' can be replaced in the RE Worker namespace
+    by executing a script. The test does not check if references kept internally by RE Worker
+    are updated, but the update happens in the same code branches where the namespace is updated.
     """
-
-    # Make sure that the environment contains databroker instance
-    re_manager_cmd(["--databroker-config", "temp"])
+    re_manager_cmd()
 
     resp1, _ = zmq_single_request("environment_open")
     assert resp1["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-    params = {"script": _script_save_instances_re_db}
+    params = {"script": _script_save_instance_re}
     if update_lists is not None:
         params.update({"update_lists": update_lists})
     else:
         update_lists = True
 
-    # Upload script that saves instances of 'RE' and 'db' in the namespace
+    # Upload script that saves instance of 'RE' in the namespace
     resp2, _ = zmq_single_request("script_upload", params=params)
     result = wait_for_task_result(10, resp2["task_uid"])
     assert result["success"] is True, pprint.pformat(result)
 
-    script_replace_re_and_db = ""
+    script_replace_re = ""
     if replace_re:
-        script_replace_re_and_db += "from bluesky import RunEngine\nRE = RunEngine()\n"
-    if replace_db:
-        script_replace_re_and_db += 'from databroker import Broker\ndb = Broker.named("temp")\n'
+        script_replace_re += "from bluesky import RunEngine\nRE = RunEngine()\n"
 
     resp3, _ = zmq_single_request(
-        "script_upload", params={"script": script_replace_re_and_db, "update_re": update_re_param}
+        "script_upload", params={"script": script_replace_re, "update_re": update_re_param}
     )
     result = wait_for_task_result(10, resp3["task_uid"])
     assert result["success"] is True, pprint.pformat(result)
 
     # Upload the script the verifies that the environment has new instances of RE and db.
     #     The script fails to load if the RE or db is not updated properly when required.
-    script_verify_re_and_db = ""
+    script_verify_re = ""
     if replace_re and update_re_param:
-        script_verify_re_and_db += "assert RE != RE_backup\n"
+        script_verify_re += "assert RE != RE_backup\n"
     else:
-        script_verify_re_and_db += "assert RE == RE_backup\n"
-    if replace_db and update_re_param:
-        script_verify_re_and_db += "assert db != db_backup\n"
-    else:
-        script_verify_re_and_db += "assert db == db_backup\n"
+        script_verify_re += "assert RE == RE_backup\n"
 
-    resp4, _ = zmq_single_request("script_upload", params={"script": script_verify_re_and_db})
+    resp4, _ = zmq_single_request("script_upload", params={"script": script_verify_re})
     result = wait_for_task_result(10, resp4["task_uid"])
     assert result["success"] is True, pprint.pformat(result)
 

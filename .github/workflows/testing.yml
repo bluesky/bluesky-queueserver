@@ -9,13 +9,15 @@ jobs:
     strategy:
       matrix:
         use-ipykernel: [false, true]
-        python-version: ["3.9", "3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
         pydantic-version: ["<2.0.0", ">=2.0.0"]
         group: [1, 2, 3]
         exclude:
           - python-version: "3.9"
             pydantic-version: "<2.0.0"
           - python-version: "3.10"
+            pydantic-version: "<2.0.0"
+          - python-version: "3.12"
             pydantic-version: "<2.0.0"
       fail-fast: false
 

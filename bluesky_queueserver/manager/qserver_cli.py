@@ -3,6 +3,7 @@ import ast
 import asyncio
 import copy
 import enum
+import getpass
 import json
 import logging
 import os
@@ -1556,7 +1557,8 @@ def qserver_console_base(*, app_name):
         if exit_code == QServerExitCodes.SUCCESS:
             logger.info("IPython Kernel Connect Info: \n%s", pprint.pformat(connect_info))
 
-            file_dir = os.path.join(tempfile.gettempdir(), "qserver", "kernel_files")
+            username = getpass.getuser()
+            file_dir = os.path.join(tempfile.gettempdir(), f"qserver_{username}", "kernel_files")
             file_name = "kernel-" + str(uuid.uuid4()).split("-")[0] + ".json"
             file_path = os.path.join(file_dir, file_name)
 

@@ -21,6 +21,8 @@ properties:
         type: boolean
       redis_addr:
         type: string
+      redis_name_prefix:
+        type: string
   worker:
     type: object
     additionalProperties: false

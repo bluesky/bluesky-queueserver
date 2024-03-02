@@ -184,6 +184,7 @@ _key_mapping = {
     "zmq_info_addr": "network/zmq_info_addr",
     "zmq_publish_console": "network/zmq_publish_console",
     "redis_addr": "network/redis_addr",
+    "redis_name_prefix": "network/redis_name_prefix",
     "keep_re": "startup/keep_re",
     "ignore_invalid_plans": "startup/ignore_invalid_plans",
     "existing_plans_and_devices_path": "startup/existing_plans_and_devices_path",
@@ -344,6 +345,7 @@ class Settings:
 
         redis_name_prefix = self._get_param(
             value_default=self._args.redis_name_prefix,
+            value_config=self._get_value_from_config("redis_name_prefix"),
             value_cli=self._args_existing("redis_name_prefix"),
         )
         if not isinstance(redis_name_prefix, str):

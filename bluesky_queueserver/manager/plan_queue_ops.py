@@ -75,6 +75,7 @@ class PlanQueueOperations:
         if not isinstance(name_prefix, str):
             raise TypeError(f"Parameter 'name_prefix' should be a string: {name_prefix}")
 
+        # The case of an empty string
         if name_prefix:
             name_prefix = name_prefix + "_"
 

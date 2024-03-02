@@ -103,6 +103,9 @@ def test_running_plan_info():
 
 
 def test_redis_name_prefix():
+    """
+    Test that the prefix is correctly appended to the name of the redis key (test with one key).
+    """
     pq = PlanQueueOperations(name_prefix=_test_redis_name_prefix)
     assert pq._name_plan_queue == _test_redis_name_prefix + "_plan_queue"
 

@@ -393,6 +393,14 @@ def start_manager():
         "(default: %(default)s). ",
     )
 
+    parser.add_argument(
+        "--redis-name-prefix",
+        dest="redis_name_prefix",
+        type=str,
+        default="qs_default",
+        help="The prefix for the names of Redis keys used by RE Manager (default: %(default)s). ",
+    )
+
     parser.add_argument("--kafka-topic", dest="kafka_topic", type=str, help="The kafka topic to publish to.")
     parser.add_argument(
         "--kafka-server",
@@ -772,6 +780,7 @@ def start_manager():
     config_manager["zmq_private_key"] = settings.zmq_private_key
 
     config_manager["redis_addr"] = settings.redis_addr
+    config_manager["redis_name_prefix"] = settings.redis_name_prefix
 
     config_manager["use_ipython_kernel"] = settings.use_ipython_kernel
 

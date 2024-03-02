@@ -342,6 +342,14 @@ class Settings:
             raise ConfigError(f"Redis address is incorrectly formatted: {redis_addr}")
         self._settings["redis_addr"] = redis_addr
 
+        redis_name_prefix = self._get_param(
+            value_default=self._args.redis_name_prefix,
+            value_cli=self._args_existing("redis_name_prefix"),
+        )
+        if not isinstance(redis_name_prefix, str):
+            raise ConfigError(f"Redis name prefix must be a string: {redis_name_prefix!r}")
+        self._settings["redis_name_prefix"] = redis_name_prefix
+
         self._settings["keep_re"] = self._get_param_boolean(
             value_default=args.keep_re,
             value_config=self._get_value_from_config("keep_re"),

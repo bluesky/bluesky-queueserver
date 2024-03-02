@@ -23,7 +23,8 @@ class PlanQueueOperations:
     name_prefix: str
         Prefix for the names of the keys used in Redis. The prefix is used to avoid conflicts
         with the keys used by other instances of Queue Server. For example, the prefix used
-        for unit tests should be different from the prefix used in production.
+        for unit tests should be different from the prefix used in production. If the prefix
+        is an empty string, then no prefix will be added (not recommended).
 
     Examples
     --------
@@ -71,18 +72,24 @@ class PlanQueueOperations:
         self._uid_dict = dict()
         self._r_pool = None
 
-        self._name_running_plan = name_prefix + "_running_plan"
-        self._name_plan_queue = name_prefix + "_plan_queue"
-        self._name_plan_history = name_prefix + "_plan_history"
-        self._name_plan_queue_mode = name_prefix + "_plan_queue_mode"
+        if not isinstance(name_prefix, str):
+            raise TypeError(f"Parameter 'name_prefix' should be a string: {name_prefix}")
+
+        if name_prefix:
+            name_prefix = name_prefix + "_"
+
+        self._name_running_plan = name_prefix + "running_plan"
+        self._name_plan_queue = name_prefix + "plan_queue"
+        self._name_plan_history = name_prefix + "plan_history"
+        self._name_plan_queue_mode = name_prefix + "plan_queue_mode"
 
         # Redis is also used for storage of some additional information not related to the queue.
         #   The class contains only the functions for saving and retrieving the data, which is
         #   not used by other functions of the class.
-        self._name_user_group_permissions = name_prefix + "_user_group_permissions"
-        self._name_lock_info = name_prefix + "_lock_info"
-        self._name_autostart_mode_info = name_prefix + "_autostart_mode_info"
-        self._name_stop_pending_info = name_prefix + "_stop_pending_info"
+        self._name_user_group_permissions = name_prefix + "user_group_permissions"
+        self._name_lock_info = name_prefix + "lock_info"
+        self._name_autostart_mode_info = name_prefix + "autostart_mode_info"
+        self._name_stop_pending_info = name_prefix + "stop_pending_info"
 
         # The list of allowed item parameters used for parameter filtering. Filtering operation
         #   involves removing all parameters that are not in the list.

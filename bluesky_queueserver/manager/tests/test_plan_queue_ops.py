@@ -11,6 +11,8 @@ from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
 
 errmsg_wrong_plan_type = "Parameter 'item' should be a dictionary"
 
+redis_prefix = "qs_unit_tests"
+
 
 class PQ:
     """

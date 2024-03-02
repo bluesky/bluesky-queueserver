@@ -23,7 +23,7 @@ logger = logging.Logger(__name__)
 # User name and user group name used throughout most of the tests.
 _user, _user_group = "Testing Script", "primary"
 
-_redis_name_prefix = "qs_unit_tests"
+_test_redis_name_prefix = "qs_unit_tests"
 
 
 def use_ipykernel_for_tests():

@@ -367,12 +367,23 @@ def clear_redis_pool(redis_name_prefix=_test_redis_name_prefix):
 
 
 class ReManager:
-    def __init__(self, params=None, *, stdout=sys.stdout, stderr=sys.stdout):
+    def __init__(self, params=None, *, stdout=sys.stdout, stderr=sys.stdout, set_redis_name_prefix=True):
         self._p = None
         # The name is saved during the manager startup and used later to clean up Redis keys
-        self._used_redis_name_prefix = None
+        # If the prefix is not passed as CLI parameter, then it will always try to delete default keys.
+        # If a testing using non-default prefix (passed using config file), manually set the prefix
+        # uisng `set_used_redis_name_prefix` after RE Manager is started.
+        self._used_redis_name_prefix = _test_redis_name_prefix
+        self.start_manager(params, stdout=stdout, stderr=stderr, set_redis_name_prefix=set_redis_name_prefix)
 
-        self.start_manager(params, stdout=stdout, stderr=stderr)
+    def set_used_redis_name_prefix(self, redis_name_prefix):
+        """
+        Manually set name prefix for used Redis keys. The prefix is used to clean up Redis keys
+        after the test. Call this function after the manager is started. This is only needed if
+        the prefix is different from default and passed using config file. This is used only in a couple
+        of specific tests.
+        """
+        self._used_redis_name_prefix = redis_name_prefix
 
     def start_manager(
         self,
@@ -380,7 +391,7 @@ class ReManager:
         *,
         stdout=sys.stdout,
         stderr=sys.stdout,
-        use_default_name_prefix=True,
+        set_redis_name_prefix=True,
         cleanup=True,
     ):
         """
@@ -419,13 +430,10 @@ class ReManager:
         # Set default name prefix for Redis keys
         name_prefix_params = [_ for _ in params if _.startswith("--redis-name-prefix")]
         if name_prefix_params:
-            if use_default_name_prefix:
-                raise ValueError("Name prefix for Redis keys is already set in parameters.")
-            else:
-                self._used_redis_name_prefix = name_prefix_params[0].split("=")[1].strip()
-        else:
+            # Try to extract the prefix from the parameter
+            self._used_redis_name_prefix = name_prefix_params[0].split("=")[1].strip()
+        elif set_redis_name_prefix:
             params.append(f"--redis-name-prefix={_test_redis_name_prefix}")
-            self._used_redis_name_prefix = _test_redis_name_prefix
 
         if not self._p:
             if cleanup:
@@ -550,13 +558,13 @@ def re_manager_cmd():
     re = {"re": None}
     failed_to_start = False
 
-    def _create(params, *, stdout, stderr):
+    def _create(params, *, stdout, stderr, set_redis_name_prefix):
         """
         Create RE Manager. ``start-re-manager`` is called with command line parameters from
           the list ``params``.
         """
         nonlocal re, failed_to_start
-        re["re"] = ReManager(params, stdout=stdout, stderr=stderr)
+        re["re"] = ReManager(params, stdout=stdout, stderr=stderr, set_redis_name_prefix=set_redis_name_prefix)
 
         # Wait until RE Manager is started. Raise exception if the server failed to start.
         if not wait_for_condition(time=10, condition=condition_manager_idle):
@@ -576,10 +584,10 @@ def re_manager_cmd():
             else:
                 re["re"].kill_manager()
 
-    def create_re_manager(params=None, *, stdout=sys.stdout, stderr=sys.stdout):
+    def create_re_manager(params=None, *, stdout=sys.stdout, stderr=sys.stdout, set_redis_name_prefix=True):
         params = params or []
         _close()
-        _create(params, stdout=stdout, stderr=stderr)
+        _create(params, stdout=stdout, stderr=stderr, set_redis_name_prefix=set_redis_name_prefix)
         return re["re"]
 
     yield create_re_manager

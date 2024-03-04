@@ -70,6 +70,7 @@ most of the supported parameters:
       zmq_info_addr: tcp://*:60625
       zmq_publish_console: true
       redis_addr: localhost:6379
+      redis_name_prefix: qs_default
     startup:
       keep_re: true
       startup_dir: ~/.ipython/profile_collection/startup
@@ -131,6 +132,10 @@ Parameters that define for network settings used by RE Manager:
 
 - ``redis_addr`` - the address of Redis server, e.g. ``localhost``, ``127.0.0.1``, ``localhost:6379``.
   The value may also be passed using ``--redis-addr`` CLI parameter.
+
+- ``redis_name_prefix`` - the prefix is appended to the Redis keys to differentiate between keys
+  created by different instances of RE Manager. The value may also be passed using
+  ``--redis-name-prefix`` CLI parameter.
 
 startup
 +++++++
@@ -242,3 +247,24 @@ its subscriptions are fully defined in startup scripts and this section is skipp
 
 - ``databroker_config`` -  databroker configuration (e.g. ``'srx'``) used by Databroker
   callback. The value can also be set using ``--databroker-config`` CLI parameter.
+
+
+Using Redis
+-----------
+
+RE Manager is using Redis as a persistent storage for plan queue, plan history and a few other
+parameters, that are expected to be preserved between RE Manager restarts. Starting from version
+v0.0.20, RE Manager is appending a prefix to each Redis key. The prefix can be used to identify
+the keys created by different instances of RE Manager (not necessarily running simultaneously,
+but maintaining different plan queue and history). The prefixed keys can also be easily
+distinguished from keys created by other applications using the same Redis server. The default
+prefix is ``qs_default``. Custom prefix can be passed using ``--redis-name-prefix`` CLI parameter
+or set in the config file using ``redis_name_prefix`` parameter in the ``network`` section.
+
+.. note::
+
+  It is recommended that Redis server is installed locally on the machine running the Queue Server
+
+Prior to version v0.0.20, RE Manager did not append any prefix to the keys. If it is desirable
+to continue using RE Manager without prefix, e.g. to access the plan queue and history created
+by the older version of RE Manager, pass `""` (empty string) as the parameter value.

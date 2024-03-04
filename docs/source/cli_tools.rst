@@ -842,7 +842,7 @@ close the worker environment.
   usage: qserver-console [-h] [--zmq-control-addr ZMQ_CONTROL_ADDR]
 
   Bluesky-QServer: Start Jupyter console for IPython kernel running in the worker process.
-  bluesky-queueserver version 0.0.19.
+  bluesky-queueserver version 0.0.20.
 
   Requests IPython kernel connection info from RE Manager and starts Jupyter Console. The RE Worker
   must be running (environment opened) and using IPython kernel. The address of 0MQ control port of

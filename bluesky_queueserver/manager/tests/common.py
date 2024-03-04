@@ -23,6 +23,8 @@ logger = logging.Logger(__name__)
 # User name and user group name used throughout most of the tests.
 _user, _user_group = "Testing Script", "primary"
 
+_test_redis_name_prefix = "qs_unit_tests"
+
 
 def use_ipykernel_for_tests():
     """
@@ -349,9 +351,9 @@ def wait_for_task_result(time, task_uid):
     raise TimeoutError(f"Timeout occurred while waiting for results of the task {task_uid!r}")
 
 
-def clear_redis_pool():
+def clear_redis_pool(redis_name_prefix=_test_redis_name_prefix):
     # Remove all Redis entries.
-    pq = PlanQueueOperations()
+    pq = PlanQueueOperations(name_prefix=redis_name_prefix)
 
     async def run():
         await pq.start()
@@ -365,22 +367,46 @@ def clear_redis_pool():
 
 
 class ReManager:
-    def __init__(self, params=None, *, stdout=sys.stdout, stderr=sys.stdout):
+    def __init__(self, params=None, *, stdout=sys.stdout, stderr=sys.stdout, set_redis_name_prefix=True):
         self._p = None
-        self.start_manager(params, stdout=stdout, stderr=stderr)
+        # The name is saved during the manager startup and used later to clean up Redis keys
+        # If the prefix is not passed as CLI parameter, then it will always try to delete default keys.
+        # If a testing using non-default prefix (passed using config file), manually set the prefix
+        # uisng `set_used_redis_name_prefix` after RE Manager is started.
+        self._used_redis_name_prefix = _test_redis_name_prefix
+        self.start_manager(params, stdout=stdout, stderr=stderr, set_redis_name_prefix=set_redis_name_prefix)
 
-    def start_manager(self, params=None, *, stdout=sys.stdout, stderr=sys.stdout, cleanup=True):
+    def set_used_redis_name_prefix(self, redis_name_prefix):
+        """
+        Manually set name prefix for used Redis keys. The prefix is used to clean up Redis keys
+        after the test. Call this function after the manager is started. This is only needed if
+        the prefix is different from default and passed using config file. This is used only in a couple
+        of specific tests.
+        """
+        self._used_redis_name_prefix = redis_name_prefix
+
+    def start_manager(
+        self,
+        params=None,
+        *,
+        stdout=sys.stdout,
+        stderr=sys.stdout,
+        set_redis_name_prefix=True,
+        cleanup=True,
+    ):
         """
         Start RE manager.
 
         Parameters
         ----------
         params : list(str)
-            The list of command line parameters passed to the manager at startup
+            The list of command line parameters paqssed to the manager at startup.
         stdout
-            Device to forward stdout, ``None`` - print to console
+            Device to forward stdout, ``None`` - print to console.
         stderr
-            Device to forward stdout, ``None`` - print to console
+            Device to forward stdout, ``None`` - print to console.
+        use_default_name_prefix: boolean
+            Set default prefix for names of Redis keys.
         cleanup: boolean
             Perform cleanup (remove related Redis keys) before opening the manager.
 
@@ -401,9 +427,17 @@ class ReManager:
         if not any([_.startswith("--use-ipython-kernel") for _ in params]) and use_ipykernel_for_tests():
             params.append("--use-ipython-kernel=ON")
 
+        # Set default name prefix for Redis keys
+        name_prefix_params = [_ for _ in params if _.startswith("--redis-name-prefix")]
+        if name_prefix_params:
+            # Try to extract the prefix from the parameter
+            self._used_redis_name_prefix = name_prefix_params[0].split("=")[1].strip()
+        elif set_redis_name_prefix:
+            params.append(f"--redis-name-prefix={_test_redis_name_prefix}")
+
         if not self._p:
             if cleanup:
-                clear_redis_pool()
+                clear_redis_pool(redis_name_prefix=self._used_redis_name_prefix)
 
             cmd = ["start-re-manager"]
             if params:
@@ -485,7 +519,7 @@ class ReManager:
 
             finally:
                 if cleanup:
-                    clear_redis_pool()
+                    clear_redis_pool(redis_name_prefix=self._used_redis_name_prefix)
                 self._p = None
 
     def kill_manager(self, timeout=10):
@@ -501,7 +535,7 @@ class ReManager:
         if self._p:
             self._p.kill()
             self._p.wait(timeout)
-            clear_redis_pool()
+            clear_redis_pool(redis_name_prefix=self._used_redis_name_prefix)
 
 
 def _reset_queue_mode():
@@ -524,13 +558,13 @@ def re_manager_cmd():
     re = {"re": None}
     failed_to_start = False
 
-    def _create(params, *, stdout, stderr):
+    def _create(params, *, stdout, stderr, set_redis_name_prefix):
         """
         Create RE Manager. ``start-re-manager`` is called with command line parameters from
           the list ``params``.
         """
         nonlocal re, failed_to_start
-        re["re"] = ReManager(params, stdout=stdout, stderr=stderr)
+        re["re"] = ReManager(params, stdout=stdout, stderr=stderr, set_redis_name_prefix=set_redis_name_prefix)
 
         # Wait until RE Manager is started. Raise exception if the server failed to start.
         if not wait_for_condition(time=10, condition=condition_manager_idle):
@@ -550,10 +584,10 @@ def re_manager_cmd():
             else:
                 re["re"].kill_manager()
 
-    def create_re_manager(params=None, *, stdout=sys.stdout, stderr=sys.stdout):
+    def create_re_manager(params=None, *, stdout=sys.stdout, stderr=sys.stdout, set_redis_name_prefix=True):
         params = params or []
         _close()
-        _create(params, stdout=stdout, stderr=stderr)
+        _create(params, stdout=stdout, stderr=stderr, set_redis_name_prefix=set_redis_name_prefix)
         return re["re"]
 
     yield create_re_manager

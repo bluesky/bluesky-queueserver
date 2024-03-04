@@ -164,6 +164,7 @@ network:
   zmq_info_addr: tcp://*:60625
   zmq_publish_console: true
   redis_addr: localhost:6379
+  redis_name_prefix: qs_test
 startup:
   keep_re: true
   startup_dir: ~/.ipython/profile_collection/startup
@@ -191,6 +192,7 @@ network:
   zmq_info_addr: tcp://*:60625
   zmq_publish_console: true
   redis_addr: localhost:6379
+  redis_name_prefix: qs_test
 """
 
 config_01b_success = """
@@ -227,6 +229,7 @@ config_01_dict = {
         "zmq_info_addr": "tcp://*:60625",
         "zmq_publish_console": True,
         "redis_addr": "localhost:6379",
+        "redis_name_prefix": "qs_test",
     },
     "startup": {
         "keep_re": True,

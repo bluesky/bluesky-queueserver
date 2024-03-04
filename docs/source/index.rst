@@ -24,7 +24,6 @@ Bluesky-QueueServer Documentation
    using_queue_server
    features_and_config
    startup_code
-   ipython
    item_validation
    plan_annotation
    cli_tools

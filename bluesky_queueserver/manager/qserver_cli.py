@@ -1449,6 +1449,14 @@ def qserver_clear_lock():
         "(default: %(default)s). ",
     )
 
+    parser.add_argument(
+        "--redis-name-prefix",
+        dest="redis_name_prefix",
+        type=str,
+        default="qs_default",
+        help="The prefix for the names of Redis keys used by RE Manager (default: %(default)s). ",
+    )
+
     args = parser.parse_args()
 
     exit_code = 0
@@ -1456,7 +1464,7 @@ def qserver_clear_lock():
     async def remove_lock():
         nonlocal exit_code
         try:
-            pq = PlanQueueOperations(redis_host=args.redis_addr)
+            pq = PlanQueueOperations(redis_host=args.redis_addr, name_prefix=args.redis_name_prefix)
             await pq.start()
             lock_info = await pq.lock_info_retrieve()
             if lock_info is not None:

@@ -11,6 +11,7 @@ from bluesky_queueserver.manager.comms import generate_zmq_keys
 
 from ..qserver_cli import QServerExitCodes
 from .common import (  # noqa: F401
+    _test_redis_name_prefix,
     append_code_to_last_startup_file,
     condition_environment_closed,
     condition_environment_created,
@@ -1694,8 +1695,11 @@ def test_qserver_clear_lock_01(re_manager_cmd):  # noqa: F811
     assert subprocess.call(["qserver", "-k", "some-lock-key", "lock", "environment"]) == SUCCESS
     check_state(True, False)
 
+    # Redis name prefix is optional, but it must be used in the test to avoid changing other keys
+    prefix = f"--redis-name-prefix={_test_redis_name_prefix}"
+
     # Clear the lock in Redis
-    assert subprocess.call(["qserver-clear-lock"]) == 0
+    assert subprocess.call(["qserver-clear-lock", prefix]) == 0
     check_state(True, False)
 
     # Restart the manager
@@ -1706,18 +1710,18 @@ def test_qserver_clear_lock_01(re_manager_cmd):  # noqa: F811
     check_state(False, False)
 
     # Now try to clear the lock repeatedly.
-    assert subprocess.call(["qserver-clear-lock"]) == 0
-    assert subprocess.call(["qserver-clear-lock"]) == 0
+    assert subprocess.call(["qserver-clear-lock", prefix]) == 0
+    assert subprocess.call(["qserver-clear-lock", prefix]) == 0
     check_state(False, False)
 
     # Pass the Redis address (correct address, same as default)
-    assert subprocess.call(["qserver-clear-lock", "--redis-addr", "localhost"]) == 0
+    assert subprocess.call(["qserver-clear-lock", "--redis-addr=localhost", prefix]) == 0
 
     # Invalid address (incorrect port). The call fails.
-    assert subprocess.call(["qserver-clear-lock", "--redis-addr", "localhost:9999"]) == 1
+    assert subprocess.call(["qserver-clear-lock", "--redis-addr=localhost:9999", prefix]) == 1
 
     # Unknown parameter
-    assert subprocess.call(["qserver-clear-lock", "--unknown-param", "value"]) == 2
+    assert subprocess.call(["qserver-clear-lock", "--unknown-param=value", prefix]) == 2
 
 
 # ================================================================================

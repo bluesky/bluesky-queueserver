@@ -14,6 +14,7 @@ from bluesky_queueserver.manager.config import default_existing_pd_fln, default_
 from ..comms import zmq_single_request
 from .common import re_manager_cmd  # noqa: F401
 from .common import (
+    _test_redis_name_prefix,
     _user,
     _user_group,
     append_code_to_last_startup_file,
@@ -487,6 +488,7 @@ def _get_expected_settings_default_1(tmpdir):
         "ipython_matplotlib": None,
         "print_console_output": True,
         "redis_addr": "localhost",
+        "redis_name_prefix": _test_redis_name_prefix,  # We use it for unit tests
         "startup_dir": startup_dir,
         "startup_module": None,
         "startup_profile": startup_profile,
@@ -503,11 +505,11 @@ def _get_expected_settings_default_1(tmpdir):
     }
 
 
-_dir_2 = os.path.join("ipython_test", "profile_collection_test", "startup")
+_dir_2 = "test2"
 
 
 # matching public key: =E0[czQkp!!%0TL1LCJ5X[<wjYD[iV+p[yuaI0an
-def _get_config_file_2(tmpdir):
+def _get_config_file_2(file_dir):
     s = """
 network:
   zmq_control_addr: tcp://*:60617
@@ -515,6 +517,7 @@ network:
   zmq_info_addr: tcp://*:60627
   zmq_publish_console: true
   redis_addr: localhost:6379
+  redis_name_prefix: qs_unit_tests2
 worker:
   use_ipython_kernel: {4}
   ipython_kernel_ip: auto
@@ -539,18 +542,16 @@ run_engine:
   zmq_data_proxy_addr: tcp://localhost:5569
   databroker_config: DIF
 """
-    file_dir = os.path.join(tmpdir, _dir_2)
     use_ip_kernel = "true" if use_ipykernel_for_tests() else "false"
     return s.format("Ue=.po0aQ9.}<Xvrny+f{V04XMc6JZ9ufKf5aeFy", file_dir, file_dir, file_dir, use_ip_kernel)
 
 
-def _get_expected_settings_config_2(tmpdir):
-    file_dir = os.path.join(tmpdir, _dir_2)
+def _get_expected_settings_config_2(file_dir):
     use_ip_kernel = use_ipykernel_for_tests()
     if use_ip_kernel:
         startup_dir = None
-        ipython_dir = os.path.join(tmpdir, "ipython_test")
-        startup_profile = "collection_test"
+        ipython_dir = os.path.split(os.path.split(file_dir)[0])[0]
+        startup_profile = "collection_sim"
         user_group_permissions_path = file_dir
         existing_plans_and_devices_path = file_dir
     else:
@@ -580,6 +581,7 @@ def _get_expected_settings_config_2(tmpdir):
         "ipython_matplotlib": "qt5",
         "print_console_output": True,
         "redis_addr": "localhost:6379",
+        "redis_name_prefix": "qs_unit_tests2",  # Specific for this test
         "startup_dir": startup_dir,
         "startup_module": None,
         "startup_profile": startup_profile,
@@ -596,11 +598,10 @@ def _get_expected_settings_config_2(tmpdir):
     }
 
 
-_dir_3 = os.path.join("ipython_test2", "profile_collection_test", "startup")
+_dir_3 = "test3"
 
 
-def _get_cli_params_3(tmpdir):
-    file_dir = os.path.join(tmpdir, _dir_3)
+def _get_cli_params_3(file_dir):
     use_ip_kernel = "ON" if use_ipykernel_for_tests() else "OFF"
     return [
         "--zmq-control-addr=tcp://*:60619",
@@ -610,6 +611,7 @@ def _get_cli_params_3(tmpdir):
         f"--user-group-permissions={file_dir}",
         "--user-group-permissions-reload=NEVER",
         "--redis-addr=localhost:6379",
+        "--redis-name-prefix=qs_unit_tests3",
         "--kafka-topic=yet_another_topic",
         "--kafka-server=127.0.0.1:9099",
         "--keep-re",
@@ -626,14 +628,12 @@ def _get_cli_params_3(tmpdir):
     ]
 
 
-def _get_expected_settings_params_3(tmpdir):
-    file_dir = os.path.join(tmpdir, _dir_3)
-
+def _get_expected_settings_params_3(file_dir):
     use_ip_kernel = use_ipykernel_for_tests()
     if use_ip_kernel:
         startup_dir = None
-        ipython_dir = os.path.join(tmpdir, "ipython_test2")
-        startup_profile = "collection_test"
+        ipython_dir = os.path.split(os.path.split(file_dir)[0])[0]
+        startup_profile = "collection_sim"
         user_group_permissions_path = file_dir
         existing_plans_and_devices_path = file_dir
     else:
@@ -663,6 +663,7 @@ def _get_expected_settings_params_3(tmpdir):
         "ipython_matplotlib": "qt",
         "print_console_output": False,
         "redis_addr": "localhost:6379",
+        "redis_name_prefix": "qs_unit_tests3",  # Specific for this test
         "startup_dir": startup_dir,
         "startup_module": None,
         "startup_profile": startup_profile,
@@ -679,24 +680,24 @@ def _get_expected_settings_params_3(tmpdir):
     }
 
 
-def _get_empty_params_1(tmpdir):
+def _get_empty_params_1(file_dir):
     return []
 
 
 # fmt: off
-@pytest.mark.parametrize("pass_config, file_dir, get_cli_params, get_expected_settings", [
+@pytest.mark.parametrize("pass_config, dest_dir, get_cli_params, get_expected_settings", [
     # Starting RE Manager using default parameters (--verbose CLI parameter is always set)
     (None, None, _get_empty_params_1, _get_expected_settings_default_1),
     # Pass config file (use EV to pass the path)
     ("name_as_ev", _dir_2, _get_empty_params_1, _get_expected_settings_config_2),
     # Pass config file (use --config CLI parameter to pass the path)
-    ("name_as_param", _dir_2, _get_empty_params_1, _get_expected_settings_config_2),
+    ("name_as_param1", _dir_2, _get_empty_params_1, _get_expected_settings_config_2),
     # Pass the config file and a set of CLI parameters that override the config parameters
-    ("name_as_param", _dir_3, _get_cli_params_3, _get_expected_settings_params_3),
+    ("name_as_param2", _dir_3, _get_cli_params_3, _get_expected_settings_params_3),
 ])
 # fmt: on
 def test_manager_with_config_file_01(
-    tmpdir, monkeypatch, re_manager_cmd, pass_config, file_dir, get_cli_params, get_expected_settings  # noqa: F811
+    tmpdir, monkeypatch, re_manager_cmd, pass_config, dest_dir, get_cli_params, get_expected_settings  # noqa: F811
 ):
     """
     Basic test for parameter handling functionality. Test if the parameters are successfully
@@ -704,8 +705,10 @@ def test_manager_with_config_file_01(
     The test is not comprehensive or well organized, so it does not test the details, but
     it is likely to fail if there are major issues with parameter handling.
     """
-    if file_dir:
-        copy_default_profile_collection(os.path.join(tmpdir, file_dir))
+    if dest_dir:
+        file_dir = copy_default_profile_collection(os.path.join(tmpdir, dest_dir))
+    else:
+        file_dir = None
 
     save_settings_path = os.path.join(tmpdir, "current_settings.yaml")
     monkeypatch.setenv("QSERVER_SETTINGS_SAVE_TO_FILE", save_settings_path)
@@ -715,9 +718,9 @@ def test_manager_with_config_file_01(
         set_qserver_zmq_public_key(monkeypatch, server_public_key="=E0[czQkp!!%0TL1LCJ5X[<wjYD[iV+p[yuaI0an")
         set_qserver_zmq_address(monkeypatch, zmq_server_address="tcp://localhost:60617")
         with open(config_path, "w") as f:
-            f.writelines(_get_config_file_2(tmpdir))
+            f.writelines(_get_config_file_2(file_dir))
 
-    cli_params = get_cli_params(tmpdir)
+    cli_params = get_cli_params(file_dir)
     if cli_params:
         set_qserver_zmq_public_key(monkeypatch, server_public_key="=E0[czQkp!!%0TL1LCJ5X[<wjYD[iV+p[yuaI0an")
         set_qserver_zmq_address(monkeypatch, zmq_server_address="tcp://localhost:60619")
@@ -726,12 +729,19 @@ def test_manager_with_config_file_01(
 
     if pass_config == "name_as_ev":
         monkeypatch.setenv("QSERVER_CONFIG", config_path)
-    elif pass_config == "name_as_param":
+    elif pass_config in ("name_as_param1", "name_as_param2"):
         params_server.append(f"--config={config_path}")
     elif pass_config is not None:
         assert False, f"Unknown option {pass_config!r}"
 
-    re_manager_cmd(params_server)
+    set_redis_name_prefix = pass_config not in ("name_as_ev", "name_as_param1")
+    re = re_manager_cmd(params_server, set_redis_name_prefix=set_redis_name_prefix)
+    if get_cli_params == _get_empty_params_1:
+        re.set_used_redis_name_prefix("qs_unit_tests2")
+
+    # Test that the manager started successfully
+    state = get_manager_status()
+    assert state["manager_state"] == "idle"
 
     with open(save_settings_path, "r") as f:
         current_settings = yaml.load(f, Loader=yaml.FullLoader)
@@ -740,7 +750,7 @@ def test_manager_with_config_file_01(
     #   separately. This is needed because the default startup directory
     #   returned by 'get_default_startup_dir()` is different for the manager
     #   and the testing code when the test is running on CI.
-    expected_settings = copy.deepcopy(get_expected_settings(tmpdir))
+    expected_settings = copy.deepcopy(get_expected_settings(file_dir))
 
     print("Current_settings:\n" + pprint.pformat(current_settings))  # Useful in case of failure
     print("Expected settings:\n" + pprint.pformat(expected_settings))  # Useful in case of failure

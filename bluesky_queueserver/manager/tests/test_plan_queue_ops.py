@@ -9,6 +9,8 @@ import pytest
 
 from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
 
+from .common import _test_redis_name_prefix
+
 errmsg_wrong_plan_type = "Parameter 'item' should be a dictionary"
 
 
@@ -25,7 +27,7 @@ class PQ:
         """
         Returns initialized instance of plan queue.
         """
-        self._pq = PlanQueueOperations()
+        self._pq = PlanQueueOperations(name_prefix=_test_redis_name_prefix)
         await self._pq.start()
         # Clear any pool entries
         await self._pq.delete_pool_entries()
@@ -98,6 +100,17 @@ def test_running_plan_info():
             assert await pq.is_item_running() is False
 
     asyncio.run(testing())
+
+
+def test_redis_name_prefix():
+    """
+    Test that the prefix is correctly appended to the name of the redis key (test with one key).
+    """
+    pq = PlanQueueOperations(name_prefix=_test_redis_name_prefix)
+    assert pq._name_plan_queue == _test_redis_name_prefix + "_plan_queue"
+
+    pq = PlanQueueOperations(name_prefix="")
+    assert pq._name_plan_queue == "plan_queue"
 
 
 # fmt: off
@@ -198,7 +211,7 @@ def test_set_plan_queue_mode_1():
             queue_mode = {"loop": True, "ignore_failures": True}
             await pq.set_plan_queue_mode(queue_mode, update=False)
 
-            pq2 = PlanQueueOperations()
+            pq2 = PlanQueueOperations(name_prefix=_test_redis_name_prefix)
             await pq2.start()
             assert pq2.plan_queue_mode == queue_mode
 

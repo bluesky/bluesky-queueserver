@@ -266,6 +266,10 @@ class RunEngineManager(Process):
         if config and ("redis_addr" in config):
             self._ip_redis_server = config["redis_addr"]
 
+        self._redis_name_prefix = "qs_default"
+        if config and ("redis_name_prefix" in config):
+            self._redis_name_prefix = config["redis_name_prefix"]
+
         self._plan_queue = None  # Object of class plan_queue_ops.PlanQueueOperations
 
         self._heartbeat_generator_task = None  # Task for heartbeat generator
@@ -3641,7 +3645,9 @@ class RunEngineManager(Process):
         self._heartbeat_generator_task = asyncio.ensure_future(self._heartbeat_generator(), loop=self._loop)
         self._worker_status_task = asyncio.ensure_future(self._periodic_worker_state_request(), loop=self._loop)
 
-        self._plan_queue = PlanQueueOperations(redis_host=self._ip_redis_server)
+        self._plan_queue = PlanQueueOperations(
+            redis_host=self._ip_redis_server, name_prefix=self._redis_name_prefix
+        )
         await self._plan_queue.start()
 
         # Delete Redis entries (for testing and debugging)

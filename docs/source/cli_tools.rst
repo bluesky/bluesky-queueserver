@@ -198,8 +198,8 @@ Other Configuration Parameters
                             [--update-existing-plans-devices {NEVER,ENVIRONMENT_OPEN,ALWAYS}]
                             [--user-group-permissions USER_GROUP_PERMISSIONS_PATH]
                             [--user-group-permissions-reload {NEVER,ON_REQUEST,ON_STARTUP}]
-                            [--redis-addr REDIS_ADDR] [--kafka-topic KAFKA_TOPIC]
-                            [--kafka-server KAFKA_SERVER]
+                            [--redis-addr REDIS_ADDR] [--redis-name-prefix REDIS_NAME_PREFIX]
+                            [--kafka-topic KAFKA_TOPIC] [--kafka-server KAFKA_SERVER]
                             [--zmq-data-proxy-addr ZMQ_DATA_PROXY_ADDR] [--keep-re]
                             [--use-ipython-kernel {ON,OFF}] [--ipython-dir IPYTHON_DIR]
                             [--ipython-matplotlib IPYTHON_MATPLOTLIB]
@@ -212,7 +212,7 @@ Other Configuration Parameters
                             [--verbose | --quiet | --silent]
 
     Start Run Engine (RE) Manager
-    bluesky-queueserver version 0.0.19
+    bluesky-queueserver version 0.0.20
 
     Encryption for ZeroMQ communication server may be enabled by setting the value of
     'QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER' environment variable to a valid private key
@@ -309,6 +309,9 @@ Other Configuration Parameters
       --redis-addr REDIS_ADDR
                         The address of Redis server, e.g. 'localhost', '127.0.0.1',
                         'localhost:6379' (default: localhost).
+      --redis-name-prefix REDIS_NAME_PREFIX
+                        The prefix for the names of Redis keys used by RE Manager (default:
+                        qs_default).
       --kafka-topic KAFKA_TOPIC
                         The kafka topic to publish to.
       --kafka-server KAFKA_SERVER
@@ -418,7 +421,7 @@ periodically requests and displays the status of Queue Server.
                   command [command ...]
 
     Command-line tool for communicating with RE Monitor.
-    bluesky-queueserver version 0.0.18.
+    bluesky-queueserver version 0.0.20.
 
     positional arguments:
       command           a sequence of keywords and parameters that define the command
@@ -640,7 +643,7 @@ the path to the directory with startup files, the path to a startup script or mo
 
     Bluesky-QServer:
     CLI tool for generating the list of plans and devices from beamline startup scripts.
-    bluesky-queueserver version 0.0.19
+    bluesky-queueserver version 0.0.20
 
     options:
       -h, --help        show this help message and exit
@@ -723,7 +726,7 @@ key to ``qserver-zmq-keys`` using ``--zmq-private_key``.
 
     Bluesky-QServer:
     ZMQ security: Generate public-private key pair for ZeroMQ control communication channel.
-    bluesky-queueserver version 0.0.3.post61.dev0+g45f1afb.
+    bluesky-queueserver version 0.0.20.
 
     Generate new public-private key pair for secured 0MQ control connection between
     RE Manager and client applications. If private key is passed as ``--zmq-private-key``
@@ -769,7 +772,7 @@ to 0MQ socket by default. Publishing can be enabled by starting RE Manager with 
 
     Queue Server Console Monitor:
     CLI tool for remote monitoring of console output published by RE Manager.
-    bluesky-queueserver version 0.0.19
+    bluesky-queueserver version 0.0.20
 
     optional arguments:
       -h, --help        show this help message and exit
@@ -802,9 +805,10 @@ address is different from default, the correct address must be passed using the 
 
   $ qserver-clear-lock -h
   usage: qserver-clear-lock [-h] [--redis-addr REDIS_ADDR]
+                                 [--redis-name-prefix REDIS_NAME_PREFIX]
 
   Bluesky-QServer: Clear RE Manager lock.
-  bluesky-queueserver version 0.0.19.
+  bluesky-queueserver version 0.0.20.
 
   Recover locked RE Manager if the lock key is lost. The utility requires access to Redis
   used by RE Manager. Provide the address of Redis service using '--redis-addr' parameter.
@@ -815,6 +819,9 @@ address is different from default, the correct address must be passed using the 
     --redis-addr REDIS_ADDR
                       The address of Redis server, e.g. 'localhost', '127.0.0.1',
                       'localhost:6379' (default: localhost).
+    --redis-name-prefix REDIS_NAME_PREFIX
+                      The prefix for the names of Redis keys used by RE Manager (default:
+                      qs_default).
 
 
 .. _qserver_console_cli:
@@ -835,7 +842,7 @@ close the worker environment.
   usage: qserver-console [-h] [--zmq-control-addr ZMQ_CONTROL_ADDR]
 
   Bluesky-QServer: Start Jupyter console for IPython kernel running in the worker process.
-  bluesky-queueserver version 0.0.19.
+  bluesky-queueserver version 0.0.20.
 
   Requests IPython kernel connection info from RE Manager and starts Jupyter Console. The RE Worker
   must be running (environment opened) and using IPython kernel. The address of 0MQ control port of

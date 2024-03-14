@@ -1471,13 +1471,18 @@ class RunEngineManager(Process):
 
     async def _worker_command_reserve_kernel(self):
         """
-        Initiate stopping the execution loop. Call fails if the worker is running on Python
-        (not IPython kernel).
+        Reserve the kernel (start execution loop in the kernel) if the worker is
+        running IPython kernel. Return ``True`` if the worker is not using IPython
+        kernel (execution loop is continuously running in this case, so the 'kernel'
+        can always be considered reserved).
         """
         try:
-            response = await self._comm_to_worker.send_msg("command_reserve_kernel")
-            success = response["status"] == "accepted"
-            err_msg = response["err_msg"]
+            if self._use_ipython_kernel:
+                response = await self._comm_to_worker.send_msg("command_reserve_kernel")
+                success = response["status"] == "accepted"
+                err_msg = response["err_msg"]
+            else:
+                success, err_msg = True, ""
         except CommTimeoutError:
             success, err_msg = None, "Timeout occurred while processing the request"
         return success, err_msg

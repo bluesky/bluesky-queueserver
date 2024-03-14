@@ -1301,11 +1301,8 @@ class RunEngineWorker(Process):
 
             self._exit_main_loop_event.clear()
             while True:
-                # Polling 10 times per second. This is fast enough for slowly executed plans.
-                ttime.sleep(0.1)
-
                 try:
-                    parameters, plan_exec_option = self._execution_queue.get(False)
+                    parameters, plan_exec_option = self._execution_queue.get(block=True, timeout=0.1)
                     self._execute_plan_or_task(parameters, plan_exec_option)
                 except queue.Empty:
                     pass

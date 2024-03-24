@@ -7,9 +7,8 @@ import uuid
 
 import zmq
 import zmq.asyncio
-from jsonrpc import JSONRPCResponseManager
-from jsonrpc.dispatcher import Dispatcher
 
+from .json_rpc import JSONRPCResponseManager
 from .logging_setup import PPrintForLogging as ppfl
 
 logger = logging.getLogger(__name__)
@@ -121,7 +120,7 @@ class PipeJsonRpcReceive:
 
     def __init__(self, conn, *, name="RE QServer Comm"):
         self._conn = conn
-        self._dispatcher = Dispatcher()  # json-rpc dispatcher
+        self._response_manager = JSONRPCResponseManager()  # json-rpc dispatcher
         self._thread_running = False  # Set True to exit the thread
 
         self._thread_name = name
@@ -165,7 +164,7 @@ class PipeJsonRpcReceive:
     def __del__(self):
         self.stop()
 
-    def add_method(self, handler, name=None):
+    def add_method(self, handler, name):
         """
         Add method to json-rpc dispatcher.
 
@@ -173,11 +172,11 @@ class PipeJsonRpcReceive:
         ----------
         handler: callable
             Reference to a handler
-        name: str, optional
-            Name to register (default is the handler name)
+        name: str
+            Name to register
         """
         # Add method to json-rpc dispatcher
-        self._dispatcher.add_method(handler, name)
+        self._response_manager.add_method(handler, name)
 
     def _start_conn_thread(self):
         if not self._thread_running:
@@ -243,9 +242,8 @@ class PipeJsonRpcReceive:
         #     if not isinstance(msg_json, dict) or (msg_json["method"] != "heartbeat"):
         #         logger.debug("Command received RE Manager->Watchdog: %s", ppfl(msg_json))
 
-        response = JSONRPCResponseManager.handle(msg, self._dispatcher)
+        response = self._response_manager.handle(msg)
         if response:
-            response = response.json
             self._conn.send(response)
 
 

@@ -12,7 +12,6 @@ import zmq
 from bluesky_queueserver.manager.comms import (
     CommJsonRpcError,
     CommTimeoutError,
-    JSONRPCResponseManager,
     PipeJsonRpcReceive,
     PipeJsonRpcSendAsync,
     ZMQCommSendAsync,
@@ -115,9 +114,10 @@ def test_PipeJsonRpcReceive_1():
 @pytest.mark.parametrize(
     "method, params, result, notification",
     [
-        ("method_handler1", [], 5, False),
-        ("method_handler1", [], 5, True),
         ("method1", [], 5, False),
+        ("method1", [], 5, True),
+        ("method1", {}, 5, False),
+        ("method1", {}, 5, True),
         ("method2", [5], 15, False),
         ("method2", {"value": 5}, 15, False),
         ("method2", {}, 12, False),
@@ -158,7 +158,6 @@ def test_PipeJsonRpcReceive_2(method, params, result, notification):
 
     conn1, conn2 = multiprocessing.Pipe()
     pc = PipeJsonRpcReceive(conn=conn2)
-    pc.add_method(method_handler1)  # No name is specified, default name is "method_handler1"
     pc.add_method(method_handler1, "method1")
     pc.add_method(method_handler2, "method2")
     pc.add_method(method_handler3, "method3")
@@ -174,7 +173,7 @@ def test_PipeJsonRpcReceive_2(method, params, result, notification):
             if not notification:
                 response = conn1.recv()
                 response = json.loads(response)
-                assert response["id"] == request["id"], "Response ID does not match message ID."
+                assert response["id"] == request["id"], f"Response ID does not match message ID: {response}"
                 assert "result" in response, f"Key 'result' is not contained in response: {response}"
                 assert response["result"] == result, f"Result does not match the expected: {response}"
                 assert value_nonlocal == "function_was_called", "Non-local variable has incorrect value"
@@ -343,7 +342,7 @@ def test_PipeJsonRpcReceive_6_failing():
     if conn1.poll(timeout=0.5):  # Set timeout large enough
         response = conn1.recv()
         response = json.loads(response)
-        assert response["error"]["code"] == -32000, f"Incorrect error reported: {response}"
+        assert response["error"]["code"] == -32602, f"Incorrect error reported: {response}"
         assert response["error"]["data"]["type"] == "TypeError", "Incorrect error type."
     else:
         assert False, "Timeout occurred while waiting for response."
@@ -485,9 +484,10 @@ def test_PipeJsonRpcSendAsync_1():
 @pytest.mark.parametrize(
     "method, params, result, notification",
     [
-        ("method_handler1", [], 5, False),
-        ("method_handler1", [], 5, True),
         ("method1", [], 5, False),
+        ("method1", [], 5, True),
+        ("method1", {}, 5, False),
+        ("method1", {}, 5, True),
         ("method2", [5], 15, False),
         ("method2", {"value": 5}, 15, False),
         ("method2", {}, 12, False),
@@ -528,7 +528,6 @@ def test_PipeJsonRpcSendAsync_2(method, params, result, notification):
 
     conn1, conn2 = multiprocessing.Pipe()
     pc = PipeJsonRpcReceive(conn=conn2, name="comm-server")
-    pc.add_method(method_handler1)  # No name is specified, default name is "method_handler1"
     pc.add_method(method_handler1, "method1")
     pc.add_method(method_handler2, "method2")
     pc.add_method(method_handler3, "method3")
@@ -673,9 +672,8 @@ class _PipeJsonRpcReceiveTest(PipeJsonRpcReceive):
     """
 
     def _handle_msg(self, msg):
-        response = JSONRPCResponseManager.handle(msg, self._dispatcher)
+        response = self._response_manager.handle(msg)
         if response:
-            response = response.json
             self._conn.send(response)  # Send the response 3 times !!!
             self._conn.send(response)
             self._conn.send(response)

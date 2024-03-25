@@ -1,4 +1,4 @@
-import json
+# import json
 import logging
 import threading
 import time as ttime
@@ -41,7 +41,7 @@ class ReManagerEmulation(threading.Thread):
         hb_period, dt = 0.5, 0.01
         n_wait = round(hb_period / dt)
         msg = format_jsonrpc_msg("heartbeat", {"value": "alive"}, notification=True)
-        msg_json = json.dumps(msg)
+        msg_json = msg  # json.dumps(msg)
         while True:
             # Since we are emulating 'kill' method, we want the function to
             #   react to 'exit' quickly.
@@ -74,12 +74,13 @@ class ReManagerEmulation(threading.Thread):
         #   this is acceptable for testing. Timeout would typically indicate an error.
         msg = format_jsonrpc_msg(method, params, notification=notification)
         with self._lock:
-            self._conn_watchdog.send(json.dumps(msg))
+            msg_json = msg  # json.dumps(msg)
+            self._conn_watchdog.send(msg_json)
             if notification:
                 return
             if self._conn_watchdog.poll(timeout):
                 response_json = self._conn_watchdog.recv()
-                response = json.loads(response_json)
+                response = response_json  # json.loads(response_json)
                 result = response["result"]
             else:
                 result = None
@@ -101,8 +102,9 @@ class ReManagerEmulation(threading.Thread):
 
         if not self._restart:
             msg = format_jsonrpc_msg("manager_stopping", notification=True)
+            msg_json = msg  # json.dumps(msg)
             with self._lock:
-                self._conn_watchdog.send(json.dumps(msg))
+                self._conn_watchdog.send(msg_json)
 
         th_hb.join()
 

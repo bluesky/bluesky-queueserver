@@ -56,7 +56,7 @@ class WatchdogProcess:
 
         # Class that supports communication over the pipe
         self._comm_to_manager = PipeJsonRpcReceive(
-            conn=self._watchdog_to_manager_conn, name="RE Watchdog-Manager Comm"
+            conn=self._watchdog_to_manager_conn, use_json=False, name="RE Watchdog-Manager Comm"
         )
 
         self._watchdog_state = 0  # State is currently just time since last notification

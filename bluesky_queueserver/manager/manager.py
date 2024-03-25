@@ -3634,10 +3634,12 @@ class RunEngineManager(Process):
 
         self._comm_to_watchdog = PipeJsonRpcSendAsync(
             conn=self._watchdog_conn,
+            use_json=False,
             name="RE Manager-Watchdog Comm",
         )
         self._comm_to_worker = PipeJsonRpcSendAsync(
             conn=self._worker_conn,
+            use_json=False,
             name="RE Manager-Worker Comm",
             timeout=self._comm_to_worker_timeout,
         )

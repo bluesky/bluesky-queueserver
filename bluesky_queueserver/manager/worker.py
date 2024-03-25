@@ -1346,7 +1346,7 @@ class RunEngineWorker(Process):
         self._run_reg_cb = CallbackRegisterRun(run_list=self._active_run_list)
 
         # Class that supports communication over the pipe
-        self._comm_to_manager = PipeJsonRpcReceive(conn=self._conn, name="RE Worker-Manager Comm")
+        self._comm_to_manager = PipeJsonRpcReceive(conn=self._conn, use_json=False, name="RE Worker-Manager Comm")
 
         self._comm_to_manager.add_method(self._request_state_handler, "request_state")
         self._comm_to_manager.add_method(self._request_ip_connect_info, "request_ip_connect_info")

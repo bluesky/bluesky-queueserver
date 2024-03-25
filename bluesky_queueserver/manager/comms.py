@@ -98,6 +98,10 @@ class PipeJsonRpcReceive:
     ----------
     conn: multiprocessing.Connection
         Reference to bidirectional end of a pipe (multiprocessing.Pipe)
+    use_json: boolean
+        If *True*, the messages are expected to be in encoded as JSON. Otherwise the messages
+        are expected to be binary. The parameter also enables/disables JSON encoding of
+        response messages.
     name: str
         Name of the receiving thread (it is better to assign meaningful unique names to threads.
 
@@ -107,7 +111,7 @@ class PipeJsonRpcReceive:
     .. code-block:: python
 
         conn1, conn2 = multiprocessing.Pipe()
-        pc = PipeJsonRPC(conn=conn1, name="RE QServer Receive")
+        pc = PipeJsonRPC(conn=conn1, use_json=True, name="RE QServer Receive")
 
         def func():
             print("Testing")
@@ -118,9 +122,9 @@ class PipeJsonRpcReceive:
         pc.stop()  # Stop before exit to stop the thread.
     """
 
-    def __init__(self, conn, *, name="RE QServer Comm"):
+    def __init__(self, conn, *, use_json=True, name="RE QServer Comm"):
         self._conn = conn
-        self._response_manager = JSONRPCResponseManager()  # json-rpc dispatcher
+        self._response_manager = JSONRPCResponseManager(use_json=use_json)
         self._thread_running = False  # Set True to exit the thread
 
         self._thread_name = name
@@ -261,6 +265,9 @@ class PipeJsonRpcSendAsync:
         Reference to bidirectional end of a pipe (multiprocessing.Pipe)
     timeout: float
         Default value of timeout: maximum time to wait for response after a message is sent
+    use_json: boolean
+        Enables/disables encoding of the outgoing messages as JSON. If *True*, then the response
+        messages are also expected to be encoded as JSON. Otherwise the messages are binary.
     name: str
         Name of the receiving thread (it is better to assign meaningful unique names to threads.
 
@@ -273,7 +280,7 @@ class PipeJsonRpcSendAsync:
 
         async def send_messages():
             # Must be instantiated and used within the loop
-            p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client")
+            p_send = PipeJsonRpcSendAsync(conn=conn1, use_json=True, name="comm-client")
             p_send.start()
 
             method = "method_name"
@@ -286,7 +293,7 @@ class PipeJsonRpcSendAsync:
         pc.stop()
 
 
-        pc = PipeJsonRpcSendAsync(conn=conn1, name="RE QServer Receive")
+        pc = PipeJsonRpcSendAsync(conn=conn1, use_json=True, name="RE QServer Receive")
 
         def func():
             print("Testing")
@@ -298,9 +305,10 @@ class PipeJsonRpcSendAsync:
 
     """
 
-    def __init__(self, conn, *, timeout=0.5, name="RE QServer Comm"):
+    def __init__(self, conn, *, timeout=0.5, use_json=True, name="RE QServer Comm"):
         self._conn = conn
         self._loop = asyncio.get_running_loop()
+        self._use_json = use_json
 
         self._thread_name = name
 
@@ -494,7 +502,7 @@ class PipeJsonRpcSendAsync:
             if self._conn.poll(self._conn_polling_timeout):
                 try:
                     msg_json = self._conn.recv()
-                    msg = json.loads(msg_json)
+                    msg = json.loads(msg_json) if self._use_json else msg_json
                     # logger.debug("Message Watchdog->Manager received: '%s'", ppfl(msg))
                     # Messages should be handled in the event loop
                     self._loop.call_soon_threadsafe(self._conn_received, msg)
@@ -510,7 +518,7 @@ class PipeJsonRpcSendAsync:
             msg = None
             try:
                 msg, fut_send = self._msg_send_buffer.get(timeout=self._conn_polling_timeout)
-                msg_json = json.dumps(msg)
+                msg_json = json.dumps(msg) if self._use_json else msg
                 self._conn.send(msg_json)
                 self._loop.call_soon_threadsafe(self._conn_sent, msg, fut_send)
             except queue.Empty:

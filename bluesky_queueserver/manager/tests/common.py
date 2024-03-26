@@ -513,7 +513,7 @@ class ReManager:
             except Exception as ex:
                 # The manager is not responsive, so just kill the process.
                 if self._p:
-                    self._p.kill()
+                    self._p.terminate()
                     self._p.wait(timeout)
                 assert False, f"RE Manager failed to stop: {str(ex)}"
 
@@ -533,7 +533,7 @@ class ReManager:
             Timeout in seconds.
         """
         if self._p:
-            self._p.kill()
+            self._p.terminate()
             self._p.wait(timeout)
             clear_redis_pool(redis_name_prefix=self._used_redis_name_prefix)
 
@@ -569,6 +569,7 @@ def re_manager_cmd():
         # Wait until RE Manager is started. Raise exception if the server failed to start.
         if not wait_for_condition(time=10, condition=condition_manager_idle):
             failed_to_start = True
+            re["re"].kill_manager()
             raise TimeoutError("Timeout: RE Manager failed to start.")
 
         _reset_queue_mode()
@@ -606,6 +607,7 @@ def re_manager():
     # Wait until RE Manager is started. Raise exception if the server failed to start.
     if not wait_for_condition(time=10, condition=condition_manager_idle):
         failed_to_start = True
+        re.kill_manager()
         raise TimeoutError("Timeout: RE Manager failed to start.")
 
     _reset_queue_mode()
@@ -630,6 +632,7 @@ def re_manager_pc_copy(tmp_path):
     # Wait until RE Manager is started. Raise exception if the server failed to start.
     if not wait_for_condition(time=10, condition=condition_manager_idle):
         failed_to_start = True
+        re.kill_manager()
         raise TimeoutError("Timeout: RE Manager failed to start.")
 
     _reset_queue_mode()

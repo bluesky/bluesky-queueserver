@@ -3816,6 +3816,7 @@ class RunEngineManager(Process):
                 self._heartbeat_generator_task.cancel()
                 self._comm_to_watchdog.stop()
                 self._comm_to_worker.stop()
+                await self._plan_queue.stop()
                 self._zmq_socket.close()
                 logger.info("RE Manager was stopped by ZMQ command.")
                 break

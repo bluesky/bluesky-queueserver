@@ -273,6 +273,14 @@ class PlanQueueOperations:
                 self._plan_queue_uid = self.new_item_uid()
                 self._plan_history_uid = self.new_item_uid()
 
+    async def stop(self):
+        """
+        Close all connections in the pool.
+        """
+        if self._r_pool:
+            await self._r_pool.aclose()
+            self._r_pool = None
+
     async def _queue_clean(self):
         """
         Delete all the invalid queue entries (there could be some entries from failed unit tests).

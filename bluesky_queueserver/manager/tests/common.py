@@ -362,6 +362,7 @@ def clear_redis_pool(redis_name_prefix=_test_redis_name_prefix):
         await pq.lock_info_clear()
         await pq.autostart_mode_clear()
         await pq.stop_pending_clear()
+        await pq.stop()
 
     asyncio.run(run())
 

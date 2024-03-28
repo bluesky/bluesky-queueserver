@@ -7,25 +7,95 @@ logger = logging.getLogger(__name__)
 
 class JSONRPCResponseManager:
     def __init__(self, *, use_json=True):
+        """
+        Simplified implementation of message handler for JSON RPC protocol.
+        Written as a replacement for ``json-rpc`` package and supports all features
+        used by Queue Server. This implementation also supports binary messages
+        (not encoded as JSON), which significatly speeds up interprocess communication.
+
+        Parameters
+        ----------
+        use_json: boolean
+            If the parameter is *True*, then incoming messages (passed to the ``handle``
+            method) are expected to be in JSON format. Otherwise, the messages are expected
+            to be dictionary or a list of dictionaries and no decoding is applied.
+        """
         self._methods = {}
         self._use_json = use_json
 
     def add_method(self, handler, method):
+        """
+        Register a handler.
+
+        Parameters
+        ----------
+        handler: Callable
+            Method handler.
+        method: str
+            Method name. JSON messages must call one of the registered methods.
+
+        Returns
+        -------
+        None
+        """
         self._methods[method] = handler
 
     def _decode(self, msg):
+        """
+        Decode the incoming message from JSON (if ``use_json`` is *True*) or return
+        the message unchanged.
+
+        Parameters
+        ----------
+        msg: str, dict or list(dict)
+            Encoded message in JSON format (*str*) or unencoded message (*dict* or
+            *list(dict)*).
+
+        Returns
+        -------
+        dict or list(dict)
+            Decoded message.
+        """
         if self._use_json:
             return json.loads(msg)
         else:
             return msg
 
     def _encode(self, msg):
+        """
+        Encode the response message to JSON (if ``use_json`` is *True*) or return
+        the message unchanged.
+
+        Parameters
+        ----------
+        msg: dict or list(dict)
+            A single message (*dict*) or a batch of messages (*list(dict)*).
+
+        Returns
+        -------
+        str, dict or list(dict)
+            Encoded response message in JSON format (*str*) or original representation
+            (*dict* or *list(dict)*).
+        """
         if self._use_json:
             return json.dumps(msg)
         else:
             return msg
 
     def _get_error_msg(self, error_code):
+        """
+        Returns a standard JSON RPC message based on the error code.
+
+        Parameters
+        ----------
+        error_code: int
+            One of the standard JSON RPC error codes.
+
+        Returns
+        -------
+        str
+            Standard message based on ``error_code``.
+        """
         msgs = {
             -32700: "Parse error",
             -32600: "Invalid Request",
@@ -37,6 +107,19 @@ class JSONRPCResponseManager:
         return msgs.get(error_code, "Unknown error")
 
     def _handle_single_msg(self, msg):
+        """
+        Handle a single JSON RPC message.
+
+        Parameters
+        ----------
+        msg: dict
+            Decoded JSON RPC message.
+
+        Returns
+        -------
+        response: dict
+            Response message
+        """
         error_code, is_notification, msg_id, response = 0, "id" not in msg, None, None
 
         try:
@@ -86,6 +169,30 @@ class JSONRPCResponseManager:
         return response
 
     def handle(self, msg_full):
+        """
+        Handle JSON RPC message. The message can contain a single message (*dict*) or a batch of messages
+        (*list(dict)*). Messages in the batch are executed one by one. The response is also a single
+        message if input message is *dict* or a batch of messages if the input message is *list(dict)*.
+
+        If a message can not be decoded (invalid JSON), then the response is *None* and should not be
+        sent. The response is also *None* if the input message is a notification or all messages in
+        the batch are notifications. Responses to notifications are not included in the batch of the
+        response messages, so the response batch may contain less messages than the input batch.
+        In any case, if the response is *None*, it should not be sent.
+
+        Parameters
+        ----------
+        msg_full: str, dict or list(dict)
+            Input message encoded as JSON (*str*) or not encoded (single message represented as *dict* or
+            a batch of messages represented as *list(dict)*). The constructor parameter ``use_json`` must
+            be *True* to use JSON encoding and *False* otherwise.
+
+        Response
+        --------
+        str, dict, list(dict) or None
+            Output message or a batch of messages in the same format as ``msg_full``. The response
+            is *None* if there is nothing to send back to the client.
+        """
         response, is_batch = [], False
 
         try:

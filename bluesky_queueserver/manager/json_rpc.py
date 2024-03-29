@@ -98,7 +98,7 @@ class JSONRPCResponseManager:
         """
         msgs = {
             -32700: "Parse error",
-            -32600: "Invalid Request",
+            -32600: "Invalid request",
             -32601: "Method not found",
             -32602: "Invalid params",
             -32603: "Internal error",
@@ -174,11 +174,12 @@ class JSONRPCResponseManager:
         (*list(dict)*). Messages in the batch are executed one by one. The response is also a single
         message if input message is *dict* or a batch of messages if the input message is *list(dict)*.
 
-        If a message can not be decoded (invalid JSON), then the response is *None* and should not be
-        sent. The response is also *None* if the input message is a notification or all messages in
-        the batch are notifications. Responses to notifications are not included in the batch of the
-        response messages, so the response batch may contain less messages than the input batch.
-        In any case, if the response is *None*, it should not be sent.
+        If the response value returned by the function is *None*, it should not be sent to client.
+        It happens when the input message is a notification ('id' is missing) or all messages in
+        the batch are notifications. Responses to notifications are not included in the batch of
+        the response messages, so the response batch may contain less messages than the input batch.
+
+        If an input message can not be decoded (invalid JSON), then the response has 'id' set to *None*.
 
         Parameters
         ----------
@@ -199,7 +200,7 @@ class JSONRPCResponseManager:
             try:
                 msg_full = self._decode(msg_full)
             except Exception as ex:
-                raise TypeError(f"Failed to parse the message {msg_full!r}: {ex}") from ex
+                raise TypeError(f"Failed to parse the message '{msg_full}': {ex}") from ex
 
             is_batch = isinstance(msg_full, list)
             if not is_batch:

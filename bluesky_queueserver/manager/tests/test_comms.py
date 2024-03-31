@@ -87,16 +87,19 @@ def test_CommJsonRpcError_3_fail():
 #                       Class PipeJsonRpcReceive
 
 
-def test_PipeJsonRpcReceive_1():
+# fmt: off
+@pytest.mark.parametrize("use_json", [False, True])
+# fmt: on
+def test_PipeJsonRpcReceive_1(use_json):
     """
     Create, start and stop `PipeJsonRpcReceive` object
     """
     conn1, conn2 = multiprocessing.Pipe()
-    new_name = "Unusual Thread Name"
+    new_name = f"Unusual Thread Name ({use_json})"
 
     assert count_threads_with_name(new_name) == 0, "No threads are expected to exist"
 
-    pc = PipeJsonRpcReceive(conn=conn2, name=new_name)
+    pc = PipeJsonRpcReceive(conn=conn2, name=new_name, use_json=use_json)
     pc.start()
     assert count_threads_with_name(new_name) == 2, "Two threads are expected to exist"
 
@@ -111,6 +114,8 @@ def test_PipeJsonRpcReceive_1():
     pc.stop()
 
 
+# fmt: off
+@pytest.mark.parametrize("use_json", [False, True])
 @pytest.mark.parametrize(
     "method, params, result, notification",
     [
@@ -127,7 +132,8 @@ def test_PipeJsonRpcReceive_1():
         ("method4", {}, 19, False),
     ],
 )
-def test_PipeJsonRpcReceive_2(method, params, result, notification):
+# fmt: on
+def test_PipeJsonRpcReceive_2(method, params, result, notification, use_json):
     """
     The case of single requests.
     """
@@ -157,7 +163,7 @@ def test_PipeJsonRpcReceive_2(method, params, result, notification):
     some_class = SomeClass()
 
     conn1, conn2 = multiprocessing.Pipe()
-    pc = PipeJsonRpcReceive(conn=conn2)
+    pc = PipeJsonRpcReceive(conn=conn2, use_json=use_json)
     pc.add_method(method_handler1, "method1")
     pc.add_method(method_handler2, "method2")
     pc.add_method(method_handler3, "method3")
@@ -168,11 +174,12 @@ def test_PipeJsonRpcReceive_2(method, params, result, notification):
         value_nonlocal = None
 
         request = format_jsonrpc_msg(method, params, notification=notification)
-        conn1.send(json.dumps(request))
+        request_json = json.dumps(request) if use_json else request
+        conn1.send(request_json)
         if conn1.poll(timeout=0.5):  # Set timeout large enough
             if not notification:
                 response = conn1.recv()
-                response = json.loads(response)
+                response = json.loads(response) if use_json else response
                 assert response["id"] == request["id"], f"Response ID does not match message ID: {response}"
                 assert "result" in response, f"Key 'result' is not contained in response: {response}"
                 assert response["result"] == result, f"Result does not match the expected: {response}"
@@ -189,7 +196,10 @@ def test_PipeJsonRpcReceive_2(method, params, result, notification):
     pc.stop()
 
 
-def test_PipeJsonRpcReceive_3():
+# fmt: off
+@pytest.mark.parametrize("use_json", [False, True])
+# fmt: on
+def test_PipeJsonRpcReceive_3(use_json):
     """
     Test sending multiple requests
     """
@@ -204,7 +214,7 @@ def test_PipeJsonRpcReceive_3():
     some_class = SomeClass()
 
     conn1, conn2 = multiprocessing.Pipe()
-    pc = PipeJsonRpcReceive(conn=conn2)
+    pc = PipeJsonRpcReceive(conn=conn2, use_json=use_json)
     pc.add_method(method_handler3, "method3")
     pc.add_method(some_class.method_handler4, "method4")
     pc.start()
@@ -215,11 +225,12 @@ def test_PipeJsonRpcReceive_3():
         format_jsonrpc_msg("method4", {"value": 3}, notification=True),
         format_jsonrpc_msg("method4", {"value": 9}),
     ]
-    conn1.send(json.dumps(request))
+    request_json = json.dumps(request) if use_json else request
+    conn1.send(request_json)
 
     if conn1.poll(timeout=0.5):  # Set timeout large enough
         response = conn1.recv()
-        response = json.loads(response)
+        response = json.loads(response) if use_json else response
         assert len(response) == 2, "Unexpected number of response messages"
         assert response[0]["id"] == request[0]["id"], "Response ID does not match message ID."
         assert response[1]["id"] == request[2]["id"], "Response ID does not match message ID."
@@ -231,7 +242,10 @@ def test_PipeJsonRpcReceive_3():
     pc.stop()
 
 
-def test_PipeJsonRpcReceive_4():
+# fmt: off
+@pytest.mark.parametrize("use_json", [False, True])
+# fmt: on
+def test_PipeJsonRpcReceive_4(use_json):
     """
     Test if all outdated unprocessed messages are deleted from the pipe
     as the processing thread is started.
@@ -241,7 +255,7 @@ def test_PipeJsonRpcReceive_4():
         return value + 15
 
     conn1, conn2 = multiprocessing.Pipe()
-    pc = PipeJsonRpcReceive(conn=conn2)
+    pc = PipeJsonRpcReceive(conn=conn2, use_json=use_json)
     pc.add_method(method_handler3, "method3")
 
     # The thread is not started yet, but we still send a message through the pipe.
@@ -252,8 +266,10 @@ def test_PipeJsonRpcReceive_4():
     request1b = [
         format_jsonrpc_msg("method3", {"value": 6}),
     ]
-    conn1.send(json.dumps(request1a))
-    conn1.send(json.dumps(request1b))
+    request1a_json = json.dumps(request1a) if use_json else request1a
+    request1b_json = json.dumps(request1b) if use_json else request1b
+    conn1.send(request1a_json)
+    conn1.send(request1b_json)
 
     # Start the processing thread. The messages that were already sent are expected to be ignored.
     pc.start()
@@ -262,11 +278,12 @@ def test_PipeJsonRpcReceive_4():
     request2 = [
         format_jsonrpc_msg("method3", {"value": 7}),
     ]
-    conn1.send(json.dumps(request2))
+    request2_json = json.dumps(request2) if use_json else request2
+    conn1.send(request2_json)
 
     if conn1.poll(timeout=0.5):  # Set timeout large enough
         response = conn1.recv()
-        response = json.loads(response)
+        response = json.loads(response) if use_json else response
         assert len(response) == 1, "Unexpected number of response messages"
         assert response[0]["id"] == request2[0]["id"], "Response ID does not match message ID."
         assert response[0]["result"] == 22, "Response ID does not match message ID."
@@ -277,9 +294,10 @@ def test_PipeJsonRpcReceive_4():
 
 
 # fmt: off
+@pytest.mark.parametrize("use_json", [False, True])
 @pytest.mark.parametrize("clear_buffer", [False, True])
 # fmt: on
-def test_PipeJsonRpcReceive_5(clear_buffer):
+def test_PipeJsonRpcReceive_5(clear_buffer, use_json):
     """
     Checking that the buffer overflow does not overflow the pipe.
     """
@@ -293,7 +311,7 @@ def test_PipeJsonRpcReceive_5(clear_buffer):
         n_calls += 1
 
     conn1, conn2 = multiprocessing.Pipe()
-    pc = PipeJsonRpcReceive(conn=conn2)
+    pc = PipeJsonRpcReceive(conn=conn2, use_json=use_json)
     pc.add_method(method_handler3, "method3")
     pc.start()
 
@@ -302,10 +320,11 @@ def test_PipeJsonRpcReceive_5(clear_buffer):
 
     n_buf = pc._msg_recv_buffer_size
 
-    conn1.send(json.dumps(request))
+    request_json = json.dumps(request) if use_json else request
+    conn1.send(request_json)
     ttime.sleep(1)
     for _ in range(n_buf * 2):
-        conn1.send(json.dumps(request))
+        conn1.send(request_json)
 
     ttime.sleep(1)
 
@@ -321,7 +340,10 @@ def test_PipeJsonRpcReceive_5(clear_buffer):
     pc.stop()
 
 
-def test_PipeJsonRpcReceive_6_failing():
+# fmt: off
+@pytest.mark.parametrize("use_json", [False, True])
+# fmt: on
+def test_PipeJsonRpcReceive_6_failing(use_json):
     """
     Those tests are a result of exploration of how `json-rpc` error processing works.
     """
@@ -330,18 +352,19 @@ def test_PipeJsonRpcReceive_6_failing():
         return value + 15
 
     conn1, conn2 = multiprocessing.Pipe()
-    pc = PipeJsonRpcReceive(conn=conn2)
+    pc = PipeJsonRpcReceive(conn=conn2, use_json=use_json)
     pc.add_method(method_handler3, "method3")
     pc.start()
 
     # ------- Incorrect argument (arg list instead of required kwargs) -------
     #   Returns 'Server Error' (-32000)
     request = format_jsonrpc_msg("method3", [5])
-    conn1.send(json.dumps(request))
+    request_json = json.dumps(request) if use_json else request
+    conn1.send(request_json)
 
     if conn1.poll(timeout=0.5):  # Set timeout large enough
         response = conn1.recv()
-        response = json.loads(response)
+        response = json.loads(response) if use_json else response
         assert response["error"]["code"] == -32602, f"Incorrect error reported: {response}"
         assert response["error"]["data"]["type"] == "TypeError", "Incorrect error type."
     else:
@@ -351,11 +374,12 @@ def test_PipeJsonRpcReceive_6_failing():
     # 'json-prc' doesn't check parameter types. Instead the handler will crash if the argument
     #   type is not suitable.
     request = format_jsonrpc_msg("method3", {"value": "abc"})
-    conn1.send(json.dumps(request))
+    request_json = json.dumps(request) if use_json else request
+    conn1.send(request_json)
 
     if conn1.poll(timeout=0.5):
         response = conn1.recv()
-        response = json.loads(response)
+        response = json.loads(response) if use_json else response
         assert response["error"]["code"] == -32000, f"Incorrect error reported: {response}"
         assert response["error"]["data"]["type"] == "TypeError", "Incorrect error type."
     else:
@@ -363,22 +387,24 @@ def test_PipeJsonRpcReceive_6_failing():
 
     # ------- Incorrect argument (extra argument) -------
     request = format_jsonrpc_msg("method3", {"value": 5, "unknown": 10})
-    conn1.send(json.dumps(request))
+    request_json = json.dumps(request) if use_json else request
+    conn1.send(request_json)
 
     if conn1.poll(timeout=0.5):
         response = conn1.recv()
-        response = json.loads(response)
+        response = json.loads(response) if use_json else response
         assert response["error"]["code"] == -32602, f"Incorrect error reported: {response}"
     else:
         assert False, "Timeout occurred while waiting for response."
 
     # ------- Non-existing method ('Method not found' error) -------
     request = format_jsonrpc_msg("method_handler3", {"value": 5})
-    conn1.send(json.dumps(request))
+    request_json = json.dumps(request) if use_json else request
+    conn1.send(request_json)
 
     if conn1.poll(timeout=0.5):
         response = conn1.recv()
-        response = json.loads(response)
+        response = json.loads(response) if use_json else response
         assert response["error"]["code"] == -32601, f"Incorrect error reported: {response}"
     else:
         assert False, "Timeout occurred while waiting for response."
@@ -386,7 +412,10 @@ def test_PipeJsonRpcReceive_6_failing():
     pc.stop()
 
 
-def test_PipeJsonRpcReceive_7_failing():
+# fmt: off
+@pytest.mark.parametrize("use_json", [False, True])
+# fmt: on
+def test_PipeJsonRpcReceive_7_failing(use_json):
     """
     Exception is raised inside the handler is causing 'Server Error' -32000.
     Returns error type (Exception type) and message. It is questionable whether
@@ -401,16 +430,17 @@ def test_PipeJsonRpcReceive_7_failing():
         raise RuntimeError("Function crashed ...")
 
     conn1, conn2 = multiprocessing.Pipe()
-    pc = PipeJsonRpcReceive(conn=conn2)
+    pc = PipeJsonRpcReceive(conn=conn2, use_json=use_json)
     pc.add_method(method_handler5, "method5")
     pc.start()
 
     request = format_jsonrpc_msg("method5")
-    conn1.send(json.dumps(request))
+    request_json = json.dumps(request) if use_json else request
+    conn1.send(request_json)
 
     if conn1.poll(timeout=0.5):  # Set timeout large enough
         response = conn1.recv()
-        response = json.loads(response)
+        response = json.loads(response) if use_json else response
         assert response["error"]["code"] == -32000, f"Incorrect error reported: {response}"
         assert response["error"]["data"]["type"] == "RuntimeError", "Incorrect error type."
         assert response["error"]["data"]["message"] == "Function crashed ...", "Incorrect message."
@@ -420,7 +450,10 @@ def test_PipeJsonRpcReceive_7_failing():
     pc.stop()
 
 
-def test_PipeJsonRpcReceive_8_failing():
+# fmt: off
+@pytest.mark.parametrize("use_json", [False, True])
+# fmt: on
+def test_PipeJsonRpcReceive_8_failing(use_json):
     """
     This is an example of handler to timeout. 'json-rpc' package can not handle timeouts.
     Care must be taken to write handles that execute quickly. Timeouts must be handled
@@ -433,14 +466,14 @@ def test_PipeJsonRpcReceive_8_failing():
         ttime.sleep(3)  # Longer than 'poll' timeout
 
     conn1, conn2 = multiprocessing.Pipe()
-    pc = PipeJsonRpcReceive(conn=conn2)
+    pc = PipeJsonRpcReceive(conn=conn2, use_json=use_json)
     pc.add_method(method_handler6, "method6")
     pc.start()
 
     # Non-existing method ('Method not found' error)
     request = format_jsonrpc_msg("method6")
-
-    conn1.send(json.dumps(request))
+    request_json = json.dumps(request) if use_json else request
+    conn1.send(request_json)
 
     if conn1.poll(timeout=0.5):  # Set timeout large enough
         assert False, "The test is expected to timeout."
@@ -454,12 +487,15 @@ def test_PipeJsonRpcReceive_8_failing():
 #                       Class PipeJsonRpcSendAsync
 
 
-def test_PipeJsonRpcSendAsync_1():
+# fmt: off
+@pytest.mark.parametrize("use_json", [False, True])
+# fmt: on
+def test_PipeJsonRpcSendAsync_1(use_json):
     """
     Create, start and stop `PipeJsonRpcReceive` object
     """
     conn1, conn2 = multiprocessing.Pipe()
-    new_name = "Unusual Thread Name"
+    new_name = f"Unusual Thread Name ({use_json})"
 
     async def object_start_stop():
         assert count_threads_with_name(new_name) == 0, "No threads are expected to exist"
@@ -481,6 +517,8 @@ def test_PipeJsonRpcSendAsync_1():
     asyncio.run(object_start_stop())
 
 
+# fmt: off
+@pytest.mark.parametrize("use_json", [False, True])
 @pytest.mark.parametrize(
     "method, params, result, notification",
     [
@@ -497,7 +535,8 @@ def test_PipeJsonRpcSendAsync_1():
         ("method4", {}, 19, False),
     ],
 )
-def test_PipeJsonRpcSendAsync_2(method, params, result, notification):
+# fmt: on
+def test_PipeJsonRpcSendAsync_2(method, params, result, notification, use_json):
     """
     Test of basic functionality. Here we don't test for timeout case (it raises an exception).
     """
@@ -527,7 +566,7 @@ def test_PipeJsonRpcSendAsync_2(method, params, result, notification):
     some_class = SomeClass()
 
     conn1, conn2 = multiprocessing.Pipe()
-    pc = PipeJsonRpcReceive(conn=conn2, name="comm-server")
+    pc = PipeJsonRpcReceive(conn=conn2, name="comm-server", use_json=use_json)
     pc.add_method(method_handler1, "method1")
     pc.add_method(method_handler2, "method2")
     pc.add_method(method_handler3, "method3")
@@ -537,7 +576,7 @@ def test_PipeJsonRpcSendAsync_2(method, params, result, notification):
     async def send_messages():
         nonlocal value_nonlocal
 
-        p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client")
+        p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client", use_json=use_json)
         p_send.start()
 
         for n in range(3):
@@ -556,7 +595,10 @@ def test_PipeJsonRpcSendAsync_2(method, params, result, notification):
     pc.stop()
 
 
-def test_PipeJsonRpcSendAsync_3():
+# fmt: off
+@pytest.mark.parametrize("use_json", [False, True])
+# fmt: on
+def test_PipeJsonRpcSendAsync_3(use_json):
     """
     Put multiple messages to the loop at once. The should be processed one by one.
     """
@@ -572,12 +614,12 @@ def test_PipeJsonRpcSendAsync_3():
         return n_return
 
     conn1, conn2 = multiprocessing.Pipe()
-    pc = PipeJsonRpcReceive(conn=conn2, name="comm-server")
+    pc = PipeJsonRpcReceive(conn=conn2, name="comm-server", use_json=use_json)
     pc.add_method(method_handler1, "method1")
     pc.start()
 
     async def send_messages():
-        p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client")
+        p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client", use_json=use_json)
         p_send.start()
 
         # Submit multiple messages at once. Messages should stay at the event loop
@@ -597,7 +639,10 @@ def test_PipeJsonRpcSendAsync_3():
     pc.stop()
 
 
-def test_PipeJsonRpcSendAsync_4():
+# fmt: off
+@pytest.mark.parametrize("use_json", [False, True])
+# fmt: on
+def test_PipeJsonRpcSendAsync_4(use_json):
     """
     Message timeout.
     """
@@ -606,12 +651,12 @@ def test_PipeJsonRpcSendAsync_4():
         ttime.sleep(1)
 
     conn1, conn2 = multiprocessing.Pipe()
-    pc = PipeJsonRpcReceive(conn=conn2, name="comm-server")
+    pc = PipeJsonRpcReceive(conn=conn2, name="comm-server", use_json=use_json)
     pc.add_method(method_handler1, "method1")
     pc.start()
 
     async def send_messages():
-        p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client")
+        p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client", use_json=use_json)
         p_send.start()
 
         # Submit multiple messages at once. Messages should stay at the event loop
@@ -625,7 +670,10 @@ def test_PipeJsonRpcSendAsync_4():
     pc.stop()
 
 
-def test_PipeJsonRpcSendAsync_5():
+# fmt: off
+@pytest.mark.parametrize("use_json", [False, True])
+# fmt: on
+def test_PipeJsonRpcSendAsync_5(use_json):
     """
     Special test case.
     Two messages: the first message times out, the second message is send before the response
@@ -642,13 +690,13 @@ def test_PipeJsonRpcSendAsync_5():
         return 56
 
     conn1, conn2 = multiprocessing.Pipe()
-    pc = PipeJsonRpcReceive(conn=conn2, name="comm-server")
+    pc = PipeJsonRpcReceive(conn=conn2, name="comm-server", use_json=use_json)
     pc.add_method(method_handler1, "method1")
     pc.add_method(method_handler2, "method2")
     pc.start()
 
     async def send_messages():
-        p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client")
+        p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client", use_json=use_json)
         p_send.start()
 
         # Submit multiple messages at once. Messages should stay at the event loop
@@ -679,7 +727,10 @@ class _PipeJsonRpcReceiveTest(PipeJsonRpcReceive):
             self._conn.send(response)
 
 
-def test_PipeJsonRpcSendAsync_6(caplog):
+# fmt: off
+@pytest.mark.parametrize("use_json", [False, True])
+# fmt: on
+def test_PipeJsonRpcSendAsync_6(caplog, use_json):
     """
     Special test case.
     The receiving process responds with multiple replies (3) to a single request. Check that
@@ -692,12 +743,12 @@ def test_PipeJsonRpcSendAsync_6(caplog):
         return 39
 
     conn1, conn2 = multiprocessing.Pipe()
-    pc = _PipeJsonRpcReceiveTest(conn=conn2, name="comm-server")
+    pc = _PipeJsonRpcReceiveTest(conn=conn2, name="comm-server", use_json=use_json)
     pc.add_method(method_handler1, "method1")
     pc.start()
 
     async def send_messages():
-        p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client")
+        p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client", use_json=use_json)
         p_send.start()
 
         result = await p_send.send_msg("method1", timeout=0.5)
@@ -715,7 +766,10 @@ def test_PipeJsonRpcSendAsync_6(caplog):
     assert caplog.text.count(txt) == 2, caplog.text
 
 
-def test_PipeJsonRpcSendAsync_7_fail():
+# fmt: off
+@pytest.mark.parametrize("use_json", [False, True])
+# fmt: on
+def test_PipeJsonRpcSendAsync_7_fail(use_json):
     """
     Exception raised inside the method.
     """
@@ -724,12 +778,12 @@ def test_PipeJsonRpcSendAsync_7_fail():
         raise RuntimeError("Function crashed ...")
 
     conn1, conn2 = multiprocessing.Pipe()
-    pc = PipeJsonRpcReceive(conn=conn2, name="comm-server")
+    pc = PipeJsonRpcReceive(conn=conn2, name="comm-server", use_json=use_json)
     pc.add_method(method_handler1, "method1")
     pc.start()
 
     async def send_messages():
-        p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client")
+        p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client", use_json=use_json)
         p_send.start()
 
         # Submit multiple messages at once. Messages should stay at the event loop
@@ -743,7 +797,10 @@ def test_PipeJsonRpcSendAsync_7_fail():
     pc.stop()
 
 
-def test_PipeJsonRpcSendAsync_8_fail():
+# fmt: off
+@pytest.mark.parametrize("use_json", [False, True])
+# fmt: on
+def test_PipeJsonRpcSendAsync_8_fail(use_json):
     """
     Method not found (other `json-rpc` errors will raise the same exception).
     """
@@ -752,12 +809,12 @@ def test_PipeJsonRpcSendAsync_8_fail():
         pass
 
     conn1, conn2 = multiprocessing.Pipe()
-    pc = PipeJsonRpcReceive(conn=conn2, name="comm-server")
+    pc = PipeJsonRpcReceive(conn=conn2, name="comm-server", use_json=use_json)
     pc.add_method(method_handler1, "method1")
     pc.start()
 
     async def send_messages():
-        p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client")
+        p_send = PipeJsonRpcSendAsync(conn=conn1, name="comm-client", use_json=use_json)
         p_send.start()
 
         # Submit multiple messages at once. Messages should stay at the event loop

@@ -49,6 +49,26 @@ class PQ:
         await self._pq.stop_pending_clear()
 
 
+def test_pq_start_stop():
+    """
+    Test for the ``PlanQueueOperations.start()`` and ``PlanQueueOperations.stop()``
+    """
+
+    async def testing():
+        pq = PlanQueueOperations(name_prefix=_test_redis_name_prefix)
+        await pq.start()
+        await pq._r_pool.ping()
+        await pq.stop()
+        assert pq._r_pool is None
+
+        await pq.start()
+        await pq._r_pool.ping()
+        await pq.stop()
+        assert pq._r_pool is None
+
+    asyncio.run(testing())
+
+
 # fmt: off
 @pytest.mark.parametrize("item_in, item_out", [
     ({"name": "plan1", "item_uid": "abcde"}, {"name": "plan1", "item_uid": "abcde"}),

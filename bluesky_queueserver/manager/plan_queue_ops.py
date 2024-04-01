@@ -65,6 +65,9 @@ class PlanQueueOperations:
         # Assume that we paused and then stopped the plan. Clear the running plan and
         #   push it back to the queue. Also create the respective history entry.
         plan = await pq.set_processed_item_as_stopped(exit_status="stopped")
+
+        # 'stopping' disconnects all connections. This step is not required in normal use.
+        await pq.stop()
     """
 
     def __init__(self, redis_host="localhost", name_prefix="qs_default"):
@@ -272,6 +275,14 @@ class PlanQueueOperations:
 
                 self._plan_queue_uid = self.new_item_uid()
                 self._plan_history_uid = self.new_item_uid()
+
+    async def stop(self):
+        """
+        Close all connections in the pool.
+        """
+        if self._r_pool:
+            await self._r_pool.aclose()
+            self._r_pool = None
 
     async def _queue_clean(self):
         """

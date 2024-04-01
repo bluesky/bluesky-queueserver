@@ -3,6 +3,8 @@ import atexit
 import logging
 import os
 import re
+import signal
+import sys
 import threading
 import time as ttime
 from multiprocessing import Pipe, Queue
@@ -56,7 +58,7 @@ class WatchdogProcess:
 
         # Class that supports communication over the pipe
         self._comm_to_manager = PipeJsonRpcReceive(
-            conn=self._watchdog_to_manager_conn, name="RE Watchdog-Manager Comm"
+            conn=self._watchdog_to_manager_conn, use_json=False, name="RE Watchdog-Manager Comm"
         )
 
         self._watchdog_state = 0  # State is currently just time since last notification
@@ -222,7 +224,58 @@ class WatchdogProcess:
         logger.info("RE Watchdog is stopped")
 
 
+class AtTerm:
+    def __init__(self):
+        """
+        Replaces the standard handler for SIGTERM (not SIGKILL). Executes the list of
+        registered functions before calling the standard handler.
+
+        Examples
+        --------
+
+        .. code-block::
+
+            # Configuring the AtTerm object
+            atterm = AtTerm()
+
+            # Somewhere at the beginning of the program
+            atterm.replace_sigterm_handler()
+
+            # Register functions to be executed at SIGTERM
+            def cleanup():
+                # <some code>
+
+            atterm.register(cleanup)
+        """
+        self._sigterm_standard_handler = None
+        self._registered_funcs = []
+
+    def _sigterm_custom_handler(self, signum, frame):
+        logger.info("Terminating the process ...")
+        for func in reversed(self._registered_funcs):
+            func()
+        signal.signal(signal.SIGTERM, self._sigterm_standard_handler)
+        sys.exit(1)
+
+    def replace_sigterm_handler(self):
+        """
+        Replaces standard handler for SIGTERM with the custom handler. The custom
+        handler calls the standard handler after calling all registered functions
+        in the reverse order.
+        """
+        self._sigterm_standard_handler = signal.getsignal(signal.SIGTERM)
+        signal.signal(signal.SIGTERM, self._sigterm_custom_handler)
+
+    def register(self, func):
+        """
+        Register a function (signature has no parameters and returns no values).
+        Registered functions are executed in reverse order when processing 'SIGTERM'.
+        """
+        self._registered_funcs.append(func)
+
+
 def start_manager():
+
     s_enc = (
         "Encryption for ZeroMQ communication server may be enabled by setting the value of\n"
         "'QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER' environment variable to a valid private key\n"
@@ -236,6 +289,9 @@ def start_manager():
     def formatter(prog):
         # Set maximum width such that printed help mostly fits in the RTD theme code block (documentation).
         return argparse.RawDescriptionHelpFormatter(prog, max_help_position=20, width=90)
+
+    atterm = AtTerm()
+    atterm.replace_sigterm_handler()
 
     parser = argparse.ArgumentParser(
         description=f"Start Run Engine (RE) Manager\nbluesky-queueserver version {__version__}\n\n{s_enc}",
@@ -799,6 +855,7 @@ def start_manager():
 
         # Make sure that all processes are killed before exit
         atexit.register(kill_all_processes)
+        atterm.register(kill_all_processes)
 
         wp.run()
     except KeyboardInterrupt:

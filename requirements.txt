@@ -3,7 +3,6 @@ bluesky-kafka
 databroker
 event-model
 ipykernel
-json-rpc
 jsonschema
 jupyter-client>=7.4.2
 jupyter-console
@@ -15,6 +14,8 @@ numpydoc
 openpyxl
 ophyd
 packaging
+pandas
+pyarrow
 pydantic
 python-multipart
 pyyaml

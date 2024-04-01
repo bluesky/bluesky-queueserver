@@ -3634,10 +3634,12 @@ class RunEngineManager(Process):
 
         self._comm_to_watchdog = PipeJsonRpcSendAsync(
             conn=self._watchdog_conn,
+            use_json=False,
             name="RE Manager-Watchdog Comm",
         )
         self._comm_to_worker = PipeJsonRpcSendAsync(
             conn=self._worker_conn,
+            use_json=False,
             name="RE Manager-Worker Comm",
             timeout=self._comm_to_worker_timeout,
         )
@@ -3814,6 +3816,7 @@ class RunEngineManager(Process):
                 self._heartbeat_generator_task.cancel()
                 self._comm_to_watchdog.stop()
                 self._comm_to_worker.stop()
+                await self._plan_queue.stop()
                 self._zmq_socket.close()
                 logger.info("RE Manager was stopped by ZMQ command.")
                 break

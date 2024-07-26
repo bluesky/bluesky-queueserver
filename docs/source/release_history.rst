@@ -2,6 +2,47 @@
 Release History
 ===============
 
+v0.0.20 (2024-07-25)
+====================
+
+Added
+-----
+
+- Compatibility with Pydantic v2 and Python 3.12.
+
+- New default parameter types: ``__READABLE__``, ``__MOVABLE__``, ``__FLYABLE__`` and ``__CALLABLE__``.
+
+- Support for ``bluesky.protocols.Readable``, ``bluesky.protocols.Movable``, ``bluesky.protocols.Flyable``,
+  ``collections.abc.Callable`` and ``typing.Callable`` in plan headers.
+
+- Extemded support of types in plan annotation. New supported types: ``typing.Iterable``,
+  ``bluesky.protocols.Configurable``, ``bluesky.protocols.Triggerable``, ``bluesky.protocols.Locatable``,
+  ``bluesky.protocols.Stageable``, ``bluesky.protocols.Pausable``, ``bluesky.protocols.Stoppable``,
+  ``bluesky.protocols.Subscribable``, ``bluesky.protocols.Checkable``.
+
+- RE Manager is now adding a prefix to each Redis key name. The default prefix is ``qs_default``.
+  Custom prefix can be passed with ``--redis-name-prefix`` CLI parameter or set as ```network/redis_name_prefix```
+  parameter in YML config file.
+
+Changed
+-------
+
+- The temporary directory created by RE Manager in demo mode if IPython kernel option is enabled is
+  renamed from ``qserver`` to ``qserver_<username>``, so that each user has individual temporary directory.
+  The directory is used to create temporary copy of ``profile_collection_sim`` in demo mode.
+  It is never used in production.
+
+- By default, RE Manager is adding ``qs_default`` prefix to each Redis key. To access plan queue and history
+  created by older versions of RE Manager, pass ``""`` (empty string) to ``--redis-name-prefix`` CLI parameter
+  or ``network/redis_name_prefix`` parameter in the YML config file.
+
+Fixed
+-----
+
+- The name of temporary directory used by ``qserver-console`` and ``qserver-qtconsole`` to store IPython kernel
+  config file now contains user name (``/tmp/qserver_<username>/kernel_files``).
+
+
 v0.0.19 (2023-06-28)
 ====================
 

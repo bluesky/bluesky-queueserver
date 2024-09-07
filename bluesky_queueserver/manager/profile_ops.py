@@ -21,10 +21,9 @@ from collections.abc import Iterable, Mapping
 import jsonschema
 import pydantic
 import yaml
+from bluesky.utils import is_plan
 from numpydoc.docscrape import NumpyDocString
 from packaging import version
-
-from bluesky.utils import is_plan
 
 import bluesky_queueserver
 

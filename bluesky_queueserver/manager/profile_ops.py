@@ -24,6 +24,8 @@ import yaml
 from numpydoc.docscrape import NumpyDocString
 from packaging import version
 
+from bluesky.utils import is_plan
+
 import bluesky_queueserver
 
 from .logging_setup import PPrintForLogging as ppfl
@@ -687,13 +689,6 @@ def load_script_into_existing_nspace(
                     del sys.modules[key]
 
             sys.path.remove(script_root_path)
-
-
-def is_plan(obj):
-    """
-    Returns ``True`` if the object is a plan.
-    """
-    return inspect.isgeneratorfunction(obj)
 
 
 def is_device(obj):

@@ -697,6 +697,7 @@ def is_plan(obj):
     try:
         # If available, use is_plan from bs utils to catch plans with new decorator.
         from bluesky.utils import is_plan as bs_utils_is_plan
+
         return bs_utils_is_plan(obj)
     except ImportError:
         return inspect.isgeneratorfunction(obj)

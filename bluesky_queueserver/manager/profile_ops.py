@@ -21,7 +21,6 @@ from collections.abc import Iterable, Mapping
 import jsonschema
 import pydantic
 import yaml
-from bluesky.utils import is_plan
 from numpydoc.docscrape import NumpyDocString
 from packaging import version
 
@@ -688,6 +687,19 @@ def load_script_into_existing_nspace(
                     del sys.modules[key]
 
             sys.path.remove(script_root_path)
+
+
+def is_plan(obj):
+    """
+    Returns ``True`` if the object is a plan.
+    """
+
+    try:
+        # If available, use is_plan from bs utils to catch plans with new decorator.
+        from bluesky.utils import is_plan as bs_utils_is_plan
+        return bs_utils_is_plan(obj)
+    except ImportError:
+        return inspect.isgeneratorfunction(obj)
 
 
 def is_device(obj):

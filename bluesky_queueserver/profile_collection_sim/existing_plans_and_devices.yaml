@@ -2049,6 +2049,60 @@ existing_plans:
       step: '0.01'
     properties:
       is_generator: true
+  mv:
+    description: Move one or more devices to a setpoint. Wait for all to complete.
+    module: bluesky.plan_stubs
+    name: mv
+    parameters:
+    - description: device1, value1, device2, value2, ...
+      kind:
+        name: VAR_POSITIONAL
+        value: 2
+      name: args
+    - default: None
+      description: Used to mark these as a unit to be waited on.
+      kind:
+        name: KEYWORD_ONLY
+        value: 3
+      name: group
+    - description: passed to obj.set()
+      kind:
+        name: VAR_KEYWORD
+        value: 4
+      name: kwargs
+    properties:
+      is_generator: true
+  mvr:
+    description: Move one or more devices to a relative setpoint. Wait for all to
+      complete.
+    module: bluesky.plan_stubs
+    name: mvr
+    parameters:
+    - description: device1, value1, device2, value2, ...
+      kind:
+        name: VAR_POSITIONAL
+        value: 2
+      name: args
+    - default: None
+      description: Used to mark these as a unit to be waited on.
+      kind:
+        name: KEYWORD_ONLY
+        value: 3
+      name: group
+    - description: passed to obj.set()
+      kind:
+        name: VAR_KEYWORD
+        value: 4
+      name: kwargs
+    properties:
+      is_generator: true
+  'null':
+    description: Yield a no-op Message. (Primarily for debugging and testing.)
+    module: bluesky.plan_stubs
+    name: 'null'
+    parameters: []
+    properties:
+      is_generator: true
   plan_test_progress_bars:
     description: Test visualization of progress bars.
     module: __main__

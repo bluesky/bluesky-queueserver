@@ -3760,7 +3760,7 @@ def test_construct_parameters_1(testmode, success, errmsg):
 # ---------------------------------------------------------------------------------
 
 
-def test_plans_from_nspace():
+def test_plans_from_nspace_1():
     """
     Function 'plans_from_nspace' is extracting a subset of callable items from the namespace
     """
@@ -3769,6 +3769,18 @@ def test_plans_from_nspace():
     plans = plans_from_nspace(nspace)
     for name, plan in plans.items():
         assert callable(plan), f"Plan '{name}' is not callable"
+
+
+def test_plans_from_nspace_2():
+    """
+    Function 'plans_from_nspace' is extracting a subset of callable items from the namespace
+    """
+    pc_path = get_default_startup_dir()
+    nspace = load_profile_collection(pc_path)
+    plans = plans_from_nspace(nspace)
+    assert "mv" in plans
+    assert "mvr" in plans
+    assert "null" in plans
 
 
 def test_devices_from_nspace():

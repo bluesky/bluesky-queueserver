@@ -2,6 +2,15 @@
 Release History
 ===============
 
+v0.0.21 (2024-09-29)
+====================
+
+Fixed
+-----
+
+- Bluesky builtin plans that use the ``@plan`` decorator are now correctly identified by queueserver.
+
+
 v0.0.20 (2024-07-25)
 ====================
 

@@ -22,3 +22,5 @@ sphinx
 sphinx_rtd_theme
 # Extra dependencies for development
 fastapi[all]
+pandas
+pyarrow

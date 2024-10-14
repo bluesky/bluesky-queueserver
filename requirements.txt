@@ -14,8 +14,6 @@ numpydoc
 openpyxl
 ophyd
 packaging
-pandas
-pyarrow
 pydantic
 python-multipart
 pyyaml

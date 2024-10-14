@@ -463,8 +463,6 @@ class RunEngineWorker(Process):
         plan_info = parameters
 
         try:
-            from bluesky.preprocessors import subs_wrapper
-
             with self._allowed_items_lock:
                 allowed_plans, allowed_devices = self._allowed_plans, self._allowed_devices
 
@@ -492,8 +490,11 @@ class RunEngineWorker(Process):
 
             def get_start_plan_func(plan_func, plan_args, plan_kwargs, plan_meta):
                 def start_plan_func():
-                    g = subs_wrapper(plan_func(*plan_args, **plan_kwargs), {"all": [self._run_reg_cb]})
-                    return self._RE(g, **plan_meta)
+                    return self._RE(
+                        plan_func(*plan_args, **plan_kwargs),
+                        {"all": [self._run_reg_cb]},
+                        **plan_meta
+                    )
 
                 return start_plan_func
 

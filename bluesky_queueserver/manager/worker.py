@@ -490,11 +490,7 @@ class RunEngineWorker(Process):
 
             def get_start_plan_func(plan_func, plan_args, plan_kwargs, plan_meta):
                 def start_plan_func():
-                    return self._RE(
-                        plan_func(*plan_args, **plan_kwargs),
-                        {"all": [self._run_reg_cb]},
-                        **plan_meta
-                    )
+                    return self._RE(plan_func(*plan_args, **plan_kwargs), {"all": [self._run_reg_cb]}, **plan_meta)
 
                 return start_plan_func
 

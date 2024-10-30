@@ -2938,9 +2938,16 @@ def _process_plan(plan, *, existing_devices, existing_plans):
             Triggerable,
         )
 
+        # TODO: remove try-except block when 'bluesky.protocols.NamedMovable' is
+        # available in every Bluesky deployment
+        try:
+            from bluesky.protocols import NamedMovable
+        except ImportError:
+            NamedMovable = Movable
+
         protocols_mapping = {
             "__READABLE__": [Readable],
-            "__MOVABLE__": [Movable],
+            "__MOVABLE__": [Movable, NamedMovable],
             "__FLYABLE__": [Flyable],
             "__DEVICE__": [
                 Configurable,
@@ -3301,9 +3308,14 @@ def _prepare_devices(devices, *, max_depth=0, ignore_all_subdevices_if_one_fails
     from ophyd.areadetector import ADBase
 
     def get_device_params(device):
+        movable_protocols = [protocols.Movable]
+        # TODO: remove this check when NamedMovable is available in every Bluesky deployment
+        if hasattr(protocols, "NamedMovable"):
+            movable_protocols.append(protocols.NamedMovable)
+
         return {
             "is_readable": isinstance(device, protocols.Readable),
-            "is_movable": isinstance(device, protocols.Movable),
+            "is_movable": isinstance(device, movable_protocols),
             "is_flyable": isinstance(device, protocols.Flyable),
             "classname": type(device).__name__,
             "module": type(device).__module__,

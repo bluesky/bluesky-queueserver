@@ -36,8 +36,7 @@ jobs:
         # installation problems if out of date.
         python -m pip install --upgrade pip setuptools numpy
 
-        pip install .
-        pip install -r requirements-dev.txt
+        pip install .[all]
         pip install "pydantic${{ matrix.pydantic-version }}"
         pip install bluesky==1.11.0
 

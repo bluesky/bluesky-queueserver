@@ -20,7 +20,9 @@ This may be due to an out-of-date pip. Make sure you have pip >= 9.0.1.
 Upgrade pip like so:
 
 pip install --upgrade pip
-""".format(*(sys.version_info[:2] + min_version))
+""".format(
+        *(sys.version_info[:2] + min_version)
+    )
     sys.exit(error)
 
 here = path.abspath(path.dirname(__file__))
@@ -30,24 +32,16 @@ with open(path.join(here, "README.rst"), encoding="utf-8") as readme_file:
 
 with open(path.join(here, "requirements.txt")) as requirements_file:
     # Parse requirements.txt, ignoring any commented-out lines.
-    requirements = [
-        line
-        for line in requirements_file.read().splitlines()
-        if not line.startswith("#")
-    ]
+    requirements = [line for line in requirements_file.read().splitlines() if not line.startswith("#")]
 
 with open(path.join(here, "requirements-dev.txt")) as requirements_file:
     # Parse requirements.txt, ignoring any commented-out lines.
-    requirements_dev = [
-        line
-        for line in requirements_file.read().splitlines()
-        if not line.startswith("#")
-    ]
+    requirements_dev = [line for line in requirements_file.read().splitlines() if not line.startswith("#")]
 
 requirements_kafka = ["bluesky-kafka"]
 
 extras_require = {"dev": sorted(set(requirements_dev)), "kafka": requirements_kafka}
-extras_require["all"] = sort(set(sum(extras_require.values())))
+extras_require["all"] = sorted(set(sum(extras_require.values(), [])))
 
 
 setup(

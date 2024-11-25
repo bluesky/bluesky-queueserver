@@ -1,5 +1,6 @@
 import argparse
 import atexit
+import importlib
 import logging
 import os
 import re
@@ -626,6 +627,13 @@ def start_manager():
             "Parameter --zmq-publish-console-addr is deprecated and will be removed in future releases. "
             "Use --zmq-info-addr instead."
         )
+
+    if settings.kafka_topic is not None or settings.kafka_server is not None:
+        if importlib.util.find_spec("bluesky-kafka") is None:
+            logger.error(
+                "Must have bluesky-kafka installed to publish documents to kafka",
+            )
+        sys.exit(1)
 
     msg_queue = Queue()
     setup_console_output_redirection(msg_queue)

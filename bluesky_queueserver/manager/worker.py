@@ -1394,7 +1394,6 @@ class RunEngineWorker(Process):
         from bluesky import RunEngine
         from bluesky.callbacks.best_effort import BestEffortCallback
         from bluesky.utils import PersistentDict
-        from bluesky_kafka import Publisher as kafkaPublisher
 
         from .profile_tools import global_user_namespace
 
@@ -1511,6 +1510,8 @@ class RunEngineWorker(Process):
                             self._RE.subscribe(self._db.insert)
 
                 if "kafka" in self._config_dict:
+                    from bluesky_kafka import Publisher as kafkaPublisher
+
                     logger.info(
                         "Subscribing to Kafka: topic '%s', servers '%s'",
                         self._config_dict["kafka"]["topic"],

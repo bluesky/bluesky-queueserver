@@ -1794,20 +1794,28 @@ class RunEngineWorker(Process):
             # Echo all the output to sys.__stdout__ and sys.__stderr__ during kernel initialization
             self._ip_kernel_app.quiet = False
 
-            # TODO: add type hints and check for exceptions for the socket connection
-            def find_kernel_ip(ip_str):
+            def find_kernel_ip(ip_str: str) -> str:
+                """Find the IP address to use for the IPython kernel."""
                 if ip_str == "localhost":
-                    ip = "127.0.0.1"
-                elif ip_str == "auto":
-                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                    s.connect(("8.8.8.8", 80))
-                    ip = s.getsockname()[0]
-                else:
-                    ip = ip_str
-                return ip
+                    return "127.0.0.1"
+                    
+                if ip_str != "auto":
+                    return ip_str
+                    
+                # Try to determine IP automatically
+                try:
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    sock.connect(("8.8.8.8", 80))
+                    ip_address = sock.getsockname()[0]
+                    sock.close()
+                    return str(ip_address)
+                    
+                except Exception as e:
+                    logger.error("Error determining IP automatically: %s", str(e))
+                    return "127.0.0.1"  # Fallback to localhost
 
-            logger.info("Generating random port numbers for IPython kernel ...")
-            kernel_ip = self._config_dict["ipython_kernel_ip"]
+            logger.info("Attempting to set the ip-address of IPython kernel ...")
+            kernel_ip: str = self._config_dict["ipython_kernel_ip"]
             kernel_ip = find_kernel_ip(kernel_ip)
             self._ip_kernel_app.ip = kernel_ip
 

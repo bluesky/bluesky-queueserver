@@ -184,7 +184,6 @@ class RunEngineWorker(Process):
 
         self._use_ipython_kernel = self._config_dict["use_ipython_kernel"]
         self._ip_kernel_app = None  # Reference to IPKernelApp, None if IPython is not used
-        self._ip_connect_file = ""  # Filename with connection info for the running IP kernel
         self._ip_kernel_client = None  # Kernel client for communication with IP kernel.
         self._ip_kernel_state = IPKernelState.DISABLED
         self._ip_kernel_monitor_stop = False
@@ -1853,8 +1852,6 @@ class RunEngineWorker(Process):
                 self._ip_kernel_monitor_always_allow_types = ["stream", "error", "execute_result"]
                 collected_tracebacks = self._ip_kernel_monitor_collected_tracebacks
                 self._ip_kernel_monitor_collected_tracebacks = None
-
-                self._ip_connect_file = self._ip_kernel_app.connection_file
 
                 # This is a very naive idea: if no exceptions were raised during kernel initialization
                 #   the we consider that startup code was loaded and the environment is fully functional

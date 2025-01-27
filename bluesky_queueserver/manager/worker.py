@@ -1857,8 +1857,6 @@ class RunEngineWorker(Process):
 
                 # Disable echoing, since startup code is already loaded
                 self._ip_kernel_app.quiet = True
-                # TODO: check whether this this call is required. `self._ip_kernel_app.initialize([])` calls `init_io` internally. 
-                self._ip_kernel_app.init_io()
 
                 # Print connect info for the kernel (after kernel initialization)
                 logger.info("IPython kernel connection info:\n %r", ppfl(self._request_ip_connect_info().get("ip_connect_info")))

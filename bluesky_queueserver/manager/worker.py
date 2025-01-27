@@ -1826,10 +1826,11 @@ class RunEngineWorker(Process):
             if self._success_startup:
 
                 def start_jupyter_client():
-                    from jupyter_client import BlockingKernelClient
+                    # from jupyter_client import BlockingKernelClient
 
-                    self._ip_kernel_client = BlockingKernelClient()
-                    self._ip_kernel_client.load_connection_info(self._ip_connect_info)
+                    # self._ip_kernel_client = BlockingKernelClient()
+                    # self._ip_kernel_client.load_connection_info(self._ip_connect_info)
+                    self._ip_kernel_client = self._ip_kernel_app.blocking_client()
                     logger.info(
                         "Session ID for communication with IP kernel: %s", self._ip_kernel_client.session.session
                     )
@@ -1842,8 +1843,6 @@ class RunEngineWorker(Process):
                     )
                     ip_kernel_iopub_monitor_thread.start()
 
-                start_jupyter_client()
-
                 self._ip_kernel_monitor_always_allow_types = ["error"]
                 self._ip_kernel_monitor_collected_tracebacks = []
 
@@ -1853,7 +1852,11 @@ class RunEngineWorker(Process):
                 self._ip_kernel_app.initialize([])
                 logger.info("IPython kernel initialization is complete.")
 
+                self._ip_connect_info = self._ip_kernel_app.get_connection_info()
+
                 ttime.sleep(0.2)  # Wait until the error message are delivered (if startup fails)
+
+                start_jupyter_client()
 
                 self._ip_kernel_monitor_always_allow_types = ["stream", "error", "execute_result"]
                 collected_tracebacks = self._ip_kernel_monitor_collected_tracebacks

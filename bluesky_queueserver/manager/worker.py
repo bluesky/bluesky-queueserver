@@ -1762,8 +1762,6 @@ class RunEngineWorker(Process):
 
             from ipykernel.kernelapp import IPKernelApp
 
-            from .utils import generate_random_port
-
             self._re_namespace["___ip_execution_loop_start___"] = self._run_loop_ipython
             self._re_namespace["___ip_kernel_startup_init___"] = self._ip_kernel_startup_init
             self._ip_kernel_app = IPKernelApp.instance(user_ns=self._re_namespace)
@@ -1811,18 +1809,8 @@ class RunEngineWorker(Process):
 
             logger.info("Generating random port numbers for IPython kernel ...")
             kernel_ip = self._config_dict["ipython_kernel_ip"]
-            try:
-                kernel_ip = find_kernel_ip(kernel_ip)
-                self._ip_kernel_app.ip = kernel_ip
-                self._ip_kernel_app.shell_port = generate_random_port(kernel_ip)
-                self._ip_kernel_app.iopub_port = generate_random_port(kernel_ip)
-                self._ip_kernel_app.stdin_port = generate_random_port(kernel_ip)
-                self._ip_kernel_app.hb_port = generate_random_port(kernel_ip)
-                self._ip_kernel_app.control_port = generate_random_port(kernel_ip)
-                self._ip_connect_info = self._ip_kernel_app.get_connection_info()
-            except Exception as ex:
-                self._success_startup = False
-                logger.error("Failed to generates kernel ports for IP %r: %s", kernel_ip, ex)
+            kernel_ip = find_kernel_ip(kernel_ip)
+            self._ip_kernel_app.ip = kernel_ip
 
             if self._success_startup:
 

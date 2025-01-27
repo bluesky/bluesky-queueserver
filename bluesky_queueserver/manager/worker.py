@@ -1797,10 +1797,10 @@ class RunEngineWorker(Process):
                 """Find the IP address to use for the IPython kernel."""
                 if ip_str == "localhost":
                     return "127.0.0.1"
-                    
+
                 if ip_str != "auto":
                     return ip_str
-                    
+
                 # Try to determine IP automatically
                 try:
                     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -1808,7 +1808,7 @@ class RunEngineWorker(Process):
                     ip_address = sock.getsockname()[0]
                     sock.close()
                     return str(ip_address)
-                    
+
                 except Exception as e:
                     logger.error("Error determining IP automatically: %s", str(e))
                     return "127.0.0.1"  # Fallback to localhost
@@ -1837,7 +1837,6 @@ class RunEngineWorker(Process):
 
                 self._ip_kernel_monitor_always_allow_types = ["error"]
                 self._ip_kernel_monitor_collected_tracebacks = []
-
 
                 logger.info("Initializing IPython kernel ...")
                 self._ip_kernel_app.initialize([])

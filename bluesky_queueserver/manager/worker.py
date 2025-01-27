@@ -1797,6 +1797,7 @@ class RunEngineWorker(Process):
             # Echo all the output to sys.__stdout__ and sys.__stderr__ during kernel initialization
             self._ip_kernel_app.quiet = False
 
+            # TODO: add type hints and check for exceptions for the socket connection ... not every host hast access to 8.8.8.8
             def find_kernel_ip(ip_str):
                 if ip_str == "localhost":
                     ip = "127.0.0.1"
@@ -1826,10 +1827,6 @@ class RunEngineWorker(Process):
             if self._success_startup:
 
                 def start_jupyter_client():
-                    # from jupyter_client import BlockingKernelClient
-
-                    # self._ip_kernel_client = BlockingKernelClient()
-                    # self._ip_kernel_client.load_connection_info(self._ip_connect_info)
                     self._ip_kernel_client = self._ip_kernel_app.blocking_client()
                     logger.info(
                         "Session ID for communication with IP kernel: %s", self._ip_kernel_client.session.session
@@ -1878,9 +1875,7 @@ class RunEngineWorker(Process):
                 self._ip_kernel_app.init_io()
 
                 # Print connect info for the kernel (after kernel initialization)
-                cinfo = copy.deepcopy(self._ip_connect_info)
-                cinfo["key"] = cinfo["key"].decode("utf-8")
-                logger.info("IPython kernel connection info:\n %r", ppfl(cinfo))
+                logger.info("IPython kernel connection info:\n %r", ppfl(self._request_ip_connect_info().get("ip_connect_info")))
 
                 th_abandoned_plans = threading.Thread(target=self._monitor_abandoned_plans_thread, daemon=True)
                 th_abandoned_plans.start()

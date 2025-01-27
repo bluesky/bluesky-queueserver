@@ -185,7 +185,6 @@ class RunEngineWorker(Process):
         self._use_ipython_kernel = self._config_dict["use_ipython_kernel"]
         self._ip_kernel_app = None  # Reference to IPKernelApp, None if IPython is not used
         self._ip_connect_file = ""  # Filename with connection info for the running IP kernel
-        self._ip_connect_info = {}  # Connection info for the running IP Kernel
         self._ip_kernel_client = None  # Kernel client for communication with IP kernel.
         self._ip_kernel_state = IPKernelState.DISABLED
         self._ip_kernel_monitor_stop = False
@@ -934,7 +933,7 @@ class RunEngineWorker(Process):
         Return IP connect info obtained from IPython kernel. Returns ``{}`` if
         worker is using pure Python.
         """
-        connect_info = copy.deepcopy(self._ip_connect_info)
+        connect_info = copy.deepcopy(self._ip_kernel_app.get_connection_info())
         connect_info["key"] = connect_info["key"].decode("utf-8")
         return {"ip_connect_info": connect_info}
 
@@ -1837,8 +1836,6 @@ class RunEngineWorker(Process):
                 self._ip_kernel_app.initialize([])
                 logger.info("IPython kernel initialization is complete.")
 
-                self._ip_connect_info = self._ip_kernel_app.get_connection_info()
-
                 ttime.sleep(0.2)  # Wait until the error message are delivered (if startup fails)
 
                 start_jupyter_client()
@@ -1860,6 +1857,7 @@ class RunEngineWorker(Process):
 
                 # Disable echoing, since startup code is already loaded
                 self._ip_kernel_app.quiet = True
+                # TODO: check whether this this call is required. `self._ip_kernel_app.initialize([])` calls `init_io` internally. 
                 self._ip_kernel_app.init_io()
 
                 # Print connect info for the kernel (after kernel initialization)

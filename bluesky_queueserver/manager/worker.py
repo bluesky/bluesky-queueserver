@@ -1808,6 +1808,15 @@ class RunEngineWorker(Process):
                     ip = ip_str
                 return ip
 
+            shell_port = None ##60000
+            iopub_port = None ##60001
+            stdin_port = None ##60002
+            hb_port = None ##60003
+            control_port = None ##60004
+            # connection_file = "test.json"
+
+            # self._ip_kernel_app.connection_file = connection_file
+
             logger.info("Generating random port numbers for IPython kernel ...")
             kernel_ip = self._config_dict["ipython_kernel_ip"]
             try:
@@ -1817,7 +1826,12 @@ class RunEngineWorker(Process):
                 self._ip_kernel_app.iopub_port = generate_random_port(kernel_ip)
                 self._ip_kernel_app.stdin_port = generate_random_port(kernel_ip)
                 self._ip_kernel_app.hb_port = generate_random_port(kernel_ip)
-                self._ip_kernel_app.control_port = generate_random_port(kernel_ip)
+                self._ip_kernel_app.control_port = control_port or generate_random_port(kernel_ip)
+                # self._ip_kernel_app.shell_port = shell_port or generate_random_port(kernel_ip)
+                # self._ip_kernel_app.iopub_port = iopub_port or generate_random_port(kernel_ip)
+                # self._ip_kernel_app.stdin_port = stdin_port or generate_random_port(kernel_ip)
+                # self._ip_kernel_app.hb_port = hb_port or generate_random_port(kernel_ip)
+                # self._ip_kernel_app.control_port = control_port or generate_random_port(kernel_ip)
                 self._ip_connect_info = self._ip_kernel_app.get_connection_info()
             except Exception as ex:
                 self._success_startup = False

@@ -490,6 +490,29 @@ def start_manager():
     )
 
     parser.add_argument(
+        "--use-persistent-metadata",
+        dest="use_persistent_metadata",
+        action="store_true",
+        help="Use msgpack-based persistent storage for scan metadata. Currently this "
+        "is the preferred method to keep continuously incremented sequence of "
+        "Run IDs between restarts of RE.",
+    )
+
+    parser.add_argument(
+        "--databroker-config",
+        dest="databroker_config",
+        type=str,
+        help="Name of the Data Broker configuration file.",
+    )
+
+    group_ip_kernel = parser.add_argument_group(
+        "Configure IPython Kernel",
+        "The parameters for configuring IPython kernel used by RE Worker. The IPython kernel is\n"
+        "created by RE Worker only if '--use-ipython-kernel' is set to 'ON'. Otherwise,\n"
+        "the parameters are ignored.",
+    )
+
+    group_ip_kernel.add_argument(
         "--use-ipython-kernel",
         dest="use_ipython_kernel",
         type=str,
@@ -498,7 +521,7 @@ def start_manager():
         help="Run the Run Engine worker in IPython kernel (default: %(default)s).",
     )
 
-    parser.add_argument(
+    group_ip_kernel.add_argument(
         "--ipython-dir",
         dest="ipython_dir",
         type=str,
@@ -506,7 +529,7 @@ def start_manager():
         "variable. The parameter is ignored if IPython kernel is not used.",
     )
 
-    parser.add_argument(
+    group_ip_kernel.add_argument(
         "--ipython-matplotlib",
         dest="ipython_matplotlib",
         type=str,
@@ -515,7 +538,7 @@ def start_manager():
         "The parameter is ignored if the worker is running pure Python (--use-ipython-kernel is OFF).",
     )
 
-    parser.add_argument(
+    group_ip_kernel.add_argument(
         "--ipython-kernel-ip",
         dest="ipython_kernel_ip",
         type=str,
@@ -528,19 +551,78 @@ def start_manager():
         "IPython. Default: %(default)s.",
     )
 
-    parser.add_argument(
-        "--use-persistent-metadata",
-        dest="use_persistent_metadata",
-        action="store_true",
-        help="Use msgpack-based persistent storage for scan metadata. Currently this "
-        "is the preferred method to keep continuously incremented sequence of "
-        "Run IDs between restarts of RE.",
-    )
-    parser.add_argument(
-        "--databroker-config",
-        dest="databroker_config",
+    group_ip_kernel.add_argument(
+        "--ipython-connection-file",
+        dest="ipython_connection_file",
         type=str,
-        help="Name of the Data Broker configuration file.",
+        default=None,
+        help="Name of the connection file used by IPython kernel. If the file name is specified, the kernel "
+        "attempts to load connection parameters from the file. If the file does not exist, the kernel creates "
+        "the new file. If the file name is specified, the kernel will use identical connection parameters "
+        "each time the environment is reopened and the connected clients (e.g. Jupyter Console) are automatically "
+        "resuming connection. If the connection file name is not specified, then the kernel creates a new file "
+        "each time the environment is opened and connected clients need to be reconnected. "
+        "The parameter can be also set using QSERVER_IPYTHON_KERNEL_CONNECTION_FILE environment variable.",
+    )
+
+    group_ip_kernel.add_argument(
+        "--ipython-connection-dir",
+        dest="ipython_connection_dir",
+        type=str,
+        default=None,
+        help="Name of the directory where IPython kernel is looking for connection files. The default "
+        "location of the connection files may found by running 'jupyter --runtime-dir'."
+        "The parameter can be also set using QSERVER_IPYTHON_KERNEL_CONNECTION_DIR environment variable",
+    )
+
+    group_ip_kernel.add_argument(
+        "--ipython-shell-port",
+        dest="ipython_shell_port",
+        type=str,
+        default=None,
+        help="The address of the IPython kernel shell port, e.g. 60000. The port is selected randomly."
+        "if not specified. The parameter can be also set using QSERVER_IPYTHON_KERNEL_SHELL_PORT "
+        "environment variable.",
+    )
+
+    group_ip_kernel.add_argument(
+        "--ipython-iopub-port",
+        dest="ipython_iopub_port",
+        type=str,
+        default=None,
+        help="The address of the IPython kernel iopub port, e.g. 60001. The port is selected randomly."
+        "if not specified. The parameter can be also set using QSERVER_IPYTHON_KERNEL_IOPUB_PORT "
+        "environment variable.",
+    )
+
+    group_ip_kernel.add_argument(
+        "--ipython-stdin-port",
+        dest="ipython_stdin_port",
+        type=str,
+        default=None,
+        help="The address of the IPython kernel stdin port, e.g. 60002. The port is selected randomly."
+        "if not specified. The parameter can be also set using QSERVER_IPYTHON_KERNEL_STDIN_PORT "
+        "environment variable.",
+    )
+
+    group_ip_kernel.add_argument(
+        "--ipython-hb-port",
+        dest="ipython_hb_port",
+        type=str,
+        default=None,
+        help="The address of the IPython kernel hb port, e.g. 60003. The port is selected randomly."
+        "if not specified. The parameter can be also set using QSERVER_IPYTHON_KERNEL_HB_PORT "
+        "environment variable.",
+    )
+
+    group_ip_kernel.add_argument(
+        "--ipython-control-port",
+        dest="ipython_control_port",
+        type=str,
+        default=None,
+        help="The address of the IPython kernel control port, e.g. 60004. The port is selected randomly."
+        "if not specified. The parameter can be also set using QSERVER_IPYTHON_KERNEL_CONTROL_PORT "
+        "environment variable.",
     )
 
     group_console_output = parser.add_argument_group(
@@ -746,6 +828,13 @@ def start_manager():
     config_worker["ipython_dir"] = ipython_dir
     config_worker["ipython_kernel_ip"] = ipython_kernel_ip
     config_worker["ipython_matplotlib"] = settings.ipython_matplotlib
+    config_worker["ipython_connection_file"] = settings.ipython_connection_file
+    config_worker["ipython_connection_dir"] = settings.ipython_connection_dir
+    config_worker["ipython_shell_port"] = settings.ipython_shell_port
+    config_worker["ipython_iopub_port"] = settings.ipython_iopub_port
+    config_worker["ipython_stdin_port"] = settings.ipython_stdin_port
+    config_worker["ipython_hb_port"] = settings.ipython_hb_port
+    config_worker["ipython_control_port"] = settings.ipython_control_port
     config_worker["ignore_invalid_plans"] = settings.ignore_invalid_plans
 
     existing_pd_path = settings.existing_plans_and_devices_path

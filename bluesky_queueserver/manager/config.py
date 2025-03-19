@@ -198,6 +198,13 @@ _key_mapping = {
     "use_ipython_kernel": "worker/use_ipython_kernel",
     "ipython_kernel_ip": "worker/ipython_kernel_ip",
     "ipython_matplotlib": "worker/ipython_matplotlib",
+    "ipython_connection_file": "worker/ipython_connection_file",
+    "ipython_connection_dir": "worker/ipython_connection_dir",
+    "ipython_shell_port": "worker/ipython_shell_port",
+    "ipython_iopub_port": "worker/ipython_iopub_port",
+    "ipython_stdin_port": "worker/ipython_stdin_port",
+    "ipython_hb_port": "worker/ipython_hb_port",
+    "ipython_control_port": "worker/ipython_control_port",
     "print_console_output": "operation/print_console_output",
     "console_logging_level": "operation/console_logging_level",
     "update_existing_plans_devices": "operation/update_existing_plans_and_devices",
@@ -395,6 +402,76 @@ class Settings:
             value_default=args.ipython_matplotlib,
             value_config=self._get_value_from_config("ipython_matplotlib"),
             value_cli=self._args_existing("ipython_matplotlib"),
+        )
+
+        self._settings["ipython_connection_file"] = self._get_param(
+            value_default=args.ipython_connection_file,
+            value_ev=os.environ.get("QSERVER_IPYTHON_KERNEL_CONNECTION_FILE", None),
+            value_config=self._get_value_from_config("ipython_connection_file"),
+            value_cli=self._args_existing("ipython_connection_file"),
+        )
+
+        self._settings["ipython_connection_dir"] = self._get_param(
+            value_default=args.ipython_connection_dir,
+            value_ev=os.environ.get("QSERVER_IPYTHON_KERNEL_CONNECTION_DIR", None),
+            value_config=self._get_value_from_config("ipython_connection_dir"),
+            value_cli=self._args_existing("ipython_connection_dir"),
+        )
+
+        self._settings["ipython_shell_port"] = self._get_param(
+            value_default=args.ipython_shell_port,
+            value_ev=os.environ.get("QSERVER_IPYTHON_KERNEL_SHELL_PORT", None),
+            value_config=self._get_value_from_config("ipython_shell_port"),
+            value_cli=self._args_existing("ipython_shell_port"),
+        )
+
+        self._settings["ipython_iopub_port"] = self._get_param(
+            value_default=args.ipython_iopub_port,
+            value_ev=os.environ.get("QSERVER_IPYTHON_KERNEL_IOPUB_PORT", None),
+            value_config=self._get_value_from_config("ipython_iopub_port"),
+            value_cli=self._args_existing("ipython_iopub_port"),
+        )
+
+        self._settings["ipython_stdin_port"] = self._get_param(
+            value_default=args.ipython_stdin_port,
+            value_ev=os.environ.get("QSERVER_IPYTHON_KERNEL_STDIN_PORT", None),
+            value_config=self._get_value_from_config("ipython_stdin_port"),
+            value_cli=self._args_existing("ipython_stdin_port"),
+        )
+
+        self._settings["ipython_hb_port"] = self._get_param(
+            value_default=args.ipython_hb_port,
+            value_ev=os.environ.get("QSERVER_IPYTHON_KERNEL_HB_PORT", None),
+            value_config=self._get_value_from_config("ipython_hb_port"),
+            value_cli=self._args_existing("ipython_hb_port"),
+        )
+
+        self._settings["ipython_control_port"] = self._get_param(
+            value_default=args.ipython_control_port,
+            value_ev=os.environ.get("QSERVER_IPYTHON_KERNEL_CONTROL_PORT", None),
+            value_config=self._get_value_from_config("ipython_control_port"),
+            value_cli=self._args_existing("ipython_control_port"),
+        )
+
+        def _check_port_value(port, port_name):
+            """
+            Convert port from string to int unless its value is None. Raise Config Error
+            if the conversion fails.
+            """
+            if port is not None:
+                try:
+                    port = int(port)
+                except ValueError:
+                    _ = port_name.upper()
+                    raise ConfigError(f"Incorrect value for IPython {_} port: {port!r} (must be 'int')")
+            return port
+
+        self._settings["ipython_shell_port"] = _check_port_value(self._settings["ipython_shell_port"], "shell")
+        self._settings["ipython_iopub_port"] = _check_port_value(self._settings["ipython_iopub_port"], "iopub")
+        self._settings["ipython_stdin_port"] = _check_port_value(self._settings["ipython_stdin_port"], "stdin")
+        self._settings["ipython_hb_port"] = _check_port_value(self._settings["ipython_hb_port"], "hb")
+        self._settings["ipython_control_port"] = _check_port_value(
+            self._settings["ipython_control_port"], "control"
         )
 
         existing_plans_and_devices_path = self._get_param(

@@ -33,6 +33,20 @@ properties:
         type: string
       ipython_matplotlib:
         type: string
+      ipython_connection_file:
+        type: string
+      ipython_connection_dir:
+        type: string
+      ipython_shell_port:
+        type: integer
+      ipython_iopub_port:
+        type: integer
+      ipython_stdin_port:
+        type: integer
+      ipython_hb_port:
+        type: integer
+      ipython_control_port:
+        type: integer
   startup:
     oneOf:
       - type: object

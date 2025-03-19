@@ -1808,23 +1808,13 @@ class RunEngineWorker(Process):
                     ip = ip_str
                 return ip
 
-            # The following parameters should be properly added to CLI and config file parameters
-            connection_file = os.environ.get("QSERVER_IPYTHON_KERNEL_CONNECTION_FILE", None)
-            connection_dir = os.environ.get("QSERVER_IPYTHON_KERNEL_CONNECTION_DIR", None)
-            shell_port = os.environ.get("QSERVER_IPYTHON_KERNEL_SHELL_PORT", None)
-            iopub_port = os.environ.get("QSERVER_IPYTHON_KERNEL_IOPUB_PORT", None)
-            stdin_port = os.environ.get("QSERVER_IPYTHON_KERNEL_STDIN_PORT", None)
-            hb_port = os.environ.get("QSERVER_IPYTHON_KERNEL_HB_PORT", None)
-            control_port = os.environ.get("QSERVER_IPYTHON_KERNEL_CONTROL_PORT", None)
-
-            def _convert_to_int(x):
-                return int(x) if x else None
-
-            shell_port = _convert_to_int(shell_port)
-            iopub_port = _convert_to_int(iopub_port)
-            stdin_port = _convert_to_int(stdin_port)
-            hb_port = _convert_to_int(hb_port)
-            control_port = _convert_to_int(control_port)
+            connection_file = self._config_dict["ipython_connection_file"]
+            connection_dir = self._config_dict["ipython_connection_dir"]
+            shell_port = self._config_dict["ipython_shell_port"]
+            iopub_port = self._config_dict["ipython_iopub_port"]
+            stdin_port = self._config_dict["ipython_stdin_port"]
+            hb_port = self._config_dict["ipython_hb_port"]
+            control_port = self._config_dict["ipython_control_port"]
 
             kernel_ip = self._config_dict["ipython_kernel_ip"]
             kernel_ip = find_kernel_ip(kernel_ip)

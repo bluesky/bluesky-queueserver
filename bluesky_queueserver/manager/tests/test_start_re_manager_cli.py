@@ -453,7 +453,7 @@ def test_cli_parameters_zmq_server_address_1(monkeypatch, re_manager_cmd, test_m
         assert status is None, (status, msg)
 
 
-def _get_expected_settings_default_1(tmpdir):
+def _get_expected_settings_default_1(_1, _2):
     use_ip_kernel = use_ipykernel_for_tests()
     username = getpass.getuser()
     if use_ip_kernel:
@@ -486,6 +486,13 @@ def _get_expected_settings_default_1(tmpdir):
         "use_ipython_kernel": bool(use_ip_kernel),
         "ipython_kernel_ip": "localhost",
         "ipython_matplotlib": None,
+        "ipython_connection_dir": None,
+        "ipython_connection_file": None,
+        "ipython_control_port": None,
+        "ipython_hb_port": None,
+        "ipython_iopub_port": None,
+        "ipython_shell_port": None,
+        "ipython_stdin_port": None,
         "print_console_output": True,
         "redis_addr": "localhost",
         "redis_name_prefix": _test_redis_name_prefix,  # We use it for unit tests
@@ -509,7 +516,7 @@ _dir_2 = "test2"
 
 
 # matching public key: =E0[czQkp!!%0TL1LCJ5X[<wjYD[iV+p[yuaI0an
-def _get_config_file_2(file_dir):
+def _get_config_file_2(file_dir, ip_con_dir):
     s = """
 network:
   zmq_control_addr: tcp://*:60617
@@ -522,6 +529,13 @@ worker:
   use_ipython_kernel: {4}
   ipython_kernel_ip: auto
   ipython_matplotlib: qt5
+  ipython_connection_dir: {5}
+  ipython_connection_file: test_connection_file
+  ipython_control_port: 60000
+  ipython_hb_port: 60001
+  ipython_iopub_port: 60002
+  ipython_shell_port: 60003
+  ipython_stdin_port: 60004
 startup:
   keep_re: false
   device_max_depth: 2
@@ -543,10 +557,12 @@ run_engine:
   databroker_config: DIF
 """
     use_ip_kernel = "true" if use_ipykernel_for_tests() else "false"
-    return s.format("Ue=.po0aQ9.}<Xvrny+f{V04XMc6JZ9ufKf5aeFy", file_dir, file_dir, file_dir, use_ip_kernel)
+    return s.format(
+        "Ue=.po0aQ9.}<Xvrny+f{V04XMc6JZ9ufKf5aeFy", file_dir, file_dir, file_dir, use_ip_kernel, ip_con_dir
+    )
 
 
-def _get_expected_settings_config_2(file_dir):
+def _get_expected_settings_config_2(file_dir, ip_con_dir):
     use_ip_kernel = use_ipykernel_for_tests()
     if use_ip_kernel:
         startup_dir = None
@@ -579,6 +595,13 @@ def _get_expected_settings_config_2(file_dir):
         "use_ipython_kernel": bool(use_ip_kernel),
         "ipython_kernel_ip": "auto",
         "ipython_matplotlib": "qt5",
+        "ipython_connection_dir": ip_con_dir,
+        "ipython_connection_file": "test_connection_file",
+        "ipython_control_port": 60000,
+        "ipython_hb_port": 60001,
+        "ipython_iopub_port": 60002,
+        "ipython_shell_port": 60003,
+        "ipython_stdin_port": 60004,
         "print_console_output": True,
         "redis_addr": "localhost:6379",
         "redis_name_prefix": "qs_unit_tests2",  # Specific for this test
@@ -620,6 +643,13 @@ def _get_cli_params_3(file_dir):
         f"--use-ipython-kernel={use_ip_kernel}",
         "--ipython-kernel-ip=127.0.0.1",
         "--ipython-matplotlib=qt",
+        "--ipython-connection-dir=test_connection_dir",
+        "--ipython-connection-file=test_connection_file",
+        "--ipython-control-port=60100",
+        "--ipython-hb-port=60101",
+        "--ipython-iopub-port=60102",
+        "--ipython-shell-port=60103",
+        "--ipython-stdin-port=60104",
         "--zmq-data-proxy-addr=tcp://localhost:5571",
         "--databroker-config=NEW",
         "--zmq-info-addr=tcp://*:60629",
@@ -628,7 +658,7 @@ def _get_cli_params_3(file_dir):
     ]
 
 
-def _get_expected_settings_params_3(file_dir):
+def _get_expected_settings_params_3(file_dir, _):
     use_ip_kernel = use_ipykernel_for_tests()
     if use_ip_kernel:
         startup_dir = None
@@ -661,6 +691,13 @@ def _get_expected_settings_params_3(file_dir):
         "use_ipython_kernel": bool(use_ip_kernel),
         "ipython_kernel_ip": "127.0.0.1",
         "ipython_matplotlib": "qt",
+        "ipython_connection_dir": "test_connection_dir",
+        "ipython_connection_file": "test_connection_file",
+        "ipython_control_port": 60100,
+        "ipython_hb_port": 60101,
+        "ipython_iopub_port": 60102,
+        "ipython_shell_port": 60103,
+        "ipython_stdin_port": 60104,
         "print_console_output": False,
         "redis_addr": "localhost:6379",
         "redis_name_prefix": "qs_unit_tests3",  # Specific for this test
@@ -718,7 +755,7 @@ def test_manager_with_config_file_01(
         set_qserver_zmq_public_key(monkeypatch, server_public_key="=E0[czQkp!!%0TL1LCJ5X[<wjYD[iV+p[yuaI0an")
         set_qserver_zmq_address(monkeypatch, zmq_server_address="tcp://localhost:60617")
         with open(config_path, "w") as f:
-            f.writelines(_get_config_file_2(file_dir))
+            f.writelines(_get_config_file_2(file_dir, tmpdir))
 
     cli_params = get_cli_params(file_dir)
     if cli_params:
@@ -750,7 +787,7 @@ def test_manager_with_config_file_01(
     #   separately. This is needed because the default startup directory
     #   returned by 'get_default_startup_dir()` is different for the manager
     #   and the testing code when the test is running on CI.
-    expected_settings = copy.deepcopy(get_expected_settings(file_dir))
+    expected_settings = copy.deepcopy(get_expected_settings(file_dir, tmpdir))
 
     print("Current_settings:\n" + pprint.pformat(current_settings))  # Useful in case of failure
     print("Expected settings:\n" + pprint.pformat(expected_settings))  # Useful in case of failure

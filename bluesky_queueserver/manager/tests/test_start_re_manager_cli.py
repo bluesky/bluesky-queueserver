@@ -1025,6 +1025,78 @@ def test_cli_ipython_kernel_ip_01(re_manager_cmd, ipython_kernel_ip):  # noqa: F
     assert wait_for_condition(time=3, condition=condition_environment_closed)
 
 
+# fmt: off
+@pytest.mark.parametrize("set_ports_second_run", [False, True])
+# fmt: on
+@pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
+def test_cli_ipython_connection_info_01(tmp_path, re_manager_cmd, set_ports_second_run):  # noqa: F811
+    """
+    CLI parameter '--ipython-kernel-ip': check different options for IP. Verify that the kernel
+    is started with appropriate IP address.
+
+    Run this test only for IP kernel worker.
+    """
+    connection_dir = os.path.join(tmp_path, "connection_dir")
+    connection_file = "test_connection_file.json"
+    shell_port = 60000
+    iopub_port = 60001
+    stdin_port = 60002
+    hb_port = 60003
+    control_port = 60004
+
+    # Start the manager
+    params1 = []
+    params1.extend([f"--ipython-connection-file={connection_file}"])
+    params1.extend([f"--ipython-connection-dir={connection_dir}"])
+
+    params2 = params1.copy()
+    params2.extend([f"--ipython-shell-port={shell_port}"])
+    params2.extend([f"--ipython-iopub-port={iopub_port}"])
+    params2.extend([f"--ipython-stdin-port={stdin_port}"])
+    params2.extend([f"--ipython-hb-port={hb_port}"])
+    params2.extend([f"--ipython-control-port={control_port}"])
+
+    re_manager_cmd(params2)
+
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp, _ = zmq_single_request("config_get")
+    assert resp["success"] is True
+
+    connect_info1 = resp["config"]["ip_connect_info"]
+
+    resp3, _ = zmq_single_request("environment_close")
+    assert resp3["success"] is True
+    assert resp3["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+
+    resp4, _ = zmq_single_request("environment_open")
+    assert resp4["success"] is True
+    assert resp4["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp, _ = zmq_single_request("config_get")
+    assert resp["success"] is True
+
+    connect_info2 = resp["config"]["ip_connect_info"]
+
+    resp5, _ = zmq_single_request("environment_close")
+    assert resp5["success"] is True
+    assert resp5["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+    assert connect_info1 == connect_info2
+
+
+
 _script_test_plan_invalid_1 = """
 def test_plan_failing(dets=det1):
     # The default value is a detector, which can not be included in the plan description.

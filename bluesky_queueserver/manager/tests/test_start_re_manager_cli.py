@@ -1026,43 +1026,74 @@ def test_cli_ipython_kernel_ip_01(re_manager_cmd, ipython_kernel_ip):  # noqa: F
 
 
 # fmt: off
-@pytest.mark.parametrize("set_ports_second_run", [False, True])
+@pytest.mark.parametrize("set_conn_file_second_run, set_ports_second_run, change_ports_second_run", [
+    (True, True, False),
+    (True, False, False),
+    (False, True, False),
+    (False, False, False),
+    (True, True, True),
+    (False, True, True),
+])
 # fmt: on
 @pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
-def test_cli_ipython_connection_info_01(tmp_path, re_manager_cmd, set_ports_second_run):  # noqa: F811
+def test_cli_ipython_connection_info_01(
+    tmp_path,
+    re_manager_cmd,  # noqa: F811
+    set_conn_file_second_run,
+    set_ports_second_run,
+    change_ports_second_run,
+):
     """
-    CLI parameter '--ipython-kernel-ip': check different options for IP. Verify that the kernel
-    is started with appropriate IP address.
+    CLI parameters '--ipython-connection-file', '--ipython-connection-dir',
+    '--ipython-shell-port', '--ipython-iopub-port', '--ipython-stdin-port',
+    '--ipython-hb-port', '--ipython-control-port'. Test different combinations.
+
+    Expected behavior:
+      1. The connection file is created in the specified directory.
+      2. If the environment is restarted, then it uses the same connection file
+         unless different ports are specified.
+      3. If different ports are specified, then the new connection file is created.
+
+    In this test, the server is started, then the environment is opened and closed twice,
+    then the server is stopped and started again with the same or different parameters
+    and the environment is opened again.
 
     Run this test only for IP kernel worker.
     """
     connection_dir = os.path.join(tmp_path, "connection_dir")
     connection_file = "test_connection_file.json"
-    shell_port = 60000
-    iopub_port = 60001
-    stdin_port = 60002
-    hb_port = 60003
-    control_port = 60004
+
+    ports_1 = dict(shell_port=60000, iopub_port=60001, stdin_port=60002, hb_port=60003, control_port=60004)
+    ports_2 = dict(shell_port=60010, iopub_port=60011, stdin_port=60012, hb_port=60013, control_port=60014)
 
     # Start the manager
-    params1 = []
-    params1.extend([f"--ipython-connection-file={connection_file}"])
-    params1.extend([f"--ipython-connection-dir={connection_dir}"])
 
-    params2 = params1.copy()
-    params2.extend([f"--ipython-shell-port={shell_port}"])
-    params2.extend([f"--ipython-iopub-port={iopub_port}"])
-    params2.extend([f"--ipython-stdin-port={stdin_port}"])
-    params2.extend([f"--ipython-hb-port={hb_port}"])
-    params2.extend([f"--ipython-control-port={control_port}"])
+    def create_parameters(set_conn_file, ports):
+        params = []
+        if set_conn_file:
+            params.extend([f"--ipython-connection-file={connection_file}"])
+            params.extend([f"--ipython-connection-dir={connection_dir}"])
+        if ports:
+            params.extend([f"--ipython-shell-port={ports['shell_port']}"])
+            params.extend([f"--ipython-iopub-port={ports['iopub_port']}"])
+            params.extend([f"--ipython-stdin-port={ports['stdin_port']}"])
+            params.extend([f"--ipython-hb-port={ports['hb_port']}"])
+            params.extend([f"--ipython-control-port={ports['control_port']}"])
+        return params
 
-    re_manager_cmd(params2)
+    params = create_parameters(set_conn_file=True, ports=ports_1)
+    re = re_manager_cmd(params)
 
+    # Open environment the first time
     resp2, _ = zmq_single_request("environment_open")
     assert resp2["success"] is True
     assert resp2["msg"] == ""
 
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    # Check that the connection file was created
+    connection_file_path = os.path.join(connection_dir, connection_file)
+    assert os.path.exists(connection_file_path), connection_file_path
 
     resp, _ = zmq_single_request("config_get")
     assert resp["success"] is True
@@ -1075,7 +1106,7 @@ def test_cli_ipython_connection_info_01(tmp_path, re_manager_cmd, set_ports_seco
 
     assert wait_for_condition(time=3, condition=condition_environment_closed)
 
-
+    # Open environment the second time, make sure it does not crash
     resp4, _ = zmq_single_request("environment_open")
     assert resp4["success"] is True
     assert resp4["msg"] == ""
@@ -1093,8 +1124,50 @@ def test_cli_ipython_connection_info_01(tmp_path, re_manager_cmd, set_ports_seco
 
     assert wait_for_condition(time=3, condition=condition_environment_closed)
 
+    # Check that connection info is identical
     assert connect_info1 == connect_info2
 
+    re.stop_manager()
+
+    ports = ports_2 if change_ports_second_run else ports_1
+    ports_to_set = ports if set_ports_second_run else None
+    params = create_parameters(set_conn_file=set_conn_file_second_run, ports=ports_to_set)
+    re_manager_cmd(params)
+
+   # Open environment the second time, make sure it does not crash
+    resp4, _ = zmq_single_request("environment_open")
+    assert resp4["success"] is True
+    assert resp4["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp, _ = zmq_single_request("config_get")
+    assert resp["success"] is True
+
+    connect_info3 = resp["config"]["ip_connect_info"]
+
+    resp5, _ = zmq_single_request("environment_close")
+    assert resp5["success"] is True
+    assert resp5["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+    if set_conn_file_second_run and not change_ports_second_run:
+        assert connect_info2 == connect_info3
+    elif set_ports_second_run:
+        assert connect_info2 != connect_info3
+        assert connect_info3["shell_port"] == ports["shell_port"]
+        assert connect_info3["iopub_port"] == ports["iopub_port"]
+        assert connect_info3["stdin_port"] == ports["stdin_port"]
+        assert connect_info3["hb_port"] == ports["hb_port"]
+        assert connect_info3["control_port"] == ports["control_port"]
+    else:
+        assert connect_info2 != connect_info3
+        assert connect_info3["shell_port"] != ports["shell_port"]
+        assert connect_info3["iopub_port"] != ports["iopub_port"]
+        assert connect_info3["stdin_port"] != ports["stdin_port"]
+        assert connect_info3["hb_port"] != ports["hb_port"]
+        assert connect_info3["control_port"] != ports["control_port"]
 
 
 _script_test_plan_invalid_1 = """

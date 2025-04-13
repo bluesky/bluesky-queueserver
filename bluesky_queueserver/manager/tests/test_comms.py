@@ -1057,7 +1057,7 @@ def test_ZMQCommSendThreads_3(is_blocking, encryption_enabled):
     n_done = 0
 
     def cb(msg, msg_err):
-        nonlocal msg_recv, msg_recv_err, n_done
+        nonlocal n_done
         msg_recv.append(msg)
         msg_recv_err.append(msg_err)
         n_done += 1
@@ -1067,7 +1067,7 @@ def test_ZMQCommSendThreads_3(is_blocking, encryption_enabled):
     if is_blocking:
         # In case of blocking call the lock can only be tested using threads
         def thread_request():
-            nonlocal msg_recv, msg_recv_err, n_done
+            nonlocal n_done
             _ = zmq_comm.send_message(method=method, params=params)
             msg_recv.append(_)
             msg_recv_err.append("")

@@ -564,7 +564,7 @@ def re_manager_cmd():
         Create RE Manager. ``start-re-manager`` is called with command line parameters from
           the list ``params``.
         """
-        nonlocal re, failed_to_start
+        nonlocal failed_to_start
         re["re"] = ReManager(params, stdout=stdout, stderr=stderr, set_redis_name_prefix=set_redis_name_prefix)
 
         # Wait until RE Manager is started. Raise exception if the server failed to start.
@@ -579,7 +579,6 @@ def re_manager_cmd():
         """
         Close RE Manager if it exists.
         """
-        nonlocal re, failed_to_start
         if re["re"] is not None:
             if not failed_to_start:
                 re["re"].stop_manager()

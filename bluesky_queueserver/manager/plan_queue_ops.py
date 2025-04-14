@@ -630,10 +630,12 @@ class PlanQueueOperations:
         if self._backend == "redis":
             return await self._r_pool.llen(self._name_plan_queue)
         elif self._backend == "sqlite":
-            async with self._sqlite_conn.cursor() as cursor:
-                await cursor.execute(f"SELECT COUNT(*) FROM list_store WHERE list_key=?", (self._name_plan_queue,))
-                row = await cursor.fetchone()
-            return row[0] if row else 0
+            if not hasattr(self, "_queue_size_cache"):
+                async with self._sqlite_conn.cursor() as cursor:
+                    await cursor.execute(f"SELECT COUNT(*) FROM list_store WHERE list_key=?", (self._name_plan_queue,))
+                    row = await cursor.fetchone()
+                    self._queue_size_cache = row[0] if row else 0
+            return self._queue_size_cache
 
     async def get_queue_size(self):
         """
@@ -732,27 +734,25 @@ class PlanQueueOperations:
             if running_item and (uid == running_item["item_uid"]):
                 raise IndexError(f"The item with UID '{uid}' is currently running.")
             item = self._uid_dict_get_item(uid)
+            
         else:
             # Retrieve item by position
-            pos = pos if pos is not None else "back"
-
             if pos == "back":
-                item_json = await self._backend_list_pop(self._name_plan_queue, position="back")
+                query = f"SELECT value FROM list_store WHERE list_key=? ORDER BY id DESC LIMIT 1"
             elif pos == "front":
-                item_json = await self._backend_list_pop(self._name_plan_queue, position="front")
+                query = f"SELECT value FROM list_store WHERE list_key=? ORDER BY id ASC LIMIT 1"
             elif isinstance(pos, int):
-                all_items = await self._backend_list_range(self._name_plan_queue, 0, -1)
-                if pos < 0:
-                    pos += len(all_items)
-                if pos < 0 or pos >= len(all_items):
-                    raise IndexError(f"Index '{pos}' is out of range.")
-                item_json = all_items[pos]
+                offset = pos if pos >= 0 else pos + await self._get_queue_size()
+                query = f"SELECT value FROM list_store WHERE list_key=? ORDER BY id ASC LIMIT 1 OFFSET {offset}"
             else:
                 raise TypeError(f"Parameter 'pos' has incorrect type: pos={str(pos)} (type={type(pos)})")
 
-            if item_json is None:
-                raise IndexError(f"Item at position '{pos}' is not found.")
-            item = json.loads(item_json)
+            async with self._sqlite_conn.cursor() as cursor:
+                await cursor.execute(query, (self._name_plan_queue,))
+                row = await cursor.fetchone()
+                if not row:
+                    raise IndexError(f"Item at position '{pos}' is not found.")
+                return json.loads(row[0])
 
         return item
 
@@ -818,8 +818,8 @@ class PlanQueueOperations:
                 n_rem_items = cursor.rowcount
             await self._sqlite_conn.commit()
 
-        if (n_rem_items != 1) and single:
-            raise RuntimeError(f"The number of removed items is {n_rem_items}. One item is expected.")
+            if single and n_rem_items != 1:
+                raise RuntimeError(f"The number of removed items is {n_rem_items}. One item is expected.")
 
     async def _pop_item_from_queue(self, *, pos=None, uid=None):
         """
@@ -919,29 +919,26 @@ class PlanQueueOperations:
             if not uids:
                 return [], await self._get_queue_size()
 
-            # Retrieve items to be removed
-            items_to_remove = []
             async with self._sqlite_conn.cursor() as cursor:
-                for uid in uids:
-                    await cursor.execute(
-                        f"SELECT value FROM list_store WHERE list_key=? AND json_extract(value, '$.item_uid')=?",
-                        (self._name_plan_queue, uid),
-                    )
-                    row = await cursor.fetchone()
-                    if row:
-                        items_to_remove.append(json.loads(row[0]))
-                    elif not ignore_missing:
-                        raise ValueError(f"Item with UID '{uid}' is not in the queue.")
+                # Retrieve items to be removed
+                placeholders = ", ".join("?" for _ in uids)
+                await cursor.execute(
+                    f"SELECT value FROM list_store WHERE list_key=? AND json_extract(value, '$.item_uid') IN ({placeholders})",
+                    (self._name_plan_queue, *uids)
+                )
+                rows = await cursor.fetchall()
+                items_to_remove = [json.loads(row[0]) for row in rows]
 
-            # Remove items in a single query
-            async with self._sqlite_conn.cursor() as cursor:
-                await cursor.executemany(
-                    f"DELETE FROM list_store WHERE list_key=? AND json_extract(value, '$.item_uid')=?",
-                    [(self._name_plan_queue, item["item_uid"]) for item in items_to_remove],
+                if not ignore_missing and len(items_to_remove) != len(uids):
+                    raise ValueError("Some UIDs are missing from the queue.")
+
+                # Remove items in a single query
+                await cursor.execute(
+                    f"DELETE FROM list_store WHERE list_key=? AND json_extract(value, '$.item_uid') IN ({placeholders})",
+                    (self._name_plan_queue, *uids)
                 )
             await self._sqlite_conn.commit()
 
-            # Update UID dictionary
             for item in items_to_remove:
                 self._uid_dict_remove(item["item_uid"])
 
@@ -1174,27 +1171,17 @@ class PlanQueueOperations:
             Indicates whether the batch was successfully added.
         """
         if self._backend == "sqlite":
-            # Batch insert for SQLite
             async with self._sqlite_conn.cursor() as cursor:
-                # Prepare items for insertion
-                items_to_insert = []
-                for item in items:
-                    if "item_uid" not in item:
-                        item = self.set_new_item_uuid(item)
-                    if filter_parameters:
-                        item = self.filter_item_parameters(item)
-                    items_to_insert.append((self._name_plan_queue, json.dumps(item)))
-
-                # Insert all items in a single query
+                items_to_insert = [
+                    (self._name_plan_queue, json.dumps(self.filter_item_parameters(item) if filter_parameters else item))
+                    for item in items
+                ]
                 await cursor.executemany(
                     f"INSERT INTO list_store (list_key, value) VALUES (?, ?)", items_to_insert
                 )
             await self._sqlite_conn.commit()
-
-            # Update UID dictionary
             for item in items:
                 self._uid_dict_add(item)
-
             qsize = await self._get_queue_size()
             return items, [{"success": True, "msg": ""} for _ in items], qsize, True
 
@@ -2314,15 +2301,19 @@ class PlanQueueOperations:
                 await self._r_pool.rpush(key, value)
             elif position == "front":
                 await self._r_pool.lpush(key, value)
-        elif self._backend == "sqlite":
+        if self._backend == "sqlite":
             async with self._sqlite_conn.cursor() as cursor:
                 if position == "back":
                     await cursor.execute(
                         f"INSERT INTO list_store (list_key, value) VALUES (?, ?)", (key, value)
                     )
                 elif position == "front":
+                    # Insert at the front by decrementing IDs
                     await cursor.execute(
-                        f"INSERT INTO list_store (list_key, value) VALUES (?, ?)", (key, value)
+                        f"UPDATE list_store SET id = id + 1 WHERE list_key=?", (key,)
+                    )
+                    await cursor.execute(
+                        f"INSERT INTO list_store (id, list_key, value) VALUES (1, ?, ?)", (key, value)
                     )
             await self._sqlite_conn.commit()
 
@@ -2336,26 +2327,28 @@ class PlanQueueOperations:
             async with self._sqlite_conn.cursor() as cursor:
                 if position == "back":
                     await cursor.execute(
-                        f"SELECT id, value FROM list_store WHERE list_key=? ORDER BY id DESC LIMIT 1", (key,)
+                        f"DELETE FROM list_store WHERE id = (SELECT id FROM list_store WHERE list_key=? ORDER BY id DESC LIMIT 1) RETURNING value",
+                        (key,)
                     )
                 elif position == "front":
                     await cursor.execute(
-                        f"SELECT id, value FROM list_store WHERE list_key=? ORDER BY id ASC LIMIT 1", (key,)
+                        f"DELETE FROM list_store WHERE id = (SELECT id FROM list_store WHERE list_key=? ORDER BY id ASC LIMIT 1) RETURNING value",
+                        (key,)
                     )
                 row = await cursor.fetchone()
-                if row:
-                    await cursor.execute(f"DELETE FROM list_store WHERE id=?", (row[0],))
-                    await self._sqlite_conn.commit()
-                    return row[1]
+                return row[0] if row else None
             return None
 
     async def _backend_list_range(self, key, start=0, end=-1):
         if self._backend == "redis":
             return await self._r_pool.lrange(key, start, end)
-        elif self._backend == "sqlite":
+        if self._backend == "sqlite":
             async with self._sqlite_conn.cursor() as cursor:
+                limit = end - start + 1 if end != -1 else None
+                offset = start
                 await cursor.execute(
-                    f"SELECT value FROM list_store WHERE list_key=? ORDER BY id ASC", (key,)
+                    f"SELECT value FROM list_store WHERE list_key=? ORDER BY id ASC LIMIT ? OFFSET ?",
+                    (key, limit, offset)
                 )
                 rows = await cursor.fetchall()
-            return [row[0] for row in rows[start:end + 1 if end != -1 else None]]
+            return [row[0] for row in rows]

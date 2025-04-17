@@ -111,6 +111,13 @@ most of the supported parameters:
       use_ipython_kernel: true
       ipython_kernel_ip: auto
       ipython_matplotlib: qt5
+      ipython_connection_file: connection_file.json,
+      ipython_connection_dir: /tmp
+      ipython_shell_port: 60000
+      ipython_iopub_port: 60001
+      ipython_stdin_port: 60002
+      ipython_hb_port: 60003
+      ipython_control_port: 60004
     run_engine:
       use_persistent_metadata: true
       kafka_server: 127.0.0.1:9092

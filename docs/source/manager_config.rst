@@ -253,6 +253,14 @@ The parameters that define configuration of RE Worker.
   plotting) or ``qt5`` (plotting using Qt5 backend). The option can also be set using
   ``--ipython-matplotlib`` CLI parameter.
 
+- ``ipython_connection_file`` - the name of the IPython kernel connection file.
+
+- ``ipython_connection_dir`` - the name and directory where IPython kernel creates and looks
+  for the connection files. The default value is good in most cases.
+
+- ``ipython_shell_port``, ``ipython_iopub_port``, ``ipython_stdin_port``, ``ipython_hb_port``,
+  ``ipython_control_port`` - 0MQ ports used by IPython kernel.
+
 
 .. _config_file_run_engine:
 
@@ -300,3 +308,30 @@ or set in the config file using ``redis_name_prefix`` parameter in the ``network
 Prior to version v0.0.20, RE Manager did not append any prefix to the keys. If it is desirable
 to continue using RE Manager without prefix, e.g. to access the plan queue and history created
 by the older version of RE Manager, pass `""` (empty string) as the parameter value.
+
+.. _config_of_ipython_kernel:
+
+Configuration of IPython Kernel
+-------------------------------
+
+The Queue Server can be configured to run Bluesky plans in the IPython environment. If IPython
+mode is enabled (see ``--use-ipython-kernel`` CLI parameter), the worker process internally creates
+an IPython kernel. The plan execution environment is created in the kernel. External client applications,
+such as Jupyter Notebook, can connect to the kernel and execute commands in the same environment.
+By default, the kernel is created each time with a new set of connection parameters (0MQ ports and UUID)
+and a new connection file with unique name is created. The kernel can be configured to use specific
+0MQ ports for communication using the following parameters: ``-ipython-shell-port``, ``--ipython-iopub-port``,
+``--ipython-stdin-port``, ``--ipython-hb-port``, ``--ipython-control-port``. If the connection file name
+is set using ``--ipython-connection-file``, the kernel looks for the connection file and loads connection
+information (including UUID) from the file. If connection parameters in the manager configuration
+and the connection file do not match, the kernel creates a new file (overwriting the old one) with new
+connection parameters. If the connection file does not exist, then the kernel creates a new file.
+If the connection parameters (including UUID) are reused by loading the existing connection file, the
+client applications are automatically reconnecting to the new kernel after restart of the environment.
+The path to the directory containing the connection file(s) can be set using
+``--ipython-connection-dir`` parameter, but the default location is acceptable in most applications.
+
+.. note::
+
+  The connection parameters in manager configuration override the parameters in IPython kernel config
+  files, such as ``ipython_kernel_config.py``.

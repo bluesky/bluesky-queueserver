@@ -154,27 +154,28 @@ Configuration of IPython Kernel
 +++++++++++++++++++++++++++++++
 
 Queue Server may execute plans using IPython or plain Python. In IPython mode, the worker
-process is starting an IPython kernel. This group of parameters is used to configure
-this IPython kernel. If the IPython mode is not enabled, then the parameters are ignored.
-
+process is creating an IPython kernel each time the environment is opened. The following
+group of parameters is used to configure the IPython kernel. If the IPython mode is not enabled,
+then the parameters are ignored.
 
 - ``--use-ipython-kernel`` - enables IPython mode. This parameter may take values ``ON``
   or ``OFF``. If IPython mode is not enabled (default), then the remaining parameters
   in this group are ignored.
-- ``--ipython-dir`` - The path to IPython root directory, which contains profiles. Overrides
+- ``--ipython-dir`` - the path to IPython root directory, which contains profiles. Overrides
   IPYTHONDIR environment variable.
 - ``--ipython-matplotlib`` - Default Matplotlib backend, typically 'qt5'. The parameter have the
   same meaning and accepts the same values as --matplotlib parameter of IPython.
   The value is passed directly to IPython kernel.
 
-The optional parameters ``--ipython-kernel-ip``, ``--ipython-connection-file``,
+The following parameters are used to configure the IPython kernel connection:
+``--ipython-kernel-ip``, ``--ipython-connection-file``,
 ``--ipython-connection-dir``, ``--ipython-shell-port``, ``--ipython-iopub-port``,
-``--ipython-stdin-port``, ``--ipython-hb-port``, and ``--ipython-control-port`` set
-connection parameters for the kernel. If the connection file name is set, the kernel will
-read connection parameters from the file. If the file does not exist, the kernel creates a new file.
-If specified connection 0MQ port numbers do not match the port numbers in the connection file, then
-the connection file is overwritten with the new port numbers. Using the fixed connection file
-allows clients to automatically reconnect to the kernel when the environment is reopened.
+``--ipython-stdin-port``, ``--ipython-hb-port``, and ``--ipython-control-port``.
+If fixed connection name is set, the connection parameters will persist between restarts of
+the environment. It allows the client applications, such as Jupyter console, to automatically
+reconnect to the kernel once the environment is closed and opened again. If the file does not exist,
+the kernel creates a new file. If specified connection parameters do not match the parameters in
+the config file, then the connection file is overwritten with the new port numbers.
 
 .. _start_re_manager_console_output:
 

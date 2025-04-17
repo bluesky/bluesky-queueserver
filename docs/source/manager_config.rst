@@ -54,6 +54,31 @@ Several parameters can be passed to RE Manager using environment variables:
     The values are ``localhost``, ``auto`` (automatically find network IP address of the host running
     the worker) or valid network IP address of the host. If the address is ``localhost`` or
     ``127.0.0.1``, the clients running on remote hosts will not be able to connect to the kernel.
+    Used only in IPython mode.
+
+  - ``QSERVER_IPYTHON_KERNEL_CONNECTION_FILE`` - sets the name of IPython kernel connection file.
+    Used only in IPython mode.
+
+  - ``QSERVER_IPYTHON_KERNEL_CONNECTION_DIR`` - sets the directory for IPython kernel connection
+    files. Used only in IPython mode.
+
+  - ``QSERVER_IPYTHON_KERNEL_IOPUB_PORT`` - sets the port for IPython kernel IOPub socket.
+    Used only in IPython mode.
+
+  - ``QSERVER_IPYTHON_KERNEL_HB_PORT`` - sets the port for IPython kernel heartbeat socket.
+    Used only in IPython mode.
+
+  - ``QSERVER_IPYTHON_KERNEL_CONTROL_PORT`` - sets the port for IPython kernel control socket.
+    Used only in IPython mode.
+
+  - ``QSERVER_IPYTHON_KERNEL_SHELL_PORT`` - sets the port for IPython kernel shell socket.
+    Used only in IPython mode.
+
+  - ``QSERVER_IPYTHON_KERNEL_STDIN_PORT`` - sets the port for IPython kernel stdin socket.
+    Used only in IPython mode.
+
+  - ``QSERVER_IPYTHON_KERNEL_MATPLOTLIB`` - sets Matplotlib backend for IPython kernel.
+    Used only in IPython mode.
 
 
 Configuration Files

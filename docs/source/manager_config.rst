@@ -23,6 +23,8 @@ for :ref:`start_re_manager_cli`. Note, that not setting parameters such as ``--k
 or ``--use-persistent-metadata`` does not disable the respective features if
 they are enabled in the config file.
 
+.. _config_environment_variables:
+
 Environment Variables
 ---------------------
 
@@ -80,6 +82,7 @@ Several parameters can be passed to RE Manager using environment variables:
   - ``QSERVER_IPYTHON_KERNEL_MATPLOTLIB`` - sets Matplotlib backend for IPython kernel.
     Used only in IPython mode.
 
+.. _config_configuration_files:
 
 Configuration Files
 -------------------
@@ -314,22 +317,47 @@ by the older version of RE Manager, pass `""` (empty string) as the parameter va
 Configuration of IPython Kernel
 -------------------------------
 
-The Queue Server can be configured to run Bluesky plans in the IPython environment. If IPython
-mode is enabled (see ``--use-ipython-kernel`` CLI parameter), the worker process internally creates
-an IPython kernel. The plan execution environment is created in the kernel. External client applications,
-such as Jupyter Notebook, can connect to the kernel and execute commands in the same environment.
-By default, the kernel is created each time with a new set of connection parameters (0MQ ports and UUID)
-and a new connection file with unique name is created. The kernel can be configured to use specific
-0MQ ports for communication using the following parameters: ``-ipython-shell-port``, ``--ipython-iopub-port``,
-``--ipython-stdin-port``, ``--ipython-hb-port``, ``--ipython-control-port``. If the connection file name
-is set using ``--ipython-connection-file``, the kernel looks for the connection file and loads connection
-information (including UUID) from the file. If connection parameters in the manager configuration
-and the connection file do not match, the kernel creates a new file (overwriting the old one) with new
-connection parameters. If the connection file does not exist, then the kernel creates a new file.
-If the connection parameters (including UUID) are reused by loading the existing connection file, the
-client applications are automatically reconnecting to the new kernel after restart of the environment.
-The path to the directory containing the connection file(s) can be set using
-``--ipython-connection-dir`` parameter, but the default location is acceptable in most applications.
+Queue Server can be configured to execute plans using IPython or plain Python (default mode).
+If IPython mode is enabled, the worker process is starting a new in-process IPython kernel
+each time the environment is opened. The worker then connects to the kernel 0MQ ports to
+monotor the kernel state and run tasks. External client applications, such as Jupyter console,
+may also connect to the same 0MQ ports to communicate with the kernel. The kernel connection,
+including kernel IP address, port numbers and location of the connection file, is configured
+using a group of connection parameters. The connection parameters may be passed as CLI parameters
+(see :ref:`start_re_manager_ipython_kernel`), environment variables (see :ref:`config_environment_variables`)
+or set in the manager config file (see :ref:`config_configuration_files`).
+
+The IPython kernel mode is enable using ``--use-ipython-kernel`` CLI parameter,  ``QSERVER_USE_IPYTHON_KERNEL``
+environment variable or ``use_ipython_kernel`` parameter in the manager config file. IPython mode is
+disabled by default. If IPython mode is disabled, the remaining parameters from the group are ignored.
+
+The following rules apply when IPython mode is enabled:
+
+- Default behavior. If no connection parameters are specified, IPython kernel is created with random ports.
+  The kernel IP address is set to ``localhost``, random port numbers are assigned to kernel 0MQ ports and
+  a new connection file with unique name is created in the default directory.
+
+- Kernel IP address may be set using ``--ipython-kernel-ip`` CLI parameter. If the parameter value is
+  ``localhost`` or ``127.0.0.1``, the kernel can not be accessed from remote machines. If the value
+  is ``auto``, the worker attempts to find network IP address of the host running the worker. In rare cases
+  when automatic detection fails, the IP address may be explicitly specified.
+
+- Kernel 0MQ port numbers may be explicitly assigned using the following parameters:
+  ``--ipython-shell-port``, ``--ipython-iopub-port``, ``--ipython-stdin-port``, ``--ipython-hb-port``,
+  ``--ipython-control-port``. Those parameters are optional. Random port numbers are generated for
+  unassigned ports.
+
+- If the default location used by the kernel to store connection files is not desirable, the directory
+  may be set using ``--ipython-connection-dir`` CLI parameter.
+
+- In many cases, it is desirable to reuse the same connection file for new instances of the kernel.
+  Using the same connection parameters, including UUID, allows the clients to reconnect to the new kernel
+  automatically after the environment is restarted. The connection file name may be set using
+  ``--ipython-connection-file`` CLI parameter. If the connection file does not exist, a new file is created.
+  If the connection file exists, the kernel loads connection parameters from the file. If any of the loaded
+  connection parameters do not match the parameters in the manager configuration (e.g. one of the 0MQ port
+  numbers is different), the existing connection file is updated with the new parameters and new UUID is
+  generated.
 
 .. note::
 

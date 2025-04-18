@@ -153,8 +153,16 @@ The parameter allows to select between the following modes for updating the list
 Configuration of IPython Kernel
 +++++++++++++++++++++++++++++++
 
-Queue Server may execute plans using IPython or plain Python. In IPython mode, the worker
-process is creating an IPython kernel each time the environment is opened. The following
+Queue Server can be configured to execute plans using IPython or plain Python (default mode).
+If IPython mode is enabled, the worker process is starting a new in-process IPython kernel
+each time the environment is opened. The worker then connects to the kernel 0MQ ports to
+monotor the kernel state and run tasks. External client applications, such as Jupyter console,
+may also connect to the same 0MQ ports to communicate with the kernel. The kernel connection,
+including kernel IP address, port numbers and location of the connection file, is configured
+using a group of connection parameters. The connection parameters may be passed as CLI parameters,
+environment variables or set in the config file.
+
+ The following
 group of parameters is used to configure the IPython kernel. If the IPython mode is not enabled,
 then the parameters are ignored.
 
@@ -176,6 +184,7 @@ the environment. It allows the client applications, such as Jupyter console, to 
 reconnect to the kernel once the environment is closed and opened again. If the file does not exist,
 the kernel creates a new file. If specified connection parameters do not match the parameters in
 the config file, then the connection file is overwritten with the new port numbers.
+See also :ref:`config_of_ipython_kernel`.
 
 .. _start_re_manager_console_output:
 

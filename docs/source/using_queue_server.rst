@@ -550,6 +550,8 @@ In IPython mode, the worker can load startup code and scripts with IPython-speci
 features, such as magics, ``user_ns``, etc. Users may also connect to the kernel directly
 bypassing RE Manager using Jupyter Console.
 
+More information on configuration of IPython kernel: :ref:`config_of_ipython_kernel`.
+
 Starting RE Manager in IPython Mode
 ***********************************
 

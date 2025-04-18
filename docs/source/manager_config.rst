@@ -241,7 +241,8 @@ The parameters that define configuration of RE Worker.
   In IPython mode the worker creates IPython kernel used to run the worker environment.
   If IPython mode is disabled, the worker environment is run using plain Python. The option
   can also be set using ``--use-ipython-kernel`` CLI parameter or ``QSERVER_USE_IPYTHON_KERNEL``
-  environment variable. See :ref:`worker_ipython_kernel` for more details.
+  environment variable. See :ref:`worker_ipython_kernel` and :ref:`config_of_ipython_kernel`
+  for more details.
 
 - ``ipython_kernel_ip`` - set IP address of IPython kernel. The option is ignored if worker
   is running not in IPython mode. The supported values are ``localhost``, ``auto`` or valid

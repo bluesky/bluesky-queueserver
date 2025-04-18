@@ -153,38 +153,23 @@ The parameter allows to select between the following modes for updating the list
 Configuration of IPython Kernel
 +++++++++++++++++++++++++++++++
 
-Queue Server can be configured to execute plans using IPython or plain Python (default mode).
-If IPython mode is enabled, the worker process is starting a new in-process IPython kernel
-each time the environment is opened. The worker then connects to the kernel 0MQ ports to
-monotor the kernel state and run tasks. External client applications, such as Jupyter console,
-may also connect to the same 0MQ ports to communicate with the kernel. The kernel connection,
-including kernel IP address, port numbers and location of the connection file, is configured
-using a group of connection parameters. The connection parameters may be passed as CLI parameters,
-environment variables or set in the config file.
-
- The following
-group of parameters is used to configure the IPython kernel. If the IPython mode is not enabled,
-then the parameters are ignored.
+The following group of parameters is used to configure the IPython kernel. See
+:ref:`config_of_ipython_kernel` for more information. The parameters are ignored if
+IPython mode is not enabled.
 
 - ``--use-ipython-kernel`` - enables IPython mode. This parameter may take values ``ON``
-  or ``OFF``. If IPython mode is not enabled (default), then the remaining parameters
-  in this group are ignored.
+  or ``OFF``.
 - ``--ipython-dir`` - the path to IPython root directory, which contains profiles. Overrides
   IPYTHONDIR environment variable.
 - ``--ipython-matplotlib`` - Default Matplotlib backend, typically 'qt5'. The parameter have the
   same meaning and accepts the same values as --matplotlib parameter of IPython.
   The value is passed directly to IPython kernel.
 
-The following parameters are used to configure the IPython kernel connection:
-``--ipython-kernel-ip``, ``--ipython-connection-file``,
-``--ipython-connection-dir``, ``--ipython-shell-port``, ``--ipython-iopub-port``,
-``--ipython-stdin-port``, ``--ipython-hb-port``, and ``--ipython-control-port``.
-If fixed connection name is set, the connection parameters will persist between restarts of
-the environment. It allows the client applications, such as Jupyter console, to automatically
-reconnect to the kernel once the environment is closed and opened again. If the file does not exist,
-the kernel creates a new file. If specified connection parameters do not match the parameters in
-the config file, then the connection file is overwritten with the new port numbers.
-See also :ref:`config_of_ipython_kernel`.
+- The parameters
+  ``--ipython-kernel-ip``, ``--ipython-connection-file``,
+  ``--ipython-connection-dir``, ``--ipython-shell-port``, ``--ipython-iopub-port``,
+  ``--ipython-stdin-port``, ``--ipython-hb-port``, and ``--ipython-control-port``
+  are used to configure the IPython kernel connection.
 
 .. _start_re_manager_console_output:
 

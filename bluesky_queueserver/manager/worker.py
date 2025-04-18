@@ -1808,16 +1808,72 @@ class RunEngineWorker(Process):
                     ip = ip_str
                 return ip
 
-            logger.info("Generating random port numbers for IPython kernel ...")
+            connection_file = self._config_dict["ipython_connection_file"]
+            connection_dir = self._config_dict["ipython_connection_dir"]
+            shell_port = self._config_dict["ipython_shell_port"]
+            iopub_port = self._config_dict["ipython_iopub_port"]
+            stdin_port = self._config_dict["ipython_stdin_port"]
+            hb_port = self._config_dict["ipython_hb_port"]
+            control_port = self._config_dict["ipython_control_port"]
+
             kernel_ip = self._config_dict["ipython_kernel_ip"]
+            kernel_ip = find_kernel_ip(kernel_ip)
+
+            use_connection_file = bool(connection_file)
+
+            if connection_dir:
+                self._ip_kernel_app.connection_dir = connection_dir
+
+            if connection_file:
+                self._ip_kernel_app.connection_file = connection_file
+                abs_cf_name = self._ip_kernel_app.abs_connection_file
+
+                # Check the connection file. Delete the existing connection file if
+                #   any of the parameters are not matching the new parameters or if
+                #   the file is corrupt.
+                if os.path.isfile(abs_cf_name):
+                    try:
+                        with open(abs_cf_name, "r") as f:
+                            cn_info = json.load(f)
+
+                        def _check_value(value, key):
+                            if value:
+                                if key not in cn_info:
+                                    raise Exception(f"Key {key!r} is not found in the connection file")
+                                if cn_info[key] != value:
+                                    raise Exception(
+                                        f"Old value {cn_info[key]=} is does not match the new value {value!r}"
+                                    )
+
+                        _check_value(shell_port, "shell_port")
+                        _check_value(iopub_port, "iopub_port")
+                        _check_value(stdin_port, "stdin_port")
+                        _check_value(hb_port, "hb_port")
+                        _check_value(control_port, "control_port")
+                        _check_value(kernel_ip, "ip")
+
+                    except Exception as ex:
+                        logger.error(
+                            f"Connection file {abs_cf_name!r} is can't be loaded or out of date. "
+                            f"A new connection file will be generated. ({ex})"
+                        )
+                        use_connection_file = False
+                        os.remove(abs_cf_name)
+                else:
+                    use_connection_file = False
+
+            logger.info("Generating random port numbers for IPython kernel ...")
             try:
-                kernel_ip = find_kernel_ip(kernel_ip)
-                self._ip_kernel_app.ip = kernel_ip
-                self._ip_kernel_app.shell_port = generate_random_port(kernel_ip)
-                self._ip_kernel_app.iopub_port = generate_random_port(kernel_ip)
-                self._ip_kernel_app.stdin_port = generate_random_port(kernel_ip)
-                self._ip_kernel_app.hb_port = generate_random_port(kernel_ip)
-                self._ip_kernel_app.control_port = generate_random_port(kernel_ip)
+                if use_connection_file:
+                    logger.info(f"Loading connection file {self._ip_kernel_app.abs_connection_file}")
+                    self._ip_kernel_app.load_connection_file(self._ip_kernel_app.abs_connection_file)
+                else:
+                    self._ip_kernel_app.ip = kernel_ip
+                    self._ip_kernel_app.shell_port = shell_port or generate_random_port(kernel_ip)
+                    self._ip_kernel_app.iopub_port = iopub_port or generate_random_port(kernel_ip)
+                    self._ip_kernel_app.stdin_port = stdin_port or generate_random_port(kernel_ip)
+                    self._ip_kernel_app.hb_port = hb_port or generate_random_port(kernel_ip)
+                    self._ip_kernel_app.control_port = control_port or generate_random_port(kernel_ip)
                 self._ip_connect_info = self._ip_kernel_app.get_connection_info()
             except Exception as ex:
                 self._success_startup = False

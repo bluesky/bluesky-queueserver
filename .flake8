@@ -8,5 +8,6 @@ exclude =
     bluesky_queueserver/_version.py,
     docs/source/conf.py
 # There are some errors produced by 'black', therefore unavoidable
-ignore = E203, W503, E701, E704
+# E114 - there is some glitch in flake8 that shows the error for correctly formatted code.
+ignore = E203, W503, E701, E704, E114
 max-line-length = 115

@@ -227,15 +227,12 @@ def test_ReceiveConsoleOutputAsync_1(period, cb_type):
     ttime.sleep(1)  # Important when executed on CI
 
     async def testing():
-        nonlocal msgs
         msgs_received = []
 
         def cb_func(msg):
-            nonlocal msgs_received
             msgs_received.append(msg)
 
         async def cb_coro(msg):
-            nonlocal msgs_received
             msgs_received.append(msg)
 
         if cb_type == "func":

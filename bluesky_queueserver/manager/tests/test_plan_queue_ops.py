@@ -2390,7 +2390,6 @@ def test_set_processed_item_as_stopped_3(loop_mode, func):
 
     async def testing():
         async with PQ() as pq:
-            nonlocal plan
             await pq.add_item_to_queue(plan)
             await pq.set_plan_queue_mode({"loop": loop_mode})
 

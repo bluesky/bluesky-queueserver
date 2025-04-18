@@ -614,7 +614,6 @@ def load_script_into_existing_nspace(
     ------
     Exceptions may be raised by the ``exec`` function.
     """
-    global _n_running_scripts
 
     # There is nothing to do if the script is an empty string or None
     if not script:

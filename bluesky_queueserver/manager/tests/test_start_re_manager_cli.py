@@ -453,7 +453,7 @@ def test_cli_parameters_zmq_server_address_1(monkeypatch, re_manager_cmd, test_m
         assert status is None, (status, msg)
 
 
-def _get_expected_settings_default_1(tmpdir):
+def _get_expected_settings_default_1(_1, _2):
     use_ip_kernel = use_ipykernel_for_tests()
     username = getpass.getuser()
     if use_ip_kernel:
@@ -486,6 +486,13 @@ def _get_expected_settings_default_1(tmpdir):
         "use_ipython_kernel": bool(use_ip_kernel),
         "ipython_kernel_ip": "localhost",
         "ipython_matplotlib": None,
+        "ipython_connection_dir": None,
+        "ipython_connection_file": None,
+        "ipython_control_port": None,
+        "ipython_hb_port": None,
+        "ipython_iopub_port": None,
+        "ipython_shell_port": None,
+        "ipython_stdin_port": None,
         "print_console_output": True,
         "redis_addr": "localhost",
         "redis_name_prefix": _test_redis_name_prefix,  # We use it for unit tests
@@ -509,7 +516,7 @@ _dir_2 = "test2"
 
 
 # matching public key: =E0[czQkp!!%0TL1LCJ5X[<wjYD[iV+p[yuaI0an
-def _get_config_file_2(file_dir):
+def _get_config_file_2(file_dir, ip_con_dir):
     s = """
 network:
   zmq_control_addr: tcp://*:60617
@@ -522,6 +529,13 @@ worker:
   use_ipython_kernel: {4}
   ipython_kernel_ip: auto
   ipython_matplotlib: qt5
+  ipython_connection_dir: {5}
+  ipython_connection_file: test_connection_file
+  ipython_control_port: 60000
+  ipython_hb_port: 60001
+  ipython_iopub_port: 60002
+  ipython_shell_port: 60003
+  ipython_stdin_port: 60004
 startup:
   keep_re: false
   device_max_depth: 2
@@ -543,10 +557,12 @@ run_engine:
   databroker_config: DIF
 """
     use_ip_kernel = "true" if use_ipykernel_for_tests() else "false"
-    return s.format("Ue=.po0aQ9.}<Xvrny+f{V04XMc6JZ9ufKf5aeFy", file_dir, file_dir, file_dir, use_ip_kernel)
+    return s.format(
+        "Ue=.po0aQ9.}<Xvrny+f{V04XMc6JZ9ufKf5aeFy", file_dir, file_dir, file_dir, use_ip_kernel, ip_con_dir
+    )
 
 
-def _get_expected_settings_config_2(file_dir):
+def _get_expected_settings_config_2(file_dir, ip_con_dir):
     use_ip_kernel = use_ipykernel_for_tests()
     if use_ip_kernel:
         startup_dir = None
@@ -579,6 +595,13 @@ def _get_expected_settings_config_2(file_dir):
         "use_ipython_kernel": bool(use_ip_kernel),
         "ipython_kernel_ip": "auto",
         "ipython_matplotlib": "qt5",
+        "ipython_connection_dir": ip_con_dir,
+        "ipython_connection_file": "test_connection_file",
+        "ipython_control_port": 60000,
+        "ipython_hb_port": 60001,
+        "ipython_iopub_port": 60002,
+        "ipython_shell_port": 60003,
+        "ipython_stdin_port": 60004,
         "print_console_output": True,
         "redis_addr": "localhost:6379",
         "redis_name_prefix": "qs_unit_tests2",  # Specific for this test
@@ -620,6 +643,13 @@ def _get_cli_params_3(file_dir):
         f"--use-ipython-kernel={use_ip_kernel}",
         "--ipython-kernel-ip=127.0.0.1",
         "--ipython-matplotlib=qt",
+        "--ipython-connection-dir=test_connection_dir",
+        "--ipython-connection-file=test_connection_file",
+        "--ipython-control-port=60100",
+        "--ipython-hb-port=60101",
+        "--ipython-iopub-port=60102",
+        "--ipython-shell-port=60103",
+        "--ipython-stdin-port=60104",
         "--zmq-data-proxy-addr=tcp://localhost:5571",
         "--databroker-config=NEW",
         "--zmq-info-addr=tcp://*:60629",
@@ -628,7 +658,7 @@ def _get_cli_params_3(file_dir):
     ]
 
 
-def _get_expected_settings_params_3(file_dir):
+def _get_expected_settings_params_3(file_dir, _):
     use_ip_kernel = use_ipykernel_for_tests()
     if use_ip_kernel:
         startup_dir = None
@@ -661,6 +691,13 @@ def _get_expected_settings_params_3(file_dir):
         "use_ipython_kernel": bool(use_ip_kernel),
         "ipython_kernel_ip": "127.0.0.1",
         "ipython_matplotlib": "qt",
+        "ipython_connection_dir": "test_connection_dir",
+        "ipython_connection_file": "test_connection_file",
+        "ipython_control_port": 60100,
+        "ipython_hb_port": 60101,
+        "ipython_iopub_port": 60102,
+        "ipython_shell_port": 60103,
+        "ipython_stdin_port": 60104,
         "print_console_output": False,
         "redis_addr": "localhost:6379",
         "redis_name_prefix": "qs_unit_tests3",  # Specific for this test
@@ -718,7 +755,7 @@ def test_manager_with_config_file_01(
         set_qserver_zmq_public_key(monkeypatch, server_public_key="=E0[czQkp!!%0TL1LCJ5X[<wjYD[iV+p[yuaI0an")
         set_qserver_zmq_address(monkeypatch, zmq_server_address="tcp://localhost:60617")
         with open(config_path, "w") as f:
-            f.writelines(_get_config_file_2(file_dir))
+            f.writelines(_get_config_file_2(file_dir, tmpdir))
 
     cli_params = get_cli_params(file_dir)
     if cli_params:
@@ -750,7 +787,7 @@ def test_manager_with_config_file_01(
     #   separately. This is needed because the default startup directory
     #   returned by 'get_default_startup_dir()` is different for the manager
     #   and the testing code when the test is running on CI.
-    expected_settings = copy.deepcopy(get_expected_settings(file_dir))
+    expected_settings = copy.deepcopy(get_expected_settings(file_dir, tmpdir))
 
     print("Current_settings:\n" + pprint.pformat(current_settings))  # Useful in case of failure
     print("Expected settings:\n" + pprint.pformat(expected_settings))  # Useful in case of failure
@@ -986,6 +1023,151 @@ def test_cli_ipython_kernel_ip_01(re_manager_cmd, ipython_kernel_ip):  # noqa: F
     assert resp9["msg"] == ""
 
     assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+
+# fmt: off
+@pytest.mark.parametrize("set_conn_file_second_run, set_ports_second_run, change_ports_second_run", [
+    (True, True, False),
+    (True, False, False),
+    (False, True, False),
+    (False, False, False),
+    (True, True, True),
+    (False, True, True),
+])
+# fmt: on
+@pytest.mark.skipif(not use_ipykernel_for_tests(), reason="Test is run only with IPython worker")
+def test_cli_ipython_connection_info_01(
+    tmp_path,
+    re_manager_cmd,  # noqa: F811
+    set_conn_file_second_run,
+    set_ports_second_run,
+    change_ports_second_run,
+):
+    """
+    CLI parameters '--ipython-connection-file', '--ipython-connection-dir',
+    '--ipython-shell-port', '--ipython-iopub-port', '--ipython-stdin-port',
+    '--ipython-hb-port', '--ipython-control-port'. Test different combinations.
+
+    Expected behavior:
+      1. The connection file is created in the specified directory.
+      2. If the environment is restarted, then it uses the same connection file
+         unless different ports are specified.
+      3. If different ports are specified, then the new connection file is created.
+
+    In this test, the server is started, then the environment is opened and closed twice,
+    then the server is stopped and started again with the same or different parameters
+    and the environment is opened again.
+
+    Run this test only for IP kernel worker.
+    """
+    connection_dir = os.path.join(tmp_path, "connection_dir")
+    connection_file = "test_connection_file.json"
+
+    ports_1 = dict(shell_port=60000, iopub_port=60001, stdin_port=60002, hb_port=60003, control_port=60004)
+    ports_2 = dict(shell_port=60010, iopub_port=60011, stdin_port=60012, hb_port=60013, control_port=60014)
+
+    # Start the manager
+
+    def create_parameters(set_conn_file, ports):
+        params = []
+        if set_conn_file:
+            params.extend([f"--ipython-connection-file={connection_file}"])
+            params.extend([f"--ipython-connection-dir={connection_dir}"])
+        if ports:
+            params.extend([f"--ipython-shell-port={ports['shell_port']}"])
+            params.extend([f"--ipython-iopub-port={ports['iopub_port']}"])
+            params.extend([f"--ipython-stdin-port={ports['stdin_port']}"])
+            params.extend([f"--ipython-hb-port={ports['hb_port']}"])
+            params.extend([f"--ipython-control-port={ports['control_port']}"])
+        return params
+
+    params = create_parameters(set_conn_file=True, ports=ports_1)
+    re = re_manager_cmd(params)
+
+    # Open environment the first time
+    resp2, _ = zmq_single_request("environment_open")
+    assert resp2["success"] is True
+    assert resp2["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    # Check that the connection file was created
+    connection_file_path = os.path.join(connection_dir, connection_file)
+    assert os.path.exists(connection_file_path), connection_file_path
+
+    resp, _ = zmq_single_request("config_get")
+    assert resp["success"] is True
+
+    connect_info1 = resp["config"]["ip_connect_info"]
+
+    resp3, _ = zmq_single_request("environment_close")
+    assert resp3["success"] is True
+    assert resp3["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+    # Open environment the second time, make sure it does not crash
+    resp4, _ = zmq_single_request("environment_open")
+    assert resp4["success"] is True
+    assert resp4["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp, _ = zmq_single_request("config_get")
+    assert resp["success"] is True
+
+    connect_info2 = resp["config"]["ip_connect_info"]
+
+    resp5, _ = zmq_single_request("environment_close")
+    assert resp5["success"] is True
+    assert resp5["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+    # Check that connection info is identical
+    assert connect_info1 == connect_info2
+
+    re.stop_manager()
+
+    ports = ports_2 if change_ports_second_run else ports_1
+    ports_to_set = ports if set_ports_second_run else None
+    params = create_parameters(set_conn_file=set_conn_file_second_run, ports=ports_to_set)
+    re_manager_cmd(params)
+
+   # Open environment the second time, make sure it does not crash
+    resp4, _ = zmq_single_request("environment_open")
+    assert resp4["success"] is True
+    assert resp4["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp, _ = zmq_single_request("config_get")
+    assert resp["success"] is True
+
+    connect_info3 = resp["config"]["ip_connect_info"]
+
+    resp5, _ = zmq_single_request("environment_close")
+    assert resp5["success"] is True
+    assert resp5["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+    if set_conn_file_second_run and not change_ports_second_run:
+        assert connect_info2 == connect_info3
+    elif set_ports_second_run:
+        assert connect_info2 != connect_info3
+        assert connect_info3["shell_port"] == ports["shell_port"]
+        assert connect_info3["iopub_port"] == ports["iopub_port"]
+        assert connect_info3["stdin_port"] == ports["stdin_port"]
+        assert connect_info3["hb_port"] == ports["hb_port"]
+        assert connect_info3["control_port"] == ports["control_port"]
+    else:
+        assert connect_info2 != connect_info3
+        assert connect_info3["shell_port"] != ports["shell_port"]
+        assert connect_info3["iopub_port"] != ports["iopub_port"]
+        assert connect_info3["stdin_port"] != ports["stdin_port"]
+        assert connect_info3["hb_port"] != ports["hb_port"]
+        assert connect_info3["control_port"] != ports["control_port"]
 
 
 _script_test_plan_invalid_1 = """

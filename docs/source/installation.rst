@@ -42,6 +42,10 @@ Installation Steps
 
     $ pip install bluesky-queueserver
 
+  Install from PyPI with kafka dependencies::
+
+    $ pip install bluesky-queueserver[kafka]
+
   Install from conda-forge::
 
     $ conda install bluesky-queueserver -c conda-forge

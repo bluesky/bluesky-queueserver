@@ -2028,7 +2028,8 @@ _pf2h_processed = {
 def _pf2i(
     val1: bluesky.protocols.Readable,
     val2: bluesky.protocols.Movable,
-    val3: bluesky.protocols.Flyable,
+    val3: bluesky.protocols.Movable,
+    val4: bluesky.protocols.Flyable,
 ):
     yield from [val1, val2, val3]
 
@@ -2048,10 +2049,16 @@ _pf2i_processed = {
             "name": "val2",
         },
         {
-            "annotation": {"type": "__FLYABLE__"},
+            "annotation": {"type": "__MOVABLE__"},
             "convert_device_names": True,
             "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
             "name": "val3",
+        },
+        {
+            "annotation": {"type": "__FLYABLE__"},
+            "convert_device_names": True,
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val4",
         },
     ],
     "properties": {"is_generator": True},

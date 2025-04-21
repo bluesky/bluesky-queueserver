@@ -1,3 +1,4 @@
+aiosqlite
 bluesky>=1.7.0
 bluesky-kafka
 databroker

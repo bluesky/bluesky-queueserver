@@ -614,7 +614,6 @@ def load_script_into_existing_nspace(
     ------
     Exceptions may be raised by the ``exec`` function.
     """
-    global _n_running_scripts
 
     # There is nothing to do if the script is an empty string or None
     if not script:
@@ -2939,9 +2938,15 @@ def _process_plan(plan, *, existing_devices, existing_plans):
             Triggerable,
         )
 
+        # TODO: remove this check once NameMovable becomes standard
+        if hasattr(bluesky.protocols, "NamedMovable"):
+            from bluesky.protocols import NamedMovable
+        else:
+            NamedMovable = Movable
+
         protocols_mapping = {
             "__READABLE__": [Readable],
-            "__MOVABLE__": [Movable],
+            "__MOVABLE__": [Movable, NamedMovable],
             "__FLYABLE__": [Flyable],
             "__DEVICE__": [
                 Configurable,
@@ -3302,9 +3307,14 @@ def _prepare_devices(devices, *, max_depth=0, ignore_all_subdevices_if_one_fails
     from ophyd.areadetector import ADBase
 
     def get_device_params(device):
+        movable_protocols = (protocols.Movable,)
+        # TODO: remove this check when NamedMovable is available in every Bluesky deployment
+        if hasattr(protocols, "NamedMovable"):
+            movable_protocols = (*movable_protocols, protocols.NamedMovable)
+
         return {
             "is_readable": isinstance(device, protocols.Readable),
-            "is_movable": isinstance(device, protocols.Movable),
+            "is_movable": isinstance(device, movable_protocols),
             "is_flyable": isinstance(device, protocols.Flyable),
             "classname": type(device).__name__,
             "module": type(device).__module__,

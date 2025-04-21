@@ -294,6 +294,7 @@ The server can recognize and properly handle the following types used in the pla
 
 * ``bluesky.protocols.Readable`` (replaced by ``__READABLE__`` built-in type);
 * ``bluesky.protocols.Movable`` (replaced by ``__MOVABLE__`` built-in type);
+* ``bluesky.protocols.NamedMovable`` (replaced by ``__MOVABLE__`` built-in type);
 * ``bluesky.protocols.Flyable`` (replaced by ``__FLYABLE__`` built-in type);
 * ``bluesky.protocols.Configurable`` (replaced by ``__DEVICE__`` built-in type);
 * ``bluesky.protocols.Triggerable`` (replaced by ``__DEVICE__`` built-in type);
@@ -394,8 +395,9 @@ of plans with type hints:
       <code implementing the plan>
 
 The server can process the annotations containing Bluesky protocols such as
-``bluesky.protocols.Readable``, ```bluesky.protocols.Movable`` and ``bluesky.protocols.Flyable``
-and callable types ``collections.abc.Callable`` and ``typing.Callable`` with or without type parameters.
+``bluesky.protocols.Readable``, ``bluesky.protocols.Movable``, ``bluesky.protocols.NamedMovable``
+and ``bluesky.protocols.Flyable`` and callable types ``collections.abc.Callable`` and
+``typing.Callable`` with or without type parameters.
 Those types are replaced with ``__READABLE__``, ``__MOVABLE__``, ``__FLYABLE__``
 and ``__CALLABLE__`` built-in types respectively. See the details on built-in types in
 :ref:`parameter_annotation_decorator_parameter_types`.

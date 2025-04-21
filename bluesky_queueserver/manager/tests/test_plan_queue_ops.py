@@ -2449,8 +2449,12 @@ def test_set_processed_item_as_stopped_3(backend, loop_mode, func):
     plan = {"item_type": "plan", "item_uid": 1, "name": "a", "properties": {"immediate_execution": True}}
 
     async def testing():
+<<<<<<< HEAD
         async with PQ(backend=backend) as pq:
             nonlocal plan
+=======
+        async with PQ() as pq:
+>>>>>>> upstream/main
             await pq.add_item_to_queue(plan)
             await pq.set_plan_queue_mode({"loop": loop_mode})
 

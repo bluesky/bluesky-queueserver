@@ -37,10 +37,10 @@ class PQ:
         """
         Returns initialized instance of plan queue.
         """
-        self._pq = PlanQueueOperations(
-            name_prefix=_test_redis_name_prefix if self._backend == "redis" else None,
-            backend=self._backend,
-            sqlite_db_path=self._sqlite_db_path,
+        pq = PlanQueueOperations(
+            name_prefix=_test_redis_name_prefix if backend == "redis" else "sqlite_backend",
+            backend=backend,
+            sqlite_db_path=":memory:" if backend == "sqlite" else None,
         )
         await self._pq.start()
         # Clear any pool entries
@@ -71,7 +71,7 @@ def test_pq_start_stop(backend):
 
     async def testing():
         pq = PlanQueueOperations(
-            name_prefix=_test_redis_name_prefix if backend == "redis" else None,
+            name_prefix=_test_redis_name_prefix if backend == "redis" else "sqlite_backend",
             backend=backend,
             sqlite_db_path=":memory:" if backend == "sqlite" else None,
         )
@@ -99,15 +99,13 @@ def test_pq_start_stop(backend):
     ({"name": "plan1", "result": {}}, {"name": "plan1"}),
 ])
 # fmt: on
-def test_filter_item_parameters(backend):
+def test_filter_item_parameters(backend, item_in, item_out):
     """
     Tests for ``filter_item_parameters``.
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
-            item_in = {"name": "plan1", "item_uid": "abcde"}
-            item_out = {"name": "plan1", "item_uid": "abcde"}
+        async with PQ(backend=backend) as pq:  # Ensure 'backend' is passed here
             item = pq.filter_item_parameters(item_in)
             assert item == item_out
 

@@ -4,6 +4,7 @@ import json
 import logging
 import time as ttime
 import uuid
+import os
 
 import redis.asyncio
 import aiosqlite
@@ -88,6 +89,21 @@ class PlanQueueOperations:
             environment variable `SQLITE_DB_PATH`. If the environment variable is not set,
             a default path `my_database.db` is used.
         """
+        # is there a default value for "name_prefix"?
+        if backend == "redis":
+            if not isinstance(name_prefix, str):
+                raise TypeError(f"Parameter 'name_prefix' should be a string: {name_prefix}")
+            self._name_plan_queue = f"{name_prefix}_plan_queue" if name_prefix else "plan_queue"
+        elif backend == "sqlite":
+            self._sqlite_tables = {
+                "list_store": "list_store",
+                "kv_store": "kv_store",
+            }
+            # For SQLite, name_prefix is irrelevant, so we set a default value
+            self._name_plan_queue = "plan_queue"
+        else:
+            raise ValueError(f"Unsupported backend: {backend}")
+
         self._backend = backend
         self._redis_host = redis_host
         self._sqlite_db_path = sqlite_db_path or os.getenv("SQLITE_DB_PATH", "queue_database.db")
@@ -307,32 +323,48 @@ class PlanQueueOperations:
         Initialize SQLite tables if they do not exist.
         """
         async with self._sqlite_conn.cursor() as cursor:
+            # Create the table for the plan queue
             await cursor.execute(f"""
-                CREATE TABLE IF NOT EXISTS {self._sqlite_tables['plan_queue']} (
+                CREATE TABLE IF NOT EXISTS {self._sqlite_tables['list_store']} (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    item_uid TEXT UNIQUE,
-                    item_data TEXT
+                    list_key TEXT,
+                    value TEXT
                 )
             """)
+
+            # Create the table for key-value storage
             await cursor.execute(f"""
-                CREATE TABLE IF NOT EXISTS {self._sqlite_tables['plan_history']} (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    item_uid TEXT UNIQUE,
-                    item_data TEXT
+                CREATE TABLE IF NOT EXISTS {self._sqlite_tables['kv_store']} (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
                 )
             """)
+
+            # Ensure the 'plan_queue' key exists in the list_store table
             await cursor.execute(f"""
-                CREATE TABLE IF NOT EXISTS {self._sqlite_tables['running_plan']} (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    item_data TEXT
-                )
+                INSERT OR IGNORE INTO {self._sqlite_tables['list_store']} (list_key, value)
+                VALUES ('plan_queue', '[]')
             """)
+
+            # Ensure the 'plan_history' key exists in the list_store table
             await cursor.execute(f"""
-                CREATE TABLE IF NOT EXISTS {self._sqlite_tables['plan_queue_mode']} (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    mode_data TEXT
-                )
+                INSERT OR IGNORE INTO {self._sqlite_tables['list_store']} (list_key, value)
+                VALUES ('plan_history', '[]')
             """)
+
+            # Ensure the 'running_plan' key exists in the list_store table
+            await cursor.execute(f"""
+                INSERT OR IGNORE INTO {self._sqlite_tables['list_store']} (list_key, value)
+                VALUES ('running_plan', 'null')
+            """)
+
+            # Ensure the 'plan_queue_mode' key exists in the list_store table
+            await cursor.execute(f"""
+                INSERT OR IGNORE INTO {self._sqlite_tables['list_store']} (list_key, value)
+                VALUES ('plan_queue_mode', '{}')
+            """)
+
+        # Commit the changes to the database
         await self._sqlite_conn.commit()
 
     async def stop(self):
@@ -734,7 +766,7 @@ class PlanQueueOperations:
             if running_item and (uid == running_item["item_uid"]):
                 raise IndexError(f"The item with UID '{uid}' is currently running.")
             item = self._uid_dict_get_item(uid)
-            
+
         else:
             # Retrieve item by position
             if pos == "back":
@@ -945,10 +977,19 @@ class PlanQueueOperations:
             qsize = await self._get_queue_size()
             return items_to_remove, qsize
 
-        else:
-            # Fallback to existing logic for Redis
-            return await super()._pop_item_from_queue_batch(uids=uids, ignore_missing=ignore_missing)
-
+        elif self._backend == "redis":
+            # Redis-specific logic for removing a batch of items
+            items_removed = []
+            for uid in uids:
+                try:
+                    item, _ = await self._pop_item_from_queue(uid=uid)
+                    items_removed.append(item)
+                except IndexError:
+                    if not ignore_missing:
+                        raise ValueError(f"Item with UID '{uid}' is not in the queue.")
+            qsize = await self._get_queue_size()
+            return items_removed, qsize
+    
     async def pop_item_from_queue_batch(self, *, uids=None, ignore_missing=True):
         """
         Pop a batch of items from the queue. Raises ``IndexError`` if plan with index ``pos`` is unavailable
@@ -1185,11 +1226,22 @@ class PlanQueueOperations:
             qsize = await self._get_queue_size()
             return items, [{"success": True, "msg": ""} for _ in items], qsize, True
 
-        else:
-            # Fallback to existing logic for Redis
-            return await super()._add_batch_to_queue(
-                items, pos=pos, before_uid=before_uid, after_uid=after_uid, filter_parameters=filter_parameters
-            )
+        elif self._backend == "redis":
+            # Redis-specific logic for adding a batch of items
+            for item in items:
+                if "item_uid" not in item:
+                    item = self.set_new_item_uuid(item)
+                else:
+                    self._verify_item(item)
+
+                if filter_parameters:
+                    item = self.filter_item_parameters(item)
+
+                await self._backend_list_push(self._name_plan_queue, json.dumps(item), position="back")
+                self._uid_dict_add(item)
+
+            qsize = await self._get_queue_size()
+            return items, [{"success": True, "msg": ""} for _ in items], qsize, True
 
     async def add_batch_to_queue(
         self, items, *, pos=None, before_uid=None, after_uid=None, filter_parameters=True

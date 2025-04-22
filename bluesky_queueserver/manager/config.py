@@ -312,7 +312,6 @@ def get_profile_name_from_path(startup_dir):
 
 class Settings:
     def __init__(self, *, parser, args):
-
         self._parser = parser
         self._args = args
         self._args_existing = _ArgsExisting(parser=parser, args=args)

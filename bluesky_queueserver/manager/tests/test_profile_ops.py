@@ -3219,8 +3219,7 @@ def test_process_plan_4(plan_func, existing_devices, plan_info_expected):
 def _pf5a_factory():
     """Arbitrary classes are not supported"""
 
-    class SomeClass:
-        ...
+    class SomeClass: ...
 
     def f(val1, *, val2, val3=SomeClass()):
         yield from [val1, val2, val3]
@@ -3264,8 +3263,7 @@ def _pf5c(detector: Optional[ophyd.Device]):
 def _pf5d_factory():
     """Arbitrary classes are not supported"""
 
-    class SomeClass:
-        ...
+    class SomeClass: ...
 
     @parameter_annotation_decorator({"parameters": {"val1": {"default": SomeClass()}}})
     def f(val1):

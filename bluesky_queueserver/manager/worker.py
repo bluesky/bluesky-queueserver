@@ -83,8 +83,7 @@ _plan_exit_status_expected = {
 }
 
 
-class RejectedError(RuntimeError):
-    ...
+class RejectedError(RuntimeError): ...
 
 
 class RunEngineWorker(Process):
@@ -1384,7 +1383,6 @@ class RunEngineWorker(Process):
         from .profile_tools import global_user_namespace
 
         try:
-            keep_re = self._config_dict["keep_re"]
             startup_dir = self._config_dict.get("startup_dir", None)
             startup_module_name = self._config_dict.get("startup_module_name", None)
             startup_script_path = self._config_dict.get("startup_script_path", None)
@@ -1395,14 +1393,11 @@ class RunEngineWorker(Process):
                     startup_dir=startup_dir,
                     startup_module_name=startup_module_name,
                     startup_script_path=startup_script_path,
-                    keep_re=keep_re,
                     nspace=self._re_namespace,
                 )
 
-            if keep_re and ("RE" not in self._re_namespace):
-                raise RuntimeError(
-                    "Run Engine is not created in the startup code and 'keep_re' option is activated."
-                )
+            if "RE" not in self._re_namespace:
+                raise RuntimeError("Run Engine is not created in the startup code.")
 
             epd = existing_plans_and_devices_from_nspace(
                 nspace=self._re_namespace,

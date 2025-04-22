@@ -230,16 +230,6 @@ get_ipython = get_ipython_patch
 """
 
 
-# Discard RE and db from the profile namespace (if they exist).
-def _discard_re_from_nspace(nspace, *, keep_re=False):
-    """
-    Discard RE and db from the profile namespace (if they exist).
-    """
-    if not keep_re:
-        nspace.pop("RE", None)
-        nspace.pop("db", None)
-
-
 def _patch_script_code(code_str):
     """
     Patch script code represented as a single text string:
@@ -268,7 +258,7 @@ def _patch_script_code(code_str):
     return "\n".join(s_list)
 
 
-def load_profile_collection(path, *, patch_profiles=True, keep_re=False, nspace=None):
+def load_profile_collection(path, *, patch_profiles=True, nspace=None):
     """
     Load profile collection located at the specified path. The collection consists of
     .py files started with 'DD-', where D is a digit (e.g. 05-file.py). The files
@@ -281,9 +271,6 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False, nspace=
     patch_profiles: boolean
         enable/disable patching profiles. At this point there is no reason not to
         patch profiles.
-    keep_re: boolean
-        Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
-        or removed (``False``).
     nspace: dict or None
         Reference to the existing namespace, in which the code is executed. If ``nspace``
         is *None*, then the new namespace is created.
@@ -359,8 +346,6 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False, nspace=
                 patch = "del __file__\n"  # Do not delete '__name__'
                 exec(patch, nspace, nspace)
 
-        _discard_re_from_nspace(nspace, keep_re=keep_re)
-
     finally:
         try:
             if path_is_set:
@@ -371,7 +356,7 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False, nspace=
     return nspace
 
 
-def load_startup_module(module_name, *, keep_re=False, nspace=None):
+def load_startup_module(module_name, *, nspace=None):
     """
     Populate namespace by import a module.
 
@@ -379,9 +364,6 @@ def load_startup_module(module_name, *, keep_re=False, nspace=None):
     ----------
     module_name: str
         name of the module to import
-    keep_re: boolean
-        Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
-        or removed (``False``).
     nspace: dict or None
         Reference to the existing namespace, in which the code is executed. If ``nspace``
         is *None*, then the new namespace is created.
@@ -406,12 +388,10 @@ def load_startup_module(module_name, *, keep_re=False, nspace=None):
         ex_str = "".join(ex_str) + "\n" + msg
         raise ScriptLoadingError(msg, ex_str) from ex
 
-    _discard_re_from_nspace(nspace, keep_re=keep_re)
-
     return nspace
 
 
-def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True, nspace=None):
+def load_startup_script(script_path, *, enable_local_imports=True, nspace=None):
     """
     Populate namespace by import a module.
 
@@ -419,9 +399,6 @@ def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True
     ----------
     script_path : str
         full path to the startup script
-    keep_re : boolean
-        Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
-        or removed (``False``).
     enable_local_imports : boolean
         If ``False``, local imports from the script will not work. Setting to ``True``
         enables local imports.
@@ -481,8 +458,6 @@ def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True
 
             sys.path.remove(p)
 
-    _discard_re_from_nspace(nspace, keep_re=keep_re)
-
     return nspace
 
 
@@ -491,7 +466,6 @@ def load_worker_startup_code(
     startup_dir=None,
     startup_module_name=None,
     startup_script_path=None,
-    keep_re=False,
     nspace=None,
 ):
     """
@@ -506,9 +480,6 @@ def load_worker_startup_code(
         Name of the startup module.
     startup_script_path : str
         Path to startup script.
-    keep_re: boolean
-        Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
-        or removed (``False``).
     nspace: dict or None
         Reference to the existing namespace, in which the code is executed. If ``nspace``
         is *None*, then the new namespace is created.
@@ -530,16 +501,16 @@ def load_worker_startup_code(
         logger.info("Loading RE Worker startup code from directory '%s' ...", startup_dir)
         startup_dir = os.path.abspath(os.path.expanduser(startup_dir))
         logger.info("Startup directory: '%s'", startup_dir)
-        nspace = load_profile_collection(startup_dir, keep_re=keep_re, patch_profiles=True, nspace=nspace)
+        nspace = load_profile_collection(startup_dir, patch_profiles=True, nspace=nspace)
 
     elif startup_module_name is not None:
         logger.info("Loading RE Worker startup code from module '%s' ...", startup_module_name)
-        nspace = load_startup_module(startup_module_name, keep_re=keep_re, nspace=nspace)
+        nspace = load_startup_module(startup_module_name, nspace=nspace)
 
     elif startup_script_path is not None:
         logger.info("Loading RE Worker startup code from script '%s' ...", startup_script_path)
         startup_script_path = os.path.abspath(os.path.expanduser(startup_script_path))
-        nspace = load_startup_script(startup_script_path, keep_re=keep_re, nspace=nspace)
+        nspace = load_startup_script(startup_script_path, nspace=nspace)
 
     else:
         logger.warning(

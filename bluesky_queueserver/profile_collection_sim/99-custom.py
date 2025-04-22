@@ -236,7 +236,8 @@ class StatusPlaceholder:
     def __init__(self):
         self.done = False
 
-    def watch(self, _): ...
+    def watch(self, _):
+        ...
 
 
 def plan_test_progress_bars(n_progress_bars: int = 1):

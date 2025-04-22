@@ -33,7 +33,8 @@ logger = logging.getLogger(__name__)
 qserver_version = bluesky_queueserver.__version__
 
 
-class CommandParameterError(Exception): ...
+class CommandParameterError(Exception):
+    ...
 
 
 class QServerExitCodes(enum.Enum):

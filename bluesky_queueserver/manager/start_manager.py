@@ -275,7 +275,6 @@ class AtTerm:
 
 
 def start_manager():
-
     s_enc = (
         "Encryption for ZeroMQ communication server may be enabled by setting the value of\n"
         "'QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER' environment variable to a valid private key\n"

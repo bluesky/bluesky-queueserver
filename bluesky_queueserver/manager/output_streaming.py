@@ -78,7 +78,8 @@ def setup_console_output_redirection(msg_queue):
 
         # Disable 'colorama' (used by Bluesky). We don't need it in Queue Server.
         #   Colorama overrides 'sys.stdout' and interferes with capturing console output.
-        def do_nothing(*args, **kwargs): ...
+        def do_nothing(*args, **kwargs):
+            ...
 
         try:
             import colorama

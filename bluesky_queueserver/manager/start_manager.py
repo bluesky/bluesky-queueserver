@@ -765,10 +765,8 @@ def start_manager():
             "Acceptable values: 'localhost', 'auto' or a string representing an IP address"
         )
 
-    config_worker["keep_re"] = settings.keep_re
     config_worker["device_max_depth"] = settings.device_max_depth
     config_worker["use_ipython_kernel"] = settings.use_ipython_kernel
-    config_worker["use_persistent_metadata"] = settings.use_persistent_metadata
 
     config_worker["startup_profile"] = startup_profile
     config_worker["startup_dir"] = startup_dir

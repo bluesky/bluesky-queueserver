@@ -166,7 +166,8 @@ Parameters that define for network settings used by RE Manager:
   ``--zmq-publish-console`` CLI parameter.
 
 - ``redis_addr`` - the address of Redis server, e.g. ``localhost``, ``127.0.0.1``, ``localhost:6379``.
-  The value may also be passed using ``--redis-addr`` CLI parameter.
+  The address may also contain a Redis database number, e.g. ``localhost:6379/0``.
+  Redis address may also be passed using ``--redis-addr`` CLI parameter.
 
 - ``redis_name_prefix`` - the prefix is appended to the Redis keys to differentiate between keys
   created by different instances of RE Manager. The value may also be passed using

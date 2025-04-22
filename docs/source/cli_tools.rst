@@ -339,7 +339,7 @@ Other Configuration Parameters
                       API request is received (default: ON_STARTUP)
     --redis-addr REDIS_ADDR
                       The address of Redis server, e.g. 'localhost', '127.0.0.1',
-                      'localhost:6379' (default: localhost).
+                      'localhost:6379', 'localhost:6379/0' (default: localhost).
     --redis-name-prefix REDIS_NAME_PREFIX
                       The prefix for the names of Redis keys used by RE Manager (default:
                       qs_default).
@@ -891,7 +891,7 @@ address is different from default, the correct address must be passed using the 
     -h, --help        show this help message and exit
     --redis-addr REDIS_ADDR
                       The address of Redis server, e.g. 'localhost', '127.0.0.1',
-                      'localhost:6379' (default: localhost).
+                      'localhost:6379', 'localhost:6379/0' (default: localhost).
     --redis-name-prefix REDIS_NAME_PREFIX
                       The prefix for the names of Redis keys used by RE Manager (default:
                       qs_default).

@@ -307,9 +307,6 @@ def simple_sample_plan_2():
 
 from bluesky import RunEngine
 RE = RunEngine({})
-
-from databroker.v0 import Broker
-db = Broker.named('temp')
 """
 
 

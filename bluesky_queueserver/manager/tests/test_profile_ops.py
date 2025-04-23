@@ -72,6 +72,7 @@ from .common import (
     _user_group,
     append_code_to_last_startup_file,
     copy_default_profile_collection,
+    fln_run_engine,
     patch_first_startup_file,
 )
 
@@ -337,29 +338,24 @@ def test_load_profile_collection_04_fail(tmp_path):
         load_profile_collection(pc_path)
 
 
-@pytest.mark.parametrize("keep_re", [True, False])
-def test_load_profile_collection_05(tmp_path, keep_re):
+# fmt: off
+@pytest.mark.parametrize("startup_with_re", [False, True])
+# fmt: on
+def test_load_profile_collection_05(tmp_path, startup_with_re):
     """
     Loading a copy of the default profile collection
     """
     pc_path = copy_default_profile_collection(tmp_path)
+    if not startup_with_re:
+        # Delete file with RE config
+        os.remove(os.path.join(pc_path, fln_run_engine))
 
-    patch = """
-from bluesky import RunEngine
-RE = RunEngine({})
-from databroker.v0 import Broker
-db = Broker.named('temp')
-RE.subscribe(db.insert)
-"""
-    patch_first_startup_file(pc_path, patch)
+    nspace = load_profile_collection(pc_path)
 
-    nspace = load_profile_collection(pc_path, keep_re=keep_re)
-    if keep_re:
+    if startup_with_re:
         assert "RE" in nspace
-        assert "db" in nspace
     else:
         assert "RE" not in nspace
-        assert "db" not in nspace
 
 
 _happi_json_db = """
@@ -615,12 +611,12 @@ def simple_sample_plan_2():
     Simple plan for tests.
     '''
     yield from count([det1, det2])
+"""
 
+
+_startup_script_1_re = """
 from bluesky import RunEngine
 RE = RunEngine({})
-
-from databroker.v0 import Broker
-db = Broker.named('temp')
 """
 
 
@@ -645,9 +641,11 @@ def simple_sample_plan_4():
 """
 
 
-@pytest.mark.parametrize("keep_re", [True, False])
+# fmt: off
+@pytest.mark.parametrize("startup_with_re", [False, True])
 @pytest.mark.parametrize("enable_local_imports", [True, False])
-def test_load_startup_script_1(tmp_path, keep_re, enable_local_imports, reset_sys_modules):  # noqa: F811
+# fmt: on
+def test_load_startup_script_1(tmp_path, startup_with_re, enable_local_imports, reset_sys_modules):  # noqa: F811
     """
     Basic test for `load_startup_script` function. Load two scripts in sequence from two
     different locations and make sure that all the plans are loaded.
@@ -658,21 +656,21 @@ def test_load_startup_script_1(tmp_path, keep_re, enable_local_imports, reset_sy
     script_dir = os.path.join(tmp_path, "script_dir1")
     script_path = os.path.join(script_dir, "startup_script.py")
 
+    s = _startup_script_1 + _startup_script_1_re if startup_with_re else _startup_script_1
+
     os.makedirs(script_dir, exist_ok=True)
     with open(script_path, "w") as f:
-        f.write(_startup_script_1)
+        f.write(s)
 
-    nspace = load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+    nspace = load_startup_script(script_path, enable_local_imports=enable_local_imports)
 
     assert nspace
     assert "simple_sample_plan_1" in nspace, pprint.pformat(nspace)
     assert "simple_sample_plan_2" in nspace, pprint.pformat(nspace)
-    if keep_re:
+    if startup_with_re:
         assert "RE" in nspace, pprint.pformat(nspace)
-        assert "db" in nspace, pprint.pformat(nspace)
     else:
         assert "RE" not in nspace, pprint.pformat(nspace)
-        assert "db" not in nspace, pprint.pformat(nspace)
 
     # Load script #2 (same name, but different path)
     script_dir = os.path.join(tmp_path, "script_dir2")
@@ -682,13 +680,12 @@ def test_load_startup_script_1(tmp_path, keep_re, enable_local_imports, reset_sy
     with open(script_path, "w") as f:
         f.write(_startup_script_2)
 
-    nspace = load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+    nspace = load_startup_script(script_path, enable_local_imports=enable_local_imports)
 
     assert nspace
     assert "simple_sample_plan_3" in nspace, pprint.pformat(nspace)
     assert "simple_sample_plan_4" in nspace, pprint.pformat(nspace)
     assert "RE" not in nspace, pprint.pformat(nspace)
-    assert "db" not in nspace, pprint.pformat(nspace)
 
 
 _imported_module_1 = """
@@ -725,9 +722,8 @@ def plan_in_module_2():
 """
 
 
-@pytest.mark.parametrize("keep_re", [True, False])
 @pytest.mark.parametrize("enable_local_imports", [True, False])
-def test_load_startup_script_2(tmp_path, keep_re, enable_local_imports, reset_sys_modules):  # noqa: F811
+def test_load_startup_script_2(tmp_path, enable_local_imports, reset_sys_modules):  # noqa: F811
     """
     Tests for `load_startup_script` function. Loading scripts WITH LOCAL IMPORTS.
     Loading is expected to fail if local imports are disabled.
@@ -752,27 +748,22 @@ def test_load_startup_script_2(tmp_path, keep_re, enable_local_imports, reset_sy
     os.makedirs(script_dir, exist_ok=True)
     os.makedirs(module_dir, exist_ok=True)
     with open(script_path, "w") as f:
-        f.write(script_patch + _startup_script_1)
+        f.write(script_patch + _startup_script_1 + _startup_script_1_re)
     with open(module_path, "w") as f:
         f.write(_imported_module_1)
 
     if enable_local_imports:
-        nspace = load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+        nspace = load_startup_script(script_path, enable_local_imports=enable_local_imports)
 
         assert nspace
         assert "simple_sample_plan_1" in nspace, pprint.pformat(nspace)
         assert "simple_sample_plan_2" in nspace, pprint.pformat(nspace)
         assert "plan_in_module_1" in nspace, pprint.pformat(nspace)
-        if keep_re:
-            assert "RE" in nspace, pprint.pformat(nspace)
-            assert "db" in nspace, pprint.pformat(nspace)
-        else:
-            assert "RE" not in nspace, pprint.pformat(nspace)
-            assert "db" not in nspace, pprint.pformat(nspace)
+        assert "RE" in nspace, pprint.pformat(nspace)
     else:
         # Expected to fail if local imports are not enaabled
         with pytest.raises(ScriptLoadingError):
-            load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+            load_startup_script(script_path, enable_local_imports=enable_local_imports)
 
     # Reload the same script, but replace the code in the module (emulate the process of code editing).
     #   Check that the new code is loaded when the module is imported.
@@ -780,14 +771,14 @@ def test_load_startup_script_2(tmp_path, keep_re, enable_local_imports, reset_sy
         f.write(_imported_module_1_modified)
 
     if enable_local_imports:
-        nspace = load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+        nspace = load_startup_script(script_path, enable_local_imports=enable_local_imports)
         assert "plan_in_module_1" not in nspace, pprint.pformat(nspace)
         assert "plan_in_module_1_modified" in nspace, pprint.pformat(nspace)
 
     else:
         # Expected to fail if local imports are not enaabled
         with pytest.raises(ScriptLoadingError):
-            load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+            load_startup_script(script_path, enable_local_imports=enable_local_imports)
 
     # Load different script (same name, but different path). The script imports module with the same name
     #   (with the same relative path). Check that the correct version of the module is loaded.
@@ -806,17 +797,16 @@ def test_load_startup_script_2(tmp_path, keep_re, enable_local_imports, reset_sy
         f.write(_imported_module_2)
 
     if enable_local_imports:
-        nspace = load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+        nspace = load_startup_script(script_path, enable_local_imports=enable_local_imports)
 
         assert nspace
         assert "simple_sample_plan_3" in nspace, pprint.pformat(nspace)
         assert "simple_sample_plan_4" in nspace, pprint.pformat(nspace)
         assert "RE" not in nspace, pprint.pformat(nspace)
-        assert "db" not in nspace, pprint.pformat(nspace)
     else:
         # Expected to fail if local imports are not enaabled
         with pytest.raises(ScriptLoadingError):
-            load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+            load_startup_script(script_path, enable_local_imports=enable_local_imports)
 
 
 _startup_script_3 = """
@@ -867,9 +857,8 @@ sim_stage = SimStage(name="sim_stage")
 """
 
 
-@pytest.mark.parametrize("keep_re", [True, False])
 @pytest.mark.parametrize("enable_local_imports", [True, False])
-def test_load_startup_script_4(tmp_path, keep_re, enable_local_imports, reset_sys_modules):  # noqa: F811
+def test_load_startup_script_4(tmp_path, enable_local_imports, reset_sys_modules):  # noqa: F811
     """
     Load a startup script with more sophisticated imports
     """
@@ -881,13 +870,12 @@ def test_load_startup_script_4(tmp_path, keep_re, enable_local_imports, reset_sy
     with open(script_path, "w") as f:
         f.write(_startup_script_4)
 
-    nspace = load_startup_script(script_path, keep_re=keep_re, enable_local_imports=enable_local_imports)
+    nspace = load_startup_script(script_path, enable_local_imports=enable_local_imports)
 
     assert nspace
     assert "SimStage" in nspace, pprint.pformat(nspace)
     assert "sim_stage" in nspace, pprint.pformat(nspace)
     assert "RE" not in nspace, pprint.pformat(nspace)
-    assert "db" not in nspace, pprint.pformat(nspace)
 
 
 code_script_startup_test5_1 = """
@@ -978,7 +966,11 @@ def test_extract_script_root_path_1(params, result):
 
 # fmt: off
 @pytest.mark.parametrize("update_re", [False, True])
-@pytest.mark.parametrize("scripts", [(_startup_script_1,), (_startup_script_1, _startup_script_2)])
+@pytest.mark.parametrize("scripts", [
+    (_startup_script_1,),
+    (_startup_script_1, _startup_script_2),
+    (_startup_script_1, _startup_script_1_re, _startup_script_2),
+])
 # fmt: on
 def test_load_script_into_existing_nspace_01(scripts, update_re):
     """
@@ -994,14 +986,13 @@ def test_load_script_into_existing_nspace_01(scripts, update_re):
     name_list = []
     if _startup_script_1 in scripts:
         name_list.extend(["simple_sample_plan_1", "simple_sample_plan_2"])
-        if update_re:
-            name_list.extend(["RE", "db"])
-
+    if _startup_script_1_re in scripts and update_re:
+        name_list.extend(["RE"])
     if _startup_script_2 in scripts:
         name_list.extend(["simple_sample_plan_3", "simple_sample_plan_4"])
 
     for name in name_list:
-        assert name in nspace
+        assert name in nspace, name
 
 
 # fmt: off
@@ -1039,7 +1030,7 @@ def test_load_script_into_existing_nspace_02(
     with open(module_path, "w") as f:
         f.write(_imported_module_1)
 
-    script = script_patch + _startup_script_1
+    script = script_patch + _startup_script_1 + _startup_script_1_re
 
     nspace = {}
 
@@ -1058,10 +1049,8 @@ def test_load_script_into_existing_nspace_02(
         assert "plan_in_module_1" in nspace, pprint.pformat(nspace)
         if update_re:
             assert "RE" in nspace, pprint.pformat(nspace)
-            assert "db" in nspace, pprint.pformat(nspace)
         else:
             assert "RE" not in nspace, pprint.pformat(nspace)
-            assert "db" not in nspace, pprint.pformat(nspace)
     else:
         # Expected to fail if local imports are not enaabled
         with pytest.raises(ScriptLoadingError):
@@ -1132,10 +1121,8 @@ def test_load_script_into_existing_nspace_02(
         assert "plan_in_module_2" in nspace, pprint.pformat(nspace)
         if update_re:
             assert "RE" in nspace, pprint.pformat(nspace)
-            assert "db" in nspace, pprint.pformat(nspace)
         else:
             assert "RE" not in nspace, pprint.pformat(nspace)
-            assert "db" not in nspace, pprint.pformat(nspace)
     else:
         # Expected to fail if local imports are not enaabled
         with pytest.raises(ScriptLoadingError):
@@ -1269,21 +1256,19 @@ def test_load_script_into_existing_nspace_08(update_re):  # noqa: F811
     nspace = {}
 
     # Load script that contains RE and db. Set 'update_re' as True.
-    load_script_into_existing_nspace(script=_startup_script_1, nspace=nspace, update_re=True)
+    load_script_into_existing_nspace(
+        script=_startup_script_1 + _startup_script_1_re, nspace=nspace, update_re=True
+    )
 
     assert "RE" in nspace
     assert nspace["RE"]
-    assert "db" in nspace
-    assert nspace["db"]
 
     script = """RE=None\ndb=None"""
     load_script_into_existing_nspace(script=script, nspace=nspace, update_re=update_re)
     if update_re:
         assert nspace["RE"] is None
-        assert nspace["db"] is None
     else:
         assert nspace["RE"]
-        assert nspace["db"]
 
 
 def test_load_script_into_existing_nspace_09():  # noqa: F811
@@ -1364,8 +1349,8 @@ def test_load_script_into_existing_nspace_12(tmp_path, reset_sys_modules):  # no
     assert tb.endswith(msg), tb
 
 
-@pytest.mark.parametrize("keep_re", [True, False])
-def test_load_startup_module_1(tmp_path, monkeypatch, keep_re, reset_sys_modules):  # noqa: F811
+@pytest.mark.parametrize("startup_with_re", [False, True])
+def test_load_startup_module_1(tmp_path, monkeypatch, startup_with_re, reset_sys_modules):  # noqa: F811
     """
     Test for `load_startup_module` function: import module that is in the module search path.
     The test also demonstrates that if the code of the module or any module imported by the module
@@ -1382,8 +1367,11 @@ def test_load_startup_module_1(tmp_path, monkeypatch, keep_re, reset_sys_modules
 
     os.makedirs(script_dir, exist_ok=True)
     os.makedirs(module_dir, exist_ok=True)
+    s = script_patch + _startup_script_1
+    if startup_with_re:
+        s += _startup_script_1_re
     with open(script_path, "w") as f:
-        f.write(script_patch + _startup_script_1)
+        f.write(s)
 
     with open(module_path, "w") as f:
         f.write(_imported_module_1)
@@ -1392,18 +1380,16 @@ def test_load_startup_module_1(tmp_path, monkeypatch, keep_re, reset_sys_modules
     sys_path = sys.path
     monkeypatch.setattr(sys, "path", [str(tmp_path)] + sys_path)
 
-    nspace = load_startup_module("script_dir1.startup_script", keep_re=keep_re)
+    nspace = load_startup_module("script_dir1.startup_script")
 
     assert nspace
     assert "simple_sample_plan_1" in nspace, pprint.pformat(nspace)
     assert "simple_sample_plan_2" in nspace, pprint.pformat(nspace)
     assert "plan_in_module_1" in nspace, pprint.pformat(nspace)
-    if keep_re:
+    if startup_with_re:
         assert "RE" in nspace, pprint.pformat(nspace)
-        assert "db" in nspace, pprint.pformat(nspace)
     else:
         assert "RE" not in nspace, pprint.pformat(nspace)
-        assert "db" not in nspace, pprint.pformat(nspace)
 
     # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     # The rest of the test demonstrates faulty behavior of the Python import system.
@@ -1415,7 +1401,7 @@ def test_load_startup_module_1(tmp_path, monkeypatch, keep_re, reset_sys_modules
     with open(script_path, "w") as f:
         f.write(script_patch + _startup_script_2)
 
-    nspace = load_startup_module("script_dir1.startup_script", keep_re=keep_re)
+    nspace = load_startup_module("script_dir1.startup_script")
     # Expect the functions from 'old' code to be in the namespace!!!
     assert "simple_sample_plan_1" in nspace, pprint.pformat(nspace)
     assert "simple_sample_plan_2" in nspace, pprint.pformat(nspace)
@@ -1424,7 +1410,7 @@ def test_load_startup_module_1(tmp_path, monkeypatch, keep_re, reset_sys_modules
     with open(module_path, "w") as f:
         f.write(_imported_module_1_modified)
 
-    nspace = load_startup_module("script_dir1.startup_script", keep_re=keep_re)
+    nspace = load_startup_module("script_dir1.startup_script")
     # Expect the functions from 'old' code to be in the namespace!!!
     assert "plan_in_module_1" in nspace, pprint.pformat(nspace)
     assert "plan_in_module_1_modified" not in nspace, pprint.pformat(nspace)
@@ -1446,7 +1432,7 @@ def test_load_startup_module_2(tmp_path, monkeypatch, reset_sys_modules):  # noq
     sys_path = sys.path
     monkeypatch.setattr(sys, "path", [str(tmp_path)] + sys_path)
 
-    nspace = load_startup_module("script_dir1.startup_script", keep_re=True)
+    nspace = load_startup_module("script_dir1.startup_script")
 
     assert nspace
     assert "SimStage" in nspace, pprint.pformat(nspace)
@@ -1510,11 +1496,11 @@ def test_load_startup_module_4(tmp_path, monkeypatch, reset_sys_modules):  # noq
 
 # fmt: off
 @pytest.mark.parametrize("option", ["startup_dir", "script", "module"])
-@pytest.mark.parametrize("keep_re", [True, False])
+@pytest.mark.parametrize("startup_with_re", [False, True])
 @pytest.mark.parametrize("pass_nspace", [False, True])
 # fmt: on
 def test_load_worker_startup_code_1(
-    tmp_path, monkeypatch, keep_re, option, pass_nspace, reset_sys_modules  # noqa: F811
+    tmp_path, monkeypatch, startup_with_re, option, pass_nspace, reset_sys_modules  # noqa: F811
 ):
     """
     Test for `load_worker_startup_code` function.
@@ -1523,23 +1509,24 @@ def test_load_worker_startup_code_1(
     script_path = os.path.join(script_dir, "startup_script.py")
 
     os.makedirs(script_dir, exist_ok=True)
+    s = _startup_script_1 + _startup_script_1_re if startup_with_re else _startup_script_1
     with open(script_path, "w") as f:
-        f.write(_startup_script_1)
+        f.write(s)
 
     pp = dict(nspace={"test_value_": 50}) if pass_nspace else {}
 
     if option == "startup_dir":
-        nspace = load_worker_startup_code(startup_dir=script_dir, keep_re=keep_re, **pp)
+        nspace = load_worker_startup_code(startup_dir=script_dir, **pp)
 
     elif option == "script":
-        nspace = load_worker_startup_code(startup_script_path=script_path, keep_re=keep_re, **pp)
+        nspace = load_worker_startup_code(startup_script_path=script_path, **pp)
 
     elif option == "module":
         # Temporarily add module to the search path
         sys_path = sys.path
         monkeypatch.setattr(sys, "path", [str(tmp_path)] + sys_path)
 
-        nspace = load_worker_startup_code(startup_module_name="script_dir1.startup_script", keep_re=keep_re, **pp)
+        nspace = load_worker_startup_code(startup_module_name="script_dir1.startup_script", **pp)
 
     else:
         assert False, f"Unknown option '{option}'"
@@ -1551,12 +1538,10 @@ def test_load_worker_startup_code_1(
     assert isinstance(nspace, dict), str(type(nspace))
     assert len(nspace) > 0
 
-    if keep_re:
+    if startup_with_re:
         assert "RE" in nspace, pprint.pformat(nspace)
-        assert "db" in nspace, pprint.pformat(nspace)
     else:
         assert "RE" not in nspace, pprint.pformat(nspace)
-        assert "db" not in nspace, pprint.pformat(nspace)
 
 
 @pytest.mark.parametrize("option", ["no_sources", "multiple_sources"])

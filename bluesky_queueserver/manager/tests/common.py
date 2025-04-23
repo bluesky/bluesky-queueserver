@@ -25,6 +25,9 @@ _user, _user_group = "Testing Script", "primary"
 
 _test_redis_name_prefix = "qs_unit_tests"
 
+# The name of the script in the simulated startup directory that configures Run Engine.
+fln_run_engine = "05-run-engine.py"
+
 
 def use_ipykernel_for_tests():
     """

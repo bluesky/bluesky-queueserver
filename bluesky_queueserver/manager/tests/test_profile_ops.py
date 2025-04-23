@@ -72,8 +72,8 @@ from .common import (
     _user_group,
     append_code_to_last_startup_file,
     copy_default_profile_collection,
-    fln_run_engine,
     patch_first_startup_file,
+    remove_run_engine_config_from_startup,
 )
 
 python_version = sys.version_info  # Can be compare to tuples (such as 'python_version >= (3, 9)')
@@ -348,7 +348,7 @@ def test_load_profile_collection_05(tmp_path, startup_with_re):
     pc_path = copy_default_profile_collection(tmp_path)
     if not startup_with_re:
         # Delete file with RE config
-        os.remove(os.path.join(pc_path, fln_run_engine))
+        remove_run_engine_config_from_startup(pc_path)
 
     nspace = load_profile_collection(pc_path)
 

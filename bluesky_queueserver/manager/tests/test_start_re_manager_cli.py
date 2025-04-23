@@ -473,15 +473,11 @@ def _get_expected_settings_default_1(_1, _2):
 
     return {
         "console_logging_level": 10,
-        "databroker_config": None,
         "demo_mode": True,
         "emergency_lock_key": None,
         "existing_plans_and_devices_path": existing_plans_and_devices_path,
         "ignore_invalid_plans": False,
         "ipython_dir": ipython_dir,
-        "kafka_server": "127.0.0.1:9092",
-        "kafka_topic": None,
-        "keep_re": False,
         "device_max_depth": 0,
         "use_ipython_kernel": bool(use_ip_kernel),
         "ipython_kernel_ip": "localhost",
@@ -501,11 +497,9 @@ def _get_expected_settings_default_1(_1, _2):
         "startup_profile": startup_profile,
         "startup_script": None,
         "update_existing_plans_devices": "ENVIRONMENT_OPEN",
-        "use_persistent_metadata": False,
         "user_group_permissions_path": user_group_permissions_path,
         "user_group_permissions_reload": "ON_STARTUP",
         "zmq_control_addr": "tcp://*:60615",
-        "zmq_data_proxy_addr": None,
         "zmq_info_addr": "tcp://*:60625",
         "zmq_private_key": None,
         "zmq_publish_console": False,
@@ -549,12 +543,6 @@ operation:
   update_existing_plans_and_devices: ALWAYS
   user_group_permissions_reload: ON_REQUEST
   emergency_lock_key: different_lock_key
-run_engine:
-  use_persistent_metadata: true
-  kafka_server: 127.0.0.1:9095
-  kafka_topic: different_topic_name
-  zmq_data_proxy_addr: tcp://localhost:5569
-  databroker_config: DIF
 """
     use_ip_kernel = "true" if use_ipykernel_for_tests() else "false"
     return s.format(
@@ -582,14 +570,10 @@ def _get_expected_settings_config_2(file_dir, ip_con_dir):
 
     return {
         "console_logging_level": 10,
-        "databroker_config": "DIF",
         "demo_mode": False,
         "emergency_lock_key": "different_lock_key",
         "existing_plans_and_devices_path": existing_plans_and_devices_path,
         "ipython_dir": ipython_dir,
-        "kafka_server": "127.0.0.1:9095",
-        "kafka_topic": "different_topic_name",
-        "keep_re": False,
         "device_max_depth": 2,
         "ignore_invalid_plans": True,
         "use_ipython_kernel": bool(use_ip_kernel),
@@ -610,11 +594,9 @@ def _get_expected_settings_config_2(file_dir, ip_con_dir):
         "startup_profile": startup_profile,
         "startup_script": None,
         "update_existing_plans_devices": "ALWAYS",
-        "use_persistent_metadata": True,
         "user_group_permissions_path": user_group_permissions_path,
         "user_group_permissions_reload": "ON_REQUEST",
         "zmq_control_addr": "tcp://*:60617",
-        "zmq_data_proxy_addr": "tcp://localhost:5569",
         "zmq_info_addr": "tcp://*:60627",
         "zmq_private_key": "Ue=.po0aQ9.}<Xvrny+f{V04XMc6JZ9ufKf5aeFy",
         "zmq_publish_console": True,
@@ -635,8 +617,6 @@ def _get_cli_params_3(file_dir):
         "--user-group-permissions-reload=NEVER",
         "--redis-addr=localhost:6379",
         "--redis-name-prefix=qs_unit_tests3",
-        "--kafka-topic=yet_another_topic",
-        "--kafka-server=127.0.0.1:9099",
         "--keep-re",
         "--device-max-depth=5",
         "--ignore-invalid-plans=ON",
@@ -650,8 +630,6 @@ def _get_cli_params_3(file_dir):
         "--ipython-iopub-port=60102",
         "--ipython-shell-port=60103",
         "--ipython-stdin-port=60104",
-        "--zmq-data-proxy-addr=tcp://localhost:5571",
-        "--databroker-config=NEW",
         "--zmq-info-addr=tcp://*:60629",
         "--zmq-publish-console=OFF",
         "--console-output=OFF",
@@ -678,14 +656,10 @@ def _get_expected_settings_params_3(file_dir, _):
 
     return {
         "console_logging_level": 10,
-        "databroker_config": "NEW",
         "demo_mode": False,
         "emergency_lock_key": "different_lock_key",
         "existing_plans_and_devices_path": existing_plans_and_devices_path,
         "ipython_dir": ipython_dir,
-        "kafka_server": "127.0.0.1:9099",
-        "kafka_topic": "yet_another_topic",
-        "keep_re": True,
         "device_max_depth": 5,
         "ignore_invalid_plans": True,
         "use_ipython_kernel": bool(use_ip_kernel),
@@ -706,11 +680,9 @@ def _get_expected_settings_params_3(file_dir, _):
         "startup_profile": startup_profile,
         "startup_script": None,
         "update_existing_plans_devices": "NEVER",
-        "use_persistent_metadata": True,
         "user_group_permissions_path": user_group_permissions_path,
         "user_group_permissions_reload": "NEVER",
         "zmq_control_addr": "tcp://*:60619",
-        "zmq_data_proxy_addr": "tcp://localhost:5571",
         "zmq_info_addr": "tcp://*:60629",
         "zmq_private_key": "Ue=.po0aQ9.}<Xvrny+f{V04XMc6JZ9ufKf5aeFy",
         "zmq_publish_console": False,

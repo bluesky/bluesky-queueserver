@@ -3280,8 +3280,12 @@ def _prepare_devices(devices, *, max_depth=0, ignore_all_subdevices_if_one_fails
     def get_device_params(device):
         movable_protocols = (protocols.Movable,)
         # TODO: remove this check when NamedMovable is available in every Bluesky deployment
-        if hasattr(protocols, "NamedMovable"):
-            movable_protocols = (*movable_protocols, protocols.NamedMovable)
+        # !!! Checking for NamedMovable involves checking for 'hints' attribute, which tends to
+        # !!! instantiate objects (at least on Python 3.10 and 3.11, worked fine on Python 3.12),
+        # !!! which is undesirable. NamedMovable object will be detected checked for attributes of
+        # !!! Movable protocol.
+        # if hasattr(protocols, "NamedMovable"):
+        #     movable_protocols = (*movable_protocols, protocols.NamedMovable)
 
         return {
             "is_readable": isinstance(device, protocols.Readable),

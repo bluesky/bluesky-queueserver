@@ -20,28 +20,14 @@ class PQ:
     cleanup afterwards. Intended for use with ``async with``.
     """
 
-    def __init__(self, backend="redis", sqlite_db_path=":memory:"):
-        """
-        Parameters
-        ----------
-        backend : str
-            Backend type ("redis" or "sqlite").
-        sqlite_db_path : str
-            Path to the SQLite database file. Use ":memory:" for an in-memory SQLite database.
-        """
+    def __init__(self):
         self._pq = None
-        self._backend = backend
-        self._sqlite_db_path = sqlite_db_path
 
     async def __aenter__(self):
         """
         Returns initialized instance of plan queue.
         """
-        pq = PlanQueueOperations(
-            name_prefix=_test_redis_name_prefix if backend == "redis" else "sqlite_backend",
-            backend=backend,
-            sqlite_db_path=":memory:" if backend == "sqlite" else None,
-        )
+        self._pq = PlanQueueOperations(name_prefix=_test_redis_name_prefix)
         await self._pq.start()
         # Clear any pool entries
         await self._pq.delete_pool_entries()
@@ -61,36 +47,42 @@ class PQ:
         await self._pq.lock_info_clear()
         await self._pq.autostart_mode_clear()
         await self._pq.stop_pending_clear()
-        await self._pq.stop()
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_pq_start_stop(backend):
+
+def test_pq_start_stop():
     """
-    Test for the ``PlanQueueOperations.start()`` and ``PlanQueueOperations.stop()``.
+    Test for the ``PlanQueueOperations.start()`` and ``PlanQueueOperations.stop()``
     """
 
     async def testing():
-        pq = PlanQueueOperations(
-            name_prefix=_test_redis_name_prefix if backend == "redis" else "sqlite_backend",
-            backend=backend,
-            sqlite_db_path=":memory:" if backend == "sqlite" else None,
-        )
+        pq = PlanQueueOperations(name_prefix=_test_redis_name_prefix)
         await pq.start()
-        if backend == "redis":
-            await pq._r_pool.ping()
-        await pq.stop()
-        assert pq._r_pool is None if backend == "redis" else True
 
-        await pq.start()
-        if backend == "redis":
-            await pq._r_pool.ping()
+        # Use _backend_ping to check if the backend is reachable
+        assert await pq._backend_ping() is True
+
         await pq.stop()
-        assert pq._r_pool is None if backend == "redis" else True
+
+        # Ensure the backend is properly closed
+        if pq._backend == "redis":
+            assert pq._r_pool is None
+        elif pq._backend == "sqlite":
+            assert pq._sqlite_conn is None
+
+        # Restart and check again
+        await pq.start()
+        assert await pq._backend_ping() is True
+        await pq.stop()
+
+        if pq._backend == "redis":
+            assert pq._r_pool is None
+        elif pq._backend == "sqlite":
+            assert pq._sqlite_conn is None
 
     asyncio.run(testing())
 
+
 # fmt: off
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
 @pytest.mark.parametrize("item_in, item_out", [
     ({"name": "plan1", "item_uid": "abcde"}, {"name": "plan1", "item_uid": "abcde"}),
     ({"user": "user1", "user_group": "group1"}, {"user": "user1", "user_group": "group1"}),
@@ -99,21 +91,20 @@ def test_pq_start_stop(backend):
     ({"name": "plan1", "result": {}}, {"name": "plan1"}),
 ])
 # fmt: on
-def test_filter_item_parameters(backend, item_in, item_out):
+def test_filter_item_parameters(item_in, item_out):
     """
     Tests for ``filter_item_parameters``.
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:  # Ensure 'backend' is passed here
+        async with PQ() as pq:
             item = pq.filter_item_parameters(item_in)
             assert item == item_out
 
     asyncio.run(testing())
 
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_running_plan_info(backend):
+def test_running_plan_info():
     """
     Basic test for the following methods:
     `PlanQueueOperations.is_item_running()`
@@ -122,7 +113,7 @@ def test_running_plan_info(backend):
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             assert await pq.get_running_item_info() == {}
             assert await pq.is_item_running() is False
 
@@ -144,29 +135,18 @@ def test_running_plan_info(backend):
     asyncio.run(testing())
 
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_redis_name_prefix(backend):
+def test_redis_name_prefix():
     """
-    Test that the prefix is correctly appended to the name of the Redis key (test with one key).
-    For SQLite, the name prefix is not used, so the test ensures it is ignored.
+    Test that the prefix is correctly appended to the name of the redis key (test with one key).
     """
-    if backend == "redis":
-        pq = PlanQueueOperations(name_prefix=_test_redis_name_prefix, backend=backend)
-        assert pq._name_plan_queue == _test_redis_name_prefix + "_plan_queue"
+    pq = PlanQueueOperations(name_prefix=_test_redis_name_prefix)
+    assert pq._name_plan_queue == _test_redis_name_prefix + "_plan_queue"
 
-        pq = PlanQueueOperations(name_prefix="", backend=backend)
-        assert pq._name_plan_queue == "plan_queue"
+    pq = PlanQueueOperations(name_prefix="")
+    assert pq._name_plan_queue == "plan_queue"
 
-    elif backend == "sqlite":
-        pq = PlanQueueOperations(name_prefix=_test_redis_name_prefix, backend=backend, sqlite_db_path=":memory:")
-        # SQLite does not use name prefixes, so the name should remain constant
-        assert pq._name_plan_queue == "plan_queue"
-
-        pq = PlanQueueOperations(name_prefix="", backend=backend, sqlite_db_path=":memory:")
-        assert pq._name_plan_queue == "plan_queue"
 
 # fmt: off
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
 @pytest.mark.parametrize("plan_running, plans, result_running, result_plans", [
     ({"testing": 1}, [{"testing": 2}, {"item_uid": "ab", "name": "nm"}, {"testing": 2}],
      {}, [{"item_uid": "ab", "name": "nm"}]),
@@ -176,32 +156,23 @@ def test_redis_name_prefix(backend):
      {"item_uid": "a"}, [{"item_uid": "a1"}, {"item_uid": "a2"}, {"item_uid": "a3"}]),
 ])
 # fmt: on
-def test_queue_clean(backend, plan_running, plans, result_running, result_plans):
+def test_queue_clean(plan_running, plans, result_running, result_plans):
     """
-    Test for ``_queue_clean()`` method.
+    Test for ``_queue_clean()`` method
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
-            # Set the running plan
+        async with PQ() as pq:
             await pq._set_running_item_info(plan_running)
-
-            # Add plans to the queue
             for plan in plans:
-                if backend == "redis":
-                    await pq._r_pool.rpush(pq._name_plan_queue, json.dumps(plan))
-                elif backend == "sqlite":
-                    await pq.add_item_to_queue(plan)
+                await pq._r_pool.rpush(pq._name_plan_queue, json.dumps(plan))
 
-            # Verify initial state
             assert await pq.get_running_item_info() == plan_running
             plan_queue, _ = await pq.get_queue()
             assert plan_queue == plans
 
-            # Clean the queue
             await pq._queue_clean()
 
-            # Verify the cleaned state
             assert await pq.get_running_item_info() == result_running
             plan_queue, _ = await pq.get_queue()
             assert plan_queue == result_plans
@@ -209,47 +180,45 @@ def test_queue_clean(backend, plan_running, plans, result_running, result_plans)
     asyncio.run(testing())
 
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_set_plan_queue_mode_1(backend):
+def test_set_plan_queue_mode_1():
     """
-    ``set_plan_queue_mode``: basic functionality for both Redis and SQLite backends.
+    ``set_plan_queue_mode``: basic functionality.
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
-            # Initially, plan queue mode must be the default queue mode
+        async with PQ() as pq:
+            # Initially plan queue mode must be default queue mode
             assert pq.plan_queue_mode == pq.plan_queue_mode_default
             assert pq.plan_queue_mode["loop"] is False
             assert pq.plan_queue_mode["ignore_failures"] is False
 
-            # The properties are expected to return copies
+            # The properties are expecte to return copies
             assert pq.plan_queue_mode is not pq._plan_queue_mode
             assert pq.plan_queue_mode_default is not pq._plan_queue_mode_default
 
             mode_expected = pq.plan_queue_mode
             assert mode_expected == dict(loop=False, ignore_failures=False)
 
-            # Update the mode with new values
             mode_new = {"loop": True}
             mode_expected.update(mode_new)
             await pq.set_plan_queue_mode(mode_new, update=True)
-            assert pq._plan_queue_mode is not mode_new  # Verify that 'set' operation performs a copy
+            assert pq._plan_queue_mode is not mode_new  # Verify that 'set' operation performs copy
             assert pq.plan_queue_mode == mode_expected
 
             mode_new = {"ignore_failures": True}
             mode_expected.update(mode_new)
             await pq.set_plan_queue_mode(mode_new, update=True)
-            assert pq._plan_queue_mode is not mode_new  # Verify that 'set' operation performs a copy
+            assert pq._plan_queue_mode is not mode_new  # Verify that 'set' operation performs copy
             assert pq.plan_queue_mode == mode_expected
 
             mode_new = {"loop": False, "ignore_failures": False}
             mode_expected.update(mode_new)
             await pq.set_plan_queue_mode(mode_new, update=False)
-            assert pq._plan_queue_mode is not mode_new  # Verify that 'set' operation performs a copy
+            assert pq._plan_queue_mode is not mode_new  # Verify that 'set' operation performs copy
             assert pq.plan_queue_mode == mode_expected
 
-            # Test invalid parameters
             for update in (False, True):
+                print(f"update={update}")
                 with pytest.raises(ValueError, match="Unsupported plan queue mode parameter 'nonexisting_key'"):
                     await pq.set_plan_queue_mode({"nonexisting_key": True}, update=update)
 
@@ -271,12 +240,13 @@ def test_set_plan_queue_mode_1(backend):
 
             assert pq.plan_queue_mode == mode_expected
 
-            # Verify that the queue mode is saved to the backend
+            # Verify that the queue mode is saved to Redis
             queue_mode = {"loop": True, "ignore_failures": True}
             await pq.set_plan_queue_mode(queue_mode, update=False)
 
-            async with PQ(backend=backend) as pq2:
-                assert pq2.plan_queue_mode == queue_mode
+            pq2 = PlanQueueOperations(name_prefix=_test_redis_name_prefix)
+            await pq2.start()
+            assert pq2.plan_queue_mode == queue_mode
 
             # Set queue mode to default
             assert pq.plan_queue_mode != pq.plan_queue_mode_default
@@ -285,21 +255,17 @@ def test_set_plan_queue_mode_1(backend):
 
     asyncio.run(testing())
 
+
 # fmt: off
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
 @pytest.mark.parametrize("plan, result",
                          [({"a": 10}, True),
                           ([10, 20], False),
                           (50, False),
                           ("abc", False)])
 # fmt: on
-def test_verify_item_type(backend, plan, result):
-    """
-    Test for the `_verify_item_type` method for both Redis and SQLite backends.
-    """
-
+def test_verify_item_type(plan, result):
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             if result:
                 pq._verify_item_type(plan)
             else:
@@ -308,8 +274,8 @@ def test_verify_item_type(backend, plan, result):
 
     asyncio.run(testing())
 
+
 # fmt: off
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
 @pytest.mark.parametrize(
     "plan, f_kwargs, result, errmsg",
     [({"a": 10}, {}, False, "Item does not have UID"),
@@ -323,7 +289,7 @@ def test_verify_item_type(backend, plan, result):
      ({"item_uid": "two"}, {"ignore_uids": ["one", "three"]}, False, "Item with UID .+ is already in the queue"),
      ])
 # fmt: on
-def test_verify_item(backend, plan, f_kwargs, result, errmsg):
+def test_verify_item(plan, f_kwargs, result, errmsg):
     """
     Tests for method ``_verify_item()``.
     """
@@ -331,7 +297,7 @@ def test_verify_item(backend, plan, f_kwargs, result, errmsg):
     existing_plans = [{"item_type": "plan", "item_uid": "two"}, {"item_type": "plan", "item_uid": "three"}]
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
 
             async def set_plans():
                 # Add plan to queue
@@ -355,39 +321,26 @@ def test_verify_item(backend, plan, f_kwargs, result, errmsg):
     asyncio.run(testing())
 
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_new_item_uid(backend):
+def test_new_item_uid():
     """
-    Test for the method ``new_item_uid()`` for both Redis and SQLite backends.
+    Smoke test for the method ``new_item_uid()``.
     """
+    assert isinstance(PlanQueueOperations.new_item_uid(), str)
 
-    async def testing():
-        async with PQ(backend=backend) as pq:
-            # Generate a new UID
-            uid = pq.new_item_uid()
-            assert isinstance(uid, str)
-            assert len(uid) > 0
-
-            # Ensure that multiple calls generate unique UIDs
-            uid2 = pq.new_item_uid()
-            assert uid != uid2
-
-    asyncio.run(testing())
 
 # fmt: off
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
 @pytest.mark.parametrize("plan", [
     {"name": "a"},
     {"item_uid": "some_uid", "name": "a"},
 ])
 # fmt: on
-def test_set_new_item_uuid(backend, plan):
+def test_set_new_item_uuid(plan):
     """
-    Basic test for the method ``set_new_item_uuid()`` for both Redis and SQLite backends.
+    Basic test for the method ``set_new_item_uuid()``.
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             uid = plan.get("item_uid", None)
 
             # The function is supposed to create or replace UID
@@ -399,8 +352,8 @@ def test_set_new_item_uuid(backend, plan):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_get_index_by_uid_1(backend):
+
+def test_get_index_by_uid_1():
     """
     Test for ``_get_index_by_uid()``
     """
@@ -411,7 +364,7 @@ def test_get_index_by_uid_1(backend):
     ]
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             for plan in plans:
                 await pq.add_item_to_queue(plan)
 
@@ -422,8 +375,8 @@ def test_get_index_by_uid_1(backend):
 
     asyncio.run(testing())
 
+
 # fmt: off
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
 @pytest.mark.parametrize("sequence, indices_expected", [
     (["a", "b", "c"], [0, 1, 2]),
     (["a", "b"], [0, 1]),
@@ -431,7 +384,7 @@ def test_get_index_by_uid_1(backend):
     (["c", "d", "b"], [2, -1, 1]),
 ])
 # fmt: on
-def test_get_index_by_uid_batch_1(backend, sequence, indices_expected):
+def test_get_index_by_uid_batch_1(sequence, indices_expected):
     """
     Test for ``_get_index_by_uid_batch()``
     """
@@ -442,7 +395,7 @@ def test_get_index_by_uid_batch_1(backend, sequence, indices_expected):
     ]
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             for plan in plans:
                 await pq.add_item_to_queue(plan)
 
@@ -451,8 +404,8 @@ def test_get_index_by_uid_batch_1(backend, sequence, indices_expected):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_uid_dict_1(backend):
+
+def test_uid_dict_1():
     """
     Basic test for functions associated with `_uid_dict`
     """
@@ -463,7 +416,7 @@ def test_uid_dict_1(backend):
     plan_b_updated = {"item_uid": "b", "name": "name_b_updated"}
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             pq._uid_dict_add(plan_a)
             pq._uid_dict_add(plan_b)
 
@@ -485,8 +438,8 @@ def test_uid_dict_1(backend):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_uid_dict_2(backend):
+
+def test_uid_dict_2():
     """
     Test if functions changing `pq._uid_dict` are also updating `pq.plan_queue_uid`.
     """
@@ -494,7 +447,7 @@ def test_uid_dict_2(backend):
     plan_a_updated = {"item_uid": "a", "name": "name_a_updated"}
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             pq_uid = pq.plan_queue_uid
 
             pq._uid_dict_add(plan_a)
@@ -518,14 +471,14 @@ def test_uid_dict_2(backend):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_uid_dict_3_initialize(backend):
+
+def test_uid_dict_3_initialize():
     """
     Basic test for functions associated with ``_uid_dict_initialize()``
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             await pq.add_item_to_queue({"name": "a"})
             await pq.add_item_to_queue({"name": "b"})
             await pq.add_item_to_queue({"name": "c"})
@@ -541,8 +494,8 @@ def test_uid_dict_3_initialize(backend):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_uid_dict_4_failing(backend):
+
+def test_uid_dict_4_failing():
     """
     Failing cases for functions associated with `_uid_dict`
     """
@@ -551,7 +504,7 @@ def test_uid_dict_4_failing(backend):
     plan_c = {"item_uid": "c", "name": "name_c"}
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             pq._uid_dict_add(plan_a)
             pq._uid_dict_add(plan_b)
 
@@ -579,14 +532,14 @@ def test_uid_dict_4_failing(backend):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_remove_item(backend):
+
+def test_remove_item():
     """
     Basic test for functions associated with ``_remove_plan()``
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             plan_list = [{"name": "a"}, {"name": "b"}, {"name": "c"}]
             for plan in plan_list:
                 await pq.add_item_to_queue(plan)
@@ -626,15 +579,15 @@ def test_remove_item(backend):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_get_queue_full_1(backend):
+
+def test_get_queue_full_1():
     """
     Basic test for the functions ``PlanQueueOperations.get_queue()`` and
     ``PlanQueueOperations.get_queue_full()``
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             plans = [
                 {"item_type": "plan", "item_uid": "one", "name": "a"},
                 {"item_type": "plan", "item_uid": "two", "name": "b"},
@@ -663,8 +616,8 @@ def test_get_queue_full_1(backend):
 
     asyncio.run(testing())
 
+
 # fmt: off
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
 @pytest.mark.parametrize("params, name", [
     ({"pos": "front"}, "a"),
     ({"pos": "back"}, "c"),
@@ -681,13 +634,13 @@ def test_get_queue_full_1(backend):
     ({"uid": "nonexistent"}, None),
 ])
 # fmt: on
-def test_get_item_1(backend, params, name):
+def test_get_item_1(params, name):
     """
     Basic test for the function ``PlanQueueOperations.get_item()``
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             pq_uid = pq.plan_queue_uid
             await pq.add_item_to_queue({"item_uid": "one", "name": "a"})
             await pq.add_item_to_queue({"item_uid": "two", "name": "b"})
@@ -705,15 +658,15 @@ def test_get_item_1(backend, params, name):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_get_item_2_fail(backend):
+
+def test_get_item_2_fail():
     """
     Basic test for the function ``PlanQueueOperations.get_item()``.
     Attempt to retrieve a running plan.
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             await pq.add_item_to_queue({"item_type": "plan", "item_uid": "one", "name": "a"})
             await pq.add_item_to_queue({"item_type": "plan", "item_uid": "two", "name": "b"})
             await pq.add_item_to_queue({"item_type": "plan", "item_uid": "three", "name": "c"})
@@ -733,14 +686,14 @@ def test_get_item_2_fail(backend):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_add_item_to_queue_1(backend):
+
+def test_add_item_to_queue_1():
     """
     Basic test for the function ``PlanQueueOperations.add_item_to_queue()``
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
 
             async def add_plan(plan, n, **kwargs):
                 plan_added, qsize = await pq.add_item_to_queue(plan, **kwargs)
@@ -772,14 +725,14 @@ def test_add_item_to_queue_1(backend):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_add_item_to_queue_2(backend):
+
+def test_add_item_to_queue_2():
     """
     Basic test for the function ``PlanQueueOperations.add_item_to_queue()``
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
 
             async def add_plan(plan, n, **kwargs):
                 plan_added, qsize = await pq.add_item_to_queue(plan, **kwargs)
@@ -820,15 +773,15 @@ def test_add_item_to_queue_2(backend):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
+
 @pytest.mark.parametrize("filter_params", [False, True])
-def test_add_item_to_queue_3(backend, filter_params):
+def test_add_item_to_queue_3(filter_params):
     """
     Test if parameter filtering works as expected with `add_item_to_queue` function.
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             # Parameter 'result' should be removed if filtering is enabled
             plan1 = {"item_type": "plan", "name": "a", "item_uid": "1"}
             plan2 = plan1.copy()
@@ -843,14 +796,14 @@ def test_add_item_to_queue_3(backend, filter_params):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_add_item_to_queue_4_fail(backend):
+
+def test_add_item_to_queue_4_fail():
     """
     Failing tests for the function ``PlanQueueOperations.add_item_to_queue()``
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             pq_uid = pq.plan_queue_uid
             with pytest.raises(ValueError, match="Parameter 'pos' has incorrect value"):
                 await pq.add_item_to_queue({"name": "a"}, pos="something")
@@ -880,8 +833,8 @@ def test_add_item_to_queue_4_fail(backend):
 
     asyncio.run(testing())
 
+
 # fmt: off
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
 @pytest.mark.parametrize("batch_params, queue_seq, batch_seq, expected_seq", [
     ({}, "", "", ""),  # Add an empty batch
     ({}, "", "567", "567"),
@@ -909,13 +862,13 @@ def test_add_item_to_queue_4_fail(backend):
     ({"after_uid": "4"}, "1234", "567", "1234567"),
 ])
 # fmt: on
-def test_add_batch_to_queue_1(backend, batch_params, queue_seq, batch_seq, expected_seq):
+def test_add_batch_to_queue_1(batch_params, queue_seq, batch_seq, expected_seq):
     """
     Basic test for the function ``PlanQueueOperations.add_batch_to_queue()``
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
 
             async def add_plan(plan, n, **kwargs):
                 plan_added, qsize = await pq.add_item_to_queue(plan, **kwargs)
@@ -959,15 +912,15 @@ def test_add_batch_to_queue_1(backend, batch_params, queue_seq, batch_seq, expec
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
+
 @pytest.mark.parametrize("filter_params", [False, True, None])
-def test_add_batch_to_queue_2(backend, filter_params):
+def test_add_batch_to_queue_2(filter_params):
     """
     Test if parameter filtering works as expected with `add_batch_to_queue` function.
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             # Parameter 'result' should be removed if filtering is enabled.
             params = {"filter_parameters": filter_params} if (filter_params is not None) else {}
             do_filtering = True if (filter_params is None) else filter_params
@@ -990,8 +943,8 @@ def test_add_batch_to_queue_2(backend, filter_params):
 
     asyncio.run(testing())
 
+
 # fmt: off
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
 @pytest.mark.parametrize("params, queue_seq, batch_seq, err_msgs", [
     ({}, "abcd", "eaf", ["", "Item with UID .+ is already in the queue", ""]),
     ({}, "abcd", "ead", [""] + ["Item with UID .+ is already in the queue"] * 2),
@@ -1001,13 +954,13 @@ def test_add_batch_to_queue_2(backend, filter_params):
     ({"pos": "front", "after_uid": "unknown"}, "abcd", "efg", ["Ambiguous parameters"] * 3),
 ])
 # fmt: on
-def test_add_batch_to_queue_3_fail(backend, params, queue_seq, batch_seq, err_msgs):
+def test_add_batch_to_queue_3_fail(params, queue_seq, batch_seq, err_msgs):
     """
     Failing cases for the function ``PlanQueueOperations.add_batch_to_queue()``
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
 
             async def add_plan(plan, n, **kwargs):
                 plan_added, qsize = await pq.add_item_to_queue(plan, **kwargs)
@@ -1041,17 +994,17 @@ def test_add_batch_to_queue_3_fail(backend, params, queue_seq, batch_seq, err_ms
 
     asyncio.run(testing())
 
+
 # fmt: off
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
 @pytest.mark.parametrize("replace_uid", [False, True])
 # fmt: on
-def test_replace_item_1(backend, replace_uid):
+def test_replace_item_1(replace_uid):
     """
     Basic functionality of ``PlanQueueOperations.replace_item()`` function.
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             plans = [{"name": "a"}, {"name": "b"}, {"name": "c"}]
             plans_added = [None] * len(plans)
             qsizes = [None] * len(plans)
@@ -1092,14 +1045,14 @@ def test_replace_item_1(backend, replace_uid):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_replace_item_2(backend):
+
+def test_replace_item_2():
     """
     ``PlanQueueOperations.replace_item()`` function: not UID in the plan - random UID is assigned.
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             plans = [{"name": "a"}, {"name": "b"}, {"name": "c"}]
             plans_added = [None] * len(plans)
             qsizes = [None] * len(plans)
@@ -1132,18 +1085,18 @@ def test_replace_item_2(backend):
 
     asyncio.run(testing())
 
+
 # fmt: off
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
 @pytest.mark.parametrize("mode", ["exact_copy", "change_uid", "change_plan"])
 # fmt: on
-def test_replace_item_3(backend, mode):
+def test_replace_item_3(mode):
     """
     ``PlanQueueOperations.replace_item()`` function: make sure that filtering
       is applied to the parameters of edited plan if the plan was changed
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             plans = [{"name": "a", "result": {}}, {"name": "b"}, {"name": "c"}]
 
             for n, plan in enumerate(plans):
@@ -1197,14 +1150,14 @@ def test_replace_item_3(backend, mode):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_replace_item_4_failing(backend):
+
+def test_replace_item_4_failing():
     """
     ``PlanQueueOperations.replace_item()`` - failing cases
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             plans = [
                 {"item_type": "plan", "name": "a"},
                 {"item_type": "plan", "name": "b"},
@@ -1259,8 +1212,8 @@ def test_replace_item_4_failing(backend):
 
     asyncio.run(testing())
 
+
 # fmt: off
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
 @pytest.mark.parametrize("params, src, order, success, pquid_changed, msg", [
     ({"pos": 1, "pos_dest": 1}, 1, "abcde", True, False, ""),
     ({"pos": "front", "pos_dest": "front"}, 0, "abcde", True, False, ""),
@@ -1313,13 +1266,13 @@ def test_replace_item_4_failing(backend):
     ({"pos": 1, "after_uid": "p4", "before_uid": "p4"}, 1, "", False, False, "Ambiguous parameters"),
 ])
 # fmt: on
-def test_move_item_1(backend, params, src, order, success, pquid_changed, msg):
+def test_move_item_1(params, src, order, success, pquid_changed, msg):
     """
     Basic tests for ``move_item()``.
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             plans = [
                 {"item_uid": "p1", "name": "a"},
                 {"item_uid": "p2", "name": "b"},
@@ -1356,14 +1309,14 @@ def test_move_item_1(backend, params, src, order, success, pquid_changed, msg):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_move_item_2(backend):
+
+def test_move_item_2():
     """
     ``move_item``: test if the item is moved 'as is', i.e. no parameter filtering is applied to it.
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             plans = [
                 {"item_uid": "p1", "name": "a", "result": {}},
                 {"item_uid": "p2", "name": "b"},
@@ -1392,8 +1345,8 @@ def test_move_item_2(backend):
 
     asyncio.run(testing())
 
+
 # fmt: off
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
 @pytest.mark.parametrize("batch_params, queue_seq, selection_seq, batch_seq, expected_seq, success, msg", [
     ({"pos_dest": "front"}, "0123456", "23", "23", "2301456", True, ""),
     ({"before_uid": "0"}, "0123456", "23", "23", "2301456", True, ""),
@@ -1443,9 +1396,9 @@ def test_move_item_2(backend):
      re.escape("The list of contains repeated UIDs (1 UIDs)")),
 ])
 # fmt: on
-def test_move_batch_1(backend, batch_params, queue_seq, selection_seq, batch_seq, expected_seq, success, msg):
+def test_move_batch_1(batch_params, queue_seq, selection_seq, batch_seq, expected_seq, success, msg):
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
 
             async def add_plan(plan, n, **kwargs):
                 plan_added, qsize = await pq.add_item_to_queue(plan, **kwargs)
@@ -1484,8 +1437,8 @@ def test_move_batch_1(backend, batch_params, queue_seq, selection_seq, batch_seq
 
     asyncio.run(testing())
 
+
 # fmt: off
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
 @pytest.mark.parametrize("pos, name", [
     ("front", "a"),
     ("back", "c"),
@@ -1499,13 +1452,13 @@ def test_move_batch_1(backend, batch_params, queue_seq, selection_seq, batch_seq
     (-4, None)  # Index out of range
 ])
 # fmt: on
-def test_pop_item_from_queue_1(backend, pos, name):
+def test_pop_item_from_queue_1(pos, name):
     """
     Basic test for the function ``PlanQueueOperations.pop_item_from_queue()``
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             await pq.add_item_to_queue({"name": "a"})
             await pq.add_item_to_queue({"name": "b"})
             await pq.add_item_to_queue({"name": "c"})
@@ -1529,16 +1482,16 @@ def test_pop_item_from_queue_1(backend, pos, name):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
+
 @pytest.mark.parametrize("pos", ["front", "back", 0, 1, -1])
-def test_pop_item_from_queue_2(backend, pos):
+def test_pop_item_from_queue_2(pos):
     """
     Test for the function ``PlanQueueOperations.pop_item_from_queue()``:
     the case of empty queue.
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             assert await pq.get_queue_size() == 0
             pq_uid = pq.plan_queue_uid
             with pytest.raises(IndexError, match="Index .* is out of range|Queue is empty"):
@@ -1547,14 +1500,14 @@ def test_pop_item_from_queue_2(backend, pos):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_pop_item_from_queue_3(backend):
+
+def test_pop_item_from_queue_3():
     """
     Pop plans by UID.
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             await pq.add_item_to_queue({"item_type": "plan", "name": "a"})
             await pq.add_item_to_queue({"item_type": "plan", "name": "b"})
             await pq.add_item_to_queue({"item_type": "plan", "name": "c"})
@@ -1590,14 +1543,14 @@ def test_pop_item_from_queue_3(backend):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_pop_item_from_queue_4_fail(backend):
+
+def test_pop_item_from_queue_4_fail():
     """
     Failing tests for the function ``PlanQueueOperations.pop_item_from_queue()``
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             pq_uid = pq.plan_queue_uid
             with pytest.raises(ValueError, match="Parameter 'pos' has incorrect value"):
                 await pq.pop_item_from_queue(pos="something")
@@ -1610,8 +1563,8 @@ def test_pop_item_from_queue_4_fail(backend):
 
     asyncio.run(testing())
 
+
 # fmt: off
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
 @pytest.mark.parametrize("batch_params, queue_seq, selection_seq, batch_seq, expected_seq, success, msg", [
     ({}, "0123456", "", "", "0123456", True, ""),
     ({}, "0123456", "23", "23", "01456", True, ""),
@@ -1635,14 +1588,14 @@ def test_pop_item_from_queue_4_fail(backend):
 ])
 # fmt: on
 def test_pop_items_from_queue_batch_1(
-    backend, batch_params, queue_seq, selection_seq, batch_seq, expected_seq, success, msg
+    batch_params, queue_seq, selection_seq, batch_seq, expected_seq, success, msg
 ):
     """
     Tests for ``pop_items_from_queue_batch``.
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
 
             async def add_plan(plan, n, **kwargs):
                 plan_added, qsize = await pq.add_item_to_queue(plan, **kwargs)
@@ -1676,14 +1629,14 @@ def test_pop_items_from_queue_batch_1(
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_clear_queue(backend):
+
+def test_clear_queue():
     """
     Test for ``PlanQueueOperations.clear_queue`` function
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             await pq.add_item_to_queue({"item_type": "plan", "name": "a"})
             await pq.add_item_to_queue({"item_type": "plan", "name": "b"})
             await pq.add_item_to_queue({"item_type": "plan", "name": "c"})
@@ -1707,14 +1660,14 @@ def test_clear_queue(backend):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_add_to_history_functions(backend):
+
+def test_add_to_history_functions():
     """
     Test for ``PlanQueueOperations._add_to_history()`` method.
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             assert await pq.get_history_size() == 0
 
             plans = [{"name": "a"}, {"name": "b"}, {"name": "c"}]
@@ -1741,11 +1694,11 @@ def test_add_to_history_functions(backend):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
+
 @pytest.mark.parametrize("immediate_execution", [False, True])
 @pytest.mark.parametrize("func", ["process_next_item", "set_next_item_as_running"])
 @pytest.mark.parametrize("loop_mode", [False, True])
-def test_process_next_item_1(backend, func, loop_mode, immediate_execution):
+def test_process_next_item_1(func, loop_mode, immediate_execution):
     """
     Test for ``PlanQueueOperations.process_next_item()`` and
     ``PlanQueueOperations.set_next_item_as_running()`` functions.
@@ -1754,7 +1707,7 @@ def test_process_next_item_1(backend, func, loop_mode, immediate_execution):
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             await pq.set_plan_queue_mode({"loop": loop_mode})
 
             # Apply to empty queue
@@ -1814,10 +1767,10 @@ def test_process_next_item_1(backend, func, loop_mode, immediate_execution):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
+
 @pytest.mark.parametrize("immediate_execution", [False, True])
 @pytest.mark.parametrize("loop_mode", [False, True])
-def test_process_next_item_2(backend, loop_mode, immediate_execution):
+def test_process_next_item_2(loop_mode, immediate_execution):
     """
     Test for ``PlanQueueOperations.process_next_item()`` and
     ``PlanQueueOperations.set_next_item_as_running()`` functions.
@@ -1828,7 +1781,7 @@ def test_process_next_item_2(backend, loop_mode, immediate_execution):
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             await pq.set_plan_queue_mode({"loop": loop_mode})
 
             # Apply to empty queue
@@ -1873,18 +1826,18 @@ def test_process_next_item_2(backend, loop_mode, immediate_execution):
 
     asyncio.run(testing())
 
+
 # fmt: off
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
 @pytest.mark.parametrize("has_uid", [False, True])
 @pytest.mark.parametrize("item_type", ["plan", "instruction"])
 # fmt: on
-def test_process_next_item_3(backend, item_type, has_uid):
+def test_process_next_item_3(item_type, has_uid):
     """
     Verify if the function ``process_next_item`` is assigning new UID to plans, but not instructions.
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             # Apply to a queue with several plans
             await pq.add_item_to_queue({"item_type": "instruction", "name": "a"})
             await pq.add_item_to_queue({"item_type": "plan", "name": "b"})
@@ -1904,18 +1857,18 @@ def test_process_next_item_3(backend, item_type, has_uid):
 
     asyncio.run(testing())
 
+
 # fmt: off
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
 @pytest.mark.parametrize("immediate_execution", [False, True])
 # fmt: on
-def test_process_next_item_4_fail(backend, immediate_execution):
+def test_process_next_item_4_fail(immediate_execution):
     """
     Try using 'set_next_item_as_running' with an instruction. Exception should be raised.
     The queue should remain unchanged.
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             # Apply to a queue with several plans
             await pq.add_item_to_queue({"item_type": "instruction", "name": "a"})
             await pq.add_item_to_queue({"item_type": "plan", "name": "b"})
@@ -1940,8 +1893,8 @@ def test_process_next_item_4_fail(backend, immediate_execution):
 
     asyncio.run(testing())
 
+
 # fmt: off
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
 @pytest.mark.parametrize("item_in, item_out", [
     ({"name": "count"}, {"name": "count"}),
     ({"name": "count", "properties": {}}, {"name": "count"}),
@@ -1949,20 +1902,20 @@ def test_process_next_item_4_fail(backend, immediate_execution):
     ({"name": "count", "properties": {"immediate_execution": True}}, {"name": "count"}),
 ])
 # fmt: on
-def test_clean_item_properties_1(backend, item_in, item_out):
+def test_clean_item_properties_1(item_in, item_out):
     """
     Basic test for `_clean_item_properties` function.
     """
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             item_cleaned = pq._clean_item_properties(item_in)
             assert item_cleaned == item_out
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_set_processed_item_as_completed_1(backend):
+
+def test_set_processed_item_as_completed_1():
     """
     Test for ``PlanQueueOperations.set_processed_item_as_completed()`` function.
     The function moves currently running plan to history.
@@ -2010,7 +1963,7 @@ def test_set_processed_item_as_completed_1(backend):
             assert _["result"]["time_start"] < _["result"]["time_stop"]
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             for plan in plans:
                 await pq.add_item_to_queue(plan)
 
@@ -2087,8 +2040,8 @@ def test_set_processed_item_as_completed_1(backend):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_set_processed_item_as_completed_2(backend):
+
+def test_set_processed_item_as_completed_2():
     """
     Test for ``PlanQueueOperations.set_processed_item_as_completed()`` function.
     Similar test as the previous one, but with LOOP mode ENABLED.
@@ -2104,7 +2057,7 @@ def test_set_processed_item_as_completed_2(backend):
     plans_scan_ids = [[1], [100, 101], []]
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             for plan in plans:
                 await pq.add_item_to_queue(plan)
 
@@ -2179,8 +2132,8 @@ def test_set_processed_item_as_completed_2(backend):
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_set_processed_item_as_stopped_1(backend):
+
+def test_set_processed_item_as_stopped_1():
     """
     Test for ``PlanQueueOperations.set_processed_item_as_stopped()`` function.
     The function pushes running plan back to the queue unless ``exit_status=="stopped"``
@@ -2237,7 +2190,7 @@ def test_set_processed_item_as_stopped_1(backend):
             assert _["result"]["time_start"] < _["result"]["time_stop"]
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             for plan in plans:
                 await pq.add_item_to_queue(plan)
 
@@ -2341,13 +2294,13 @@ def test_set_processed_item_as_stopped_1(backend):
 
     asyncio.run(testing())
 
+
 # fmt: off
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
 @pytest.mark.parametrize("func", ["completed", "unknown", "failed", "stopped", "aborted", "halted"])
 @pytest.mark.parametrize("loop_mode", [False, True])
 @pytest.mark.parametrize("immediate_execution", [False, True])
 # fmt: on
-def test_set_processed_item_as_stopped_2(backend, loop_mode, func, immediate_execution):
+def test_set_processed_item_as_stopped_2(loop_mode, func, immediate_execution):
     """
     ``set_processed_item_as_completed`` and ``set_processed_item_as_stopped`` processing of an item set
     for normal and immediate execution with/without LOOP mode.
@@ -2362,7 +2315,7 @@ def test_set_processed_item_as_stopped_2(backend, loop_mode, func, immediate_exe
     plan4_scan_ids = [100, 101]
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             for plan in plans:
                 await pq.add_item_to_queue(plan)
 
@@ -2433,10 +2386,10 @@ def test_set_processed_item_as_stopped_2(backend, loop_mode, func, immediate_exe
 
     asyncio.run(testing())
 
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
+
 @pytest.mark.parametrize("loop_mode", [False, True])
 @pytest.mark.parametrize("func", ["completed", "stopped"])
-def test_set_processed_item_as_stopped_3(backend, loop_mode, func):
+def test_set_processed_item_as_stopped_3(loop_mode, func):
     """
     Test for ``PlanQueueOperations.set_processed_item_as_completed()`` and
     ``PlanQueueOperations.set_processed_item_as_stopped()`` function.
@@ -2449,12 +2402,7 @@ def test_set_processed_item_as_stopped_3(backend, loop_mode, func):
     plan = {"item_type": "plan", "item_uid": 1, "name": "a", "properties": {"immediate_execution": True}}
 
     async def testing():
-<<<<<<< HEAD
-        async with PQ(backend=backend) as pq:
-            nonlocal plan
-=======
         async with PQ() as pq:
->>>>>>> upstream/main
             await pq.add_item_to_queue(plan)
             await pq.set_plan_queue_mode({"loop": loop_mode})
 
@@ -2493,8 +2441,7 @@ def test_set_processed_item_as_stopped_3(backend, loop_mode, func):
 
 # ==============================================================================================
 #                    Saving and retrieving user group permissions
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_user_group_permissions_1(backend):
+def test_user_group_permissions_1():
     """
     Test for saving and retrieving and clearing user group permissions, which are backed up in Redis.
     """
@@ -2502,7 +2449,7 @@ def test_user_group_permissions_1(backend):
     ug_permissions_2 = {"some_key_2": "some_value_2"}
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             assert await pq.user_group_permissions_retrieve() is None
 
             await pq.user_group_permissions_save(ug_permissions_1)
@@ -2519,8 +2466,7 @@ def test_user_group_permissions_1(backend):
 
 # ==============================================================================================
 #                           Saving and retrieving lock info
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_lock_info_1(backend):
+def test_lock_info_1():
     """
     Test for saving and retrieving and clearing user group permissions, which are backed up in Redis.
     """
@@ -2528,7 +2474,7 @@ def test_lock_info_1(backend):
     lock_info_2 = {"environment": True, "queue": False, "lock_key": "fghijk"}
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             assert await pq.lock_info_retrieve() is None
 
             await pq.lock_info_save(lock_info_1)
@@ -2545,8 +2491,7 @@ def test_lock_info_1(backend):
 
 # ==============================================================================================
 #                           Saving and retrieving 'stop pending' info
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_stop_pending_info_1(backend):
+def test_stop_pending_info_1():
     """
     Test for saving and retrieving and clearing user group permissions, which are backed up in Redis.
     """
@@ -2554,7 +2499,7 @@ def test_stop_pending_info_1(backend):
     stop_pending_info_2 = {"enabled": True}
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             assert await pq.stop_pending_retrieve() is None
 
             await pq.stop_pending_save(stop_pending_info_1)
@@ -2571,8 +2516,7 @@ def test_stop_pending_info_1(backend):
 
 # ==============================================================================================
 #                           Saving and retrieving autostart info
-@pytest.mark.parametrize("backend", ["redis", "sqlite"])
-def test_autostart_mode_info_1(backend):
+def test_autostart_mode_info_1():
     """
     Test for saving and retrieving and clearing user group permissions, which are backed up in Redis.
     """
@@ -2580,7 +2524,7 @@ def test_autostart_mode_info_1(backend):
     autostart_info_2 = {"enabled": True}
 
     async def testing():
-        async with PQ(backend=backend) as pq:
+        async with PQ() as pq:
             assert await pq.autostart_mode_retrieve() is None
 
             await pq.autostart_mode_save(autostart_info_1)
@@ -2593,21 +2537,3 @@ def test_autostart_mode_info_1(backend):
             assert await pq.autostart_mode_retrieve() is None
 
     asyncio.run(testing())
-
-
-# ==============================================================================================
-#                           Testing SQLite schema initialization
-@pytest.mark.asyncio
-async def test_sqlite_schema_initialization():
-    """
-    Test that the SQLite schema is initialized correctly.
-    """
-    sqlite_db_path = ":memory:"
-    async with aiosqlite.connect(sqlite_db_path) as conn:
-        await PlanQueueOperations._initialize_sqlite_schema(conn)
-
-        # Verify that the tables exist
-        async with conn.execute("SELECT name FROM sqlite_master WHERE type='table'") as cursor:
-            tables = [row[0] for row in await cursor.fetchall()]
-            assert "list_store" in tables
-            assert "kv_store" in tables

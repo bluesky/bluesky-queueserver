@@ -2776,6 +2776,10 @@ def test_zmq_api_environment_update_02(re_manager, ip_kernel_simple_client):  # 
     assert resp1["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
+    status, _ = zmq_single_request("status")
+    assert status["worker_environment_exists"] is True, pprint.pformat(status)
+    assert status["re_state"] == "idle", pprint.pformat(status)
+
     execute_script(_script_to_upload_eu_re1)
 
     # Get 're_state' in status (it should be 'None', because RE is not RunEngine object)
@@ -2787,14 +2791,15 @@ def test_zmq_api_environment_update_02(re_manager, ip_kernel_simple_client):  # 
 
     # Try to run a plan (it should fail)
     resp, _ = zmq_single_request("queue_start")
-    assert resp["success"] is True, str(resp)
+    assert resp["success"] is False, str(resp)
+    assert "Run Engine is not found in the RE Worker environment" in resp["msg"], str(resp)
     assert wait_for_condition(10, condition_manager_idle)
 
     status, _ = zmq_single_request("status")
     assert status["re_state"] is None, pprint.pformat(status)
     assert status["queue_stop_pending"] is False, pprint.pformat(status)
     assert status["items_in_queue"] == 1, pprint.pformat(status)
-    assert status["items_in_history"] == 1, pprint.pformat(status)
+    assert status["items_in_history"] == 0, pprint.pformat(status)
 
     execute_script(_script_to_upload_eu_re2)
 
@@ -2802,7 +2807,7 @@ def test_zmq_api_environment_update_02(re_manager, ip_kernel_simple_client):  # 
     assert status["re_state"] == "idle", pprint.pformat(status)
     assert status["queue_stop_pending"] is False, pprint.pformat(status)
     assert status["items_in_queue"] == 1, pprint.pformat(status)
-    assert status["items_in_history"] == 1, pprint.pformat(status)
+    assert status["items_in_history"] == 0, pprint.pformat(status)
 
     resp, _ = zmq_single_request("queue_start")
     assert resp["success"] is True, str(resp)
@@ -2812,7 +2817,7 @@ def test_zmq_api_environment_update_02(re_manager, ip_kernel_simple_client):  # 
     assert status["re_state"] == "idle", pprint.pformat(status)
     assert status["queue_stop_pending"] is False, pprint.pformat(status)
     assert status["items_in_queue"] == 0, pprint.pformat(status)
-    assert status["items_in_history"] == 2, pprint.pformat(status)
+    assert status["items_in_history"] == 1, pprint.pformat(status)
 
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"

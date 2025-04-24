@@ -875,6 +875,8 @@ class RunEngineManager(Process):
         try:
             if not self._environment_exists:
                 raise RuntimeError("RE Worker environment does not exist.")
+            elif not self._worker_state_info or self._worker_state_info["re_state"] is None:
+                raise RuntimeError("Run Engine is not found in the RE Worker environment.")
             elif self._manager_state != MState.IDLE:
                 raise RuntimeError("RE Manager is busy.")
             elif self._use_ipython_kernel and self._is_ipkernel_external_task():
@@ -904,6 +906,8 @@ class RunEngineManager(Process):
         try:
             if not self._environment_exists:
                 raise RuntimeError("RE Worker environment does not exist.")
+            elif not self._worker_state_info or self._worker_state_info["re_state"] is None:
+                raise RuntimeError("Run Engine is not found in the RE Worker environment.")
             elif self._manager_state != MState.IDLE:
                 raise RuntimeError("RE Manager is busy.")
             elif self._use_ipython_kernel and self._is_ipkernel_external_task():
@@ -1061,6 +1065,9 @@ class RunEngineManager(Process):
         if not self._environment_exists:
             success = False
             err_msg = "Environment does not exist."
+        elif not self._worker_state_info or self._worker_state_info["re_state"] is None:
+            success = False
+            err_msg = "Run Engine is not found in the RE Worker environment."
         else:
             success, err_msg = await self._worker_command_pause_plan(option)
 
@@ -1088,6 +1095,9 @@ class RunEngineManager(Process):
             raise RuntimeError("IPython kernel (RE Worker) is busy.")
 
         elif self._environment_exists:
+            if not self._worker_state_info or self._worker_state_info["re_state"] is None:
+                raise RuntimeError("Run Engine is not found in the RE Worker environment.")
+
             # Attempt to reserve IPython kernel.
             success, err_msg = await self._worker_command_reserve_kernel()
             if success:

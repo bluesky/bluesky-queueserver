@@ -445,7 +445,7 @@ def start_manager():
         dest="redis_addr",
         type=str,
         default="localhost",
-        help="The address of Redis server, e.g. 'localhost', '127.0.0.1', 'localhost:6379' "
+        help="The address of Redis server, e.g. 'localhost', '127.0.0.1', 'localhost:6379', 'localhost:6379/0'."
         "(default: %(default)s). ",
     )
 

@@ -190,6 +190,7 @@ def test_manager_acq_with_0MQ_proxy(re_manager_cmd, zmq_proxy, zmq_dispatcher): 
 @pytest.mark.parametrize("redis_addr, success", [
     ("localhost", True),
     ("localhost:6379", True),
+    ("localhost:6379/0", True),
     ("localhost:6378", False)])  # Incorrect port.
 # fmt: on
 def test_manager_redis_addr_parameter(re_manager_cmd, redis_addr, success):  # noqa: F811

@@ -1396,8 +1396,8 @@ class RunEngineWorker(Process):
                     nspace=self._re_namespace,
                 )
 
-            if "RE" not in self._re_namespace:
-                raise RuntimeError("Run Engine is not created in the startup code.")
+            # if "RE" not in self._re_namespace:
+            #     raise RuntimeError("Run Engine is not created in the startup code.")
 
             epd = existing_plans_and_devices_from_nspace(
                 nspace=self._re_namespace,
@@ -1446,8 +1446,8 @@ class RunEngineWorker(Process):
                     user_ns=self._re_namespace, use_ipython=self._use_ipython_kernel
                 )
 
-                # Copy reference to Run Engine from the namespace
-                self._RE = self._re_namespace["RE"]
+                # Copy reference to Run Engine from the namespace. Set to None if RE does not exist.
+                self._RE = self._re_namespace.get("RE", None)
 
                 self._execution_queue = queue.Queue()
 

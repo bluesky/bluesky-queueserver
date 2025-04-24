@@ -2271,6 +2271,10 @@ def test_zmq_api_script_upload_06(tmp_path, re_manager_cmd):  # noqa: F811
     assert resp1["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
+    status = get_manager_status()
+    assert status["worker_environment_exists"] is True
+    assert status["re_state"] is None
+
     # At this point the lists of allowed plans and devices are expected to be empty.
     resp2a, _ = zmq_single_request("plans_existing")
     assert resp2a["success"] is True, pprint.pformat(resp2a)
@@ -2286,12 +2290,16 @@ def test_zmq_api_script_upload_06(tmp_path, re_manager_cmd):  # noqa: F811
     for fn in default_files:
         with open(fn, "r") as f:
             script = f.read()
-            resp3, _ = zmq_single_request("script_upload", params={"script": script})
+            resp3, _ = zmq_single_request("script_upload", params={"script": script, "update_re": True})
             assert resp3["success"] is True
             wait_for_task_result(10, resp3["task_uid"])
             resp3a, _ = zmq_single_request("task_result", params={"task_uid": resp3["task_uid"]})
             assert resp3a["success"] is True
             assert resp3a["result"]["success"] is True, resp3a["result"]["return_value"]
+
+    status = get_manager_status()
+    assert status["worker_environment_exists"] is True
+    assert status["re_state"] == "idle"
 
     # At this point the list of existing plans and devices must be identical to the default
     nspace = load_profile_collection(default_pc_path)

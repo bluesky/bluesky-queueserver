@@ -1942,6 +1942,9 @@ def _compare_types(object_in, object_out):
         if isinstance(object_out, float) and isinstance(object_in, int):
             match = True
 
+        if pydantic_version_major == 1 and isinstance(object_in, (int, float)) and isinstance(object_out, str):
+            match = True
+
         # Conversion to Enum is valid (parameters often contain values, that are converted to Enums).
         elif issubclass(type(object_out), enum.Enum) and object_in == object_out.value:
             match = True

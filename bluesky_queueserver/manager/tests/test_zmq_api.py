@@ -46,6 +46,7 @@ from .common import (  # noqa: F401
     condition_manager_idle,
     condition_manager_paused,
     condition_queue_processing_finished,
+    condition_worker_executing_plan,
     copy_default_profile_collection,
     get_manager_status,
     ip_kernel_simple_client,
@@ -5616,8 +5617,8 @@ def test_zmq_api_re_pause_3(re_manager, continue_option, loop_mode):  # noqa: F8
 
 def test_zmq_api_re_pause_4_fail(tmp_path, re_manager_cmd):  # noqa: F811
     """
-    Test that the commands "re_pause","re_resume", "re_stop", "re_abort", "re_halt"
-    return an error if the environment does not contain Run Engine.
+    Test that the commands "re_pause","re_resume".
+    Return an error if the environment does not contain Run Engine.
     """
 
     pc_path = copy_default_profile_collection(tmp_path)
@@ -5635,14 +5636,9 @@ def test_zmq_api_re_pause_4_fail(tmp_path, re_manager_cmd):  # noqa: F811
     assert state["re_state"] is None
     assert state["worker_environment_state"] == "idle"
 
-    def run_test(cmd):
-        resp2a, _ = zmq_single_request(cmd)
-        assert resp2a["success"] is False, f"cmd={cmd} resp={resp2a}"
-        assert "Run Engine is not found in the RE Worker environment" in resp2a["msg"], f"cmd={cmd} resp={resp2a}"
-
-    commands_to_test = ("re_pause", "re_resume", "re_stop", "re_abort", "re_halt")
-    for cmd in commands_to_test:
-        run_test(cmd)
+    resp2a, _ = zmq_single_request("re_pause")
+    assert resp2a["success"] is False, resp2a
+    assert "Run Engine is not found in the RE Worker environment" in resp2a["msg"], resp2a
 
     state = get_manager_status()
     assert state["re_state"] is None

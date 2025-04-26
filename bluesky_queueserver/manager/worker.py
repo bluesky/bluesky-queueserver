@@ -1681,9 +1681,29 @@ class RunEngineWorker(Process):
 
             from .utils import generate_random_port
 
+            connection_file = self._config_dict["ipython_connection_file"]
+            connection_dir = self._config_dict["ipython_connection_dir"]
+
+            if connection_file:
+                # IPython kernel is designed to remove connection files after the kernel is closed.
+                # This functionality exists for a long time, but apparently it did not work in the past,
+                # It appeares to work as expected with Python 3.13, which creates a problem with QS.
+                # We specify the name of the connection file if we want to reuse the connection
+                # information (including random key), at the next startup, so we need to keep
+                # the connection file. The patch removes the functionality from IPKernelApp.
+                class IPKernelAppCustom(IPKernelApp):
+                    def cleanup_connection_file(self):
+                        # Do not remove the connection file
+                        self.cleanup_ipc_files()
+
+            else:
+                # If the name is not specified, IPython creates files with random names and we
+                # don't need them. Use the default functionality.
+                IPKernelAppCustom = IPKernelApp
+
             self._re_namespace["___ip_execution_loop_start___"] = self._run_loop_ipython
             self._re_namespace["___ip_kernel_startup_init___"] = self._ip_kernel_startup_init
-            self._ip_kernel_app = IPKernelApp.instance(user_ns=self._re_namespace)
+            self._ip_kernel_app = IPKernelAppCustom.instance(user_ns=self._re_namespace)
             out_stream, err_stream = sys.stdout, sys.stderr
 
             self._worker_prepare_for_startup()
@@ -1725,8 +1745,6 @@ class RunEngineWorker(Process):
                     ip = ip_str
                 return ip
 
-            connection_file = self._config_dict["ipython_connection_file"]
-            connection_dir = self._config_dict["ipython_connection_dir"]
             shell_port = self._config_dict["ipython_shell_port"]
             iopub_port = self._config_dict["ipython_iopub_port"]
             stdin_port = self._config_dict["ipython_stdin_port"]
@@ -1777,14 +1795,15 @@ class RunEngineWorker(Process):
                         use_connection_file = False
                         os.remove(abs_cf_name)
                 else:
+                    logger.info(f"Connection file {abs_cf_name!r} is not found. Creating a new file.")
                     use_connection_file = False
 
-            logger.info("Generating random port numbers for IPython kernel ...")
             try:
                 if use_connection_file:
                     logger.info(f"Loading connection file {self._ip_kernel_app.abs_connection_file}")
                     self._ip_kernel_app.load_connection_file(self._ip_kernel_app.abs_connection_file)
                 else:
+                    logger.info("Generating connection parameters. New file is created ...")
                     self._ip_kernel_app.ip = kernel_ip
                     self._ip_kernel_app.shell_port = shell_port or generate_random_port(kernel_ip)
                     self._ip_kernel_app.iopub_port = iopub_port or generate_random_port(kernel_ip)
@@ -1794,7 +1813,7 @@ class RunEngineWorker(Process):
                 self._ip_connect_info = self._ip_kernel_app.get_connection_info()
             except Exception as ex:
                 self._success_startup = False
-                logger.error("Failed to generates kernel ports for IP %r: %s", kernel_ip, ex)
+                logger.error("Failed to generate kernel ports for IP %r: %s", kernel_ip, ex)
 
             if self._success_startup:
 

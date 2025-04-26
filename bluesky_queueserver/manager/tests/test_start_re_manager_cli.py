@@ -1035,6 +1035,8 @@ def test_cli_ipython_connection_info_01(
     connection_dir = os.path.join(tmp_path, "connection_dir")
     connection_file = "test_connection_file.json"
 
+    os.makedirs(connection_dir, exist_ok=True)
+
     ports_1 = dict(shell_port=60000, iopub_port=60001, stdin_port=60002, hb_port=60003, control_port=60004)
     ports_2 = dict(shell_port=60010, iopub_port=60011, stdin_port=60012, hb_port=60013, control_port=60014)
 
@@ -1106,7 +1108,7 @@ def test_cli_ipython_connection_info_01(
     params = create_parameters(set_conn_file=set_conn_file_second_run, ports=ports_to_set)
     re_manager_cmd(params)
 
-   # Open environment the second time, make sure it does not crash
+    # Open environment the second time, make sure it does not crash
     resp4, _ = zmq_single_request("environment_open")
     assert resp4["success"] is True
     assert resp4["msg"] == ""

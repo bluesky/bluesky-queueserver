@@ -25,6 +25,9 @@ _user, _user_group = "Testing Script", "primary"
 
 _test_redis_name_prefix = "qs_unit_tests"
 
+# The name of the script in the simulated startup directory that configures Run Engine.
+_fln_run_engine_config = "05-run-engine.py"
+
 
 def use_ipykernel_for_tests():
     """
@@ -143,6 +146,15 @@ def append_code_to_last_startup_file(pc_path, additional_code):
         file_out.writelines(code)
         file_out.write("\n\n")
         file_out.writelines(additional_code)
+
+
+def remove_run_engine_config_from_startup(startup_dir):
+    """
+    Remove the file that configures Run Engine from startup directory.
+    """
+    fl_path = os.path.join(startup_dir, _fln_run_engine_config)
+    if os.path.isfile(fl_path):
+        os.remove(fl_path)
 
 
 # The name of env. variable holding ZMQ public key. Public key is necessary in tests using encryption
@@ -282,6 +294,10 @@ def condition_manager_idle_or_paused(msg):
 
 def condition_manager_executing_queue(msg):
     return ("manager_state" in msg) and (msg["manager_state"] == "executing_queue")
+
+
+def condition_worker_executing_plan(msg):
+    return ("worker_environment_state" in msg) and (msg["worker_environment_state"] == "executing_plan")
 
 
 def condition_environment_created(msg):

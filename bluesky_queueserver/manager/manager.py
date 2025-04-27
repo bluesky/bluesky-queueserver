@@ -875,6 +875,8 @@ class RunEngineManager(Process):
         try:
             if not self._environment_exists:
                 raise RuntimeError("RE Worker environment does not exist.")
+            elif self._compute_re_state() is None:
+                raise RuntimeError("Run Engine is not found in the RE Worker environment.")
             elif self._manager_state != MState.IDLE:
                 raise RuntimeError("RE Manager is busy.")
             elif self._use_ipython_kernel and self._is_ipkernel_external_task():
@@ -904,6 +906,8 @@ class RunEngineManager(Process):
         try:
             if not self._environment_exists:
                 raise RuntimeError("RE Worker environment does not exist.")
+            elif self._compute_re_state() is None:
+                raise RuntimeError("Run Engine is not found in the RE Worker environment.")
             elif self._manager_state != MState.IDLE:
                 raise RuntimeError("RE Manager is busy.")
             elif self._use_ipython_kernel and self._is_ipkernel_external_task():
@@ -1061,6 +1065,9 @@ class RunEngineManager(Process):
         if not self._environment_exists:
             success = False
             err_msg = "Environment does not exist."
+        elif self._compute_re_state() is None:
+            success = False
+            err_msg = "Run Engine is not found in the RE Worker environment."
         else:
             success, err_msg = await self._worker_command_pause_plan(option)
 
@@ -1088,6 +1095,9 @@ class RunEngineManager(Process):
             raise RuntimeError("IPython kernel (RE Worker) is busy.")
 
         elif self._environment_exists:
+            if self._compute_re_state() is None:
+                raise RuntimeError("Run Engine is not found in the RE Worker environment.")
+
             # Attempt to reserve IPython kernel.
             success, err_msg = await self._worker_command_reserve_kernel()
             if success:
@@ -1126,7 +1136,7 @@ class RunEngineManager(Process):
             queue_size = await self._plan_queue.get_queue_size()
             if not self.queue_autostart_enabled:
                 break
-            if queue_size and self._manager_state == MState.IDLE:
+            if queue_size and self._manager_state == MState.IDLE and self._compute_re_state() is not None:
                 success, err_msg = await self._start_plan()
                 if not success:
                     logger.debug("Autostart: failed to start a plan: %s", err_msg)
@@ -1731,6 +1741,9 @@ class RunEngineManager(Process):
         """
         return await self._status_handler(request)
 
+    def _compute_re_state(self):
+        return self._worker_state_info["re_state"] if self._worker_state_info else None
+
     async def _status_handler(self, request):
         """
         Returns status of the manager.
@@ -1752,7 +1765,7 @@ class RunEngineManager(Process):
         queue_stop_pending = self.queue_stop_pending
         queue_autostart_enabled = self.queue_autostart_enabled
         worker_environment_exists = self._environment_exists
-        re_state = self._worker_state_info["re_state"] if self._worker_state_info else None
+        re_state = self._compute_re_state()
         ip_kernel_state = self._worker_state_info["ip_kernel_state"] if self._worker_state_info else None
         ip_kernel_captured = self._worker_state_info["ip_kernel_captured"] if self._worker_state_info else None
         env_state = self._worker_state_info["environment_state"] if self._worker_state_info else "closed"

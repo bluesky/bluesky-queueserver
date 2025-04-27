@@ -1,13 +1,8 @@
 bluesky>=1.7.0
-bluesky-kafka
-databroker
-event-model
 ipykernel
 jsonschema
 jupyter-client>=7.4.2
 jupyter-console
-msgpack>=1.0.0
-msgpack_numpy
 numpydoc
 openpyxl
 ophyd

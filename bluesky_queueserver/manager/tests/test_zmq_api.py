@@ -46,12 +46,14 @@ from .common import (  # noqa: F401
     condition_manager_idle,
     condition_manager_paused,
     condition_queue_processing_finished,
+    condition_worker_executing_plan,
     copy_default_profile_collection,
     get_manager_status,
     ip_kernel_simple_client,
     re_manager,
     re_manager_cmd,
     re_manager_pc_copy,
+    remove_run_engine_config_from_startup,
     use_ipykernel_for_tests,
     wait_for_condition,
     wait_for_task_result,
@@ -348,6 +350,66 @@ def test_zmq_api_environment_open_close_3(re_manager):  # noqa F811
     assert resp2["msg"] == ""
 
     assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+
+# fmt: off
+@pytest.mark.parametrize("startup_with_re", [True, False])
+# fmt: on
+def test_zmq_api_environment_open_close_4(tmp_path, re_manager_cmd, startup_with_re):  # noqa F811
+    """
+    Basic test for `environment_open` and `environment_close` methods.
+    """
+    pc_path = copy_default_profile_collection(tmp_path)
+    if not startup_with_re:
+        # Delete file with RE config
+        remove_run_engine_config_from_startup(pc_path)
+
+    re_manager_cmd(["--startup-dir", pc_path])
+
+    state = get_manager_status()
+    assert state["re_state"] is None
+    assert state["worker_environment_state"] == "closed"
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert resp1["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    state = get_manager_status()
+    assert state["re_state"] == ("idle" if startup_with_re else None)
+    assert state["worker_environment_state"] == "idle"
+
+    # Test if the queue can be started
+    resp2, _ = zmq_single_request("queue_item_add", {"item": _plan3, "user": _user, "user_group": _user_group})
+    assert resp2["success"] is True
+    resp3, _ = zmq_single_request("queue_start")
+    if startup_with_re:
+        assert resp3["success"] is True
+        assert wait_for_condition(time=20, condition=condition_queue_processing_finished)
+    else:
+        assert resp3["success"] is False
+        assert "Run Engine is not found in the RE Worker environment" in resp3["msg"]
+
+    # Test if a single plan can be executed
+    params4 = {"item": _plan3, "user": _user, "user_group": _user_group}
+    resp4, _ = zmq_single_request("queue_item_execute", params4)
+    if startup_with_re:
+        assert resp4["success"] is True
+        assert wait_for_condition(time=20, condition=condition_queue_processing_finished)
+    else:
+        assert resp4["success"] is False
+        assert "Run Engine is not found in the RE Worker environment" in resp4["msg"]
+
+    resp5, _ = zmq_single_request("environment_close")
+    assert resp5["success"] is True
+    assert resp5["msg"] == ""
+
+    assert wait_for_condition(time=3, condition=condition_environment_closed)
+
+    state = get_manager_status()
+    assert state["re_state"] is None
+    assert state["worker_environment_state"] == "closed"
 
 
 # =======================================================================================
@@ -1264,6 +1326,47 @@ def test_zmq_api_queue_item_execute_4_fail(re_manager):  # noqa: F811
     resp3b, _ = zmq_single_request("status")
     assert resp3b["items_in_queue"] == 0
     assert resp3b["items_in_history"] == 0
+
+
+def test_zmq_api_queue_item_execute_5_fail(tmp_path, re_manager_cmd):  # noqa: F811
+    """
+    Test for ``queue_item_execute`` API: Load the startup code without RE.
+    Calls to ``queue_item_execute`` should fail.
+    """
+
+    pc_path = copy_default_profile_collection(tmp_path)
+    remove_run_engine_config_from_startup(pc_path)
+
+    re_manager_cmd(["--startup-dir", pc_path])
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert resp1["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    state = get_manager_status()
+    assert state["re_state"] is None
+    assert state["worker_environment_state"] == "idle"
+
+    # Attempt to start execution of a plan before the environment is open
+    params1a = {"item": _plan1, "user": _user, "user_group": _user_group}
+    resp1a, _ = zmq_single_request("queue_item_execute", params1a)
+    assert resp1a["success"] is False, f"resp={resp1a}"
+    assert "Run Engine is not found in the RE Worker environment" in resp1a["msg"]
+    assert resp1a["qsize"] is None
+    assert resp1a["item"]["name"] == _plan1["name"]
+
+    state = get_manager_status()
+    assert state["re_state"] is None
+    assert state["worker_environment_state"] == "idle"
+    assert state["items_in_queue"] == 0
+    assert state["items_in_history"] == 0
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
 # =======================================================================================
@@ -2271,6 +2374,10 @@ def test_zmq_api_script_upload_06(tmp_path, re_manager_cmd):  # noqa: F811
     assert resp1["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
+    status = get_manager_status()
+    assert status["worker_environment_exists"] is True
+    assert status["re_state"] is None
+
     # At this point the lists of allowed plans and devices are expected to be empty.
     resp2a, _ = zmq_single_request("plans_existing")
     assert resp2a["success"] is True, pprint.pformat(resp2a)
@@ -2286,12 +2393,16 @@ def test_zmq_api_script_upload_06(tmp_path, re_manager_cmd):  # noqa: F811
     for fn in default_files:
         with open(fn, "r") as f:
             script = f.read()
-            resp3, _ = zmq_single_request("script_upload", params={"script": script})
+            resp3, _ = zmq_single_request("script_upload", params={"script": script, "update_re": True})
             assert resp3["success"] is True
             wait_for_task_result(10, resp3["task_uid"])
             resp3a, _ = zmq_single_request("task_result", params={"task_uid": resp3["task_uid"]})
             assert resp3a["success"] is True
             assert resp3a["result"]["success"] is True, resp3a["result"]["return_value"]
+
+    status = get_manager_status()
+    assert status["worker_environment_exists"] is True
+    assert status["re_state"] == "idle"
 
     # At this point the list of existing plans and devices must be identical to the default
     nspace = load_profile_collection(default_pc_path)
@@ -2707,6 +2818,10 @@ def test_zmq_api_environment_update_02(re_manager, ip_kernel_simple_client):  # 
     assert resp1["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
+    status, _ = zmq_single_request("status")
+    assert status["worker_environment_exists"] is True, pprint.pformat(status)
+    assert status["re_state"] == "idle", pprint.pformat(status)
+
     execute_script(_script_to_upload_eu_re1)
 
     # Get 're_state' in status (it should be 'None', because RE is not RunEngine object)
@@ -2718,14 +2833,15 @@ def test_zmq_api_environment_update_02(re_manager, ip_kernel_simple_client):  # 
 
     # Try to run a plan (it should fail)
     resp, _ = zmq_single_request("queue_start")
-    assert resp["success"] is True, str(resp)
+    assert resp["success"] is False, str(resp)
+    assert "Run Engine is not found in the RE Worker environment" in resp["msg"], str(resp)
     assert wait_for_condition(10, condition_manager_idle)
 
     status, _ = zmq_single_request("status")
     assert status["re_state"] is None, pprint.pformat(status)
     assert status["queue_stop_pending"] is False, pprint.pformat(status)
     assert status["items_in_queue"] == 1, pprint.pformat(status)
-    assert status["items_in_history"] == 1, pprint.pformat(status)
+    assert status["items_in_history"] == 0, pprint.pformat(status)
 
     execute_script(_script_to_upload_eu_re2)
 
@@ -2733,7 +2849,7 @@ def test_zmq_api_environment_update_02(re_manager, ip_kernel_simple_client):  # 
     assert status["re_state"] == "idle", pprint.pformat(status)
     assert status["queue_stop_pending"] is False, pprint.pformat(status)
     assert status["items_in_queue"] == 1, pprint.pformat(status)
-    assert status["items_in_history"] == 1, pprint.pformat(status)
+    assert status["items_in_history"] == 0, pprint.pformat(status)
 
     resp, _ = zmq_single_request("queue_start")
     assert resp["success"] is True, str(resp)
@@ -2743,7 +2859,7 @@ def test_zmq_api_environment_update_02(re_manager, ip_kernel_simple_client):  # 
     assert status["re_state"] == "idle", pprint.pformat(status)
     assert status["queue_stop_pending"] is False, pprint.pformat(status)
     assert status["items_in_queue"] == 0, pprint.pformat(status)
-    assert status["items_in_history"] == 2, pprint.pformat(status)
+    assert status["items_in_history"] == 1, pprint.pformat(status)
 
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
@@ -4691,6 +4807,71 @@ def test_zmq_api_queue_autostart_09(re_manager, autostart_on):  # noqa: F811
     assert status["items_in_history"] == 1
 
 
+def test_zmq_api_queue_autostart_10(tmp_path, re_manager_cmd):  # noqa: F811
+    """
+    Test the case when the autostart is enabled before RE engine is created
+    (by uploading a script) in the environment.
+    """
+
+    pc_path = copy_default_profile_collection(tmp_path)
+    remove_run_engine_config_from_startup(pc_path)
+
+    re_manager_cmd(["--startup-dir", pc_path])
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert resp1["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    state = get_manager_status()
+    assert state["re_state"] is None
+    assert state["worker_environment_state"] == "idle"
+    assert state["queue_autostart_enabled"] is False
+
+    resp, _ = zmq_single_request("queue_autostart", params={"enable": True})
+    assert resp["success"] is True, f"resp={resp}"
+
+    state = get_manager_status()
+    assert state["re_state"] is None
+    assert state["worker_environment_state"] == "idle"
+    assert state["queue_autostart_enabled"] is True
+
+    def add_plans(plans):
+        resp, _ = zmq_single_request(
+            "queue_item_add_batch", params={"items": plans, "user": _user, "user_group": _user_group}
+        )
+        assert resp["success"] is True
+
+    add_plans([_plan3])
+
+    state = get_manager_status()
+    assert state["re_state"] is None
+    assert state["worker_environment_state"] == "idle"
+    assert state["queue_autostart_enabled"] is True
+    assert state["items_in_queue"] == 1
+    assert state["items_in_history"] == 0
+
+    script = "from bluesky import RunEngine\n" "RE = RunEngine()\n"
+    resp, _ = zmq_single_request("script_upload", params={"script": script, "update_re": True})
+    assert resp["success"] is True
+
+    assert wait_for_condition(time=10, condition=condition_manager_executing_queue)
+
+    assert wait_for_condition(time=30, condition=condition_manager_idle)
+
+    state = get_manager_status()
+    assert state["re_state"] == "idle"
+    assert state["worker_environment_state"] == "idle"
+    assert state["items_in_queue"] == 0
+    assert state["items_in_history"] == 1
+
+    # Close the environment
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
 # =======================================================================================
 #                              Method 'permissions_reload'
 
@@ -5429,6 +5610,43 @@ def test_zmq_api_re_pause_3(re_manager, continue_option, loop_mode):  # noqa: F8
     assert isinstance(result["time_stop"], float)
     assert result["time_start"] < result["time_stop"]
 
+    resp6, _ = zmq_single_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_re_pause_4_fail(tmp_path, re_manager_cmd):  # noqa: F811
+    """
+    Test that the commands "re_pause","re_resume".
+    Return an error if the environment does not contain Run Engine.
+    """
+
+    pc_path = copy_default_profile_collection(tmp_path)
+    remove_run_engine_config_from_startup(pc_path)
+
+    re_manager_cmd(["--startup-dir", pc_path])
+
+    resp1, _ = zmq_single_request("environment_open")
+    assert resp1["success"] is True
+    assert resp1["msg"] == ""
+
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    state = get_manager_status()
+    assert state["re_state"] is None
+    assert state["worker_environment_state"] == "idle"
+
+    resp2a, _ = zmq_single_request("re_pause")
+    assert resp2a["success"] is False, resp2a
+    assert "Run Engine is not found in the RE Worker environment" in resp2a["msg"], resp2a
+
+    state = get_manager_status()
+    assert state["re_state"] is None
+    assert state["worker_environment_state"] == "idle"
+    assert state["items_in_queue"] == 0
+    assert state["items_in_history"] == 0
+
+    # Close the environment
     resp6, _ = zmq_single_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)

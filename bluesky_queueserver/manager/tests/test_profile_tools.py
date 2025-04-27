@@ -438,6 +438,9 @@ from bluesky.plans import count
 from bluesky_queueserver.manager.profile_tools import is_re_worker_active
 from {}dir1.file1 import f1
 
+from bluesky import RunEngine
+RE = RunEngine()
+
 # Executed during import
 if not is_re_worker_active():
     raise Exception("Importing startup script: RE Worker is not detected as active")

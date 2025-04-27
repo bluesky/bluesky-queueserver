@@ -275,7 +275,6 @@ class AtTerm:
 
 
 def start_manager():
-
     s_enc = (
         "Encryption for ZeroMQ communication server may be enabled by setting the value of\n"
         "'QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER' environment variable to a valid private key\n"
@@ -457,52 +456,13 @@ def start_manager():
         help="The prefix for the names of Redis keys used by RE Manager (default: %(default)s). ",
     )
 
-    parser.add_argument("--kafka-topic", dest="kafka_topic", type=str, help="The kafka topic to publish to.")
-    parser.add_argument(
-        "--kafka-server",
-        dest="kafka_server",
-        type=str,
-        help="Bootstrap server to connect (default: %(default)s).",
-        default="127.0.0.1:9092",
-    )
-
-    parser.add_argument(
-        "--zmq-data-proxy-addr",
-        dest="zmq_data_proxy_addr",
-        type=str,
-        help="The address of ZMQ proxy used to publish data. If the parameter is specified, RE is "
-        "subscribed to 'bluesky.callbacks.zmq.Publisher' and documents are published via 0MQ proxy. "
-        "0MQ Proxy (see Bluesky 0MQ documentation) should be started before plans are executed. "
-        "The address should be in the form '127.0.0.1:5567' or 'localhost:5567'. The address is passed "
-        "to 'bluesky.callbacks.zmq.Publisher'. It is recommended to use Kafka instead of 0MQ proxy in "
-        "production data acquisition systems and use Kafka instead.",
-    )
-
     parser.add_argument(
         "--keep-re",
         dest="keep_re",
         action="store_true",
-        help="Keep RE created in profile collection. If the flag is set, RE must be "
-        "created in the profile collection for the plans to run. RE will also "
-        "keep all its subscriptions. Also must be subscribed to the Data Broker "
-        "inside the profile collection, since '--databroker-config' argument "
-        "is ignored.",
-    )
-
-    parser.add_argument(
-        "--use-persistent-metadata",
-        dest="use_persistent_metadata",
-        action="store_true",
-        help="Use msgpack-based persistent storage for scan metadata. Currently this "
-        "is the preferred method to keep continuously incremented sequence of "
-        "Run IDs between restarts of RE.",
-    )
-
-    parser.add_argument(
-        "--databroker-config",
-        dest="databroker_config",
-        type=str,
-        help="Name of the Data Broker configuration file.",
+        help="The parameter is deprecated. The value is ignored by the Queue Server. Run Engine instance\n"
+        "must always be defined and configured in the startup code. The parameter will be removed\n"
+        "in future releases.",
     )
 
     group_ip_kernel = parser.add_argument_group(
@@ -736,13 +696,6 @@ def start_manager():
 
     config_worker = {}
     config_manager = {}
-    if settings.kafka_topic is not None:
-        config_worker["kafka"] = {}
-        config_worker["kafka"]["topic"] = settings.kafka_topic
-        config_worker["kafka"]["bootstrap"] = settings.kafka_server
-
-    if settings.zmq_data_proxy_addr is not None:
-        config_worker["zmq_data_proxy_addr"] = settings.zmq_data_proxy_addr
 
     startup_profile = settings.startup_profile
     startup_dir = settings.startup_dir
@@ -812,14 +765,8 @@ def start_manager():
             "Acceptable values: 'localhost', 'auto' or a string representing an IP address"
         )
 
-    config_worker["keep_re"] = settings.keep_re
     config_worker["device_max_depth"] = settings.device_max_depth
     config_worker["use_ipython_kernel"] = settings.use_ipython_kernel
-    config_worker["use_persistent_metadata"] = settings.use_persistent_metadata
-
-    config_worker["databroker"] = {}
-    if settings.databroker_config:
-        config_worker["databroker"]["config"] = settings.databroker_config
 
     config_worker["startup_profile"] = startup_profile
     config_worker["startup_dir"] = startup_dir
@@ -868,51 +815,6 @@ def start_manager():
             "EXECUTE ANY OTHER OPERATIONS THAT REQUIRE PERMISSIONS.",
             user_group_pd_path,
         )
-
-    # default_existing_pd_fln = "existing_plans_and_devices.yaml"
-    # if settings.existing_plans_and_devices_path:
-    #     existing_pd_path = os.path.expanduser(settings.existing_plans_and_devices_path)
-    #     if not os.path.isabs(existing_pd_path) and startup_dir:
-    #         existing_pd_path = os.path.join(startup_dir, existing_pd_path)
-    #     if not existing_pd_path.endswith(".yaml"):
-    #         existing_pd_path = os.path.join(existing_pd_path, default_existing_pd_fln)
-    # else:
-    #     existing_pd_path = os.path.join(startup_dir, default_existing_pd_fln)
-    # # The file may not exist, but the directory MUST exist
-    # pd_dir = os.path.dirname(existing_pd_path) or "."
-    # if not os.path.isdir(os.path.dirname(existing_pd_path)):
-    #     logger.error(
-    #         "The directory for list of plans and devices ('%s')does not exist. "
-    #         "Create the directory manually and restart RE Manager.",
-    #         pd_dir,
-    #     )
-    #     ttime.sleep(0.01)
-    #     return 1
-    # if not os.path.isfile(existing_pd_path):
-    #     logger.warning(
-    #         "The file with the list of allowed plans and devices ('%s') does not exist. "
-    #         "The manager will be started with empty list. The list will be populated after "
-    #         "RE worker environment is opened the first time.",
-    #         existing_pd_path,
-    #     )
-
-    # default_user_group_pd_fln = "user_group_permissions.yaml"
-    # if settings.user_group_permissions_path:
-    #     user_group_pd_path = os.path.expanduser(settings.user_group_permissions_path)
-    #     if not os.path.isabs(user_group_pd_path) and startup_dir:
-    #         user_group_pd_path = os.path.join(startup_dir, user_group_pd_path)
-    #     if not user_group_pd_path.endswith(".yaml"):
-    #         user_group_pd_path = os.path.join(user_group_pd_path, default_user_group_pd_fln)
-    # else:
-    #     user_group_pd_path = os.path.join(startup_dir, default_user_group_pd_fln)
-    # if not os.path.isfile(user_group_pd_path):
-    #     logger.error(
-    #         "The file with user permissions was not found at "
-    #         "'%s'. User groups are not defined. USERS WILL NOT BE ABLE TO SUBMIT PLANS OR "
-    #         "EXECUTE ANY OTHER OPERATIONS THAT REQUIRE PERMISSIONS.",
-    #         user_group_pd_path,
-    #     )
-    #     user_group_pd_path = None
 
     config_worker["existing_plans_and_devices_path"] = existing_pd_path
     config_manager["existing_plans_and_devices_path"] = existing_pd_path

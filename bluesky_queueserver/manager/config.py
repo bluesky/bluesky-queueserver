@@ -20,6 +20,7 @@ import yaml
 
 from .comms import default_zmq_control_address_for_server, validate_zmq_key
 from .config_schemas.loading import ConfigError, load_schema_from_yml
+from .logging_setup import setup_loggers
 from .output_streaming import default_zmq_info_address_for_server
 from .profile_ops import get_default_startup_dir, get_default_startup_profile
 from .utils import to_boolean
@@ -210,11 +211,6 @@ _key_mapping = {
     "update_existing_plans_devices": "operation/update_existing_plans_and_devices",
     "user_group_permissions_reload": "operation/user_group_permissions_reload",
     "emergency_lock_key": "operation/emergency_lock_key",
-    "use_persistent_metadata": "run_engine/use_persistent_metadata",
-    "kafka_server": "run_engine/kafka_server",
-    "kafka_topic": "run_engine/kafka_topic",
-    "zmq_data_proxy_addr": "run_engine/zmq_data_proxy_addr",
-    "databroker_config": "run_engine/databroker_config",
 }
 
 
@@ -325,6 +321,11 @@ class Settings:
         config_path = config_path or os.environ.get("QSERVER_CONFIG", None)
         self._config = parse_configs(config_path) if config_path else {}
 
+        # Configure logger using logging level passed as part of config
+        log_level = self._get_console_logging_level()
+        logging.basicConfig(level=max(logging.WARNING, log_level))
+        setup_loggers(log_level=log_level)
+
         self._settings["zmq_control_addr"] = self._get_zmq_control_addr()
         self._settings["zmq_private_key"] = self._get_zmq_private_key()
 
@@ -359,11 +360,11 @@ class Settings:
             raise ConfigError(f"Redis name prefix must be a string: {redis_name_prefix!r}")
         self._settings["redis_name_prefix"] = redis_name_prefix
 
-        self._settings["keep_re"] = self._get_param_boolean(
-            value_default=args.keep_re,
-            value_config=self._get_value_from_config("keep_re"),
-            value_cli=self._args_existing("keep_re"),
-        )
+        # Print warnings if deprecated parameter is used
+        if self._args_existing("keep_re"):
+            logger.warning("The CLI parameter '--keep-re' is deprecated and will be removed in future releases.")
+        if self._get_value_from_config("keep_re") is not None:
+            logger.warning("The config parameter 'keep_re' is deprecated and will be removed in future releases.")
 
         device_max_depth = self._get_param(
             value_default=self._args.device_max_depth,
@@ -547,36 +548,6 @@ class Settings:
         self._settings["emergency_lock_key"] = self._get_param(
             value_ev=os.environ.get("QSERVER_EMERGENCY_LOCK_KEY_FOR_SERVER", None),
             value_config=self._get_value_from_config("emergency_lock_key"),
-        )
-
-        self._settings["use_persistent_metadata"] = self._get_param_boolean(
-            value_default=args.use_persistent_metadata,
-            value_config=self._get_value_from_config("use_persistent_metadata"),
-            value_cli=self._args_existing("use_persistent_metadata"),
-        )
-
-        self._settings["kafka_server"] = self._get_param(
-            value_default=args.kafka_server,
-            value_config=self._get_value_from_config("kafka_server"),
-            value_cli=self._args_existing("kafka_server"),
-        )
-
-        self._settings["kafka_topic"] = self._get_param(
-            value_default=args.kafka_topic,
-            value_config=self._get_value_from_config("kafka_topic"),
-            value_cli=self._args_existing("kafka_topic"),
-        )
-
-        self._settings["zmq_data_proxy_addr"] = self._get_param(
-            value_default=args.zmq_data_proxy_addr,
-            value_config=self._get_value_from_config("zmq_data_proxy_addr"),
-            value_cli=self._args_existing("zmq_data_proxy_addr"),
-        )
-
-        self._settings["databroker_config"] = self._get_param(
-            value_default=args.databroker_config,
-            value_config=self._get_value_from_config("databroker_config"),
-            value_cli=self._args_existing("databroker_config"),
         )
 
     def __getattr__(self, attr):

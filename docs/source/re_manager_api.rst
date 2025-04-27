@@ -263,7 +263,8 @@ Returns       **msg**: *str*
 
               **re_state**: *str* or *None*
                   current state of Bluesky Run Engine (see Blue Sky documentation) or *None* if
-                  RE Worker environment does not exist (or closed).
+                  RE Worker environment does not exist (or closed) or if the instance of Run Engine
+                  is not defined in the environment namespace.
 
               **worker_environment_state**: *str*
                   current state of the worker environment. Supported states: *'initializing'*,

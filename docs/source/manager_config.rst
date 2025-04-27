@@ -353,13 +353,13 @@ The following rules apply when IPython mode is enabled:
   may be set using ``--ipython-connection-dir`` CLI parameter.
 
 - In many cases, it is desirable to reuse the same connection file for new instances of the kernel.
-  Using the same connection parameters, including UUID, allows the clients to reconnect to the new kernel
-  automatically after the environment is restarted. The connection file name may be set using
-  ``--ipython-connection-file`` CLI parameter. If the connection file does not exist, a new file is created.
-  If the connection file exists, the kernel loads connection parameters from the file. If any of the loaded
-  connection parameters do not match the parameters in the manager configuration (e.g. one of the 0MQ port
-  numbers is different), the existing connection file is updated with the new parameters and new UUID is
-  generated.
+  Using the same connection parameters, including the ``key`` parameter (UUID), allows the clients
+  to reconnect to the new kernel automatically after the environment is restarted. The connection
+  file name may be set using ``--ipython-connection-file`` CLI parameter. If the connection file
+  does not exist, a new file is created. If the connection file exists, the kernel loads connection
+  parameters from the file. If any of the loaded connection parameters do not match the parameters
+  in the manager configuration (e.g. one of the 0MQ port numbers is different), the existing connection
+  file is updated with the new parameters and the new ``key`` (UUID) is generated.
 
 .. note::
 

@@ -11,13 +11,8 @@ import threading
 import time as ttime
 import traceback
 import uuid
-from functools import partial
 from multiprocessing import Process
 from threading import Thread
-
-import msgpack
-import msgpack_numpy as mpn
-from event_model import RunRouter
 
 from .comms import PipeJsonRpcReceive
 from .config import profile_name_to_startup_dir
@@ -155,8 +150,6 @@ class RunEngineWorker(Process):
 
         # Class that supports communication over the pipe
         self._comm_to_manager = None
-
-        self._db = None
 
         # Note: 'self._config' is a private attribute of 'multiprocessing.Process'. Overriding
         #   this variable may lead to unpredictable and hard to debug issues.
@@ -825,10 +818,6 @@ class RunEngineWorker(Process):
                 self._RE = self._re_namespace["RE"]
                 logger.info("Run Engine instance ('RE') was replaced.")
 
-            if ("db" in self._re_namespace) and (self._db != self._re_namespace["db"]):
-                self._db = self._re_namespace["db"]
-                logger.info("Data Broker instance ('db') was replaced.")
-
         if update_lists:
             logger.info("Updating lists of existing and available plans and devices ...")
 
@@ -1391,20 +1380,12 @@ class RunEngineWorker(Process):
         """
         Perform startup tasks for the worker.
         """
-        from bluesky import RunEngine
-        from bluesky.callbacks.best_effort import BestEffortCallback
-        from bluesky.utils import PersistentDict
-        from bluesky_kafka import Publisher as kafkaPublisher
-
         from .profile_tools import global_user_namespace
 
         try:
-            keep_re = self._config_dict["keep_re"]
             startup_dir = self._config_dict.get("startup_dir", None)
             startup_module_name = self._config_dict.get("startup_module_name", None)
             startup_script_path = self._config_dict.get("startup_script_path", None)
-
-            ipython_matplotlib = self._config_dict.get("ipython_matplotlib", None)
 
             # If IPython kernel is used, the startup code is loaded during kernel initialization.
             if not self._use_ipython_kernel:
@@ -1412,14 +1393,11 @@ class RunEngineWorker(Process):
                     startup_dir=startup_dir,
                     startup_module_name=startup_module_name,
                     startup_script_path=startup_script_path,
-                    keep_re=keep_re,
                     nspace=self._re_namespace,
                 )
 
-            if keep_re and ("RE" not in self._re_namespace):
-                raise RuntimeError(
-                    "Run Engine is not created in the startup code and 'keep_re' option is activated."
-                )
+            # if "RE" not in self._re_namespace:
+            #     raise RuntimeError("Run Engine is not created in the startup code.")
 
             epd = existing_plans_and_devices_from_nspace(
                 nspace=self._re_namespace,
@@ -1468,69 +1446,8 @@ class RunEngineWorker(Process):
                     user_ns=self._re_namespace, use_ipython=self._use_ipython_kernel
                 )
 
-                if self._config_dict["keep_re"]:
-                    # Copy references from the namespace
-                    self._RE = self._re_namespace["RE"]
-                    self._db = self._re_namespace.get("db", None)
-                else:
-                    # Instantiate a new Run Engine and Data Broker (if needed)
-                    md = {}
-                    if self._config_dict["use_persistent_metadata"]:
-                        # This code is temporarily copied from 'nslsii' before better solution for keeping
-                        #   continuous sequence Run ID is found. TODO: continuous sequence of Run IDs.
-                        directory = os.path.expanduser("~/.config/bluesky/md")
-                        os.makedirs(directory, exist_ok=True)
-                        md = PersistentDict(directory)
-
-                    self._RE = RunEngine(md)
-                    self._re_namespace["RE"] = self._RE
-
-                    def factory(name, doc):
-                        # Documents from each run are routed to an independent
-                        #   instance of BestEffortCallback
-                        bec = BestEffortCallback()
-                        if not self._use_ipython_kernel or not ipython_matplotlib:
-                            bec.disable_plots()
-                        return [bec], []
-
-                    # Subscribe to Best Effort Callback in the way that works with multi-run plans.
-                    rr = RunRouter([factory])
-                    self._RE.subscribe(rr)
-
-                    # Subscribe RE to databroker if config file name is provided
-                    self._db = None
-                    if "databroker" in self._config_dict:
-                        config_name = self._config_dict["databroker"].get("config", None)
-                        if config_name:
-                            logger.info("Subscribing RE to Data Broker using configuration '%s'.", config_name)
-                            from databroker import Broker
-
-                            self._db = Broker.named(config_name)
-                            self._re_namespace["db"] = self._db
-
-                            self._RE.subscribe(self._db.insert)
-
-                if "kafka" in self._config_dict:
-                    logger.info(
-                        "Subscribing to Kafka: topic '%s', servers '%s'",
-                        self._config_dict["kafka"]["topic"],
-                        self._config_dict["kafka"]["bootstrap"],
-                    )
-                    kafka_publisher = kafkaPublisher(
-                        topic=self._config_dict["kafka"]["topic"],
-                        bootstrap_servers=self._config_dict["kafka"]["bootstrap"],
-                        key="kafka-unit-test-key",
-                        # work with a single broker
-                        producer_config={"acks": 1, "enable.idempotence": False, "request.timeout.ms": 5000},
-                        serializer=partial(msgpack.dumps, default=mpn.encode),
-                    )
-                    self._RE.subscribe(kafka_publisher)
-
-                if "zmq_data_proxy_addr" in self._config_dict:
-                    from bluesky.callbacks.zmq import Publisher
-
-                    publisher = Publisher(self._config_dict["zmq_data_proxy_addr"])
-                    self._RE.subscribe(publisher)
+                # Copy reference to Run Engine from the namespace. Set to None if RE does not exist.
+                self._RE = self._re_namespace.get("RE", None)
 
                 self._execution_queue = queue.Queue()
 
@@ -1764,9 +1681,29 @@ class RunEngineWorker(Process):
 
             from .utils import generate_random_port
 
+            connection_file = self._config_dict["ipython_connection_file"]
+            connection_dir = self._config_dict["ipython_connection_dir"]
+
+            if connection_file:
+                # IPython kernel is designed to remove connection files after the kernel is closed.
+                # This functionality exists for a long time, but apparently it did not work in the past,
+                # It appeares to work as expected with Python 3.13, which creates a problem with QS.
+                # We specify the name of the connection file if we want to reuse the connection
+                # information (including random key), at the next startup, so we need to keep
+                # the connection file. The patch removes the functionality from IPKernelApp.
+                class IPKernelAppCustom(IPKernelApp):
+                    def cleanup_connection_file(self):
+                        # Do not remove the connection file
+                        self.cleanup_ipc_files()
+
+            else:
+                # If the name is not specified, IPython creates files with random names and we
+                # don't need them. Use the default functionality.
+                IPKernelAppCustom = IPKernelApp
+
             self._re_namespace["___ip_execution_loop_start___"] = self._run_loop_ipython
             self._re_namespace["___ip_kernel_startup_init___"] = self._ip_kernel_startup_init
-            self._ip_kernel_app = IPKernelApp.instance(user_ns=self._re_namespace)
+            self._ip_kernel_app = IPKernelAppCustom.instance(user_ns=self._re_namespace)
             out_stream, err_stream = sys.stdout, sys.stderr
 
             self._worker_prepare_for_startup()
@@ -1808,8 +1745,6 @@ class RunEngineWorker(Process):
                     ip = ip_str
                 return ip
 
-            connection_file = self._config_dict["ipython_connection_file"]
-            connection_dir = self._config_dict["ipython_connection_dir"]
             shell_port = self._config_dict["ipython_shell_port"]
             iopub_port = self._config_dict["ipython_iopub_port"]
             stdin_port = self._config_dict["ipython_stdin_port"]
@@ -1860,14 +1795,15 @@ class RunEngineWorker(Process):
                         use_connection_file = False
                         os.remove(abs_cf_name)
                 else:
+                    logger.info(f"Connection file {abs_cf_name!r} is not found. Creating a new file.")
                     use_connection_file = False
 
-            logger.info("Generating random port numbers for IPython kernel ...")
             try:
                 if use_connection_file:
                     logger.info(f"Loading connection file {self._ip_kernel_app.abs_connection_file}")
                     self._ip_kernel_app.load_connection_file(self._ip_kernel_app.abs_connection_file)
                 else:
+                    logger.info("Generating connection parameters. New file is created ...")
                     self._ip_kernel_app.ip = kernel_ip
                     self._ip_kernel_app.shell_port = shell_port or generate_random_port(kernel_ip)
                     self._ip_kernel_app.iopub_port = iopub_port or generate_random_port(kernel_ip)
@@ -1877,7 +1813,7 @@ class RunEngineWorker(Process):
                 self._ip_connect_info = self._ip_kernel_app.get_connection_info()
             except Exception as ex:
                 self._success_startup = False
-                logger.error("Failed to generates kernel ports for IP %r: %s", kernel_ip, ex)
+                logger.error("Failed to generate kernel ports for IP %r: %s", kernel_ip, ex)
 
             if self._success_startup:
 

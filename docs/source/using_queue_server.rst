@@ -576,6 +576,10 @@ the server. The IP address passed to the kernel is returned as part of connectio
 which is used by client applications to connect to the kernel
 (see :ref:`method_config_get` API).
 
+Additional parameters may be used to set the directory and the name of the IPython kernel
+connection file and the numbers of 0MQ ports used by the kernel for communication.
+See :ref:`config_of_ipython_kernel` for more details.
+
 Specifying Location of Startup Code
 ***********************************
 

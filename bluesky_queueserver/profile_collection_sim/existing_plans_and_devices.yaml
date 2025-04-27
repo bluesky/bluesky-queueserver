@@ -1813,7 +1813,7 @@ existing_plans:
         value: 2
       name: args
     - annotation:
-        type: typing.Union[collections.abc.Iterable, bool, NoneType]
+        type: typing.Union[collections.abc.Iterable[typing.Any], bool, NoneType]
       default: None
       description: 'which axes should be snaked, either ``False`` (do not snake any
         axes),
@@ -2403,7 +2403,7 @@ existing_plans:
         value: 2
       name: args
     - annotation:
-        type: typing.Union[collections.abc.Iterable, bool, NoneType]
+        type: typing.Union[collections.abc.Iterable[typing.Any], bool, NoneType]
       default: None
       description: 'which axes should be snaked, either ``False`` (do not snake any
         axes),

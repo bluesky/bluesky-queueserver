@@ -2187,6 +2187,36 @@ _pf2k_processed = {
 }
 
 
+def _pf2l(
+    val1: collections.abc.Iterable,
+    val2: collections.abc.Iterable[int],
+    val3: Optional[typing.Union[collections.abc.Iterable, bool]],
+):
+    yield from [val1, val2, val3]
+
+
+_pf2l_processed = {
+    "parameters": [
+        {
+            "annotation": {"type": "collections.abc.Iterable[typing.Any]"},
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val1",
+        },
+        {
+            "annotation": {"type": "collections.abc.Iterable[int]"},
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val2",
+        },
+        {
+            "annotation": {"type": "typing.Union[collections.abc.Iterable[typing.Any], bool, NoneType]"},
+            "kind": {"name": "POSITIONAL_OR_KEYWORD", "value": 1},
+            "name": "val3",
+        },
+    ],
+    "properties": {"is_generator": True},
+}
+
+
 # fmt: off
 @pytest.mark.parametrize("plan_func, plan_info_expected", [
     (_pf2a, _pf2a_processed),
@@ -2200,6 +2230,7 @@ _pf2k_processed = {
     (_pf2i, _pf2i_processed),
     (_pf2j, _pf2j_processed),
     (_pf2k, _pf2k_processed),
+    (_pf2l, _pf2l_processed),
 ])
 # fmt: on
 def test_process_plan_2(plan_func, plan_info_expected):

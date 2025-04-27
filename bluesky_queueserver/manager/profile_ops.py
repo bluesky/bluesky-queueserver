@@ -2957,13 +2957,16 @@ def _process_plan(plan, *, existing_devices, existing_plans):
         #   expressed as "<class 'int'>", but have valid '__name__' attribute
         #   containing type name, such as "int".
         if hasattr(annotation, "__name__") and re.search("^<.*>$", a_str):
-            # Note, that starting with Python 3.10 parameter annotation always have
+            # Note, that starting with Python 3.10 parameter annotation always has
             #   '__name__', which is meaningless for types other than base types.
-            a_str = annotation.__name__
+            _ = annotation.__name__
             mapping = {k.__name__: v for k, v in protocols_inv.items()}
-            if a_str in mapping:
-                a_str = mapping[a_str]
+            if _ in mapping:
+                a_str = mapping[_]
                 ns[a_str] = annotation  # 'a_str' is __DEVICE__, __READABLE__ or similar
+            else:
+                if re.search("<class '.+'>", a_str):
+                    a_str = re.sub(r"<class '(.+)'>", r"\1", a_str)
         else:
             # Replace each expression with a unique string in the form of '__CALLABLE<n>__'
             n_patterns = 0  # Number of detected callables
@@ -2995,6 +2998,15 @@ def _process_plan(plan, *, existing_devices, existing_plans):
             # Replace all callables ('__CALLABLE1__', '__CALLABLE2__', etc.) with '__CALLABLE__' string
             for k, v in substitutions_dict.items():
                 a_str = re.sub(k, v, a_str)
+
+            # Some types can not be validated by Pydantic, but they could be substituted by other types that can
+            patches = {
+                "collections.abc.Iterable": "collections.abc.Iterable[typing.Any]",
+            }
+            template_prefix = r"(?<![._A-Za-z0-9])"
+            template_suffix = r"(?![._\[A-Za-z0-9])"
+            for k, v in patches.items():
+                a_str = re.sub(f"{template_prefix}{k}{template_suffix}", v, a_str)
 
         except Exception:
             # Ignore the type if it can not be recreated.

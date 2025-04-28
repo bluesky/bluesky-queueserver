@@ -2,6 +2,8 @@ import asyncio
 import copy
 import enum
 import logging
+import os
+import pickle
 import time as ttime
 import uuid
 from datetime import datetime
@@ -3627,13 +3629,21 @@ class RunEngineManager(Process):
 
     async def _zmq_receive(self):
         try:
-            msg_in = await self._zmq_socket.recv_json()
+            if os.environ.get("QSERVER_ZMQ_ENCODING", "JSON") == "PICKLE":
+                _ = await self._zmq_socket.recv()
+                msg_in = pickle.loads(_)
+            else:
+                msg_in = await self._zmq_socket.recv_json()
         except Exception as ex:
             msg_in = f"JSON decode error: {ex}"
         return msg_in
 
     async def _zmq_send(self, msg):
-        await self._zmq_socket.send_json(msg)
+        if os.environ.get("QSERVER_ZMQ_ENCODING", "JSON") == "PICKLE":
+            _ = pickle.dumps(msg)
+            await self._zmq_socket.send(_)
+        else:
+            await self._zmq_socket.send_json(msg)
 
     async def zmq_server_comm(self):
         """

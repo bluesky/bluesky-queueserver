@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import pickle
 import queue
 import threading
 import uuid
@@ -610,6 +611,9 @@ class ZMQCommSendThreads:
         public/private key pair must be passed if encryption is enabled at the 0MQ server side.
         Communication requests will time out if the key is invalid. Exception will be raised if
         the key is improperly formatted. Encryption will be disabled if ``None`` is passed.
+    use_json : bool
+        Use JSON-encoded messages if *True* (default), otherwise send the messages
+        in binary (picked) format.
 
     Examples
     --------
@@ -656,6 +660,7 @@ class ZMQCommSendThreads:
         timeout_send=500,
         raise_exceptions=True,
         server_public_key=None,
+        use_json=True,
     ):
         zmq_server_address = zmq_server_address or default_zmq_control_address
 
@@ -663,6 +668,8 @@ class ZMQCommSendThreads:
         self._ctx = zmq.Context()
         self._zmq_socket = None
         self._zmq_server_address = zmq_server_address
+
+        self._use_json = use_json
 
         if server_public_key is not None:
             validate_zmq_key(server_public_key)
@@ -704,7 +711,11 @@ class ZMQCommSendThreads:
                 msg, msg_err = {}, ""
                 try:
                     if self._zmq_socket.poll(timeout=self._timeout_receive_last):
-                        msg = self._zmq_socket.recv_json()
+                        if self._use_json:
+                            msg = self._zmq_socket.recv_json()
+                        else:
+                            _ = self._zmq_socket.recv()
+                            msg = pickle.loads(_)
                     else:
                         # This is very likely a timeout (RE Manager is not responding)
                         raise Exception("timeout occurred")
@@ -814,7 +825,12 @@ class ZMQCommSendThreads:
             self._timeout_receive_last = timeout
             self._zmq_socket.RCVTIMEO = timeout + 1
 
-        self._zmq_socket.send_json(msg_out)
+        if self._use_json:
+            self._zmq_socket.send_json(msg_out)
+        else:
+            _ = pickle.dumps(msg_out)
+            self._zmq_socket.send(_)
+
         self._event_wait_for_msg.set()
 
         if self._blocking_call:
@@ -984,6 +1000,9 @@ class ZMQCommSendAsync:
         public/private key pair must be passed if encryption is enabled at the 0MQ server side.
         Communication requests will time out if the key is invalid. Exception will be raised if
         the key is improperly formatted. Encryption will be disabled if ``None`` is passed.
+    use_json : bool
+        Use JSON-encoded messages if *True* (default), otherwise send the messages
+        in binary (picked) format.
 
     Examples
     --------
@@ -1010,8 +1029,11 @@ class ZMQCommSendAsync:
         timeout_send=500,
         raise_exceptions=True,
         server_public_key=None,
+        use_json=True,
     ):
         self._loop = loop if loop else asyncio.get_event_loop()
+
+        self._use_json = use_json
 
         zmq_server_address = zmq_server_address or default_zmq_control_address
         self._server_public_key = server_public_key
@@ -1042,12 +1064,20 @@ class ZMQCommSendAsync:
         return self._loop
 
     async def _zmq_send(self, msg):
-        await self._zmq_socket.send_json(msg)
+        if self._use_json:
+            await self._zmq_socket.send_json(msg)
+        else:
+            _ = pickle.dumps(msg)
+            await self._zmq_socket.send(_)
 
     async def _zmq_receive(self, *, timeout):
         try:
             if await self._zmq_socket.poll(timeout=timeout):
-                msg = await self._zmq_socket.recv_json()
+                if self._use_json:
+                    msg = await self._zmq_socket.recv_json()
+                else:
+                    _ = await self._zmq_socket.recv()
+                    msg = pickle.loads(_)
             else:
                 # This is very likely a timeout (RE Manager is not responding)
                 raise Exception("timeout occurred")
@@ -1162,7 +1192,9 @@ class ZMQCommSendAsync:
             self._zmq_socket.close()
 
 
-def zmq_single_request(method, params=None, *, timeout=None, zmq_server_address=None, server_public_key=None):
+def zmq_single_request(
+    method, params=None, *, timeout=None, zmq_server_address=None, server_public_key=None, use_json=True
+):
     """
     Send a single request to ZMQ server. The function opens the socket, sends
     a single ZMQ request and closes the socket. The function is not expected
@@ -1187,7 +1219,9 @@ def zmq_single_request(method, params=None, *, timeout=None, zmq_server_address=
         public/private key pair must be passed if encryption is enabled at the 0MQ server side.
         Communication requests will time out if the key is invalid. Exception will be raised if
         the key is improperly formatted. Encryption will be disabled if ``None`` is passed.
-
+    use_json : bool
+        Use JSON-encoded messages if *True* (default), otherwise send the messages
+        in binary (picked) format.
 
     Returns
     -------
@@ -1203,7 +1237,7 @@ def zmq_single_request(method, params=None, *, timeout=None, zmq_server_address=
     async def send_request(method, params):
         nonlocal msg_received
         zmq_to_manager = ZMQCommSendAsync(
-            zmq_server_address=zmq_server_address, server_public_key=server_public_key
+            zmq_server_address=zmq_server_address, server_public_key=server_public_key, use_json=use_json
         )
         msg_received = await zmq_to_manager.send_message(
             method=method, params=params, timeout=timeout, raise_exceptions=True

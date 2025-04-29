@@ -196,12 +196,13 @@ def test_ReceiveConsoleOutput_1(
 
 
 # fmt: off
+@pytest.mark.parametrize("zmq_encoding", ["json", "pickle"])
 @pytest.mark.parametrize("period", [0.5, 1, 1.5])
 @pytest.mark.parametrize("cb_type", ["func", "coro"])
 # fmt: on
 # TODO: this test may need to be changed to run more reliably on CI
 @pytest.mark.xfail(reason="Test often fails when run on CI, but expected to pass locally")
-def test_ReceiveConsoleOutputAsync_1(period, cb_type):
+def test_ReceiveConsoleOutputAsync_1(period, cb_type, zmq_encoding):
     """
     Basic test for ``ReceiveConsoleOutputAsync``: send and receive 3 messages over 0MQ.
     Send messages with different period (to check if timeout is handled correctly) and
@@ -223,13 +224,16 @@ def test_ReceiveConsoleOutputAsync_1(period, cb_type):
         zmq_publish_on=True,
         zmq_publish_addr=zmq_publish_addr,
         zmq_topic=zmq_topic,
+        zmq_encoding=zmq_encoding,
     )
 
     pco.start()
 
     msgs = ["message-one\n", "message-two\n", "message-three\n"]
 
-    rm = ReceiveConsoleOutputAsync(zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic, timeout=timeout)
+    rm = ReceiveConsoleOutputAsync(
+        zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic, timeout=timeout, zmq_encoding=zmq_encoding
+    )
     ttime.sleep(1)  # Important when executed on CI
 
     async def testing():
@@ -283,7 +287,8 @@ def test_ReceiveConsoleOutputAsync_1(period, cb_type):
     pco.stop()
 
 
-def test_ReceiveConsoleOutputAsync_2():
+@pytest.mark.parametrize("zmq_encoding", ["json", "pickle"])
+def test_ReceiveConsoleOutputAsync_2(zmq_encoding):
     """
     ``ReceiveConsoleOutputAsync``: test various options to subscribe and unsubscribe
     """
@@ -292,7 +297,9 @@ def test_ReceiveConsoleOutputAsync_2():
     zmq_topic = "testing_topic"
     zmq_subscribe_addr = f"tcp://localhost:{zmq_port}"
 
-    rm = ReceiveConsoleOutputAsync(zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic, timeout=100)
+    rm = ReceiveConsoleOutputAsync(
+        zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic, zmq_encoding=zmq_encoding, timeout=100
+    )
 
     assert rm._socket_subscribed is False
 
@@ -330,3 +337,23 @@ def test_ReceiveConsoleOutputAsync_2():
         assert rm._socket_subscribed is False
 
     asyncio.run(testing_3())
+
+
+@pytest.mark.parametrize("zmq_encoding", [None, "json", "pickle"])
+def test_ConsoleOutput_zmq_encoding_1(zmq_encoding):
+    """
+    Thest that zmq_encoding option is correctly processed in all classes for console output streaming.
+    """
+    params = {} if zmq_encoding is None else {"zmq_encoding": zmq_encoding}
+    use_json = zmq_encoding in ("json", None)
+
+    queue = multiprocessing.Queue()
+
+    pco = PublishConsoleOutput(msg_queue=queue, **params)
+    assert pco._use_json == use_json
+
+    rco1 = ReceiveConsoleOutput(**params)
+    assert rco1._use_json == use_json
+
+    rco2 = ReceiveConsoleOutputAsync(**params)
+    assert rco2._use_json == use_json

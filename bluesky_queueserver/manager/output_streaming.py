@@ -21,6 +21,21 @@ qserver_version = bluesky_queueserver.__version__
 default_zmq_info_address_for_server = "tcp://*:60625"
 default_zmq_info_address = "tcp://localhost:60625"
 
+supported_zmq_encoding = ("json", "pickle")
+
+
+def _process_zmq_encoding(zmq_encoding):
+    """
+    Process the value passed as 'zmq_encoding' parameter: check if the value is supported
+    and raise an exception if the value is invalid. Then compute and return the value of 'use_json'.
+    """
+    if zmq_encoding.lower() not in supported_zmq_encoding:
+        raise RuntimeError(
+            f"0MQ encoding {zmq_encoding!r} is not supported. Supported values: {supported_zmq_encoding}."
+        )
+    use_json = True if zmq_encoding.lower() == "json" else False
+    return use_json
+
 
 class ConsoleOutputStream(io.TextIOBase):
     """
@@ -141,10 +156,7 @@ class PublishConsoleOutput:
         self._console_output_on = console_output_on
         self._zmq_publish_on = zmq_publish_on
 
-        encodings = ("json", "pickle")
-        if zmq_encoding.lower() not in encodings:
-            raise RuntimeError(f"0MQ encoding {zmq_encoding!r} is not supported. Supported values: {encodings}.")
-        self._use_json = True if zmq_encoding.lower() == "json" else False
+        self._use_json = _process_zmq_encoding(zmq_encoding)
 
         zmq_publish_addr = zmq_publish_addr or default_zmq_info_address_for_server
 
@@ -282,10 +294,7 @@ class ReceiveConsoleOutput:
         self._zmq_subscribe_addr = zmq_subscribe_addr
         self._zmq_topic = zmq_topic
 
-        encodings = ("json", "pickle")
-        if zmq_encoding.lower() not in encodings:
-            raise RuntimeError(f"0MQ encoding {zmq_encoding!r} is not supported. Supported values: {encodings}.")
-        self._use_json = True if zmq_encoding.lower() == "json" else False
+        self._use_json = _process_zmq_encoding(zmq_encoding)
 
         self._socket = None
         self._socket_subscribed = False
@@ -473,10 +482,7 @@ class ReceiveConsoleOutputAsync:
         self._zmq_subscribe_addr = zmq_subscribe_addr
         self._zmq_topic = zmq_topic
 
-        encodings = ("json", "pickle")
-        if zmq_encoding.lower() not in encodings:
-            raise RuntimeError(f"0MQ encoding {zmq_encoding!r} is not supported. Supported values: {encodings}.")
-        self._use_json = True if zmq_encoding.lower() == "json" else False
+        self._use_json = _process_zmq_encoding(zmq_encoding)
 
         self._socket = None
         self._socket_subscribed = False

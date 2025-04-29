@@ -21,7 +21,7 @@ import yaml
 from .comms import default_zmq_control_address_for_server, validate_zmq_key
 from .config_schemas.loading import ConfigError, load_schema_from_yml
 from .logging_setup import setup_loggers
-from .output_streaming import default_zmq_info_address_for_server
+from .output_streaming import default_zmq_info_address_for_server, supported_zmq_encoding
 from .profile_ops import get_default_startup_dir, get_default_startup_profile
 from .utils import to_boolean
 
@@ -343,7 +343,12 @@ class Settings:
             value_config=self._get_value_from_config("zmq_encoding"),
             value_cli=self._args_existing("zmq_encoding"),
         )
-        self._settings["zmq_encoding"] = zmq_encoding.lower()
+        zmq_encoding = zmq_encoding.lower()
+        if zmq_encoding.lower() not in supported_zmq_encoding:
+            raise ConfigError(
+                f"0MQ encoding {zmq_encoding!r} is not supported. Supported values: {supported_zmq_encoding}."
+            )
+        self._settings["zmq_encoding"] = zmq_encoding
 
         self._settings["zmq_publish_console"] = self._get_param_boolean(
             value_default=args.zmq_publish_console,

@@ -3,6 +3,7 @@ import copy
 import glob
 import json
 import os
+import pickle
 import pprint
 import re
 import time as ttime
@@ -55,6 +56,7 @@ from .common import (  # noqa: F401
     re_manager_pc_copy,
     remove_run_engine_config_from_startup,
     use_ipykernel_for_tests,
+    use_zmq_pickle_encoding_for_tests,
     wait_for_condition,
     wait_for_task_result,
 )
@@ -86,7 +88,8 @@ def test_zmq_api_thread_based(re_manager):  # noqa F811
     sure that the API is compatible with the client. It is sufficient to test only
     the blocking call, since it is still using callbacks mechanism.
     """
-    client = ZMQCommSendThreads()
+    use_json = not use_zmq_pickle_encoding_for_tests()
+    client = ZMQCommSendThreads(use_json=use_json)
 
     resp1 = client.send_message(
         method="queue_item_add", params={"item": _plan1, "user": _user, "user_group": _user_group}
@@ -128,8 +131,10 @@ def test_zmq_api_asyncio_based(re_manager):  # noqa F811
     sure that the API is compatible with the client.
     """
 
+    use_json = not use_zmq_pickle_encoding_for_tests()
+
     async def testing():
-        client = ZMQCommSendAsync()
+        client = ZMQCommSendAsync(use_json=use_json)
 
         resp1 = await client.send_message(
             method="queue_item_add", params={"item": _plan1, "user": _user, "user_group": _user_group}
@@ -175,32 +180,65 @@ def test_invalid_requests_1(re_manager):  # noqa F811
     socket = ctx.socket(zmq.REQ)
     socket.connect(default_zmq_control_address)
 
-    socket.send(b"")  # Not JSON
-    resp = socket.recv_json()
-    assert resp["success"] is False
-    assert "Failed to decode the request: JSON decode error:" in resp["msg"]
+    if not use_zmq_pickle_encoding_for_tests():
+        socket.send(b"")  # Not JSON
+        resp = socket.recv_json()
+        assert resp["success"] is False
+        assert "Failed to decode the request: JSON decode error:" in resp["msg"]
 
-    socket.send_string('{"method":')  # Invalid JSON
-    resp = socket.recv_json()
-    assert resp["success"] is False
-    assert "Failed to decode the request: JSON decode error:" in resp["msg"]
+        socket.send_string('{"method":')  # Invalid JSON
+        resp = socket.recv_json()
+        assert resp["success"] is False
+        assert "Failed to decode the request: JSON decode error:" in resp["msg"]
 
-    socket.send_string('{"met": "status"}')  # No 'method' key
-    resp = socket.recv_json()
-    assert resp["success"] is False
-    assert "Invalid request format: method is not specified: {'met': 'status'}" in resp["msg"]
+        socket.send_string('{"met": "status"}')  # No 'method' key
+        resp = socket.recv_json()
+        assert resp["success"] is False
+        assert "Invalid request format: method is not specified: {'met': 'status'}" in resp["msg"]
 
-    socket.send_string('{"method": "status"}')  # Valid JSON, no optional 'params'
-    resp = socket.recv_json()
-    assert "success" not in resp, str(resp)
-    assert "manager_state" in resp, str(resp)
-    assert resp["manager_state"] == "idle", str(resp)
+        socket.send_string('{"method": "status"}')  # Valid JSON, no optional 'params'
+        resp = socket.recv_json()
+        assert "success" not in resp, str(resp)
+        assert "manager_state" in resp, str(resp)
+        assert resp["manager_state"] == "idle", str(resp)
 
-    socket.send_string('{"method": "status", "params": {}}')  # Valid JSON
-    resp = socket.recv_json()
-    assert "success" not in resp, str(resp)
-    assert "manager_state" in resp, str(resp)
-    assert resp["manager_state"] == "idle", str(resp)
+        socket.send_string('{"method": "status", "params": {}}')  # Valid JSON
+        resp = socket.recv_json()
+        assert "success" not in resp, str(resp)
+        assert "manager_state" in resp, str(resp)
+        assert resp["manager_state"] == "idle", str(resp)
+
+    else:
+        socket.send(b"")  # Not JSON
+        resp = pickle.loads(socket.recv())
+        assert resp["success"] is False
+        assert "Failed to decode the request: PICKLE decode error:" in resp["msg"]
+
+        _ = pickle.dumps({"some_key": "some_value"})
+        socket.send(_[:-1])  # Clipped message
+        resp = pickle.loads(socket.recv())
+        assert resp["success"] is False
+        assert "PICKLE decode error: pickle data was truncated" in resp["msg"]
+
+        _ = pickle.dumps({"met": "status"})  # No 'method' key
+        socket.send(_)
+        resp = pickle.loads(socket.recv())
+        assert resp["success"] is False
+        assert "Invalid request format: method is not specified: {'met': 'status'}" in resp["msg"]
+
+        _ = pickle.dumps({"method": "status"})  # Valid JSON, no optional 'params'
+        socket.send(_)
+        resp = pickle.loads(socket.recv())
+        assert "success" not in resp, str(resp)
+        assert "manager_state" in resp, str(resp)
+        assert resp["manager_state"] == "idle", str(resp)
+
+        _ = pickle.dumps({"method": "status", "params": {}})  # Valid JSON
+        socket.send(_)
+        resp = pickle.loads(socket.recv())
+        assert "success" not in resp, str(resp)
+        assert "manager_state" in resp, str(resp)
+        assert resp["manager_state"] == "idle", str(resp)
 
     socket.close()
 

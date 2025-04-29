@@ -3634,7 +3634,8 @@ class RunEngineManager(Process):
                 _ = await self._zmq_socket.recv()
                 msg_in = pickle.loads(_)
         except Exception as ex:
-            msg_in = f"JSON decode error: {ex}"
+            _ = "JSON" if self._use_json else "PICKLE"
+            msg_in = f"{_} decode error: {ex}"
         return msg_in
 
     async def _zmq_send(self, msg):

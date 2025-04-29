@@ -26,6 +26,7 @@ from .comms import (
     zmq_single_request,
 )
 from .logging_setup import PPrintForLogging as ppfl
+from .output_streaming import process_zmq_encoding_parameter
 from .plan_queue_ops import PlanQueueOperations
 
 logger = logging.getLogger(__name__)
@@ -1292,6 +1293,16 @@ def qserver():
     )
 
     parser.add_argument(
+        "--zmq-encoding",
+        dest="zmq_encoding",
+        type=str,
+        default=None,
+        help="The encoding used for 0MQ communication. The encoding must match the encoding used by RE Manager. "
+        "The parameter value overrides the value set by QSERVER_ZMQ_ENCODING environment variable. "
+        "The supported values: 'json' (default) or 'pickle'.",
+    )
+
+    parser.add_argument(
         "--lock-key",
         "-k",
         dest="lock_key",
@@ -1323,6 +1334,11 @@ def qserver():
                     f"Lock key must be a non-empty string: submitted lock key is {lock_key!r}"
                 )
 
+        zmq_encoding = args.zmq_encoding
+        zmq_encoding = zmq_encoding or os.environ.get("QSERVER_ZMQ_ENCODING", None)
+        zmq_encoding = zmq_encoding or "json"
+        use_json = process_zmq_encoding_parameter(zmq_encoding)
+
         # Read public key from the environment variable, then check if the CLI parameter exists
         zmq_public_key = os.environ.get("QSERVER_ZMQ_PUBLIC_KEY", None)
         zmq_public_key = zmq_public_key if zmq_public_key else None  # Case of key==""
@@ -1338,7 +1354,7 @@ def qserver():
 
         while True:
             msg, msg_err = zmq_single_request(
-                method, params, zmq_server_address=address, server_public_key=zmq_public_key
+                method, params, zmq_server_address=address, server_public_key=zmq_public_key, use_json=use_json
             )
 
             now = datetime.now()
@@ -1515,6 +1531,16 @@ def qserver_console_base(*, app_name):
         f"(default: {default_zmq_control_address!r}).",
     )
 
+    parser.add_argument(
+        "--zmq-encoding",
+        dest="zmq_encoding",
+        type=str,
+        default=None,
+        help="The encoding used for 0MQ communication. The encoding must match the encoding used by RE Manager. "
+        "The parameter value overrides the value set by QSERVER_ZMQ_ENCODING environment variable. "
+        "The supported values: 'json' (default) or 'pickle'.",
+    )
+
     args = parser.parse_args()
 
     exit_code = QServerExitCodes.SUCCESS
@@ -1525,6 +1551,11 @@ def qserver_console_base(*, app_name):
         address = address or os.environ.get("QSERVER_ZMQ_CONTROL_ADDRESS", None)
         # If the address is not specified, then use the default address
         address = address or default_zmq_control_address
+
+        zmq_encoding = args.zmq_encoding
+        zmq_encoding = zmq_encoding or os.environ.get("QSERVER_ZMQ_ENCODING", None)
+        zmq_encoding = zmq_encoding or "json"
+        use_json = process_zmq_encoding_parameter(zmq_encoding)
 
         # Read public key from the environment variable, then check if the CLI parameter exists
         zmq_public_key = os.environ.get("QSERVER_ZMQ_PUBLIC_KEY", None)
@@ -1537,7 +1568,7 @@ def qserver_console_base(*, app_name):
 
         # Request connection info
         msg, msg_err = zmq_single_request(
-            "config_get", zmq_server_address=address, server_public_key=zmq_public_key
+            "config_get", zmq_server_address=address, server_public_key=zmq_public_key, use_json=use_json
         )
 
         now = datetime.now()

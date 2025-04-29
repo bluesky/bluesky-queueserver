@@ -662,6 +662,16 @@ def qserver_console_monitor_cli():
         help="The parameter is deprecated and will be removed. Use --zmq-info-addr instead.",
     )
 
+    parser.add_argument(
+        "--zmq-encoding",
+        dest="zmq_encoding",
+        type=str,
+        default=None,
+        help="The encoding used for 0MQ communication. The encoding must match the encoding used by RE Manager. "
+        "The parameter value overrides the value set by QSERVER_ZMQ_ENCODING environment variable. "
+        "The supported values: 'json' (default) or 'pickle'.",
+    )
+
     args = parser.parse_args()
 
     zmq_info_addr = args.zmq_info_addr
@@ -673,8 +683,12 @@ def qserver_console_monitor_cli():
     zmq_info_addr = zmq_info_addr or os.environ.get("QSERVER_ZMQ_INFO_ADDRESS", None)
     zmq_info_addr = zmq_info_addr or default_zmq_info_address
 
+    zmq_encoding = args.zmq_encoding
+    zmq_encoding = zmq_encoding or os.environ.get("QSERVER_ZMQ_ENCODING", None)
+    zmq_encoding = zmq_encoding or "json"
+
     try:
-        rco = ReceiveConsoleOutput(zmq_subscribe_addr=zmq_info_addr)
+        rco = ReceiveConsoleOutput(zmq_subscribe_addr=zmq_info_addr, zmq_encoding=zmq_encoding)
         rco.subscribe()
         while True:
             try:

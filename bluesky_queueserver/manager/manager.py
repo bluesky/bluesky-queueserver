@@ -2,7 +2,6 @@ import asyncio
 import copy
 import enum
 import logging
-import os
 import pickle
 import time as ttime
 import uuid
@@ -17,7 +16,7 @@ import bluesky_queueserver
 from .comms import CommTimeoutError, PipeJsonRpcSendAsync, validate_zmq_key
 from .logging_setup import PPrintForLogging as ppfl
 from .logging_setup import setup_loggers
-from .output_streaming import setup_console_output_redirection
+from .output_streaming import process_zmq_encoding_parameter, setup_console_output_redirection
 from .plan_queue_ops import PlanQueueOperations
 from .profile_ops import (
     check_if_function_allowed,
@@ -227,7 +226,6 @@ class RunEngineManager(Process):
         self._lock_info = LockInfo()  # Lock/unlock environment and/or queue
         self._lock_info.set_emergency_lock_key(config["lock_key_emergency"])
 
-        # The following attributes hold the state of the system
         self._manager_stopping = False  # Set True to exit manager (by _manager_stop_handler)
         self._environment_exists = False  # True if RE Worker environment exists
         self._manager_state = MState.INITIALIZING
@@ -247,6 +245,7 @@ class RunEngineManager(Process):
         self._loop = None
 
         # Communication with the server using ZMQ
+        self._use_json = process_zmq_encoding_parameter(config["zmq_encoding"])
         self._ctx = None
         self._zmq_socket = None
         self._zmq_ip_server = "tcp://*:60615"
@@ -3629,21 +3628,21 @@ class RunEngineManager(Process):
 
     async def _zmq_receive(self):
         try:
-            if os.environ.get("QSERVER_ZMQ_ENCODING", "JSON") == "PICKLE":
+            if self._use_json:
+                msg_in = await self._zmq_socket.recv_json()
+            else:
                 _ = await self._zmq_socket.recv()
                 msg_in = pickle.loads(_)
-            else:
-                msg_in = await self._zmq_socket.recv_json()
         except Exception as ex:
             msg_in = f"JSON decode error: {ex}"
         return msg_in
 
     async def _zmq_send(self, msg):
-        if os.environ.get("QSERVER_ZMQ_ENCODING", "JSON") == "PICKLE":
+        if self._use_json:
+            await self._zmq_socket.send_json(msg)
+        else:
             _ = pickle.dumps(msg)
             await self._zmq_socket.send(_)
-        else:
-            await self._zmq_socket.send_json(msg)
 
     async def zmq_server_comm(self):
         """

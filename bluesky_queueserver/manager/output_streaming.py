@@ -24,7 +24,7 @@ default_zmq_info_address = "tcp://localhost:60625"
 supported_zmq_encoding = ("json", "pickle")
 
 
-def _process_zmq_encoding(zmq_encoding):
+def process_zmq_encoding_parameter(zmq_encoding):
     """
     Process the value passed as 'zmq_encoding' parameter: check if the value is supported
     and raise an exception if the value is invalid. Then compute and return the value of 'use_json'.
@@ -156,7 +156,7 @@ class PublishConsoleOutput:
         self._console_output_on = console_output_on
         self._zmq_publish_on = zmq_publish_on
 
-        self._use_json = _process_zmq_encoding(zmq_encoding)
+        self._use_json = process_zmq_encoding_parameter(zmq_encoding)
 
         zmq_publish_addr = zmq_publish_addr or default_zmq_info_address_for_server
 
@@ -294,7 +294,7 @@ class ReceiveConsoleOutput:
         self._zmq_subscribe_addr = zmq_subscribe_addr
         self._zmq_topic = zmq_topic
 
-        self._use_json = _process_zmq_encoding(zmq_encoding)
+        self._use_json = process_zmq_encoding_parameter(zmq_encoding)
 
         self._socket = None
         self._socket_subscribed = False
@@ -482,7 +482,7 @@ class ReceiveConsoleOutputAsync:
         self._zmq_subscribe_addr = zmq_subscribe_addr
         self._zmq_topic = zmq_topic
 
-        self._use_json = _process_zmq_encoding(zmq_encoding)
+        self._use_json = process_zmq_encoding_parameter(zmq_encoding)
 
         self._socket = None
         self._socket_subscribed = False

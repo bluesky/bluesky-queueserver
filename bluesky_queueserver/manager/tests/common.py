@@ -39,6 +39,13 @@ def use_ipykernel_for_tests():
     return to_boolean(os.environ.get("USE_IPYKERNEL", None))
 
 
+def use_zmq_pickle_encoding_for_tests():
+    """
+    Similar to 'use_ipykernel_for_tests()' but setting the different parameter.
+    """
+    return to_boolean(os.environ.get("USE_ZMQ_PICKLE_ENCODING", None))
+
+
 def copy_default_profile_collection(tmp_path, *, copy_py=True, copy_yaml=True):
     """
     Copy default profile collections (only .py files) to temporary directory.
@@ -213,7 +220,24 @@ def clear_qserver_zmq_address(mpatch):
     mpatch.delenv(_name_ev_zmq_address)
 
 
-def zmq_secure_request(method, params=None, *, zmq_server_address=None, server_public_key=None):
+def zmq_request(method, params=None, *, zmq_server_address=None, use_json=None, server_public_key=None):
+    """
+    Calls 'zmq_single_request' function. If 'use_json' parameter is not passed, it sets it automatically
+    based on the value returned by ``use_zmq_pickle_encoding_for_tests()`` function.
+    """
+    if use_json is None:
+        use_json = not use_zmq_pickle_encoding_for_tests()
+
+    return zmq_single_request(
+        method=method,
+        params=params,
+        zmq_server_address=zmq_server_address,
+        use_json=use_json,
+        server_public_key=server_public_key,
+    )
+
+
+def zmq_secure_request(method, params=None, *, zmq_server_address=None, use_json=None, server_public_key=None):
     """
     Wrapper for 'zmq_single_request'. Verifies if environment variable holding server public key is set
     and passes the key to 'zmq_single_request' . Simplifies writing tests that use RE Manager in secure mode.
@@ -234,6 +258,9 @@ def zmq_secure_request(method, params=None, *, zmq_server_address=None, server_p
     zmq_server_address: str or None
         Address of the ZMQ control socket of RE Manager. An address from the environment variable or
         the default address is used if the value is ``None``.
+    use_json: bool
+        If ``True`` then the message is sent in JSON format. If ``False`` then the message is sent
+        in pickle format.
     server_public_key: str or None
         Server public key (z85-encoded 40 character string). The Valid public key from the server
         public/private key pair must be passed if encryption is enabled at the 0MQ server side.
@@ -248,8 +275,12 @@ def zmq_secure_request(method, params=None, *, zmq_server_address=None, server_p
     # Use the address from env. variable if 'zmq_server_address' is None
     zmq_server_address = zmq_server_address or os.environ.get(_name_ev_zmq_address, None)
 
-    return zmq_single_request(
-        method=method, params=params, zmq_server_address=zmq_server_address, server_public_key=server_public_key
+    return zmq_request(
+        method=method,
+        params=params,
+        zmq_server_address=zmq_server_address,
+        use_json=use_json,
+        server_public_key=server_public_key,
     )
 
 
@@ -444,6 +475,10 @@ class ReManager:
         if not any([_.startswith("--use-ipython-kernel") for _ in params]) and use_ipykernel_for_tests():
             params.append("--use-ipython-kernel=ON")
 
+        # Use 'pickle' encoding for 0MQ communication
+        if not any([_.startswith("--zmq-encoding") for _ in params]) and use_zmq_pickle_encoding_for_tests():
+            params.append("--zmq-encoding=pickle")
+
         # Set default name prefix for Redis keys
         name_prefix_params = [_ for _ in params if _.startswith("--redis-name-prefix")]
         if name_prefix_params:
@@ -459,6 +494,7 @@ class ReManager:
             cmd = ["start-re-manager"]
             if params:
                 cmd += params
+
             self._p = subprocess.Popen(cmd, universal_newlines=True, stdout=stdout, stderr=stderr)
 
     def check_if_stopped(self, timeout=5):
@@ -695,7 +731,7 @@ class IPKernelClient:
         if self.ip_kernel_client:
             self.stop()
 
-        resp, _ = zmq_single_request("config_get")
+        resp, _ = zmq_request("config_get")
         assert resp["success"] is True, pprint.pformat(resp)
         assert "config" in resp, pprint.pformat(resp)
         assert "ip_connect_info" in resp["config"], pprint.pformat(resp)

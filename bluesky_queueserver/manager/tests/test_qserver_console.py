@@ -13,6 +13,7 @@ from .common import (
     set_qserver_zmq_address,
     set_qserver_zmq_public_key,
     use_ipykernel_for_tests,
+    use_zmq_pickle_encoding_for_tests,
     wait_for_condition,
     zmq_secure_request,
 )
@@ -118,6 +119,9 @@ def test_cli_qserver_console_02(
             monkeypatch.setenv("QSERVER_ZMQ_CONTROL_ADDRESS", address_client)
         else:
             params_console.append(f"--zmq-control-addr={address_client}")
+
+        if use_zmq_pickle_encoding_for_tests():
+            params_console.append("--zmq-encoding=pickle")
 
     if encryption_key:
         # # Set server public key (for 'qserver') using environment variable

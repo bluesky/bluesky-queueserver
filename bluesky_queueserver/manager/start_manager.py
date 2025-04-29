@@ -324,6 +324,18 @@ def start_manager():
         default=None,
         help="The parameter is deprecated and will be removed in future releases. Use --zmq-control-addr instead.",
     )
+    parser.add_argument(
+        "--zmq-encoding",
+        dest="zmq_encoding",
+        type=str,
+        default=None,
+        help="The encoding used for 0MQ communication. RE Manager is using JSON messages by default, "
+        "but it can be configured to communicate using binary (pickled) Python dictionaries instead. "
+        "Sending binary data over 0MQ recommended only for closed systems with RE Manager and the clients "
+        "using compatible encoding format, and may improve performance. The parameter controls encoding "
+        "for all sockets used by RE Manager. "
+        "The parameter values: 'json' (recommended, default) or 'pickle' (application-specific).",
+    )
 
     parser.add_argument(
         "--startup-profile",
@@ -684,6 +696,7 @@ def start_manager():
         console_output_on=settings.print_console_output,
         zmq_publish_on=settings.zmq_publish_console,
         zmq_publish_addr=settings.zmq_info_addr,
+        zmq_encoding=settings.zmq_encoding,
     )
 
     if settings.zmq_publish_console:
@@ -825,6 +838,7 @@ def start_manager():
 
     config_manager["zmq_addr"] = settings.zmq_control_addr
     config_manager["zmq_private_key"] = settings.zmq_private_key
+    config_manager["zmq_encoding"] = settings.zmq_encoding
 
     config_manager["redis_addr"] = settings.redis_addr
     config_manager["redis_name_prefix"] = settings.redis_name_prefix

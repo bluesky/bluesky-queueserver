@@ -17,6 +17,8 @@ properties:
         type: string
       zmq_info_addr:
         type: string
+      zmq_encoding:
+        type: string
       zmq_publish_console:
         type: boolean
       redis_addr:

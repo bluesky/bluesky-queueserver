@@ -78,6 +78,7 @@ def test_setup_console_output_redirection_1(sys_stdout_stderr_restore):
 
 
 # fmt: off
+@pytest.mark.parametrize("zmq_encoding", ["json", "pickle"])
 @pytest.mark.parametrize("console_output_on, zmq_publish_on, sub, unsub, period, timeout, n_timeouts", [
     (True, True, False, False, 0, None, 0),
     (True, False, False, False, 0, None, 0),
@@ -93,7 +94,9 @@ def test_setup_console_output_redirection_1(sys_stdout_stderr_restore):
 # fmt: on
 # TODO: this test may need to be changed to run more reliably on CI
 @pytest.mark.xfail(reason="Test often fails when run on CI, but expected to pass locally")
-def test_ReceiveConsoleOutput_1(capfd, console_output_on, zmq_publish_on, sub, unsub, period, timeout, n_timeouts):
+def test_ReceiveConsoleOutput_1(
+    capfd, console_output_on, zmq_publish_on, sub, unsub, period, timeout, n_timeouts, zmq_encoding
+):
     """
     Tests for ``ReceiveConsoleOutput`` and ``PublishConsoleOutput``.
     """
@@ -111,12 +114,15 @@ def test_ReceiveConsoleOutput_1(capfd, console_output_on, zmq_publish_on, sub, u
         zmq_publish_on=zmq_publish_on,
         zmq_publish_addr=zmq_publish_addr,
         zmq_topic=zmq_topic,
+        zmq_encoding=zmq_encoding,
     )
 
     class ReceiveMessages(threading.Thread):
-        def __init__(self, *, zmq_subscribe_addr, zmq_topic):
+        def __init__(self, *, zmq_subscribe_addr, zmq_topic, zmq_encoding):
             super().__init__()
-            self._rco = ReceiveConsoleOutput(zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic)
+            self._rco = ReceiveConsoleOutput(
+                zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic, zmq_encoding=zmq_encoding
+            )
             self._exit = False
             self.received_msgs = []
             self.n_timeouts = 0
@@ -141,7 +147,7 @@ def test_ReceiveConsoleOutput_1(capfd, console_output_on, zmq_publish_on, sub, u
         def unsubscribe(self):
             self._rco.unsubscribe()
 
-    rm = ReceiveMessages(zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic)
+    rm = ReceiveMessages(zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic, zmq_encoding=zmq_encoding)
 
     pco.start()
 

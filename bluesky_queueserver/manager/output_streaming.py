@@ -5,6 +5,7 @@ import io
 import json
 import logging
 import os
+import pickle
 import sys
 import threading
 import time as ttime
@@ -113,6 +114,8 @@ class PublishConsoleOutput:
     zmq_publish_addr : str, None
         Address of 0MQ PUB socket for the publishing server. If ``None``, then
         the default address ``tcp://*:60625`` is used.
+    zmq_encoding : str
+        Encoding for 0MQ messages: 'json' (default) or 'pickle'.
     zmq_topic : str
         Name of the 0MQ topic where the messages are published.
     name : str
@@ -126,6 +129,7 @@ class PublishConsoleOutput:
         console_output_on=True,
         zmq_publish_on=True,
         zmq_publish_addr=None,
+        zmq_encoding="json",
         zmq_topic=_default_zmq_console_topic,
         name="RE Console Output Publisher",
     ):
@@ -136,6 +140,11 @@ class PublishConsoleOutput:
 
         self._console_output_on = console_output_on
         self._zmq_publish_on = zmq_publish_on
+
+        encodings = ("json", "pickle")
+        if zmq_encoding.lower() not in encodings:
+            raise RuntimeError(f"0MQ encoding {zmq_encoding!r} is not supported. Supported values: {encodings}.")
+        self._use_json = True if zmq_encoding.lower() == "json" else False
 
         zmq_publish_addr = zmq_publish_addr or default_zmq_info_address_for_server
 
@@ -202,8 +211,12 @@ class PublishConsoleOutput:
 
         if self._zmq_publish_on and self._socket:
             topic = self._zmq_topic
-            payload_json = json.dumps(payload)
-            self._socket.send_multipart([topic.encode("ascii"), payload_json.encode("utf8")])
+            if self._use_json:
+                payload_json = json.dumps(payload)
+                self._socket.send_multipart([topic.encode("ascii"), payload_json.encode("utf8")])
+            else:
+                payload_pickle = pickle.dumps(payload)
+                self._socket.send_multipart([topic.encode("ascii"), payload_pickle])
 
 
 class ReceiveConsoleOutput:
@@ -248,6 +261,8 @@ class ReceiveConsoleOutput:
     zmq_subscribe_addr : str or None
         Address of ZMQ server (PUB socket). If None, then the default address is
         ``tcp://localhost:60625`` is used.
+    zmq_encoding : str
+        Encoding for 0MQ messages: 'json' (default) or 'pickle'.
     zmq_topic : str
         0MQ topic for console output. Only messages from this topic are going to be received.
     timeout : int, float or None
@@ -255,7 +270,9 @@ class ReceiveConsoleOutput:
         for the message indefinitely.
     """
 
-    def __init__(self, *, zmq_subscribe_addr=None, zmq_topic=_default_zmq_console_topic, timeout=1000):
+    def __init__(
+        self, *, zmq_subscribe_addr=None, zmq_encoding="json", zmq_topic=_default_zmq_console_topic, timeout=1000
+    ):
         self._timeout = timeout  # Timeout for 'recv' operation (ms)
 
         zmq_subscribe_addr = zmq_subscribe_addr or default_zmq_info_address
@@ -264,6 +281,11 @@ class ReceiveConsoleOutput:
         logger.info("Subscribing to 0MQ topic: '%s' ...", zmq_topic)
         self._zmq_subscribe_addr = zmq_subscribe_addr
         self._zmq_topic = zmq_topic
+
+        encodings = ("json", "pickle")
+        if zmq_encoding.lower() not in encodings:
+            raise RuntimeError(f"0MQ encoding {zmq_encoding!r} is not supported. Supported values: {encodings}.")
+        self._use_json = True if zmq_encoding.lower() == "json" else False
 
         self._socket = None
         self._socket_subscribed = False
@@ -326,9 +348,13 @@ class ReceiveConsoleOutput:
         if not self._socket.poll(timeout=timeout):
             raise TimeoutError("No message received during timeout period {timeout} ms")
 
-        topic, payload_json = self._socket.recv_multipart()
-        payload_json = payload_json.decode("utf8", "strict")
-        payload = json.loads(payload_json)
+        topic, payload_received = self._socket.recv_multipart()
+        if self._use_json:
+            payload_json = payload_received.decode("utf8", "strict")
+            payload = json.loads(payload_json)
+        else:
+            payload = pickle.loads(payload_received)
+
         return payload
 
     def __del__(self):
@@ -424,12 +450,16 @@ class ReceiveConsoleOutputAsync:
         ``tcp://localhost:60625`` is used.
     zmq_topic : str
         0MQ topic for console output. Only messages from this topic are going to be received.
+    zmq_topic : str
+        0MQ topic for console output. Only messages from this topic are going to be received.
     timeout : int, float or None
         Timeout for the receive operation in milliseconds. If `None`, then wait
         for the message indefinitely.
     """
 
-    def __init__(self, *, zmq_subscribe_addr=None, zmq_topic=_default_zmq_console_topic, timeout=1000):
+    def __init__(
+        self, *, zmq_subscribe_addr=None, zmq_encoding="json", zmq_topic=_default_zmq_console_topic, timeout=1000
+    ):
         self._timeout = timeout  # Timeout for 'recv' operation (ms)
 
         zmq_subscribe_addr = zmq_subscribe_addr or "tcp://localhost:60625"
@@ -442,6 +472,11 @@ class ReceiveConsoleOutputAsync:
         logger.info("Subscribing to 0MQ topic: '%s' ...", zmq_topic)
         self._zmq_subscribe_addr = zmq_subscribe_addr
         self._zmq_topic = zmq_topic
+
+        encodings = ("json", "pickle")
+        if zmq_encoding.lower() not in encodings:
+            raise RuntimeError(f"0MQ encoding {zmq_encoding!r} is not supported. Supported values: {encodings}.")
+        self._use_json = True if zmq_encoding.lower() == "json" else False
 
         self._socket = None
         self._socket_subscribed = False
@@ -522,10 +557,13 @@ class ReceiveConsoleOutputAsync:
         if not await self._socket.poll(timeout=timeout):
             raise TimeoutError("No message received during timeout period {timeout} ms")
 
-        topic, payload_json = await self._socket.recv_multipart()
+        topic, payload_received = await self._socket.recv_multipart()
+        if self._use_json:
+            payload_json = payload_received.decode("utf8", "strict")
+            payload = json.loads(payload_json)
+        else:
+            payload = pickle.loads(payload_received)
 
-        payload_json = payload_json.decode("utf8", "strict")
-        payload = json.loads(payload_json)
         return payload
 
     async def _recv_next_message(self):

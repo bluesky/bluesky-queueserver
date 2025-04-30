@@ -220,7 +220,9 @@ def clear_qserver_zmq_address(mpatch):
     mpatch.delenv(_name_ev_zmq_address)
 
 
-def zmq_request(method, params=None, *, zmq_server_address=None, use_json=None, server_public_key=None):
+def zmq_request(
+    method, params=None, *, timeout=None, zmq_server_address=None, use_json=None, server_public_key=None
+):
     """
     Calls 'zmq_single_request' function. If 'use_json' parameter is not passed, it sets it automatically
     based on the value returned by ``use_zmq_pickle_encoding_for_tests()`` function.
@@ -231,6 +233,7 @@ def zmq_request(method, params=None, *, zmq_server_address=None, use_json=None, 
     return zmq_single_request(
         method=method,
         params=params,
+        timeout=timeout,
         zmq_server_address=zmq_server_address,
         use_json=use_json,
         server_public_key=server_public_key,

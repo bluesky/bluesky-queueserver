@@ -1238,10 +1238,19 @@ def prepare_qserver_output(msg):
                 d[k] = "{...}"
     return ppfl(msg)
 
-
 def qserver():
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger("bluesky_queueserver").setLevel("ERROR")
+
+    # Determine the backend type
+    backend = os.getenv("PLAN_QUEUE_BACKEND", "redis").lower()
+
+    if backend not in ["redis", "sqlite", "dict"]:
+        raise ValueError(f"Unsupported backend: {backend}")
+
+    if backend != "redis":
+        print(f"Backend is set to '{backend}'. Skipping ZMQ setup and communication.")
+        return QServerExitCodes.SUCCESS.value
 
     s_enc = (
         "If RE Manager is configured to use encrypted ZeroMQ communication channel,\n"

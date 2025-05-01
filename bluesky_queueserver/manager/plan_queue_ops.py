@@ -1,3 +1,5 @@
+
+from abc import ABC, abstractmethod
 import asyncio
 import copy
 import json
@@ -5,12 +7,290 @@ import logging
 import time as ttime
 import uuid
 
-import redis.asyncio
-
 logger = logging.getLogger(__name__)
 
-
 class PlanQueueOperations:
+    """
+    Wrapper class for plan queue operations. Delegates method calls to the appropriate backend
+    implementation (e.g., Redis, SQLite, or Dict) while keeping the interface consistent.
+    """
+
+    def __init__(self, **kwargs):
+        """
+        Initialize the PlanQueueOperations class with the specified backend.
+
+        The backend is determined by the environment variable `PLAN_QUEUE_BACKEND`.
+        If the variable is not defined, the default backend is Redis.
+
+        Parameters
+        ----------
+        kwargs : dict
+            Additional arguments to pass to the backend implementation.
+        """
+        import os
+        backend = os.getenv("PLAN_QUEUE_BACKEND", "redis").lower()
+
+        if backend == "redis":
+            from .plan_queue_ops_redis import RedisPlanQueueOperations
+            self._backend = RedisPlanQueueOperations(**kwargs)
+        elif backend == "sqlite":
+            from .plan_queue_ops_sqlite import SQLitePlanQueueOperations
+            self._backend = SQLitePlanQueueOperations(**kwargs)
+        elif backend == "dict":
+            from .plan_queue_ops_dict import DictPlanQueueOperations
+            self._backend = DictPlanQueueOperations(**kwargs)
+        else:
+            raise ValueError(f"Unsupported backend: {backend}")
+
+    def __getattr__(self, name):
+        """
+        Delegate attribute access to the backend implementation.
+
+        This allows method calls to be forwarded to the backend without explicitly defining
+        them in this wrapper class.
+
+        Parameters
+        ----------
+        name : str
+            The name of the attribute or method being accessed.
+
+        Returns
+        -------
+        Any
+            The attribute or method from the backend implementation.
+        """
+        return getattr(self._backend, name)
+    
+
+class AbstractPlanQueueOperations(ABC):
+    """
+    Abstract base class for plan queue operations. Subclasses must implement these methods
+    for specific backends (e.g., Redis, SQLite).
+    """
+
+    # Variables
+    @property
+    @abstractmethod
+    def plan_queue_uid(self):
+        """Get the current plan queue UID."""
+        pass
+
+    @property
+    @abstractmethod
+    def plan_history_uid(self):
+        """Get the current plan history UID."""
+        pass
+
+    @property
+    @abstractmethod
+    def plan_queue_mode(self):
+        """Get or set the current plan queue mode."""
+        pass
+
+    # Methods
+    @abstractmethod
+    async def add_batch_to_queue(self, items_prepared, pos=None, before_uid=None, after_uid=None):
+        """Add a batch of items to the queue."""
+        pass
+
+    @abstractmethod
+    async def add_item_to_queue(self, item, pos=None, before_uid=None, after_uid=None):
+        """Add a single item to the queue."""
+        pass
+
+    @abstractmethod
+    async def autostart_mode_retrieve(self):
+        """Retrieve the autostart mode."""
+        pass
+
+    @abstractmethod
+    async def autostart_mode_save(self, enabled):
+        """Save the autostart mode."""
+        pass
+
+    @abstractmethod
+    async def clear_history(self):
+        """Clear the plan history."""
+        pass
+
+    @abstractmethod
+    async def clear_queue(self):
+        """Clear the plan queue."""
+        pass
+
+    @abstractmethod
+    async def get_history_size(self):
+        """Get the size of the plan history."""
+        pass
+
+    @abstractmethod
+    async def get_history(self):
+        """Retrieve the plan history."""
+        pass
+
+    @abstractmethod
+    async def get_item(self, pos="front", uid=None):
+        """Retrieve an item from the queue."""
+        pass
+
+    @abstractmethod
+    async def get_queue_full(self):
+        """Retrieve the full queue."""
+        pass
+
+    @abstractmethod
+    async def get_queue_size(self):
+        """Get the size of the queue."""
+        pass
+
+    @abstractmethod
+    async def get_running_item_info(self):
+        """Retrieve information about the currently running item."""
+        pass
+
+    @abstractmethod
+    async def lock_info_retrieve(self):
+        """Retrieve lock information."""
+        pass
+
+    @abstractmethod
+    async def lock_info_save(self, lock_info):
+        """Save lock information."""
+        pass
+
+    @abstractmethod
+    async def move_batch(self, uids, pos_dest=None, before_uid=None, after_uid=None, reorder=False):
+        """Move a batch of items in the queue."""
+        pass
+
+    @abstractmethod
+    async def move_item(self, pos=None, uid=None, pos_dest=None, before_uid=None, after_uid=None):
+        """Move a single item in the queue."""
+        pass
+
+    @abstractmethod
+    async def pop_item_from_queue_batch(self, uids, ignore_missing=False):
+        """Pop a batch of items from the queue."""
+        pass
+
+    @abstractmethod
+    async def pop_item_from_queue(self, pos=None, uid=None):
+        """Pop a single item from the queue."""
+        pass
+
+    @abstractmethod
+    async def process_next_item(self, item):
+        """Process the next item in the queue."""
+        pass
+
+    @abstractmethod
+    async def replace_item(self, item, item_uid_original):
+        """Replace an item in the queue."""
+        pass
+
+    @abstractmethod
+    async def set_new_item_uuid(self, item):
+        """Set a new UUID for an item."""
+        pass
+
+    @abstractmethod
+    async def set_plan_queue_mode(self, plan_queue_mode, update=True):
+        """Set the plan queue mode."""
+        pass
+
+    @abstractmethod
+    async def set_processed_item_as_completed(self, exit_status, run_uids, scan_ids, err_msg="", err_tb=""):
+        """Mark a processed item as completed."""
+        pass
+
+    @abstractmethod
+    async def set_processed_item_as_stopped(self, exit_status, run_uids, scan_ids, err_msg="", err_tb=""):
+        """Mark a processed item as stopped."""
+        pass
+
+    @abstractmethod
+    async def start(self):
+        """Start the backend connection."""
+        pass
+
+    @abstractmethod
+    async def stop_pending_retrieve(self):
+        """Retrieve the stop-pending state."""
+        pass
+
+    @abstractmethod
+    async def stop_pending_save(self, enabled):
+        """Save the stop-pending state."""
+        pass
+
+    @abstractmethod
+    async def stop(self):
+        """Stop the backend connection."""
+        pass
+
+    @abstractmethod
+    async def user_group_permissions_retrieve(self):
+        """Retrieve user group permissions."""
+        pass
+
+    @abstractmethod
+    async def user_group_permissions_save(self, user_group_permissions):
+        """Save user group permissions."""
+        pass
+
+    # method found in qserver_cli.py and tests/common.py
+    @abstractmethod
+    async def lock_info_clear(self):
+        """
+        Clear lock information. This method is not part of the public API and should
+        not be used outside of the class.
+        """
+        pass
+
+    # method found in test_zmq_api.py; not applicable to SQLite
+    @abstractmethod
+    async def new_item_uid(self):
+        """
+        Generate a new item UID. This method is not part of the public API and should
+        not be used outside of the class.
+        """
+        pass
+
+    # method found in test/common.py
+    @abstractmethod
+    async def delete_pool_entries(self):
+        """
+        Delete all pool entries used by the backend. This method is typically used for testing
+        or resetting the backend state.
+        """
+        pass
+
+    # method found in test/common.py
+    @abstractmethod
+    async def user_group_permissions_clear(self):
+        """
+        Clear user group permissions stored in the backend.
+        """
+        pass
+
+    # method found in test/common.py
+    @abstractmethod
+    async def autostart_mode_clear(self):
+        """
+        Clear the autostart mode information stored in the backend.
+        """
+        pass
+
+    # method found in test/common.py
+    @abstractmethod
+    async def stop_pending_clear(self):
+        """
+        Clear the stop-pending state information stored in the backend.
+        """
+        pass
+
+
+class RedisPlanQueueOperations(AbstractPlanQueueOperations):
     """
     The class supports operations with plan queue based on Redis. The public methods
     of the class are protected with ``asyncio.Lock``.
@@ -71,6 +351,8 @@ class PlanQueueOperations:
     """
 
     def __init__(self, redis_host="localhost", name_prefix="qs_default"):
+        # Import redis.asyncio locally since it is only used in this class
+        import redis.asyncio
         self._redis_host = redis_host
         self._uid_dict = dict()
         self._r_pool = None
@@ -1942,3 +2224,579 @@ class PlanQueueOperations:
         """
         lock_info_json = await self._r_pool.get(self._name_autostart_mode_info)
         return json.loads(lock_info_json) if lock_info_json else None
+    
+
+# =============================================================================================
+
+class SQLitePlanQueueOperations(AbstractPlanQueueOperations):
+    """
+    The class supports operations with plan queue based on SQLite. The public methods
+    of the class are protected with ``asyncio.Lock``.
+
+    Parameters
+    ----------
+    sqlite_db_path: str
+        Path to the SQLite database file.
+
+    name_prefix: str
+        Prefix for the names of the tables used in SQLite. The prefix is used to avoid conflicts
+        with the tables used by other instances of Queue Server. For example, the prefix used
+        for unit tests should be different from the prefix used in production. If the prefix
+        is an empty string, then no prefix will be added (not recommended).
+    """
+
+    def __init__(self, sqlite_db_path=None, name_prefix="qs_default"):
+        """
+        Initialize the SQLitePlanQueueOperations class.
+
+        Parameters
+        ----------
+        sqlite_db_path : str or None
+            Path to the SQLite database file. If None, the path is determined by the
+            environment variable `PLAN_QUEUE_SQLITE_PATH`. If the environment variable
+            is not set, the default is the current working directory.
+        name_prefix : str
+            Prefix for the names of the tables used in SQLite.
+        """
+        import aiosqlite  # Import aiosqlite locally since it is only used in this class
+        import os
+        # Determine the SQLite database path
+        if sqlite_db_path is None:
+            sqlite_db_path = os.getenv("PLAN_QUEUE_SQLITE_PATH", os.path.join(os.getcwd(), "plan_queue.db"))
+
+        self._sqlite_db_path = sqlite_db_path
+        self._sqlite_conn = None
+
+        if not isinstance(name_prefix, str):
+            raise TypeError(f"Parameter 'name_prefix' should be a string: {name_prefix}")
+
+        # The case of an empty string
+        if name_prefix:
+            name_prefix = name_prefix + "_"
+
+        self._table_running_plan = name_prefix + "running_plan"
+        self._table_plan_queue = name_prefix + "plan_queue"
+        self._table_plan_history = name_prefix + "plan_history"
+        self._table_plan_queue_mode = name_prefix + "plan_queue_mode"
+
+        # SQLite is also used for storage of some additional information not related to the queue.
+        #   The class contains only the functions for saving and retrieving the data, which is
+        #   not used by other functions of the class.
+        self._table_user_group_permissions = name_prefix + "user_group_permissions"
+        self._table_lock_info = name_prefix + "lock_info"
+        self._table_autostart_mode_info = name_prefix + "autostart_mode_info"
+        self._table_stop_pending_info = name_prefix + "stop_pending_info"
+
+        # The list of allowed item parameters used for parameter filtering. Filtering operation
+        #   involves removing all parameters that are not in the list.
+        self._allowed_item_parameters = (
+            "item_uid",
+            "item_type",
+            "name",
+            "args",
+            "kwargs",
+            "meta",
+            "user",
+            "user_group",
+            "properties",
+        )
+
+        # Plan queue UID is expected to change each time the contents of the queue is changed.
+        #   Since `self._uid_dict` is modified each time the queue is updated, it is sufficient
+        #   to update Plan queue UID in the functions that update `self._uid_dict`.
+        self._plan_queue_uid = self.new_item_uid()
+        # Plan history UID is expected to change each time the history is changed.
+        self._plan_history_uid = self.new_item_uid()
+
+        self._lock = None
+
+        # Settings that determine the mode of queue operation. The set of supported modes
+        #      may be extended if additional modes are to be implemented. The mode will be saved in
+        #      SQLite, so that it is not modified between restarts of the manager.
+        #   Loop mode:
+        #      loop, True/False. If enabled, then each executed item (plan or instruction)
+        #        will be placed to the back of the queue.
+        #      ignore_failures, True/False. Run all the plans in the queue to the end
+        #        even if some or all of the plans fail. The queue is still stopped if the user
+        #        stops/aborts/halts a plan.
+        self._plan_queue_mode_default = {"loop": False, "ignore_failures": False}
+        self._plan_queue_mode = self.plan_queue_mode_default
+
+    @property
+    def plan_queue_uid(self):
+        """Get the current plan queue UID."""
+        return self._plan_queue_uid
+
+    @property
+    def plan_history_uid(self):
+        """Get the current plan history UID."""
+        return self._plan_history_uid
+
+    @property
+    def plan_queue_mode(self):
+        """Get or set the current plan queue mode."""
+        return self._plan_queue_mode
+
+    async def start(self):
+        """Start the backend connection."""
+        if not self._sqlite_conn:
+            self._sqlite_conn = await aiosqlite.connect(self._sqlite_db_path)
+            await self._initialize_tables()
+
+    async def stop(self):
+        """Stop the backend connection."""
+        if self._sqlite_conn:
+            await self._sqlite_conn.close()
+            self._sqlite_conn = None
+
+    async def _initialize_tables(self):
+        """Initialize SQLite tables if they do not exist."""
+        async with self._sqlite_conn.cursor() as cursor:
+            await cursor.execute(f"""
+                CREATE TABLE IF NOT EXISTS {self._table_plan_queue} (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    item TEXT
+                )
+            """)
+            await cursor.execute(f"""
+                CREATE TABLE IF NOT EXISTS {self._table_plan_history} (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,s DictPlanQueueOperations
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    mode TEXT
+                )
+            """)
+        await self._sqlite_conn.commit()
+
+    async def add_item_to_queue(self, item, pos=None, before_uid=None, after_uid=None):
+        """Add a single item to the queue."""
+        async with self._sqlite_conn.cursor() as cursor:
+            item_json = json.dumps(item)
+            if pos == "front":
+                await cursor.execute(f"INSERT INTO {self._table_plan_queue} (item) VALUES (?)", (item_json,))
+            else:  # Default to adding to the back
+                await cursor.execute(f"INSERT INTO {self._table_plan_queue} (item) VALUES (?)", (item_json,))
+        await self._sqlite_conn.commit()
+
+    async def get_queue_size(self):
+        """Get the size of the queue."""
+        async with self._sqlite_conn.cursor() as cursor:
+            await cursor.execute(f"SELECT COUNT(*) FROM {self._table_plan_queue}")
+            row = await cursor.fetchone()
+        return row[0]
+
+    async def get_queue_full(self):
+        """Retrieve the full queue."""
+        async with self._sqlite_conn.cursor() as cursor:
+            await cursor.execute(f"SELECT item FROM {self._table_plan_queue}")
+            rows = await cursor.fetchall()
+        return [json.loads(row[0]) for row in rows]
+
+    async def clear_queue(self):
+        """Clear the plan queue."""
+        async with self._sqlite_conn.cursor() as cursor:
+            await cursor.execute(f"DELETE FROM {self._table_plan_queue}")
+        await self._sqlite_conn.commit()
+
+    async def set_plan_queue_mode(self, plan_queue_mode, update=True):
+        """Set the plan queue mode."""
+        async with self._sqlite_conn.cursor() as cursor:
+            mode_json = json.dumps(plan_queue_mode)
+            await cursor.execute(f"DELETE FROM {self._table_plan_queue_mode}")
+            await cursor.execute(f"INSERT INTO {self._table_plan_queue_mode} (mode) VALUES (?)", (mode_json,))
+        await self._sqlite_conn.commit()
+
+    async def get_running_item_info(self):
+        """Retrieve information about the currently running item."""
+        async with self._sqlite_conn.cursor() as cursor:
+            await cursor.execute(f"SELECT item FROM {self._table_running_plan} LIMIT 1")
+            row = await cursor.fetchone()
+        return json.loads(row[0]) if row else {}
+
+    async def set_processed_item_as_completed(self, exit_status, run_uids, scan_ids, err_msg="", err_tb=""):
+        """
+        Mark a processed item as completed and move it to the history table.
+
+        Parameters
+        ----------
+        exit_status : str
+            Completion status of the plan (e.g., "completed").
+        run_uids : list
+            List of run UIDs associated with the completed plan.
+        scan_ids : list
+            List of scan IDs associated with the completed plan.
+        err_msg : str, optional
+            Error message in case of failure.
+        err_tb : str, optional
+            Traceback in case of failure.
+
+        Returns
+        -------
+        dict
+            The item added to the history, including the completion status.
+        """
+        async with self._sqlite_conn.cursor() as cursor:
+            # Retrieve the currently running item
+            await cursor.execute(f"SELECT item FROM {self._table_running_plan} LIMIT 1")
+            row = await cursor.fetchone()
+
+            if not row:
+                return {}  # No running item found
+
+            # Parse the running item
+            item = json.loads(row[0])
+
+            # Add result details to the item
+            item.setdefault("result", {})
+            item["result"]["exit_status"] = exit_status
+            item["result"]["run_uids"] = run_uids
+            item["result"]["scan_ids"] = scan_ids
+            item["result"]["time_start"] = item.get("properties", {}).get("time_start", None)
+            item["result"]["time_stop"] = ttime.time()
+            item["result"]["msg"] = err_msg
+            item["result"]["traceback"] = err_tb
+
+            # Add the item to the history table
+            item_json = json.dumps(item)
+            await cursor.execute(f"INSERT INTO {self._table_plan_history} (item) VALUES (?)", (item_json,))
+
+            # Clear the running plan table
+            await cursor.execute(f"DELETE FROM {self._table_running_plan}")
+
+        # Commit the changes
+        await self._sqlite_conn.commit()
+
+        return item
+
+    async def set_processed_item_as_stopped(self, exit_status, run_uids, scan_ids, err_msg="", err_tb=""):
+        """
+        Mark a processed item as stopped and move it to the history table.
+
+        Parameters
+        ----------
+        exit_status : str
+            Completion status of the plan (e.g., "stopped", "failed", "aborted").
+        run_uids : list
+            List of run UIDs associated with the stopped plan.
+        scan_ids : list
+            List of scan IDs associated with the stopped plan.
+        err_msg : str, optional
+            Error message in case of failure.
+        err_tb : str, optional
+            Traceback in case of failure.
+
+        Returns
+        -------
+        dict
+            The item added to the history, including the stop status.
+        """
+        async with self._sqlite_conn.cursor() as cursor:
+            # Retrieve the currently running item
+            await cursor.execute(f"SELECT item FROM {self._table_running_plan} LIMIT 1")
+            row = await cursor.fetchone()
+
+            if not row:
+                return {}  # No running item found
+
+            # Parse the running item
+            item = json.loads(row[0])
+
+            # Add result details to the item
+            item.setdefault("result", {})
+            item["result"]["exit_status"] = exit_status
+            item["result"]["run_uids"] = run_uids
+            item["result"]["scan_ids"] = scan_ids
+            item["result"]["time_start"] = item.get("properties", {}).get("time_start", None)
+            item["result"]["time_stop"] = ttime.time()
+            item["result"]["msg"] = err_msg
+            item["result"]["traceback"] = err_tb
+
+            # Add the item to the history table
+            item_json = json.dumps(item)
+            await cursor.execute(f"INSERT INTO {self._table_plan_history} (item) VALUES (?)", (item_json,))
+
+            # Clear the running plan table
+            await cursor.execute(f"DELETE FROM {self._table_running_plan}")
+
+            # If the plan was not stopped successfully, re-add it to the front of the queue
+            if exit_status not in ["stopped", "completed"]:
+                item["item_uid"] = str(uuid.uuid4())  # Generate a new UID for the re-added item
+                item_json = json.dumps(item)
+                await cursor.execute(f"INSERT INTO {self._table_plan_queue} (item) VALUES (?)", (item_json,))
+
+        # Commit the changes
+        await self._sqlite_conn.commit()
+
+        return item
+
+    async def user_group_permissions_save(self, user_group_permissions):
+        """Save user group permissions."""
+        async with self._sqlite_conn.cursor() as cursor:
+            permissions_json = json.dumps(user_group_permissions)
+            await cursor.execute(f"DELETE FROM {self._table_user_group_permissions}")
+            await cursor.execute(f"INSERT INTO {self._table_user_group_permissions} (permissions) VALUES (?)", (permissions_json,))
+        await self._sqlite_conn.commit()
+
+    async def user_group_permissions_retrieve(self):
+        """Retrieve user group permissions."""
+        async with self._sqlite_conn.cursor() as cursor:
+            await cursor.execute(f"SELECT permissions FROM {self._table_user_group_permissions} LIMIT 1")
+            row = await cursor.fetchone()
+        return json.loads(row[0]) if row else None
+    
+    async def lock_info_clear(self):
+        """
+        Clear lock information stored in the SQLite database.
+        """
+        async with self._sqlite_conn.cursor() as cursor:
+            await cursor.execute(f"DELETE FROM {self._table_lock_info}")
+        await self._sqlite_conn.commit()
+
+    async def new_item_uid(self):
+        """
+        Generate a new item UID. This method is not applicable to the SQLite backend.
+        """
+        raise NotImplementedError("The method 'new_item_uid' is not applicable to the SQLite backend.")
+    
+    async def delete_pool_entries(self):
+        """
+        Delete all pool entries used by the SQLite backend.
+        """
+        async with self._sqlite_conn.cursor() as cursor:
+            await cursor.execute(f"DELETE FROM {self._table_plan_queue}")
+            await cursor.execute(f"DELETE FROM {self._table_plan_history}")
+            await cursor.execute(f"DELETE FROM {self._table_running_plan}")
+            await cursor.execute(f"DELETE FROM {self._table_plan_queue_mode}")
+        await self._sqlite_conn.commit()
+
+    async def user_group_permissions_clear(self):
+        """
+        Clear user group permissions stored in the SQLite database.
+        """
+        async with self._sqlite_conn.cursor() as cursor:
+            await cursor.execute(f"DELETE FROM {self._table_user_group_permissions}")
+        await self._sqlite_conn.commit()
+
+    async def autostart_mode_clear(self):
+        """
+        Clear the autostart mode information stored in the SQLite database.
+        """
+        async with self._sqlite_conn.cursor() as cursor:
+            await cursor.execute(f"DELETE FROM {self._table_autostart_mode_info}")
+        await self._sqlite_conn.commit()
+
+    async def stop_pending_clear(self):
+        """
+        Clear the stop-pending state information stored in the SQLite database.
+        """
+        async with self._sqlite_conn.cursor() as cursor:
+            await cursor.execute(f"DELETE FROM {self._table_stop_pending_info}")
+        await self._sqlite_conn.commit()
+
+
+class DictPlanQueueOperations(AbstractPlanQueueOperations):
+    """
+    Backend implementation for plan queue operations using an in-memory Python dictionary.
+    Data is saved and loaded to/from storage using JSON serialization with aiofiles.
+
+    **Limitations
+    The DictPlanQueueOperations backend is designed for in-memory operations with persistence via JSON files. 
+    While it is suitable for lightweight or testing scenarios, it may not be ideal for production environments 
+    where durability and concurrency are critical. For such cases, Redis or SQLite backends are more appropriate.
+    """
+
+    def __init__(self, storage_file=None):
+        """
+        Initialize the DictPlanQueueOperations class.
+
+        Parameters
+        ----------
+        storage_file : str or None
+            Path to the file where the data will be saved and loaded. If None, the path is determined
+            by the environment variable `PLAN_QUEUE_DICT_PATH`. If the environment variable is not set,
+            the default is `plan_queue_storage.json` in the current working directory.
+        """
+        import aiofiles
+        import os
+        # Determine the storage file path
+        if storage_file is None:
+            storage_file = os.getenv("PLAN_QUEUE_DICT_PATH", os.path.join(os.getcwd(), "plan_queue_storage.json"))
+
+        self._storage_file = storage_file
+        self._data = {
+            "plan_queue": [],
+            "plan_history": [],
+            "running_plan": None,
+            "plan_queue_mode": {"loop": False, "ignore_failures": False},
+            "user_group_permissions": None,
+            "lock_info": None,
+            "autostart_mode_info": None,
+            "stop_pending_info": None,
+        }
+        self._plan_queue_uid = self.new_item_uid()
+        self._plan_history_uid = self.new_item_uid()
+
+    @property
+    def plan_queue_uid(self):
+        """Get the current plan queue UID."""
+        return self._plan_queue_uid
+
+    @property
+    def plan_history_uid(self):
+        """Get the current plan history UID."""
+        return self._plan_history_uid
+
+    @property
+    def plan_queue_mode(self):
+        """Get or set the current plan queue mode."""
+        return self._data["plan_queue_mode"]
+
+    async def _save_to_storage(self):
+        """Save the current state to the storage file asynchronously."""
+        async with aiofiles.open(self._storage_file, "w") as f:
+            await f.write(json.dumps(self._data))
+
+    async def _load_from_storage(self):
+        """Load the state from the storage file asynchronously."""
+        try:
+            async with aiofiles.open(self._storage_file, "r") as f:
+                content = await f.read()
+                self._data = json.loads(content)
+        except FileNotFoundError:
+            pass  # If the file doesn't exist, keep the default data
+
+    async def start(self):
+        """Start the backend connection by loading data from storage."""
+        await self._load_from_storage()
+
+    async def stop(self):
+        """Stop the backend connection by saving data to storage."""
+        await self._save_to_storage()
+
+    async def add_item_to_queue(self, item, pos=None, before_uid=None, after_uid=None):
+        """Add a single item to the queue."""
+        if "item_uid" not in item:
+            item["item_uid"] = self.new_item_uid()
+        if pos == "front":
+            self._data["plan_queue"].insert(0, item)
+        else:  # Default to adding to the back
+            self._data["plan_queue"].append(item)
+        self._plan_queue_uid = self.new_item_uid()
+        await self._save_to_storage()
+
+    async def get_queue_size(self):
+        """Get the size of the queue."""
+        return len(self._data["plan_queue"])
+
+    async def get_queue_full(self):
+        """Retrieve the full queue."""
+        return self._data["plan_queue"]
+
+    async def clear_queue(self):
+        """Clear the plan queue."""
+        self._data["plan_queue"] = []
+        self._plan_queue_uid = self.new_item_uid()
+        await self._save_to_storage()
+
+    async def set_plan_queue_mode(self, plan_queue_mode, update=True):
+        """Set the plan queue mode."""
+        if update:
+            self._data["plan_queue_mode"].update(plan_queue_mode)
+        else:
+            self._data["plan_queue_mode"] = plan_queue_mode
+        await self._save_to_storage()
+
+    async def get_running_item_info(self):
+        """Retrieve information about the currently running item."""
+        return self._data["running_plan"]
+
+    async def set_processed_item_as_completed(self, exit_status, run_uids, scan_ids, err_msg="", err_tb=""):
+        """Mark a processed item as completed and move it to the history."""
+        item = self._data["running_plan"]
+        if not item:
+            return {}
+        item["result"] = {
+            "exit_status": exit_status,
+            "run_uids": run_uids,
+            "scan_ids": scan_ids,
+            "time_start": item.get("properties", {}).get("time_start", None),
+            "time_stop": ttime.time(),
+            "msg": err_msg,
+            "traceback": err_tb,
+        }
+        self._data["plan_history"].append(item)
+        self._data["running_plan"] = None
+        self._plan_history_uid = self.new_item_uid()
+        await self._save_to_storage()
+        return item
+
+    async def set_processed_item_as_stopped(self, exit_status, run_uids, scan_ids, err_msg="", err_tb=""):
+        """Mark a processed item as stopped and move it to the history."""
+        item = self._data["running_plan"]
+        if not item:
+            return {}
+        item["result"] = {
+            "exit_status": exit_status,
+            "run_uids": run_uids,
+            "scan_ids": scan_ids,
+            "time_start": item.get("properties", {}).get("time_start", None),
+            "time_stop": ttime.time(),
+            "msg": err_msg,
+            "traceback": err_tb,
+        }
+        self._data["plan_history"].append(item)
+        self._data["running_plan"] = None
+        if exit_status not in ["stopped", "completed"]:
+            item["item_uid"] = self.new_item_uid()
+            self._data["plan_queue"].insert(0, item)
+        self._plan_history_uid = self.new_item_uid()
+        await self._save_to_storage()
+        return item
+
+    async def user_group_permissions_save(self, user_group_permissions):
+        """Save user group permissions."""
+        self._data["user_group_permissions"] = user_group_permissions
+        await self._save_to_storage()
+
+    async def user_group_permissions_retrieve(self):
+        """Retrieve user group permissions."""
+        return self._data["user_group_permissions"]
+
+    async def lock_info_clear(self):
+        """Clear lock information."""
+        self._data["lock_info"] = None
+        await self._save_to_storage()
+
+    async def new_item_uid(self):
+        """Generate a new item UID."""
+        return str(uuid.uuid4())
+
+    async def delete_pool_entries(self):
+        """Delete all pool entries."""
+        self._data = {
+            "plan_queue": [],
+            "plan_history": [],
+            "running_plan": None,
+            "plan_queue_mode": {"loop": False, "ignore_failures": False},
+            "user_group_permissions": None,
+            "lock_info": None,
+            "autostart_mode_info": None,
+            "stop_pending_info": None,
+        }
+        self._plan_queue_uid = self.new_item_uid()
+        self._plan_history_uid = self.new_item_uid()
+        await self._save_to_storage()
+
+    async def user_group_permissions_clear(self):
+        """Clear user group permissions."""
+        self._data["user_group_permissions"] = None
+        await self._save_to_storage()
+
+    async def autostart_mode_clear(self):
+        """Clear the autostart mode information."""
+        self._data["autostart_mode_info"] = None
+        await self._save_to_storage()
+
+    async def stop_pending_clear(self):
+        """Clear the stop-pending state information."""
+        self._data["stop_pending_info"] = None
+        await self._save_to_storage()

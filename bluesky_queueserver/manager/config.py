@@ -18,10 +18,10 @@ from pathlib import Path
 import jsonschema
 import yaml
 
-from .comms import default_zmq_control_address_for_server, validate_zmq_key
+from .comms import default_zmq_control_address_for_server, supported_zmq_encodings, validate_zmq_key
 from .config_schemas.loading import ConfigError, load_schema_from_yml
 from .logging_setup import setup_loggers
-from .output_streaming import default_zmq_info_address_for_server, supported_zmq_encoding
+from .output_streaming import default_zmq_info_address_for_server
 from .profile_ops import get_default_startup_dir, get_default_startup_profile
 from .utils import to_boolean
 

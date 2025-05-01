@@ -6,6 +6,7 @@ import time as ttime
 
 import pytest
 
+from bluesky_queueserver.manager.comms import ZMQEncoding, process_zmq_encoding_name
 from bluesky_queueserver.manager.output_streaming import (
     ConsoleOutputStream,
     PublishConsoleOutput,
@@ -78,7 +79,7 @@ def test_setup_console_output_redirection_1(sys_stdout_stderr_restore):
 
 
 # fmt: off
-@pytest.mark.parametrize("zmq_encoding", ["json", "pickle"])
+@pytest.mark.parametrize("zmq_encoding", ["json", "msgpack"])
 @pytest.mark.parametrize("console_output_on, zmq_publish_on, sub, unsub, period, timeout, n_timeouts", [
     (True, True, False, False, 0, None, 0),
     (True, False, False, False, 0, None, 0),
@@ -114,14 +115,14 @@ def test_ReceiveConsoleOutput_1(
         zmq_publish_on=zmq_publish_on,
         zmq_publish_addr=zmq_publish_addr,
         zmq_topic=zmq_topic,
-        zmq_encoding=zmq_encoding,
+        encoding=zmq_encoding,
     )
 
     class ReceiveMessages(threading.Thread):
         def __init__(self, *, zmq_subscribe_addr, zmq_topic, zmq_encoding):
             super().__init__()
             self._rco = ReceiveConsoleOutput(
-                zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic, zmq_encoding=zmq_encoding
+                zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic, encoding=zmq_encoding
             )
             self._exit = False
             self.received_msgs = []
@@ -147,7 +148,7 @@ def test_ReceiveConsoleOutput_1(
         def unsubscribe(self):
             self._rco.unsubscribe()
 
-    rm = ReceiveMessages(zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic, zmq_encoding=zmq_encoding)
+    rm = ReceiveMessages(zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic, encoding=zmq_encoding)
 
     pco.start()
 
@@ -196,7 +197,7 @@ def test_ReceiveConsoleOutput_1(
 
 
 # fmt: off
-@pytest.mark.parametrize("zmq_encoding", ["json", "pickle"])
+@pytest.mark.parametrize("zmq_encoding", ["json", "msgpack"])
 @pytest.mark.parametrize("period", [0.5, 1, 1.5])
 @pytest.mark.parametrize("cb_type", ["func", "coro"])
 # fmt: on
@@ -224,7 +225,7 @@ def test_ReceiveConsoleOutputAsync_1(period, cb_type, zmq_encoding):
         zmq_publish_on=True,
         zmq_publish_addr=zmq_publish_addr,
         zmq_topic=zmq_topic,
-        zmq_encoding=zmq_encoding,
+        encoding=zmq_encoding,
     )
 
     pco.start()
@@ -232,7 +233,7 @@ def test_ReceiveConsoleOutputAsync_1(period, cb_type, zmq_encoding):
     msgs = ["message-one\n", "message-two\n", "message-three\n"]
 
     rm = ReceiveConsoleOutputAsync(
-        zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic, timeout=timeout, zmq_encoding=zmq_encoding
+        zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic, timeout=timeout, encoding=zmq_encoding
     )
     ttime.sleep(1)  # Important when executed on CI
 
@@ -287,7 +288,7 @@ def test_ReceiveConsoleOutputAsync_1(period, cb_type, zmq_encoding):
     pco.stop()
 
 
-@pytest.mark.parametrize("zmq_encoding", ["json", "pickle"])
+@pytest.mark.parametrize("zmq_encoding", ["json", "msgpack"])
 def test_ReceiveConsoleOutputAsync_2(zmq_encoding):
     """
     ``ReceiveConsoleOutputAsync``: test various options to subscribe and unsubscribe
@@ -298,7 +299,7 @@ def test_ReceiveConsoleOutputAsync_2(zmq_encoding):
     zmq_subscribe_addr = f"tcp://localhost:{zmq_port}"
 
     rm = ReceiveConsoleOutputAsync(
-        zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic, zmq_encoding=zmq_encoding, timeout=100
+        zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic, encoding=zmq_encoding, timeout=100
     )
 
     assert rm._socket_subscribed is False
@@ -339,21 +340,21 @@ def test_ReceiveConsoleOutputAsync_2(zmq_encoding):
     asyncio.run(testing_3())
 
 
-@pytest.mark.parametrize("zmq_encoding", [None, "json", "pickle"])
+@pytest.mark.parametrize("zmq_encoding", ["json", "msgpack", None])
 def test_ConsoleOutput_zmq_encoding_1(zmq_encoding):
     """
     Thest that zmq_encoding option is correctly processed in all classes for console output streaming.
     """
-    params = {} if zmq_encoding is None else {"zmq_encoding": zmq_encoding}
-    use_json = zmq_encoding in ("json", None)
+    params = {} if zmq_encoding is None else {"encoding": zmq_encoding}
+    encoding = process_zmq_encoding_name(zmq_encoding) if zmq_encoding else ZMQEncoding.JSON
 
     queue = multiprocessing.Queue()
 
     pco = PublishConsoleOutput(msg_queue=queue, **params)
-    assert pco._use_json == use_json
+    assert pco._encoding == encoding
 
     rco1 = ReceiveConsoleOutput(**params)
-    assert rco1._use_json == use_json
+    assert rco1._encoding == encoding
 
     rco2 = ReceiveConsoleOutputAsync(**params)
-    assert rco2._use_json == use_json
+    assert rco2._encoding == encoding

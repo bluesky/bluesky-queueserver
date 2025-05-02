@@ -119,10 +119,10 @@ def test_ReceiveConsoleOutput_1(
     )
 
     class ReceiveMessages(threading.Thread):
-        def __init__(self, *, zmq_subscribe_addr, zmq_topic, zmq_encoding):
+        def __init__(self, *, zmq_subscribe_addr, zmq_topic, encoding):
             super().__init__()
             self._rco = ReceiveConsoleOutput(
-                zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic, encoding=zmq_encoding
+                zmq_subscribe_addr=zmq_subscribe_addr, zmq_topic=zmq_topic, encoding=encoding
             )
             self._exit = False
             self.received_msgs = []

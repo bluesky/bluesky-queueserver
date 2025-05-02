@@ -329,12 +329,10 @@ def start_manager():
         dest="zmq_encoding",
         type=str,
         default=None,
-        help="The encoding used for 0MQ communication. RE Manager is using JSON messages by default, "
-        "but it can be configured to communicate using binary (pickled) Python dictionaries instead. "
-        "Sending binary data over 0MQ recommended only for closed systems with RE Manager and the clients "
-        "using compatible encoding format, and may improve performance. The parameter controls encoding "
-        "for all sockets used by RE Manager. "
-        "The parameter values: 'json' (recommended, default) or 'pickle' (application-specific).",
+        help="The encoding used for 0MQ communication. The encoding must match the encoding used by RE Manager. "
+        "The parameter value overrides the value set by QSERVER_ZMQ_ENCODING_FOR_SERVER environment variable. "
+        "The parameter sets encoding used by all 0MQ sockets. "
+        "The supported values: 'json' (default) or 'msgpack'.",
     )
 
     parser.add_argument(
@@ -696,7 +694,7 @@ def start_manager():
         console_output_on=settings.print_console_output,
         zmq_publish_on=settings.zmq_publish_console,
         zmq_publish_addr=settings.zmq_info_addr,
-        zmq_encoding=settings.zmq_encoding,
+        encoding=settings.zmq_encoding,
     )
 
     if settings.zmq_publish_console:

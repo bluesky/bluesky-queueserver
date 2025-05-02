@@ -19,14 +19,15 @@ import yaml
 import bluesky_queueserver
 
 from .comms import (
+    ZMQEncoding,
     default_zmq_control_address,
     generate_zmq_keys,
     generate_zmq_public_key,
+    process_zmq_encoding_name,
     validate_zmq_key,
     zmq_single_request,
 )
 from .logging_setup import PPrintForLogging as ppfl
-from .output_streaming import process_zmq_encoding_parameter
 from .plan_queue_ops import PlanQueueOperations
 
 logger = logging.getLogger(__name__)
@@ -1337,7 +1338,7 @@ def qserver():
         zmq_encoding = args.zmq_encoding
         zmq_encoding = zmq_encoding or os.environ.get("QSERVER_ZMQ_ENCODING", None)
         zmq_encoding = zmq_encoding or "json"
-        use_json = process_zmq_encoding_parameter(zmq_encoding)
+        zmq_encoding = process_zmq_encoding_name(zmq_encoding)
 
         # Read public key from the environment variable, then check if the CLI parameter exists
         zmq_public_key = os.environ.get("QSERVER_ZMQ_PUBLIC_KEY", None)
@@ -1354,7 +1355,7 @@ def qserver():
 
         while True:
             msg, msg_err = zmq_single_request(
-                method, params, zmq_server_address=address, server_public_key=zmq_public_key, use_json=use_json
+                method, params, zmq_server_address=address, server_public_key=zmq_public_key, encoding=zmq_encoding
             )
 
             now = datetime.now()
@@ -1538,7 +1539,7 @@ def qserver_console_base(*, app_name):
         default=None,
         help="The encoding used for 0MQ communication. The encoding must match the encoding used by RE Manager. "
         "The parameter value overrides the value set by QSERVER_ZMQ_ENCODING environment variable. "
-        "The supported values: 'json' (default) or 'pickle'.",
+        "The supported values: 'json' (default) or 'msgpack'.",
     )
 
     args = parser.parse_args()
@@ -1555,7 +1556,7 @@ def qserver_console_base(*, app_name):
         zmq_encoding = args.zmq_encoding
         zmq_encoding = zmq_encoding or os.environ.get("QSERVER_ZMQ_ENCODING", None)
         zmq_encoding = zmq_encoding or "json"
-        use_json = process_zmq_encoding_parameter(zmq_encoding)
+        zmq_encoding = process_zmq_encoding_name(zmq_encoding)
 
         # Read public key from the environment variable, then check if the CLI parameter exists
         zmq_public_key = os.environ.get("QSERVER_ZMQ_PUBLIC_KEY", None)
@@ -1568,7 +1569,7 @@ def qserver_console_base(*, app_name):
 
         # Request connection info
         msg, msg_err = zmq_single_request(
-            "config_get", zmq_server_address=address, server_public_key=zmq_public_key, use_json=use_json
+            "config_get", zmq_server_address=address, server_public_key=zmq_public_key, encoding=zmq_encoding
         )
 
         now = datetime.now()

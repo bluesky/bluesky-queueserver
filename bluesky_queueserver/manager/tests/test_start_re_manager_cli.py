@@ -27,7 +27,7 @@ from .common import (
     set_qserver_zmq_address,
     set_qserver_zmq_public_key,
     use_ipykernel_for_tests,
-    use_zmq_pickle_encoding_for_tests,
+    use_zmq_encoding_for_tests,
     wait_for_condition,
     wait_for_task_result,
     zmq_request,

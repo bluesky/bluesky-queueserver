@@ -39,11 +39,11 @@ def use_ipykernel_for_tests():
     return to_boolean(os.environ.get("USE_IPYKERNEL", None))
 
 
-def use_zmq_pickle_encoding_for_tests():
+def use_zmq_encoding_for_tests():
     """
-    Similar to 'use_ipykernel_for_tests()' but setting the different parameter.
+    Returns the encoding 'use_ipykernel_for_tests()' for 0MQ messages.
     """
-    return to_boolean(os.environ.get("USE_ZMQ_PICKLE_ENCODING", None))
+    return os.environ.get("USE_ZMQ_ENCODING", "json")
 
 
 def copy_default_profile_collection(tmp_path, *, copy_py=True, copy_yaml=True):
@@ -221,26 +221,26 @@ def clear_qserver_zmq_address(mpatch):
 
 
 def zmq_request(
-    method, params=None, *, timeout=None, zmq_server_address=None, use_json=None, server_public_key=None
+    method, params=None, *, timeout=None, zmq_server_address=None, encoding=None, server_public_key=None
 ):
     """
     Calls 'zmq_single_request' function. If 'use_json' parameter is not passed, it sets it automatically
-    based on the value returned by ``use_zmq_pickle_encoding_for_tests()`` function.
+    based on the value returned by ``use_zmq_encoding_for_tests()`` function.
     """
-    if use_json is None:
-        use_json = not use_zmq_pickle_encoding_for_tests()
+    if encoding is None:
+        encoding = use_zmq_encoding_for_tests()
 
     return zmq_single_request(
         method=method,
         params=params,
         timeout=timeout,
         zmq_server_address=zmq_server_address,
-        use_json=use_json,
+        encoding=encoding,
         server_public_key=server_public_key,
     )
 
 
-def zmq_secure_request(method, params=None, *, zmq_server_address=None, use_json=None, server_public_key=None):
+def zmq_secure_request(method, params=None, *, zmq_server_address=None, encoding=None, server_public_key=None):
     """
     Wrapper for 'zmq_single_request'. Verifies if environment variable holding server public key is set
     and passes the key to 'zmq_single_request' . Simplifies writing tests that use RE Manager in secure mode.
@@ -261,9 +261,8 @@ def zmq_secure_request(method, params=None, *, zmq_server_address=None, use_json
     zmq_server_address: str or None
         Address of the ZMQ control socket of RE Manager. An address from the environment variable or
         the default address is used if the value is ``None``.
-    use_json: bool
-        If ``True`` then the message is sent in JSON format. If ``False`` then the message is sent
-        in pickle format.
+    encoding: str
+        Encoding used for sending 0MQ messages: "json" or "msgpack".
     server_public_key: str or None
         Server public key (z85-encoded 40 character string). The Valid public key from the server
         public/private key pair must be passed if encryption is enabled at the 0MQ server side.
@@ -282,7 +281,7 @@ def zmq_secure_request(method, params=None, *, zmq_server_address=None, use_json
         method=method,
         params=params,
         zmq_server_address=zmq_server_address,
-        use_json=use_json,
+        encoding=encoding,
         server_public_key=server_public_key,
     )
 
@@ -478,9 +477,9 @@ class ReManager:
         if not any([_.startswith("--use-ipython-kernel") for _ in params]) and use_ipykernel_for_tests():
             params.append("--use-ipython-kernel=ON")
 
-        # Use 'pickle' encoding for 0MQ communication
-        if not any([_.startswith("--zmq-encoding") for _ in params]) and use_zmq_pickle_encoding_for_tests():
-            params.append("--zmq-encoding=pickle")
+        # Set the encoding for 0MQ communication
+        if not any([_.startswith("--zmq-encoding") for _ in params]):
+            params.append(f"--zmq-encoding={use_zmq_encoding_for_tests()}")
 
         # Set default name prefix for Redis keys
         name_prefix_params = [_ for _ in params if _.startswith("--redis-name-prefix")]

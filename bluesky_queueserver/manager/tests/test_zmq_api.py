@@ -3,12 +3,12 @@ import copy
 import glob
 import json
 import os
-import pickle
 import pprint
 import re
 import time as ttime
 from datetime import datetime
 
+import msgpack
 import numpy as np
 import pytest
 import yaml
@@ -55,7 +55,7 @@ from .common import (  # noqa: F401
     re_manager_pc_copy,
     remove_run_engine_config_from_startup,
     use_ipykernel_for_tests,
-    use_zmq_pickle_encoding_for_tests,
+    use_zmq_encoding_for_tests,
     wait_for_condition,
     wait_for_task_result,
     zmq_request,
@@ -88,8 +88,8 @@ def test_zmq_api_thread_based(re_manager):  # noqa F811
     sure that the API is compatible with the client. It is sufficient to test only
     the blocking call, since it is still using callbacks mechanism.
     """
-    use_json = not use_zmq_pickle_encoding_for_tests()
-    client = ZMQCommSendThreads(use_json=use_json)
+    encoding = use_zmq_encoding_for_tests()
+    client = ZMQCommSendThreads(encoding=encoding)
 
     resp1 = client.send_message(
         method="queue_item_add", params={"item": _plan1, "user": _user, "user_group": _user_group}

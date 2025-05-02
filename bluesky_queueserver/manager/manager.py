@@ -2,21 +2,21 @@ import asyncio
 import copy
 import enum
 import logging
-import pickle
 import time as ttime
 import uuid
 from datetime import datetime
 from multiprocessing import Process
 
+import msgpack
 import zmq
 import zmq.asyncio
 
 import bluesky_queueserver
 
-from .comms import CommTimeoutError, PipeJsonRpcSendAsync, validate_zmq_key
+from .comms import CommTimeoutError, PipeJsonRpcSendAsync, ZMQEncoding, process_zmq_encoding_name, validate_zmq_key
 from .logging_setup import PPrintForLogging as ppfl
 from .logging_setup import setup_loggers
-from .output_streaming import process_zmq_encoding_parameter, setup_console_output_redirection
+from .output_streaming import setup_console_output_redirection
 from .plan_queue_ops import PlanQueueOperations
 from .profile_ops import (
     check_if_function_allowed,
@@ -245,7 +245,7 @@ class RunEngineManager(Process):
         self._loop = None
 
         # Communication with the server using ZMQ
-        self._use_json = process_zmq_encoding_parameter(config["zmq_encoding"])
+        self._zmq_encoding = process_zmq_encoding_name(config["zmq_encoding"])
         self._ctx = None
         self._zmq_socket = None
         self._zmq_ip_server = "tcp://*:60615"
@@ -3628,21 +3628,21 @@ class RunEngineManager(Process):
 
     async def _zmq_receive(self):
         try:
-            if self._use_json:
+            if self._zmq_encoding == ZMQEncoding.JSON:
                 msg_in = await self._zmq_socket.recv_json()
             else:
                 _ = await self._zmq_socket.recv()
-                msg_in = pickle.loads(_)
+                msg_in = msgpack.unpackb(_)
         except Exception as ex:
-            _ = "JSON" if self._use_json else "PICKLE"
+            _ = self._zmq_encoding.name()
             msg_in = f"{_} decode error: {ex}"
         return msg_in
 
     async def _zmq_send(self, msg):
-        if self._use_json:
+        if self._zmq_encoding == ZMQEncoding.JSON:
             await self._zmq_socket.send_json(msg)
         else:
-            _ = pickle.dumps(msg)
+            _ = msgpack.packb(msg)
             await self._zmq_socket.send(_)
 
     async def zmq_server_comm(self):

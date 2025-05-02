@@ -1221,7 +1221,7 @@ class ZMQCommSendAsync:
 
 
 def zmq_single_request(
-    method, params=None, *, timeout=None, zmq_server_address=None, server_public_key=None, use_json=True
+    method, params=None, *, timeout=None, zmq_server_address=None, server_public_key=None, encoding="json"
 ):
     """
     Send a single request to ZMQ server. The function opens the socket, sends
@@ -1247,9 +1247,8 @@ def zmq_single_request(
         public/private key pair must be passed if encryption is enabled at the 0MQ server side.
         Communication requests will time out if the key is invalid. Exception will be raised if
         the key is improperly formatted. Encryption will be disabled if ``None`` is passed.
-    use_json : bool
-        Use JSON-encoded messages if *True* (default), otherwise send the messages
-        in binary (picked) format.
+    encoding : str or ZMQEncoding
+        Encoding of used for 0MQ messages. Supported values: "json" or "msgpack".
 
     Returns
     -------
@@ -1265,7 +1264,7 @@ def zmq_single_request(
     async def send_request(method, params):
         nonlocal msg_received
         zmq_to_manager = ZMQCommSendAsync(
-            zmq_server_address=zmq_server_address, server_public_key=server_public_key, use_json=use_json
+            zmq_server_address=zmq_server_address, server_public_key=server_public_key, encoding=encoding
         )
         msg_received = await zmq_to_manager.send_message(
             method=method, params=params, timeout=timeout, raise_exceptions=True

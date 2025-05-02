@@ -344,9 +344,9 @@ class Settings:
             value_cli=self._args_existing("zmq_encoding"),
         )
         zmq_encoding = zmq_encoding.lower()
-        if zmq_encoding.lower() not in supported_zmq_encoding:
+        if zmq_encoding.lower() not in supported_zmq_encodings():
             raise ConfigError(
-                f"0MQ encoding {zmq_encoding!r} is not supported. Supported values: {supported_zmq_encoding}."
+                f"0MQ encoding {zmq_encoding!r} is not supported. Supported values: {supported_zmq_encodings()}."
             )
         self._settings["zmq_encoding"] = zmq_encoding
 

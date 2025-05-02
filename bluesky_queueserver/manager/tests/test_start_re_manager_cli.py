@@ -25,8 +25,8 @@ from .common import (
     copy_default_profile_collection,
     get_manager_status,
     set_qserver_zmq_address,
-    set_qserver_zmq_public_key,
     set_qserver_zmq_encoding,
+    set_qserver_zmq_public_key,
     use_ipykernel_for_tests,
     use_zmq_encoding_for_tests,
     wait_for_condition,
@@ -607,7 +607,7 @@ def _get_expected_settings_config_2(file_dir, ip_con_dir):
         "user_group_permissions_path": user_group_permissions_path,
         "user_group_permissions_reload": "ON_REQUEST",
         "zmq_control_addr": "tcp://*:60617",
-        "zmq_encoding": f"{use_zmq_encoding_for_tests()}",
+        "zmq_encoding": "msgpack",
         "zmq_info_addr": "tcp://*:60627",
         "zmq_private_key": "Ue=.po0aQ9.}<Xvrny+f{V04XMc6JZ9ufKf5aeFy",
         "zmq_publish_console": True,
@@ -621,7 +621,7 @@ def _get_cli_params_3(file_dir):
     use_ip_kernel = "ON" if use_ipykernel_for_tests() else "OFF"
     return [
         "--zmq-control-addr=tcp://*:60619",
-        "--zmq-encoding=msgpack",
+        "--zmq-encoding=json",
         f"--startup-dir={file_dir}",
         f"--existing-plans-devices={file_dir}",
         "--update-existing-plans-devices=NEVER",
@@ -695,7 +695,7 @@ def _get_expected_settings_params_3(file_dir, _):
         "user_group_permissions_path": user_group_permissions_path,
         "user_group_permissions_reload": "NEVER",
         "zmq_control_addr": "tcp://*:60619",
-        "zmq_encoding": "msgpack",
+        "zmq_encoding": "json",
         "zmq_info_addr": "tcp://*:60629",
         "zmq_private_key": "Ue=.po0aQ9.}<Xvrny+f{V04XMc6JZ9ufKf5aeFy",
         "zmq_publish_console": False,
@@ -703,7 +703,7 @@ def _get_expected_settings_params_3(file_dir, _):
 
 
 def _get_empty_params_1(file_dir):
-    return ["--zmq-encoding=0"]  # 0MQ encoding '0' - the entry is removed, so no value is passed
+    return []
 
 
 # fmt: off
@@ -711,15 +711,22 @@ def _get_empty_params_1(file_dir):
     # Starting RE Manager using default parameters (--verbose CLI parameter is always set)
     (None, None, _get_empty_params_1, _get_expected_settings_default_1, "json"),
     # Pass config file (use EV to pass the path)
-    ("name_as_ev", _dir_2, _get_empty_params_1, _get_expected_settings_config_2, "json"),
+    ("name_as_ev", _dir_2, _get_empty_params_1, _get_expected_settings_config_2, "msgpack"),
     # Pass config file (use --config CLI parameter to pass the path)
-    ("name_as_param1", _dir_2, _get_empty_params_1, _get_expected_settings_config_2, "json"),
+    ("name_as_param1", _dir_2, _get_empty_params_1, _get_expected_settings_config_2, "msgpack"),
     # Pass the config file and a set of CLI parameters that override the config parameters
-    ("name_as_param2", _dir_3, _get_cli_params_3, _get_expected_settings_params_3, "msgpack"),
+    ("name_as_param2", _dir_3, _get_cli_params_3, _get_expected_settings_params_3, "json"),
 ])
 # fmt: on
 def test_manager_with_config_file_01(
-    tmpdir, monkeypatch, re_manager_cmd, pass_config, dest_dir, get_cli_params, get_expected_settings, zmq_encoding  # noqa: F811
+    tmpdir,
+    monkeypatch,
+    re_manager_cmd,  # noqa: F811
+    pass_config,
+    dest_dir,
+    get_cli_params,
+    get_expected_settings,
+    zmq_encoding,
 ):
     """
     Basic test for parameter handling functionality. Test if the parameters are successfully
@@ -746,6 +753,9 @@ def test_manager_with_config_file_01(
     if cli_params:
         set_qserver_zmq_public_key(monkeypatch, server_public_key="=E0[czQkp!!%0TL1LCJ5X[<wjYD[iV+p[yuaI0an")
         set_qserver_zmq_address(monkeypatch, zmq_server_address="tcp://localhost:60619")
+    else:
+        # 0MQ encoding '0' - the entry is removed, so no value is passed to RE Manager
+        cli_params.append("--zmq-encoding=0")
 
     set_qserver_zmq_encoding(monkeypatch, encoding=zmq_encoding)
 
@@ -757,17 +767,11 @@ def test_manager_with_config_file_01(
         params_server.append(f"--config={config_path}")
     elif pass_config is not None:
         assert False, f"Unknown option {pass_config!r}"
-    
+
     set_redis_name_prefix = pass_config not in ("name_as_ev", "name_as_param1")
-    print(f"================ Starting ...") ##
     re = re_manager_cmd(params_server, set_redis_name_prefix=set_redis_name_prefix)
-    print(f"================= Started ...") ##
     if get_cli_params == _get_empty_params_1:
         re.set_used_redis_name_prefix("qs_unit_tests2")
-
-    import time  ##
-    time.sleep(1)  ##
-    assert False
 
     # Test that the manager started successfully
     state = get_manager_status(encoding=zmq_encoding)

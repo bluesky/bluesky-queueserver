@@ -185,6 +185,7 @@ def set_qserver_zmq_public_key(mpatch, *, server_public_key):
     """
     mpatch.setenv(_name_ev_public_key, server_public_key)
 
+
 def clear_qserver_zmq_public_key(mpatch):
     """
     Clear the environment variable holding server public key set by ``set_qserver_zmq_public_key``.
@@ -221,6 +222,7 @@ def clear_qserver_zmq_address(mpatch):
 
 _name_ev_zmq_encoding = "_TEST_QSERVER_ZMQ_ENCODING_"
 
+
 def set_qserver_zmq_encoding(mpatch, *, encoding):
     """
     Temporarily set environment variable holding server zmq encoding for using with ``zmq_request``.
@@ -236,6 +238,7 @@ def set_qserver_zmq_encoding(mpatch, *, encoding):
         ZMQ encoding (such as 'json' or 'msgpack').
     """
     mpatch.setenv(_name_ev_zmq_encoding, encoding)
+
 
 def clear_qserver_zmq_encoding(mpatch):
     """
@@ -254,13 +257,11 @@ def zmq_request(
     """
     if encoding is None:
         encoding = os.environ.get(_name_ev_zmq_encoding, None)
-        if encoding is None:
-            encoding = use_zmq_encoding_for_tests()
+    if encoding is None:
+        encoding = use_zmq_encoding_for_tests()
     elif encoding == 0:
         encoding = None
 
-    print(f"============== encoding={encoding!r}")  ##
-        
     return zmq_single_request(
         method=method,
         params=params,
@@ -317,7 +318,7 @@ def zmq_secure_request(method, params=None, *, zmq_server_address=None, encoding
     )
 
 
-def get_manager_status(encoding=None):
+def get_manager_status(*, encoding=None):
     method, params = "status", None
     msg, _ = zmq_secure_request(method, params, encoding=encoding)
     if msg is None:
@@ -325,19 +326,19 @@ def get_manager_status(encoding=None):
     return msg
 
 
-def get_queue():
+def get_queue(*, encoding=None):
     """
     Returns current queue.
     """
     method, params = "queue_get", None
-    msg, _ = zmq_secure_request(method, params)
+    msg, _ = zmq_secure_request(method, params, encoding=encoding)
     if msg is None:
         raise TimeoutError("Timeout occurred while loading queue from RE Manager.")
     return msg
 
 
-def get_queue_state():
-    msg = get_manager_status()
+def get_queue_state(*, encoding=None):
+    msg = get_manager_status(encoding=encoding)
     items_in_queue = msg["items_in_queue"]
     queue_is_running = msg["manager_state"] == "executing_queue"
     items_in_history = msg["items_in_history"]
@@ -386,7 +387,7 @@ def condition_ip_kernel_busy(msg):
     return msg["ip_kernel_state"] == "busy"
 
 
-def wait_for_condition(time, condition):
+def wait_for_condition(time, condition, *, encoding=None):
     """
     Wait until queue is processed. Note: processing of TimeoutError is needed for
     monitoring RE Manager while it is restarted.
@@ -396,7 +397,7 @@ def wait_for_condition(time, condition):
     while ttime.time() < time_stop:
         ttime.sleep(dt / 2)
         try:
-            msg = get_manager_status()
+            msg = get_manager_status(encoding=encoding)
             if condition(msg):
                 return True
         except TimeoutError:
@@ -405,7 +406,7 @@ def wait_for_condition(time, condition):
     return False
 
 
-def wait_for_task_result(time, task_uid):
+def wait_for_task_result(time, task_uid, *, encoding=None):
     """
     Wait for the results of the task defined by ``task_uid``. Raises ``TimeoutError`` if
     timeout ``time`` is exceeded while waiting for the task result. Returns the task result
@@ -416,7 +417,7 @@ def wait_for_task_result(time, task_uid):
     while ttime.time() < time_stop:
         ttime.sleep(dt / 2)
         try:
-            resp, _ = zmq_secure_request("task_result", params={"task_uid": task_uid})
+            resp, _ = zmq_secure_request("task_result", params={"task_uid": task_uid}, encoding=encoding)
 
             assert resp["success"] is True, f"Request for task result failed: {resp['msg']}"
             assert resp["task_uid"] == task_uid
@@ -454,7 +455,6 @@ class ReManager:
         # If the prefix is not passed as CLI parameter, then it will always try to delete default keys.
         # If a testing using non-default prefix (passed using config file), manually set the prefix
         # uisng `set_used_redis_name_prefix` after RE Manager is started.
-        self._encoding = None
         self._used_redis_name_prefix = _test_redis_name_prefix
         self.start_manager(params, stdout=stdout, stderr=stderr, set_redis_name_prefix=set_redis_name_prefix)
 
@@ -498,7 +498,6 @@ class ReManager:
             Subprocess in which the manager is running. It needs to be stopped at certain point.
         """
         params = params or []
-        print(f"====================== Starting RE Manager ...")  ##
 
         # Set logging level for RE Manager unless it is already set in parameters
         #   Leads to excessive output and some tests may fail at tearup. Enable only when needed.
@@ -516,12 +515,6 @@ class ReManager:
         # Remove --zmq-encoding=0   # Do not pass the parameter at all
         if "--zmq-encoding=0" in params:
             params.remove("--zmq-encoding=0")
-        # Save the set encoding. The encoding can be changed in the test (if needed) 
-        #   by directly modifying 'self._encoding' after the server is started.
-        #   This may be needed if the encoding different from default is set in the config file.
-        for _ in params:
-            if _.startswith("--zmq-encoding"):
-                self._encoding = _.split("=")[1].strip()
 
         # Set default name prefix for Redis keys
         name_prefix_params = [_ for _ in params if _.startswith("--redis-name-prefix")]
@@ -540,8 +533,6 @@ class ReManager:
                 cmd += params
 
             self._p = subprocess.Popen(cmd, universal_newlines=True, stdout=stdout, stderr=stderr)
-
-        print("====================== Server started ...")  ##
 
     def check_if_stopped(self, timeout=5):
         """
@@ -575,23 +566,15 @@ class ReManager:
                 if self._p.poll() is None:
                     success, msg = False, ""
 
-                    print("====================== Setting request 1 ...")  ##
                     # Try to stop the manager in a nice way first by sending the command
-                    resp1, err_msg1 = zmq_secure_request(
-                        method="manager_stop", params=None, encoding=self._encoding
-                    )
-                    print("====================== Request 1 completed ...")  ##
+                    resp1, err_msg1 = zmq_secure_request(method="manager_stop", params=None)
                     assert resp1, str(err_msg1)
                     success = resp1["success"]
 
                     if not success:
-                        print("====================== Setting request 2 ...")  ##
                         # If the command was rejected, try 'safe_off' mode that kills the RE worker environment
                         msg += f"Request to stop the manager in with the 'safe_on' option failed: {resp1['msg']}."
-                        resp2, err_msg2 = zmq_secure_request(
-                            method="manager_stop", params={"option": "safe_off"}, encoding=self._encoding
-                        )
-                        print("====================== Request 2 completed ...")  ##
+                        resp2, err_msg2 = zmq_secure_request(method="manager_stop", params={"option": "safe_off"})
                         assert resp2, str(err_msg2)
                         success = resp2["success"]
                         if not success:

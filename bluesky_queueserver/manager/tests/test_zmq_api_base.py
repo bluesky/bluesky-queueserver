@@ -243,7 +243,7 @@ def test_invalid_requests_1(re_manager):  # noqa F811
 
     else:
         raise ValueError(f"Unknown encoding: {encoding!r}")
-    
+
     socket.close()
 
 
@@ -3269,9 +3269,9 @@ def func_elements():
     (_script_func_2, [(1, 2, 3)], [1, 2, 3], True, True, []),
     (_script_func_2, [{"key": 1.0}], {"key": 1.0}, True, True, []),
     (_script_func_2, [None], None, True, True, []),
-    (_script_func_2, [np.array([1, 2, 3])], None, False, None, 
+    (_script_func_2, [np.array([1, 2, 3])], None, False, None,
      ["Object of type ndarray is not JSON serializable", "can not serialize 'numpy.ndarray' object"]),
-    (_script_func_3, [], None, True, False, 
+    (_script_func_3, [], None, True, False,
      ["Object of type ndarray is not JSON serializable", "can not serialize 'numpy.ndarray' object"]),
     (_script_func_4, [], None, True, False, ["-- Exception was raised!!! --"]),
 ])

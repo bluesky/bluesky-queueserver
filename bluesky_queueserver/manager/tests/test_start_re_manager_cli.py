@@ -26,6 +26,7 @@ from .common import (
     get_manager_status,
     set_qserver_zmq_address,
     set_qserver_zmq_public_key,
+    set_qserver_zmq_encoding,
     use_ipykernel_for_tests,
     use_zmq_encoding_for_tests,
     wait_for_condition,
@@ -104,7 +105,8 @@ def test_start_re_manager_console_output_1(re_manager_cmd, console_print, consol
         console_zmq = False
 
     # Start monitor (captures messages published to 0MQ)
-    params_mon = ["--zmq-encoding=pickle"] if use_zmq_pickle_encoding_for_tests() else []
+    encoding = use_zmq_encoding_for_tests()
+    params_mon = [f"--zmq-encoding={encoding}"] if encoding != "json" else []
     p_monitor = subprocess.Popen(
         ["qserver-console-monitor", *params_mon],
         universal_newlines=True,
@@ -211,8 +213,8 @@ def test_start_re_manager_console_output_2(monkeypatch, re_manager_cmd, test_mod
 
     # Start monitor (captures messages published to 0MQ)
     params_mon = [f"--zmq-info-addr={address_info_client}"]
-    if use_zmq_pickle_encoding_for_tests():
-        params_mon.append("--zmq-encoding=pickle")
+    if use_zmq_encoding_for_tests() != "json":
+        params_mon.append(f"--zmq-encoding={use_zmq_encoding_for_tests()}")
     p_monitor = subprocess.Popen(
         ["qserver-console-monitor", *params_mon],
         universal_newlines=True,
@@ -506,6 +508,7 @@ def _get_expected_settings_default_1(_1, _2):
         "user_group_permissions_path": user_group_permissions_path,
         "user_group_permissions_reload": "ON_STARTUP",
         "zmq_control_addr": "tcp://*:60615",
+        "zmq_encoding": "json",
         "zmq_info_addr": "tcp://*:60625",
         "zmq_private_key": None,
         "zmq_publish_console": False,
@@ -520,6 +523,7 @@ def _get_config_file_2(file_dir, ip_con_dir):
     s = """
 network:
   zmq_control_addr: tcp://*:60617
+  zmq_encoding: msgpack
   zmq_private_key: {0}
   zmq_info_addr: tcp://*:60627
   zmq_publish_console: true
@@ -603,6 +607,7 @@ def _get_expected_settings_config_2(file_dir, ip_con_dir):
         "user_group_permissions_path": user_group_permissions_path,
         "user_group_permissions_reload": "ON_REQUEST",
         "zmq_control_addr": "tcp://*:60617",
+        "zmq_encoding": f"{use_zmq_encoding_for_tests()}",
         "zmq_info_addr": "tcp://*:60627",
         "zmq_private_key": "Ue=.po0aQ9.}<Xvrny+f{V04XMc6JZ9ufKf5aeFy",
         "zmq_publish_console": True,
@@ -616,6 +621,7 @@ def _get_cli_params_3(file_dir):
     use_ip_kernel = "ON" if use_ipykernel_for_tests() else "OFF"
     return [
         "--zmq-control-addr=tcp://*:60619",
+        "--zmq-encoding=msgpack",
         f"--startup-dir={file_dir}",
         f"--existing-plans-devices={file_dir}",
         "--update-existing-plans-devices=NEVER",
@@ -689,6 +695,7 @@ def _get_expected_settings_params_3(file_dir, _):
         "user_group_permissions_path": user_group_permissions_path,
         "user_group_permissions_reload": "NEVER",
         "zmq_control_addr": "tcp://*:60619",
+        "zmq_encoding": "msgpack",
         "zmq_info_addr": "tcp://*:60629",
         "zmq_private_key": "Ue=.po0aQ9.}<Xvrny+f{V04XMc6JZ9ufKf5aeFy",
         "zmq_publish_console": False,
@@ -696,23 +703,23 @@ def _get_expected_settings_params_3(file_dir, _):
 
 
 def _get_empty_params_1(file_dir):
-    return []
+    return ["--zmq-encoding=0"]  # 0MQ encoding '0' - the entry is removed, so no value is passed
 
 
 # fmt: off
-@pytest.mark.parametrize("pass_config, dest_dir, get_cli_params, get_expected_settings", [
+@pytest.mark.parametrize("pass_config, dest_dir, get_cli_params, get_expected_settings, zmq_encoding", [
     # Starting RE Manager using default parameters (--verbose CLI parameter is always set)
-    (None, None, _get_empty_params_1, _get_expected_settings_default_1),
+    (None, None, _get_empty_params_1, _get_expected_settings_default_1, "json"),
     # Pass config file (use EV to pass the path)
-    ("name_as_ev", _dir_2, _get_empty_params_1, _get_expected_settings_config_2),
+    ("name_as_ev", _dir_2, _get_empty_params_1, _get_expected_settings_config_2, "json"),
     # Pass config file (use --config CLI parameter to pass the path)
-    ("name_as_param1", _dir_2, _get_empty_params_1, _get_expected_settings_config_2),
+    ("name_as_param1", _dir_2, _get_empty_params_1, _get_expected_settings_config_2, "json"),
     # Pass the config file and a set of CLI parameters that override the config parameters
-    ("name_as_param2", _dir_3, _get_cli_params_3, _get_expected_settings_params_3),
+    ("name_as_param2", _dir_3, _get_cli_params_3, _get_expected_settings_params_3, "msgpack"),
 ])
 # fmt: on
 def test_manager_with_config_file_01(
-    tmpdir, monkeypatch, re_manager_cmd, pass_config, dest_dir, get_cli_params, get_expected_settings  # noqa: F811
+    tmpdir, monkeypatch, re_manager_cmd, pass_config, dest_dir, get_cli_params, get_expected_settings, zmq_encoding  # noqa: F811
 ):
     """
     Basic test for parameter handling functionality. Test if the parameters are successfully
@@ -740,6 +747,8 @@ def test_manager_with_config_file_01(
         set_qserver_zmq_public_key(monkeypatch, server_public_key="=E0[czQkp!!%0TL1LCJ5X[<wjYD[iV+p[yuaI0an")
         set_qserver_zmq_address(monkeypatch, zmq_server_address="tcp://localhost:60619")
 
+    set_qserver_zmq_encoding(monkeypatch, encoding=zmq_encoding)
+
     params_server = cli_params
 
     if pass_config == "name_as_ev":
@@ -748,14 +757,20 @@ def test_manager_with_config_file_01(
         params_server.append(f"--config={config_path}")
     elif pass_config is not None:
         assert False, f"Unknown option {pass_config!r}"
-
+    
     set_redis_name_prefix = pass_config not in ("name_as_ev", "name_as_param1")
+    print(f"================ Starting ...") ##
     re = re_manager_cmd(params_server, set_redis_name_prefix=set_redis_name_prefix)
+    print(f"================= Started ...") ##
     if get_cli_params == _get_empty_params_1:
         re.set_used_redis_name_prefix("qs_unit_tests2")
 
+    import time  ##
+    time.sleep(1)  ##
+    assert False
+
     # Test that the manager started successfully
-    state = get_manager_status()
+    state = get_manager_status(encoding=zmq_encoding)
     assert state["manager_state"] == "idle"
 
     with open(save_settings_path, "r") as f:

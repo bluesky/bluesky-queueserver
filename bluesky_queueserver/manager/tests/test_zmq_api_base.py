@@ -131,10 +131,10 @@ def test_zmq_api_asyncio_based(re_manager):  # noqa F811
     sure that the API is compatible with the client.
     """
 
-    use_json = not use_zmq_pickle_encoding_for_tests()
+    encoding = use_zmq_encoding_for_tests()
 
     async def testing():
-        client = ZMQCommSendAsync(use_json=use_json)
+        client = ZMQCommSendAsync(encoding=encoding)
 
         resp1 = await client.send_message(
             method="queue_item_add", params={"item": _plan1, "user": _user, "user_group": _user_group}
@@ -180,7 +180,8 @@ def test_invalid_requests_1(re_manager):  # noqa F811
     socket = ctx.socket(zmq.REQ)
     socket.connect(default_zmq_control_address)
 
-    if not use_zmq_pickle_encoding_for_tests():
+    encoding = use_zmq_encoding_for_tests()
+    if encoding == "json":
         socket.send(b"")  # Not JSON
         resp = socket.recv_json()
         assert resp["success"] is False
@@ -208,38 +209,41 @@ def test_invalid_requests_1(re_manager):  # noqa F811
         assert "manager_state" in resp, str(resp)
         assert resp["manager_state"] == "idle", str(resp)
 
-    else:
+    elif encoding == "msgpack":
         socket.send(b"")  # Not JSON
-        resp = pickle.loads(socket.recv())
+        resp = msgpack.unpackb(socket.recv())
         assert resp["success"] is False
-        assert "Failed to decode the request: PICKLE decode error:" in resp["msg"]
+        assert "Failed to decode the request: MSGPACK decode error:" in resp["msg"]
 
-        _ = pickle.dumps({"some_key": "some_value"})
+        _ = msgpack.packb({"some_key": "some_value"})
         socket.send(_[:-1])  # Clipped message
-        resp = pickle.loads(socket.recv())
+        resp = msgpack.unpackb(socket.recv())
         assert resp["success"] is False
-        assert "PICKLE decode error: pickle data was truncated" in resp["msg"]
+        assert "MSGPACK decode error: Unpack failed: incomplete input" in resp["msg"]
 
-        _ = pickle.dumps({"met": "status"})  # No 'method' key
+        _ = msgpack.packb({"met": "status"})  # No 'method' key
         socket.send(_)
-        resp = pickle.loads(socket.recv())
+        resp = msgpack.unpackb(socket.recv())
         assert resp["success"] is False
         assert "Invalid request format: method is not specified: {'met': 'status'}" in resp["msg"]
 
-        _ = pickle.dumps({"method": "status"})  # Valid JSON, no optional 'params'
+        _ = msgpack.packb({"method": "status"})  # Valid JSON, no optional 'params'
         socket.send(_)
-        resp = pickle.loads(socket.recv())
+        resp = msgpack.unpackb(socket.recv())
         assert "success" not in resp, str(resp)
         assert "manager_state" in resp, str(resp)
         assert resp["manager_state"] == "idle", str(resp)
 
-        _ = pickle.dumps({"method": "status", "params": {}})  # Valid JSON
+        _ = msgpack.packb({"method": "status", "params": {}})  # Valid JSON
         socket.send(_)
-        resp = pickle.loads(socket.recv())
+        resp = msgpack.unpackb(socket.recv())
         assert "success" not in resp, str(resp)
         assert "manager_state" in resp, str(resp)
         assert resp["manager_state"] == "idle", str(resp)
 
+    else:
+        raise ValueError(f"Unknown encoding: {encoding!r}")
+    
     socket.close()
 
 
@@ -3258,25 +3262,29 @@ def func_elements():
 
 
 # fmt: off
-@pytest.mark.parametrize("script, args, return_value, success_snd, success_rcv, msg", [
-    (_script_func_2, [10], 10, True, True, ""),
-    (_script_func_2, ["test"], "test", True, True, ""),
-    (_script_func_2, [[1, 2, 3]], [1, 2, 3], True, True, ""),
-    (_script_func_2, [(1, 2, 3)], [1, 2, 3], True, True, ""),
-    (_script_func_2, [{"key": 1.0}], {"key": 1.0}, True, True, ""),
-    (_script_func_2, [None], None, True, True, ""),
-    (_script_func_2, [np.array([1, 2, 3])], None, False, None, "Object of type ndarray is not JSON serializable"),
-    (_script_func_3, [], None, True, False, "Object of type ndarray is not JSON serializable"),
-    (_script_func_4, [], None, True, False, "-- Exception was raised!!! --"),
+@pytest.mark.parametrize("script, args, return_value, success_snd, success_rcv, msgs", [
+    (_script_func_2, [10], 10, True, True, []),
+    (_script_func_2, ["test"], "test", True, True, []),
+    (_script_func_2, [[1, 2, 3]], [1, 2, 3], True, True, []),
+    (_script_func_2, [(1, 2, 3)], [1, 2, 3], True, True, []),
+    (_script_func_2, [{"key": 1.0}], {"key": 1.0}, True, True, []),
+    (_script_func_2, [None], None, True, True, []),
+    (_script_func_2, [np.array([1, 2, 3])], None, False, None, 
+     ["Object of type ndarray is not JSON serializable", "can not serialize 'numpy.ndarray' object"]),
+    (_script_func_3, [], None, True, False, 
+     ["Object of type ndarray is not JSON serializable", "can not serialize 'numpy.ndarray' object"]),
+    (_script_func_4, [], None, True, False, ["-- Exception was raised!!! --"]),
 ])
 # fmt: on
 def test_zmq_api_function_execute_5(
-    re_manager, script, args, return_value, success_snd, success_rcv, msg  # noqa: F811
+    re_manager, script, args, return_value, success_snd, success_rcv, msgs  # noqa: F811
 ):
     """
     ``function_execute`` 0MQ API: test if data of different types could be passed to and
     from a function. Check that error is reported if function parameter or return value is not serializable.
     """
+    assert isinstance(msgs, list)
+
     resp1, _ = zmq_request("environment_open")
     assert resp1["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
@@ -3292,7 +3300,7 @@ def test_zmq_api_function_execute_5(
     resp4, msg_err = zmq_request("function_execute", params={"item": func_info, **params})
     if not success_snd:
         # Communication error due to unserializable parameter type (not JSON serializable)
-        assert msg in msg_err
+        assert any([_ in msg_err for _ in msgs])
     else:
         assert resp4["success"] is True, pprint.pformat(resp4)
         result = wait_for_task_result(10, resp4["task_uid"])
@@ -3302,9 +3310,9 @@ def test_zmq_api_function_execute_5(
         else:
             assert result["return_value"] is None
             assert isinstance(result["traceback"], str)
-            assert msg in result["msg"]
+            assert any([_ in result["msg"] for _ in msgs])
             assert isinstance(result["traceback"], str)
-            assert msg in result["traceback"]
+            assert any([_ in result["traceback"] for _ in msgs])
             assert result["traceback"].startswith("Traceback")
 
     resp6, _ = zmq_request("environment_close")

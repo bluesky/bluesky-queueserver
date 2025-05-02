@@ -3634,7 +3634,7 @@ class RunEngineManager(Process):
                 _ = await self._zmq_socket.recv()
                 msg_in = msgpack.unpackb(_)
         except Exception as ex:
-            _ = self._zmq_encoding.name()
+            _ = self._zmq_encoding.name
             msg_in = f"{_} decode error: {ex}"
         return msg_in
 

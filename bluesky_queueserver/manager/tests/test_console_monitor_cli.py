@@ -2,9 +2,14 @@ import subprocess
 
 import pytest
 
-from ..comms import zmq_single_request
 from .common import re_manager_cmd  # noqa: F401
-from .common import condition_environment_closed, condition_environment_created, wait_for_condition
+from .common import (
+    condition_environment_closed,
+    condition_environment_created,
+    use_zmq_encoding_for_tests,
+    wait_for_condition,
+    zmq_request,
+)
 
 timeout_env_open = 10
 
@@ -22,7 +27,10 @@ def test_console_monitor_cli_parameters_1(monkeypatch, re_manager_cmd, test_mode
     address_info_client_incorrect = "tcp://localhost:60622"
 
     params_server = ["--zmq-publish-console=ON", f"--zmq-info-addr={address_info_server}"]
-    params_client = []
+
+    encoding = use_zmq_encoding_for_tests()
+    params_client = [] if encoding == "json" else [f"--zmq-encoding={encoding}"]
+
     if test_mode == "none":
         # Use default address, communication fails
         success = False
@@ -57,9 +65,9 @@ def test_console_monitor_cli_parameters_1(monkeypatch, re_manager_cmd, test_mode
         stderr=subprocess.PIPE,
     )
 
-    zmq_single_request("environment_open")
+    zmq_request("environment_open")
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
-    zmq_single_request("environment_close")
+    zmq_request("environment_close")
     assert wait_for_condition(time=3, condition=condition_environment_closed)
 
     p_monitor.terminate()

@@ -18,7 +18,7 @@ from pathlib import Path
 import jsonschema
 import yaml
 
-from .comms import default_zmq_control_address_for_server, validate_zmq_key
+from .comms import default_zmq_control_address_for_server, supported_zmq_encodings, validate_zmq_key
 from .config_schemas.loading import ConfigError, load_schema_from_yml
 from .logging_setup import setup_loggers
 from .output_streaming import default_zmq_info_address_for_server
@@ -183,6 +183,7 @@ _key_mapping = {
     "zmq_control_addr": "network/zmq_control_addr",
     "zmq_private_key": "network/zmq_private_key",
     "zmq_info_addr": "network/zmq_info_addr",
+    "zmq_encoding": "network/zmq_encoding",
     "zmq_publish_console": "network/zmq_publish_console",
     "redis_addr": "network/redis_addr",
     "redis_name_prefix": "network/redis_name_prefix",
@@ -335,6 +336,19 @@ class Settings:
             value_config=self._get_value_from_config("zmq_info_addr"),
             value_cli=self._args_existing("zmq_info_addr") or self._args_existing("zmq_publish_console_addr"),
         )
+
+        zmq_encoding = self._get_param(
+            value_default="json",
+            value_ev=os.environ.get("QSERVER_ZMQ_ENCODING_FOR_SERVER", None),
+            value_config=self._get_value_from_config("zmq_encoding"),
+            value_cli=self._args_existing("zmq_encoding"),
+        )
+        zmq_encoding = zmq_encoding.lower()
+        if zmq_encoding.lower() not in supported_zmq_encodings():
+            raise ConfigError(
+                f"0MQ encoding {zmq_encoding!r} is not supported. Supported values: {supported_zmq_encodings()}."
+            )
+        self._settings["zmq_encoding"] = zmq_encoding
 
         self._settings["zmq_publish_console"] = self._get_param_boolean(
             value_default=args.zmq_publish_console,

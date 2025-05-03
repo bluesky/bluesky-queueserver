@@ -39,6 +39,13 @@ def use_ipykernel_for_tests():
     return to_boolean(os.environ.get("USE_IPYKERNEL", None))
 
 
+def use_zmq_encoding_for_tests():
+    """
+    Returns the encoding 'use_ipykernel_for_tests()' for 0MQ messages.
+    """
+    return os.environ.get("USE_ZMQ_ENCODING", "json")
+
+
 def copy_default_profile_collection(tmp_path, *, copy_py=True, copy_yaml=True):
     """
     Copy default profile collections (only .py files) to temporary directory.
@@ -213,7 +220,59 @@ def clear_qserver_zmq_address(mpatch):
     mpatch.delenv(_name_ev_zmq_address)
 
 
-def zmq_secure_request(method, params=None, *, zmq_server_address=None, server_public_key=None):
+_name_ev_zmq_encoding = "_TEST_QSERVER_ZMQ_ENCODING_"
+
+
+def set_qserver_zmq_encoding(mpatch, *, encoding):
+    """
+    Temporarily set environment variable holding server zmq encoding for using with ``zmq_request``.
+    Note, that ``monkeypatch`` should precede the fixture that is starting RE Manager in test
+    parameters. Otherwise the environment variable will be cleared before RE Manager is stopped and
+    the test will fail.
+
+    Parameters
+    ----------
+    mpatch
+        instance of ``monkeypatch``.
+    server_zmq_encoding : str
+        ZMQ encoding (such as 'json' or 'msgpack').
+    """
+    mpatch.setenv(_name_ev_zmq_encoding, encoding)
+
+
+def clear_qserver_zmq_encoding(mpatch):
+    """
+    Clear the environment variable holding server zmq encoding set by ``set_qserver_zmq_encoding``.
+    """
+    mpatch.delenv(_name_ev_zmq_encoding)
+
+
+def zmq_request(
+    method, params=None, *, timeout=None, zmq_server_address=None, encoding=None, server_public_key=None
+):
+    """
+    Calls 'zmq_single_request' function. If 'use_json' parameter is not passed, it sets it automatically
+    based on the value returned by ``use_zmq_encoding_for_tests()`` function.
+    If the encoding is 0, then pass None.
+    """
+    if encoding is None:
+        encoding = os.environ.get(_name_ev_zmq_encoding, None)
+    if encoding is None:
+        encoding = use_zmq_encoding_for_tests()
+    elif encoding == 0:
+        encoding = None
+
+    return zmq_single_request(
+        method=method,
+        params=params,
+        timeout=timeout,
+        zmq_server_address=zmq_server_address,
+        encoding=encoding,
+        server_public_key=server_public_key,
+    )
+
+
+def zmq_secure_request(method, params=None, *, zmq_server_address=None, encoding=None, server_public_key=None):
     """
     Wrapper for 'zmq_single_request'. Verifies if environment variable holding server public key is set
     and passes the key to 'zmq_single_request' . Simplifies writing tests that use RE Manager in secure mode.
@@ -234,6 +293,8 @@ def zmq_secure_request(method, params=None, *, zmq_server_address=None, server_p
     zmq_server_address: str or None
         Address of the ZMQ control socket of RE Manager. An address from the environment variable or
         the default address is used if the value is ``None``.
+    encoding: str
+        Encoding used for sending 0MQ messages: "json" or "msgpack".
     server_public_key: str or None
         Server public key (z85-encoded 40 character string). The Valid public key from the server
         public/private key pair must be passed if encryption is enabled at the 0MQ server side.
@@ -248,32 +309,36 @@ def zmq_secure_request(method, params=None, *, zmq_server_address=None, server_p
     # Use the address from env. variable if 'zmq_server_address' is None
     zmq_server_address = zmq_server_address or os.environ.get(_name_ev_zmq_address, None)
 
-    return zmq_single_request(
-        method=method, params=params, zmq_server_address=zmq_server_address, server_public_key=server_public_key
+    return zmq_request(
+        method=method,
+        params=params,
+        zmq_server_address=zmq_server_address,
+        encoding=encoding,
+        server_public_key=server_public_key,
     )
 
 
-def get_manager_status():
+def get_manager_status(*, encoding=None):
     method, params = "status", None
-    msg, _ = zmq_secure_request(method, params)
+    msg, _ = zmq_secure_request(method, params, encoding=encoding)
     if msg is None:
         raise TimeoutError("Timeout occurred while reading RE Manager status.")
     return msg
 
 
-def get_queue():
+def get_queue(*, encoding=None):
     """
     Returns current queue.
     """
     method, params = "queue_get", None
-    msg, _ = zmq_secure_request(method, params)
+    msg, _ = zmq_secure_request(method, params, encoding=encoding)
     if msg is None:
         raise TimeoutError("Timeout occurred while loading queue from RE Manager.")
     return msg
 
 
-def get_queue_state():
-    msg = get_manager_status()
+def get_queue_state(*, encoding=None):
+    msg = get_manager_status(encoding=encoding)
     items_in_queue = msg["items_in_queue"]
     queue_is_running = msg["manager_state"] == "executing_queue"
     items_in_history = msg["items_in_history"]
@@ -322,7 +387,7 @@ def condition_ip_kernel_busy(msg):
     return msg["ip_kernel_state"] == "busy"
 
 
-def wait_for_condition(time, condition):
+def wait_for_condition(time, condition, *, encoding=None):
     """
     Wait until queue is processed. Note: processing of TimeoutError is needed for
     monitoring RE Manager while it is restarted.
@@ -332,7 +397,7 @@ def wait_for_condition(time, condition):
     while ttime.time() < time_stop:
         ttime.sleep(dt / 2)
         try:
-            msg = get_manager_status()
+            msg = get_manager_status(encoding=encoding)
             if condition(msg):
                 return True
         except TimeoutError:
@@ -341,7 +406,7 @@ def wait_for_condition(time, condition):
     return False
 
 
-def wait_for_task_result(time, task_uid):
+def wait_for_task_result(time, task_uid, *, encoding=None):
     """
     Wait for the results of the task defined by ``task_uid``. Raises ``TimeoutError`` if
     timeout ``time`` is exceeded while waiting for the task result. Returns the task result
@@ -352,7 +417,7 @@ def wait_for_task_result(time, task_uid):
     while ttime.time() < time_stop:
         ttime.sleep(dt / 2)
         try:
-            resp, _ = zmq_secure_request("task_result", params={"task_uid": task_uid})
+            resp, _ = zmq_secure_request("task_result", params={"task_uid": task_uid}, encoding=encoding)
 
             assert resp["success"] is True, f"Request for task result failed: {resp['msg']}"
             assert resp["task_uid"] == task_uid
@@ -444,6 +509,13 @@ class ReManager:
         if not any([_.startswith("--use-ipython-kernel") for _ in params]) and use_ipykernel_for_tests():
             params.append("--use-ipython-kernel=ON")
 
+        # Set the encoding for 0MQ communication
+        if not any([_.startswith("--zmq-encoding") for _ in params]):
+            params.append(f"--zmq-encoding={use_zmq_encoding_for_tests()}")
+        # Remove --zmq-encoding=0   # Do not pass the parameter at all
+        if "--zmq-encoding=0" in params:
+            params.remove("--zmq-encoding=0")
+
         # Set default name prefix for Redis keys
         name_prefix_params = [_ for _ in params if _.startswith("--redis-name-prefix")]
         if name_prefix_params:
@@ -459,6 +531,7 @@ class ReManager:
             cmd = ["start-re-manager"]
             if params:
                 cmd += params
+
             self._p = subprocess.Popen(cmd, universal_newlines=True, stdout=stdout, stderr=stderr)
 
     def check_if_stopped(self, timeout=5):
@@ -695,7 +768,7 @@ class IPKernelClient:
         if self.ip_kernel_client:
             self.stop()
 
-        resp, _ = zmq_single_request("config_get")
+        resp, _ = zmq_request("config_get")
         assert resp["success"] is True, pprint.pformat(resp)
         assert "config" in resp, pprint.pformat(resp)
         assert "ip_connect_info" in resp["config"], pprint.pformat(resp)

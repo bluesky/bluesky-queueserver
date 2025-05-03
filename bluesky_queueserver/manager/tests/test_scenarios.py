@@ -6,7 +6,7 @@ import pytest
 
 import bluesky_queueserver
 
-from ..comms import generate_zmq_keys, zmq_single_request
+from ..comms import generate_zmq_keys
 from .common import (  # noqa: F401
     _user,
     _user_group,
@@ -21,6 +21,7 @@ from .common import (  # noqa: F401
     re_manager_pc_copy,
     set_qserver_zmq_public_key,
     wait_for_condition,
+    zmq_request,
     zmq_secure_request,
 )
 
@@ -50,66 +51,66 @@ def test_zmq_api_queue_execution_1(re_manager):  # noqa: F811
 
     # Instruction STOP
     params1a = {"item": _instruction_stop, "user": _user, "user_group": _user_group}
-    resp1a, _ = zmq_single_request("queue_item_add", params1a)
+    resp1a, _ = zmq_request("queue_item_add", params1a)
     assert resp1a["success"] is True, f"resp={resp1a}"
     assert resp1a["msg"] == ""
     assert resp1a["item"]["name"] == "queue_stop"
 
     # Plan
     params1b = {"item": _plan1, "user": _user, "user_group": _user_group}
-    resp1b, _ = zmq_single_request("queue_item_add", params1b)
+    resp1b, _ = zmq_request("queue_item_add", params1b)
     assert resp1b["success"] is True, f"resp={resp1b}"
 
     # Instruction STOP
     params1c = {"item": _instruction_stop, "user": _user, "user_group": _user_group}
-    resp1c, _ = zmq_single_request("queue_item_add", params1c)
+    resp1c, _ = zmq_request("queue_item_add", params1c)
     assert resp1c["success"] is True, f"resp={resp1c}"
     assert resp1c["msg"] == ""
     assert resp1c["item"]["name"] == "queue_stop"
 
     # Plan
     params1d = {"item": _plan2, "user": _user, "user_group": _user_group}
-    resp1d, _ = zmq_single_request("queue_item_add", params1d)
+    resp1d, _ = zmq_request("queue_item_add", params1d)
     assert resp1d["success"] is True, f"resp={resp1d}"
 
     # The queue contains only a single instruction (stop the queue).
-    resp2, _ = zmq_single_request("environment_open")
+    resp2, _ = zmq_request("environment_open")
     assert resp2["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-    resp2a, _ = zmq_single_request("status")
+    resp2a, _ = zmq_request("status")
     assert resp2a["items_in_queue"] == 4
     assert resp2a["items_in_history"] == 0
 
-    resp3, _ = zmq_single_request("queue_start")
+    resp3, _ = zmq_request("queue_start")
     assert resp3["success"] is True
 
     assert wait_for_condition(time=5, condition=condition_manager_idle)
 
-    resp3a, _ = zmq_single_request("status")
+    resp3a, _ = zmq_request("status")
     assert resp3a["items_in_queue"] == 3
     assert resp3a["items_in_history"] == 0
 
-    resp4, _ = zmq_single_request("queue_start")
+    resp4, _ = zmq_request("queue_start")
     assert resp4["success"] is True
 
     assert wait_for_condition(time=5, condition=condition_manager_idle)
 
-    resp4a, _ = zmq_single_request("status")
+    resp4a, _ = zmq_request("status")
     assert resp4a["items_in_queue"] == 1
     assert resp4a["items_in_history"] == 1
 
-    resp5, _ = zmq_single_request("queue_start")
+    resp5, _ = zmq_request("queue_start")
     assert resp5["success"] is True
 
     assert wait_for_condition(time=5, condition=condition_queue_processing_finished)
 
-    resp5a, _ = zmq_single_request("status")
+    resp5a, _ = zmq_request("status")
     assert resp5a["items_in_queue"] == 0
     assert resp5a["items_in_history"] == 2
 
     # Close the environment
-    resp6, _ = zmq_single_request("environment_close")
+    resp6, _ = zmq_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
@@ -164,65 +165,65 @@ def test_zmq_api_queue_execution_2(re_manager):  # noqa: F811
 
     # Plan
     params1b = {"item": _plan3, "user": _user, "user_group": _user_group}
-    resp1b, _ = zmq_single_request("queue_item_add", params1b)
+    resp1b, _ = zmq_request("queue_item_add", params1b)
     assert resp1b["success"] is True, f"resp={resp1b}"
     uid_checker.verify_uid_changes(pq_changed=True, ph_changed=False)
 
     # Plan
     params1d = {"item": _plan3, "user": _user, "user_group": _user_group}
-    resp1d, _ = zmq_single_request("queue_item_add", params1d)
+    resp1d, _ = zmq_request("queue_item_add", params1d)
     assert resp1d["success"] is True, f"resp={resp1d}"
     uid_checker.verify_uid_changes(pq_changed=True, ph_changed=False)
 
     # The queue contains only a single instruction (stop the queue).
-    resp2, _ = zmq_single_request("environment_open")
+    resp2, _ = zmq_request("environment_open")
     assert resp2["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-    resp2a, _ = zmq_single_request("status")
+    resp2a, _ = zmq_request("status")
     assert resp2a["items_in_queue"] == 2
     assert resp2a["items_in_history"] == 0
 
     uid_checker.verify_uid_changes(pq_changed=False, ph_changed=False)
 
-    resp3, _ = zmq_single_request("queue_start")
+    resp3, _ = zmq_request("queue_start")
     assert resp3["success"] is True
     ttime.sleep(1)
     uid_checker.verify_uid_changes(pq_changed=True, ph_changed=False)
 
-    resp3a, _ = zmq_single_request("queue_stop")
+    resp3a, _ = zmq_request("queue_stop")
     assert resp3a["success"] is True
 
     assert wait_for_condition(time=20, condition=condition_manager_idle)
     uid_checker.verify_uid_changes(pq_changed=True, ph_changed=True)
 
-    resp3b, _ = zmq_single_request("status")
+    resp3b, _ = zmq_request("status")
     assert resp3b["items_in_queue"] == 1
     assert resp3b["items_in_history"] == 1
 
-    resp5, _ = zmq_single_request("queue_start")
+    resp5, _ = zmq_request("queue_start")
     assert resp5["success"] is True
     ttime.sleep(1)
     uid_checker.verify_uid_changes(pq_changed=True, ph_changed=False)
 
-    resp5a, _ = zmq_single_request("re_pause", params={"option": "immediate"})
+    resp5a, _ = zmq_request("re_pause", params={"option": "immediate"})
     assert resp5a["success"] is True, str(resp5a)
 
     assert wait_for_condition(time=20, condition=condition_manager_paused)
     uid_checker.verify_uid_changes(pq_changed=False, ph_changed=False)
 
-    resp5b, _ = zmq_single_request("re_abort")
+    resp5b, _ = zmq_request("re_abort")
     assert resp5b["success"] is True, str(resp5b)
 
     assert wait_for_condition(time=20, condition=condition_manager_idle)
     uid_checker.verify_uid_changes(pq_changed=True, ph_changed=True)
 
-    resp5a, _ = zmq_single_request("status")
+    resp5a, _ = zmq_request("status")
     assert resp5a["items_in_queue"] == 1
     assert resp5a["items_in_history"] == 2
 
     # Close the environment
-    resp6, _ = zmq_single_request("environment_close")
+    resp6, _ = zmq_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
     assert wait_for_condition(time=30, condition=condition_environment_closed)
 
@@ -309,7 +310,7 @@ def test_zmq_api_queue_execution_4(re_manager, stop_queue, pause_before_kill):  
     """
 
     def _check_status(n_queue, n_hist, m_state, re_state, pause_pend):
-        resp, _ = zmq_single_request("status")
+        resp, _ = zmq_request("status")
         assert resp["items_in_queue"] == n_queue
         assert resp["items_in_history"] == n_hist
         assert resp["manager_state"] == m_state
@@ -319,29 +320,29 @@ def test_zmq_api_queue_execution_4(re_manager, stop_queue, pause_before_kill):  
     # Add 2 plans
     for _ in range(2):
         params1a = {"item": _plan4, "user": _user, "user_group": _user_group}
-        resp1a, _ = zmq_single_request("queue_item_add", params1a)
+        resp1a, _ = zmq_request("queue_item_add", params1a)
         assert resp1a["success"] is True, f"resp={resp1a}"
 
     # The queue contains only a single instruction (stop the queue).
-    resp2, _ = zmq_single_request("environment_open")
+    resp2, _ = zmq_request("environment_open")
     assert resp2["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     _check_status(2, 0, "idle", "idle", False)
 
-    resp3, _ = zmq_single_request("queue_start")
+    resp3, _ = zmq_request("queue_start")
     assert resp3["success"] is True
 
     if stop_queue:
         ttime.sleep(1)  # Wait for the plan to start
-        resp3a, _ = zmq_single_request("queue_stop")
+        resp3a, _ = zmq_request("queue_stop")
         assert resp3a["success"] is True, f"{resp3a}"
 
         _check_status(1, 0, "executing_queue", "running", False)
 
     else:
         ttime.sleep(pause_before_kill)  # ~50% of the second (last) measurement of the 1st plan
-        zmq_single_request("manager_kill")
+        zmq_request("manager_kill")
         ttime.sleep(6)  # Wait until the manager is restarted
 
         if pause_before_kill < 6:
@@ -354,12 +355,12 @@ def test_zmq_api_queue_execution_4(re_manager, stop_queue, pause_before_kill):  
     assert wait_for_condition(time=20, condition=condition_manager_idle)
 
     if stop_queue:
-        zmq_single_request("manager_kill")
+        zmq_request("manager_kill")
         ttime.sleep(6)  # Wait until the manager is restarted
         _check_status(1, 1, "idle", "idle", False)
 
     # Execute the remaining plans (if any plans left)
-    resp4, _ = zmq_single_request("queue_start")
+    resp4, _ = zmq_request("queue_start")
     assert resp4["success"] is True
 
     assert wait_for_condition(time=20, condition=condition_queue_processing_finished)
@@ -367,7 +368,7 @@ def test_zmq_api_queue_execution_4(re_manager, stop_queue, pause_before_kill):  
     _check_status(0, 2, "idle", "idle", False)
 
     # Close the environment
-    resp6, _ = zmq_single_request("environment_close")
+    resp6, _ = zmq_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
@@ -400,29 +401,29 @@ def test_blocking_plan_01(re_manager):  # noqa: F811
     - start execution of a function, wait for completion and verify the result;
     - destroy the environment.
     """
-    resp1, _ = zmq_single_request("environment_open")
+    resp1, _ = zmq_request("environment_open")
     assert resp1["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-    resp2, _ = zmq_single_request("script_upload", params={"script": script_blocking_plan})
+    resp2, _ = zmq_request("script_upload", params={"script": script_blocking_plan})
     assert resp2["success"] is True
     assert wait_for_condition(time=10, condition=condition_manager_idle)
 
-    resp3, _ = zmq_single_request("plans_allowed", params={"user_group": _user_group})
+    resp3, _ = zmq_request("plans_allowed", params={"user_group": _user_group})
     assert resp3["success"] is True, resp3
     assert "blocking_plan" in resp3["plans_allowed"]
 
     params = {"item": {"item_type": "plan", "name": "blocking_plan"}}
     params.update({"user": _user, "user_group": _user_group})
-    resp4, _ = zmq_single_request("queue_item_add", params=params)
+    resp4, _ = zmq_request("queue_item_add", params=params)
     assert resp4["success"] is True, pprint.pformat(resp4)
 
-    resp5, _ = zmq_single_request("queue_start")
+    resp5, _ = zmq_request("queue_start")
     assert resp4["success"] is True, resp5
 
     ttime.sleep(1)
 
-    resp6, _ = zmq_single_request("re_pause")
+    resp6, _ = zmq_request("re_pause")
     assert resp6["success"] is True, resp6
 
     state = get_manager_status()
@@ -433,25 +434,25 @@ def test_blocking_plan_01(re_manager):  # noqa: F811
     delay = 0.5
     func_item = {"name": "function_sleep", "item_type": "function", "args": [delay]}
     params = {"item": func_item, "run_in_background": True, "user": _user, "user_group": _test_user_group}
-    resp7, _ = zmq_single_request("function_execute", params=params)
+    resp7, _ = zmq_request("function_execute", params=params)
     assert resp7["success"] is True
     task_uid = resp7["task_uid"]
 
     t_start = ttime.time()
     while True:
-        resp8, _ = zmq_single_request("task_status", params={"task_uid": task_uid})
+        resp8, _ = zmq_request("task_status", params={"task_uid": task_uid})
         assert resp8["success"] is True
         if resp8["status"] == "completed":
             break
         assert ttime.time() - t_start < 10
         ttime.sleep(0.1)
 
-    resp9, _ = zmq_single_request("task_result", params={"task_uid": task_uid})
+    resp9, _ = zmq_request("task_result", params={"task_uid": task_uid})
     assert resp9["success"] is True
     assert resp9["status"] == "completed"
     assert resp9["result"]["return_value"] == {"success": True, "time": delay}
 
-    resp10, _ = zmq_single_request("environment_destroy")
+    resp10, _ = zmq_request("environment_destroy")
     assert resp10["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_closed)
 
@@ -460,7 +461,7 @@ def poll_for_task_completion(task_uid, *, timeout):
     # Simplified polling
     t_start = ttime.time()
     while True:
-        resp, _ = zmq_single_request("task_status", params={"task_uid": task_uid})
+        resp, _ = zmq_request("task_status", params={"task_uid": task_uid})
         assert resp["success"] is True
         if resp["status"] == "completed":
             break
@@ -494,44 +495,44 @@ def test_large_datasets_01(re_manager, background):  # noqa: F811
     n_elements, timeout_ms = 1000000, 15000
     vlist = [random.random() for _ in range(n_elements)]
 
-    resp1, _ = zmq_single_request("environment_open")
+    resp1, _ = zmq_request("environment_open")
     assert resp1["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-    resp2, _ = zmq_single_request("script_upload", params={"script": script_upload_download_data})
+    resp2, _ = zmq_request("script_upload", params={"script": script_upload_download_data})
     assert resp2["success"] is True
     assert wait_for_condition(time=10, condition=condition_manager_idle)
 
     if background:
         params = {"item": _plan4, "user": _user, "user_group": _user_group}
-        resp, _ = zmq_single_request("queue_item_add", params)
+        resp, _ = zmq_request("queue_item_add", params)
         assert resp["success"] is True, pprint.pformat(resp)
 
-        resp, _ = zmq_single_request("queue_start")
+        resp, _ = zmq_request("queue_start")
         assert resp["success"] is True, pprint.pformat(resp)
 
     func_item = {"name": "unit_test_upload_data", "item_type": "function", "kwargs": {"data": vlist}}
     params = {"item": func_item, "run_in_background": background, "user": _user, "user_group": _test_user_group}
-    resp3, _ = zmq_single_request("function_execute", params=params, timeout=timeout_ms)
+    resp3, _ = zmq_request("function_execute", params=params, timeout=timeout_ms)
     assert resp3["success"] is True
     task_uid = resp3["task_uid"]
 
     poll_for_task_completion(task_uid, timeout=10)
 
-    resp4, _ = zmq_single_request("task_result", params={"task_uid": task_uid})
+    resp4, _ = zmq_request("task_result", params={"task_uid": task_uid})
     assert resp4["success"] is True
     assert resp4["status"] == "completed"
     assert resp4["result"]["return_value"] == "Data is received"
 
     func_item = {"name": "unit_test_download_data", "item_type": "function"}
     params = {"item": func_item, "run_in_background": background, "user": _user, "user_group": _test_user_group}
-    resp5, _ = zmq_single_request("function_execute", params=params, timeout=timeout_ms)
+    resp5, _ = zmq_request("function_execute", params=params, timeout=timeout_ms)
     assert resp5["success"] is True, pprint.pformat(resp5)
     task_uid = resp5["task_uid"]
 
     poll_for_task_completion(task_uid, timeout=30)
 
-    resp6, _ = zmq_single_request("task_result", params={"task_uid": task_uid})
+    resp6, _ = zmq_request("task_result", params={"task_uid": task_uid})
     assert resp6["success"] is True
     assert resp6["status"] == "completed"
     assert resp6["result"]["return_value"] == vlist
@@ -542,7 +543,7 @@ def test_large_datasets_01(re_manager, background):  # noqa: F811
     assert status["items_in_queue"] == 0
     assert status["items_in_history"] == (1 if background else 0)
 
-    resp10, _ = zmq_single_request("environment_destroy")
+    resp10, _ = zmq_request("environment_destroy")
     assert resp10["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_closed)
 
@@ -571,26 +572,26 @@ def test_large_datasets_02(re_manager):  # noqa: F811
     n_elements, timeout_ms = 1000000, 15000
     vlist = [random.random() for _ in range(n_elements)]
 
-    resp1, _ = zmq_single_request("environment_open")
+    resp1, _ = zmq_request("environment_open")
     assert resp1["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-    resp2, _ = zmq_single_request("script_upload", params={"script": script_plan_processing_large_array})
+    resp2, _ = zmq_request("script_upload", params={"script": script_plan_processing_large_array})
     assert resp2["success"] is True
     assert wait_for_condition(time=10, condition=condition_manager_idle)
 
     plan = {"name": "plan_large_array", "kwargs": {"vlist": vlist, "n": len(vlist)}, "item_type": "plan"}
     params = {"item": plan, "user": _user, "user_group": _user_group}
-    resp, _ = zmq_single_request("queue_item_add", params, timeout=timeout_ms)
+    resp, _ = zmq_request("queue_item_add", params, timeout=timeout_ms)
     assert resp["success"] is True, pprint.pformat(resp)
 
-    resp4, _ = zmq_single_request("queue_get", timeout=timeout_ms)
+    resp4, _ = zmq_request("queue_get", timeout=timeout_ms)
     assert resp4["success"] is True, pprint.pformat(resp4)
     assert len(resp4["items"]) == 1
     assert resp4["items"][0]["kwargs"]["vlist"] == vlist
     assert resp4["items"][0]["kwargs"]["n"] == len(vlist)
 
-    resp, _ = zmq_single_request("queue_start")
+    resp, _ = zmq_request("queue_start")
     assert resp["success"] is True, pprint.pformat(resp)
 
     assert wait_for_condition(time=30, condition=condition_manager_idle)
@@ -599,7 +600,7 @@ def test_large_datasets_02(re_manager):  # noqa: F811
     assert status["items_in_queue"] == 0
     assert status["items_in_history"] == 1
 
-    resp10, _ = zmq_single_request("environment_destroy")
+    resp10, _ = zmq_request("environment_destroy")
     assert resp10["success"] is True
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_closed)
 
@@ -626,7 +627,7 @@ def test_large_datasets_03(re_manager, plan, n_plans, timeout_ms):  # noqa: F811
     plans = [plan] * n_plans
     params = {"items": plans, "user": _user, "user_group": _user_group}
 
-    resp, _ = zmq_single_request("queue_item_add_batch", params, timeout=timeout_ms)
+    resp, _ = zmq_request("queue_item_add_batch", params, timeout=timeout_ms)
     assert "success" in resp, pprint.pformat(resp)
     assert resp["success"] is True, pprint.pformat(resp)
 
@@ -634,12 +635,12 @@ def test_large_datasets_03(re_manager, plan, n_plans, timeout_ms):  # noqa: F811
     assert status["items_in_queue"] == n_plans
     assert status["items_in_history"] == 0
 
-    resp, _ = zmq_single_request("queue_get", timeout=timeout_ms)
+    resp, _ = zmq_request("queue_get", timeout=timeout_ms)
     assert "success" in resp, pprint.pformat(resp)
     assert resp["success"] is True, pprint.pformat(resp)
     assert len(resp["items"]) == n_plans
 
-    resp, _ = zmq_single_request("queue_clear")
+    resp, _ = zmq_request("queue_clear")
     assert "success" in resp, pprint.pformat(resp)
     assert resp["success"] is True, pprint.pformat(resp)
 

@@ -6,7 +6,6 @@ import subprocess
 import pytest
 
 from bluesky_queueserver import gen_list_of_plans_and_devices
-from bluesky_queueserver.manager.comms import zmq_single_request
 
 from .common import re_manager_cmd  # noqa: F401
 from .common import (
@@ -18,6 +17,7 @@ from .common import (
     condition_queue_processing_finished,
     copy_default_profile_collection,
     wait_for_condition,
+    zmq_request,
 )
 
 _plan1 = {"name": "count", "args": [["det1", "det2"]], "item_type": "plan"}
@@ -76,28 +76,28 @@ def test_manager_options_startup_profile(re_manager_cmd, tmp_path, monkeypatch, 
         assert False, f"Unknown option '{option}'"
 
     # Open the environment (make sure that the environment loads)
-    resp1, _ = zmq_single_request("environment_open")
+    resp1, _ = zmq_request("environment_open")
     assert resp1["success"] is True
     assert wait_for_condition(time=10, condition=condition_environment_created)
 
     # Add the plan to the queue (will fail if incorrect environment is loaded)
     plan = {"name": "simple_sample_plan", "item_type": "plan"}
     params = {"item": plan, "user": _user, "user_group": _user_group}
-    resp2, _ = zmq_single_request("queue_item_add", params)
+    resp2, _ = zmq_request("queue_item_add", params)
     assert resp2["success"] is True, f"resp={resp2}"
 
     # Start the queue
-    resp3, _ = zmq_single_request("queue_start")
+    resp3, _ = zmq_request("queue_start")
     assert resp3["success"] is True
     assert wait_for_condition(time=10, condition=condition_queue_processing_finished)
 
     # Make sure that the plan was executed
-    resp4, _ = zmq_single_request("status")
+    resp4, _ = zmq_request("status")
     assert resp4["items_in_queue"] == 0
     assert resp4["items_in_history"] == 1
 
     # Close the environment
-    resp5, _ = zmq_single_request("environment_close")
+    resp5, _ = zmq_request("environment_close")
     assert resp5["success"] is True, f"resp={resp5}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
@@ -125,7 +125,7 @@ def test_manager_redis_addr_parameter(re_manager_cmd, redis_addr, success):  # n
 
         # Try to communicate with the server to make sure Redis is configure correctly.
         #   RE Manager has to access Redis in order to prepare 'status'.
-        resp1, _ = zmq_single_request("status")
+        resp1, _ = zmq_request("status")
         assert resp1["items_in_queue"] == 0
         assert resp1["items_in_history"] == 0
     else:

@@ -1259,7 +1259,7 @@ def qserver():
 
     parser = argparse.ArgumentParser(
         description="Command-line tool for communicating with RE Monitor.\n"
-        f"bluesky-queueserver version {qserver_version}.\n",
+        f"bluesky-queueserver version {qserver_version}\n",
         formatter_class=formatter,
         epilog=f"\n\n{s_enc}\n\n{cli_examples}\n\n",
     )
@@ -1397,7 +1397,7 @@ def qserver_zmq_keys():
 
     parser = argparse.ArgumentParser(
         description="Bluesky-QServer:\nZMQ security: Generate public-private key pair for "
-        f"ZeroMQ control communication channel.\nbluesky-queueserver version {qserver_version}.\n\n"
+        f"ZeroMQ control communication channel.\nbluesky-queueserver version {qserver_version}\n\n"
         f"Generate new public-private key pair for secured 0MQ control connection between\n"
         f"RE Manager and client applications. If private key is passed as ``--zmq-private-key``\n"
         f"parameter, then the generated key pair is based on the provided private key.\n",
@@ -1449,7 +1449,7 @@ def qserver_clear_lock():
 
     parser = argparse.ArgumentParser(
         description="Bluesky-QServer: Clear RE Manager lock.\n"
-        f"bluesky-queueserver version {qserver_version}.\n\n"
+        f"bluesky-queueserver version {qserver_version}\n\n"
         "Recover locked RE Manager if the lock key is lost. The utility requires access to Redis\n"
         "used by RE Manager. Provide the address of Redis service using '--redis-addr' parameter.\n"
         "Restart the RE Manager service after clearing the lock.\n",
@@ -1509,7 +1509,7 @@ def qserver_console_base(*, app_name):
 
     parser = argparse.ArgumentParser(
         description="Bluesky-QServer: Start Jupyter console for IPython kernel running in the worker process.\n"
-        f"bluesky-queueserver version {qserver_version}.\n\n"
+        f"bluesky-queueserver version {qserver_version}\n\n"
         "Requests IPython kernel connection info from RE Manager and starts Jupyter Console. The RE Worker\n"
         "must be running (environment opened) and using IPython kernel. The address of 0MQ control port of\n"
         "RE Manager can be passed as a parameter or an environment variable. If encryption of the control\n"

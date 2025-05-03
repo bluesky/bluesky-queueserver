@@ -15,6 +15,33 @@ and CLI parameters. Parameters passed using config file(s) override the paramete
 passed using environment variables. Parameters passed using CLI override all other
 parameters.
 
+Configuring 0MQ Communication
+-----------------------------
+
+RE Manager opens two 0MQ sockets for communication with clients: REP socket for
+receiving and replying to control commands from clients and PUB socket for streaming
+information (console output) to clients. The socket addresses, if different from
+default, may be set using ``--zmq-control-addr`` and ``--zmq-info-addr`` CLI parameters
+of ``start-re-manager``. The addresses may also be set using environment variables
+or config file parameters.
+
+If RE Manager and the client (e.g. HTTP Server) are running on the same host,
+0MQ may be configured to use IPC communication. RE Manager and the clients accept
+IPC addresses, such as ``ipc:///tmp/my_channel`` or ``ipc://@my_channel``.
+IPC may be used both for control communication and info streaming.
+
+Incoming communication in the control channel may be encrypted using configurable
+public/private key pair. The private key for RE Manager is set using
+``QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER`` environment variable. The key pair may be generated
+using using :ref:`qserver_zmq_keys_cli` CLI tool. If encryption
+is enabled, the outgoing message are also encrypted, but the key pair is fixed and
+can not be changed. Customization of the key pair for outgoing messages may be changed
+if necessary.
+
+The 0MQ messages are encoded as JSON by default. RE Manager also supports MSGPACK encoding.
+The encoding is set for both sockets using ``--zmq-encoding`` CLI parameter or respective
+environment variable or config file parameter.
+
 CLI Parameters
 --------------
 
@@ -40,6 +67,11 @@ Several parameters can be passed to RE Manager using environment variables:
   - ``QSERVER_ZMQ_INFO_ADDRESS_FOR_SERVER`` - address of the 0MQ PUB-SUB socked used to
     publish console output. The address may also be set in the config file or passed using
     ``--zmq-info-addr`` CLI parameter.
+
+  - ``QSERVER_ZMQ_ENCODING_FOR_SERVER`` - encoding for messages passed over 0MQ sockets
+    (both CONTROL and INFO). The encoding may also be set in the config file or passed
+    using ``--zmq-encoding`` CLI parameter. The supported values are *'json'* (default)
+    and *'msgpack'*.
 
   - ``QSERVER_EMERGENCY_LOCK_KEY_FOR_SERVER`` - emergency lock key used to unlock RE Manager
     if the lock key set by a user is lost. The key may also be set in the config file.
@@ -96,6 +128,7 @@ most of the supported parameters:
       zmq_control_addr: tcp://*:60615
       zmq_private_key: ${CUSTOM_EV_FOR_PRIVATE_KEY}
       zmq_info_addr: tcp://*:60625
+      zmq_encoding: json
       zmq_publish_console: true
       redis_addr: localhost:6379
       redis_name_prefix: qs_default
@@ -160,6 +193,10 @@ Parameters that define for network settings used by RE Manager:
 - ``zmq_info_addr`` - address of the 0MQ PUB-SUB socked used to publish console output. The address
   may also be passed using environment variable QSERVER_ZMQ_INFO_ADDRESS_FOR_SERVER or
   ``--zmq-info-addr`` CLI parameter. Address format: ``tcp://*:60625``.
+
+- ``zmq_encoding`` - encoding used for sending and receiving 0MQ messages in all the sockets.
+  The encoding may also be set using ``--zmq-encoding`` CLI parameter or ``QSERVER_ZMQ_ENCODING_FOR_SERVER``
+  environment variables. The supported values are *'json'* (default) and *'msgpack'*.
 
 - ``zmq_publish_console`` - enable or disable publishing console output to the socket set using
   ``zmq_info_addr``. Accepted values are ``true`` and ``false``. The value can also passed using

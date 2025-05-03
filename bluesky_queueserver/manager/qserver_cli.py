@@ -19,7 +19,6 @@ import yaml
 import bluesky_queueserver
 
 from .comms import (
-    ZMQEncoding,
     default_zmq_control_address,
     generate_zmq_keys,
     generate_zmq_public_key,

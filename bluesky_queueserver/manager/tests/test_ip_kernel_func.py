@@ -3,7 +3,6 @@ import time as ttime
 
 import pytest
 
-from ..comms import zmq_single_request
 from .common import ip_kernel_simple_client  # noqa: F401
 from .common import re_manager  # noqa: F401
 from .common import re_manager_cmd  # noqa: F401
@@ -24,6 +23,7 @@ from .common import (
     use_ipykernel_for_tests,
     wait_for_condition,
     wait_for_task_result,
+    zmq_request,
 )
 
 timeout_env_open = 20
@@ -61,7 +61,7 @@ def test_ip_kernel_loading_script_01(tmp_path, re_manager_cmd):  # noqa: F811
     params = ["--startup-dir", pc_path]
     re_manager_cmd(params)
 
-    resp2, _ = zmq_single_request("environment_open")
+    resp2, _ = zmq_request("environment_open")
     assert resp2["success"] is True
     assert resp2["msg"] == ""
 
@@ -71,7 +71,7 @@ def test_ip_kernel_loading_script_01(tmp_path, re_manager_cmd):  # noqa: F811
     else:
         assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-        resp9, _ = zmq_single_request("environment_close")
+        resp9, _ = zmq_request("environment_close")
         assert resp9["success"] is True
         assert resp9["msg"] == ""
 
@@ -85,13 +85,13 @@ def test_ip_kernel_loading_script_02(re_manager):  # noqa: F811
     """
     using_ipython = use_ipykernel_for_tests()
 
-    resp2, _ = zmq_single_request("environment_open")
+    resp2, _ = zmq_request("environment_open")
     assert resp2["success"] is True
     assert resp2["msg"] == ""
 
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-    resp3, _ = zmq_single_request("script_upload", params={"script": _script_with_ip_features})
+    resp3, _ = zmq_request("script_upload", params={"script": _script_with_ip_features})
     assert resp3["success"] is True, pprint.pformat(resp3)
 
     result = wait_for_task_result(10, resp3["task_uid"])
@@ -102,7 +102,7 @@ def test_ip_kernel_loading_script_02(re_manager):  # noqa: F811
         assert result["success"] is True, pprint.pformat(result)
         assert result["msg"] == "", pprint.pformat(result)
 
-    resp9, _ = zmq_single_request("environment_close")
+    resp9, _ = zmq_request("environment_close")
     assert resp9["success"] is True
     assert resp9["msg"] == ""
 
@@ -132,7 +132,7 @@ def test_ip_kernel_run_plans_01(re_manager, plan_option, resume_option):  # noqa
 
     check_status(None, None)
 
-    resp2, _ = zmq_single_request("environment_open")
+    resp2, _ = zmq_request("environment_open")
     assert resp2["success"] is True
     assert resp2["msg"] == ""
 
@@ -145,16 +145,12 @@ def test_ip_kernel_run_plans_01(re_manager, plan_option, resume_option):  # noqa
 
     if plan_option in ("queue", "plan"):
         if plan_option == "queue":
-            resp, _ = zmq_single_request(
-                "queue_item_add", {"item": _plan4, "user": _user, "user_group": _user_group}
-            )
+            resp, _ = zmq_request("queue_item_add", {"item": _plan4, "user": _user, "user_group": _user_group})
             assert resp["success"] is True
-            resp, _ = zmq_single_request("queue_start")
+            resp, _ = zmq_request("queue_start")
             assert resp["success"] is True
         elif plan_option == "plan":
-            resp, _ = zmq_single_request(
-                "queue_item_execute", {"item": _plan4, "user": _user, "user_group": _user_group}
-            )
+            resp, _ = zmq_request("queue_item_execute", {"item": _plan4, "user": _user, "user_group": _user_group})
             assert resp["success"] is True
         else:
             assert False, f"Unsupported option: {plan_option!r}"
@@ -171,7 +167,7 @@ def test_ip_kernel_run_plans_01(re_manager, plan_option, resume_option):  # noqa
 
         ttime.sleep(1)
 
-        resp, _ = zmq_single_request("re_pause")
+        resp, _ = zmq_request("re_pause")
         assert resp["success"] is True, pprint.pformat(resp)
 
         wait_for_condition(time=10, condition=condition_manager_paused)
@@ -180,7 +176,7 @@ def test_ip_kernel_run_plans_01(re_manager, plan_option, resume_option):  # noqa
         assert s["manager_state"] == "paused"
         assert s["worker_environment_state"] == "idle"
 
-        resp, _ = zmq_single_request(f"re_{resume_option}")
+        resp, _ = zmq_request(f"re_{resume_option}")
         assert resp["success"] is True, pprint.pformat(resp)
 
         if resume_option == "resume":
@@ -201,7 +197,7 @@ def test_ip_kernel_run_plans_01(re_manager, plan_option, resume_option):  # noqa
         assert s["items_in_queue"] == n_items_in_queue
         assert s["items_in_history"] == 1
 
-        resp, _ = zmq_single_request("history_get")
+        resp, _ = zmq_request("history_get")
         assert resp["success"] is True, pprint.pformat(resp)
         history_items = resp["items"]
         exit_status = history_items[0]["result"]["exit_status"]
@@ -214,7 +210,7 @@ def test_ip_kernel_run_plans_01(re_manager, plan_option, resume_option):  # noqa
     else:
         assert False, f"Unsupported option: {plan_option!r}"
 
-    resp9, _ = zmq_single_request("environment_close")
+    resp9, _ = zmq_request("environment_close")
     assert resp9["success"] is True
     assert resp9["msg"] == ""
 
@@ -247,7 +243,7 @@ def test_ip_kernel_run_plans_02(re_manager, ip_kernel_simple_client, plan_option
 
     check_status(None, None)
 
-    resp2, _ = zmq_single_request("environment_open")
+    resp2, _ = zmq_request("environment_open")
     assert resp2["success"] is True
     assert resp2["msg"] == ""
 
@@ -258,21 +254,21 @@ def test_ip_kernel_run_plans_02(re_manager, ip_kernel_simple_client, plan_option
     item_params = {"item": _plan4, "user": _user, "user_group": _user_group}
 
     if plan_option == "queue":
-        resp, _ = zmq_single_request("queue_item_add", item_params)
+        resp, _ = zmq_request("queue_item_add", item_params)
         item_params2 = {"item": _plan1, "user": _user, "user_group": _user_group}
-        resp, _ = zmq_single_request("queue_item_add", item_params2)
+        resp, _ = zmq_request("queue_item_add", item_params2)
         assert resp["success"] is True
-        resp, _ = zmq_single_request("queue_start")
+        resp, _ = zmq_request("queue_start")
         assert resp["success"] is True
     elif plan_option == "plan":
-        resp, _ = zmq_single_request("queue_item_execute", item_params)
+        resp, _ = zmq_request("queue_item_execute", item_params)
         assert resp["success"] is True
     else:
         assert False, f"Unsupported option: {plan_option!r}"
 
     ttime.sleep(1)
 
-    resp, _ = zmq_single_request("re_pause")
+    resp, _ = zmq_request("re_pause")
     assert resp["success"] is True, pprint.pformat(resp)
 
     wait_for_condition(time=10, condition=condition_manager_paused)
@@ -299,7 +295,7 @@ def test_ip_kernel_run_plans_02(re_manager, ip_kernel_simple_client, plan_option
     assert s["items_in_queue"] == n_items_in_queue
     assert s["items_in_history"] == 1
 
-    resp, _ = zmq_single_request("history_get")
+    resp, _ = zmq_request("history_get")
     assert resp["success"] is True, pprint.pformat(resp)
     history_items = resp["items"]
     exit_status = history_items[0]["result"]["exit_status"]
@@ -310,7 +306,7 @@ def test_ip_kernel_run_plans_02(re_manager, ip_kernel_simple_client, plan_option
 
     assert exit_status == exit_status_expected, pprint.pformat(history_items[0])
 
-    resp9, _ = zmq_single_request("environment_close")
+    resp9, _ = zmq_request("environment_close")
     assert resp9["success"] is True
     assert resp9["msg"] == ""
 
@@ -358,14 +354,14 @@ def test_ip_kernel_run_plans_03(re_manager, ip_kernel_simple_client, plan_option
 
     check_status(None, None)
 
-    resp2, _ = zmq_single_request("environment_open")
+    resp2, _ = zmq_request("environment_open")
     assert resp2["success"] is True
     assert resp2["msg"] == ""
 
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     # Add failing plan to the environment
-    resp, _ = zmq_single_request("script_upload", params={"script": _plan_for_test1})
+    resp, _ = zmq_request("script_upload", params={"script": _plan_for_test1})
     assert resp["success"] is True
     wait_for_condition(time=10, condition=condition_manager_idle)
 
@@ -375,21 +371,21 @@ def test_ip_kernel_run_plans_03(re_manager, ip_kernel_simple_client, plan_option
     item_params = {"item": plan_for_test, "user": _user, "user_group": _user_group}
 
     if plan_option == "queue":
-        resp, _ = zmq_single_request("queue_item_add", item_params)
+        resp, _ = zmq_request("queue_item_add", item_params)
         assert resp["success"] is True
-        resp, _ = zmq_single_request("queue_item_add", item_params)
+        resp, _ = zmq_request("queue_item_add", item_params)
         assert resp["success"] is True
-        resp, _ = zmq_single_request("queue_start")
+        resp, _ = zmq_request("queue_start")
         assert resp["success"] is True
     elif plan_option == "plan":
-        resp, _ = zmq_single_request("queue_item_execute", item_params)
+        resp, _ = zmq_request("queue_item_execute", item_params)
         assert resp["success"] is True
     else:
         assert False, f"Unsupported option: {plan_option!r}"
 
     ttime.sleep(1)
 
-    resp, _ = zmq_single_request("re_pause")
+    resp, _ = zmq_request("re_pause")
     assert resp["success"] is True, pprint.pformat(resp)
 
     wait_for_condition(time=10, condition=condition_manager_paused)
@@ -416,7 +412,7 @@ def test_ip_kernel_run_plans_03(re_manager, ip_kernel_simple_client, plan_option
     assert s["items_in_queue"] == n_items_in_queue
     assert s["items_in_history"] == 1
 
-    resp, _ = zmq_single_request("history_get")
+    resp, _ = zmq_request("history_get")
     assert resp["success"] is True, pprint.pformat(resp)
     history_items = resp["items"]
     exit_status = history_items[0]["result"]["exit_status"]
@@ -425,7 +421,7 @@ def test_ip_kernel_run_plans_03(re_manager, ip_kernel_simple_client, plan_option
 
     assert exit_status == exit_status_expected, pprint.pformat(history_items[0])
 
-    resp9, _ = zmq_single_request("environment_close")
+    resp9, _ = zmq_request("environment_close")
     assert resp9["success"] is True
     assert resp9["msg"] == ""
 
@@ -458,7 +454,7 @@ def test_ip_kernel_run_plans_04(re_manager, ip_kernel_simple_client, plan_option
 
     check_status(None, None)
 
-    resp2, _ = zmq_single_request("environment_open")
+    resp2, _ = zmq_request("environment_open")
     assert resp2["success"] is True
     assert resp2["msg"] == ""
 
@@ -469,21 +465,21 @@ def test_ip_kernel_run_plans_04(re_manager, ip_kernel_simple_client, plan_option
     item_params = {"item": _plan4, "user": _user, "user_group": _user_group}
 
     if plan_option == "queue":
-        resp, _ = zmq_single_request("queue_item_add", item_params)
+        resp, _ = zmq_request("queue_item_add", item_params)
         item_params2 = {"item": _plan1, "user": _user, "user_group": _user_group}
-        resp, _ = zmq_single_request("queue_item_add", item_params2)
+        resp, _ = zmq_request("queue_item_add", item_params2)
         assert resp["success"] is True
-        resp, _ = zmq_single_request("queue_start")
+        resp, _ = zmq_request("queue_start")
         assert resp["success"] is True
     elif plan_option == "plan":
-        resp, _ = zmq_single_request("queue_item_execute", item_params)
+        resp, _ = zmq_request("queue_item_execute", item_params)
         assert resp["success"] is True
     else:
         assert False, f"Unsupported option: {plan_option!r}"
 
     ttime.sleep(1)
 
-    resp, _ = zmq_single_request("re_pause")
+    resp, _ = zmq_request("re_pause")
     assert resp["success"] is True, pprint.pformat(resp)
 
     wait_for_condition(time=10, condition=condition_manager_paused)
@@ -502,7 +498,7 @@ def test_ip_kernel_run_plans_04(re_manager, ip_kernel_simple_client, plan_option
     assert s["manager_state"] == "paused"
     assert s["worker_environment_state"] == "idle"
 
-    resp, _ = zmq_single_request("re_pause")
+    resp, _ = zmq_request("re_pause")
     assert resp["success"] is True, pprint.pformat(resp)
 
     wait_for_condition(time=10, condition=condition_ip_kernel_idle)
@@ -511,7 +507,7 @@ def test_ip_kernel_run_plans_04(re_manager, ip_kernel_simple_client, plan_option
     assert s["manager_state"] == "paused"
     assert s["worker_environment_state"] == "idle"
 
-    resp, _ = zmq_single_request(f"re_{resume_option}")
+    resp, _ = zmq_request(f"re_{resume_option}")
     assert resp["success"] is True, pprint.pformat(resp)
 
     if resume_option == "resume":
@@ -546,7 +542,7 @@ def test_ip_kernel_run_plans_04(re_manager, ip_kernel_simple_client, plan_option
     assert s["items_in_queue"] == n_items_in_queue
     assert s["items_in_history"] == n_items_in_history
 
-    resp, _ = zmq_single_request("history_get")
+    resp, _ = zmq_request("history_get")
     assert resp["success"] is True, pprint.pformat(resp)
     history_items = resp["items"]
     exit_status = history_items[0]["result"]["exit_status"]
@@ -556,7 +552,7 @@ def test_ip_kernel_run_plans_04(re_manager, ip_kernel_simple_client, plan_option
 
     assert exit_status == exit_status_expected, pprint.pformat(history_items[0])
 
-    resp9, _ = zmq_single_request("environment_close")
+    resp9, _ = zmq_request("environment_close")
     assert resp9["success"] is True
     assert resp9["msg"] == ""
 
@@ -587,7 +583,7 @@ def test_ip_kernel_execute_tasks_01(re_manager, option, run_in_background):  # n
 
     check_status(None, None)
 
-    resp2, _ = zmq_single_request("environment_open")
+    resp2, _ = zmq_request("environment_open")
     assert resp2["success"] is True
     assert resp2["msg"] == ""
 
@@ -598,7 +594,7 @@ def test_ip_kernel_execute_tasks_01(re_manager, option, run_in_background):  # n
     if option == "function":
         # Upload a script with a function function
         script = "def func_for_test():\n    import time\n    time.sleep(3)"
-        resp, _ = zmq_single_request("script_upload", params={"script": script})
+        resp, _ = zmq_request("script_upload", params={"script": script})
         assert resp["success"] is True
         wait_for_condition(time=3, condition=condition_manager_idle)
 
@@ -610,7 +606,7 @@ def test_ip_kernel_execute_tasks_01(re_manager, option, run_in_background):  # n
         wait_for_condition(time=30, condition=condition_manager_idle)
 
         func_info = {"name": "func_for_test", "item_type": "function"}
-        resp, _ = zmq_single_request(
+        resp, _ = zmq_request(
             "function_execute",
             params={
                 "item": func_info,
@@ -624,9 +620,7 @@ def test_ip_kernel_execute_tasks_01(re_manager, option, run_in_background):  # n
 
     elif option == "script":
         script = "import time\ntime.sleep(3)"
-        resp, _ = zmq_single_request(
-            "script_upload", params={"script": script, "run_in_background": run_in_background}
-        )
+        resp, _ = zmq_request("script_upload", params={"script": script, "run_in_background": run_in_background})
         assert resp["success"] is True
         task_uid = resp["task_uid"]
 
@@ -660,7 +654,7 @@ def test_ip_kernel_execute_tasks_01(re_manager, option, run_in_background):  # n
     assert s["manager_state"] == "idle"
     assert s["worker_environment_state"] == "idle"
 
-    resp9, _ = zmq_single_request("environment_close")
+    resp9, _ = zmq_request("environment_close")
     assert resp9["success"] is True
     assert resp9["msg"] == ""
 
@@ -687,7 +681,7 @@ def test_ip_kernel_execute_tasks_02(re_manager):  # noqa: F811
 
     check_status(None, None)
 
-    resp2, _ = zmq_single_request("environment_open")
+    resp2, _ = zmq_request("environment_open")
     assert resp2["success"] is True
     assert resp2["msg"] == ""
 
@@ -696,18 +690,18 @@ def test_ip_kernel_execute_tasks_02(re_manager):  # noqa: F811
     check_status("idle" if using_ipython else "disabled", False if using_ipython else True)
 
     script = "test_v = 0\ndef func_for_test():\n    return test_v"
-    resp, _ = zmq_single_request("script_upload", params={"script": script})
+    resp, _ = zmq_request("script_upload", params={"script": script})
     assert resp["success"] is True
     wait_for_condition(time=3, condition=condition_manager_idle)
 
     for _ in range(3):
         script = "test_v += 1"
-        resp, _ = zmq_single_request("script_upload", params={"script": script})
+        resp, _ = zmq_request("script_upload", params={"script": script})
         assert resp["success"] is True
         wait_for_condition(time=3, condition=condition_manager_idle)
 
     func_info = {"name": "func_for_test", "item_type": "function"}
-    resp, _ = zmq_single_request(
+    resp, _ = zmq_request(
         "function_execute",
         params={"item": func_info, "user": _user, "user_group": _user_group},
     )
@@ -717,11 +711,11 @@ def test_ip_kernel_execute_tasks_02(re_manager):  # noqa: F811
 
     for _ in range(3):
         script = "test_v += 1"
-        resp, _ = zmq_single_request("script_upload", params={"script": script})
+        resp, _ = zmq_request("script_upload", params={"script": script})
         assert resp["success"] is True
         wait_for_condition(time=3, condition=condition_manager_idle)
 
-    resp, _ = zmq_single_request(
+    resp, _ = zmq_request(
         "function_execute",
         params={"item": func_info, "user": _user, "user_group": _user_group},
     )
@@ -730,11 +724,11 @@ def test_ip_kernel_execute_tasks_02(re_manager):  # noqa: F811
     wait_for_condition(time=3, condition=condition_manager_idle)
 
     # Make sure that the tests were executed correctly
-    resp, _ = zmq_single_request("task_result", params={"task_uid": task_uid1})
+    resp, _ = zmq_request("task_result", params={"task_uid": task_uid1})
     assert resp["success"] is True
     value1 = resp["result"]["return_value"]
 
-    resp, _ = zmq_single_request("task_result", params={"task_uid": task_uid2})
+    resp, _ = zmq_request("task_result", params={"task_uid": task_uid2})
     assert resp["success"] is True
     value2 = resp["result"]["return_value"]
 
@@ -745,7 +739,7 @@ def test_ip_kernel_execute_tasks_02(re_manager):  # noqa: F811
     assert s["manager_state"] == "idle"
     assert s["worker_environment_state"] == "idle"
 
-    resp9, _ = zmq_single_request("environment_close")
+    resp9, _ = zmq_request("environment_close")
     assert resp9["success"] is True
     assert resp9["msg"] == ""
 
@@ -774,7 +768,7 @@ def test_ip_kernel_direct_connection_01(re_manager, ip_kernel_simple_client):  #
 
     check_status(None, None)
 
-    resp2, _ = zmq_single_request("environment_open")
+    resp2, _ = zmq_request("environment_open")
     assert resp2["success"] is True
     assert resp2["msg"] == ""
 
@@ -797,7 +791,7 @@ def test_ip_kernel_direct_connection_01(re_manager, ip_kernel_simple_client):  #
     assert s["manager_state"] == "idle"
     assert s["worker_environment_state"] == "idle"
 
-    resp9, _ = zmq_single_request("environment_close")
+    resp9, _ = zmq_request("environment_close")
     assert resp9["success"] is True
     assert resp9["msg"] == ""
 
@@ -830,12 +824,12 @@ def test_ip_kernel_direct_connection_02(re_manager, ip_kernel_simple_client, pla
     check_status(None, None)
 
     if plan_option == "queue":
-        resp, _ = zmq_single_request(
+        resp, _ = zmq_request(
             "queue_item_add", {"item": _plan3, "user": _user, "user_group": _user_group}
         )
         assert resp["success"] is True
 
-    resp2, _ = zmq_single_request("environment_open")
+    resp2, _ = zmq_request("environment_open")
     assert resp2["success"] is True
     assert resp2["msg"] == ""
 
@@ -849,9 +843,9 @@ def test_ip_kernel_direct_connection_02(re_manager, ip_kernel_simple_client, pla
     ttime.sleep(delay)
 
     if plan_option == "queue":
-        resp, _ = zmq_single_request("queue_start")
+        resp, _ = zmq_request("queue_start")
     elif plan_option == "plan":
-        resp, _ = zmq_single_request(
+        resp, _ = zmq_request(
             "queue_item_execute", {"item": _plan3, "user": _user, "user_group": _user_group}
         )
     else:
@@ -870,10 +864,10 @@ def test_ip_kernel_direct_connection_02(re_manager, ip_kernel_simple_client, pla
 
     # External tasks are finished. Now try running the plan.
     if plan_option == "queue":
-        resp, _ = zmq_single_request("queue_start")
+        resp, _ = zmq_request("queue_start")
         assert resp["success"] is True, pprint.pformat(resp)
     elif plan_option == "plan":
-        resp, _ = zmq_single_request(
+        resp, _ = zmq_request(
             "queue_item_execute", {"item": _plan1, "user": _user, "user_group": _user_group}
         )
         assert resp["success"] is True, pprint.pformat(resp)
@@ -886,7 +880,7 @@ def test_ip_kernel_direct_connection_02(re_manager, ip_kernel_simple_client, pla
     assert s["items_in_queue"] == 0
     assert s["items_in_history"] == n_history_items_expected
 
-    resp9, _ = zmq_single_request("environment_close")
+    resp9, _ = zmq_request("environment_close")
     assert resp9["success"] is True
     assert resp9["msg"] == ""
 
@@ -918,23 +912,23 @@ def test_ip_kernel_direct_connection_03(re_manager, ip_kernel_simple_client, opt
 
     check_status(None, None)
 
-    resp, _ = zmq_single_request(
+    resp, _ = zmq_request(
         "queue_item_add", {"item": _plan3, "user": _user, "user_group": _user_group}
     )
     assert resp["success"] is True
 
-    resp2, _ = zmq_single_request("environment_open")
+    resp2, _ = zmq_request("environment_open")
     assert resp2["success"] is True
     assert resp2["msg"] == ""
 
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-    resp, _ = zmq_single_request("queue_start")
+    resp, _ = zmq_request("queue_start")
     assert resp["success"] is True, pprint.pformat(resp)
 
     ttime.sleep(1)
 
-    resp, _ = zmq_single_request("re_pause")
+    resp, _ = zmq_request("re_pause")
     assert resp["success"] is True, pprint.pformat(resp)
 
     assert wait_for_condition(time=5, condition=condition_manager_paused)
@@ -947,7 +941,7 @@ def test_ip_kernel_direct_connection_03(re_manager, ip_kernel_simple_client, opt
 
     n_history_items_expected = 1
 
-    resp, _ = zmq_single_request(f"re_{option}")
+    resp, _ = zmq_request(f"re_{option}")
 
     assert resp["success"] is False
     msg = resp["msg"]
@@ -962,7 +956,7 @@ def test_ip_kernel_direct_connection_03(re_manager, ip_kernel_simple_client, opt
     assert wait_for_condition(10, condition_ip_kernel_idle)
 
     # External tasks are finished. Now try running the plan.
-    resp, _ = zmq_single_request(f"re_{option}")
+    resp, _ = zmq_request(f"re_{option}")
     assert resp["success"] is True, pprint.pformat(resp)
 
     assert wait_for_condition(time=10, condition=condition_manager_idle)
@@ -971,7 +965,7 @@ def test_ip_kernel_direct_connection_03(re_manager, ip_kernel_simple_client, opt
     assert s["items_in_queue"] == 0 if option in ("resume", "stop") else 1
     assert s["items_in_history"] == n_history_items_expected
 
-    resp9, _ = zmq_single_request("environment_close")
+    resp9, _ = zmq_request("environment_close")
     assert resp9["success"] is True
     assert resp9["msg"] == ""
 
@@ -1003,7 +997,7 @@ def test_ip_kernel_direct_connection_04(re_manager, ip_kernel_simple_client, opt
 
     check_status(None, None)
 
-    resp2, _ = zmq_single_request("environment_open")
+    resp2, _ = zmq_request("environment_open")
     assert resp2["success"] is True
     assert resp2["msg"] == ""
 
@@ -1012,7 +1006,7 @@ def test_ip_kernel_direct_connection_04(re_manager, ip_kernel_simple_client, opt
     if option == "function":
         # Upload a script with a function
         script = "def func_for_test():\n    ttime.sleep(0.5)"
-        resp, _ = zmq_single_request("script_upload", params={"script": script})
+        resp, _ = zmq_request("script_upload", params={"script": script})
         assert resp["success"] is True, pprint.pformat(resp)
         wait_for_condition(time=3, condition=condition_manager_idle)
 
@@ -1029,11 +1023,11 @@ def test_ip_kernel_direct_connection_04(re_manager, ip_kernel_simple_client, opt
     ttime.sleep(delay)
 
     if option == "function":
-        resp1, _ = zmq_single_request("function_execute", params=func_params)
-        resp2, _ = zmq_single_request("function_execute", params=dict(**func_params, **func_params_bckg))
+        resp1, _ = zmq_request("function_execute", params=func_params)
+        resp2, _ = zmq_request("function_execute", params=dict(**func_params, **func_params_bckg))
     elif option == "script":
-        resp1, _ = zmq_single_request("script_upload", params={"script": test_script})
-        resp2, _ = zmq_single_request("script_upload", params=dict(script=test_script, **func_params_bckg))
+        resp1, _ = zmq_request("script_upload", params={"script": test_script})
+        resp2, _ = zmq_request("script_upload", params=dict(script=test_script, **func_params_bckg))
     else:
         assert False, f"Unsupported option: {option!r}"
 
@@ -1049,7 +1043,7 @@ def test_ip_kernel_direct_connection_04(re_manager, ip_kernel_simple_client, opt
 
     assert wait_for_task_result(10, task_uid2)
 
-    resp, _ = zmq_single_request("task_result", params={"task_uid": task_uid2})
+    resp, _ = zmq_request("task_result", params={"task_uid": task_uid2})
     assert resp["success"] is True
     assert resp["result"]["msg"] == "", pprint.pformat(resp)
 
@@ -1057,9 +1051,9 @@ def test_ip_kernel_direct_connection_04(re_manager, ip_kernel_simple_client, opt
 
     # External tasks are finished. Now try running the plan.
     if option == "function":
-        resp3, _ = zmq_single_request("function_execute", params=func_params)
+        resp3, _ = zmq_request("function_execute", params=func_params)
     elif option == "script":
-        resp3, _ = zmq_single_request("script_upload", params={"script": test_script})
+        resp3, _ = zmq_request("script_upload", params={"script": test_script})
     else:
         assert False, f"Unsupported option: {option!r}"
 
@@ -1068,11 +1062,11 @@ def test_ip_kernel_direct_connection_04(re_manager, ip_kernel_simple_client, opt
     task_uid3 = resp3["task_uid"]
     assert wait_for_task_result(10, task_uid3)
 
-    resp, _ = zmq_single_request("task_result", params={"task_uid": task_uid3})
+    resp, _ = zmq_request("task_result", params={"task_uid": task_uid3})
     assert resp["success"] is True
     assert resp["result"]["msg"] == "", pprint.pformat(resp)
 
-    resp9, _ = zmq_single_request("environment_close")
+    resp9, _ = zmq_request("environment_close")
     assert resp9["success"] is True
     assert resp9["msg"] == ""
 
@@ -1107,7 +1101,7 @@ def test_ip_kernel_reserve_01(re_manager, option):  # noqa: F811
 
     check_status(None, None)
 
-    resp2, _ = zmq_single_request("environment_open")
+    resp2, _ = zmq_request("environment_open")
     assert resp2["success"] is True
     assert resp2["msg"] == ""
 
@@ -1115,7 +1109,7 @@ def test_ip_kernel_reserve_01(re_manager, option):  # noqa: F811
 
     check_status("idle", False)
 
-    resp3, _ = zmq_single_request("manager_test", params=dict(test_name="reserve_kernel"))
+    resp3, _ = zmq_request("manager_test", params=dict(test_name="reserve_kernel"))
     assert resp3["success"] is True, pprint.pformat(resp3)
     assert resp3["msg"] == "", pprint.pformat(resp3)
 
@@ -1129,7 +1123,7 @@ def test_ip_kernel_reserve_01(re_manager, option):  # noqa: F811
     elif option == "repeated":
         ttime.sleep(0.5)
 
-        resp4, _ = zmq_single_request("manager_test", params=dict(test_name="reserve_kernel"))
+        resp4, _ = zmq_request("manager_test", params=dict(test_name="reserve_kernel"))
         assert resp4["success"] is True, pprint.pformat(resp4)
         assert resp4["msg"] == "", pprint.pformat(resp4)
 
@@ -1141,7 +1135,7 @@ def test_ip_kernel_reserve_01(re_manager, option):  # noqa: F811
     else:
         assert False, f"Unknown option: {option!r}"
 
-    resp9, _ = zmq_single_request("environment_close")
+    resp9, _ = zmq_request("environment_close")
     assert resp9["success"] is True
     assert resp9["msg"] == ""
 
@@ -1156,13 +1150,13 @@ def test_ip_kernel_interrupt_01(re_manager):  # noqa: F811
     """
     using_ipython = use_ipykernel_for_tests()
 
-    resp2, _ = zmq_single_request("environment_open")
+    resp2, _ = zmq_request("environment_open")
     assert resp2["success"] is True
     assert resp2["msg"] == ""
 
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
-    resp2, _ = zmq_single_request("kernel_interrupt")
+    resp2, _ = zmq_request("kernel_interrupt")
     if using_ipython:
         assert resp2["success"] is True, pprint.pformat(resp2)
         assert resp2["msg"] == "", pprint.pformat(resp2)
@@ -1173,7 +1167,7 @@ def test_ip_kernel_interrupt_01(re_manager):  # noqa: F811
     if using_ipython:
         ttime.sleep(0.5)  # Short pause may be needed
 
-    resp9, _ = zmq_single_request("environment_close")
+    resp9, _ = zmq_request("environment_close")
     assert resp9["success"] is True
     assert resp9["msg"] == ""
 
@@ -1217,7 +1211,7 @@ def test_ip_kernel_interrupt_02(re_manager, ip_kernel_simple_client, option):  #
         assert status["ip_kernel_captured"] == ip_kernel_captured
         return status
 
-    resp2, _ = zmq_single_request("environment_open")
+    resp2, _ = zmq_request("environment_open")
     assert resp2["success"] is True
     assert resp2["msg"] == ""
 
@@ -1230,19 +1224,19 @@ def test_ip_kernel_interrupt_02(re_manager, ip_kernel_simple_client, option):  #
         ip_kernel_simple_client.execute_with_check(_busy_script_01)
         params_interrupt = {}
     elif option == "script":
-        resp, _ = zmq_single_request("script_upload", params=dict(script=_busy_script_01))
+        resp, _ = zmq_request("script_upload", params=dict(script=_busy_script_01))
         assert resp["success"] is True, pprint.pformat(resp)
         task_uid = resp["task_uid"]
 
         params_interrupt = {"interrupt_task": True}
     elif option == "func":
-        resp, _ = zmq_single_request("script_upload", params=dict(script=_busy_script_02))
+        resp, _ = zmq_request("script_upload", params=dict(script=_busy_script_02))
         assert resp["success"] is True, pprint.pformat(resp)
         assert wait_for_condition(3, condition_manager_idle)
 
         func_item = {"name": "func_for_test_sleep", "item_type": "function"}
         params = {"item": func_item, "user": _user, "user_group": _user_group}
-        resp, _ = zmq_single_request("function_execute", params=params)
+        resp, _ = zmq_request("function_execute", params=params)
         assert resp["success"] is True, pprint.pformat(resp)
         task_uid = resp["task_uid"]
 
@@ -1255,7 +1249,7 @@ def test_ip_kernel_interrupt_02(re_manager, ip_kernel_simple_client, option):  #
     ip_kernel_captured = (option != "ip_client")
     check_status("busy", ip_kernel_captured)
 
-    resp2, _ = zmq_single_request("kernel_interrupt", params=params_interrupt)
+    resp2, _ = zmq_request("kernel_interrupt", params=params_interrupt)
     assert resp2["success"] is True, pprint.pformat(resp2)
     assert resp2["msg"] == "", pprint.pformat(resp2)
 
@@ -1267,7 +1261,7 @@ def test_ip_kernel_interrupt_02(re_manager, ip_kernel_simple_client, option):  #
     check_status("idle", False)
 
     if task_uid:
-        resp, _ = zmq_single_request("task_result", params={"task_uid": task_uid})
+        resp, _ = zmq_request("task_result", params={"task_uid": task_uid})
         assert resp["success"] is True, pprint.pformat(resp)
 
         result = resp["result"]
@@ -1278,16 +1272,16 @@ def test_ip_kernel_interrupt_02(re_manager, ip_kernel_simple_client, option):  #
 
     # Now run a simple plan to make sure the worker is still functional
     params = {"item": _plan1, "user": _user, "user_group": _user_group}
-    resp, _ = zmq_single_request("queue_item_add", params)
+    resp, _ = zmq_request("queue_item_add", params)
     assert resp["success"] is True
-    resp, _ = zmq_single_request("queue_start")
+    resp, _ = zmq_request("queue_start")
     assert resp["success"] is True
     assert wait_for_condition(3, condition_queue_processing_finished)
-    status, _ = zmq_single_request("status")
+    status, _ = zmq_request("status")
     assert status["items_in_queue"] == 0
     assert status["items_in_history"] == 1
 
-    resp9, _ = zmq_single_request("environment_close")
+    resp9, _ = zmq_request("environment_close")
     assert resp9["success"] is True
     assert resp9["msg"] == ""
 
@@ -1327,28 +1321,28 @@ def test_ip_kernel_interrupt_03(
         assert status["ip_kernel_captured"] == ip_kernel_captured
         return status
 
-    resp2, _ = zmq_single_request("environment_open")
+    resp2, _ = zmq_request("environment_open")
     assert resp2["success"] is True
     assert resp2["msg"] == ""
 
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     params = {"item": plan, "user": _user, "user_group": _user_group}
-    resp, _ = zmq_single_request("queue_item_add", params)
+    resp, _ = zmq_request("queue_item_add", params)
     assert resp["success"] is True
-    resp, _ = zmq_single_request("queue_start")
+    resp, _ = zmq_request("queue_start")
     assert resp["success"] is True
 
     ttime.sleep(delay)
 
     params_interrupt = dict(interrupt_plan=True)
     if pause_option == "deferred":
-        resp, _ = zmq_single_request("kernel_interrupt", params=params_interrupt)
+        resp, _ = zmq_request("kernel_interrupt", params=params_interrupt)
         assert resp["success"] is True, pprint.pformat(resp)
     elif pause_option == "immediate":
-        resp, _ = zmq_single_request("kernel_interrupt", params=params_interrupt)
+        resp, _ = zmq_request("kernel_interrupt", params=params_interrupt)
         assert resp["success"] is True, pprint.pformat(resp)
-        resp, _ = zmq_single_request("kernel_interrupt", params=params_interrupt)
+        resp, _ = zmq_request("kernel_interrupt", params=params_interrupt)
         assert resp["success"] is True, pprint.pformat(resp)
     else:
         assert False, f"Unknown pause option: {pause_option!r}"
@@ -1359,7 +1353,7 @@ def test_ip_kernel_interrupt_03(
     if is_paused:
         assert status["manager_state"] == "paused"
 
-        resp, _ = zmq_single_request("re_resume")
+        resp, _ = zmq_request("re_resume")
         assert resp["success"] is True
 
         assert wait_for_condition(20, condition_queue_processing_finished)
@@ -1374,16 +1368,16 @@ def test_ip_kernel_interrupt_03(
 
     # Now run a simple plan to make sure the worker is still functional
     params = {"item": _plan1, "user": _user, "user_group": _user_group}
-    resp, _ = zmq_single_request("queue_item_add", params)
+    resp, _ = zmq_request("queue_item_add", params)
     assert resp["success"] is True
-    resp, _ = zmq_single_request("queue_start")
+    resp, _ = zmq_request("queue_start")
     assert resp["success"] is True
     assert wait_for_condition(3, condition_queue_processing_finished)
-    status, _ = zmq_single_request("status")
+    status, _ = zmq_request("status")
     assert status["items_in_queue"] == 0
     assert status["items_in_history"] == 2
 
-    resp9, _ = zmq_single_request("environment_close")
+    resp9, _ = zmq_request("environment_close")
     assert resp9["success"] is True
     assert resp9["msg"] == ""
 
@@ -1432,7 +1426,7 @@ def test_ip_kernel_interrupt_04(
         assert status["ip_kernel_captured"] == ip_kernel_captured
         return status
 
-    resp2, _ = zmq_single_request("environment_open")
+    resp2, _ = zmq_request("environment_open")
     assert resp2["success"] is True
     assert resp2["msg"] == ""
 
@@ -1442,22 +1436,22 @@ def test_ip_kernel_interrupt_04(
         ip_kernel_simple_client.start()
         ip_kernel_simple_client.execute_with_check(_busy_script_01)
     elif option == "script":
-        resp, _ = zmq_single_request("script_upload", params=dict(script=_busy_script_01))
+        resp, _ = zmq_request("script_upload", params=dict(script=_busy_script_01))
         assert resp["success"] is True, pprint.pformat(resp)
     elif option == "func":
-        resp, _ = zmq_single_request("script_upload", params=dict(script=_busy_script_02))
+        resp, _ = zmq_request("script_upload", params=dict(script=_busy_script_02))
         assert resp["success"] is True, pprint.pformat(resp)
         assert wait_for_condition(3, condition_manager_idle)
 
         func_item = {"name": "func_for_test_sleep", "item_type": "function"}
         params = {"item": func_item, "user": _user, "user_group": _user_group}
-        resp, _ = zmq_single_request("function_execute", params=params)
+        resp, _ = zmq_request("function_execute", params=params)
         assert resp["success"] is True, pprint.pformat(resp)
     elif option == "plan":
         params = {"item": _plan3, "user": _user, "user_group": _user_group}
-        resp, _ = zmq_single_request("queue_item_add", params)
+        resp, _ = zmq_request("queue_item_add", params)
         assert resp["success"] is True
-        resp, _ = zmq_single_request("queue_start")
+        resp, _ = zmq_request("queue_start")
         assert resp["success"] is True
     else:
         assert False, f"Unknown option {option!r}"
@@ -1467,7 +1461,7 @@ def test_ip_kernel_interrupt_04(
     ip_kernel_captured = (option != "ip_client")
     check_status("busy", ip_kernel_captured)
 
-    resp2, _ = zmq_single_request("kernel_interrupt", params=int_params)
+    resp2, _ = zmq_request("kernel_interrupt", params=int_params)
     if success:
         assert resp2["success"] is True, pprint.pformat(resp2)
         assert resp2["msg"] == "", pprint.pformat(resp2)
@@ -1475,7 +1469,7 @@ def test_ip_kernel_interrupt_04(
         assert resp2["success"] is False, pprint.pformat(resp2)
         assert msg in resp2["msg"], pprint.pformat(resp2)
 
-        resp, _ = zmq_single_request(
+        resp, _ = zmq_request(
             "kernel_interrupt", params={"interrupt_task": True, "interrupt_plan": True}
         )
         assert resp["success"] is True, pprint.pformat(resp)
@@ -1487,11 +1481,11 @@ def test_ip_kernel_interrupt_04(
 
     status = check_status("idle", False)
     if status["manager_state"] == "paused":
-        resp, _ = zmq_single_request("re_stop")
+        resp, _ = zmq_request("re_stop")
         assert resp["success"] is True, pprint.pformat(resp)
         assert wait_for_condition(3, condition_manager_idle)
 
-    resp9, _ = zmq_single_request("environment_close")
+    resp9, _ = zmq_request("environment_close")
     assert resp9["success"] is True
     assert resp9["msg"] == ""
 

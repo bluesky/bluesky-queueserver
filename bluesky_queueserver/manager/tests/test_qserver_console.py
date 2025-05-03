@@ -44,8 +44,8 @@ def test_cli_qserver_console_01(re_manager_cmd, ipython_kernel_ip, env_open):  #
     re_manager_cmd(params)
 
     params_console = []
-    if use_zmq_pickle_encoding_for_tests():
-        params_console.append("--zmq-encoding=pickle")
+    if use_zmq_encoding_for_tests() != "json":
+        params_console.append(f"--zmq-encoding={use_zmq_encoding_for_tests()}")
 
     if env_open:
         resp2, _ = zmq_request("environment_open")
@@ -124,8 +124,8 @@ def test_cli_qserver_console_02(
         else:
             params_console.append(f"--zmq-control-addr={address_client}")
 
-    if use_zmq_pickle_encoding_for_tests():
-        params_console.append("--zmq-encoding=pickle")
+    if use_zmq_encoding_for_tests() != "json":
+        params_console.append(f"--zmq-encoding={use_zmq_encoding_for_tests()}")
 
     if encryption_key:
         # # Set server public key (for 'qserver') using environment variable

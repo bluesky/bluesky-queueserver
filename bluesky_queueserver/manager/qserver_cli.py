@@ -1243,7 +1243,8 @@ def qserver():
     logging.getLogger("bluesky_queueserver").setLevel("ERROR")
 
     # Determine the backend type
-    backend = os.getenv("PLAN_QUEUE_BACKEND", "redis").lower()
+    # backend = os.getenv("PLAN_QUEUE_BACKEND", "redis").lower()
+    backend = os.getenv("QSERVER_NVM_BACKEND", "redis").lower()
 
     if backend not in ["redis", "sqlite", "dict"]:
         raise ValueError(f"Unsupported backend: {backend}")

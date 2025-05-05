@@ -38,7 +38,7 @@ from .profile_ops import (
 
 logger = logging.getLogger(__name__)
 
-# Change the variable to change the default behavior
+# Change the variable to change the default behavior; redis can easily run multiple threads, but sqlite and dict options are not well suited for that.
 DEFAULT_RUN_FOREGROUND_TASKS_IN_SEPARATE_THREADS = False
 
 

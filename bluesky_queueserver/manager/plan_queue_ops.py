@@ -1,12 +1,16 @@
-# import logging
 import os
+import uuid
+from typing import Any
 
-# logger = logging.getLogger(__name__)
+from bluesky_queueserver.manager.plan_queue_ops_backends import get_default_backend
 
 class PlanQueueOperations:
     """
     Wrapper class for plan queue operations. Delegates method calls to the appropriate backend
-    implementation (e.g., Redis, SQLite, or Dict) while keeping the interface consistent.
+    implementation (Redis, SQLite, PostgreSQL, or Dict) while keeping the interface consistent.
+    
+    The backend selection is controlled through the PLAN_QUEUE_BACKEND environment variable,
+    which can be set to 'redis', 'sqlite', 'postgresql', or 'dict'.
     """
 
     def __init__(self, **kwargs):
@@ -20,22 +24,13 @@ class PlanQueueOperations:
         ----------
         kwargs : dict
             Additional arguments to pass to the backend implementation.
+            [...]
         """
-        backend = os.getenv("PLAN_QUEUE_BACKEND", "redis").lower()
-
-        if backend == "redis":
-            from bluesky_queueserver.manager.plan_queue_ops_redis import RedisPlanQueueOperations
-            self._backend = RedisPlanQueueOperations(**kwargs)
-        elif backend == "sqlite":
-            from bluesky_queueserver.manager.plan_queue_ops_sqlite import SQLitePlanQueueOperations
-            self._backend = SQLitePlanQueueOperations(**kwargs)
-        elif backend == "dict":
-            from bluesky_queueserver.manager.plan_queue_ops_dict import DictPlanQueueOperations
-            self._backend = DictPlanQueueOperations(**kwargs)
-        else:
-            raise ValueError(f"Unsupported backend: {backend}")
-
-    def __getattr__(self, name):
+        # Get the appropriate backend class from the centralized mechanism
+        BackendClass = get_default_backend()
+        self._backend = BackendClass(**kwargs)
+        
+    def __getattr__(self, name: str) -> Any:
         """
         Delegate attribute access to the backend implementation.
 
@@ -53,3 +48,39 @@ class PlanQueueOperations:
             The attribute or method from the backend implementation.
         """
         return getattr(self._backend, name)
+    
+    @staticmethod
+    def new_item_uid() -> str:
+        """
+        Generate a new unique identifier for an item.
+
+        Returns
+        -------
+        str
+            A new unique identifier.
+        """
+        return str(uuid.uuid4())
+    
+    @classmethod
+    def get_available_backends(cls) -> list:
+        """
+        Return a list of available backend implementations.
+        
+        Returns
+        -------
+        list
+            List of available backend names
+        """
+        return ["redis", "sqlite", "postgresql", "dict"]
+    
+    @property
+    def backend_name(self) -> str:
+        """
+        Return the name of the currently active backend.
+        
+        Returns
+        -------
+        str
+            Name of the active backend implementation
+        """
+        return self._backend.__class__.__name__.replace("PlanQueueOperations", "").lower()

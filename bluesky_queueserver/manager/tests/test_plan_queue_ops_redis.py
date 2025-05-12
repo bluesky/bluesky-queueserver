@@ -300,10 +300,10 @@ def test_verify_item(plan, f_kwargs, result, errmsg):
             await set_plans()
 
             if result:
-                pq._verify_item(plan, **f_kwargs)
+                await pq._verify_item(plan, **f_kwargs)
             else:
                 with pytest.raises(Exception, match=errmsg):
-                    pq._verify_item(plan, **f_kwargs)
+                   await pq._verify_item(plan, **f_kwargs)
 
     asyncio.run(testing())
 
@@ -331,7 +331,7 @@ def test_set_new_item_uuid(plan):
             uid = plan.get("item_uid", None)
 
             # The function is supposed to create or replace UID
-            new_plan = pq.set_new_item_uuid(plan)
+            new_plan = await pq.set_new_item_uuid(plan)
 
             assert "item_uid" in new_plan
             assert isinstance(new_plan["item_uid"], str)
@@ -1110,7 +1110,7 @@ def test_replace_item_3(mode):
                 # Modify plan UID. Filtering is applied
                 plan_new = plan0_before
                 item_uid_to_replace = plan_new["item_uid"]
-                plan_new = pq.set_new_item_uuid(plan_new)
+                plan_new = await pq.set_new_item_uuid(plan_new)
                 plan_replaced, qsize = await pq.replace_item(plan_new, item_uid=item_uid_to_replace)
 
                 queue, _ = await pq.get_queue()
@@ -1832,7 +1832,7 @@ def test_process_next_item_3(item_type, has_uid):
 
             item4 = {"item_type": item_type, "name": "d"}
             if has_uid:
-                item4 = pq.set_new_item_uuid(item4)
+                item4 = await pq.set_new_item_uuid(item4)
 
             running_item = await pq.process_next_item(item=item4)
 

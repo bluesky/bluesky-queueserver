@@ -1,17 +1,22 @@
+
+
+
 import asyncio
-import os
-import redis.asyncio
 import copy
 import json
 import logging
 import time as ttime
-import uuid
-from bluesky_queueserver.manager.plan_queue_ops_abstract import AbstractPlanQueueOperations
-#from bluesky_queueserver.manager.plan_queue_ops_base import BasePlanQueueOperations
+
+from .config import get_backend_config
+
+import redis.asyncio
+
+from bluesky_queueserver.manager.plan_queue_ops_backends.plan_queue_ops_abstract import AbstractPlanQueueOperations
 
 logger = logging.getLogger(__name__)
 
-class RedisPlanQueueOperations(AbstractPlanQueueOperations): # Add a BasePlanQueueOperations class to ensure methods are implemented equivalently
+
+class RedisPlanQueueOperations(AbstractPlanQueueOperations): 
     """
     The class supports operations with plan queue based on Redis. The public methods
     of the class are protected with ``asyncio.Lock``.
@@ -71,11 +76,25 @@ class RedisPlanQueueOperations(AbstractPlanQueueOperations): # Add a BasePlanQue
         await pq.stop()
     """
 
-    def __init__(self, redis_host="localhost", name_prefix="qs_default"):
+    def __init__(self, **kwargs):
+        # Start with default config and override with any passed kwargs
+        config = get_backend_config("redis")
+        config.update(kwargs)
 
-        self._redis_host = redis_host
+        # initialize uid operations
+        super().__init__()
+
+        # Use config values instead of direct variable references
+        self._redis_host = config["host"]
+        self._redis_port = config["port"]
+        self._redis_db = config["db"]
+        self._redis_password = config["password"]
+        self._decode_responses = config["decode_responses"]
+        
         self._uid_dict = dict()
         self._r_pool = None
+
+        name_prefix = config["name_prefix"]
 
         if not isinstance(name_prefix, str):
             raise TypeError(f"Parameter 'name_prefix' should be a string: {name_prefix}")
@@ -259,9 +278,22 @@ class RedisPlanQueueOperations(AbstractPlanQueueOperations): # Add a BasePlanQue
             self._lock = asyncio.Lock()
             async with self._lock:
                 try:
-                    host = f"redis://{self._redis_host}"
-                    self._r_pool = redis.asyncio.from_url(host, encoding="utf-8", decode_responses=True)
+                    # Build a proper Redis URL using all configuration parameters
+                    redis_url = f"redis://"
+                    if self._redis_password:
+                        redis_url += f":{self._redis_password}@"
+                    redis_url += f"{self._redis_host}:{self._redis_port}/{self._redis_db}"
+                    
+                    self._r_pool = redis.asyncio.from_url(
+                        redis_url, 
+                        encoding="utf-8", 
+                        decode_responses=self._decode_responses
+                    )
                     await self._r_pool.ping()
+                # try:
+                #     host = f"redis://{self._redis_host}"
+                #     self._r_pool = redis.asyncio.from_url(host, encoding="utf-8", decode_responses=True)
+                #     await self._r_pool.ping()
                 except Exception as ex:
                     error_msg = (
                         f"Failed to create the Redis pool: "
@@ -330,177 +362,177 @@ class RedisPlanQueueOperations(AbstractPlanQueueOperations): # Add a BasePlanQue
         async with self._lock:
             await self._delete_pool_entries()
 
-    @staticmethod
-    def _verify_item_type(item):
-        """
-        Check that the item (plan) is a dictionary.
-        """
-        if not isinstance(item, dict):
-            raise TypeError(f"Parameter 'item' should be a dictionary: '{item}', (type '{type(item)}')")
+    # @staticmethod
+    # def _verify_item_type(item):
+    #     """
+    #     Check that the item (plan) is a dictionary.
+    #     """
+    #     if not isinstance(item, dict):
+    #         raise TypeError(f"Parameter 'item' should be a dictionary: '{item}', (type '{type(item)}')")
 
-    def _verify_item(self, item, *, ignore_uids=None):
-        """
-        Verify that item (plan) structure is valid enough to be put in the queue.
-        Current checks: item is a dictionary, ``item_uid`` key is present, Plan with the UID is not in
-        the queue or currently running. Ignore UIDs in the list ``ignore_uids``: those UIDs are expected
-        to be in the dictionary.
-        """
-        ignore_uids = ignore_uids or []
-        self._verify_item_type(item)
-        # Verify plan UID
-        if "item_uid" not in item:
-            raise ValueError("Item does not have UID.")
-        uid = item["item_uid"]
-        if (uid not in ignore_uids) and self._is_uid_in_dict(uid):
-            raise RuntimeError(f"Item with UID {uid} is already in the queue")
+    # def _verify_item(self, item, *, ignore_uids=None):
+    #     """
+    #     Verify that item (plan) structure is valid enough to be put in the queue.
+    #     Current checks: item is a dictionary, ``item_uid`` key is present, Plan with the UID is not in
+    #     the queue or currently running. Ignore UIDs in the list ``ignore_uids``: those UIDs are expected
+    #     to be in the dictionary.
+    #     """
+    #     ignore_uids = ignore_uids or []
+    #     self._verify_item_type(item)
+    #     # Verify plan UID
+    #     if "item_uid" not in item:
+    #         raise ValueError("Item does not have UID.")
+    #     uid = item["item_uid"]
+    #     if (uid not in ignore_uids) and self._is_uid_in_dict(uid):
+    #         raise RuntimeError(f"Item with UID {uid} is already in the queue")
 
-    @staticmethod
-    def new_item_uid():
-        """
-        Generate UID for an item (plan).
-        """
-        return str(uuid.uuid4())
+    # @staticmethod
+    # def new_item_uid():
+    #     """
+    #     Generate UID for an item (plan).
+    #     """
+    #     return str(uuid.uuid4())
 
-    def set_new_item_uuid(self, item):
-        """
-        Replaces Item UID with a new one or creates a new UID.
+    # def set_new_item_uuid(self, item):
+    #     """
+    #     Replaces Item UID with a new one or creates a new UID.
 
-        Parameters
-        ----------
-        item: dict
-            Dictionary of item parameters. The dictionary may or may not have the key ``item_uid``.
+    #     Parameters
+    #     ----------
+    #     item: dict
+    #         Dictionary of item parameters. The dictionary may or may not have the key ``item_uid``.
 
-        Returns
-        -------
-        dict
-            Plan with new UID.
-        """
-        item = copy.deepcopy(item)
-        self._verify_item_type(item)
-        item["item_uid"] = self.new_item_uid()
-        return item
+    #     Returns
+    #     -------
+    #     dict
+    #         Plan with new UID.
+    #     """
+    #     item = copy.deepcopy(item)
+    #     self._verify_item_type(item)
+    #     item["item_uid"] = self.new_item_uid()
+    #     return item
 
-    async def _get_index_by_uid(self, *, uid):
-        """
-        Get index of a plan in Redis list by UID. This is inefficient operation and should
-        be avoided whenever possible. Raises an exception if the plan is not found.
+    # async def _get_index_by_uid(self, *, uid):
+    #     """
+    #     Get index of a plan in Redis list by UID. This is inefficient operation and should
+    #     be avoided whenever possible. Raises an exception if the plan is not found.
 
-        Parameters
-        ----------
-        uid: str
-            UID of the plans to find.
+    #     Parameters
+    #     ----------
+    #     uid: str
+    #         UID of the plans to find.
 
-        Returns
-        -------
-        int
-            Index of the plan with given UID.
+    #     Returns
+    #     -------
+    #     int
+    #         Index of the plan with given UID.
 
-        Raises
-        ------
-        IndexError
-            No plan is found.
-        """
-        queue, _ = await self._get_queue()
-        for n, plan in enumerate(queue):
-            if plan["item_uid"] == uid:
-                return n
-        raise IndexError(f"No plan with UID '{uid}' was found in the list.")
+    #     Raises
+    #     ------
+    #     IndexError
+    #         No plan is found.
+    #     """
+    #     queue, _ = await self._get_queue()
+    #     for n, plan in enumerate(queue):
+    #         if plan["item_uid"] == uid:
+    #             return n
+    #     raise IndexError(f"No plan with UID '{uid}' was found in the list.")
 
-    async def _get_index_by_uid_batch(self, *, uids):
-        """
-        Batch version of ``_get_index_by_uid``. The operation is implemented efficiently
-        and should be used for finding indices of large number of items (in batch operations).
-        Returns a list of indices. Index is set to -1 for items that are not found.
+    # async def _get_index_by_uid_batch(self, *, uids):
+    #     """
+    #     Batch version of ``_get_index_by_uid``. The operation is implemented efficiently
+    #     and should be used for finding indices of large number of items (in batch operations).
+    #     Returns a list of indices. Index is set to -1 for items that are not found.
 
-        Parameters
-        ----------
-        uids: list(str)
-            List of UIDs of the items in the batch to find.
+    #     Parameters
+    #     ----------
+    #     uids: list(str)
+    #         List of UIDs of the items in the batch to find.
 
-        Returns
-        -------
-        list(int)
-            List of indices of the items. The list has the same number of items as the list ``uids``.
-            Indices are set to -1 for the items that were not found in the queue.
-        """
-        queue, _ = await self._get_queue()
+    #     Returns
+    #     -------
+    #     list(int)
+    #         List of indices of the items. The list has the same number of items as the list ``uids``.
+    #         Indices are set to -1 for the items that were not found in the queue.
+    #     """
+    #     queue, _ = await self._get_queue()
 
-        uids_set = set(uids)  # Set should be more efficient for searching elements
-        uid_to_index = {}
-        for n, plan in enumerate(queue):
-            uid = plan["item_uid"]
-            if uid in uids_set:
-                uid_to_index[uid] = n
+    #     uids_set = set(uids)  # Set should be more efficient for searching elements
+    #     uid_to_index = {}
+    #     for n, plan in enumerate(queue):
+    #         uid = plan["item_uid"]
+    #         if uid in uids_set:
+    #             uid_to_index[uid] = n
 
-        indices = [None] * len(uids)
-        for n, uid in enumerate(uids):
-            indices[n] = uid_to_index.get(uid, -1)
+    #     indices = [None] * len(uids)
+    #     for n, uid in enumerate(uids):
+    #         indices[n] = uid_to_index.get(uid, -1)
 
-        return indices
+    #     return indices
 
-    # --------------------------------------------------------------------------
-    #                          Operations with UID set
-    def _uid_dict_clear(self):
-        """
-        Clear ``self._uid_dict``.
-        """
-        self._plan_queue_uid = self.new_item_uid()
-        self._uid_dict.clear()
+    # # --------------------------------------------------------------------------
+    # #                          Operations with UID set
+    # def _uid_dict_clear(self):
+    #     """
+    #     Clear ``self._uid_dict``.
+    #     """
+    #     self._plan_queue_uid = self.new_item_uid()
+    #     self._uid_dict.clear()
 
-    def _is_uid_in_dict(self, uid):
-        """
-        Checks if UID exists in ``self._uid_dict``.
-        """
-        return uid in self._uid_dict
+    # def _is_uid_in_dict(self, uid):
+    #     """
+    #     Checks if UID exists in ``self._uid_dict``.
+    #     """
+    #     return uid in self._uid_dict
 
-    def _uid_dict_add(self, item):
-        """
-        Add UID to ``self._uid_dict``.
-        """
-        uid = item["item_uid"]
-        if self._is_uid_in_dict(uid):
-            raise RuntimeError(f"Trying to add plan with UID '{uid}', which is already in the queue")
-        self._plan_queue_uid = self.new_item_uid()
-        self._uid_dict.update({uid: item})
+    # def _uid_dict_add(self, item):
+    #     """
+    #     Add UID to ``self._uid_dict``.
+    #     """
+    #     uid = item["item_uid"]
+    #     if self._is_uid_in_dict(uid):
+    #         raise RuntimeError(f"Trying to add plan with UID '{uid}', which is already in the queue")
+    #     self._plan_queue_uid = self.new_item_uid()
+    #     self._uid_dict.update({uid: item})
 
-    def _uid_dict_remove(self, uid):
-        """
-        Remove UID from ``self._uid_dict``.
-        """
-        if not self._is_uid_in_dict(uid):
-            raise RuntimeError(f"Trying to remove plan with UID '{uid}', which is not in the queue")
-        self._plan_queue_uid = self.new_item_uid()
-        self._uid_dict.pop(uid)
+    # def _uid_dict_remove(self, uid):
+    #     """
+    #     Remove UID from ``self._uid_dict``.
+    #     """
+    #     if not self._is_uid_in_dict(uid):
+    #         raise RuntimeError(f"Trying to remove plan with UID '{uid}', which is not in the queue")
+    #     self._plan_queue_uid = self.new_item_uid()
+    #     self._uid_dict.pop(uid)
 
-    def _uid_dict_update(self, item):
-        """
-        Update a plan with UID that is already in the dictionary.
-        """
-        uid = item["item_uid"]
-        if not self._is_uid_in_dict(uid):
-            raise RuntimeError(f"Trying to update plan with UID '{uid}', which is not in the queue")
-        self._plan_queue_uid = self.new_item_uid()
-        self._uid_dict.update({uid: item})
+    # def _uid_dict_update(self, item):
+    #     """
+    #     Update a plan with UID that is already in the dictionary.
+    #     """
+    #     uid = item["item_uid"]
+    #     if not self._is_uid_in_dict(uid):
+    #         raise RuntimeError(f"Trying to update plan with UID '{uid}', which is not in the queue")
+    #     self._plan_queue_uid = self.new_item_uid()
+    #     self._uid_dict.update({uid: item})
 
-    def _uid_dict_get_item(self, uid):
-        """
-        Returns a plan with the given UID.
-        """
-        return self._uid_dict[uid]
+    # def _uid_dict_get_item(self, uid):
+    #     """
+    #     Returns a plan with the given UID.
+    #     """
+    #     return self._uid_dict[uid]
 
-    async def _uid_dict_initialize(self):
-        """
-        Initialize ``self._uid_dict`` with UIDs extracted from the plans in the queue.
-        """
-        pq, _ = await self._get_queue()
-        self._uid_dict_clear()
-        # Go over all plans in the queue
-        for item in pq:
-            self._uid_dict_add(item)
-        # If plan is currently running
-        item = await self._get_running_item_info()
-        if item:
-            self._uid_dict_add(item)
+    # async def _uid_dict_initialize(self):
+    #     """
+    #     Initialize ``self._uid_dict`` with UIDs extracted from the plans in the queue.
+    #     """
+    #     pq, _ = await self._get_queue()
+    #     self._uid_dict_clear()
+    #     # Go over all plans in the queue
+    #     for item in pq:
+    #         self._uid_dict_add(item)
+    #     # If plan is currently running
+    #     item = await self._get_running_item_info()
+    #     if item:
+    #         self._uid_dict_add(item)
 
     # -------------------------------------------------------------
     #                   Currently Running Plan
@@ -858,26 +890,26 @@ class RedisPlanQueueOperations(AbstractPlanQueueOperations): # Add a BasePlanQue
         async with self._lock:
             return await self._pop_item_from_queue_batch(uids=uids, ignore_missing=ignore_missing)
 
-    def filter_item_parameters(self, item):
-        """
-        Remove parameters that are not in the list of allowed parameters.
-        Current parameter list includes parameters ``item_type``, ``item_uid``,
-        ``name``, ``args``, ``kwargs``, ``meta``, ``user``, ``user_group``.
+    # def filter_item_parameters(self, item):
+    #     """
+    #     Remove parameters that are not in the list of allowed parameters.
+    #     Current parameter list includes parameters ``item_type``, ``item_uid``,
+    #     ``name``, ``args``, ``kwargs``, ``meta``, ``user``, ``user_group``.
 
-        The list does not include ``result`` parameter, i.e. ``result`` will
-        be removed from the list of parameters.
+    #     The list does not include ``result`` parameter, i.e. ``result`` will
+    #     be removed from the list of parameters.
 
-        Parameters
-        ----------
-        item : dict
-            dictionary of item parameters
+    #     Parameters
+    #     ----------
+    #     item : dict
+    #         dictionary of item parameters
 
-        Returns
-        -------
-        dict
-            dictionary of filtered item parameters
-        """
-        return {k: w for k, w in item.items() if k in self._allowed_item_parameters}
+    #     Returns
+    #     -------
+    #     dict
+    #         dictionary of filtered item parameters
+    #     """
+    #     return {k: w for k, w in item.items() if k in self._allowed_item_parameters}
 
     async def _add_item_to_queue(self, item, *, pos=None, before_uid=None, after_uid=None, filter_parameters=True):
         """
@@ -894,9 +926,9 @@ class RedisPlanQueueOperations(AbstractPlanQueueOperations): # Add a BasePlanQue
         pos = pos if pos is not None else "back"
 
         if "item_uid" not in item:
-            item = self.set_new_item_uuid(item)
+            item = await self.set_new_item_uuid(item)
         else:
-            self._verify_item(item)
+            await self._verify_item(item)
 
         if filter_parameters:
             item = self.filter_item_parameters(item)
@@ -1117,7 +1149,7 @@ class RedisPlanQueueOperations(AbstractPlanQueueOperations): # Add a BasePlanQue
             raise RuntimeError(f"Failed to replace item: Item with UID '{item_uid}' is currently running")
 
         if "item_uid" not in item:
-            item = self.set_new_item_uuid(item)
+            item = await self.set_new_item_uuid(item)
 
         item_to_replace = self._uid_dict_get_item(item_uid)
         if item == item_to_replace:
@@ -1128,7 +1160,7 @@ class RedisPlanQueueOperations(AbstractPlanQueueOperations): # Add a BasePlanQue
         # Item with 'item_uid' is expected to be in the queue, so ignore 'item_uid'.
         #   The concern is that the queue may contain a plan with `item["item_uid"]`, which could be
         #   different from 'item_uid'. Then inserting the item may violate integrity of the queue.
-        self._verify_item(item, ignore_uids=[item_uid])
+        await self._verify_item(item, ignore_uids=[item_uid])
 
         # Parameters of the edited item should be verified against the list of the allowed parameters
         item = self.filter_item_parameters(item)
@@ -1549,7 +1581,7 @@ class RedisPlanQueueOperations(AbstractPlanQueueOperations): # Add a BasePlanQue
         immediate_execution = bool(item)
         if immediate_execution:
             # Generate UID if it does not exist or creates a deep copy
-            item = copy.deepcopy(item) if "item_uid" in item else self.set_new_item_uuid(item)
+            item = copy.deepcopy(item) if "item_uid" in item else await self.set_new_item_uuid(item)
         else:
             item = await self._get_item(pos="front")
 
@@ -1564,7 +1596,7 @@ class RedisPlanQueueOperations(AbstractPlanQueueOperations): # Add a BasePlanQue
                 # Items other than plans should be pushed to the back of the queue.
                 await self._pop_item_from_queue(pos="front")
                 if loop_mode:
-                    item_to_add = self.set_new_item_uuid(item)
+                    item_to_add = await self.set_new_item_uuid(item)
                     await self._add_item_to_queue(item_to_add)
 
         return item_to_return
@@ -1595,7 +1627,7 @@ class RedisPlanQueueOperations(AbstractPlanQueueOperations): # Add a BasePlanQue
         immediate_execution = bool(item)
         if immediate_execution:
             # Generate UID if it does not exist or creates a deep copy
-            item = copy.deepcopy(item) if "item_uid" in item else self.set_new_item_uuid(item)
+            item = copy.deepcopy(item) if "item_uid" in item else await self.set_new_item_uuid(item)
             item.setdefault("properties", {})["immediate_execution"] = True
 
         # UID remains in the `self._uid_dict` after this operation.
@@ -1688,7 +1720,7 @@ class RedisPlanQueueOperations(AbstractPlanQueueOperations): # Add a BasePlanQue
 
             if loop_mode and not immediate_execution:
                 item_to_add = item_cleaned.copy()
-                item_to_add = self.set_new_item_uuid(item_to_add)
+                item_to_add = await self.set_new_item_uuid(item_to_add)
                 await self._r_pool.rpush(self._name_plan_queue, json.dumps(item_to_add))
                 self._uid_dict_add(item_to_add)
             item_cleaned.setdefault("result", {})
@@ -1776,7 +1808,7 @@ class RedisPlanQueueOperations(AbstractPlanQueueOperations): # Add a BasePlanQue
                 self._uid_dict_remove(item["item_uid"])
                 # "stopped" - successful completion. Do not insert the item back in the queue.
                 if exit_status != "stopped":
-                    item_pushed_to_queue = self.set_new_item_uuid(item_cleaned)
+                    item_pushed_to_queue = await self.set_new_item_uuid(item_cleaned)
                     await self._add_item_to_queue(item_pushed_to_queue, pos="front", filter_parameters=False)
             self._plan_queue_uid = self.new_item_uid()
         else:
@@ -1944,4 +1976,3 @@ class RedisPlanQueueOperations(AbstractPlanQueueOperations): # Add a BasePlanQue
         """
         lock_info_json = await self._r_pool.get(self._name_autostart_mode_info)
         return json.loads(lock_info_json) if lock_info_json else None
-    

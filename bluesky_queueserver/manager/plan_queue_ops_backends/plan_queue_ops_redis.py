@@ -1,6 +1,4 @@
 
-
-
 import asyncio
 import copy
 import json
@@ -362,6 +360,8 @@ class RedisPlanQueueOperations(AbstractPlanQueueOperations):
         async with self._lock:
             await self._delete_pool_entries()
 
+    # Methods below are now and have been put into the abstract class as they are not specific to the redis backend.
+    # Putting them here for reference.
     # @staticmethod
     # def _verify_item_type(item):
     #     """

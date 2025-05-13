@@ -1,3 +1,4 @@
+aiosqlite
 bluesky>=1.7.0
 ipykernel
 jsonschema

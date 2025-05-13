@@ -17,7 +17,6 @@ from bluesky_queueserver.manager.profile_tools import (
     set_re_worker_active,
 )
 
-from ..comms import zmq_single_request
 from .common import re_manager_cmd  # noqa: F401
 from .common import (
     _user,
@@ -29,6 +28,7 @@ from .common import (
     patch_first_startup_file,
     use_ipykernel_for_tests,
     wait_for_condition,
+    zmq_request,
 )
 
 
@@ -438,6 +438,9 @@ from bluesky.plans import count
 from bluesky_queueserver.manager.profile_tools import is_re_worker_active
 from {}dir1.file1 import f1
 
+from bluesky import RunEngine
+RE = RunEngine()
+
 # Executed during import
 if not is_re_worker_active():
     raise Exception("Importing startup script: RE Worker is not detected as active")
@@ -588,16 +591,16 @@ def test_is_re_worker_active_2(re_manager_cmd, tmp_path, monkeypatch, option):  
         assert False, f"Unknown option '{option}'"
 
     # Open environment and execute plan 'sim_plan_1'
-    resp1, _ = zmq_single_request("permissions_reload", {"restore_plans_devices": True})
+    resp1, _ = zmq_request("permissions_reload", {"restore_plans_devices": True})
     assert resp1["success"] is True, f"resp={resp1}"
 
     # Add plan to the queue
     params = {"item": {"name": "sim_plan_1", "item_type": "plan"}, "user": _user, "user_group": _user_group}
-    resp2, _ = zmq_single_request("queue_item_add", params)
+    resp2, _ = zmq_request("queue_item_add", params)
     assert resp2["success"] is True, f"resp={resp2}"
 
     # Open the environment
-    resp3, _ = zmq_single_request("environment_open")
+    resp3, _ = zmq_request("environment_open")
     assert resp3["success"] is True
     assert wait_for_condition(time=10, condition=condition_environment_created)
 
@@ -605,28 +608,28 @@ def test_is_re_worker_active_2(re_manager_cmd, tmp_path, monkeypatch, option):  
     assert is_re_worker_active() is False
 
     # Make sure that the run is in the queue and the history is empty
-    status, _ = zmq_single_request("status")
+    status, _ = zmq_request("status")
     assert status["items_in_queue"] == 1
     assert status["items_in_history"] == 0
 
     # Start the queue
-    resp4, _ = zmq_single_request("queue_start")
+    resp4, _ = zmq_request("queue_start")
     assert resp4["success"] is True
 
     assert wait_for_condition(time=5, condition=condition_manager_idle)
 
     # Make sure that the run was executed successfully
-    status, _ = zmq_single_request("status")
+    status, _ = zmq_request("status")
     assert status["items_in_queue"] == 0
     assert status["items_in_history"] == 1
 
     # Make sure that plan was completed successfully
-    resp5, _ = zmq_single_request("history_get")
+    resp5, _ = zmq_request("history_get")
     assert resp5["success"] is True
     history = resp5["items"]
     assert history[-1]["result"]["exit_status"] == "completed"
 
     # Close the environment
-    resp6, _ = zmq_single_request("environment_close")
+    resp6, _ = zmq_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)

@@ -3,7 +3,6 @@ import subprocess
 import pytest
 
 from bluesky_queueserver import generate_zmq_keys
-from bluesky_queueserver.manager.comms import zmq_single_request
 
 from ..qserver_cli import QServerExitCodes
 from .common import re_manager_cmd  # noqa: F401
@@ -13,7 +12,9 @@ from .common import (
     set_qserver_zmq_address,
     set_qserver_zmq_public_key,
     use_ipykernel_for_tests,
+    use_zmq_encoding_for_tests,
     wait_for_condition,
+    zmq_request,
     zmq_secure_request,
 )
 
@@ -42,15 +43,19 @@ def test_cli_qserver_console_01(re_manager_cmd, ipython_kernel_ip, env_open):  #
         params.extend([f"--ipython-kernel-ip={ipython_kernel_ip}"])
     re_manager_cmd(params)
 
+    params_console = []
+    if use_zmq_encoding_for_tests() != "json":
+        params_console.append(f"--zmq-encoding={use_zmq_encoding_for_tests()}")
+
     if env_open:
-        resp2, _ = zmq_single_request("environment_open")
+        resp2, _ = zmq_request("environment_open")
         assert resp2["success"] is True
         assert resp2["msg"] == ""
 
         assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
 
     p = subprocess.Popen(
-        ["qserver-console"],
+        ["qserver-console", *params_console],
         universal_newlines=True,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
@@ -74,7 +79,7 @@ def test_cli_qserver_console_01(re_manager_cmd, ipython_kernel_ip, env_open):  #
         assert "Starting Jupyter Console ..." in output, output
 
     if env_open:
-        resp9, _ = zmq_single_request("environment_close")
+        resp9, _ = zmq_request("environment_close")
         assert resp9["success"] is True
         assert resp9["msg"] == ""
 
@@ -118,6 +123,9 @@ def test_cli_qserver_console_02(
             monkeypatch.setenv("QSERVER_ZMQ_CONTROL_ADDRESS", address_client)
         else:
             params_console.append(f"--zmq-control-addr={address_client}")
+
+    if use_zmq_encoding_for_tests() != "json":
+        params_console.append(f"--zmq-encoding={use_zmq_encoding_for_tests()}")
 
     if encryption_key:
         # # Set server public key (for 'qserver') using environment variable

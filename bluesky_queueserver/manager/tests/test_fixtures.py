@@ -1,5 +1,3 @@
-from bluesky_queueserver.manager.comms import zmq_single_request
-
 from .common import (  # noqa: F401
     _user,
     _user_group,
@@ -8,6 +6,7 @@ from .common import (  # noqa: F401
     condition_manager_idle,
     re_manager_cmd,
     wait_for_condition,
+    zmq_request,
 )
 
 
@@ -31,32 +30,32 @@ def test_fixture_re_manager_cmd_2(re_manager_cmd):  # noqa F811
 
     # Plan
     params1 = {"item": plan, "user": _user, "user_group": _user_group}
-    resp1, _ = zmq_single_request("queue_item_add", params1)
+    resp1, _ = zmq_request("queue_item_add", params1)
     assert resp1["success"] is True, f"resp={resp1}"
 
-    resp2, _ = zmq_single_request("status")
+    resp2, _ = zmq_request("status")
     assert resp2["items_in_queue"] == 1
     assert resp2["items_in_history"] == 0
 
     # Open the environment.
-    resp3, _ = zmq_single_request("environment_open")
+    resp3, _ = zmq_request("environment_open")
     assert resp3["success"] is True
     assert wait_for_condition(time=10, condition=condition_environment_created)
 
-    resp4, _ = zmq_single_request("queue_start")
+    resp4, _ = zmq_request("queue_start")
     assert resp4["success"] is True
 
     assert wait_for_condition(time=5, condition=condition_manager_idle)
 
-    resp5, _ = zmq_single_request("status")
+    resp5, _ = zmq_request("status")
     assert resp5["items_in_queue"] == 0
     assert resp5["items_in_history"] == 1
 
-    resp6, _ = zmq_single_request("history_get")
+    resp6, _ = zmq_request("history_get")
     history = resp6["items"]
     assert len(history) == 1
 
     # Close the environment.
-    resp7, _ = zmq_single_request("environment_close")
+    resp7, _ = zmq_request("environment_close")
     assert resp7["success"] is True, f"resp={resp7}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)

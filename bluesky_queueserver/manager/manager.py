@@ -7,12 +7,13 @@ import uuid
 from datetime import datetime
 from multiprocessing import Process
 
+import msgpack
 import zmq
 import zmq.asyncio
 
 import bluesky_queueserver
 
-from .comms import CommTimeoutError, PipeJsonRpcSendAsync, validate_zmq_key
+from .comms import CommTimeoutError, PipeJsonRpcSendAsync, ZMQEncoding, process_zmq_encoding_name, validate_zmq_key
 from .logging_setup import PPrintForLogging as ppfl
 from .logging_setup import setup_loggers
 from .output_streaming import setup_console_output_redirection
@@ -225,7 +226,6 @@ class RunEngineManager(Process):
         self._lock_info = LockInfo()  # Lock/unlock environment and/or queue
         self._lock_info.set_emergency_lock_key(config["lock_key_emergency"])
 
-        # The following attributes hold the state of the system
         self._manager_stopping = False  # Set True to exit manager (by _manager_stop_handler)
         self._environment_exists = False  # True if RE Worker environment exists
         self._manager_state = MState.INITIALIZING
@@ -245,6 +245,7 @@ class RunEngineManager(Process):
         self._loop = None
 
         # Communication with the server using ZMQ
+        self._zmq_encoding = process_zmq_encoding_name(config["zmq_encoding"])
         self._ctx = None
         self._zmq_socket = None
         self._zmq_ip_server = "tcp://*:60615"
@@ -875,6 +876,8 @@ class RunEngineManager(Process):
         try:
             if not self._environment_exists:
                 raise RuntimeError("RE Worker environment does not exist.")
+            elif self._compute_re_state() is None:
+                raise RuntimeError("Run Engine is not found in the RE Worker environment.")
             elif self._manager_state != MState.IDLE:
                 raise RuntimeError("RE Manager is busy.")
             elif self._use_ipython_kernel and self._is_ipkernel_external_task():
@@ -904,6 +907,8 @@ class RunEngineManager(Process):
         try:
             if not self._environment_exists:
                 raise RuntimeError("RE Worker environment does not exist.")
+            elif self._compute_re_state() is None:
+                raise RuntimeError("Run Engine is not found in the RE Worker environment.")
             elif self._manager_state != MState.IDLE:
                 raise RuntimeError("RE Manager is busy.")
             elif self._use_ipython_kernel and self._is_ipkernel_external_task():
@@ -1061,6 +1066,9 @@ class RunEngineManager(Process):
         if not self._environment_exists:
             success = False
             err_msg = "Environment does not exist."
+        elif self._compute_re_state() is None:
+            success = False
+            err_msg = "Run Engine is not found in the RE Worker environment."
         else:
             success, err_msg = await self._worker_command_pause_plan(option)
 
@@ -1088,6 +1096,9 @@ class RunEngineManager(Process):
             raise RuntimeError("IPython kernel (RE Worker) is busy.")
 
         elif self._environment_exists:
+            if self._compute_re_state() is None:
+                raise RuntimeError("Run Engine is not found in the RE Worker environment.")
+
             # Attempt to reserve IPython kernel.
             success, err_msg = await self._worker_command_reserve_kernel()
             if success:
@@ -1126,7 +1137,7 @@ class RunEngineManager(Process):
             queue_size = await self._plan_queue.get_queue_size()
             if not self.queue_autostart_enabled:
                 break
-            if queue_size and self._manager_state == MState.IDLE:
+            if queue_size and self._manager_state == MState.IDLE and self._compute_re_state() is not None:
                 success, err_msg = await self._start_plan()
                 if not success:
                     logger.debug("Autostart: failed to start a plan: %s", err_msg)
@@ -1731,6 +1742,9 @@ class RunEngineManager(Process):
         """
         return await self._status_handler(request)
 
+    def _compute_re_state(self):
+        return self._worker_state_info["re_state"] if self._worker_state_info else None
+
     async def _status_handler(self, request):
         """
         Returns status of the manager.
@@ -1752,7 +1766,7 @@ class RunEngineManager(Process):
         queue_stop_pending = self.queue_stop_pending
         queue_autostart_enabled = self.queue_autostart_enabled
         worker_environment_exists = self._environment_exists
-        re_state = self._worker_state_info["re_state"] if self._worker_state_info else None
+        re_state = self._compute_re_state()
         ip_kernel_state = self._worker_state_info["ip_kernel_state"] if self._worker_state_info else None
         ip_kernel_captured = self._worker_state_info["ip_kernel_captured"] if self._worker_state_info else None
         env_state = self._worker_state_info["environment_state"] if self._worker_state_info else "closed"
@@ -3614,13 +3628,22 @@ class RunEngineManager(Process):
 
     async def _zmq_receive(self):
         try:
-            msg_in = await self._zmq_socket.recv_json()
+            if self._zmq_encoding == ZMQEncoding.JSON:
+                msg_in = await self._zmq_socket.recv_json()
+            else:
+                _ = await self._zmq_socket.recv()
+                msg_in = msgpack.unpackb(_)
         except Exception as ex:
-            msg_in = f"JSON decode error: {ex}"
+            _ = self._zmq_encoding.name
+            msg_in = f"{_} decode error: {ex}"
         return msg_in
 
     async def _zmq_send(self, msg):
-        await self._zmq_socket.send_json(msg)
+        if self._zmq_encoding == ZMQEncoding.JSON:
+            await self._zmq_socket.send_json(msg)
+        else:
+            _ = msgpack.packb(msg)
+            await self._zmq_socket.send(_)
 
     async def zmq_server_comm(self):
         """

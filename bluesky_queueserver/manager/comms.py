@@ -4,7 +4,9 @@ import logging
 import queue
 import threading
 import uuid
+from enum import Enum
 
+import msgpack
 import zmq
 import zmq.asyncio
 
@@ -18,6 +20,35 @@ _fixed_private_key = "=@e7WwVuz{*eGcnv{AL@x2hmX!z^)wP3vKsQ{S7s"
 
 default_zmq_control_address_for_server = "tcp://*:60615"
 default_zmq_control_address = "tcp://localhost:60615"
+
+
+class ZMQEncoding(Enum):
+    JSON = "json"
+    MSGPACK = "msgpack"
+
+
+def supported_zmq_encodings():
+    """
+    Returns a tuple of supported ZMQ encodings.
+    """
+    return tuple([_.value for _ in ZMQEncoding])
+
+
+def process_zmq_encoding_name(encoding):
+    if isinstance(encoding, ZMQEncoding):
+        return encoding
+    elif isinstance(encoding, str):
+        if encoding.lower() in supported_zmq_encodings():
+            return ZMQEncoding(encoding.lower())
+        else:
+            raise ValueError(
+                f"Unsupported ZMQ encoding: {encoding}. Supported encodings: {supported_zmq_encodings()}"
+            )
+    else:
+        raise TypeError(
+            f"Unsupported type of the 'encoding' parameter {encoding} ({type(encoding)}). "
+            "Supported types: 'str' or 'ZMQEncoding'."
+        )
 
 
 class CommTimeoutError(TimeoutError):
@@ -610,6 +641,8 @@ class ZMQCommSendThreads:
         public/private key pair must be passed if encryption is enabled at the 0MQ server side.
         Communication requests will time out if the key is invalid. Exception will be raised if
         the key is improperly formatted. Encryption will be disabled if ``None`` is passed.
+    encoding : str or ZMQEncoding
+        Encoding of used for 0MQ messages. Supported values: "json" or "msgpack".
 
     Examples
     --------
@@ -656,6 +689,7 @@ class ZMQCommSendThreads:
         timeout_send=500,
         raise_exceptions=True,
         server_public_key=None,
+        encoding="json",
     ):
         zmq_server_address = zmq_server_address or default_zmq_control_address
 
@@ -663,6 +697,8 @@ class ZMQCommSendThreads:
         self._ctx = zmq.Context()
         self._zmq_socket = None
         self._zmq_server_address = zmq_server_address
+
+        self._encoding = process_zmq_encoding_name(encoding)
 
         if server_public_key is not None:
             validate_zmq_key(server_public_key)
@@ -704,7 +740,11 @@ class ZMQCommSendThreads:
                 msg, msg_err = {}, ""
                 try:
                     if self._zmq_socket.poll(timeout=self._timeout_receive_last):
-                        msg = self._zmq_socket.recv_json()
+                        if self._encoding == ZMQEncoding.JSON:
+                            msg = self._zmq_socket.recv_json()
+                        else:
+                            _ = self._zmq_socket.recv()
+                            msg = msgpack.unpackb(_)
                     else:
                         # This is very likely a timeout (RE Manager is not responding)
                         raise Exception("timeout occurred")
@@ -814,7 +854,12 @@ class ZMQCommSendThreads:
             self._timeout_receive_last = timeout
             self._zmq_socket.RCVTIMEO = timeout + 1
 
-        self._zmq_socket.send_json(msg_out)
+        if self._encoding == ZMQEncoding.JSON:
+            self._zmq_socket.send_json(msg_out)
+        else:
+            _ = msgpack.packb(msg_out)
+            self._zmq_socket.send(_)
+
         self._event_wait_for_msg.set()
 
         if self._blocking_call:
@@ -984,6 +1029,8 @@ class ZMQCommSendAsync:
         public/private key pair must be passed if encryption is enabled at the 0MQ server side.
         Communication requests will time out if the key is invalid. Exception will be raised if
         the key is improperly formatted. Encryption will be disabled if ``None`` is passed.
+    encoding : str or ZMQEncoding
+        Encoding of used for 0MQ messages. Supported values: "json" or "msgpack".
 
     Examples
     --------
@@ -1010,6 +1057,7 @@ class ZMQCommSendAsync:
         timeout_send=500,
         raise_exceptions=True,
         server_public_key=None,
+        encoding="json",
     ):
         self._loop = loop if loop else asyncio.get_event_loop()
 
@@ -1025,6 +1073,8 @@ class ZMQCommSendAsync:
         self._ctx = zmq.asyncio.Context()
         self._zmq_socket = None
         self._zmq_server_address = zmq_server_address
+
+        self._encoding = process_zmq_encoding_name(encoding)
 
         if self._server_public_key is not None:
             validate_zmq_key(self._server_public_key)
@@ -1042,12 +1092,20 @@ class ZMQCommSendAsync:
         return self._loop
 
     async def _zmq_send(self, msg):
-        await self._zmq_socket.send_json(msg)
+        if self._encoding == ZMQEncoding.JSON:
+            await self._zmq_socket.send_json(msg)
+        else:
+            _ = msgpack.packb(msg)
+            await self._zmq_socket.send(_)
 
     async def _zmq_receive(self, *, timeout):
         try:
             if await self._zmq_socket.poll(timeout=timeout):
-                msg = await self._zmq_socket.recv_json()
+                if self._encoding == ZMQEncoding.JSON:
+                    msg = await self._zmq_socket.recv_json()
+                else:
+                    _ = await self._zmq_socket.recv()
+                    msg = msgpack.unpackb(_)
             else:
                 # This is very likely a timeout (RE Manager is not responding)
                 raise Exception("timeout occurred")
@@ -1162,7 +1220,9 @@ class ZMQCommSendAsync:
             self._zmq_socket.close()
 
 
-def zmq_single_request(method, params=None, *, timeout=None, zmq_server_address=None, server_public_key=None):
+def zmq_single_request(
+    method, params=None, *, timeout=None, zmq_server_address=None, server_public_key=None, encoding="json"
+):
     """
     Send a single request to ZMQ server. The function opens the socket, sends
     a single ZMQ request and closes the socket. The function is not expected
@@ -1187,7 +1247,8 @@ def zmq_single_request(method, params=None, *, timeout=None, zmq_server_address=
         public/private key pair must be passed if encryption is enabled at the 0MQ server side.
         Communication requests will time out if the key is invalid. Exception will be raised if
         the key is improperly formatted. Encryption will be disabled if ``None`` is passed.
-
+    encoding : str or ZMQEncoding
+        Encoding of used for 0MQ messages. Supported values: "json" or "msgpack".
 
     Returns
     -------
@@ -1203,7 +1264,7 @@ def zmq_single_request(method, params=None, *, timeout=None, zmq_server_address=
     async def send_request(method, params):
         nonlocal msg_received
         zmq_to_manager = ZMQCommSendAsync(
-            zmq_server_address=zmq_server_address, server_public_key=server_public_key
+            zmq_server_address=zmq_server_address, server_public_key=server_public_key, encoding=encoding
         )
         msg_received = await zmq_to_manager.send_message(
             method=method, params=params, timeout=timeout, raise_exceptions=True

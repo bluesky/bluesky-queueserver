@@ -1,14 +1,11 @@
 import glob
-import multiprocessing
 import os
 import shutil
 import subprocess
-import time as ttime
 
 import pytest
 
 from bluesky_queueserver import gen_list_of_plans_and_devices
-from bluesky_queueserver.manager.comms import zmq_single_request
 
 from .common import re_manager_cmd  # noqa: F401
 from .common import (
@@ -20,6 +17,7 @@ from .common import (
     condition_queue_processing_finished,
     copy_default_profile_collection,
     wait_for_condition,
+    zmq_request,
 )
 
 _plan1 = {"name": "count", "args": [["det1", "det2"]], "item_type": "plan"}
@@ -78,28 +76,28 @@ def test_manager_options_startup_profile(re_manager_cmd, tmp_path, monkeypatch, 
         assert False, f"Unknown option '{option}'"
 
     # Open the environment (make sure that the environment loads)
-    resp1, _ = zmq_single_request("environment_open")
+    resp1, _ = zmq_request("environment_open")
     assert resp1["success"] is True
     assert wait_for_condition(time=10, condition=condition_environment_created)
 
     # Add the plan to the queue (will fail if incorrect environment is loaded)
     plan = {"name": "simple_sample_plan", "item_type": "plan"}
     params = {"item": plan, "user": _user, "user_group": _user_group}
-    resp2, _ = zmq_single_request("queue_item_add", params)
+    resp2, _ = zmq_request("queue_item_add", params)
     assert resp2["success"] is True, f"resp={resp2}"
 
     # Start the queue
-    resp3, _ = zmq_single_request("queue_start")
+    resp3, _ = zmq_request("queue_start")
     assert resp3["success"] is True
     assert wait_for_condition(time=10, condition=condition_queue_processing_finished)
 
     # Make sure that the plan was executed
-    resp4, _ = zmq_single_request("status")
+    resp4, _ = zmq_request("status")
     assert resp4["items_in_queue"] == 0
     assert resp4["items_in_history"] == 1
 
     # Close the environment
-    resp5, _ = zmq_single_request("environment_close")
+    resp5, _ = zmq_request("environment_close")
     assert resp5["success"] is True, f"resp={resp5}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
@@ -112,78 +110,6 @@ def zmq_proxy():
     p = subprocess.Popen(cmd, universal_newlines=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     yield
     p.kill()
-
-
-class _StartDispatcherProcess(multiprocessing.Process):
-    def __init__(self, queue, **kwargs):
-        super().__init__(**kwargs)
-        self._queue = queue
-
-    def run(self):
-        def put_in_queue(name, doc):
-            print("putting ", name, "in queue")
-            self._queue.put((name, doc))
-
-        from bluesky.callbacks.zmq import RemoteDispatcher
-
-        d = RemoteDispatcher("127.0.0.1:5568")
-        d.subscribe(put_in_queue)
-        print("REMOTE IS READY TO START")
-        d.loop.call_later(9, d.stop)
-        d.start()
-
-
-@pytest.fixture
-def zmq_dispatcher():
-    # The following code is refactored code from 'bluesky.tests.test_zmq.py' (test_zmq_no_RE)
-    queue = multiprocessing.Queue()
-    dispatcher_proc = _StartDispatcherProcess(queue=queue, daemon=True)
-    dispatcher_proc.start()
-    ttime.sleep(2)  # As above, give this plenty of time to start.
-
-    yield queue
-
-    dispatcher_proc.terminate()
-    dispatcher_proc.join()
-
-
-def test_manager_acq_with_0MQ_proxy(re_manager_cmd, zmq_proxy, zmq_dispatcher):  # noqa: F811
-    re_manager_cmd(["--zmq-data-proxy-addr", "localhost:5567"])
-
-    # Open the environment (make sure that the environment loads)
-    resp1, _ = zmq_single_request("environment_open")
-    assert resp1["success"] is True
-    assert wait_for_condition(time=10, condition=condition_environment_created)
-
-    # Add the plan to the queue (will fail if incorrect environment is loaded)
-    params = {"item": _plan1, "user": _user, "user_group": _user_group}
-    resp2, _ = zmq_single_request("queue_item_add", params)
-    assert resp2["success"] is True, f"resp={resp2}"
-
-    # Start the queue
-    resp3, _ = zmq_single_request("queue_start")
-    assert resp3["success"] is True
-    assert wait_for_condition(time=10, condition=condition_queue_processing_finished)
-
-    # Make sure that the plan was executed
-    resp4, _ = zmq_single_request("status")
-    assert resp4["items_in_queue"] == 0
-    assert resp4["items_in_history"] == 1
-
-    # Close the environment
-    resp5, _ = zmq_single_request("environment_close")
-    assert resp5["success"] is True, f"resp={resp5}"
-    assert wait_for_condition(time=5, condition=condition_environment_closed)
-
-    # Test if the data was delivered to the consumer.
-    # Simple test: check if 'start' and 'stop' documents were delivered.
-    queue = zmq_dispatcher
-    remote_accumulator = []
-    while not queue.empty():  # Since queue is used by one process at a time, queue.empty() should work reliably
-        remote_accumulator.append(queue.get(timeout=2))
-    assert len(remote_accumulator) >= 2
-    assert remote_accumulator[0][0] == "start"  # Start document
-    assert remote_accumulator[-1][0] == "stop"  # Stop document
 
 
 # fmt: off
@@ -199,7 +125,7 @@ def test_manager_redis_addr_parameter(re_manager_cmd, redis_addr, success):  # n
 
         # Try to communicate with the server to make sure Redis is configure correctly.
         #   RE Manager has to access Redis in order to prepare 'status'.
-        resp1, _ = zmq_single_request("status")
+        resp1, _ = zmq_request("status")
         assert resp1["items_in_queue"] == 0
         assert resp1["items_in_history"] == 0
     else:

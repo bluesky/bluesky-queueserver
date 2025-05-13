@@ -17,6 +17,8 @@ properties:
         type: string
       zmq_info_addr:
         type: string
+      zmq_encoding:
+        type: string
       zmq_publish_console:
         type: boolean
       redis_addr:
@@ -346,18 +348,4 @@ properties:
         type: string
         pattern: "^(NEVER)|(ON_REQUEST)|(ON_STARTUP)"
       emergency_lock_key:
-        type: string
-  run_engine:
-    type: object
-    additional_properties: false
-    properties:
-      use_persistent_metadata:
-        type: boolean
-      kafka_server:
-        type: string
-      kafka_topic:
-        type: string
-      zmq_data_proxy_addr:
-        type: string
-      databroker_config:
         type: string

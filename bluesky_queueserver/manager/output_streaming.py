@@ -9,13 +9,15 @@ import sys
 import threading
 import time as ttime
 
+import msgpack
 import zmq
 
 import bluesky_queueserver
 
+from .comms import ZMQEncoding, process_zmq_encoding_name
+
 logger = logging.getLogger(__name__)
 qserver_version = bluesky_queueserver.__version__
-
 
 default_zmq_info_address_for_server = "tcp://*:60625"
 default_zmq_info_address = "tcp://localhost:60625"
@@ -113,6 +115,8 @@ class PublishConsoleOutput:
     zmq_publish_addr : str, None
         Address of 0MQ PUB socket for the publishing server. If ``None``, then
         the default address ``tcp://*:60625`` is used.
+    encoding : str or ZMQEncoding
+        Encoding of used for 0MQ messages. Supported values: "json" or "msgpack".
     zmq_topic : str
         Name of the 0MQ topic where the messages are published.
     name : str
@@ -126,6 +130,7 @@ class PublishConsoleOutput:
         console_output_on=True,
         zmq_publish_on=True,
         zmq_publish_addr=None,
+        encoding="json",
         zmq_topic=_default_zmq_console_topic,
         name="RE Console Output Publisher",
     ):
@@ -136,6 +141,8 @@ class PublishConsoleOutput:
 
         self._console_output_on = console_output_on
         self._zmq_publish_on = zmq_publish_on
+
+        self._encoding = process_zmq_encoding_name(encoding)
 
         zmq_publish_addr = zmq_publish_addr or default_zmq_info_address_for_server
 
@@ -202,8 +209,12 @@ class PublishConsoleOutput:
 
         if self._zmq_publish_on and self._socket:
             topic = self._zmq_topic
-            payload_json = json.dumps(payload)
-            self._socket.send_multipart([topic.encode("ascii"), payload_json.encode("utf8")])
+            if self._encoding == ZMQEncoding.JSON:
+                payload_json = json.dumps(payload)
+                self._socket.send_multipart([topic.encode("ascii"), payload_json.encode("utf8")])
+            else:
+                payload_pickle = msgpack.packb(payload)
+                self._socket.send_multipart([topic.encode("ascii"), payload_pickle])
 
 
 class ReceiveConsoleOutput:
@@ -248,6 +259,8 @@ class ReceiveConsoleOutput:
     zmq_subscribe_addr : str or None
         Address of ZMQ server (PUB socket). If None, then the default address is
         ``tcp://localhost:60625`` is used.
+    encoding : str or ZMQEncoding
+        Encoding of used for 0MQ messages. Supported values: "json" or "msgpack".
     zmq_topic : str
         0MQ topic for console output. Only messages from this topic are going to be received.
     timeout : int, float or None
@@ -255,7 +268,9 @@ class ReceiveConsoleOutput:
         for the message indefinitely.
     """
 
-    def __init__(self, *, zmq_subscribe_addr=None, zmq_topic=_default_zmq_console_topic, timeout=1000):
+    def __init__(
+        self, *, zmq_subscribe_addr=None, encoding="json", zmq_topic=_default_zmq_console_topic, timeout=1000
+    ):
         self._timeout = timeout  # Timeout for 'recv' operation (ms)
 
         zmq_subscribe_addr = zmq_subscribe_addr or default_zmq_info_address
@@ -264,6 +279,8 @@ class ReceiveConsoleOutput:
         logger.info("Subscribing to 0MQ topic: '%s' ...", zmq_topic)
         self._zmq_subscribe_addr = zmq_subscribe_addr
         self._zmq_topic = zmq_topic
+
+        self._encoding = process_zmq_encoding_name(encoding)
 
         self._socket = None
         self._socket_subscribed = False
@@ -326,9 +343,13 @@ class ReceiveConsoleOutput:
         if not self._socket.poll(timeout=timeout):
             raise TimeoutError("No message received during timeout period {timeout} ms")
 
-        topic, payload_json = self._socket.recv_multipart()
-        payload_json = payload_json.decode("utf8", "strict")
-        payload = json.loads(payload_json)
+        topic, payload_received = self._socket.recv_multipart()
+        if self._encoding == ZMQEncoding.JSON:
+            payload_json = payload_received.decode("utf8", "strict")
+            payload = json.loads(payload_json)
+        else:
+            payload = msgpack.unpackb(payload_received)
+
         return payload
 
     def __del__(self):
@@ -422,6 +443,8 @@ class ReceiveConsoleOutputAsync:
     zmq_subscribe_addr : str or None
         Address of ZMQ server (PUB socket). If None, then the default address is
         ``tcp://localhost:60625`` is used.
+    encoding : str or ZMQEncoding
+        Encoding of used for 0MQ messages. Supported values: "json" or "msgpack".
     zmq_topic : str
         0MQ topic for console output. Only messages from this topic are going to be received.
     timeout : int, float or None
@@ -429,7 +452,9 @@ class ReceiveConsoleOutputAsync:
         for the message indefinitely.
     """
 
-    def __init__(self, *, zmq_subscribe_addr=None, zmq_topic=_default_zmq_console_topic, timeout=1000):
+    def __init__(
+        self, *, zmq_subscribe_addr=None, encoding="json", zmq_topic=_default_zmq_console_topic, timeout=1000
+    ):
         self._timeout = timeout  # Timeout for 'recv' operation (ms)
 
         zmq_subscribe_addr = zmq_subscribe_addr or "tcp://localhost:60625"
@@ -442,6 +467,8 @@ class ReceiveConsoleOutputAsync:
         logger.info("Subscribing to 0MQ topic: '%s' ...", zmq_topic)
         self._zmq_subscribe_addr = zmq_subscribe_addr
         self._zmq_topic = zmq_topic
+
+        self._encoding = process_zmq_encoding_name(encoding)
 
         self._socket = None
         self._socket_subscribed = False
@@ -522,10 +549,13 @@ class ReceiveConsoleOutputAsync:
         if not await self._socket.poll(timeout=timeout):
             raise TimeoutError("No message received during timeout period {timeout} ms")
 
-        topic, payload_json = await self._socket.recv_multipart()
+        topic, payload_received = await self._socket.recv_multipart()
+        if self._encoding == ZMQEncoding.JSON:
+            payload_json = payload_received.decode("utf8", "strict")
+            payload = json.loads(payload_json)
+        else:
+            payload = msgpack.unpackb(payload_received)
 
-        payload_json = payload_json.decode("utf8", "strict")
-        payload = json.loads(payload_json)
         return payload
 
     async def _recv_next_message(self):
@@ -618,6 +648,16 @@ def qserver_console_monitor_cli():
         help="The parameter is deprecated and will be removed. Use --zmq-info-addr instead.",
     )
 
+    parser.add_argument(
+        "--zmq-encoding",
+        dest="zmq_encoding",
+        type=str,
+        default=None,
+        help="The encoding used for 0MQ communication. The encoding must match the encoding used by RE Manager. "
+        "The parameter value overrides the value set by QSERVER_ZMQ_ENCODING environment variable. "
+        "The supported values: 'json' (default) or 'msgpack'.",
+    )
+
     args = parser.parse_args()
 
     zmq_info_addr = args.zmq_info_addr
@@ -629,8 +669,12 @@ def qserver_console_monitor_cli():
     zmq_info_addr = zmq_info_addr or os.environ.get("QSERVER_ZMQ_INFO_ADDRESS", None)
     zmq_info_addr = zmq_info_addr or default_zmq_info_address
 
+    zmq_encoding = args.zmq_encoding
+    zmq_encoding = zmq_encoding or os.environ.get("QSERVER_ZMQ_ENCODING", None)
+    zmq_encoding = zmq_encoding or "json"
+
     try:
-        rco = ReceiveConsoleOutput(zmq_subscribe_addr=zmq_info_addr)
+        rco = ReceiveConsoleOutput(zmq_subscribe_addr=zmq_info_addr, encoding=zmq_encoding)
         rco.subscribe()
         while True:
             try:

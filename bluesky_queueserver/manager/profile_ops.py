@@ -230,16 +230,6 @@ get_ipython = get_ipython_patch
 """
 
 
-# Discard RE and db from the profile namespace (if they exist).
-def _discard_re_from_nspace(nspace, *, keep_re=False):
-    """
-    Discard RE and db from the profile namespace (if they exist).
-    """
-    if not keep_re:
-        nspace.pop("RE", None)
-        nspace.pop("db", None)
-
-
 def _patch_script_code(code_str):
     """
     Patch script code represented as a single text string:
@@ -268,7 +258,7 @@ def _patch_script_code(code_str):
     return "\n".join(s_list)
 
 
-def load_profile_collection(path, *, patch_profiles=True, keep_re=False, nspace=None):
+def load_profile_collection(path, *, patch_profiles=True, nspace=None):
     """
     Load profile collection located at the specified path. The collection consists of
     .py files started with 'DD-', where D is a digit (e.g. 05-file.py). The files
@@ -281,9 +271,6 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False, nspace=
     patch_profiles: boolean
         enable/disable patching profiles. At this point there is no reason not to
         patch profiles.
-    keep_re: boolean
-        Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
-        or removed (``False``).
     nspace: dict or None
         Reference to the existing namespace, in which the code is executed. If ``nspace``
         is *None*, then the new namespace is created.
@@ -359,8 +346,6 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False, nspace=
                 patch = "del __file__\n"  # Do not delete '__name__'
                 exec(patch, nspace, nspace)
 
-        _discard_re_from_nspace(nspace, keep_re=keep_re)
-
     finally:
         try:
             if path_is_set:
@@ -371,7 +356,7 @@ def load_profile_collection(path, *, patch_profiles=True, keep_re=False, nspace=
     return nspace
 
 
-def load_startup_module(module_name, *, keep_re=False, nspace=None):
+def load_startup_module(module_name, *, nspace=None):
     """
     Populate namespace by import a module.
 
@@ -379,9 +364,6 @@ def load_startup_module(module_name, *, keep_re=False, nspace=None):
     ----------
     module_name: str
         name of the module to import
-    keep_re: boolean
-        Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
-        or removed (``False``).
     nspace: dict or None
         Reference to the existing namespace, in which the code is executed. If ``nspace``
         is *None*, then the new namespace is created.
@@ -406,12 +388,10 @@ def load_startup_module(module_name, *, keep_re=False, nspace=None):
         ex_str = "".join(ex_str) + "\n" + msg
         raise ScriptLoadingError(msg, ex_str) from ex
 
-    _discard_re_from_nspace(nspace, keep_re=keep_re)
-
     return nspace
 
 
-def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True, nspace=None):
+def load_startup_script(script_path, *, enable_local_imports=True, nspace=None):
     """
     Populate namespace by import a module.
 
@@ -419,9 +399,6 @@ def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True
     ----------
     script_path : str
         full path to the startup script
-    keep_re : boolean
-        Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
-        or removed (``False``).
     enable_local_imports : boolean
         If ``False``, local imports from the script will not work. Setting to ``True``
         enables local imports.
@@ -481,8 +458,6 @@ def load_startup_script(script_path, *, keep_re=False, enable_local_imports=True
 
             sys.path.remove(p)
 
-    _discard_re_from_nspace(nspace, keep_re=keep_re)
-
     return nspace
 
 
@@ -491,7 +466,6 @@ def load_worker_startup_code(
     startup_dir=None,
     startup_module_name=None,
     startup_script_path=None,
-    keep_re=False,
     nspace=None,
 ):
     """
@@ -506,9 +480,6 @@ def load_worker_startup_code(
         Name of the startup module.
     startup_script_path : str
         Path to startup script.
-    keep_re: boolean
-        Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)
-        or removed (``False``).
     nspace: dict or None
         Reference to the existing namespace, in which the code is executed. If ``nspace``
         is *None*, then the new namespace is created.
@@ -530,16 +501,16 @@ def load_worker_startup_code(
         logger.info("Loading RE Worker startup code from directory '%s' ...", startup_dir)
         startup_dir = os.path.abspath(os.path.expanduser(startup_dir))
         logger.info("Startup directory: '%s'", startup_dir)
-        nspace = load_profile_collection(startup_dir, keep_re=keep_re, patch_profiles=True, nspace=nspace)
+        nspace = load_profile_collection(startup_dir, patch_profiles=True, nspace=nspace)
 
     elif startup_module_name is not None:
         logger.info("Loading RE Worker startup code from module '%s' ...", startup_module_name)
-        nspace = load_startup_module(startup_module_name, keep_re=keep_re, nspace=nspace)
+        nspace = load_startup_module(startup_module_name, nspace=nspace)
 
     elif startup_script_path is not None:
         logger.info("Loading RE Worker startup code from script '%s' ...", startup_script_path)
         startup_script_path = os.path.abspath(os.path.expanduser(startup_script_path))
-        nspace = load_startup_script(startup_script_path, keep_re=keep_re, nspace=nspace)
+        nspace = load_startup_script(startup_script_path, nspace=nspace)
 
     else:
         logger.warning(
@@ -1971,6 +1942,9 @@ def _compare_types(object_in, object_out):
         if isinstance(object_out, float) and isinstance(object_in, int):
             match = True
 
+        if pydantic_version_major == 1 and isinstance(object_in, (int, float)) and isinstance(object_out, str):
+            match = True
+
         # Conversion to Enum is valid (parameters often contain values, that are converted to Enums).
         elif issubclass(type(object_out), enum.Enum) and object_in == object_out.value:
             match = True
@@ -2983,13 +2957,16 @@ def _process_plan(plan, *, existing_devices, existing_plans):
         #   expressed as "<class 'int'>", but have valid '__name__' attribute
         #   containing type name, such as "int".
         if hasattr(annotation, "__name__") and re.search("^<.*>$", a_str):
-            # Note, that starting with Python 3.10 parameter annotation always have
+            # Note, that starting with Python 3.10 parameter annotation always has
             #   '__name__', which is meaningless for types other than base types.
-            a_str = annotation.__name__
+            _ = annotation.__name__
             mapping = {k.__name__: v for k, v in protocols_inv.items()}
-            if a_str in mapping:
-                a_str = mapping[a_str]
+            if _ in mapping:
+                a_str = mapping[_]
                 ns[a_str] = annotation  # 'a_str' is __DEVICE__, __READABLE__ or similar
+            else:
+                if re.search("<class '.+'>", a_str):
+                    a_str = re.sub(r"<class '(.+)'>", r"\1", a_str)
         else:
             # Replace each expression with a unique string in the form of '__CALLABLE<n>__'
             n_patterns = 0  # Number of detected callables
@@ -3021,6 +2998,15 @@ def _process_plan(plan, *, existing_devices, existing_plans):
             # Replace all callables ('__CALLABLE1__', '__CALLABLE2__', etc.) with '__CALLABLE__' string
             for k, v in substitutions_dict.items():
                 a_str = re.sub(k, v, a_str)
+
+            # Some types can not be validated by Pydantic, but they could be substituted by other types that can
+            patches = {
+                "collections.abc.Iterable": "collections.abc.Iterable[typing.Any]",
+            }
+            template_prefix = r"(?<![._A-Za-z0-9])"
+            template_suffix = r"(?![._\[A-Za-z0-9])"
+            for k, v in patches.items():
+                a_str = re.sub(f"{template_prefix}{k}{template_suffix}", v, a_str)
 
         except Exception:
             # Ignore the type if it can not be recreated.
@@ -3309,8 +3295,12 @@ def _prepare_devices(devices, *, max_depth=0, ignore_all_subdevices_if_one_fails
     def get_device_params(device):
         movable_protocols = (protocols.Movable,)
         # TODO: remove this check when NamedMovable is available in every Bluesky deployment
-        if hasattr(protocols, "NamedMovable"):
-            movable_protocols = (*movable_protocols, protocols.NamedMovable)
+        # !!! Checking for NamedMovable involves checking for 'hints' attribute, which tends to
+        # !!! instantiate objects (at least on Python 3.10 and 3.11, worked fine on Python 3.12),
+        # !!! which is undesirable. NamedMovable object will be detected checked for attributes of
+        # !!! Movable protocol.
+        # if hasattr(protocols, "NamedMovable"):
+        #     movable_protocols = (*movable_protocols, protocols.NamedMovable)
 
         return {
             "is_readable": isinstance(device, protocols.Readable),

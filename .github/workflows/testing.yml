@@ -9,16 +9,25 @@ jobs:
     strategy:
       matrix:
         use-ipykernel: [false, true]
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
-        pydantic-version: ["<2.0.0", ">=2.0.0"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        zmq-encoding: ["json", "msgpack"]
+        # pydantic-version: ["<2.0.0", ">=2.0.0"]
         group: [1, 2, 3]
         exclude:
           - python-version: "3.9"
-            pydantic-version: "<2.0.0"
+            zmq-encoding: "msgpack"
           - python-version: "3.10"
-            pydantic-version: "<2.0.0"
-          - python-version: "3.12"
-            pydantic-version: "<2.0.0"
+            zmq-encoding: "msgpack"
+          - python-version: "3.11"
+            zmq-encoding: "msgpack"
+          - python-version: "3.13"
+            zmq-encoding: "msgpack"
+        #   - python-version: "3.9"
+        #     pydantic-version: "<2.0.0"
+        #   - python-version: "3.10"
+        #     pydantic-version: "<2.0.0"
+        #   - python-version: "3.12"
+        #     pydantic-version: "<2.0.0"
       fail-fast: false
 
     steps:
@@ -38,13 +47,14 @@ jobs:
 
         pip install .
         pip install -r requirements-dev.txt
-        pip install "pydantic${{ matrix.pydantic-version }}"
-        pip install bluesky==1.11.0
+        # pip install "pydantic${{ matrix.pydantic-version }}"
+        # pip install bluesky==1.13.1
 
         pip list
     - name: Test with pytest
       env:
         USE_IPYKERNEL: ${{ matrix.use-ipykernel }}
+        USE_ZMQ_ENCODING: ${{ matrix.zmq-encoding }}
       run: |
         # pytest -k test_ip_kernel_func -vvv
         coverage run -m pytest -vv --splits 3 --group ${{ matrix.group }}

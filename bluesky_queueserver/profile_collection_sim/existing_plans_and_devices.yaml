@@ -1575,7 +1575,7 @@ existing_plans:
       name: min_step
     - annotation:
         type: float
-      description: largest step for slow-chaning regions
+      description: largest step for slow-changing regions
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -2322,14 +2322,14 @@ existing_plans:
       name: motor
     - annotation:
         type: float
-      description: starting position of motor
+      description: starting position of motor, relative to the current position.
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
       name: start
     - annotation:
         type: float
-      description: ending position of motor
+      description: ending position of motor, relative to the current position.
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1
@@ -2343,7 +2343,7 @@ existing_plans:
       name: min_step
     - annotation:
         type: float
-      description: largest step for slow-chaning regions
+      description: largest step for slow-changing regions
       kind:
         name: POSITIONAL_OR_KEYWORD
         value: 1

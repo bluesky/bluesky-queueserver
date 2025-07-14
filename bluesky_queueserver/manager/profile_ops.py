@@ -677,9 +677,9 @@ def is_device(obj):
     """
     Returns ``True`` if the object is a device.
     """
-    from bluesky import protocols
+    from bluesky.protocols import Flyable, HasName, Readable
 
-    return isinstance(obj, (protocols.Readable, protocols.Flyable)) and not inspect.isclass(obj)
+    return isinstance(obj, (HasName, Readable, Flyable)) and not inspect.isclass(obj)
 
 
 def _process_registered_objects(*, nspace, reg_objs, validator, obj_type):
@@ -818,17 +818,11 @@ def _get_nspace_object(object_name, *, objects_in_nspace, nspace=None):
 
     if object_found:
         for c in components[1:]:
-            if hasattr(device, "component_names") and (c in device.component_names):
-                # The defice MUST have the attribute 'c', but still process the case when
-                #   there is a bug and the device doesn't have the attribute
-                device = getattr(device, c, None)
-                if object_found is None:
-                    object_found = False
-                    logger.error("Device '%s' does not have attribute (subdevice) '%s'", object_name, c)
-                object_found = object_found if device else False
-
-            else:
+            device = getattr(device, c, None)
+            if device is None:
                 object_found = False
+                logger.error("Device '%s' does not have attribute (subdevice) '%s'", object_name, c)
+            object_found = object_found if device else False
 
             if not object_found:
                 break
@@ -3315,6 +3309,8 @@ def _prepare_devices(devices, *, max_depth=0, ignore_all_subdevices_if_one_fails
             component_names = device.component_names
             if not isinstance(component_names, Iterable):
                 component_names = []
+        elif hasattr(device, "children"):
+            component_names = [_[0] for _ in device.children()]
         else:
             component_names = []
         return component_names

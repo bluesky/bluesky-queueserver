@@ -677,9 +677,10 @@ def is_device(obj):
     """
     Returns ``True`` if the object is a device.
     """
-    from bluesky.protocols import Flyable, HasName, Readable
+    from bluesky.protocols import Flyable, Readable
 
-    return isinstance(obj, (HasName, Readable, Flyable)) and not inspect.isclass(obj)
+    # Detect ophyd-async devices, which are not readable nor flyable by checking existence of 'children' attribute
+    return (isinstance(obj, (Readable, Flyable)) or hasattr(obj, "children")) and not inspect.isclass(obj)
 
 
 def _process_registered_objects(*, nspace, reg_objs, validator, obj_type):

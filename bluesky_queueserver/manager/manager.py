@@ -2742,16 +2742,25 @@ class RunEngineManager(Process):
 
     async def _history_clear_handler(self, request):
         """
-        Remove all entries from the plan history
+        Remove some or all entries from the plan history
         """
         logger.info("Clearing the plan execution history ...")
         try:
-            supported_param_names = ["lock_key"]
+            supported_param_names = ["lock_key", "size"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
             self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
-            await self._plan_queue.clear_history()
+            size = request.get("size", None)
+            if size is not None:
+                if not isinstance(size, int):
+                    raise ValueError("The 'size' parameter must be an integer.")
+                if size < 0:
+                    raise ValueError("The 'size' paramter cannot be negative.")
+                await self._plan_queue.trim_history(new_size=size)
+            else:
+                await self._plan_queue.clear_history()
+
             success, msg = True, ""
         except Exception as ex:
             success, msg = False, f"Error: {ex}"

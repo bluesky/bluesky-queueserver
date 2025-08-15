@@ -15,6 +15,8 @@ from typing import Dict, Optional
 import bluesky.protocols
 import ophyd
 import ophyd.sim
+import ophyd_async.core
+import ophyd_async.sim
 import pydantic
 import pytest
 import yaml
@@ -4307,6 +4309,8 @@ _pp_dev1 = ophyd.Device(name="_pp_dev1")
 _pp_dev2 = ophyd.Device(name="_pp_dev2")
 _pp_dev3 = ophyd.Device(name="_pp_dev3")
 
+_pp_async_dev1 = ophyd_async.core.Device(name="_pp_async_dev1")
+
 
 def _pp_p1():
     yield from []
@@ -4373,10 +4377,18 @@ def _pp_generate_stage_devs():
     sim_bundle_A = SimBundle(name="sim_bundle_A")
     sim_bundle_B = SimBundle(name="sim_bundle_B")  # Used for tests
 
-    return sim_bundle_A, sim_bundle_B
+    class SimAsynStage(ophyd_async.core.Device):
+        def __init__(self, name=""):
+            self.vertical = ophyd_async.sim.SimMotor()
+            self.horizontal = ophyd_async.sim.SimMotor()
+            super().__init__(name=name)
+
+    sim_asyn_stage_A = SimAsynStage(name="sim_asyn_stage_A")
+
+    return sim_bundle_A, sim_bundle_B, sim_asyn_stage_A
 
 
-_pp_stg_A, _pp_stg_B = _pp_generate_stage_devs()
+_pp_stg_A, _pp_stg_B, _pp_async_stg_A = _pp_generate_stage_devs()
 
 
 def _pp_callable1():
@@ -4584,8 +4596,8 @@ def _gen_environment_pp2():
         yield from [a, b]
 
     # Create namespace
-    nspace = {"_pp_dev1": _pp_dev1, "_pp_dev2": _pp_dev2, "_pp_dev3": _pp_dev3}
-    nspace.update({"_pp_stg_A": _pp_stg_A, "_pp_stg_B": _pp_stg_B})
+    nspace = {"_pp_dev1": _pp_dev1, "_pp_dev2": _pp_dev2, "_pp_dev3": _pp_dev3, "_pp_async_dev1": _pp_async_dev1}
+    nspace.update({"_pp_stg_A": _pp_stg_A, "_pp_stg_B": _pp_stg_B, "_pp_async_stg_A": _pp_async_stg_A})
     nspace.update({"_pp_p1": _pp_p1, "_pp_p2": _pp_p2, "_pp_p3": _pp_p3})
     nspace.update({"_pp_callable1": _pp_callable1, "_pp_callable2": _pp_callable2})
     nspace.update({"plan1": plan1})
@@ -5193,12 +5205,27 @@ _stg_components = {
     }
 }
 
+_mtr_async_components = {
+    "components": {
+        "acceleration_time": {}, "units": {}, "user_readback": {}, "user_setpoint": {}, "velocity": {}
+    }
+}
+
+_stg_async_components = {
+    "components": {
+        "vertical": copy.deepcopy(_mtr_async_components),
+        "horizontal": copy.deepcopy(_mtr_async_components),
+    }
+}
+
 _all_devices_pd1 = {
     "_pp_dev1": {},
     "_pp_dev2": {},
     "_pp_dev3": {},
+    "_pp_async_dev1": {},
     "_pp_stg_A": copy.deepcopy(_stg_components),
     "_pp_stg_B": copy.deepcopy(_stg_components),
+    "_pp_async_stg_A": copy.deepcopy(_stg_async_components),
 }
 
 _stg_components_depth_3 = {  # Used for tests with 'depth==3'
@@ -5232,6 +5259,8 @@ _stg_components_depth_3 = {  # Used for tests with 'depth==3'
         "_pp_dev3": {},
         "_pp_stg_A": {},
         "_pp_stg_B": {},
+        "_pp_async_dev1": {},
+        "_pp_async_stg_A": {},
     }),
     (2, {}, {
         "_pp_dev1": {},
@@ -5239,6 +5268,8 @@ _stg_components_depth_3 = {  # Used for tests with 'depth==3'
         "_pp_dev3": {},
         "_pp_stg_A": {'components': {'dets': {}, 'mtrs': {}}},
         "_pp_stg_B": {'components': {'dets': {}, 'mtrs': {}}},
+        "_pp_async_dev1": {},
+        "_pp_async_stg_A": {'components': {'horizontal': {}, 'vertical': {}}},
     }),
     (3, {}, {
         "_pp_dev1": {},
@@ -5246,12 +5277,16 @@ _stg_components_depth_3 = {  # Used for tests with 'depth==3'
         "_pp_dev3": {},
         "_pp_stg_A": _stg_components_depth_3,
         "_pp_stg_B": _stg_components_depth_3,
+        "_pp_async_dev1": {},
+        "_pp_async_stg_A": copy.deepcopy(_stg_async_components),
     }),
     (4, {}, _all_devices_pd1),
     (5, {}, _all_devices_pd1),
     (3, {"_pp_dev2": {"exclude": True},
          "_pp_dev3": {"exclude": True},
-         "_pp_stg_A": {"exclude": True}},
+         "_pp_stg_A": {"exclude": True},
+         "_pp_async_dev1": {"exclude": True},
+         "_pp_async_stg_A": {"exclude": True}},
         {
         "_pp_dev1": {},
         "_pp_stg_B": _stg_components_depth_3,
@@ -5265,11 +5300,15 @@ _stg_components_depth_3 = {  # Used for tests with 'depth==3'
         "_pp_dev3": {},
         "_pp_stg_A": {},
         "_pp_stg_B": _stg_components_depth_3,
+        "_pp_async_dev1": {},
+        "_pp_async_stg_A": {'components': {'horizontal': {}, 'vertical': {}}},
     }),
     (2, {"_pp_dev2": {"exclude": False},
          "_pp_dev3": {"exclude": False},
          "_pp_stg_A": {"depth": 0},
-         "_pp_stg_B": {"depth": 0}},
+         "_pp_stg_B": {"depth": 0},
+         "_pp_async_dev1": {"depth": 0},
+         "_pp_async_stg_A": {"depth": 0}},
         _all_devices_pd1
      ),
 ])

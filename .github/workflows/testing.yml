@@ -9,13 +9,11 @@ jobs:
     strategy:
       matrix:
         use-ipykernel: [false, true]
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
         zmq-encoding: ["json", "msgpack"]
         # pydantic-version: ["<2.0.0", ">=2.0.0"]
         group: [1, 2, 3]
         exclude:
-          - python-version: "3.9"
-            zmq-encoding: "msgpack"
           - python-version: "3.10"
             zmq-encoding: "msgpack"
           - python-version: "3.11"

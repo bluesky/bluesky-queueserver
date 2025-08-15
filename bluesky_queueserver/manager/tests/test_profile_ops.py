@@ -4159,6 +4159,21 @@ def test_build_plan_name_list_2_fail(plan_def, exception_type, msg):
         )
 
 
+_script_test_get_nspace_object_async = """
+from ophyd_async.sim import SimMotor
+from ophyd_async.core import init_devices, Device
+
+class SimStageAsync(Device):
+    def __init__(self, name = ""):
+        self.vertical = SimMotor()
+        self.horizontal = SimMotor()
+        super().__init__(name=name)
+
+with init_devices():
+    sim_stage_async = SimStageAsync(name="asim_stage")
+"""
+
+
 # fmt: off
 @pytest.mark.parametrize("object_name, exists_in_plans, exists_in_devices, exists_in_all", [
     ("count", True, False, True),
@@ -4168,11 +4183,20 @@ def test_build_plan_name_list_2_fail(plan_def, exception_type, msg):
     ("sim_bundle_A.mtrs.z", False, True, True),
     ("sim_bundle_A.mtrs.a", False, False, False),
     ("sim_bundle_A.unknown.z", False, False, False),
+    ("sim_stage_async", False, True, True),
+    ("sim_stage_async.horizontal", False, True, True),
+    ("sim_stage_async.vertical", False, True, True),
+    ("sim_stage_async.vertical.user_readback", False, True, True),
 ])
 @pytest.mark.parametrize("from_nspace", [False, True])
 # fmt: on
-def test_get_nspace_object_1(object_name, exists_in_plans, exists_in_devices, exists_in_all, from_nspace):
-    pc_path = get_default_startup_dir()
+def test_get_nspace_object_1(
+    tmp_path, object_name, exists_in_plans, exists_in_devices, exists_in_all, from_nspace
+):
+
+    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
+    append_code_to_last_startup_file(pc_path, _script_test_get_nspace_object_async)
+
     nspace = load_profile_collection(pc_path)
     plans = plans_from_nspace(nspace)
     devices = devices_from_nspace(nspace)
@@ -4195,9 +4219,11 @@ def test_get_nspace_object_1(object_name, exists_in_plans, exists_in_devices, ex
         # Ophyd 1.6.4 or older
         from ophyd.ophydobj import OphydObject
 
+    from ophyd_async.core import Device as DeviceAsync
+
     object_ref = _get_nspace_object(object_name, objects_in_nspace=all_objects, **pp)
     if exists_in_all:
-        assert isinstance(object_ref, (OphydObject, Callable))
+        assert isinstance(object_ref, (OphydObject, DeviceAsync, Callable))
     else:
         assert isinstance(object_ref, str)
 
@@ -4209,7 +4235,7 @@ def test_get_nspace_object_1(object_name, exists_in_plans, exists_in_devices, ex
 
     object_ref = _get_nspace_object(object_name, objects_in_nspace=devices, **pp)
     if exists_in_devices:
-        assert isinstance(object_ref, OphydObject)
+        assert isinstance(object_ref, (OphydObject, DeviceAsync))
     else:
         assert isinstance(object_ref, str)
 

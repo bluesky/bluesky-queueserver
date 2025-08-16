@@ -15,6 +15,8 @@ from typing import Dict, Optional
 import bluesky.protocols
 import ophyd
 import ophyd.sim
+import ophyd_async.core
+import ophyd_async.sim
 import pydantic
 import pytest
 import yaml
@@ -4157,6 +4159,21 @@ def test_build_plan_name_list_2_fail(plan_def, exception_type, msg):
         )
 
 
+_script_test_get_nspace_object_async = """
+from ophyd_async.sim import SimMotor
+from ophyd_async.core import init_devices, Device
+
+class SimStageAsync(Device):
+    def __init__(self, name = ""):
+        self.vertical = SimMotor()
+        self.horizontal = SimMotor()
+        super().__init__(name=name)
+
+with init_devices():
+    sim_stage_async = SimStageAsync(name="asim_stage")
+"""
+
+
 # fmt: off
 @pytest.mark.parametrize("object_name, exists_in_plans, exists_in_devices, exists_in_all", [
     ("count", True, False, True),
@@ -4166,11 +4183,20 @@ def test_build_plan_name_list_2_fail(plan_def, exception_type, msg):
     ("sim_bundle_A.mtrs.z", False, True, True),
     ("sim_bundle_A.mtrs.a", False, False, False),
     ("sim_bundle_A.unknown.z", False, False, False),
+    ("sim_stage_async", False, True, True),
+    ("sim_stage_async.horizontal", False, True, True),
+    ("sim_stage_async.vertical", False, True, True),
+    ("sim_stage_async.vertical.user_readback", False, True, True),
 ])
 @pytest.mark.parametrize("from_nspace", [False, True])
 # fmt: on
-def test_get_nspace_object_1(object_name, exists_in_plans, exists_in_devices, exists_in_all, from_nspace):
-    pc_path = get_default_startup_dir()
+def test_get_nspace_object_1(
+    tmp_path, object_name, exists_in_plans, exists_in_devices, exists_in_all, from_nspace
+):
+
+    pc_path = copy_default_profile_collection(tmp_path, copy_yaml=False)
+    append_code_to_last_startup_file(pc_path, _script_test_get_nspace_object_async)
+
     nspace = load_profile_collection(pc_path)
     plans = plans_from_nspace(nspace)
     devices = devices_from_nspace(nspace)
@@ -4193,9 +4219,11 @@ def test_get_nspace_object_1(object_name, exists_in_plans, exists_in_devices, ex
         # Ophyd 1.6.4 or older
         from ophyd.ophydobj import OphydObject
 
+    from ophyd_async.core import Device as DeviceAsync
+
     object_ref = _get_nspace_object(object_name, objects_in_nspace=all_objects, **pp)
     if exists_in_all:
-        assert isinstance(object_ref, (OphydObject, Callable))
+        assert isinstance(object_ref, (OphydObject, DeviceAsync, Callable))
     else:
         assert isinstance(object_ref, str)
 
@@ -4207,7 +4235,7 @@ def test_get_nspace_object_1(object_name, exists_in_plans, exists_in_devices, ex
 
     object_ref = _get_nspace_object(object_name, objects_in_nspace=devices, **pp)
     if exists_in_devices:
-        assert isinstance(object_ref, OphydObject)
+        assert isinstance(object_ref, (OphydObject, DeviceAsync))
     else:
         assert isinstance(object_ref, str)
 
@@ -4307,6 +4335,8 @@ _pp_dev1 = ophyd.Device(name="_pp_dev1")
 _pp_dev2 = ophyd.Device(name="_pp_dev2")
 _pp_dev3 = ophyd.Device(name="_pp_dev3")
 
+_pp_async_dev1 = ophyd_async.core.Device(name="_pp_async_dev1")
+
 
 def _pp_p1():
     yield from []
@@ -4373,10 +4403,18 @@ def _pp_generate_stage_devs():
     sim_bundle_A = SimBundle(name="sim_bundle_A")
     sim_bundle_B = SimBundle(name="sim_bundle_B")  # Used for tests
 
-    return sim_bundle_A, sim_bundle_B
+    class SimAsynStage(ophyd_async.core.Device):
+        def __init__(self, name=""):
+            self.vertical = ophyd_async.sim.SimMotor()
+            self.horizontal = ophyd_async.sim.SimMotor()
+            super().__init__(name=name)
+
+    sim_asyn_stage_A = SimAsynStage(name="sim_asyn_stage_A")
+
+    return sim_bundle_A, sim_bundle_B, sim_asyn_stage_A
 
 
-_pp_stg_A, _pp_stg_B = _pp_generate_stage_devs()
+_pp_stg_A, _pp_stg_B, _pp_async_stg_A = _pp_generate_stage_devs()
 
 
 def _pp_callable1():
@@ -4584,8 +4622,8 @@ def _gen_environment_pp2():
         yield from [a, b]
 
     # Create namespace
-    nspace = {"_pp_dev1": _pp_dev1, "_pp_dev2": _pp_dev2, "_pp_dev3": _pp_dev3}
-    nspace.update({"_pp_stg_A": _pp_stg_A, "_pp_stg_B": _pp_stg_B})
+    nspace = {"_pp_dev1": _pp_dev1, "_pp_dev2": _pp_dev2, "_pp_dev3": _pp_dev3, "_pp_async_dev1": _pp_async_dev1}
+    nspace.update({"_pp_stg_A": _pp_stg_A, "_pp_stg_B": _pp_stg_B, "_pp_async_stg_A": _pp_async_stg_A})
     nspace.update({"_pp_p1": _pp_p1, "_pp_p2": _pp_p2, "_pp_p3": _pp_p3})
     nspace.update({"_pp_callable1": _pp_callable1, "_pp_callable2": _pp_callable2})
     nspace.update({"plan1": plan1})
@@ -5193,12 +5231,27 @@ _stg_components = {
     }
 }
 
+_mtr_async_components = {
+    "components": {
+        "acceleration_time": {}, "units": {}, "user_readback": {}, "user_setpoint": {}, "velocity": {}
+    }
+}
+
+_stg_async_components = {
+    "components": {
+        "vertical": copy.deepcopy(_mtr_async_components),
+        "horizontal": copy.deepcopy(_mtr_async_components),
+    }
+}
+
 _all_devices_pd1 = {
     "_pp_dev1": {},
     "_pp_dev2": {},
     "_pp_dev3": {},
+    "_pp_async_dev1": {},
     "_pp_stg_A": copy.deepcopy(_stg_components),
     "_pp_stg_B": copy.deepcopy(_stg_components),
+    "_pp_async_stg_A": copy.deepcopy(_stg_async_components),
 }
 
 _stg_components_depth_3 = {  # Used for tests with 'depth==3'
@@ -5232,6 +5285,8 @@ _stg_components_depth_3 = {  # Used for tests with 'depth==3'
         "_pp_dev3": {},
         "_pp_stg_A": {},
         "_pp_stg_B": {},
+        "_pp_async_dev1": {},
+        "_pp_async_stg_A": {},
     }),
     (2, {}, {
         "_pp_dev1": {},
@@ -5239,6 +5294,8 @@ _stg_components_depth_3 = {  # Used for tests with 'depth==3'
         "_pp_dev3": {},
         "_pp_stg_A": {'components': {'dets': {}, 'mtrs': {}}},
         "_pp_stg_B": {'components': {'dets': {}, 'mtrs': {}}},
+        "_pp_async_dev1": {},
+        "_pp_async_stg_A": {'components': {'horizontal': {}, 'vertical': {}}},
     }),
     (3, {}, {
         "_pp_dev1": {},
@@ -5246,12 +5303,16 @@ _stg_components_depth_3 = {  # Used for tests with 'depth==3'
         "_pp_dev3": {},
         "_pp_stg_A": _stg_components_depth_3,
         "_pp_stg_B": _stg_components_depth_3,
+        "_pp_async_dev1": {},
+        "_pp_async_stg_A": copy.deepcopy(_stg_async_components),
     }),
     (4, {}, _all_devices_pd1),
     (5, {}, _all_devices_pd1),
     (3, {"_pp_dev2": {"exclude": True},
          "_pp_dev3": {"exclude": True},
-         "_pp_stg_A": {"exclude": True}},
+         "_pp_stg_A": {"exclude": True},
+         "_pp_async_dev1": {"exclude": True},
+         "_pp_async_stg_A": {"exclude": True}},
         {
         "_pp_dev1": {},
         "_pp_stg_B": _stg_components_depth_3,
@@ -5265,11 +5326,15 @@ _stg_components_depth_3 = {  # Used for tests with 'depth==3'
         "_pp_dev3": {},
         "_pp_stg_A": {},
         "_pp_stg_B": _stg_components_depth_3,
+        "_pp_async_dev1": {},
+        "_pp_async_stg_A": {'components': {'horizontal': {}, 'vertical': {}}},
     }),
     (2, {"_pp_dev2": {"exclude": False},
          "_pp_dev3": {"exclude": False},
          "_pp_stg_A": {"depth": 0},
-         "_pp_stg_B": {"depth": 0}},
+         "_pp_stg_B": {"depth": 0},
+         "_pp_async_dev1": {"depth": 0},
+         "_pp_async_stg_A": {"depth": 0}},
         _all_devices_pd1
      ),
 ])

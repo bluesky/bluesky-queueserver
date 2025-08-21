@@ -1515,6 +1515,24 @@ class PlanQueueOperations:
         async with self._lock:
             await self._clear_history()
 
+    async def _trim_history(self, *, new_size=None):
+        """
+        See ``self.trim_history()`` method.
+        """
+        self._plan_history_uid = self.new_item_uid()
+        if new_size is None:
+            new_size = -1
+        await self._r_pool.ltrim(self._name_plan_history, 0, new_size - 1)
+
+    async def trim_history(self, *, new_size=None):
+        """
+        Remove all entries from the plan queue older than the given index.
+        Does not touch the running item. The item (plan) may be pushed back
+        into the queue if it is stopped.
+        """
+        async with self._lock:
+            await self._trim_history(new_size=new_size)
+
     # ----------------------------------------------------------------------
     #          Standard item operations during queue execution
 

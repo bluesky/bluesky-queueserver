@@ -1682,6 +1682,56 @@ def test_add_to_history_functions():
     asyncio.run(testing())
 
 
+def test_trim_history_functions():
+    """
+    Test for ``PlanQueueOperations._trim_history()`` method.
+    """
+
+    async def testing():
+        async with PQ() as pq:
+            assert await pq.get_history_size() == 0
+
+            plans = [{"name": "a"}, {"name": "b"}, {"name": "c"}, {"name": "d"}]
+            ph_uid = pq.plan_history_uid
+            for plan in plans:
+                await pq._add_to_history(plan)
+            assert await pq.get_history_size() == 4
+            assert pq.plan_history_uid != ph_uid
+
+            ph_uid = pq.plan_history_uid
+            plan_history, plan_history_uid_1 = await pq.get_history()
+            assert pq.plan_history_uid == plan_history_uid_1
+            assert pq.plan_history_uid == ph_uid
+
+            assert len(plan_history) == 4
+            assert plan_history == plans
+
+            ph_uid = pq.plan_history_uid
+            await pq.trim_history(new_size=2)
+            assert pq.plan_history_uid != ph_uid
+
+            plan_history, _ = await pq.get_history()
+            assert len(plan_history) == 2
+            assert plan_history == [{"name": "a"}, {"name": "b"}]
+
+            ph_uid = pq.plan_history_uid
+            await pq.trim_history()
+            assert pq.plan_history_uid != ph_uid
+
+            plan_history, _ = await pq.get_history()
+            assert len(plan_history) == 1
+            assert plan_history == [{"name": "a"}]
+
+            ph_uid = pq.plan_history_uid
+            await pq.trim_history()
+            assert pq.plan_history_uid != ph_uid
+
+            plan_history, _ = await pq.get_history()
+            assert len(plan_history) == 0
+
+    asyncio.run(testing())
+
+
 @pytest.mark.parametrize("immediate_execution", [False, True])
 @pytest.mark.parametrize("func", ["process_next_item", "set_next_item_as_running"])
 @pytest.mark.parametrize("loop_mode", [False, True])

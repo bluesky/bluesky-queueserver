@@ -1515,23 +1515,48 @@ class PlanQueueOperations:
         async with self._lock:
             await self._clear_history()
 
-    async def _trim_history(self, *, new_size=None):
+    async def _trim_history(self, *, new_size=None, item_uid=None):
         """
         See ``self.trim_history()`` method.
         """
-        self._plan_history_uid = self.new_item_uid()
-        if new_size is None:
-            new_size = -1
-        await self._r_pool.ltrim(self._name_plan_history, 0, new_size - 1)
+        if new_size is None and item_uid is None:
+            raise ValueError("At least one of the parameters 'new_size' or 'item_uid' must be specified.")
+        elif new_size is not None and item_uid is not None:
+            raise ValueError("The parameters 'new_size' and 'item_uid' are mutually exclusive.")
 
-    async def trim_history(self, *, new_size=None):
+        update_uid = False
+        if new_size is not None:
+            history_size = await self._get_history_size()
+            if new_size < history_size:
+                new_size = max(min(new_size, history_size), 0)
+                n_delete = history_size - new_size
+                update_uid = True
+                await self._r_pool.ltrim(self._name_plan_history, n_delete, -1)
+        else:  # item_uid is not None
+            # The following code is not efficient if the history is huge, but it should work fine for now.
+            history, _ = await self._get_history()
+
+            n_delete = None
+            for i, item in enumerate(history):
+                if item["item_uid"] == item_uid:
+                    n_delete = i
+                    break
+
+            if n_delete is not None:
+                update_uid = True
+                await self._r_pool.ltrim(self._name_plan_history, n_delete + 1, -1)
+
+        if update_uid:
+            self._plan_history_uid = self.new_item_uid()
+
+    async def trim_history(self, *, new_size=None, item_uid=None):
         """
         Remove all entries from the plan queue older than the given index.
         Does not touch the running item. The item (plan) may be pushed back
         into the queue if it is stopped.
         """
         async with self._lock:
-            await self._trim_history(new_size=new_size)
+            await self._trim_history(new_size=new_size, item_uid=item_uid)
 
     # ----------------------------------------------------------------------
     #          Standard item operations during queue execution

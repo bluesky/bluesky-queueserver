@@ -1691,6 +1691,7 @@ def test_add_to_history_functions():
     (3, None, 3, [{"item_uid": "b"}, {"item_uid": "c"}, {"item_uid": "d"}]),
     (4, None, 4, [{"item_uid": "a"}, {"item_uid": "b"}, {"item_uid": "c"}, {"item_uid": "d"}]),
     (5, None, 4, [{"item_uid": "a"}, {"item_uid": "b"}, {"item_uid": "c"}, {"item_uid": "d"}]),
+    (None, "d", 0, []),
     (None, "c", 1, [{"item_uid": "d"}]),
     (None, "b", 2, [{"item_uid": "c"}, {"item_uid": "d"}]),
     (None, "a", 3, [{"item_uid": "b"}, {"item_uid": "c"}, {"item_uid": "d"}]),

@@ -2746,18 +2746,21 @@ class RunEngineManager(Process):
         """
         logger.info("Clearing the plan execution history ...")
         try:
-            supported_param_names = ["lock_key", "size"]
+            supported_param_names = ["lock_key", "size", "item_uid"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
             self._validate_lock_key(request.get("lock_key", None), check_queue=True)
 
             size = request.get("size", None)
-            if size is not None:
+            item_uid = request.get("item_uid", None)
+            if size is not None and item_uid is not None:
+                raise ValueError("Parameters 'size' and 'item_uid' are mutually exclusive.")
+            elif size is not None:
                 if not isinstance(size, int):
-                    raise ValueError("The 'size' parameter must be an integer.")
-                if size < 0:
-                    raise ValueError("The 'size' paramter cannot be negative.")
+                    raise ValueError(f"The 'size' parameter must be an integer: size={size!r}")
                 await self._plan_queue.trim_history(new_size=size)
+            elif item_uid is not None:
+                await self._plan_queue.trim_history(item_uid=item_uid)
             else:
                 await self._plan_queue.clear_history()
 

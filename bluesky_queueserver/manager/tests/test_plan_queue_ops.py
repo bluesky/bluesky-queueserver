@@ -1682,7 +1682,23 @@ def test_add_to_history_functions():
     asyncio.run(testing())
 
 
-def test_trim_history_functions():
+# fmt: off
+@pytest.mark.parametrize("new_size, item_uid, exp_size, new_items", [
+    (-1, None, 0, []),
+    (0, None, 0, []),
+    (1, None, 1, [{"item_uid": "d"}]),
+    (2, None, 2, [{"item_uid": "c"}, {"item_uid": "d"}]),
+    (3, None, 3, [{"item_uid": "b"}, {"item_uid": "c"}, {"item_uid": "d"}]),
+    (4, None, 4, [{"item_uid": "a"}, {"item_uid": "b"}, {"item_uid": "c"}, {"item_uid": "d"}]),
+    (5, None, 4, [{"item_uid": "a"}, {"item_uid": "b"}, {"item_uid": "c"}, {"item_uid": "d"}]),
+    (None, "d", 0, []),
+    (None, "c", 1, [{"item_uid": "d"}]),
+    (None, "b", 2, [{"item_uid": "c"}, {"item_uid": "d"}]),
+    (None, "a", 3, [{"item_uid": "b"}, {"item_uid": "c"}, {"item_uid": "d"}]),
+    (None, "?", 4, [{"item_uid": "a"}, {"item_uid": "b"}, {"item_uid": "c"}, {"item_uid": "d"}]),
+])
+# fmt: on
+def test_trim_history_functions_1(new_size, item_uid, exp_size, new_items):
     """
     Test for ``PlanQueueOperations._trim_history()`` method.
     """
@@ -1691,7 +1707,9 @@ def test_trim_history_functions():
         async with PQ() as pq:
             assert await pq.get_history_size() == 0
 
-            plans = [{"name": "a"}, {"name": "b"}, {"name": "c"}, {"name": "d"}]
+            plans = [{"item_uid": "a"}, {"item_uid": "b"}, {"item_uid": "c"}, {"item_uid": "d"}]
+            update_uid = exp_size != len(plans)
+
             ph_uid = pq.plan_history_uid
             for plan in plans:
                 await pq._add_to_history(plan)
@@ -1707,29 +1725,71 @@ def test_trim_history_functions():
             assert plan_history == plans
 
             ph_uid = pq.plan_history_uid
-            await pq.trim_history(new_size=2)
-            assert pq.plan_history_uid != ph_uid
+            if item_uid is None:
+                await pq.trim_history(new_size=new_size)
+            else:
+                await pq.trim_history(item_uid=item_uid)
+            if update_uid:
+                assert pq.plan_history_uid != ph_uid
+            else:
+                assert pq.plan_history_uid == ph_uid
 
             plan_history, _ = await pq.get_history()
-            assert len(plan_history) == 2
-            assert plan_history == [{"name": "a"}, {"name": "b"}]
-
-            ph_uid = pq.plan_history_uid
-            await pq.trim_history()
-            assert pq.plan_history_uid != ph_uid
-
-            plan_history, _ = await pq.get_history()
-            assert len(plan_history) == 1
-            assert plan_history == [{"name": "a"}]
-
-            ph_uid = pq.plan_history_uid
-            await pq.trim_history()
-            assert pq.plan_history_uid != ph_uid
-
-            plan_history, _ = await pq.get_history()
-            assert len(plan_history) == 0
+            assert len(plan_history) == exp_size
+            assert plan_history == new_items
 
     asyncio.run(testing())
+
+
+# # fmt: off
+# @pytest.mark.parametrize("new_size, exp_size, new_items, success", [
+#     (-1, 0, []),
+#     (0, 0, []),
+#     (1, 1, [{"name": "d"}]),
+#     (2, 2, [{"name": "c"}, {"name": "d"}]),
+#     (3, 3, [{"name": "b"}, {"name": "c"}, {"name": "d"}]),
+#     (4, 4, [{"name": "a"}, {"name": "b"}, {"name": "c"}, {"name": "d"}]),
+#     (5, 4, [{"name": "a"}, {"name": "b"}, {"name": "c"}, {"name": "d"}]),
+# ])
+# # fmt: on
+# def test_trim_history_functions_2(new_size, exp_size, new_items, success):
+#     """
+#     Test for ``PlanQueueOperations._trim_history()`` method.
+#     """
+
+#     async def testing():
+#         async with PQ() as pq:
+#             assert await pq.get_history_size() == 0
+
+#             plans = [{"name": "a"}, {"name": "b"}, {"name": "c"}, {"name": "d"}]
+#             update_uid = (new_size < len(plans))
+
+#             ph_uid = pq.plan_history_uid
+#             for plan in plans:
+#                 await pq._add_to_history(plan)
+#             assert await pq.get_history_size() == 4
+#             assert pq.plan_history_uid != ph_uid
+
+#             ph_uid = pq.plan_history_uid
+#             plan_history, plan_history_uid_1 = await pq.get_history()
+#             assert pq.plan_history_uid == plan_history_uid_1
+#             assert pq.plan_history_uid == ph_uid
+
+#             assert len(plan_history) == 4
+#             assert plan_history == plans
+
+#             ph_uid = pq.plan_history_uid
+#             await pq.trim_history(new_size=new_size)
+#             if update_uid:
+#                 assert pq.plan_history_uid != ph_uid
+#             else:
+#                 assert pq.plan_history_uid == ph_uid
+
+#             plan_history, _ = await pq.get_history()
+#             assert len(plan_history) == exp_size
+#             assert plan_history == new_items
+
+#     asyncio.run(testing())
 
 
 @pytest.mark.parametrize("immediate_execution", [False, True])

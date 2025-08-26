@@ -6,6 +6,7 @@ import os
 import pprint
 import re
 import time as ttime
+import uuid
 from datetime import datetime
 
 import msgpack
@@ -452,6 +453,87 @@ def test_zmq_api_environment_open_close_4(tmp_path, re_manager_cmd, startup_with
     state = get_manager_status()
     assert state["re_state"] is None
     assert state["worker_environment_state"] == "closed"
+
+
+# =======================================================================================
+#                          Method 'history_clear'
+
+
+# fmt: off
+@pytest.mark.parametrize("params, n_expected, success, err_msg", [
+    ({}, 0, True, ""),
+    ({"size": -1}, 0, True, ""),
+    ({"size": 0}, 0, True, ""),
+    ({"size": 1}, 1, True, ""),
+    ({"size": 3}, 3, True, ""),
+    ({"size": 4}, 4, True, ""),
+    ({"size": 5}, 4, True, ""),
+    ({"item_uid": 0}, 3, True, ""),
+    ({"item_uid": 1}, 2, True, ""),
+    ({"item_uid": 2}, 1, True, ""),
+    ({"item_uid": 3}, 0, True, ""),
+    ({"item_uid": -1}, 4, True, ""),  # Random UUID - nothing is deleted
+    ({"size": "ab"}, 4, False, "Error: The 'size' parameter must be an integer: size='ab'"),
+    ({"item_uid": 1.5}, 4, False, "Error: The 'item_uid' parameter must be a string: item_uid=1.5"),
+    ({"size": 2, "item_uid": 2}, 4, False, "Error: Parameters 'size' and 'item_uid' are mutually exclusive."),
+])
+# fmt: on
+def test_zmq_api_history_clear_1(re_manager, params, n_expected, success, err_msg):  # noqa: F811
+    """
+    Basic test for ``history_clear`` API.
+    """
+    # Add 4 plans to queue
+    for n in range(4):
+        params1a = {"item": _plan1, "user": _user, "user_group": _user_group}
+        resp1a, _ = zmq_request("queue_item_add", params1a)
+        assert resp1a["success"] is True, f"resp={resp1a}"
+
+    resp2, _ = zmq_request("environment_open")
+    assert resp2["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp3, _ = zmq_request("queue_start")
+    assert resp3["success"] is True
+    assert wait_for_condition(time=30, condition=condition_manager_idle)
+
+    resp4, _ = zmq_request("status")
+    assert resp4["items_in_queue"] == 0
+    assert resp4["items_in_history"] == 4
+
+    history, _ = zmq_request("history_get")
+    h_items_1 = history["items"]
+    assert len(h_items_1) == 4, pprint.pformat(h_items_1)
+    h_uids_1 = [_["item_uid"] for _ in h_items_1]
+
+    # Replace index with UUID if integer is provided
+    if "item_uid" in params and isinstance(params["item_uid"], int):
+        n = params["item_uid"]
+        if n >= 0:
+            # Select UUID based on the index of the item in the history
+            params["item_uid"] = h_uids_1[params["item_uid"]]
+        else:
+            # Generate random UUID
+            params["item_uid"] = str(uuid.uuid4())
+
+    resp5, _ = zmq_request("history_clear", params=params)
+    history_clear_success = resp5["success"]
+    assert history_clear_success is success, f"params={pprint.pformat(params)}\n{pprint.pformat(resp5)}"
+    assert resp5["msg"] == err_msg
+
+    resp4, _ = zmq_request("status")
+    assert resp4["items_in_queue"] == 0
+    assert resp4["items_in_history"] == n_expected
+
+    history, _ = zmq_request("history_get")
+    h_items_2 = history["items"]
+    assert len(h_items_2) == n_expected, pprint.pformat(h_items_2)
+    if len(h_items_2) > 0:
+        h_uids_2 = [_["item_uid"] for _ in h_items_2]
+        assert h_uids_2 == h_uids_1[-n_expected:], pprint.pformat(h_uids_2)
+
+    resp6, _ = zmq_request("environment_close")
+    assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
 # =======================================================================================

@@ -657,11 +657,23 @@ Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
 Method        **'history_clear'**
 ------------  -----------------------------------------------------------------------------------------
-Description   Clear the contents of the plan history.
-
-              *The request always succeeds*.
+Description   Clear the contents of the plan history. If the parameter **size** is specified, then
+              the history is trimmed to the desired size. If the parameter **item_uid** is specified,
+              then the item with matching UID and all older items are removed from the history.
+              The parameters **size** and **item_uid** are mutually exclusive.
 ------------  -----------------------------------------------------------------------------------------
-Parameters    **lock_key**: *str* (optional)
+Parameters    **size**: *int* or *None* (optional)
+                  The new size of the history. If the size is 0 or less, then the history is
+                  cleared. If the size is greater than or equal to size of the queue, then the queue is
+                  not modified and **plan_history_uid** remains unchanged. Otherwise the history is
+                  trimmed to the desired size.
+
+              **item_uid**: *str* or *None* (optional)
+                  If the history contains an item with **item_uid**, then the history is trimmed by
+                  removing this item and all older items. If the item with **item_uid** is not found
+                  then the history and **plan_history_uid** remain unchanged.
+
+              **lock_key**: *str* (optional)
                   Lock key. The API fails if **the queue** is locked and no valid key is submitted
                   with the request. See documentation on :ref:`method_lock` API for more details.
 ------------  -----------------------------------------------------------------------------------------

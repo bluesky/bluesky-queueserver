@@ -2760,6 +2760,8 @@ class RunEngineManager(Process):
                     raise ValueError(f"The 'size' parameter must be an integer: size={size!r}")
                 await self._plan_queue.trim_history(new_size=size)
             elif item_uid is not None:
+                if not isinstance(item_uid, str):
+                    raise ValueError(f"The 'item_uid' parameter must be a string: item_uid={item_uid!r}")
                 await self._plan_queue.trim_history(item_uid=item_uid)
             else:
                 await self._plan_queue.clear_history()

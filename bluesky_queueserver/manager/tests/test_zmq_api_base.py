@@ -474,9 +474,9 @@ def test_zmq_api_environment_open_close_4(tmp_path, re_manager_cmd, startup_with
     ({"item_uid": 3}, 0, True, ""),
     ({"item_uid": -1}, 4, True, ""),  # Random UUID - nothing is deleted
     ({"size": "ab"}, 4, False, "Error: The 'size' parameter must be an integer: size='ab'"),
+    ({"item_uid": 1.5}, 4, False, "Error: The 'item_uid' parameter must be a string: item_uid=1.5"),
     ({"size": 2, "item_uid": 2}, 4, False, "Error: Parameters 'size' and 'item_uid' are mutually exclusive."),
-]
-)
+])
 # fmt: on
 def test_zmq_api_history_clear_1(re_manager, params, n_expected, success, err_msg):  # noqa: F811
     """

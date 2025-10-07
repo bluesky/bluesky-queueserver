@@ -3641,15 +3641,25 @@ class RunEngineManager(Process):
     #          Functions that support communication via 0MQ
 
     async def _zmq_receive(self):
-        try:
-            if self._zmq_encoding == ZMQEncoding.JSON:
-                msg_in = await self._zmq_socket.recv_json()
-            else:
-                _ = await self._zmq_socket.recv()
-                msg_in = msgpack.unpackb(_)
-        except Exception as ex:
-            _ = self._zmq_encoding.name
-            msg_in = f"{_} decode error: {ex}"
+        while True:
+            retry = False
+            try:
+                if self._zmq_encoding == ZMQEncoding.JSON:
+                    msg_in = await self._zmq_socket.recv_json()
+                else:
+                    _ = await self._zmq_socket.recv()
+                    msg_in = msgpack.unpackb(_)
+            except zmq.ZMQError as ex:
+                if ex.errno == zmq.EAGAIN:
+                    logger.error("OMQ receive error: error code EAGAIN (11). Retrying ...")
+                    retry = True
+                _ = self._zmq_encoding.name
+                msg_in = f"{_} decode error: {ex}"
+            except Exception as ex:
+                _ = self._zmq_encoding.name
+                msg_in = f"{_} decode error: {ex}"
+            if not retry:
+                break
         return msg_in
 
     async def _zmq_send(self, msg):

@@ -3654,7 +3654,8 @@ class RunEngineManager(Process):
                     logger.error("OMQ receive error: error code EAGAIN (11). Retrying ...")
                     retry = True
                 _ = self._zmq_encoding.name
-                msg_in = f"{_} decode error: {ex}"
+                msg_in = f"{_} decode error: {ex}. Error code: {ex.errno}"
+                logger.error(msg_in)
             except Exception as ex:
                 _ = self._zmq_encoding.name
                 msg_in = f"{_} decode error: {ex}"

@@ -3641,6 +3641,12 @@ class RunEngineManager(Process):
     #          Functions that support communication via 0MQ
 
     async def _zmq_receive(self):
+        """
+        Wait for the next 0MQ packet. Retry recv operation if it fails with EAGAIN error.
+        (EAGAIN error is happens due to security scans of the 0MQ port. Since the packet
+        is not received, the following 0MQ send operation fails, which leads to crash
+        and restart of the manager.)
+        """
         while True:
             try:
                 if self._zmq_encoding == ZMQEncoding.JSON:
@@ -3650,17 +3656,15 @@ class RunEngineManager(Process):
                     msg_in = msgpack.unpackb(_)
                 break
             except zmq.Again as ex:
-                logger.error(f"OMQ receive error ('AGAIN'): {ex}. Retrying ...")
+                logger.debug(f"OMQ receive error ('AGAIN'): {ex}. Retrying ...")
             except zmq.ZMQError as ex:
-                logger.error(f"0MQ receive error ({ex.errno}): {ex}.")
-                _ = self._zmq_encoding.name
-                msg_in = f"{_} decode error: {ex}. Error code: {ex.errno}"
+                msg_in = f"0MQ receive error: {ex}. Error code: {ex.errno}"
                 break
             except Exception as ex:
-                logger.error(f"0MQ receive error (general): {ex}.")
                 _ = self._zmq_encoding.name
                 msg_in = f"{_} decode error: {ex}"
                 break
+            # Reasonable timeout. It is assumed that EAGAIN event happens rarely.
             ttime.sleep(0.05)
         return msg_in
 

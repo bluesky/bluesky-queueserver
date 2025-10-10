@@ -3643,29 +3643,24 @@ class RunEngineManager(Process):
     async def _zmq_receive(self):
         """
         Wait for the next 0MQ packet. Retry recv operation if it fails with EAGAIN error.
-        (EAGAIN error is happens due to security scans of the 0MQ port. Since the packet
-        is not received, the following 0MQ send operation fails, which leads to crash
-        and restart of the manager.)
         """
-        while True:
-            try:
-                if self._zmq_encoding == ZMQEncoding.JSON:
-                    msg_in = await self._zmq_socket.recv_json()
-                else:
-                    _ = await self._zmq_socket.recv()
-                    msg_in = msgpack.unpackb(_)
-                break
-            except zmq.Again as ex:
-                logger.debug(f"OMQ receive error ('AGAIN'): {ex}. Retrying ...")
-            except zmq.ZMQError as ex:
-                msg_in = f"0MQ receive error: {ex}. Error code: {ex.errno}"
-                break
-            except Exception as ex:
-                _ = self._zmq_encoding.name
-                msg_in = f"{_} decode error: {ex}"
-                break
-            # Reasonable timeout. It is assumed that EAGAIN event happens rarely.
-            ttime.sleep(0.05)
+        try:
+            while True:
+                try:
+                    if self._zmq_encoding == ZMQEncoding.JSON:
+                        msg_in = await self._zmq_socket.recv_json()
+                    else:
+                        _ = await self._zmq_socket.recv()
+                        msg_in = msgpack.unpackb(_)
+                    break
+                except zmq.Again as ex:
+                    logger.debug(f"OMQ receive error ('AGAIN'): {ex}. Retrying ...")
+                    ttime.sleep(0.05)
+        except zmq.ZMQError as ex:
+            msg_in = f"0MQ receive error: {ex}. Error code: {ex.errno}"
+        except Exception as ex:
+            _ = self._zmq_encoding.name
+            msg_in = f"{_} decode error: {ex}"
         return msg_in
 
     async def _zmq_send(self, msg):

@@ -107,6 +107,8 @@ Supported queue instructions:
 
 qserver queue get    # Request the list of items (plans or instructions) in the queue
 qserver queue clear  # Clear the queue (remove all plans from the queue)
+qserver queue clear 200  # Clear the queue, leave the latest 200 items
+qserver queue clear <uid>  # Clear the queue by removing older items starting from the specified item
 
 qserver queue item get           # Request the last item in the queue
 qserver queue item get back      # Request the last item in the queue

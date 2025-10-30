@@ -539,7 +539,7 @@ execution time about 60 seconds::
 Open the environment as described in :ref:`tutorial_opening_closing_re_worker_environment`.
 
 Every plan that is executed by RE Manager is added to the plan history. The history
-is not designed to for long-term storage and must be periodically cleared::
+is not designed for long-term storage and must be periodically cleared::
 
   $ qserver history clear
   11:51:11 - MESSAGE:

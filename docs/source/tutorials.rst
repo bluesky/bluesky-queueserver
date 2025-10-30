@@ -794,7 +794,7 @@ was fully completed and not repeated after the plan was resumed::
 The following sequence of commands starts the queue and request immediate pause.
 The sequence may be tested with the same plan::
 
-  $ qserver start
+  $ qserver queue start
   $ qserver re pause immediate
   $ qserver re resume
 

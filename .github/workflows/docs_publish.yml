@@ -22,9 +22,12 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: ${{ matrix.python-version }}
+    - uses: shogo82148/actions-setup-redis@v1
+      with:
+        redis-version: "7.x"
     - name: Install dependencies
       run: |
-        sudo apt install redis
+        # sudo apt install redis
 
         # Versioneer uses the most recent git tag to generate __version__, which appears
         # in the published documentation.

@@ -17,9 +17,12 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: ${{ matrix.python-version }}
+    - uses: shogo82148/actions-setup-redis@v1
+      with:
+        redis-version: "7.x"
     - name: Install dependencies
       run: |
-        sudo apt install redis
+        # sudo apt install redis
 
         # These packages are installed in the base environment but may be older
         # versions. Explicitly upgrade them because they often create

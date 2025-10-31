@@ -471,7 +471,7 @@ periodically requests and displays the status of Queue Server.
                 command [command ...]
 
   Command-line tool for communicating with RE Monitor.
-  bluesky-queueserver version 0.0.22
+  bluesky-queueserver version 0.0.23
 
   positional arguments:
     command           a sequence of keywords and parameters that define the command
@@ -613,6 +613,8 @@ periodically requests and displays the status of Queue Server.
 
   qserver history get        # Request plan history
   qserver history clear      # Clear plan history
+  qserver history clear 200  # Clear the history, leave the latest 200 items
+  qserver history clear <uid>  # Clear the history by removing older items starting from the specified item
 
   qserver function execute <function-params>             # Start execution of a function
   qserver function execute <function-params> background  # ... in the background thread
@@ -698,7 +700,7 @@ the path to the directory with startup files, the path to a startup script or mo
 
   Bluesky-QServer:
   CLI tool for generating the list of plans and devices from beamline startup scripts.
-  bluesky-queueserver version 0.0.22
+  bluesky-queueserver version 0.0.23
 
   options:
     -h, --help        show this help message and exit
@@ -781,7 +783,7 @@ key to ``qserver-zmq-keys`` using ``--zmq-private_key``.
 
   Bluesky-QServer:
   ZMQ security: Generate public-private key pair for ZeroMQ control communication channel.
-  bluesky-queueserver version 0.0.22
+  bluesky-queueserver version 0.0.23
 
   Generate new public-private key pair for secured 0MQ control connection between
   RE Manager and client applications. If private key is passed as ``--zmq-private-key``
@@ -828,7 +830,7 @@ to 0MQ socket by default. Publishing can be enabled by starting RE Manager with 
 
   Queue Server Console Monitor:
   CLI tool for remote monitoring of console output published by RE Manager.
-  bluesky-queueserver version 0.0.22
+  bluesky-queueserver version 0.0.23
 
   options:
     -h, --help        show this help message and exit
@@ -869,7 +871,7 @@ address is different from default, the correct address must be passed using the 
                             [--redis-name-prefix REDIS_NAME_PREFIX]
 
   Bluesky-QServer: Clear RE Manager lock.
-  bluesky-queueserver version 0.0.22
+  bluesky-queueserver version 0.0.23
 
   Recover locked RE Manager if the lock key is lost. The utility requires access to Redis
   used by RE Manager. Provide the address of Redis service using '--redis-addr' parameter.
@@ -904,7 +906,7 @@ close the worker environment.
                         [--zmq-encoding ZMQ_ENCODING]
 
   Bluesky-QServer: Start Jupyter console for IPython kernel running in the worker process.
-  bluesky-queueserver version 0.0.22
+  bluesky-queueserver version 0.0.23
 
   Requests IPython kernel connection info from RE Manager and starts Jupyter Console. The RE Worker
   must be running (environment opened) and using IPython kernel. The address of 0MQ control port of

@@ -345,6 +345,17 @@ def get_queue_state(*, encoding=None):
     return items_in_queue, queue_is_running, items_in_history
 
 
+def get_history(*, encoding=None):
+    """
+    Returns current history.
+    """
+    method, params = "history_get", None
+    msg, _ = zmq_secure_request(method, params, encoding=encoding)
+    if msg is None:
+        raise TimeoutError("Timeout occurred while loading history from RE Manager.")
+    return msg
+
+
 def condition_manager_idle(msg):
     return ("manager_state" in msg) and (msg["manager_state"] == "idle")
 

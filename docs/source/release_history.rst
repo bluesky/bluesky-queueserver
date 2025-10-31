@@ -2,6 +2,24 @@
 Release History
 ===============
 
+v0.0.23 (2025-10-31)
+====================
+
+Added
+-----
+
+- Support for children of Ophyd Async devices.
+
+- ``history_clear`` was extended to accept the optional ``size`` and ``item_uid``  parameters for trimming the history.
+
+- Extended options for ``qserver`` CLI tool to allow trimming the history.
+
+Fixed
+-----
+
+- The issue that caused restart of RE Manager due to EAGAIN 0MQ error caused by automated scans of 0MQ port.
+
+
 v0.0.22 (2025-05-18)
 ====================
 

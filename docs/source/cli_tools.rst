@@ -235,7 +235,7 @@ Other Configuration Parameters
                           [--verbose | --quiet | --silent]
 
   Start Run Engine (RE) Manager
-  bluesky-queueserver version 0.0.22
+  bluesky-queueserver version 0.0.23
 
   Encryption for ZeroMQ communication server may be enabled by setting the value of
   'QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER' environment variable to a valid private key

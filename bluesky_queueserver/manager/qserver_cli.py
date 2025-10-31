@@ -158,6 +158,8 @@ qserver re runs closed     # Get the list of closed runs (subset of active runs)
 
 qserver history get        # Request plan history
 qserver history clear      # Clear plan history
+qserver history clear 200  # Clear the history, leave the latest 200 items
+qserver history clear <uid>  # Clear the history by removing older items starting from the specified item
 
 qserver function execute <function-params>             # Start execution of a function
 qserver function execute <function-params> background  # ... in the background thread
@@ -768,6 +770,47 @@ def msg_queue_stop(params):
     return method, prms
 
 
+def msg_history_clear(params):
+    """
+    Generate outgoing message for `history clear` command.
+
+    Parameters
+    ----------
+    params : list
+        List of parameters of the command. The first element of the list is expected to be ``clear`` keyword.
+        The optional second element can be an item UID or a desired number of elements in the queue (integer).
+
+    Returns
+    -------
+    str
+        Name of the method from RE Manager API
+    dict
+        Dictionary of the method parameters
+
+    """
+    # Check if the function was called for the appropriate command
+    command = "history"
+    expected_p0 = "clear"
+    if params[0] != expected_p0:
+        raise ValueError(f"Incorrect parameter value '{params[0]}'. Expected value: '{expected_p0}'")
+
+    check_number_of_parameters(params, 1, 2, params)
+
+    method = f"{command}_{params[0]}"
+    prms = {}
+    if len(params) == 2:
+        try:
+            size_new = int(params[1])
+            prms["size"] = size_new
+        except ValueError:
+            # If the value can not be interpreted as integer, try sending it as a UID.
+            item_uid = params[1]
+            # TODO: add validation to check if the string matches UID format
+            prms["item_uid"] = item_uid
+
+    return method, prms
+
+
 def msg_re_pause(params):
     """
     Generate outgoing message for `re pause` command.
@@ -1056,7 +1099,7 @@ def create_msg(params, *, lock_key):
                 if len(params) != 1:
                     raise CommandParameterError(f"Request '{command} {params[0]}' must include only one parameter")
                 method, prms = f"{command}_{params[0]}", {}
-                if params[0] in ("clear", "start"):
+                if params[0] == ("start", "clear"):
                     if lock_key:
                         prms["lock_key"] = lock_key
 
@@ -1118,11 +1161,13 @@ def create_msg(params, *, lock_key):
         if len(params) < 1:
             raise CommandParameterError(f"Request '{command}' must include at least one parameter")
         supported_params = ("get", "clear")
-        if params[0] in supported_params:
+        if params[0] == "get":
             method, prms = f"{command}_{params[0]}", {}
-            if params[0] == "clear":
-                if lock_key:
-                    prms["lock_key"] = lock_key
+        elif params[0] == "clear":
+            method, prms = msg_history_clear(params)
+            if lock_key:
+                prms["lock_key"] = lock_key
+
         else:
             raise CommandParameterError(f"Request '{command} {params[0]}' is not supported")
 

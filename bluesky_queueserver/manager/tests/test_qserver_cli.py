@@ -20,6 +20,7 @@ from .common import (  # noqa: F401
     condition_manager_idle_or_paused,
     condition_manager_paused,
     condition_queue_processing_finished,
+    get_history,
     get_manager_status,
     get_queue,
     get_queue_state,
@@ -1055,6 +1056,81 @@ def test_qserver_queue_item_get_remove(re_manager, pos, uid_ind, pos_result, suc
         # Check that the right entry disappeared from the queue.
         assert queue_2[0]["args"] == plans_args[ind[0]]
         assert queue_2[1]["args"] == plans_args[ind[1]]
+
+
+# fmt: off
+@pytest.mark.parametrize("params, n_expected, exit_code", [
+    ({}, 0, SUCCESS),
+    ({"size": -1}, 0, SUCCESS),
+    ({"size": 0}, 0, SUCCESS),
+    ({"size": 1}, 1, SUCCESS),
+    ({"size": 3}, 3, SUCCESS),
+    ({"size": 4}, 4, SUCCESS),
+    ({"size": 5}, 4, SUCCESS),
+    ({"item_uid": 0}, 3, SUCCESS),
+    ({"item_uid": 1}, 2, SUCCESS),
+    ({"item_uid": 2}, 1, SUCCESS),
+    ({"item_uid": 3}, 0, SUCCESS),
+    ({"item_uid": -1}, 4, SUCCESS),  # Random UUID - nothing is deleted
+])
+# fmt: on
+def test_qserver_history_clear_1(re_manager, params, n_expected, exit_code):  # noqa: F811
+    """
+    Basic test for ``history_clear`` API.
+    """
+
+    plan = "{'name': 'count', 'args': [['det1', 'det2']]}"
+
+    # Add 4 plans to queue
+    for n in range(4):
+        assert sp_call(["qserver", "queue", "add", "plan", plan]) == SUCCESS
+
+    assert sp_call(["qserver", "environment", "open"]) == SUCCESS
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    assert sp_call(["qserver", "queue", "start"]) == SUCCESS
+    assert wait_for_condition(time=30, condition=condition_manager_idle)
+
+    status = get_manager_status()
+    assert status["items_in_queue"] == 0
+    assert status["items_in_history"] == 4
+
+    history = get_history()
+    h_items_1 = history["items"]
+    assert len(h_items_1) == 4, pprint.pformat(h_items_1)
+    h_uids_1 = [_["item_uid"] for _ in h_items_1]
+
+    # Replace index with UUID if integer is provided
+    if "item_uid" in params and isinstance(params["item_uid"], int):
+        n = params["item_uid"]
+        if n >= 0:
+            # Select UUID based on the index of the item in the history
+            params["item_uid"] = h_uids_1[params["item_uid"]]
+        else:
+            # Generate random UUID
+            params["item_uid"] = "this_is_not_UID"
+
+    cli_params = ["qserver", "history", "clear"]
+    if "size" in params:
+        cli_params.append(f"{params['size']}")
+    elif "item_uid" in params:
+        cli_params.append(f"{params['item_uid']}")
+
+    assert sp_call(cli_params) == exit_code
+
+    status = get_manager_status()
+    assert status["items_in_queue"] == 0
+    assert status["items_in_history"] == n_expected
+
+    history = get_history()
+    h_items_2 = history["items"]
+    assert len(h_items_2) == n_expected, pprint.pformat(h_items_2)
+    if len(h_items_2) > 0:
+        h_uids_2 = [_["item_uid"] for _ in h_items_2]
+        assert h_uids_2 == h_uids_1[-n_expected:], pprint.pformat(h_uids_2)
+
+    assert sp_call(["qserver", "environment", "close"]) == SUCCESS
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
 # fmt: off

@@ -324,6 +324,7 @@ def _configure_happi(tmp_path, monkeypatch, json_devices):
     (("det", ["motor", "2motor_$new"]), ("det", "motor"), {}, False, "may consist of lowercase letters, numbers"),
 ])
 # fmt: on
+@pytest.mark.skipif(sys.version_info[:2] == (3, 13), reason="Do not run the test for Python 3.13 (Happi)")
 def test_load_devices_from_happi_1(tmp_path, monkeypatch, device_names, loaded_names, kw_args, success, errmsg):
     """
     Tests for ``load_devices_from_happi``.

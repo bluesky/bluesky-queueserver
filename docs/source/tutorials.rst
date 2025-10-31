@@ -825,8 +825,8 @@ and repeated after the plan was resumed::
   generator count ['76e20bbc'] (scan num: 2)
 
 Once the plan is paused, it can be resumed (as alread demonstrated), stopped, aborted or halted. The
-technical difference between the three methods of terminating a plan relatively small, except that
-stopped plans is considered successful, aborted and halted plans are considered failed; a new plan
+technical differences among the three methods of terminating a plan are relatively small, except that
+a stopped plan is considered successful, while aborted and halted plans are considered failed; a new plan
 can be started immediately after a plan is stopped or aborted, but the environment needs to be
 restarted (closed and opened again) after a plan is halted.
 
@@ -1049,7 +1049,7 @@ and check the status. The number of background tasks is now 2::
 
 The manager and environment state is ``'idle'``, which means that users are free to run plans or foreground
 tasks without waiting for the background tasks to complete. Background tasks can also be started while
-plans or forground tasks are running. Try running the function as a foreground task. Also try running
+plans or foreground tasks are running. Try running the function as a foreground task. Also try running
 a plan while the function is running. Also try running one or multiple copies of the function while
 a plan or a foreground task is running.
 
@@ -1639,8 +1639,8 @@ Locking RE Manager
 RE Manager can be temporarily locked by a user using a 'secret' key. The user is expected to
 remember (or keep) the key and unlock the manager when safe. The user may choose to
 lock the worker environment and/or the queue which prevents other users
-to change the state of environment (start the queue, run plans, upload scripts etc.) or
-the queue (add, edit or reorder plans in the queue etc.) unless they are provided with the key.
+from changing the state of the environment (start the queue, run plans, upload scripts, etc.) or
+the queue (add, edit, or reorder plans in the queue, etc.) unless they are provided with the key.
 For more detailed description see :ref:`locking_re_manager`.
 
 Start RE Manager using instructions given in :ref:`tutorial_starting_queue_server`.
@@ -1679,7 +1679,7 @@ When the manager is locked, the status includes the name of the user (``user``) 
 the lock, time (``time``, ``time_str``) when the lock was applied and optional note (``note``)
 for other users of the system, explaining the reason why the lock was applied.
 The parameter ``emergency_lock_key_is_set`` (``False``) indicates that the emergency key is
-not set and the manager can be unlocked only only with the key used to lock it.
+not set and the manager can be unlocked only with the key used to lock it.
 
 Lock the environment with a note::
 
@@ -2068,7 +2068,7 @@ RE Manager generates or updates the list of existing plans and devices automatic
 RE Worker environment is opened, but in some cases it is convenient to generate
 the list manually. For example, the developers wishing to update ``existing_plans_and_devices.yaml``
 in `the 'profile_collection_sim' directory <https://github.com/bluesky/bluesky-queueserver/tree/main/bluesky_queueserver/profile_collection_sim>`_
-when the respective startup files are modified have the only option to do it manually (RE Manager
+when the respective startup files are modified only have the option to do it manually (RE Manager
 is designed not to automatically modify files in built-in ``profile_collection_sim`` directory).
 
 **Step 1.** Create the directory with startup files and copy startup Python files as
@@ -2126,7 +2126,7 @@ disables printing of the console output::
 
   $ start-re-manager --zmq-publish-console ON --console-output OFF
 
-Notice that no output is printed in Terminal2. External monitor (running in
+Notice that no output is printed in Terminal2. External monitoring (running in
 Terminal 1) is needed to visualize the output from RE Manager.
 
 In practice, the client applications are expected to implement the

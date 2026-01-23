@@ -3366,7 +3366,10 @@ class RunEngineManager(Process):
         """
         Returns the runengine metadata from the RE worker process
         """
-        logger.info("Returning the runengine metadata dictionary ...")
+
+        # Clients may ask for RE metadata frequently to update some state,
+        # so make this message debug only.
+        logger.debug("Returning the runengine metadata dictionary ...")
 
         success, msg, re_metadata = True, "", {}
         try:

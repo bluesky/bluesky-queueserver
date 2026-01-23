@@ -5972,6 +5972,36 @@ def test_zmq_api_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_resta
 
 
 # fmt: off
+@pytest.mark.parametrize("test_with_manager_restart", [False, True])
+# fmt: on
+def test_zmq_api_re_metadata_1(re_manager_pc_copy, tmp_path, test_with_manager_restart):  # noqa: F811
+    """
+    Test for retrieving runengine meteadata
+    """
+
+    _, pc_path = re_manager_pc_copy
+
+    resp, _ = zmq_request("re_metadata")
+    assert resp["success"] is False, f"{resp = }"
+    assert resp["msg"] == "Environment does not exist. Cannot retrieve Run Engine metadata."
+
+    # Open the environment
+    resp, _ = zmq_request("environment_open")
+    assert resp["success"] is True, f"{resp = }"
+    assert wait_for_condition(time=5, condition=condition_environment_created)
+
+    # Get the run_engine metadata
+    resp, _ = zmq_request("re_metadata")
+    assert resp["success"] is True, f"{resp = }"
+    re_md = resp["re_metadata"]
+    assert "metadata_key" in re_md, "Expected key not found in RE metadata"
+    assert re_md["metadata_key"] == "metadata_value"
+
+    resp, _ = zmq_request("environment_close")
+    assert resp["success"] is True, f"{resp = }"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+# fmt: off
 @pytest.mark.parametrize("em_lock_code", [False, True])
 # fmt: on
 def test_zmq_api_lock_1(monkeypatch, re_manager_cmd, em_lock_code):  # noqa: F811

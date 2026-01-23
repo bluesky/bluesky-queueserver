@@ -1591,7 +1591,7 @@ class RunEngineManager(Process):
             runengine_metadata = await self._comm_to_worker.send_msg("request_runengine_metadata")
             err_msg = ""
             if runengine_metadata is None:
-                err_msg = "Failed to obtain the RunEngine metadata from the worker"
+                err_msg = "Failed to obtain the RE metadata from the worker"
         except CommTimeoutError:
             runengine_metadata, err_msg = None, "Timeout occurred while processing the request"
         return runengine_metadata, err_msg
@@ -3361,6 +3361,30 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg, "run_list": run_list, "run_list_uid": run_list_uid}
 
+
+    async def _re_metadata_handler(self, request):
+        """
+        Returns the runengine metadata from the RE worker process
+        """
+        logger.info("Returning the runengine metadata dictionary ...")
+
+        success, msg, re_metadata = True, "", {}
+        try:
+            self._check_request_for_unsupported_params(request=request, param_names=[])
+
+            if self._environment_exists:
+                re_metadata, msg = await self._worker_request_runengine_metadata()
+
+                if re_metadata is None:
+                    success, re_metadata = False, {}
+            else:
+                success, msg, re_metadata = False, "Environment does not exist. Cannot retrieve Run Engine metadata.", {}
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg, "re_metadata": re_metadata}
+
+
     def _lock_key_invalid_msg(self):
         """
         Format error message, which reports an invalid lock key.
@@ -3694,6 +3718,7 @@ class RunEngineManager(Process):
             "re_abort": "_re_abort_handler",
             "re_halt": "_re_halt_handler",
             "re_runs": "_re_runs_handler",
+            "re_metadata": "_re_metadata_handler",
             "lock": "_lock_handler",
             "lock_info": "_lock_info_handler",
             "unlock": "_unlock_handler",

@@ -3383,8 +3383,11 @@ class RunEngineManager(Process):
                 if re_metadata is None:
                     success, re_metadata = False, {}
                 else:
-                    # Make sure the metadata is serializable
-                    json.dumps(re_metadata)
+                    # Make sure the metadata is serializable given the encoding
+                    if self._zmq_encoding == ZMQEncoding.JSON:
+                        json.dumps(re_metadata)
+                    else:
+                        msgpack.packb(re_metadata)
             else:
                 success, msg, re_metadata = (
                     False,

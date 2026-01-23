@@ -978,6 +978,10 @@ class RunEngineWorker(Process):
         return msg_out
 
     def _request_runengine_metadata_handler(self):
+        """
+        Returns the current state of the Run Engine metadata as a dictionary
+        """
+
         return dict(self._RE.md)
 
     def _command_close_env_handler(self):

@@ -5999,10 +5999,10 @@ def test_zmq_api_re_metadata_1(re_manager_pc_copy, tmp_path, test_with_manager_r
     def check_initial_metadata(re_md):
         """Function that checks if initial metadata matches what we expect"""
 
-        assert "metadata_key" in re_md, "Expected key not found in RE metadata"
+        assert "metadata_key" in re_md, pprint.pformat(re_md)
         assert re_md["metadata_key"] == "metadata_value"
-        assert "versions" in re_md, "Expected to find versions dictionary in metadata"
-        assert "bluesky" in re_md["versions"], "Expected to find bluesky version in metadata"
+        assert "versions" in re_md, pprint.pformat(re_md)
+        assert "bluesky" in re_md["versions"], pprint.pformat(re_md)
 
     re_md = resp["re_metadata"]
     check_initial_metadata(re_md)
@@ -6023,7 +6023,7 @@ def test_zmq_api_re_metadata_1(re_manager_pc_copy, tmp_path, test_with_manager_r
 
     # Make sure we can retrieve scan ID, and it's an int
     # the `count` plan should add this key, and it should start at `1`
-    assert "scan_id" in re_md, "Scan ID not found in RE metadata"
+    assert "scan_id" in re_md, pprint.pformat(re_md)
     assert re_md["scan_id"] == 1, "Scan ID for first plan should be 1"
 
     # Make sure our original metadata key is still there

@@ -5976,7 +5976,9 @@ def test_zmq_api_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_resta
 # fmt: on
 def test_zmq_api_re_metadata_1(re_manager_pc_copy, tmp_path, test_with_manager_restart):  # noqa: F811
     """
-    Test for retrieving runengine meteadata
+    Tests `re_metadata` functionality. First checks if the request correctly fails if the environment is not open.
+    Then checks to make sure initial metadata could be retrieved. Then, executes a count plan that adds `scan_id` and
+    `versions` keys to the metadata, and makes sure we can read those back, as well as the original key/value.
     """
 
     _, pc_path = re_manager_pc_copy
@@ -5990,16 +5992,47 @@ def test_zmq_api_re_metadata_1(re_manager_pc_copy, tmp_path, test_with_manager_r
     assert resp["success"] is True, f"{resp = }"
     assert wait_for_condition(time=5, condition=condition_environment_created)
 
-    # Get the run_engine metadata
+    # Get the initial run_engine metadata
+    resp, _ = zmq_request("re_metadata")
+    assert resp["success"] is True, f"{resp = }"
+
+    def check_initial_metadata(re_md):
+        """Function that checks if initial metadata matches what we expect"""
+
+        assert "metadata_key" in re_md, "Expected key not found in RE metadata"
+        assert re_md["metadata_key"] == "metadata_value"
+        assert "versions" in re_md, "Expected to find versions dictionary in metadata"
+        assert "bluesky" in re_md["versions"], "Expected to find bluesky version in metadata"
+
+    re_md = resp["re_metadata"]
+    check_initial_metadata(re_md)
+    assert len(re_md) == 2, "Only two metadata keys should be present initially!"
+
+    # Add the first 'count' plan
+    resp, _ = zmq_request("queue_item_add", {"item": _plan1, "user": _user, "user_group": _user_group})
+    assert resp["success"] is True
+
+    # Execute the count plan. This should add some additional metadata items
+    resp, _ = zmq_request("queue_start")
+    assert resp["success"] is True
+    assert wait_for_condition(20, condition=condition_manager_idle)
+
     resp, _ = zmq_request("re_metadata")
     assert resp["success"] is True, f"{resp = }"
     re_md = resp["re_metadata"]
-    assert "metadata_key" in re_md, "Expected key not found in RE metadata"
-    assert re_md["metadata_key"] == "metadata_value"
+
+    # Make sure we can retrieve scan ID, and it's an int
+    # the `count` plan should add this key, and it should start at `1`
+    assert "scan_id" in re_md, "Scan ID not found in RE metadata"
+    assert re_md["scan_id"] == 1, "Scan ID for first plan should be 1"
+
+    # Make sure our original metadata key is still there
+    check_initial_metadata(re_md)
 
     resp, _ = zmq_request("environment_close")
     assert resp["success"] is True, f"{resp = }"
     assert wait_for_condition(time=5, condition=condition_environment_closed)
+
 
 # fmt: off
 @pytest.mark.parametrize("em_lock_code", [False, True])

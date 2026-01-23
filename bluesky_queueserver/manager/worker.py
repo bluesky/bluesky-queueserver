@@ -991,6 +991,9 @@ class RunEngineWorker(Process):
         self._existing_plans_and_devices_changed = False
         return msg_out
 
+    def _request_runengine_metadata_handler(self):
+        return str(self._RE.md)
+
     def _command_close_env_handler(self):
         """
         Close RE Worker environment in orderly way.
@@ -1355,6 +1358,7 @@ class RunEngineWorker(Process):
         self._comm_to_manager.add_method(
             self._request_plans_and_devices_list_handler, "request_plans_and_devices_list"
         )
+        self._comm_to_manager.add_method(self._request_runengine_metadata_handler, "request_runengine_metadata")
         self._comm_to_manager.add_method(self._request_task_results_handler, "request_task_results")
         self._comm_to_manager.add_method(self._command_close_env_handler, "command_close_env")
         self._comm_to_manager.add_method(self._command_confirm_exit_handler, "command_confirm_exit")

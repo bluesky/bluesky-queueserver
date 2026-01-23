@@ -155,6 +155,8 @@ qserver re runs active     # Get the list of active runs
 qserver re runs open       # Get the list of open runs (subset of active runs)
 qserver re runs closed     # Get the list of closed runs (subset of active runs)
 
+qserver re metadata        # Request RunEngine metadata
+
 qserver history get        # Request plan history
 qserver history clear      # Clear plan history
 
@@ -1091,7 +1093,7 @@ def create_msg(params, *, lock_key):
     elif command == "re":
         if len(params) < 1:
             raise CommandParameterError(f"Request '{command}' must include at least one parameter")
-        supported_params = ("pause", "resume", "stop", "abort", "halt", "runs")
+        supported_params = ("pause", "resume", "stop", "abort", "halt", "runs", "metadata")
         if params[0] in supported_params:
             if params[0] == "pause":
                 method, prms = msg_re_pause(params)
@@ -1104,6 +1106,8 @@ def create_msg(params, *, lock_key):
                     raise CommandParameterError(
                         f"Unrecognized combination of parameters: {format_list_as_command(params)}"
                     )
+            elif params[0] == "metadata":
+                method, prms = "request_runengine_metadata", {}
             else:
                 method, prms = f"{command}_{params[0]}", {}
 

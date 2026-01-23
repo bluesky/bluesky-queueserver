@@ -978,7 +978,7 @@ class RunEngineWorker(Process):
         return msg_out
 
     def _request_runengine_metadata_handler(self):
-        return str(self._RE.md)
+        return dict(self._RE.md)
 
     def _command_close_env_handler(self):
         """

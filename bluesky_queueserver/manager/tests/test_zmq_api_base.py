@@ -6034,6 +6034,33 @@ def test_zmq_api_re_metadata_1(re_manager_pc_copy, tmp_path, test_with_manager_r
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
+_add_datetime_to_md = """
+from datetime import datetime
+RE.md['date'] = datetime.now()
+"""
+
+
+def test_zmq_api_re_metadata_non_serializable_md(re_manager_pc_copy, tmp_path):  # noqa: F811
+
+    _, pc_path = re_manager_pc_copy
+
+    # Add a non-serializable type to the runengine metadata
+    append_code_to_last_startup_file(pc_path, additional_code=_add_datetime_to_md)
+
+    resp, _ = zmq_request("environment_open")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_created)
+
+    # Get the initial run_engine metadata
+    resp, _ = zmq_request("re_metadata")
+    assert resp["success"] is False
+    assert resp["msg"] == "Error: Object of type datetime is not JSON serializable"
+
+    resp, _ = zmq_request("environment_close")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
 # fmt: off
 @pytest.mark.parametrize("em_lock_code", [False, True])
 # fmt: on

@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import enum
+import json
 import logging
 import time as ttime
 import uuid
@@ -1592,8 +1593,10 @@ class RunEngineManager(Process):
             err_msg = ""
             if runengine_metadata is None:
                 err_msg = "Failed to obtain the RE metadata from the worker"
+
         except CommTimeoutError:
             runengine_metadata, err_msg = None, "Timeout occurred while processing the request"
+
         return runengine_metadata, err_msg
 
     async def _worker_request_task_results(self):
@@ -3379,6 +3382,9 @@ class RunEngineManager(Process):
 
                 if re_metadata is None:
                     success, re_metadata = False, {}
+                else:
+                    # Make sure the metadata is serializable
+                    json.dumps(re_metadata)
             else:
                 success, msg, re_metadata = (
                     False,
@@ -3386,7 +3392,7 @@ class RunEngineManager(Process):
                     {},
                 )
         except Exception as ex:
-            success, msg = False, f"Error: {ex}"
+            success, msg, re_metadata = False, f"Error: {ex}", {}
 
         return {"success": success, "msg": msg, "re_metadata": re_metadata}
 

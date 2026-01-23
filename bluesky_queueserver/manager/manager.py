@@ -1586,6 +1586,16 @@ class RunEngineManager(Process):
             plans_and_devices_list, err_msg = None, "Timeout occurred while processing the request"
         return plans_and_devices_list, err_msg
 
+    async def _worker_request_runengine_metadata(self):
+        try:
+            runengine_metadata = await self._comm_to_worker.send_msg("request_runengine_metadata")
+            err_msg = ""
+            if runengine_metadata is None:
+                err_msg = "Failed to obtain the RunEngine metadata from the worker"
+        except CommTimeoutError:
+            runengine_metadata, err_msg = None, "Timeout occurred while processing the request"
+        return runengine_metadata, err_msg
+
     async def _worker_request_task_results(self):
         try:
             tt = self._comm_to_worker_timeout_long

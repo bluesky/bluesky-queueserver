@@ -5977,24 +5977,24 @@ def test_zmq_api_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_resta
 def test_zmq_api_re_metadata_1(re_manager_pc_copy, tmp_path, test_with_manager_restart):  # noqa: F811
     """
     Tests `re_metadata` functionality. First checks if the request correctly fails if the environment is not open.
-    Then checks to make sure initial metadata could be retrieved. Then, executes a count plan that adds `scan_id` and
+    Then checks to make sure initial metadata could be retrieved. Then, executes a plan that adds `scan_id` and
     `versions` keys to the metadata, and makes sure we can read those back, as well as the original key/value.
     """
 
     _, pc_path = re_manager_pc_copy
 
     resp, _ = zmq_request("re_metadata")
-    assert resp["success"] is False, f"{resp = }"
+    assert resp["success"] is False, f"{resp =}"
     assert resp["msg"] == "Environment does not exist. Cannot retrieve Run Engine metadata."
 
     # Open the environment
     resp, _ = zmq_request("environment_open")
-    assert resp["success"] is True, f"{resp = }"
+    assert resp["success"] is True, f"{resp =}"
     assert wait_for_condition(time=5, condition=condition_environment_created)
 
     # Get the initial run_engine metadata
     resp, _ = zmq_request("re_metadata")
-    assert resp["success"] is True, f"{resp = }"
+    assert resp["success"] is True, f"{resp =}"
 
     def check_initial_metadata(re_md):
         """Function that checks if initial metadata matches what we expect"""
@@ -6018,7 +6018,7 @@ def test_zmq_api_re_metadata_1(re_manager_pc_copy, tmp_path, test_with_manager_r
     assert wait_for_condition(20, condition=condition_manager_idle)
 
     resp, _ = zmq_request("re_metadata")
-    assert resp["success"] is True, f"{resp = }"
+    assert resp["success"] is True, f"{resp =}"
     re_md = resp["re_metadata"]
 
     # Make sure we can retrieve scan ID, and it's an int
@@ -6030,7 +6030,7 @@ def test_zmq_api_re_metadata_1(re_manager_pc_copy, tmp_path, test_with_manager_r
     check_initial_metadata(re_md)
 
     resp, _ = zmq_request("environment_close")
-    assert resp["success"] is True, f"{resp = }"
+    assert resp["success"] is True, f"{resp =}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 

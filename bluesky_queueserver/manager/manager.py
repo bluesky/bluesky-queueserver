@@ -3361,7 +3361,6 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg, "run_list": run_list, "run_list_uid": run_list_uid}
 
-
     async def _re_metadata_handler(self, request):
         """
         Returns the runengine metadata from the RE worker process
@@ -3381,12 +3380,15 @@ class RunEngineManager(Process):
                 if re_metadata is None:
                     success, re_metadata = False, {}
             else:
-                success, msg, re_metadata = False, "Environment does not exist. Cannot retrieve Run Engine metadata.", {}
+                success, msg, re_metadata = (
+                    False,
+                    "Environment does not exist. Cannot retrieve Run Engine metadata.",
+                    {},
+                )
         except Exception as ex:
             success, msg = False, f"Error: {ex}"
 
         return {"success": success, "msg": msg, "re_metadata": re_metadata}
-
 
     def _lock_key_invalid_msg(self):
         """

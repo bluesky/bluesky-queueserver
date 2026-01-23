@@ -1150,8 +1150,6 @@ def create_msg(params, *, lock_key):
                     raise CommandParameterError(
                         f"Unrecognized combination of parameters: {format_list_as_command(params)}"
                     )
-            elif params[0] == "metadata":
-                method, prms = "request_runengine_metadata", {}
             else:
                 method, prms = f"{command}_{params[0]}", {}
 

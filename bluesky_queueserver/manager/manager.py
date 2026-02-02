@@ -3392,7 +3392,7 @@ class RunEngineManager(Process):
                     except Exception as ex:
                         success, msg, re_metadata = (
                             False,
-                            f"Failed to serialize RE metadata with {self._zmq_encoding.name.upper()}: {ex}",
+                            f"Failed to serialize RE metadata with {self._zmq_encoding.name}: {ex}",
                             {},
                         )
             else:

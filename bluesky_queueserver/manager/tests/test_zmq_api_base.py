@@ -5985,7 +5985,7 @@ def test_zmq_api_re_metadata_1(re_manager_pc_copy, tmp_path, test_with_manager_r
 
     resp, _ = zmq_request("re_metadata")
     assert resp["success"] is False, f"{resp =}"
-    assert resp["msg"] == "Environment does not exist. Cannot retrieve Run Engine metadata."
+    assert resp["msg"] == "Environment does not exist. Cannot retrieve RE metadata."
 
     # Open the environment
     resp, _ = zmq_request("environment_open")
@@ -6057,9 +6057,9 @@ def test_zmq_api_re_metadata_non_serializable_md(re_manager_pc_copy, tmp_path): 
 
     # Check that the error message is correct depending on encoding
     if encoding == "json":
-        assert resp["msg"] == "Error: Object of type datetime is not JSON serializable"
+        assert resp["msg"].startswith("Failed to serialize RE metadata with JSON:")
     elif encoding == "msgpack":
-        assert resp["msg"] == "Error: can not serialize 'datetime.datetime' object"
+        assert resp["msg"].startswith("Failed to serialize RE metadata with MSGPACK:")
 
     resp, _ = zmq_request("environment_close")
     assert resp["success"] is True, f"{resp =}"

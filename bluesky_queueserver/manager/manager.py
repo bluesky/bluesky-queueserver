@@ -3384,14 +3384,21 @@ class RunEngineManager(Process):
                     success, re_metadata = False, {}
                 else:
                     # Make sure the metadata is serializable given the encoding
-                    if self._zmq_encoding == ZMQEncoding.JSON:
-                        json.dumps(re_metadata)
-                    else:
-                        msgpack.packb(re_metadata)
+                    try:
+                        if self._zmq_encoding == ZMQEncoding.JSON:
+                            json.dumps(re_metadata)
+                        else:
+                            msgpack.packb(re_metadata)
+                    except Exception as ex:
+                        success, msg, re_metadata = (
+                            False,
+                            f"Failed to serialize RE metadata with {self._zmq_encoding.name.upper()}: {ex}",
+                            {},
+                        )
             else:
                 success, msg, re_metadata = (
                     False,
-                    "Environment does not exist. Cannot retrieve Run Engine metadata.",
+                    "Environment does not exist. Cannot retrieve RE metadata.",
                     {},
                 )
         except Exception as ex:

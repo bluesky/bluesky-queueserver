@@ -982,7 +982,15 @@ class RunEngineWorker(Process):
         Returns the current state of the Run Engine metadata as a dictionary
         """
 
-        return dict(self._RE.md)
+        if self._RE is None:
+            raise RuntimeError("Run Engine does not exist in worker environment")
+        elif not hasattr(self._RE, "md"):
+            raise AttributeError("Run Engine does not have a metadata attribute")
+
+        try:
+            return dict(self._RE.md)
+        except Exception as ex:
+            raise RuntimeError(f"Failed to convert Run Engine metadata to dictionary: {ex}") from ex
 
     def _command_close_env_handler(self):
         """

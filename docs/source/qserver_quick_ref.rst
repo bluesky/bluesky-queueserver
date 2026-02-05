@@ -238,6 +238,11 @@ commands and HTTP API::
   qserver re runs open       # Get the list of open runs (subset of active runs)
   qserver re runs closed     # Get the list of closed runs (subset of active runs)
 
+As long as the environment is opened, you may also query the current state of the runengine
+metadata dictionary.
+
+  qserver re metadata        # Get the current runengine metadata dictionary
+
 The queue can be stopped at any time. Stopping the queue is a safe operation. When the stopping
 sequence is initiated, the currently running plan is finished and the next plan is not be started.
 The stopping sequence can be cancelled if it was activated by mistake or decision was changed::

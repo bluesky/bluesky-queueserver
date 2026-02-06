@@ -1690,7 +1690,7 @@ Returns       **success**: *boolean*
                   error message in case of failure, empty string ('') otherwise.
 
               **run_list**: *list(dict)*
-                  The requested list of runs, list items are dictionaries with keys 'uid' (str),
+                  the requested list of runs, list items are dictionaries with keys 'uid' (str),
                   'scan_id' (int), 'is_open' (boolean) and 'exit_status' (str or None).
                   See Bluesky documentation for 'exit_status' values.
 

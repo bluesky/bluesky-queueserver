@@ -611,6 +611,8 @@ periodically requests and displays the status of Queue Server.
   qserver re runs open       # Get the list of open runs (subset of active runs)
   qserver re runs closed     # Get the list of closed runs (subset of active runs)
 
+  qserver re metadata        # Get Run Engine metadata
+
   qserver history get        # Request plan history
   qserver history clear      # Clear plan history
   qserver history clear 200  # Clear the history, leave the latest 200 items

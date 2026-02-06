@@ -131,6 +131,8 @@ def test_qserver_cli_and_manager(re_manager):  # noqa: F811
 
     assert sp_call(["qserver", "re", "resume"]) == SUCCESS
 
+    assert sp_call(["qserver", "re", "metadata"]) == SUCCESS
+
     assert wait_for_condition(
         time=60, condition=condition_queue_processing_finished
     ), "Timeout while waiting for process to finish"

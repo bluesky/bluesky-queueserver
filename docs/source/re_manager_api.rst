@@ -127,6 +127,10 @@ Monitor the list of active runs:
 
 - :ref:`method_re_runs`
 
+Get Run Engine metadata:
+
+- :ref:`method_re_metadata`
+
 Run tasks in RE Worker namespace:
 
 - :ref:`method_script_upload`
@@ -1693,6 +1697,38 @@ Returns       **success**: *boolean*
               **run_list_uid**: str
                   UID of the returned run list, identical to the RE Manager status field with
                   the same name.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+
+
+.. _method_re_metadata:
+
+
+**'re_metadata'**
+^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'re_metadata'**
+------------  -----------------------------------------------------------------------------------------
+Description   Request the current state of the runengine metadata dictionary. The metadata dictionary may be
+              modified by plans during execution, or by external processes if the metadata is tied to an external
+              source like a Redis server. The API allows clients to monitor changes
+              in the metadata to display specific metadata key values to users. By default the bluesky Run Engine
+              will update the metadata to be an in-process dictionary with a 'versions' key that tracks the versions of bluesky and
+              related libraries. A transient 'scan_id' key is also added when a plan is run.
+------------  -----------------------------------------------------------------------------------------
+Parameters    ---
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **re_metadata**: *dict*
+                  The requested runengine metadata dictionary. If the request fails, the dictionary is empty.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================

@@ -5971,6 +5971,161 @@ def test_zmq_api_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_resta
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
+def test_zmq_api_re_metadata_1(re_manager_pc_copy, tmp_path):  # noqa: F811
+    """
+    Tests `re_metadata` functionality. First checks if the request correctly fails if the environment is not open.
+    Then checks to make sure initial metadata could be retrieved. Then, executes a plan that adds `scan_id` and
+    `versions` keys to the metadata, and makes sure we can read those back, as well as the original key/value.
+    """
+
+    _, pc_path = re_manager_pc_copy
+
+    resp, _ = zmq_request("re_metadata")
+    assert resp["success"] is False, f"{resp =}"
+    assert resp["msg"] == "Environment does not exist. Cannot retrieve RE metadata."
+
+    # Open the environment
+    resp, _ = zmq_request("environment_open")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_created)
+
+    # Get the initial run_engine metadata
+    resp, _ = zmq_request("re_metadata")
+    assert resp["success"] is True, f"{resp =}"
+
+    def check_initial_metadata(re_md):
+        """Function that checks if initial metadata matches what we expect"""
+
+        assert "metadata_key" in re_md, pprint.pformat(re_md)
+        assert re_md["metadata_key"] == "metadata_value"
+        assert "versions" in re_md, pprint.pformat(re_md)
+        assert "bluesky" in re_md["versions"], pprint.pformat(re_md)
+
+    re_md = resp["re_metadata"]
+    check_initial_metadata(re_md)
+    assert len(re_md) == 2, "Only two metadata keys should be present initially!"
+
+    # Add the first 'count' plan
+    resp, _ = zmq_request("queue_item_add", {"item": _plan1, "user": _user, "user_group": _user_group})
+    assert resp["success"] is True
+
+    # Execute the count plan. This should add some additional metadata items
+    resp, _ = zmq_request("queue_start")
+    assert resp["success"] is True
+    assert wait_for_condition(20, condition=condition_manager_idle)
+
+    resp, _ = zmq_request("re_metadata")
+    assert resp["success"] is True, f"{resp =}"
+    re_md = resp["re_metadata"]
+
+    # Make sure we can retrieve scan ID, and it's an int
+    # the `count` plan should add this key, and it should start at `1`
+    assert "scan_id" in re_md, pprint.pformat(re_md)
+    assert re_md["scan_id"] == 1, "Scan ID for first plan should be 1"
+
+    # Make sure our original metadata key is still there
+    check_initial_metadata(re_md)
+
+    resp, _ = zmq_request("environment_close")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+_add_datetime_to_md = """
+from datetime import datetime
+RE.md['date'] = datetime.now()
+"""
+
+
+def test_zmq_api_re_metadata_2_non_serializable_md(re_manager_pc_copy, tmp_path):  # noqa: F811
+
+    _, pc_path = re_manager_pc_copy
+    # Add a non-serializable type to the runengine metadata
+    append_code_to_last_startup_file(pc_path, additional_code=_add_datetime_to_md)
+
+    encoding = use_zmq_encoding_for_tests()
+
+    resp, _ = zmq_request("environment_open")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_created)
+
+    resp, _ = zmq_request("re_metadata")
+    assert resp["success"] is False
+
+    # Check that the error message is correct depending on encoding
+    if encoding == "json":
+        assert resp["msg"].startswith("Failed to serialize RE metadata with JSON:"), resp
+    elif encoding == "msgpack":
+        assert resp["msg"].startswith("Failed to serialize RE metadata with MSGPACK:"), resp
+
+    resp, _ = zmq_request("environment_close")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_re_metadata_3_no_re(re_manager_pc_copy, tmp_path):  # noqa: F811
+    """
+    Tests `re_metadata` functionality when Run Engine is not present in the environment.
+    """
+
+    _, pc_path = re_manager_pc_copy
+    remove_run_engine_config_from_startup(pc_path)
+
+    resp, _ = zmq_request("environment_open")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_created)
+
+    resp, _ = zmq_request("re_metadata")
+    assert resp["success"] is False, f"{resp =}"
+    assert "Run Engine does not exist in worker environment" in resp["msg"], resp
+
+    resp, _ = zmq_request("environment_close")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_re_metadata_4_no_md(re_manager_pc_copy, tmp_path):  # noqa: F811
+    """
+    Tests `re_metadata` functionality when Run Engine does not have 'md' attribute.
+    """
+
+    _, pc_path = re_manager_pc_copy
+    append_code_to_last_startup_file(pc_path, additional_code="del RE.md")
+
+    resp, _ = zmq_request("environment_open")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_created)
+
+    resp, _ = zmq_request("re_metadata")
+    assert resp["success"] is False, f"{resp =}"
+    assert "Run Engine does not have a metadata attribute" in resp["msg"], resp
+
+    resp, _ = zmq_request("environment_close")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_re_metadata_5_non_mapping_md(re_manager_pc_copy, tmp_path):  # noqa: F811
+    """
+    Tests `re_metadata` functionality when Run Engine has non-mapping type as 'md' attribute.
+    """
+
+    _, pc_path = re_manager_pc_copy
+    append_code_to_last_startup_file(pc_path, additional_code="RE.md = 12345")
+
+    resp, _ = zmq_request("environment_open")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_created)
+
+    resp, _ = zmq_request("re_metadata")
+    assert resp["success"] is False, f"{resp =}"
+    assert "Failed to convert Run Engine metadata to dictionary" in resp["msg"], resp
+
+    resp, _ = zmq_request("environment_close")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
 # fmt: off
 @pytest.mark.parametrize("em_lock_code", [False, True])
 # fmt: on

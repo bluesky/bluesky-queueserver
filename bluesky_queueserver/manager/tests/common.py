@@ -702,7 +702,6 @@ def re_manager_factory(request):
     Factory for starting RE Manager as a subprocess. Tests will communicate with RE Manager via ZeroMQ.
     """
 
-
     def _factory(params=None, copy_pc_tmp_path=None):
 
         pc_path = None

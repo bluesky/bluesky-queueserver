@@ -52,8 +52,8 @@ from .common import (  # noqa: F401
     get_manager_status,
     ip_kernel_simple_client,
     re_manager,
-    re_manager_factory,
     re_manager_cmd,
+    re_manager_factory,
     re_manager_pc_copy,
     remove_run_engine_config_from_startup,
     use_ipykernel_for_tests,
@@ -6127,7 +6127,7 @@ def test_zmq_api_re_metadata_5_non_mapping_md(re_manager_pc_copy, tmp_path):  # 
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_re_metadata_6_filtered_by_keys(re_manager_cmd, tmp_path): # noqa: F811
+def test_zmq_api_re_metadata_6_filtered_by_keys(re_manager_cmd, tmp_path):  # noqa: F811
     """
     Tests `re_metadata` functionality with filtering by keys. Checks that the filtering works correctly and that
     the error is returned if some of the requested keys are not present in the metadata.
@@ -6152,9 +6152,10 @@ def test_zmq_api_re_metadata_6_filtered_by_keys(re_manager_cmd, tmp_path): # noq
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_re_metadata_7_filtered_by_keys_non_existent_key(re_manager_cmd, tmp_path): # noqa: F811
+def test_zmq_api_re_metadata_7_filtered_by_keys_non_existent_key(re_manager_cmd, tmp_path):  # noqa: F811
     """
-    Tests `re_metadata` functionality with filtering by keys. Checks that the error is returned if some of the requested keys are not present in the metadata.
+    Tests `re_metadata` functionality with filtering by keys.
+    Checks that the error is returned if some of the requested keys are not present in the metadata.
     """
 
     pc_path = copy_default_profile_collection(tmp_path)
@@ -6174,13 +6175,16 @@ def test_zmq_api_re_metadata_7_filtered_by_keys_non_existent_key(re_manager_cmd,
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_re_metadata_8_filtered_by_nested_key(re_manager_cmd, tmp_path): # noqa: F811
+def test_zmq_api_re_metadata_8_filtered_by_nested_key(re_manager_cmd, tmp_path):  # noqa: F811
     """
-    Tests `re_metadata` functionality with filtering by nested keys. Checks that the filtering works correctly for nested keys.
+    Tests `re_metadata` functionality with filtering by nested keys.
+    Checks that the filtering works correctly for nested keys.
     """
 
     pc_path = copy_default_profile_collection(tmp_path)
-    re_manager_cmd(["--startup-dir", pc_path, "--permitted-re-metadata-keys", "/metadata_key", "/versions/bluesky"])
+    re_manager_cmd(
+        ["--startup-dir", pc_path, "--permitted-re-metadata-keys", "/metadata_key", "/versions/bluesky"]
+    )
 
     resp, _ = zmq_request("environment_open")
     assert resp["success"] is True, f"{resp =}"

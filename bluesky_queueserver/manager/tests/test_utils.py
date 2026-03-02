@@ -31,7 +31,7 @@ from bluesky_queueserver.manager.utils import filter_dict_by_permitted_keys
         ({"a": {"b": 1, "c": 2}, "d": 2}, ["/a/c/"], {"a": {"c": 2}}),
         ({"a": {"b": 1, "c": 2}, "d": 2}, ["/a/d"], {}),
         ({"a": {"b": 1, "c": 2}, "d": 2}, ["/a/d/"], {}),
-    ]
+    ],
 )
 def test_filter_dict_by_permitted_keys(d, permitted_keys, expected):
     assert filter_dict_by_permitted_keys(d, permitted_keys) == expected

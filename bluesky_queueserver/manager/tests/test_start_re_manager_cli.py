@@ -650,7 +650,10 @@ def _get_cli_params_3(file_dir):
         "--ipython-stdin-port=60104",
         # Using '=' syntax with more than one arg value doesn't work with
         # argparse, so pass them as seperate arguments.
-        "--permitted-re-metadata-keys", "/a/b", "/c", "/d/",
+        "--permitted-re-metadata-keys",
+        "/a/b",
+        "/c",
+        "/d/",
         "--zmq-info-addr=tcp://*:60629",
         "--zmq-publish-console=OFF",
         "--console-output=OFF",

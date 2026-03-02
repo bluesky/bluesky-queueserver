@@ -39,6 +39,7 @@ def filter_dict_by_permitted_keys(d, permitted_keys):
     (e.g. "/key1/key2") or as prefixes (e.g. "/key1/"). In the latter case, all keys that start with the prefix
     will be included in the filtered dictionary.
     """
+
     def _match_path(path, permitted_keys):
         # If root ("/") is in permitted_keys, always match
         if "/" in permitted_keys:

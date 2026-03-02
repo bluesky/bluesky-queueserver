@@ -30,6 +30,7 @@ from .profile_ops import (
     prepare_plan,
     update_existing_plans_and_devices,
 )
+from .utils import filter_dict_by_permitted_keys
 
 logger = logging.getLogger(__name__)
 
@@ -202,6 +203,7 @@ class RunEngineWorker(Process):
         self._run_reg_cb = None  # Callback for RE
 
         self._re_namespace, self._plans_in_nspace, self._devices_in_nspace = {}, {}, {}
+        self._permitted_re_metadata_keys = set(self._config_dict.get("permitted_re_metadata_keys", ["/"]))
 
         self._worker_shutdown_initiated = False  # Indicates if shutdown is initiated by request
         self._unexpected_shutdown = False  # Indicates if shutdown is in progress, but it was not requested
@@ -988,7 +990,7 @@ class RunEngineWorker(Process):
             raise AttributeError("Run Engine does not have a metadata attribute")
 
         try:
-            return dict(self._RE.md)
+            return filter_dict_by_permitted_keys(dict(self._RE.md), self._permitted_re_metadata_keys)
         except Exception as ex:
             raise RuntimeError(f"Failed to convert Run Engine metadata to dictionary: {ex}") from ex
 

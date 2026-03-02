@@ -49,6 +49,11 @@ properties:
         type: integer
       ipython_control_port:
         type: integer
+      permitted_re_metadata_keys:
+        type: array
+        uniqueItems: true
+        items:
+          type: string
   startup:
     oneOf:
       - type: object

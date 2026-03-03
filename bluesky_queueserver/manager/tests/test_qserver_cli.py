@@ -29,6 +29,7 @@ from .common import (  # noqa: F401
     patch_first_startup_file_undo,
     re_manager,
     re_manager_cmd,
+    re_manager_factory,
     re_manager_pc_copy,
     set_qserver_zmq_address,
     set_qserver_zmq_public_key,

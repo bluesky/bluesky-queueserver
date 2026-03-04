@@ -16,6 +16,7 @@ from .common import (  # noqa: F401
     condition_manager_paused,
     condition_queue_processing_finished,
     get_manager_status,
+    re_manager_factory,
     re_manager,
     re_manager_cmd,
     re_manager_pc_copy,

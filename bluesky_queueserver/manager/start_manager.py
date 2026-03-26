@@ -606,7 +606,7 @@ def start_manager():
         "metadata keys. A value of '/key1' will permit reading of 'key1' and all its subkeys, but not 'key2'. "
         "A value of '/key1/subkey' will permit reading of 'subkey' and all its subkeys, but not any other "
         "subkeys of 'key1', or a 'key2'. This paremeter can also be set using QSERVER_PERMITTED_RE_METADATA_KEYS "
-        "environment variable, where the keys are separated by commas.",
+        "environment variable, where the keys are separated by colons.",
     )
 
     group_console_output = parser.add_argument_group(

@@ -154,6 +154,10 @@ most of the supported parameters:
       ipython_stdin_port: 60002
       ipython_hb_port: 60003
       ipython_control_port: 60004
+      permitted_re_metadata_keys:
+        - "/versions"
+        - "/scan_id"
+        - "/data_session"
     run_engine:
       use_persistent_metadata: true
       kafka_server: 127.0.0.1:9092
@@ -303,6 +307,10 @@ The parameters that define configuration of RE Worker.
 - ``ipython_shell_port``, ``ipython_iopub_port``, ``ipython_stdin_port``, ``ipython_hb_port``,
   ``ipython_control_port`` - 0MQ ports used by IPython kernel.
 
+- ``permitted_re_metadata_keys`` - list of metadata keys that are allowed to be included in the
+  messages sent by Run Engine callbacks. If the list is empty, all metadata keys are allowed.
+  The option can also be set using ``--permitted-re-metadata-keys`` CLI parameter, or the
+  ``QSERVER_PERMITTED_RE_METADATA_KEYS`` environment variable (colon-separated list of keys).
 
 .. _config_file_run_engine:
 

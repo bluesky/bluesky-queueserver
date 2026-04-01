@@ -239,7 +239,9 @@ commands and HTTP API::
   qserver re runs closed     # Get the list of closed runs (subset of active runs)
 
 As long as the environment is opened, you may also query the current state of the runengine
-metadata dictionary.
+metadata dictionary. The metadata dictionary will be filtered based on the list of permitted
+metadata keys defined in the manager configuration. If the list of permitted keys is empty, then
+all metadata keys are allowed.
 
   qserver re metadata        # Get the current runengine metadata dictionary
 

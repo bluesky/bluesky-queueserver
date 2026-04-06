@@ -81,6 +81,9 @@ Several parameters can be passed to RE Manager using environment variables:
     Alternatively, the private key may be set in the config file by referencing a different
     environment variable. Explicitly listing security keys in the config file is not recommended.
 
+  - ``QSERVER_PERMITTED_RE_METADATA_KEYS`` - a list of permitted RE metadata keys separated by
+    colons. Default value is '/' which permits reading of all metadata keys.
+
   - ``QSERVER_USE_IPYTHON_KERNEL`` - tells RE Manager whether to start tbe worker in IPython mode
     (start IPython kernel) or use plain Python worker. Boolean value.
 

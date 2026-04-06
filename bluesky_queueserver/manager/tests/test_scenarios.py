@@ -18,6 +18,7 @@ from .common import (  # noqa: F401
     get_manager_status,
     re_manager,
     re_manager_cmd,
+    re_manager_factory,
     re_manager_pc_copy,
     set_qserver_zmq_public_key,
     wait_for_condition,

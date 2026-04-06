@@ -6,6 +6,7 @@ import pytest
 from .common import ip_kernel_simple_client  # noqa: F401
 from .common import re_manager  # noqa: F401
 from .common import re_manager_cmd  # noqa: F401
+from .common import re_manager_factory  # noqa: F401
 from .common import (
     _user,
     _user_group,

@@ -188,6 +188,10 @@ worker:
   ipython_stdin_port: 60002
   ipython_hb_port: 60003
   ipython_control_port: 60004
+  permitted_re_metadata_keys:
+    - "/a/b"
+    - "/c"
+    - "/d/"
 """
 
 config_01a_success = """
@@ -230,6 +234,10 @@ worker:
   ipython_stdin_port: 60002
   ipython_hb_port: 60003
   ipython_control_port: 60004
+  permitted_re_metadata_keys:
+    - /a/b
+    - /c
+    - /d/
 """
 
 config_01_dict = {
@@ -266,6 +274,7 @@ config_01_dict = {
         "ipython_stdin_port": 60002,
         "ipython_hb_port": 60003,
         "ipython_control_port": 60004,
+        "permitted_re_metadata_keys": ["/a/b", "/c", "/d/"],
     },
 }
 

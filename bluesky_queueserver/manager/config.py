@@ -207,6 +207,7 @@ _key_mapping = {
     "ipython_stdin_port": "worker/ipython_stdin_port",
     "ipython_hb_port": "worker/ipython_hb_port",
     "ipython_control_port": "worker/ipython_control_port",
+    "permitted_re_metadata_keys": "worker/permitted_re_metadata_keys",
     "print_console_output": "operation/print_console_output",
     "console_logging_level": "operation/console_logging_level",
     "update_existing_plans_devices": "operation/update_existing_plans_and_devices",
@@ -485,6 +486,13 @@ class Settings:
         self._settings["ipython_hb_port"] = _check_port_value(self._settings["ipython_hb_port"], "hb")
         self._settings["ipython_control_port"] = _check_port_value(
             self._settings["ipython_control_port"], "control"
+        )
+
+        self._settings["permitted_re_metadata_keys"] = self._get_param(
+            value_default=args.permitted_re_metadata_keys,
+            value_config=self._get_value_from_config("permitted_re_metadata_keys"),
+            value_ev=os.environ.get("QSERVER_PERMITTED_RE_METADATA_KEYS", "/").split(":"),
+            value_cli=self._args_existing("permitted_re_metadata_keys"),
         )
 
         existing_plans_and_devices_path = self._get_param(

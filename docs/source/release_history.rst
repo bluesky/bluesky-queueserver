@@ -3,6 +3,23 @@ Release History
 ===============
 
 
+v0.0.25 (Unreleased)
+====================
+
+Added
+-----
+
+- New ``re_metadata`` manager API endpoint that allows clients to query the current Run Engine metadata
+  dictionary. The metadata dictionary is filtered based on the list of permitted metadata keys defined
+  in the manager configuration. If the list of permitted keys is empty, then all metadata keys are allowed.
+
+- New CLI command ``qserver re metadata`` for querying the current Run Engine metadata dictionary.
+
+- New ``permitted_re_metadata_keys`` parameter for RE Manager configuration that allows to control which
+  metadata keys are allowed to be included in the messages sent by Run Engine callbacks.
+  The option can be set using CLI parameter ``--permitted-re-metadata-keys`` or environment variable
+  ``QSERVER_PERMITTED_RE_METADATA_KEYS``.
+
 v0.0.24 (2026-01-21)
 ====================
 

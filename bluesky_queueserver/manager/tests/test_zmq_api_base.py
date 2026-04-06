@@ -53,6 +53,7 @@ from .common import (  # noqa: F401
     ip_kernel_simple_client,
     re_manager,
     re_manager_cmd,
+    re_manager_factory,
     re_manager_pc_copy,
     remove_run_engine_config_from_startup,
     use_ipykernel_for_tests,
@@ -6120,6 +6121,83 @@ def test_zmq_api_re_metadata_5_non_mapping_md(re_manager_pc_copy, tmp_path):  # 
     resp, _ = zmq_request("re_metadata")
     assert resp["success"] is False, f"{resp =}"
     assert "Failed to convert Run Engine metadata to dictionary" in resp["msg"], resp
+
+    resp, _ = zmq_request("environment_close")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_re_metadata_6_filtered_by_keys(re_manager_cmd, tmp_path):  # noqa: F811
+    """
+    Tests `re_metadata` functionality with filtering by keys. Checks that the filtering works correctly and that
+    the error is returned if some of the requested keys are not present in the metadata.
+    """
+
+    pc_path = copy_default_profile_collection(tmp_path)
+    re_manager_cmd(["--startup-dir", pc_path, "--permitted-re-metadata-keys", "/metadata_key"])
+
+    resp, _ = zmq_request("environment_open")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_created)
+
+    # Check that filtering by keys works correctly
+    resp, _ = zmq_request("re_metadata")
+    assert resp["success"] is True, f"{resp =}"
+    assert "metadata_key" in resp["re_metadata"], f"{resp =}"
+    assert resp["re_metadata"]["metadata_key"] == "metadata_value", f"{resp =}"
+    assert len(resp["re_metadata"]) == 1, f"{resp =}"
+
+    resp, _ = zmq_request("environment_close")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_re_metadata_7_filtered_by_keys_non_existent_key(re_manager_cmd, tmp_path):  # noqa: F811
+    """
+    Tests `re_metadata` functionality with filtering by keys.
+    Checks that the error is returned if some of the requested keys are not present in the metadata.
+    """
+
+    pc_path = copy_default_profile_collection(tmp_path)
+    re_manager_cmd(["--startup-dir", pc_path, "--permitted-re-metadata-keys", "/non_existent_key"])
+
+    resp, _ = zmq_request("environment_open")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_created)
+
+    # Check that error is returned if some of the requested keys are not present in the metadata
+    resp, _ = zmq_request("re_metadata")
+    assert resp["success"] is True, f"{resp =}"
+    assert resp["re_metadata"] == {}, f"{resp =}"
+
+    resp, _ = zmq_request("environment_close")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_re_metadata_8_filtered_by_nested_key(re_manager_cmd, tmp_path):  # noqa: F811
+    """
+    Tests `re_metadata` functionality with filtering by nested keys.
+    Checks that the filtering works correctly for nested keys.
+    """
+
+    pc_path = copy_default_profile_collection(tmp_path)
+    re_manager_cmd(
+        ["--startup-dir", pc_path, "--permitted-re-metadata-keys", "/metadata_key", "/versions/bluesky"]
+    )
+
+    resp, _ = zmq_request("environment_open")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_created)
+
+    # Check that filtering by nested keys works correctly
+    resp, _ = zmq_request("re_metadata")
+    assert resp["success"] is True, f"{resp =}"
+    assert "metadata_key" in resp["re_metadata"], f"{resp =}"
+    assert resp["re_metadata"]["metadata_key"] == "metadata_value", f"{resp =}"
+    assert "versions" in resp["re_metadata"], f"{resp =}"
+    assert "bluesky" in resp["re_metadata"]["versions"], f"{resp =}"
+    assert len(resp["re_metadata"]) == 2, f"{resp =}"
 
     resp, _ = zmq_request("environment_close")
     assert resp["success"] is True, f"{resp =}"

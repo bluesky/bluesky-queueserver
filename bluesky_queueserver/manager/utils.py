@@ -30,3 +30,43 @@ def generate_random_port(ip=None):
     sock.close()
 
     return port
+
+
+def filter_dict_by_permitted_keys(d, permitted_keys):
+    """
+    Filter the dictionary `d` by the list of `permitted_keys`. The keys in the dictionary that are not in the list
+    of permitted keys will be removed. The keys in the list of permitted keys can be specified as absolute paths
+    (e.g. "/key1/key2").
+    """
+
+    def _match_path(path: str, permitted_keys: list[str]) -> bool:
+        # If root ("/") is in permitted_keys, always match
+        if "/" in permitted_keys:
+            return True
+        for p in permitted_keys:
+            # Trim trailing slash(es) for matching
+            p = p.rstrip("/")
+            if path == p:
+                return True
+
+        return False
+
+    def _filter(d, permitted_keys, prefix=""):
+        filtered = {}
+        for k, v in d.items():
+            path = f"{prefix}/{k}" if prefix else f"/{k}"
+            # If value is a dict, recurse
+            if isinstance(v, dict):
+                # If any permitted key matches this path as a prefix, include the whole dict
+                if _match_path(path + "/", permitted_keys) or _match_path(path, permitted_keys):
+                    filtered[k] = v
+                else:
+                    nested = _filter(v, permitted_keys, path)
+                    if nested:
+                        filtered[k] = nested
+            else:
+                if _match_path(path, permitted_keys) or _match_path(path + "/", permitted_keys):
+                    filtered[k] = v
+        return filtered
+
+    return _filter(d, permitted_keys)

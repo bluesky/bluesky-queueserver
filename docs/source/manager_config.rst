@@ -81,6 +81,9 @@ Several parameters can be passed to RE Manager using environment variables:
     Alternatively, the private key may be set in the config file by referencing a different
     environment variable. Explicitly listing security keys in the config file is not recommended.
 
+  - ``QSERVER_PERMITTED_RE_METADATA_KEYS`` - a list of permitted RE metadata keys separated by
+    colons. Default value is '/' which permits reading of all metadata keys.
+
   - ``QSERVER_USE_IPYTHON_KERNEL`` - tells RE Manager whether to start tbe worker in IPython mode
     (start IPython kernel) or use plain Python worker. Boolean value.
 
@@ -154,6 +157,10 @@ most of the supported parameters:
       ipython_stdin_port: 60002
       ipython_hb_port: 60003
       ipython_control_port: 60004
+      permitted_re_metadata_keys:
+        - "/versions"
+        - "/scan_id"
+        - "/data_session"
     run_engine:
       use_persistent_metadata: true
       kafka_server: 127.0.0.1:9092
@@ -303,6 +310,10 @@ The parameters that define configuration of RE Worker.
 - ``ipython_shell_port``, ``ipython_iopub_port``, ``ipython_stdin_port``, ``ipython_hb_port``,
   ``ipython_control_port`` - 0MQ ports used by IPython kernel.
 
+- ``permitted_re_metadata_keys`` - list of metadata keys that are allowed to be included in the
+  messages sent by Run Engine callbacks. If the list is empty, all metadata keys are allowed.
+  The option can also be set using ``--permitted-re-metadata-keys`` CLI parameter, or the
+  ``QSERVER_PERMITTED_RE_METADATA_KEYS`` environment variable (colon-separated list of keys).
 
 .. _config_file_run_engine:
 

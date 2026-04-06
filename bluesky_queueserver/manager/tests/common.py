@@ -697,51 +697,59 @@ def re_manager_cmd():
 
 
 @pytest.fixture
-def re_manager():
+def re_manager_factory(request):
     """
-    Start RE Manager as a subprocess. Tests will communicate with RE Manager via ZeroMQ.
+    Factory for starting RE Manager as a subprocess. Tests will communicate with RE Manager via ZeroMQ.
     """
-    re = ReManager()
-    failed_to_start = False
 
-    # Wait until RE Manager is started. Raise exception if the server failed to start.
-    if not wait_for_condition(time=10, condition=condition_manager_idle):
-        failed_to_start = True
-        re.kill_manager()
-        raise TimeoutError("Timeout: RE Manager failed to start.")
+    def _factory(params=None, copy_pc_tmp_path=None):
 
-    _reset_queue_mode()
+        pc_path = None
+        if copy_pc_tmp_path:
+            pc_path = copy_default_profile_collection(copy_pc_tmp_path)
+            params = params or []
+            params += ["--startup-dir", pc_path]
 
-    yield re  # Nothing to return
-    if not failed_to_start:
-        re.stop_manager()
-    else:
-        re.kill_manager()
+        re = ReManager(params=params)
+        failed_to_start = False
+
+        # Wait until RE Manager is started. Raise exception if the server failed to start.
+        if not wait_for_condition(time=10, condition=condition_manager_idle):
+            failed_to_start = True
+            re.kill_manager()
+            raise TimeoutError("Timeout: RE Manager failed to start.")
+
+        _reset_queue_mode()
+
+        if pc_path:
+            yield (re, pc_path)
+        else:
+            yield re  # Nothing to return
+        if not failed_to_start:
+            re.stop_manager()
+        else:
+            re.kill_manager()
+
+    return _factory
 
 
 @pytest.fixture
-def re_manager_pc_copy(tmp_path):
+def re_manager(re_manager_factory, request):
+    """
+    Start RE Manager as a subprocess. Tests will communicate with RE Manager via ZeroMQ.
+    """
+
+    yield from re_manager_factory()
+
+
+@pytest.fixture
+def re_manager_pc_copy(re_manager_factory, tmp_path):
     """
     Start RE Manager as a subprocess. Tests will communicate with RE Manager via ZeroMQ.
     Copy profile collection and return its temporary path.
     """
-    pc_path = copy_default_profile_collection(tmp_path)
-    re = ReManager(["--startup-dir", pc_path])
-    failed_to_start = False
 
-    # Wait until RE Manager is started. Raise exception if the server failed to start.
-    if not wait_for_condition(time=10, condition=condition_manager_idle):
-        failed_to_start = True
-        re.kill_manager()
-        raise TimeoutError("Timeout: RE Manager failed to start.")
-
-    _reset_queue_mode()
-
-    yield re, pc_path  # Location of the copy of the default profile collection.
-    if not failed_to_start:
-        re.stop_manager()
-    else:
-        re.kill_manager()
+    yield from re_manager_factory(copy_pc_tmp_path=tmp_path)
 
 
 @pytest.fixture

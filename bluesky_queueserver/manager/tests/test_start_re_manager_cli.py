@@ -497,6 +497,7 @@ def _get_expected_settings_default_1(_1, _2):
         "ipython_iopub_port": None,
         "ipython_shell_port": None,
         "ipython_stdin_port": None,
+        "permitted_re_metadata_keys": ["/"],
         "print_console_output": True,
         "redis_addr": "localhost",
         "redis_name_prefix": _test_redis_name_prefix,  # We use it for unit tests
@@ -540,6 +541,10 @@ worker:
   ipython_iopub_port: 60002
   ipython_shell_port: 60003
   ipython_stdin_port: 60004
+  permitted_re_metadata_keys:
+    - /a/b
+    - /c
+    - /d/
 startup:
   keep_re: false
   device_max_depth: 2
@@ -596,6 +601,7 @@ def _get_expected_settings_config_2(file_dir, ip_con_dir):
         "ipython_iopub_port": 60002,
         "ipython_shell_port": 60003,
         "ipython_stdin_port": 60004,
+        "permitted_re_metadata_keys": ["/a/b", "/c", "/d/"],
         "print_console_output": True,
         "redis_addr": "localhost:6379",
         "redis_name_prefix": "qs_unit_tests2",  # Specific for this test
@@ -642,6 +648,12 @@ def _get_cli_params_3(file_dir):
         "--ipython-iopub-port=60102",
         "--ipython-shell-port=60103",
         "--ipython-stdin-port=60104",
+        # Using '=' syntax with more than one arg value doesn't work with
+        # argparse, so pass them as seperate arguments.
+        "--permitted-re-metadata-keys",
+        "/a/b",
+        "/c",
+        "/d/",
         "--zmq-info-addr=tcp://*:60629",
         "--zmq-publish-console=OFF",
         "--console-output=OFF",
@@ -684,6 +696,7 @@ def _get_expected_settings_params_3(file_dir, _):
         "ipython_iopub_port": 60102,
         "ipython_shell_port": 60103,
         "ipython_stdin_port": 60104,
+        "permitted_re_metadata_keys": ["/a/b", "/c", "/d/"],
         "print_console_output": False,
         "redis_addr": "localhost:6379",
         "redis_name_prefix": "qs_unit_tests3",  # Specific for this test

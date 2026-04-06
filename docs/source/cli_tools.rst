@@ -201,6 +201,8 @@ Other Configuration Parameters
 - ``--verbose``, ``--quiet`` and ``--silent`` options modify logging verbosity
   level for RE Manager.
 
+- ``--permitted-re-metadata-keys`` specifies a list of permitted RE metadata keys.
+
 ``start-re-manager -h`` displays help information:
 
 .. code-block::
@@ -229,6 +231,8 @@ Other Configuration Parameters
                           [--ipython-stdin-port IPYTHON_STDIN_PORT]
                           [--ipython-hb-port IPYTHON_HB_PORT]
                           [--ipython-control-port IPYTHON_CONTROL_PORT]
+                          [--permitted-re-metadata-keys PERMITTED_RE_METADATA_KEYS
+                           [PERMITTED_RE_METADATA_KEYS ...]]
                           [--zmq-info-addr ZMQ_INFO_ADDR]
                           [--zmq-publish-console-addr ZMQ_PUBLISH_CONSOLE_ADDR]
                           [--zmq-publish-console {ON,OFF}] [--console-output {ON,OFF}]
@@ -344,6 +348,16 @@ Other Configuration Parameters
     --keep-re         The parameter is deprecated. The value is ignored by the Queue Server.
                       Run Engine instance must always be defined and configured in the
                       startup code. The parameter will be removed in future releases.
+    --permitted-re-metadata-keys PERMITTED_RE_METADATA_KEYS [PERMITTED_RE_METADATA_KEYS ...]
+                      A list of permitted RE metadata keys. Keys are configured in the form
+                      of unix paths, and recursively apply to all subkeys. For example, the
+                      default of '/' will permit reading of all metadata keys. A value of
+                      '/key1' will permit reading of 'key1' and all its subkeys, but not
+                      'key2'. A value of '/key1/subkey' will permit reading of 'subkey' and
+                      all its subkeys, but not any other subkeys of 'key1', or a 'key2'.
+                      This paremeter can also be set using
+                      QSERVER_PERMITTED_RE_METADATA_KEYS environment variable, where the
+                      keys are separated by colons.
 
   Configure IPython Kernel:
     The parameters for configuring IPython kernel used by RE Worker. The IPython kernel is

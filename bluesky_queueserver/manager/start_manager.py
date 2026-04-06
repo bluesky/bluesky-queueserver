@@ -595,6 +595,20 @@ def start_manager():
         "environment variable.",
     )
 
+    parser.add_argument(
+        "--permitted-re-metadata-keys",
+        dest="permitted_re_metadata_keys",
+        type=str,
+        nargs="+",
+        default=["/"],
+        help="A list of permitted RE metadata keys. Keys are configured in the form of unix paths, and "
+        "recursively apply to all subkeys. For example, the default of '/' will permit reading of all "
+        "metadata keys. A value of '/key1' will permit reading of 'key1' and all its subkeys, but not 'key2'. "
+        "A value of '/key1/subkey' will permit reading of 'subkey' and all its subkeys, but not any other "
+        "subkeys of 'key1', or a 'key2'. This paremeter can also be set using QSERVER_PERMITTED_RE_METADATA_KEYS "
+        "environment variable, where the keys are separated by colons.",
+    )
+
     group_console_output = parser.add_argument_group(
         "Configure console output",
         "The arguments allow to configure printing and publishing of the console output\n"
@@ -794,6 +808,7 @@ def start_manager():
     config_worker["ipython_hb_port"] = settings.ipython_hb_port
     config_worker["ipython_control_port"] = settings.ipython_control_port
     config_worker["ignore_invalid_plans"] = settings.ignore_invalid_plans
+    config_worker["permitted_re_metadata_keys"] = settings.permitted_re_metadata_keys
 
     existing_pd_path = settings.existing_plans_and_devices_path
     if not existing_pd_path:

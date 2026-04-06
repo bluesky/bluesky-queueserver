@@ -1,4 +1,3 @@
-
 def to_boolean(value):
     """
     Returns ``True`` or ``False`` if ``value`` is found in one of the lists of supported values.

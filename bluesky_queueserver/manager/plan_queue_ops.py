@@ -1764,6 +1764,7 @@ class PlanQueueOperations:
                 item_to_add = item_cleaned.copy()
                 item_to_add = self.set_new_item_uuid(item_to_add)
                 await self._r_pool.rpush(self._name_plan_queue, json.dumps(item_to_add))
+                self._uid_dict_remove(item["item_uid"])
                 self._uid_dict_add(item_to_add)
             item_cleaned.setdefault("result", {})
             item_cleaned["result"]["exit_status"] = exit_status

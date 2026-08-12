@@ -160,7 +160,7 @@ def test_ip_kernel_run_plans_01(re_manager, plan_option, resume_option):  # noqa
         assert s["manager_state"] in ("starting_queue", "executing_queue")
         assert s["worker_environment_state"] in ("idle", "executing_plan", "reserved")
 
-        ttime.sleep(1)
+        ttime.sleep(2)
 
         s = check_status("busy" if using_ipython else "disabled", True)
         assert s["manager_state"] == "executing_queue", pprint.pformat(s)

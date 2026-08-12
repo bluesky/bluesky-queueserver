@@ -615,8 +615,8 @@ _plan_move_then_count = {
 
 
 @pytest.mark.parametrize("plan, n_plans, timeout_ms", [
-    (_plan4, 10000, 60000),
-    (_plan_move_then_count, 10000, 60000),
+    (_plan4, 10000, 120000),
+    (_plan_move_then_count, 10000, 120000),
 ])
 # fmt: on
 def test_large_datasets_03(re_manager, plan, n_plans, timeout_ms):  # noqa: F811

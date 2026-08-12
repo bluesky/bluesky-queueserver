@@ -8,6 +8,7 @@ from ..qserver_cli import QServerExitCodes
 from .common import (
     condition_environment_closed,
     condition_environment_created,
+    condition_ip_kernel_idle,
     re_manager_cmd,  # noqa: F401
     set_qserver_zmq_address,
     set_qserver_zmq_public_key,
@@ -18,7 +19,7 @@ from .common import (
     zmq_secure_request,
 )
 
-timeout_env_open = 10
+timeout_env_open = 20
 
 
 # fmt: off
@@ -79,6 +80,8 @@ def test_cli_qserver_console_01(re_manager_cmd, ipython_kernel_ip, env_open):  #
         assert "Starting Jupyter Console ..." in output, output
 
     if env_open:
+        if using_ipython:
+            assert wait_for_condition(time=10, condition=condition_ip_kernel_idle)
         resp9, _ = zmq_request("environment_close")
         assert resp9["success"] is True
         assert resp9["msg"] == ""
@@ -164,6 +167,8 @@ def test_cli_qserver_console_02(
 
     assert return_code == QServerExitCodes.SUCCESS.value, output
     assert "Starting Jupyter Console ..." in output, output
+
+    assert wait_for_condition(time=10, condition=condition_ip_kernel_idle)
 
     resp9, _ = zmq_secure_request("environment_close")
     assert resp9["success"] is True

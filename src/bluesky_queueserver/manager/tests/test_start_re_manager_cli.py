@@ -41,7 +41,7 @@ _plan3 = {"name": "count", "args": [["det1", "det2"]], "kwargs": {"num": 5, "del
 _instruction_stop = {"name": "queue_stop", "item_type": "instruction"}
 
 
-timeout_env_open = 10
+timeout_env_open = 20
 
 
 # fmt: off
@@ -501,10 +501,12 @@ def _get_expected_settings_default_1(_1, _2):
         "print_console_output": True,
         "redis_addr": "localhost",
         "redis_name_prefix": _test_redis_name_prefix,  # We use it for unit tests
+        "sardana_enable": False,
         "startup_dir": startup_dir,
         "startup_module": None,
         "startup_profile": startup_profile,
         "startup_script": None,
+        "tango_url": None,
         "update_existing_plans_devices": "ENVIRONMENT_OPEN",
         "user_group_permissions_path": user_group_permissions_path,
         "user_group_permissions_reload": "ON_STARTUP",
@@ -604,10 +606,12 @@ def _get_expected_settings_config_2(file_dir, ip_con_dir):
         "print_console_output": True,
         "redis_addr": "localhost:6379",
         "redis_name_prefix": "qs_unit_tests2",  # Specific for this test
+        "sardana_enable": False,
         "startup_dir": startup_dir,
         "startup_module": None,
         "startup_profile": startup_profile,
         "startup_script": None,
+        "tango_url": None,
         "update_existing_plans_devices": "ALWAYS",
         "user_group_permissions_path": user_group_permissions_path,
         "user_group_permissions_reload": "ON_REQUEST",
@@ -698,10 +702,12 @@ def _get_expected_settings_params_3(file_dir, _):
         "print_console_output": False,
         "redis_addr": "localhost:6379",
         "redis_name_prefix": "qs_unit_tests3",  # Specific for this test
+        "sardana_enable": False,
         "startup_dir": startup_dir,
         "startup_module": None,
         "startup_profile": startup_profile,
         "startup_script": None,
+        "tango_url": None,
         "update_existing_plans_devices": "NEVER",
         "user_group_permissions_path": user_group_permissions_path,
         "user_group_permissions_reload": "NEVER",

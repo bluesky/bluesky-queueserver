@@ -18,6 +18,14 @@ from .comms import PipeJsonRpcReceive
 from .config import profile_name_to_startup_dir
 from .logging_setup import PPrintForLogging as ppfl
 from .logging_setup import setup_loggers
+
+try:
+    from tango import Database, DeviceProxy, DevState, EventType
+
+    _tango_available = True
+except ImportError:
+    Database = DeviceProxy = DevState = EventType = None
+    _tango_available = False
 from .output_streaming import setup_console_output_redirection
 from .profile_ops import (
     compare_existing_plans_and_devices,
@@ -136,6 +144,11 @@ class RunEngineWorker(Process):
         # Reference to Bluesky Run Engine
         self._RE = None
 
+        # Sardana Tango device proxy (Door). Set during startup only when 'tango_url' is configured.
+        self.dev = None
+        self._sardana_enabled = bool((config or {}).get("tango_url"))
+        self._sardana_pending_interrupt = None
+
         # The following variable determine the state of RE Worker
         self._env_state = EState.CLOSED
         self._running_plan_info = None
@@ -214,12 +227,22 @@ class RunEngineWorker(Process):
     def re_state(self):
         """
         Returns RE state if possible (RE is a RunEngine object), otherwise returns ``None``.
+
+        In Sardana mode the state is derived from the Tango Door device state.
         """
         try:
-            state = str(self._RE.state)
+            if self._sardana_enabled and self.dev is not None:
+                s = self.dev.State()
+                if s == DevState.RUNNING:
+                    return "running"
+                if s == DevState.STANDBY:
+                    return "paused"
+                if s in (DevState.ALARM, DevState.FAULT):
+                    return "panicked"
+                return "idle"
+            return str(self._RE.state)
         except Exception:
-            state = None
-        return state
+            return None
 
     @property
     def re_deferred_pause_requested(self):
@@ -295,7 +318,33 @@ class RunEngineWorker(Process):
             th.start()
             # -------------------------------------------------------------------------------------------
 
-            result = func()
+            if self._sardana_enabled and self.dev is not None:
+
+                def callback_print(evnt):
+                    if len(evnt.attr_value.value) > 0:
+                        print(evnt.attr_value.value[0])
+
+                func()
+                result = ""
+                output_print = self.dev.subscribe_event(
+                    "output", EventType.CHANGE_EVENT, callback_print, wait=True
+                )
+                try:
+                    while self.re_state == "running":
+                        result = self.dev.output
+                        if result is None or result == "":
+                            result = "no output\n"
+                    if exec_option in plan_continue_options:
+                        ttime.sleep(0.5)
+                    if self.re_state == "paused":
+                        self._re_report["plan_state"] = "paused"
+                finally:
+                    self.dev.unsubscribe_event(output_print)
+                    sardana_interrupt = self._sardana_pending_interrupt
+                    self._sardana_pending_interrupt = None
+            else:
+                result = func()
+                sardana_interrupt = None
 
             uids, scan_ids = self._active_run_list.get_uids(), self._active_run_list.get_scan_ids()
 
@@ -310,7 +359,10 @@ class RunEngineWorker(Process):
                     "traceback": "",
                     "stop_queue": False,  # True - request manager not to start the next plan
                 }
-                if exec_option in (ExecOption.NEW, ExecOption.RESUME):
+                if sardana_interrupt is not None:
+                    self._re_report["plan_state"] = _plan_exit_status_expected[ExecOption(sardana_interrupt)]
+                    self._running_plan_exec_state = PlanExecState.COMPLETED
+                elif exec_option in (ExecOption.NEW, ExecOption.RESUME):
                     self._re_report["plan_state"] = "completed"
                     self._running_plan_exec_state = PlanExecState.COMPLETED
                 else:
@@ -461,19 +513,26 @@ class RunEngineWorker(Process):
             with self._allowed_items_lock:
                 allowed_plans, allowed_devices = self._allowed_plans, self._allowed_devices
 
-            plan_parsed = prepare_plan(
-                plan_info,
-                plans_in_nspace=self._plans_in_nspace,
-                devices_in_nspace=self._devices_in_nspace,
-                allowed_plans=allowed_plans,
-                allowed_devices=allowed_devices,
-                nspace=self._re_namespace,
-            )
+            if self._sardana_enabled and self.dev is not None:
+                # In Sardana mode, the 'plan' is a macro name dispatched to the Door device.
+                plan_func = parameters["name"]
+                plan_args_parsed = list(parameters.get("args", []))
+                plan_kwargs_parsed = dict(parameters.get("kwargs", {}))
+                plan_meta_parsed = parameters.get("meta", {})
+            else:
+                plan_parsed = prepare_plan(
+                    plan_info,
+                    plans_in_nspace=self._plans_in_nspace,
+                    devices_in_nspace=self._devices_in_nspace,
+                    allowed_plans=allowed_plans,
+                    allowed_devices=allowed_devices,
+                    nspace=self._re_namespace,
+                )
 
-            plan_func = plan_parsed["callable"]
-            plan_args_parsed = plan_parsed["args"]
-            plan_kwargs_parsed = plan_parsed["kwargs"]
-            plan_meta_parsed = plan_parsed["meta"]
+                plan_func = plan_parsed["callable"]
+                plan_args_parsed = plan_parsed["args"]
+                plan_kwargs_parsed = plan_parsed["kwargs"]
+                plan_meta_parsed = plan_parsed["meta"]
 
             if self.re_state == "panicked":
                 raise RuntimeError(
@@ -483,9 +542,20 @@ class RunEngineWorker(Process):
             elif self.re_state not in ("idle", None):
                 raise RuntimeError(f"Run Engine is in {self.re_state!r} state. Stop or finish any running plan.")
 
+            sardana_mode = self._sardana_enabled and self.dev is not None
+
             def get_start_plan_func(plan_func, plan_args, plan_kwargs, plan_meta):
-                def start_plan_func():
-                    return self._RE(plan_func(*plan_args, **plan_kwargs), {"all": [self._run_reg_cb]}, **plan_meta)
+                if sardana_mode:
+
+                    def start_plan_func():
+                        args = [str(plan_func)] + [str(a) for a in plan_args]
+                        return self.dev.runmacro(args)
+                else:
+
+                    def start_plan_func():
+                        return self._RE(
+                            plan_func(*plan_args, **plan_kwargs), {"all": [self._run_reg_cb]}, **plan_meta
+                        )
 
                 return start_plan_func
 
@@ -514,9 +584,20 @@ class RunEngineWorker(Process):
         elif option not in available_options:
             raise RuntimeError(f"Option '{option}' is not supported. Supported options: {available_options}")
 
+        sardana_mode = self._sardana_enabled and self.dev is not None
+
         def get_continued_plan_func(option):
-            def continued_plan_func():
-                return getattr(self._RE, option)()
+            if sardana_mode:
+
+                def continued_plan_func():
+                    try:
+                        return self.dev.resumemacro()
+                    except Exception as e:
+                        raise RuntimeError(f"Failed to resume macro on Tango device: {e}") from e
+            else:
+
+                def continued_plan_func():
+                    return getattr(self._RE, option)()
 
             return continued_plan_func
 
@@ -823,12 +904,16 @@ class RunEngineWorker(Process):
         if update_lists:
             logger.info("Updating lists of existing and available plans and devices ...")
 
-            epd = existing_plans_and_devices_from_nspace(
-                nspace=self._re_namespace,
-                ignore_invalid_plans=self._config_dict["ignore_invalid_plans"],
-                max_depth=self._config_dict["device_max_depth"],
-            )
-            existing_plans, existing_devices, plans_in_nspace, devices_in_nspace = epd
+            if self._sardana_enabled and self.dev is not None:
+                existing_plans, existing_devices = self._sardana_existing_plans_and_devices()
+                plans_in_nspace, devices_in_nspace = {}, {}
+            else:
+                epd = existing_plans_and_devices_from_nspace(
+                    nspace=self._re_namespace,
+                    ignore_invalid_plans=self._config_dict["ignore_invalid_plans"],
+                    max_depth=self._config_dict["device_max_depth"],
+                )
+                existing_plans, existing_devices, plans_in_nspace, devices_in_nspace = epd
 
             self._existing_plans_and_devices_changed = not compare_existing_plans_and_devices(
                 existing_plans=existing_plans,
@@ -1138,7 +1223,11 @@ class RunEngineWorker(Process):
                 #   because if RE event loop is blocked (a plan is stuck in the infinite loop), the operation
                 #   will never complete and block communication thread of the worker.
                 # self._RE.request_pause(defer=defer)  # WILL BLOCK THE LOOP
-                asyncio.run_coroutine_threadsafe(self._RE._request_pause_coro(defer), loop=self._RE.loop)
+                if self._sardana_enabled and self.dev is not None:
+                    self.dev.pausemacro()
+                else:
+                    asyncio.run_coroutine_threadsafe(self._RE._request_pause_coro(defer), loop=self._RE.loop)
+
                 status = "accepted"
             except Exception as ex:
                 status = "error"
@@ -1156,6 +1245,17 @@ class RunEngineWorker(Process):
         """
         # Continue execution of the plan
         status, err_msg = "accepted", ""
+
+        if self._sardana_enabled and self.dev is not None and option in ("abort", "stop", "halt"):
+            tango_method = {"abort": "abortmacro", "stop": "stopmacro", "halt": "abortmacro"}[option]
+            try:
+                logger.info("Sardana: executing '%s' directly on the Door ...", option)
+                self._sardana_pending_interrupt = option
+                getattr(self.dev, tango_method)()
+            except Exception as ex:
+                self._sardana_pending_interrupt = None
+                status, err_msg = "rejected", f"Failed to execute '{option}' on Tango device: {ex}"
+            return {"status": status, "err_msg": err_msg}
 
         if self.re_state != "paused":
             status = "rejected"
@@ -1394,6 +1494,221 @@ class RunEngineWorker(Process):
         loop = get_bluesky_event_loop() or asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
+    _SARDANA_MOVABLE_TYPES = {"motor", "pseudomotor", "motorgroup"}
+
+    # Sardana scalar parameter types -> Python type emitted in ``annotation.type``.
+    _SARDANA_SCALAR_TYPE_MAP = {
+        "Float": "float",
+        "Integer": "int",
+        "Boolean": "bool",
+        "String": "str",
+        "User": "str",
+        "Env": "str",
+        "Object": "str",
+        "Controller": "str",
+        "Instrument": "str",
+    }
+
+    _SARDANA_ELEMENT_GROUP_MAP = {
+        "Moveable": "Motors",
+        "Motor": "Motors",
+        "PseudoMotor": "Motors",
+        "MotorGroup": "Motors",
+        "ExpChannel": "ExpChannels",
+        "PseudoCounter": "ExpChannels",
+        "CTExpChannel": "ExpChannels",
+        "ZeroDExpChannel": "ExpChannels",
+        "OneDExpChannel": "ExpChannels",
+        "TwoDExpChannel": "ExpChannels",
+        "MeasurementGroup": "MeasurementGroups",
+        "IORegister": "IORegisters",
+    }
+
+    _SARDANA_POOL_LIST_TO_GROUP = {
+        "MotorList": "Motors",
+        "PseudoMotorList": "Motors",
+        "MotorGroupList": "Motors",
+        "ExpChannelList": "ExpChannels",
+        "PseudoCounterList": "ExpChannels",
+        "IORegisterList": "IORegisters",
+        "MeasurementGroupList": "MeasurementGroups",
+    }
+
+    @staticmethod
+    def _format_default(value):
+        """Return a string the qserver schema can round-trip via ast.literal_eval."""
+        return repr(value)
+
+    def _sardana_macro_info_to_plan(self, info: dict, device_groups: dict[str, list]) -> dict:
+        """Convert one GetMacroInfo JSON entry into a qserver existing_plans dict.
+
+        ``device_groups`` maps a group name (Motors / ExpChannels /
+        MeasurementGroups / IORegisters) to the list of device names available
+        in that group. Element-typed parameters are emitted in the qserver
+        schema form (``type: <Group>`` + ``devices: {Group: [...]}``) so
+        form-builder UIs like Daiquiri can render them as dropdowns.
+
+        Some Sardana macros (``mv``, ``wm``, ``mesh`` variants, ...) declare
+        repeating parameter groups via ``ParamRepeat``: in the JSON returned
+        by ``GetMacroInfo`` the parameter's ``type`` field is then a *list*
+        of nested parameter dicts, not a type name string. We emit those as
+        a single VAR_POSITIONAL slot whose description lists the inner field
+        names so a client still knows what to send.
+        """
+        name = info.get("name", "")
+        parameters = []
+        for p in info.get("parameters") or []:
+            sardana_type = p.get("type")
+            entry = {"name": p.get("name", "")}
+
+            if isinstance(sardana_type, list):
+                inner_names = [str(it.get("name", "?")) for it in sardana_type if isinstance(it, dict)]
+                entry["kind"] = {"name": "VAR_POSITIONAL", "value": 2}
+                entry["annotation"] = {"type": "typing.Union[str, float, int]"}
+                inner_desc = ", ".join(inner_names) or "items"
+                entry["description"] = (p.get("description") or "").strip() or f"Repeating group of ({inner_desc})"
+            else:
+                stype = (sardana_type or "User").strip() if isinstance(sardana_type, str) else "User"
+                entry["kind"] = {"name": "POSITIONAL_OR_KEYWORD", "value": 1}
+
+                if stype in self._SARDANA_ELEMENT_GROUP_MAP:
+                    group = self._SARDANA_ELEMENT_GROUP_MAP[stype]
+                    entry["annotation"] = {
+                        "type": group,
+                        "devices": {group: list(device_groups.get(group, []))},
+                    }
+                else:
+                    entry["annotation"] = {"type": self._SARDANA_SCALAR_TYPE_MAP.get(stype, "str")}
+
+                desc = p.get("description")
+                if isinstance(desc, str) and desc.strip():
+                    entry["description"] = desc.strip()
+
+            default = p.get("default_value")
+            if default is not None:
+                entry["default"] = self._format_default(default)
+            if p.get("min") is not None:
+                entry["min"] = str(p["min"])
+            if p.get("max") is not None:
+                entry["max"] = str(p["max"])
+            parameters.append(entry)
+
+        raw_desc = info.get("description") or f"Sardana macro {name!r}"
+        description = raw_desc.strip() if isinstance(raw_desc, str) else f"Sardana macro {name!r}"
+        return {
+            "name": name,
+            "module": info.get("module") or "sardana.macroserver",
+            "description": description,
+            "properties": {"is_generator": True},
+            "parameters": parameters,
+        }
+
+    def _sardana_existing_plans_and_devices(self):
+        """
+        Build the ``existing_plans``/``existing_devices`` dictionaries by querying the
+        Sardana MacroServer (for macros) and Pool (for elements). The output uses the
+        same schema as ``existing_plans_and_devices_from_nspace`` so the manager,
+        qserver CLI, and web UI can consume it unchanged.
+
+        Returns whatever it could gather; failures are logged at warning level so
+        the worker still starts even if part of the discovery fails.
+        """
+        existing_plans, existing_devices = {}, {}
+
+        tango_url = self._config_dict.get("tango_url")
+        if not tango_url:
+            return existing_plans, existing_devices
+
+        try:
+            host, port = re.split(":", tango_url)
+            db = Database(host, port)
+        except Exception as ex:
+            logger.warning("Failed to connect to Tango DB at %r: %s", tango_url, ex)
+            return existing_plans, existing_devices
+
+        device_groups: dict[str, list] = {}
+        try:
+            pools = db.get_device_exported_for_class("Pool") or []
+            for pool_name in pools:
+                try:
+                    pool = DeviceProxy(f"{tango_url}/{pool_name}")
+                except Exception as ex:
+                    logger.warning("Failed to connect to Sardana pool %r: %s", pool_name, ex)
+                    continue
+
+                for list_attr, group in self._SARDANA_POOL_LIST_TO_GROUP.items():
+                    try:
+                        items = list(getattr(pool, list_attr) or [])
+                    except Exception:
+                        # Optional lists may not exist on every Sardana release
+                        continue
+
+                    bucket = device_groups.setdefault(group, [])
+                    for raw in items:
+                        try:
+                            info = json.loads(raw)
+                        except Exception:
+                            continue
+                        name = info.get("name")
+                        if not name:
+                            continue
+                        if name not in bucket:
+                            bucket.append(name)
+                        # MeasurementGroups are surfaced via config_get only.
+                        if list_attr == "MeasurementGroupList":
+                            continue
+                        kind = (info.get("type") or "").lower()
+                        existing_devices[name] = {
+                            "classname": info.get("type", "SardanaElement"),
+                            "module": "sardana.pool",
+                            "is_readable": True,
+                            "is_movable": kind in self._SARDANA_MOVABLE_TYPES,
+                            "is_flyable": False,
+                        }
+        except Exception as ex:
+            logger.warning("Failed to enumerate Sardana pools: %s", ex)
+
+        try:
+            macroservers = db.get_device_exported_for_class("MacroServer") or []
+            if not macroservers:
+                logger.warning("No Sardana MacroServer was found at %r", tango_url)
+            else:
+                ms = DeviceProxy(f"{tango_url}/{macroservers[0]}")
+                macros = list(ms.MacroList or [])
+                if macros:
+                    try:
+                        info_blobs = list(ms.command_inout("GetMacroInfo", macros) or [])
+                    except Exception as ex:
+                        logger.warning("GetMacroInfo failed (%s); falling back to bare macro stubs.", ex)
+                        info_blobs = []
+
+                    seen = set()
+                    for blob in info_blobs:
+                        try:
+                            info = json.loads(blob)
+                        except Exception:
+                            continue
+                        name = info.get("name")
+                        if not name:
+                            continue
+                        existing_plans[name] = self._sardana_macro_info_to_plan(info, device_groups)
+                        seen.add(name)
+
+                    for m in macros:
+                        if m in seen:
+                            continue
+                        existing_plans[m] = {
+                            "name": m,
+                            "module": "sardana.macroserver",
+                            "description": f"Sardana macro {m!r}",
+                            "properties": {"is_generator": True},
+                            "parameters": [],
+                        }
+        except Exception as ex:
+            logger.warning("Failed to read MacroList from Sardana MacroServer: %s", ex)
+
+        return existing_plans, existing_devices
+
     def _worker_startup_code(self):
         """
         Perform startup tasks for the worker.
@@ -1404,6 +1719,19 @@ class RunEngineWorker(Process):
             startup_dir = self._config_dict.get("startup_dir", None)
             startup_module_name = self._config_dict.get("startup_module_name", None)
             startup_script_path = self._config_dict.get("startup_script_path", None)
+
+            tango_url = self._config_dict.get("tango_url")
+            if tango_url and self._sardana_enabled:
+                if not _tango_available:
+                    raise RuntimeError("'tango_url' is configured but pytango is not installed.")
+                host, port = re.split(":", tango_url)
+                db = Database(host, port)
+                doors = db.get_device_exported_for_class("door*")
+                if not doors:
+                    raise RuntimeError(f"No Sardana Door devices were found at TANGO_HOST {tango_url!r}.")
+                logger.info("Available Sardana Door devices: %s", list(doors))
+                logger.info("Selecting %r for running macros", doors[-1])
+                self.dev = DeviceProxy(f"{tango_url}/{doors[-1]}")
 
             # If IPython kernel is used, the startup code is loaded during kernel initialization.
             if not self._use_ipython_kernel:
@@ -1417,12 +1745,16 @@ class RunEngineWorker(Process):
             # if "RE" not in self._re_namespace:
             #     raise RuntimeError("Run Engine is not created in the startup code.")
 
-            epd = existing_plans_and_devices_from_nspace(
-                nspace=self._re_namespace,
-                ignore_invalid_plans=self._config_dict["ignore_invalid_plans"],
-                max_depth=self._config_dict["device_max_depth"],
-            )
-            existing_plans, existing_devices, plans_in_nspace, devices_in_nspace = epd
+            if self._sardana_enabled and self.dev is not None:
+                existing_plans, existing_devices = self._sardana_existing_plans_and_devices()
+                plans_in_nspace, devices_in_nspace = {}, {}
+            else:
+                epd = existing_plans_and_devices_from_nspace(
+                    nspace=self._re_namespace,
+                    ignore_invalid_plans=self._config_dict["ignore_invalid_plans"],
+                    max_depth=self._config_dict["device_max_depth"],
+                )
+                existing_plans, existing_devices, plans_in_nspace, devices_in_nspace = epd
 
             # self._existing_plans_and_devices_changed = not compare_existing_plans_and_devices(
             #     existing_plans = existing_plans,
@@ -1455,6 +1787,21 @@ class RunEngineWorker(Process):
         if self._success_startup:
             self._generate_lists_of_allowed_plans_and_devices()
             self._update_existing_pd_file(options=("ENVIRONMENT_OPEN", "ALWAYS"))
+
+            if self._sardana_enabled and self.dev is not None:
+                # Sardana mode: macros run on the Door device, no local RunEngine is needed.
+                try:
+                    self._execution_queue = queue.Queue()
+                    if not self._use_ipython_kernel:
+                        self._env_state = EState.IDLE
+                    logger.info("Sardana Worker Environment is ready")
+                except BaseException as ex:
+                    self._success_startup = False
+                    logger.exception("Error occurred while initializing the Sardana environment: %s.", ex)
+
+                if not self._success_startup:
+                    self._env_state = EState.FAILED
+                return
 
             logger.info("Instantiating and configuring Run Engine ...")
 

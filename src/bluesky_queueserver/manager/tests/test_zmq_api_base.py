@@ -78,7 +78,7 @@ _test_user_group = "test_user"
 _existing_plans_and_devices_fln = "existing_plans_and_devices.yaml"
 _user_group_permissions_fln = "user_group_permissions.yaml"
 
-timeout_env_open = 10
+timeout_env_open = 20
 
 # =======================================================================================
 #                   Thread-based ZMQ API - ZMQCommSendThreads

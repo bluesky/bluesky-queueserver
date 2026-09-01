@@ -456,7 +456,10 @@ def load_startup_script(script_path, *, enable_local_imports=True, nspace=None):
                     # Make sure the module is local before deleting it.
                     # Do not delete common library modules.
                     fl = getattr(sys.modules[key], "__file__", None)
-                    if fl and fl.startswith(p):
+                    # In case 'venv' or '.pixi' directories are in the startup directory, then
+                    #   standard packages can also be recognized as 'local' and removed, which leads
+                    #   to annoying issues. Thus skip the packages with 'site-packages' in the path.
+                    if fl and fl.startswith(p) and "site-packages" not in fl:
                         # print(f"Deleting the key '{key}'")
                         del sys.modules[key]
 
@@ -660,7 +663,10 @@ def load_script_into_existing_nspace(
                     # Make sure the module is local before deleting it.
                     # Do not delete common library modules.
                     fl = getattr(sys.modules[key], "__file__", None)
-                    if fl and fl.startswith(script_root_path):
+                    # In case 'venv' or '.pixi' directories are in the startup directory, then
+                    #   standard packages can also be recognized as 'local' and removed, which leads
+                    #   to annoying issues. Thus skip the packages with 'site-packages' in the path.
+                    if fl and fl.startswith(script_root_path) and "site-packages" not in fl:
                         # print(f"Deleting the key '{key}'")
                         del sys.modules[key]
 

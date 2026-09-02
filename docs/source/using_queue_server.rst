@@ -224,6 +224,12 @@ completion status, error message and traceback in case of failure). The plan his
 :ref:`method_history_get` API and cleared using :ref:`method_history_clear` API. Plan history is not designed
 to grow indefinitely and should be periodically cleared in order to avoid performance issues.
 
+To retrieve a plan return value, preserve the **item_uid** returned when the queue item is accepted. Monitor
+**plan_history_uid** in :ref:`method_status` until it changes, then call :ref:`method_history_get` and select the
+history item with the matching **item_uid** rather than assuming the last item belongs to the submitted plan. Read
+**result.return_value** and **result.return_value_error** from that item. The ``qserver history get`` command already
+prints the complete :ref:`method_history_get` response.
+
 Controlling Execution of the Queue and the Plans
 ------------------------------------------------
 

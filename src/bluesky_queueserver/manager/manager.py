@@ -813,20 +813,15 @@ class RunEngineManager(Process):
         else:
             plan_state = plan_report["plan_state"]
             success = plan_report["success"]
-            result = plan_report["result"]
+            return_value = plan_report["return_value"]
+            return_value_error = plan_report["return_value_error"]
             uids = plan_report["uids"]
             scan_ids = plan_report["scan_ids"]
             err_msg = plan_report["err_msg"]
             err_tb = plan_report["traceback"]
             stop_queue = plan_report["stop_queue"]  # Worker tells the manager to stop the queue
 
-            msg_display = result if result else err_msg
-            logger.debug(
-                "Report received from RE Worker:\nplan_state=%s\nsuccess=%s\n%s\n)",
-                plan_state,
-                success,
-                msg_display,
-            )
+            logger.debug("Report received from RE Worker: plan_state=%s, success=%s", plan_state, success)
 
             ignore_failures = self._plan_queue.plan_queue_mode["ignore_failures"]
             continue_failed = (plan_state == "failed") and ignore_failures
@@ -841,13 +836,25 @@ class RunEngineManager(Process):
                 # execution of the queue is stopped. It can be restarted later (failed or
                 # interrupted plan will still be in the queue.
                 await self._plan_queue.set_processed_item_as_completed(
-                    exit_status=plan_state, run_uids=uids, scan_ids=scan_ids, err_msg=err_msg, err_tb=err_tb
+                    exit_status=plan_state,
+                    run_uids=uids,
+                    scan_ids=scan_ids,
+                    err_msg=err_msg,
+                    err_tb=err_tb,
+                    return_value=return_value,
+                    return_value_error=return_value_error,
                 )
                 await self._start_plan_task(stop_queue=stop_queue or bool(immediate_execution))
             elif plan_state in ("failed", "stopped", "aborted", "halted"):
                 # Paused plan was stopped/aborted/halted
                 await self._plan_queue.set_processed_item_as_stopped(
-                    exit_status=plan_state, run_uids=uids, scan_ids=scan_ids, err_msg=err_msg, err_tb=err_tb
+                    exit_status=plan_state,
+                    run_uids=uids,
+                    scan_ids=scan_ids,
+                    err_msg=err_msg,
+                    err_tb=err_tb,
+                    return_value=return_value,
+                    return_value_error=return_value_error,
                 )
                 self._loop.create_task(self._set_manager_state(MState.IDLE, autostart_disable=True))
             elif plan_state == "paused":

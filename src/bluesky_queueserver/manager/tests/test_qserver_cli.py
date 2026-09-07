@@ -46,7 +46,7 @@ REQ_FAILED = QServerExitCodes.REQUEST_FAILED.value
 COM_ERROR = QServerExitCodes.COMMUNICATION_ERROR.value
 EXCEPTION_OCCURRED = QServerExitCodes.EXCEPTION_OCCURRED.value
 
-timeout_env_open = 10
+timeout_env_open = 20
 
 
 def sp_call(*args, **kwargs):

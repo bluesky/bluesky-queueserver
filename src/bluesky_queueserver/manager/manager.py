@@ -3,6 +3,7 @@ import copy
 import enum
 import json
 import logging
+import re
 import time as ttime
 import uuid
 from datetime import datetime
@@ -13,6 +14,14 @@ import zmq
 import zmq.asyncio
 
 import bluesky_queueserver
+
+try:
+    from tango import Database, DeviceProxy
+
+    _tango_available = True
+except ImportError:
+    Database = DeviceProxy = None
+    _tango_available = False
 
 from .comms import CommTimeoutError, PipeJsonRpcSendAsync, ZMQEncoding, process_zmq_encoding_name, validate_zmq_key
 from .logging_setup import PPrintForLogging as ppfl
@@ -213,6 +222,9 @@ class RunEngineManager(Process):
 
         self._log_level = log_level
         self._msg_queue = msg_queue
+        # Sardana measurement groups, populated when 'tango_url' is configured.
+        self._measurement_groups = []
+        self._sardana_enabled = bool((config or {}).get("tango_url"))
 
         self._watchdog_conn = conn_watchdog
         self._worker_conn = conn_worker
@@ -270,6 +282,15 @@ class RunEngineManager(Process):
         self._ip_redis_server = "localhost"
         if config and ("redis_addr" in config):
             self._ip_redis_server = config["redis_addr"]
+
+        self._tango_url = None
+        self._db = None
+        self._pool = None
+        self._dev = None
+        if self._sardana_enabled:
+            if not _tango_available:
+                raise RuntimeError("'tango_url' is configured but pytango is not installed.")
+            self._tango_url = config["tango_url"]
 
         self._redis_name_prefix = "qs_default"
         if config and ("redis_name_prefix" in config):
@@ -1211,7 +1232,8 @@ class RunEngineManager(Process):
         """
 
         available_options = ("resume", "abort", "stop", "halt")
-        if self._manager_state != MState.PAUSED:
+        allowed_states = (MState.PAUSED, MState.EXECUTING_QUEUE) if self._sardana_enabled else (MState.PAUSED,)
+        if self._manager_state not in allowed_states:
             success = False
             err_msg = f"RE Manager is not paused: current state is '{self._manager_state.value}'"
 
@@ -1919,6 +1941,8 @@ class RunEngineManager(Process):
 
             config = {
                 "ip_connect_info": ip_connect_info,
+                "sardana_enabled": self._sardana_enabled,
+                "measurement_groups": self._measurement_groups,
             }
         except Exception as ex:
             success, msg, config = False, str(ex), {}
@@ -4020,6 +4044,27 @@ class RunEngineManager(Process):
 
     # ======================================================================
 
+    def _connect_sardana(self):
+        """
+        Connects to the Sardana Pool at 'self._tango_url' and populates
+        'self._db', 'self._pool', 'self._dev' and 'self._measurement_groups'.
+        """
+        try:
+            host, port = re.split(":", self._tango_url)
+            self._db = Database(host, port)
+            self._pool = self._db.get_device_exported_for_class("pool*")
+            if self._pool:
+                self._dev = DeviceProxy(f"{self._tango_url}/{self._pool[0]}")
+                meas_groups = self._dev.MeasurementGroupList or []
+                self._measurement_groups = [
+                    {"name": item["name"], "elements": item["elements"]}
+                    for item in (json.loads(x) for x in meas_groups)
+                ]
+            else:
+                logger.warning("No Sardana Pool was found at %r", self._tango_url)
+        except Exception as ex:
+            logger.exception("Failed to query Sardana Pool at %r: %s", self._tango_url, ex)
+
     def run(self):
         """
         Overrides the `run()` function of the `multiprocessing.Process` class. Called
@@ -4031,6 +4076,8 @@ class RunEngineManager(Process):
         setup_loggers(log_level=self._log_level)
 
         logger.info("Starting RE Manager process")
+        if self._sardana_enabled:
+            self._connect_sardana()
         try:
             asyncio.run(self.zmq_server_comm())
         except Exception as ex:

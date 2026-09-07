@@ -214,6 +214,8 @@ _key_mapping = {
     "update_existing_plans_devices": "operation/update_existing_plans_and_devices",
     "user_group_permissions_reload": "operation/user_group_permissions_reload",
     "emergency_lock_key": "operation/emergency_lock_key",
+    "tango_url": "run_engine/tango_url",
+    "sardana_enable": "run_engine/sardana_enable",
 }
 
 
@@ -350,6 +352,26 @@ class Settings:
                 f"0MQ encoding {zmq_encoding!r} is not supported. Supported values: {supported_zmq_encodings()}."
             )
         self._settings["zmq_encoding"] = zmq_encoding
+
+        self._settings["sardana_enable"] = self._get_param_boolean(
+            value_default=args.sardana_enable,
+            value_config=self._get_value_from_config("sardana_enable"),
+            value_cli=self._args_existing("sardana_enable"),
+        )
+
+        self._settings["tango_url"] = self._get_param(
+            value_default=None,
+            value_ev=os.environ.get("TANGO_HOST") if self._settings["sardana_enable"] else None,
+            value_config=self._get_value_from_config("tango_url"),
+            value_cli=self._args_existing("tango_url"),
+        )
+
+        if self._settings["sardana_enable"] and not self._settings["tango_url"]:
+            raise ConfigError(
+                "Sardana mode is enabled ('--sardana-enable'), but no Tango database address "
+                "was provided via '--tango_url', 'run_engine/tango_url' config, or 'TANGO_HOST' "
+                "environment variable."
+            )
 
         self._settings["zmq_publish_console"] = self._get_param_boolean(
             value_default=args.zmq_publish_console,

@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import glob
+import inspect
 import json
 import os
 import pprint
@@ -14,6 +15,7 @@ import numpy as np
 import pytest
 import yaml
 import zmq
+from bluesky import RunEngine
 
 import bluesky_queueserver
 from bluesky_queueserver import gen_list_of_plans_and_devices
@@ -1300,9 +1302,152 @@ def test_zmq_api_queue_item_execute_1(re_manager):  # noqa: F811
     assert h_items[0]["name"] == _plan3["name"]
     assert h_items[1]["name"] == _plan1["name"]
 
+    assert "return_value" not in h_items[0]["result"]
+    assert "return_value_error" not in h_items[0]["result"]
     # Close the environment
     resp6, _ = zmq_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+_script_plan_return_values_1 = """
+from bluesky import plan_stubs as bps
+
+
+def plan_return_object():
+    yield from bps.null()
+    return object()
+
+
+def plan_return_rd():
+    yield from bps.mv(motor, 5)
+    return (yield from bps.rd(motor))
+"""
+
+
+def test_zmq_api_plan_return_values_1(tmp_path, monkeypatch, re_manager_cmd):  # noqa: F811
+    """
+    Verify completed plan return values are persisted without blocking queue progression.
+    """
+    pc_path = copy_default_profile_collection(tmp_path)
+    re_config = "from bluesky import RunEngine\nRE = RunEngine({})\n"
+    if "call_returns_result" in inspect.signature(RunEngine).parameters:
+        re_config = "from bluesky import RunEngine\nRE = RunEngine({}, call_returns_result=True)\n"
+    append_code_to_last_startup_file(pc_path, additional_code=re_config)
+    monkeypatch.setenv("QSERVER_CAPTURE_PLAN_RETURN_VALUES", "ON")
+    re_manager_cmd(["--startup-dir", pc_path])
+
+    resp, _ = zmq_request("environment_open")
+    assert resp["success"] is True, pprint.pformat(resp)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp, _ = zmq_request("script_upload", params={"script": _script_plan_return_values_1, "update_lists": True})
+    assert resp["success"] is True, pprint.pformat(resp)
+    script_result = wait_for_task_result(10, resp["task_uid"])
+    assert script_result["success"] is True, pprint.pformat(script_result)
+    assert wait_for_condition(time=5, condition=condition_manager_idle)
+
+    item_uids = []
+    for plan_name in ("plan_return_object", "plan_return_rd"):
+        resp, _ = zmq_request(
+            "queue_item_add",
+            params={"item": {"item_type": "plan", "name": plan_name}, "user": _user, "user_group": _user_group},
+        )
+        assert resp["success"] is True, pprint.pformat(resp)
+        item_uids.append(resp["item"]["item_uid"])
+    item_uid_object, item_uid_rd = item_uids
+
+    status_before, _ = zmq_request("status")
+    plan_history_uid = status_before["plan_history_uid"]
+    resp, _ = zmq_request("queue_start")
+    assert resp["success"] is True, pprint.pformat(resp)
+    assert wait_for_condition(time=20, condition=condition_manager_idle)
+
+    status, _ = zmq_request("status")
+    assert status["items_in_queue"] == 0
+    assert status["items_in_history"] == 2
+    assert status["plan_history_uid"] != plan_history_uid
+
+    history, _ = zmq_request("history_get")
+    assert history["success"] is True, pprint.pformat(history)
+    history_by_uid = {item["item_uid"]: item for item in history["items"]}
+    object_result = history_by_uid[item_uid_object]["result"]
+    rd_result = history_by_uid[item_uid_rd]["result"]
+
+    assert object_result["exit_status"] == "completed"
+    assert object_result["return_value"] is None
+    assert object_result["return_value_error"].startswith("Plan return value can not be serialized as JSON:")
+    assert rd_result["exit_status"] == "completed"
+    assert rd_result["return_value"] == 5
+    assert rd_result["return_value_error"] == ""
+
+    resp, _ = zmq_request("environment_close")
+    assert resp["success"] is True, pprint.pformat(resp)
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+_script_plan_return_values_2 = """
+from bluesky.plans import count
+
+
+def plan_return_resume():
+    yield from count([det1], num=3, delay=2)
+    return "resumed"
+"""
+
+
+def test_zmq_api_plan_return_values_2_resume(monkeypatch, re_manager_cmd):  # noqa: F811
+    """
+    Verify a resumed plan retains its terminal return value.
+    """
+    monkeypatch.setenv("QSERVER_CAPTURE_PLAN_RETURN_VALUES", "ON")
+    re_manager_cmd()
+
+    resp, _ = zmq_request("environment_open")
+    assert resp["success"] is True, pprint.pformat(resp)
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    resp, _ = zmq_request("script_upload", params={"script": _script_plan_return_values_2, "update_lists": True})
+    assert resp["success"] is True, pprint.pformat(resp)
+    script_result = wait_for_task_result(10, resp["task_uid"])
+    assert script_result["success"] is True, pprint.pformat(script_result)
+    assert wait_for_condition(time=5, condition=condition_manager_idle)
+
+    params = {
+        "item": {"item_type": "plan", "name": "plan_return_resume"},
+        "user": _user,
+        "user_group": _user_group,
+    }
+    resp, _ = zmq_request("queue_item_add", params=params)
+    assert resp["success"] is True, pprint.pformat(resp)
+    item_uid = resp["item"]["item_uid"]
+
+    resp, _ = zmq_request("queue_start")
+    assert resp["success"] is True, pprint.pformat(resp)
+    ttime.sleep(3)
+
+    resp, _ = zmq_request("re_pause")
+    assert resp["success"] is True, pprint.pformat(resp)
+    assert wait_for_condition(time=20, condition=condition_manager_paused)
+
+    resp, _ = zmq_request("re_resume")
+    assert resp["success"] is True, pprint.pformat(resp)
+    assert wait_for_condition(time=30, condition=condition_manager_idle)
+
+    status, _ = zmq_request("status")
+    assert status["items_in_queue"] == 0
+    assert status["items_in_history"] == 1
+
+    history, _ = zmq_request("history_get")
+    assert history["success"] is True, pprint.pformat(history)
+    history_by_uid = {item["item_uid"]: item for item in history["items"]}
+    result = history_by_uid[item_uid]["result"]
+    assert result["exit_status"] == "completed"
+    assert result["return_value"] == "resumed"
+    assert result["return_value_error"] == ""
+
+    resp, _ = zmq_request("environment_close")
+    assert resp["success"] is True, pprint.pformat(resp)
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 

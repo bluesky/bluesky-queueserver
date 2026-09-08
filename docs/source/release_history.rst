@@ -20,6 +20,9 @@ Added
   The option can be set using CLI parameter ``--permitted-re-metadata-keys`` or environment variable
   ``QSERVER_PERMITTED_RE_METADATA_KEYS``.
 
+- Optional capture of terminal plan return values in ``history_get`` records. Enable it with
+  ``operation/capture_plan_return_values`` or ``QSERVER_CAPTURE_PLAN_RETURN_VALUES``.
+
 - Support for Python 3.14
 
 Fixed

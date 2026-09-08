@@ -506,6 +506,7 @@ def _get_expected_settings_default_1(_1, _2):
         "startup_profile": startup_profile,
         "startup_script": None,
         "update_existing_plans_devices": "ENVIRONMENT_OPEN",
+        "capture_plan_return_values": False,
         "user_group_permissions_path": user_group_permissions_path,
         "user_group_permissions_reload": "ON_STARTUP",
         "zmq_control_addr": "tcp://*:60615",
@@ -559,6 +560,7 @@ operation:
   print_console_output: true
   console_logging_level: VERBOSE
   update_existing_plans_and_devices: ALWAYS
+  capture_plan_return_values: true
   user_group_permissions_reload: ON_REQUEST
   emergency_lock_key: different_lock_key
 """
@@ -613,6 +615,7 @@ def _get_expected_settings_config_2(file_dir, ip_con_dir):
         "startup_profile": startup_profile,
         "startup_script": None,
         "update_existing_plans_devices": "ALWAYS",
+        "capture_plan_return_values": True,
         "user_group_permissions_path": user_group_permissions_path,
         "user_group_permissions_reload": "ON_REQUEST",
         "zmq_control_addr": "tcp://*:60617",
@@ -711,6 +714,7 @@ def _get_expected_settings_params_3(file_dir, _):
         "startup_profile": startup_profile,
         "startup_script": None,
         "update_existing_plans_devices": "NEVER",
+        "capture_plan_return_values": True,
         "user_group_permissions_path": user_group_permissions_path,
         "user_group_permissions_reload": "NEVER",
         "zmq_control_addr": "tcp://*:60619",

@@ -654,6 +654,19 @@ Returns       **success**: *boolean*
 
                   - **traceback** - full traceback if the plan failed, empty string otherwise.
 
+                  If ``capture_plan_return_values`` is enabled, newly finalized history items contain the
+                  following keys:
+
+                  - **return_value** - JSON-normalized terminal return value of a plan with **exit_status**
+                    **'completed'**. *None* is a valid plan return and is also used for plans without a completed
+                    return value.
+
+                  - **return_value_error** - empty string if the return value was retained; otherwise, the
+                    JSON-serialization diagnostic while the plan remains completed.
+
+                  History items created while capture is disabled or before these fields were added do not contain
+                  either key.
+
               **plan_history_uid**: *str*
                   current plan history UID.
 ------------  -----------------------------------------------------------------------------------------

@@ -174,6 +174,7 @@ operation:
   print_console_output: true
   console_logging_level: NORMAL
   update_existing_plans_and_devices: ENVIRONMENT_OPEN
+  capture_plan_return_values: true
   user_group_permissions_reload: ON_REQUEST
   emergency_lock_key: some_lock_key
 worker:
@@ -217,6 +218,7 @@ operation:
   console_logging_level: NORMAL
   update_existing_plans_and_devices: ENVIRONMENT_OPEN
   user_group_permissions_reload: ON_REQUEST
+  capture_plan_return_values: true
   emergency_lock_key: some_lock_key
 """
 
@@ -258,6 +260,7 @@ config_01_dict = {
         "console_logging_level": "NORMAL",
         "update_existing_plans_and_devices": "ENVIRONMENT_OPEN",
         "user_group_permissions_reload": "ON_REQUEST",
+        "capture_plan_return_values": True,
         "emergency_lock_key": "some_lock_key",
     },
     "worker": {

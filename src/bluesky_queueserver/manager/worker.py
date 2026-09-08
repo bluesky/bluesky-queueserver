@@ -135,6 +135,8 @@ class RunEngineWorker(Process):
 
         # Reference to Bluesky Run Engine
         self._RE = None
+        # Terminal value returned by the currently executing top-level plan.
+        self._plan_return_value = None
 
         # The following variable determine the state of RE Worker
         self._env_state = EState.CLOSED
@@ -322,21 +324,34 @@ class RunEngineWorker(Process):
             th.start()
             # -------------------------------------------------------------------------------------------
 
-            result = func()
+            func()
 
             uids, scan_ids = self._active_run_list.get_uids(), self._active_run_list.get_scan_ids()
+
+            return_value = None
+            return_value_error = ""
+            if self._config_dict["capture_plan_return_values"] and exec_option in (
+                ExecOption.NEW,
+                ExecOption.RESUME,
+            ):
+                try:
+                    return_value = json.loads(json.dumps(self._plan_return_value))
+                except Exception as ex:
+                    return_value_error = f"Plan return value can not be serialized as JSON: {ex}"
 
             with self._re_report_lock:
                 self._re_report = {
                     "action": "plan_exit",
                     "success": True,
-                    "result": result,
                     "uids": uids,
                     "scan_ids": scan_ids,
                     "err_msg": "",
                     "traceback": "",
                     "stop_queue": False,  # True - request manager not to start the next plan
                 }
+                if self._config_dict["capture_plan_return_values"]:
+                    self._re_report["return_value"] = return_value
+                    self._re_report["return_value_error"] = return_value_error
                 if exec_option in (ExecOption.NEW, ExecOption.RESUME):
                     self._re_report["plan_state"] = "completed"
                     self._running_plan_exec_state = PlanExecState.COMPLETED
@@ -362,10 +377,12 @@ class RunEngineWorker(Process):
                     "action": "plan_exit",
                     "uids": uids,
                     "scan_ids": scan_ids,
-                    "result": "",
                     "traceback": traceback.format_exc(),
                     "stop_queue": False,  # True - request manager not to start the next plan
                 }
+                if self._config_dict["capture_plan_return_values"]:
+                    self._re_report["return_value"] = None
+                    self._re_report["return_value_error"] = ""
 
                 if self.re_state == "paused":
                     # Run Engine was paused
@@ -419,7 +436,6 @@ class RunEngineWorker(Process):
                 "action": "plan_exit",
                 "success": plan_state == "success",
                 "plan_state": plan_state,
-                "result": tuple(uids),  # List of UIDs
                 "uids": uids,
                 "scan_ids": scan_ids,
                 "err_msg": "The plan is completed outside RE Manager",  # List of UIDs
@@ -427,6 +443,9 @@ class RunEngineWorker(Process):
                 "stop_queue": True,  # True - request manager not to start the next plan
                 "re_state": self.re_state,
             }
+            if self._config_dict["capture_plan_return_values"]:
+                self._re_report["return_value"] = None
+                self._re_report["return_value_error"] = ""
 
         self._running_plan_exec_state = PlanExecState.COMPLETED
         self._active_run_list.clear()
@@ -483,6 +502,7 @@ class RunEngineWorker(Process):
         Generate the function that starts execution of a plan based on plan parameters.
         """
         plan_info = parameters
+        self._plan_return_value = None
 
         try:
             with self._allowed_items_lock:
@@ -512,7 +532,15 @@ class RunEngineWorker(Process):
 
             def get_start_plan_func(plan_func, plan_args, plan_kwargs, plan_meta):
                 def start_plan_func():
-                    return self._RE(plan_func(*plan_args, **plan_kwargs), {"all": [self._run_reg_cb]}, **plan_meta)
+                    if self._config_dict["capture_plan_return_values"]:
+
+                        def plan_with_return_value():
+                            self._plan_return_value = yield from plan_func(*plan_args, **plan_kwargs)
+
+                        plan = plan_with_return_value()
+                    else:
+                        plan = plan_func(*plan_args, **plan_kwargs)
+                    return self._RE(plan, {"all": [self._run_reg_cb]}, **plan_meta)
 
                 return start_plan_func
 

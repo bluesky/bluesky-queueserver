@@ -2151,6 +2151,8 @@ def test_set_processed_item_as_completed_1():
             plan_history_expected = add_msg_to_plan_history(
                 plan_history_expected, [plan_uids[0]], "Test message", "Traceback"
             )
+            plan_history_expected[0]["result"]["return_value"] = {"value": 1}
+            plan_history_expected[0]["result"]["return_value_error"] = ""
             check_plan_history(plan_history, plan_history_expected)
 
     asyncio.run(testing())
@@ -2411,6 +2413,8 @@ def test_set_processed_item_as_stopped_1():
             plan_history_expected = add_msg_to_plan_history(
                 plan_history_expected, [running_uid2], "Plan stopped", "Traceback 2"
             )
+            plan_history_expected[0]["result"]["return_value"] = None
+            plan_history_expected[0]["result"]["return_value_error"] = "Test return value error"
             check_plan_history(plan_history, plan_history_expected)
 
             # Verify that `_uid_dict` still has correct size. `_uid_dict` should never be accessed directly.

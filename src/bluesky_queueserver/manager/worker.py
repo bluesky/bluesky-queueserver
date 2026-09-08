@@ -160,7 +160,6 @@ class RunEngineWorker(Process):
         # Note: 'self._config' is a private attribute of 'multiprocessing.Process'. Overriding
         #   this variable may lead to unpredictable and hard to debug issues.
         self._config_dict = config or {}
-        self._capture_plan_return_values = self._config_dict["capture_plan_return_values"]
         self._existing_plans_and_devices_changed = False
         self._existing_plans, self._existing_devices = {}, {}
         self._allowed_plans, self._allowed_devices = {}, {}
@@ -331,7 +330,10 @@ class RunEngineWorker(Process):
 
             return_value = None
             return_value_error = ""
-            if self._capture_plan_return_values and exec_option in (ExecOption.NEW, ExecOption.RESUME):
+            if self._config_dict["capture_plan_return_values"] and exec_option in (
+                ExecOption.NEW,
+                ExecOption.RESUME,
+            ):
                 try:
                     return_value = json.loads(json.dumps(self._plan_return_value))
                 except Exception as ex:
@@ -347,7 +349,7 @@ class RunEngineWorker(Process):
                     "traceback": "",
                     "stop_queue": False,  # True - request manager not to start the next plan
                 }
-                if self._capture_plan_return_values:
+                if self._config_dict["capture_plan_return_values"]:
                     self._re_report["return_value"] = return_value
                     self._re_report["return_value_error"] = return_value_error
                 if exec_option in (ExecOption.NEW, ExecOption.RESUME):
@@ -378,7 +380,7 @@ class RunEngineWorker(Process):
                     "traceback": traceback.format_exc(),
                     "stop_queue": False,  # True - request manager not to start the next plan
                 }
-                if self._capture_plan_return_values:
+                if self._config_dict["capture_plan_return_values"]:
                     self._re_report["return_value"] = None
                     self._re_report["return_value_error"] = ""
 
@@ -441,7 +443,7 @@ class RunEngineWorker(Process):
                 "stop_queue": True,  # True - request manager not to start the next plan
                 "re_state": self.re_state,
             }
-            if self._capture_plan_return_values:
+            if self._config_dict["capture_plan_return_values"]:
                 self._re_report["return_value"] = None
                 self._re_report["return_value_error"] = ""
 
@@ -530,7 +532,7 @@ class RunEngineWorker(Process):
 
             def get_start_plan_func(plan_func, plan_args, plan_kwargs, plan_meta):
                 def start_plan_func():
-                    if self._capture_plan_return_values:
+                    if self._config_dict["capture_plan_return_values"]:
 
                         def plan_with_return_value():
                             self._plan_return_value = yield from plan_func(*plan_args, **plan_kwargs)

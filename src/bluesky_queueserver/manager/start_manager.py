@@ -801,6 +801,7 @@ def start_manager():
     config_worker["ignore_invalid_plans"] = settings.ignore_invalid_plans
     config_worker["permitted_re_metadata_keys"] = settings.permitted_re_metadata_keys
     config_worker["zmq_stream_device_progress"] = settings.zmq_stream_device_progress and settings.zmq_publish_info
+    config_worker["capture_plan_return_values"] = settings.capture_plan_return_values
 
     existing_pd_path = settings.existing_plans_and_devices_path
     if not existing_pd_path:
@@ -840,6 +841,7 @@ def start_manager():
 
     config_worker["update_existing_plans_devices"] = settings.update_existing_plans_devices
     config_manager["user_group_permissions_reload"] = settings.user_group_permissions_reload
+    config_manager["capture_plan_return_values"] = settings.capture_plan_return_values
 
     config_manager["zmq_addr"] = settings.zmq_control_addr
     config_manager["zmq_private_key"] = settings.zmq_private_key

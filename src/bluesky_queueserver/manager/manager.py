@@ -813,8 +813,12 @@ class RunEngineManager(Process):
         else:
             plan_state = plan_report["plan_state"]
             success = plan_report["success"]
-            return_value = plan_report["return_value"]
-            return_value_error = plan_report["return_value_error"]
+            return_value_kwargs = {}
+            if self._config_dict["capture_plan_return_values"]:
+                return_value_kwargs = {
+                    "return_value": plan_report["return_value"],
+                    "return_value_error": plan_report["return_value_error"],
+                }
             uids = plan_report["uids"]
             scan_ids = plan_report["scan_ids"]
             err_msg = plan_report["err_msg"]
@@ -841,8 +845,7 @@ class RunEngineManager(Process):
                     scan_ids=scan_ids,
                     err_msg=err_msg,
                     err_tb=err_tb,
-                    return_value=return_value,
-                    return_value_error=return_value_error,
+                    **return_value_kwargs,
                 )
                 await self._start_plan_task(stop_queue=stop_queue or bool(immediate_execution))
             elif plan_state in ("failed", "stopped", "aborted", "halted"):
@@ -853,8 +856,7 @@ class RunEngineManager(Process):
                     scan_ids=scan_ids,
                     err_msg=err_msg,
                     err_tb=err_tb,
-                    return_value=return_value,
-                    return_value_error=return_value_error,
+                    **return_value_kwargs,
                 )
                 self._loop.create_task(self._set_manager_state(MState.IDLE, autostart_disable=True))
             elif plan_state == "paused":

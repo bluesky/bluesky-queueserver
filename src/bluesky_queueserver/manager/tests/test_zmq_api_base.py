@@ -1302,6 +1302,8 @@ def test_zmq_api_queue_item_execute_1(re_manager):  # noqa: F811
     assert h_items[0]["name"] == _plan3["name"]
     assert h_items[1]["name"] == _plan1["name"]
 
+    assert "return_value" not in h_items[0]["result"]
+    assert "return_value_error" not in h_items[0]["result"]
     # Close the environment
     resp6, _ = zmq_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
@@ -1323,15 +1325,17 @@ def plan_return_rd():
 """
 
 
-def test_zmq_api_plan_return_values_1(re_manager_pc_copy):  # noqa: F811
+def test_zmq_api_plan_return_values_1(tmp_path, monkeypatch, re_manager_cmd):  # noqa: F811
     """
     Verify completed plan return values are persisted without blocking queue progression.
     """
-    _, pc_path = re_manager_pc_copy
+    pc_path = copy_default_profile_collection(tmp_path)
     re_config = "from bluesky import RunEngine\nRE = RunEngine({})\n"
     if "call_returns_result" in inspect.signature(RunEngine).parameters:
         re_config = "from bluesky import RunEngine\nRE = RunEngine({}, call_returns_result=True)\n"
     append_code_to_last_startup_file(pc_path, additional_code=re_config)
+    monkeypatch.setenv("QSERVER_CAPTURE_PLAN_RETURN_VALUES", "ON")
+    re_manager_cmd(["--startup-dir", pc_path])
 
     resp, _ = zmq_request("environment_open")
     assert resp["success"] is True, pprint.pformat(resp)
@@ -1392,10 +1396,13 @@ def plan_return_resume():
 """
 
 
-def test_zmq_api_plan_return_values_2_resume(re_manager):  # noqa: F811
+def test_zmq_api_plan_return_values_2_resume(monkeypatch, re_manager_cmd):  # noqa: F811
     """
     Verify a resumed plan retains its terminal return value.
     """
+    monkeypatch.setenv("QSERVER_CAPTURE_PLAN_RETURN_VALUES", "ON")
+    re_manager_cmd()
+
     resp, _ = zmq_request("environment_open")
     assert resp["success"] is True, pprint.pformat(resp)
     assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)

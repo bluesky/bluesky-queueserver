@@ -212,6 +212,7 @@ _key_mapping = {
     "print_console_output": "operation/print_console_output",
     "console_logging_level": "operation/console_logging_level",
     "update_existing_plans_devices": "operation/update_existing_plans_and_devices",
+    "capture_plan_return_values": "operation/capture_plan_return_values",
     "user_group_permissions_reload": "operation/user_group_permissions_reload",
     "emergency_lock_key": "operation/emergency_lock_key",
 }
@@ -563,6 +564,11 @@ class Settings:
             value_default=args.update_existing_plans_devices,
             value_config=self._get_value_from_config("update_existing_plans_devices"),
             value_cli=self._args_existing("update_existing_plans_devices"),
+        )
+        self._settings["capture_plan_return_values"] = self._get_param_boolean(
+            value_default=False,
+            value_ev=os.environ.get("QSERVER_CAPTURE_PLAN_RETURN_VALUES", None),
+            value_config=self._get_value_from_config("capture_plan_return_values"),
         )
 
         self._settings["user_group_permissions_reload"] = self._get_param(

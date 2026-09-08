@@ -8,6 +8,7 @@ import uuid
 import redis.asyncio
 
 logger = logging.getLogger(__name__)
+_RETURN_VALUE_UNSET = object()
 
 
 class PlanQueueOperations:
@@ -1745,7 +1746,15 @@ class PlanQueueOperations:
             return await self._set_next_item_as_running(item=item)
 
     async def _set_processed_item_as_completed(
-        self, *, exit_status, run_uids, scan_ids, err_msg, err_tb, return_value=None, return_value_error=""
+        self,
+        *,
+        exit_status,
+        run_uids,
+        scan_ids,
+        err_msg,
+        err_tb,
+        return_value=_RETURN_VALUE_UNSET,
+        return_value_error="",
     ):
         """
         See ``self.set_processed_item_as_completed`` method.
@@ -1760,13 +1769,17 @@ class PlanQueueOperations:
             item_time_start = item["properties"]["time_start"]
             item_cleaned = self._clean_item_properties(item)
 
+            item_cleaned.setdefault("result", {})
+            if return_value is _RETURN_VALUE_UNSET:
+                item_cleaned["result"].pop("return_value", None)
+                item_cleaned["result"].pop("return_value_error", None)
             if loop_mode and not immediate_execution:
                 item_to_add = item_cleaned.copy()
+                item_to_add.pop("result", None)
                 item_to_add = self.set_new_item_uuid(item_to_add)
                 await self._r_pool.rpush(self._name_plan_queue, json.dumps(item_to_add))
                 self._uid_dict_remove(item["item_uid"])
                 self._uid_dict_add(item_to_add)
-            item_cleaned.setdefault("result", {})
             item_cleaned["result"]["exit_status"] = exit_status
             item_cleaned["result"]["run_uids"] = run_uids
             item_cleaned["result"]["scan_ids"] = scan_ids
@@ -1774,8 +1787,9 @@ class PlanQueueOperations:
             item_cleaned["result"]["time_stop"] = ttime.time()
             item_cleaned["result"]["msg"] = err_msg
             item_cleaned["result"]["traceback"] = err_tb
-            item_cleaned["result"]["return_value"] = return_value
-            item_cleaned["result"]["return_value_error"] = return_value_error
+            if return_value is not _RETURN_VALUE_UNSET:
+                item_cleaned["result"]["return_value"] = return_value
+                item_cleaned["result"]["return_value_error"] = return_value_error
             await self._clear_running_item_info()
             if not loop_mode and not immediate_execution:
                 self._uid_dict_remove(item["item_uid"])
@@ -1791,7 +1805,15 @@ class PlanQueueOperations:
         return item_cleaned
 
     async def set_processed_item_as_completed(
-        self, *, exit_status, run_uids, scan_ids, err_msg, err_tb, return_value=None, return_value_error=""
+        self,
+        *,
+        exit_status,
+        run_uids,
+        scan_ids,
+        err_msg,
+        err_tb,
+        return_value=_RETURN_VALUE_UNSET,
+        return_value_error="",
     ):
         """
         Moves currently executed item (plan) to history and sets ``exit_status`` key.
@@ -1814,9 +1836,10 @@ class PlanQueueOperations:
             Error message in case of failure.
         err_tb: str
             Traceback in case of failure.
-        return_value: JSON-compatible value
-            Terminal return value of a completed plan.
-        return_value_error: str
+        return_value: JSON-compatible value, optional
+            Terminal return value of a completed plan. Omit the parameter to leave return value fields
+            out of the history item.
+        return_value_error: str, optional
             JSON serialization diagnostic for the plan return value.
 
         Returns
@@ -1837,7 +1860,15 @@ class PlanQueueOperations:
             )
 
     async def _set_processed_item_as_stopped(
-        self, *, exit_status, run_uids, scan_ids, err_msg, err_tb, return_value=None, return_value_error=""
+        self,
+        *,
+        exit_status,
+        run_uids,
+        scan_ids,
+        err_msg,
+        err_tb,
+        return_value=_RETURN_VALUE_UNSET,
+        return_value_error="",
     ):
         """
         See ``self.set_processed_item_as_stopped()`` method.
@@ -1862,6 +1893,9 @@ class PlanQueueOperations:
             item_cleaned = self._clean_item_properties(item)
 
             item_cleaned.setdefault("result", {})
+            if return_value is _RETURN_VALUE_UNSET:
+                item_cleaned["result"].pop("return_value", None)
+                item_cleaned["result"].pop("return_value_error", None)
             item_cleaned["result"]["exit_status"] = exit_status
             item_cleaned["result"]["run_uids"] = run_uids
             item_cleaned["result"]["scan_ids"] = scan_ids
@@ -1869,8 +1903,9 @@ class PlanQueueOperations:
             item_cleaned["result"]["time_stop"] = ttime.time()
             item_cleaned["result"]["msg"] = err_msg
             item_cleaned["result"]["traceback"] = err_tb
-            item_cleaned["result"]["return_value"] = return_value
-            item_cleaned["result"]["return_value_error"] = return_value_error
+            if return_value is not _RETURN_VALUE_UNSET:
+                item_cleaned["result"]["return_value"] = return_value
+                item_cleaned["result"]["return_value_error"] = return_value_error
 
             await self._add_to_history(item_cleaned)
             await self._clear_running_item_info()
@@ -1893,7 +1928,15 @@ class PlanQueueOperations:
         return item_cleaned
 
     async def set_processed_item_as_stopped(
-        self, *, exit_status, run_uids, scan_ids, err_msg, err_tb, return_value=None, return_value_error=""
+        self,
+        *,
+        exit_status,
+        run_uids,
+        scan_ids,
+        err_msg,
+        err_tb,
+        return_value=_RETURN_VALUE_UNSET,
+        return_value_error="",
     ):
         """
         A stopped plan is considered successfully completed (if ``exit_status=="stopped"``) or
@@ -1915,9 +1958,10 @@ class PlanQueueOperations:
             Error message in case of failure.
         err_tb: str
             Traceback in case of failure.
-        return_value: JSON-compatible value
-            Terminal return value of a completed plan.
-        return_value_error: str
+        return_value: JSON-compatible value, optional
+            Terminal return value of a completed plan. Omit the parameter to leave return value fields
+            out of the history item.
+        return_value_error: str, optional
             JSON serialization diagnostic for the plan return value.
 
         Returns

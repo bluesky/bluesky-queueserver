@@ -325,6 +325,8 @@ properties:
       update_existing_plans_and_devices:
         type: string
         pattern: "^(NEVER)|(ENVIRONMENT_OPEN)|(ALWAYS)$"
+      capture_plan_return_values:
+        type: boolean
       user_group_permissions_reload:
         type: string
         pattern: "^(NEVER)|(ON_REQUEST)|(ON_STARTUP)"

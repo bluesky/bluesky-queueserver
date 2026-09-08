@@ -76,6 +76,10 @@ Several parameters can be passed to RE Manager using environment variables:
   - ``QSERVER_EMERGENCY_LOCK_KEY_FOR_SERVER`` - emergency lock key used to unlock RE Manager
     if the lock key set by a user is lost. The key may also be set in the config file.
 
+  - ``QSERVER_CAPTURE_PLAN_RETURN_VALUES`` - enables or disables capture of terminal values returned
+    by plans. The default is ``false``. The value may also be set in the ``operation`` section
+    of the configuration file.
+
   - ``QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER`` - private key used to decrypt control messages sent
     by clients. **Using environment variables may be preferred way of setting the public key.**
     Alternatively, the private key may be set in the config file by referencing a different
@@ -144,6 +148,7 @@ most of the supported parameters:
       print_console_output: true
       console_logging_level: NORMAL
       update_existing_plans_and_devices: ENVIRONMENT_OPEN
+      capture_plan_return_values: false
       user_group_permissions_reload: ON_REQUEST
       emergency_lock_key: custom_lock_key
     worker:
@@ -262,6 +267,11 @@ The parameters that define run-time behavior of RE Manager:
   lists (``'NEVER'``), update the lists when the environment is opened
   (``'ENVIRONMENT_OPEN'``, default) or update the lists each the lists are changed (``'ALWAYS'``).
   The value may be set using ``--update-existing-plans-devices`` parameter.
+
+- ``capture_plan_return_values`` - enables capture of terminal values returned by completed plans and
+  stores them in plan history. The default is ``false``. If enabled, the value may be set using
+  environment variable ``QSERVER_CAPTURE_PLAN_RETURN_VALUES``. Restart RE Manager after changing
+  the setting.
 
 - ``user_group_permissions_reload`` - select when user group permissions are reloaded from disk.
   Options: ``'NEVER'`` - RE Manager never attempts to load permissions from disk file.

@@ -500,7 +500,7 @@ class RunEngineWorker(Process):
             plan_func = plan_parsed["callable"]
             plan_args_parsed = plan_parsed["args"]
             plan_kwargs_parsed = plan_parsed["kwargs"]
-            plan_meta_parsed = plan_parsed["meta"]
+            plan_meta_parsed = {**plan_parsed["meta"], "queue_item_uid": plan_info["item_uid"]}
 
             if self.re_state == "panicked":
                 raise RuntimeError(

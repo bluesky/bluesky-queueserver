@@ -1205,61 +1205,145 @@ def _zmq_server_delay2(*, private_key=None, encoding="json"):
     ctx.term()
 
 
+def _zmq_server_late_response(
+    *, private_key=None, encoding="json", ev_first_request_received, ev_send_late_response, ev_late_response_sent
+):
+    """
+    REP server for testing recovery from a client timeout. The response to the first request
+    is withheld until ``ev_send_late_response`` is set. The events let the test submit the
+    second request either before or after the late response without relying on sleeps.
+    ``private_key`` - server private key (for tests with enabled encryption)
+    """
+    ctx = zmq.Context()
+    zmq_socket = ctx.socket(zmq.REP)
+    encoding = process_zmq_encoding_name(encoding)
+
+    if private_key is not None:
+        zmq_socket.set(zmq.CURVE_SERVER, 1)
+        zmq_socket.set(zmq.CURVE_SECRETKEY, private_key.encode("utf-8"))
+
+    zmq_socket.bind("tcp://*:60615")
+
+    msg_in = _zmq_recv(zmq_socket, encoding=encoding)
+    ev_first_request_received.set()
+    if not ev_send_late_response.wait(timeout=10):
+        raise TimeoutError("Timed out waiting to send the late response")
+
+    _zmq_send({"success": True, "some_data": 10, "msg_in": msg_in}, zmq_socket, encoding=encoding)
+    ev_late_response_sent.set()
+
+    msg_in = _zmq_recv(zmq_socket, encoding=encoding)
+    _zmq_send({"success": True, "some_data": 20, "msg_in": msg_in}, zmq_socket, encoding=encoding)
+
+    zmq_socket.close(linger=10)
+    ctx.term()
 # fmt: off
 @pytest.mark.parametrize("encoding", ["json", "msgpack"])
 @pytest.mark.parametrize("encryption_enabled", [False, True])
 @pytest.mark.parametrize(
     "is_blocking, raise_exception",
-    [(True, False),  # Repeated test are intentional
-     (True, False),
+    [(True, False),
      (True, None),
      (True, True),
-     (False, False),
      (False, False)]
 )
-@pytest.mark.parametrize("delay_between_reads", [2, 0.1])
+@pytest.mark.parametrize("late_response_first", [True, False])
 # fmt: on
-def test_ZMQCommSendThreads_4(is_blocking, raise_exception, delay_between_reads, encryption_enabled, encoding):
+def test_ZMQCommSendThreads_4(
+    is_blocking, raise_exception, late_response_first, encryption_enabled, encoding, monkeypatch
+):
     """
-    ZMQCommSendThreads: Timeout at the server.
+    ZMQCommSendThreads: timeout at a REP server. The server withholds the response to the first
+    request until the client reports a timeout. The second request must succeed whether it is sent
+    before or after the late response to the first request.
     """
     public_key, _, server_kwargs = _gen_server_keys(encryption_enabled=encryption_enabled, encoding=encoding)
 
-    thread = threading.Thread(target=_zmq_server_delay2, kwargs=server_kwargs)
+    ev_first_request_received = threading.Event()
+    ev_send_late_response = threading.Event()
+    ev_late_response_sent = threading.Event()
+    server_kwargs.update(
+        ev_first_request_received=ev_first_request_received,
+        ev_send_late_response=ev_send_late_response,
+        ev_late_response_sent=ev_late_response_sent,
+    )
+
+    method, params = "testing", {"p1": 10, "p2": "abc"}
+
+    # Exercise the timeout path immediately, but only after the REP server has received the request.
+    poll = zmq.Socket.poll
+    force_timeout = True
+
+    def poll_with_immediate_first_timeout(socket, *args, **kwargs):
+        nonlocal force_timeout
+        if force_timeout:
+            force_timeout = False
+            ev_first_request_received.wait(timeout=10)
+            return 0
+        return poll(socket, *args, **kwargs)
+
+    monkeypatch.setattr(zmq.Socket, "poll", poll_with_immediate_first_timeout)
+
+    # Observe real sends so the REP server can release its first response only after request 2 is queued.
+    n_requests_sent = 0
+
+    def request_sent(msg):
+        nonlocal n_requests_sent
+        if isinstance(msg, dict) and msg.get("method") == method:
+            n_requests_sent += 1
+            if (n_requests_sent == 2) and not late_response_first:
+                ev_send_late_response.set()
+
+    if encoding == "json":
+        send = zmq.Socket.send_json
+
+        def send_and_track_request(socket, msg, *args, **kwargs):
+            result = send(socket, msg, *args, **kwargs)
+            request_sent(msg)
+            return result
+
+        monkeypatch.setattr(zmq.Socket, "send_json", send_and_track_request)
+    else:
+        send = zmq.Socket.send
+
+        def send_and_track_request(socket, msg, *args, **kwargs):
+            result = send(socket, msg, *args, **kwargs)
+            request_sent(msgpack.unpackb(msg))
+            return result
+
+        monkeypatch.setattr(zmq.Socket, "send", send_and_track_request)
+
+    thread = threading.Thread(target=_zmq_server_late_response, kwargs=server_kwargs)
     thread.start()
 
     zmq_comm = ZMQCommSendThreads(
         server_public_key=public_key if encryption_enabled else None,
         encoding=encoding,
     )
-    method, params = "testing", {"p1": 10, "p2": "abc"}
 
     msg_recv, msg_recv_err = {}, ""
+    callback_done = threading.Event()
+
+    def cb(msg, msg_err):
+        nonlocal msg_recv, msg_recv_err
+        msg_recv = msg
+        msg_recv_err = msg_err
+        callback_done.set()
 
     for val in (10, 20):
         if is_blocking:
             if (raise_exception in (True, None)) and (val == 10):
-                # The case when timeout is expected for blocking operation
                 with pytest.raises(CommTimeoutError, match="timeout occurred"):
                     zmq_comm.send_message(method=method, params=params, raise_exceptions=raise_exception)
             else:
                 msg_recv = zmq_comm.send_message(method=method, params=params, raise_exceptions=raise_exception)
         else:
-            done = False
-
-            def cb(msg, msg_err):
-                nonlocal msg_recv, msg_recv_err, done
-                msg_recv = msg
-                msg_recv_err = msg_err
-                done = True
-
+            callback_done.clear()
             zmq_comm.send_message(method=method, params=params, cb=cb, raise_exceptions=raise_exception)
-
-            # Implement primitive polling of 'done' flag
-            while not done:
-                ttime.sleep(0.1)
+            assert callback_done.wait(timeout=10)
 
         if val == 10:
+            assert ev_first_request_received.is_set()
             if is_blocking:
                 if raise_exception not in (True, None):
                     assert msg_recv["success"] is False, str(msg_recv)
@@ -1268,17 +1352,19 @@ def test_ZMQCommSendThreads_4(is_blocking, raise_exception, delay_between_reads,
                 assert msg_recv == {}
                 assert "timeout occurred" in msg_recv_err
 
-            # Delay between consecutive reads. Test cases when read is initiated before and
-            #   after the server restored operation and sent the response.
-            ttime.sleep(delay_between_reads)
+            if late_response_first:
+                ev_send_late_response.set()
+                assert ev_late_response_sent.wait(timeout=10)
 
         else:
+            assert ev_late_response_sent.is_set()
             assert msg_recv["success"] is True, str(msg_recv)
             assert msg_recv["some_data"] == val, str(msg_recv)
             assert msg_recv["msg_in"] == {"method": method, "params": params}, str(msg_recv)
             assert msg_recv_err == ""
 
-    thread.join()
+    thread.join(timeout=10)
+    assert not thread.is_alive()
     zmq_comm.close()
 
 

@@ -1020,7 +1020,8 @@ class RunEngineWorker(Process):
         try:
             md = copy.deepcopy(self._RE.md)
             md_filtered = filter_dict_by_permitted_keys(md, self._permitted_re_metadata_keys)
-            json.dumps(md_filtered)  # Make sure the result is JSON-serializable
+            # Make sure the result is JSON-serializable. It is assumed that 'md_filtered' is small.
+            json.dumps(md_filtered)
             return md_filtered
         except Exception as ex:
             raise RuntimeError(f"Failed to convert Run Engine metadata to dictionary: {ex}") from ex

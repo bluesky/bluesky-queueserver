@@ -12,8 +12,10 @@ from datetime import datetime
 import msgpack
 import numpy as np
 import pytest
+import redis
 import yaml
 import zmq
+from redis_json_dict import RedisJSONDict
 
 import bluesky_queueserver
 from bluesky_queueserver import gen_list_of_plans_and_devices
@@ -36,6 +38,7 @@ from ..comms import (
     default_zmq_control_address,
 )
 from .common import (  # noqa: F401
+    _test_redis_name_prefix,
     _user,
     _user_group,
     append_code_to_last_startup_file,
@@ -6206,6 +6209,70 @@ def test_zmq_api_re_metadata_8_filtered_by_nested_key(re_manager_cmd, tmp_path):
     resp, _ = zmq_request("environment_close")
     assert resp["success"] is True, f"{resp =}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+_redis_json_dict_prefix = _test_redis_name_prefix + "_temp_dict_"
+
+@pytest.fixture()
+def redis_json_dict():
+    redis_client = redis.Redis(host="localhost")
+    prefix = _redis_json_dict_prefix
+
+    yield RedisJSONDict(redis_client, prefix=prefix)
+
+    keys = list(redis_client.scan_iter(match=f"{prefix}*"))
+    if keys:
+        redis_client.delete(*keys)
+
+
+_script_redis_json_dict = f"""
+import redis
+from redis_json_dict import RedisJSONDict
+
+redis_client = redis.Redis(host="localhost")
+prefix = "{_redis_json_dict_prefix}"
+
+_md = RE.md
+
+RE.md = RedisJSONDict(
+    redis_client=redis_client,
+    prefix=prefix,
+)
+
+RE.md.update(_md)
+
+RE.md["project_registry"] = {{
+    "project_a": ["subproject_1", "subproject_2"],
+}}
+"""
+
+def test_zmq_re_metadata_9(re_manager_cmd, tmp_path, redis_json_dict):  # noqa: F811
+    """
+    Tests `re_metadata` operation in case RE.md is redis_json_dict (RedisJSONDict) to
+    make sure the redis-based dictionary is properly converted to regular dictionary and
+    can be serialized.
+    """
+
+    pc_path = copy_default_profile_collection(tmp_path)
+    append_code_to_last_startup_file(pc_path, _script_redis_json_dict)
+    re_manager_cmd(["--startup-dir", pc_path, "--permitted-re-metadata-keys", "/"])
+
+    resp, _ = zmq_request("environment_open")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_created)
+
+    resp, _ = zmq_request("re_metadata")
+    assert resp["success"] is True, f"{resp =}"
+    assert resp["msg"] == "", f"{resp =}"
+    re_md = resp["re_metadata"]
+    assert isinstance(re_md, dict), f"{resp =}"
+    assert re_md.get("project_registry") == {'project_a': ['subproject_1', 'subproject_2']}, pprint.pformat(re_md)
+    assert "versions" in re_md, pprint.pformat(re_md)
+
+    resp, _ = zmq_request("environment_close")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
 
 
 # fmt: off

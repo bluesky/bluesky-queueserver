@@ -1018,7 +1018,10 @@ class RunEngineWorker(Process):
             raise AttributeError("Run Engine does not have a metadata attribute")
 
         try:
-            return filter_dict_by_permitted_keys(dict(self._RE.md), self._permitted_re_metadata_keys)
+            md = copy.deepcopy(self._RE.md)
+            md_filtered = filter_dict_by_permitted_keys(md, self._permitted_re_metadata_keys)
+            json.dumps(md_filtered)  # Make sure the result is JSON-serializable
+            return md_filtered
         except Exception as ex:
             raise RuntimeError(f"Failed to convert Run Engine metadata to dictionary: {ex}") from ex
 

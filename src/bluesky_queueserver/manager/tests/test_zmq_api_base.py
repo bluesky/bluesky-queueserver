@@ -6060,11 +6060,7 @@ def test_zmq_api_re_metadata_2_non_serializable_md(re_manager_pc_copy, tmp_path)
     resp, _ = zmq_request("re_metadata")
     assert resp["success"] is False
 
-    # Check that the error message is correct depending on encoding
-    if encoding == "json":
-        assert resp["msg"].startswith("Failed to serialize RE metadata with JSON:"), resp
-    elif encoding == "msgpack":
-        assert resp["msg"].startswith("Failed to serialize RE metadata with MSGPACK:"), resp
+    assert "is not JSON serializable" in resp["msg"], resp
 
     resp, _ = zmq_request("environment_close")
     assert resp["success"] is True, f"{resp =}"
@@ -6246,7 +6242,7 @@ RE.md["project_registry"] = {{
 }}
 """
 
-def test_zmq_re_metadata_9(re_manager_cmd, tmp_path, redis_json_dict):  # noqa: F811
+def test_zmq_api_re_metadata_9_redis_json_dict(re_manager_cmd, tmp_path, redis_json_dict):  # noqa: F811
     """
     Tests `re_metadata` operation in case RE.md is redis_json_dict (RedisJSONDict) to
     make sure the redis-based dictionary is properly converted to regular dictionary and

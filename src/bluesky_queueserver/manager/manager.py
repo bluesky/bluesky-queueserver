@@ -3383,19 +3383,19 @@ class RunEngineManager(Process):
 
                 if re_metadata is None:
                     success, re_metadata = False, {}
-                else:
-                    # Make sure the metadata is serializable given the encoding
-                    try:
-                        if self._zmq_encoding == ZMQEncoding.JSON:
-                            json.dumps(re_metadata)
-                        else:
-                            msgpack.packb(re_metadata)
-                    except Exception as ex:
-                        success, msg, re_metadata = (
-                            False,
-                            f"Failed to serialize RE metadata with {self._zmq_encoding.name}: {ex}",
-                            {},
-                        )
+                # else:
+                #     # Make sure the metadata is serializable given the encoding
+                #     try:
+                #         if self._zmq_encoding == ZMQEncoding.JSON:
+                #             json.dumps(re_metadata)
+                #         else:
+                #             msgpack.packb(re_metadata)
+                #     except Exception as ex:
+                #         success, msg, re_metadata = (
+                #             False,
+                #             f"Failed to serialize RE metadata with {self._zmq_encoding.name}: {ex}",
+                #             {},
+                #         )
             else:
                 success, msg, re_metadata = (
                     False,

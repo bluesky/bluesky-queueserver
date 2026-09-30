@@ -586,7 +586,7 @@ def start_manager():
         dest="permitted_re_metadata_keys",
         type=str,
         nargs="+",
-        default=["/"],
+        default=["/scan_id", "/versions"],
         help="A list of permitted RE metadata keys. Keys are configured in the form of unix paths, and "
         "recursively apply to all subkeys. For example, the default of '/' will permit reading of all "
         "metadata keys. A value of '/key1' will permit reading of 'key1' and all its subkeys, but not 'key2'. "

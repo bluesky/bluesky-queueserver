@@ -11,6 +11,7 @@ concurrency:
 
 jobs:
   config:
+    name: Unit Test Setup
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}

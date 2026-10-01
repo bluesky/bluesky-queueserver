@@ -1718,7 +1718,8 @@ Description   Request the current state of the runengine metadata dictionary. Th
               RE Manager may be configured to return data under specific keys of ``RE.md``. By default, 
               only ``/scan_id`` and ``/versions`` keys are returned. The defaults can be overwritten using
               CLI parameter, environment variable or config file parameter. If the list of keys contain ``/``,
-              then full ``RE.md`` dictionary is returned.
+              then full ``RE.md`` dictionary is returned. Note: the API is intended for retrieving a small 
+              dictionary of metadata parameters; do not use it for downloading data from a running plan.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    ---
 ------------  -----------------------------------------------------------------------------------------

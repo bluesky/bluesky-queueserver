@@ -187,6 +187,7 @@ _key_mapping = {
     "zmq_publish_console": "network/zmq_publish_console",
     "zmq_publish_info": "network/zmq_publish_info",
     "zmq_stream_device_progress": "network/zmq_stream_device_progress",
+    "zmq_stream_re_messages": "network/zmq_stream_re_messages",
     "redis_addr": "network/redis_addr",
     "redis_name_prefix": "network/redis_name_prefix",
     "ignore_invalid_plans": "startup/ignore_invalid_plans",
@@ -367,6 +368,12 @@ class Settings:
             value_default=args.zmq_stream_device_progress,
             value_config=self._get_value_from_config("zmq_stream_device_progress"),
             value_cli=self._args_existing("zmq_stream_device_progress"),
+        )
+
+        self._settings["zmq_stream_re_messages"] = self._get_param_boolean(
+            value_default=args.zmq_stream_re_messages,
+            value_config=self._get_value_from_config("zmq_stream_re_messages"),
+            value_cli=self._args_existing("zmq_stream_re_messages"),
         )
 
         redis_addr = self._get_param(

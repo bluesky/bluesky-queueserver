@@ -107,6 +107,22 @@ Device progress streaming is disabled by default and can be enabled using the
 ``network/zmq_stream_device_progress`` parameter in the config file.
 
 
+RunEngine messages (optional)
++++++++++++++++++++++++++++++
+
+While a plan is running, RE Manager may also stream serialized RunEngine messages (RunEngine
+``msg_hook`` updates) on the same socket under the ``re_message`` key. Each update contains the
+timestamp when the message was processed, the message ``command``, the name of the associated
+object (``obj``), and the message ``args``, ``kwargs`` and ``run`` key (all serialized to
+JSON-safe values)::
+
+  {"time": <timestamp>, "msg": {"re_message": <message-info>}}
+
+Message streaming is disabled by default and can be enabled using the
+``--zmq-stream-re-messages`` CLI parameter of ``start-re-manager`` or 
+``network/zmq_stream_re_messages`` parameter in the config file.
+
+
 The ``ReceiveSystemInfo`` class can be used in synchronous or thread-based applications to
 receive the streamed messages:
 

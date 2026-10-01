@@ -220,12 +220,6 @@ startup
 
   Parameters that control opening the worker environment and handling of startup files:
 
-  - ``keep_re`` - keep and use the instance of the Run Engine created in startup scripts (``true``)
-    or delete the instance of the Run Engine created in startup scripts and create a new instance
-    based on settings in :ref:`config_file_run_engine` (``false``). The built-in configuration
-    options for Run Engine are very limited and it is assumed that Run Engine is created in startup
-    scripts in production deployments.
-
   - ``startup_dir``, ``startup_profile``, ``startup_module`` and ``startup_script`` are mutually
     exclusive parameters that specify a path to startup directory, name of the startup IPython
     profile, name of installed Python module containing startup code or a path to startup script.

@@ -6007,7 +6007,7 @@ def test_zmq_api_re_metadata_01(re_manager_pc_copy, tmp_path):  # noqa: F811
 
     re_md = resp["re_metadata"]
     check_initial_metadata(re_md)
-    assert len(re_md) == 1, "Only two metadata keys should be present initially!"
+    assert len(re_md) == 1, "Only one metadata key should be present initially!"
 
     # Add the first 'count' plan
     resp, _ = zmq_request("queue_item_add", {"item": _plan1, "user": _user, "user_group": _user_group})

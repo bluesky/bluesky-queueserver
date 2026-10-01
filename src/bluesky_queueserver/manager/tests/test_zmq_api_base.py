@@ -963,6 +963,8 @@ RE.subscribe(cb_save_start_docs)
     ([{"test_key1": 10}, {"test_key2": 20}], {"test_key1": 10, "test_key2": 20}),
     # ' meta' - array. Merging dictionaries with identical keys.
     ([{"test_key": 10}, {"test_key": 20}], {"test_key": 10}),
+    # Queue Server-assigned item UID overrides a conflicting value in submitted metadata.
+    ({"queue_item_uid": "submitted_item_uid", "test_key": "test_value"}, {"test_key": "test_value"}),
 ])
 # fmt: on
 def test_zmq_api_queue_item_add_09(tmp_path, re_manager_cmd, meta_param, meta_saved):  # noqa: F811
@@ -977,6 +979,7 @@ def test_zmq_api_queue_item_add_09(tmp_path, re_manager_cmd, meta_param, meta_sa
     params1 = {"item": plan, "user": _user, "user_group": _user_group}
     resp1, _ = zmq_request("queue_item_add", params1)
     assert resp1["success"] is True, f"resp={resp1}"
+    item_uid = resp1["item"]["item_uid"]
 
     resp2, _ = zmq_request("status")
     assert resp2["items_in_queue"] == 1
@@ -1003,6 +1006,7 @@ def test_zmq_api_queue_item_add_09(tmp_path, re_manager_cmd, meta_param, meta_sa
     resp6, _ = zmq_request("history_get")
     history = resp6["items"]
     assert len(history) == 1
+    assert history[0]["item_uid"] == item_uid
 
     # Load saved start documents
     func_item = {"name": "unit_test_get_start_docs", "item_type": "function"}
@@ -1022,6 +1026,7 @@ def test_zmq_api_queue_item_add_09(tmp_path, re_manager_cmd, meta_param, meta_sa
     assert start_docs[0]["uid"] == uid
 
     assert start_docs[0]["scan_id"] == history[-1]["result"]["scan_ids"][0]
+    assert start_docs[0]["queue_item_uid"] == item_uid
     for key in meta_saved:
         assert key in start_docs[0], str(start_docs[0])
         assert meta_saved[key] == start_docs[0][key], str(start_docs[0])

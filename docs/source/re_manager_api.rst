@@ -1714,10 +1714,11 @@ Method        **'re_metadata'**
 ------------  -----------------------------------------------------------------------------------------
 Description   Request the current state of the runengine metadata dictionary. The metadata dictionary may be
               modified by plans during execution, or by external processes if the metadata is tied to an external
-              source like a Redis server. The API allows clients to monitor changes
-              in the metadata to display specific metadata key values to users. By default the bluesky Run Engine
-              will update the metadata to be an in-process dictionary with a 'versions' key that tracks the versions of bluesky and
-              related libraries. A transient 'scan_id' key is also added when a plan is run.
+              source like a Redis server. The API allows clients to monitor changes in the metadata.
+              RE Manager may be configured to return data under specific keys of ``RE.md``. By default, 
+              only ``/scan_id`` and ``/versions`` keys are returned. The defaults can be overwritten using
+              CLI parameter, environment variable or config file parameter. If the list of keys contain ``/``,
+              then full ``RE.md`` dictionary is returned.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    ---
 ------------  -----------------------------------------------------------------------------------------

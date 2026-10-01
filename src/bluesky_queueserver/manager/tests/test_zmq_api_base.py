@@ -6107,7 +6107,7 @@ def test_zmq_api_re_metadata_04_no_md(re_manager_pc_copy, tmp_path):  # noqa: F8
 
 def test_zmq_api_re_metadata_05_default_keys(re_manager_pc_copy, tmp_path):  # noqa: F811
     """
-    Tests `re_metadata` functionality when Run Engine does not have 'md' attribute.
+    Tests that `re_metadata` returns only the default keys and ignores additional keys.
     """
 
     _, pc_path = re_manager_pc_copy

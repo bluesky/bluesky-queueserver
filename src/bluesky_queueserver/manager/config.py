@@ -494,10 +494,11 @@ class Settings:
             self._settings["ipython_control_port"], "control"
         )
 
+        permitted_re_metadata_keys_ev = os.environ.get("QSERVER_PERMITTED_RE_METADATA_KEYS", None)
         self._settings["permitted_re_metadata_keys"] = self._get_param(
             value_default=args.permitted_re_metadata_keys,
             value_config=self._get_value_from_config("permitted_re_metadata_keys"),
-            value_ev=os.environ.get("QSERVER_PERMITTED_RE_METADATA_KEYS", "/").split(":"),
+            value_ev=permitted_re_metadata_keys_ev.split(":") if permitted_re_metadata_keys_ev else None,
             value_cli=self._args_existing("permitted_re_metadata_keys"),
         )
 

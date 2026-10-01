@@ -46,9 +46,7 @@ CLI Parameters
 --------------
 
 Comprehensive list of CLI parameters of RE Manager may be found in the documentation
-for :ref:`start_re_manager_cli`. Note, that not setting parameters such as ``--keep-re``
-or ``--use-persistent-metadata`` does not disable the respective features if
-they are enabled in the config file.
+for :ref:`start_re_manager_cli`.
 
 .. _config_environment_variables:
 
@@ -82,7 +80,7 @@ Several parameters can be passed to RE Manager using environment variables:
     environment variable. Explicitly listing security keys in the config file is not recommended.
 
   - ``QSERVER_PERMITTED_RE_METADATA_KEYS`` - a list of permitted RE metadata keys separated by
-    colons. Default value is '/' which permits reading of all metadata keys.
+    colons. Only the keys in the list are selected from ``RE.md`` and returned by *re_metadata* API.
 
   - ``QSERVER_USE_IPYTHON_KERNEL`` - tells RE Manager whether to start tbe worker in IPython mode
     (start IPython kernel) or use plain Python worker. Boolean value.
@@ -222,12 +220,6 @@ startup
 
   Parameters that control opening the worker environment and handling of startup files:
 
-  - ``keep_re`` - keep and use the instance of the Run Engine created in startup scripts (``true``)
-    or delete the instance of the Run Engine created in startup scripts and create a new instance
-    based on settings in :ref:`config_file_run_engine` (``false``). The built-in configuration
-    options for Run Engine are very limited and it is assumed that Run Engine is created in startup
-    scripts in production deployments.
-
   - ``startup_dir``, ``startup_profile``, ``startup_module`` and ``startup_script`` are mutually
     exclusive parameters that specify a path to startup directory, name of the startup IPython
     profile, name of installed Python module containing startup code or a path to startup script.
@@ -310,36 +302,13 @@ The parameters that define configuration of RE Worker.
 - ``ipython_shell_port``, ``ipython_iopub_port``, ``ipython_stdin_port``, ``ipython_hb_port``,
   ``ipython_control_port`` - 0MQ ports used by IPython kernel.
 
-- ``permitted_re_metadata_keys`` - list of metadata keys that are allowed to be included in the
-  messages sent by Run Engine callbacks. If the list is empty, all metadata keys are allowed.
-  The option can also be set using ``--permitted-re-metadata-keys`` CLI parameter, or the
-  ``QSERVER_PERMITTED_RE_METADATA_KEYS`` environment variable (colon-separated list of keys).
-
-.. _config_file_run_engine:
-
-run_engine
-++++++++++
-
-The parameters that define configuration of Run Engine created by RE Manager and some basic
-subscriptions for the Run Engine. The configuration options are very limited and primarily
-intended for use in quick demos. It is assumed that in production systems, Run Engine and
-its subscriptions are fully defined in startup scripts and this section is skipped completely.
-
-- ``use_persistent_metadata`` - use msgpack-based persistent storage for scan metadata
-  (``true/false``). The option can also be enabled using ``--use-persistent-metadata`` CLI
-  parameter.
-
-- ``kafka_server`` - bootstrap server to for Kafka Run Engine callback, e.g. ``127.0.0.1:9092``.
-  The value can be set using ``--kafka-server`` CLI parameter.
-
-- ``kafka_topic`` - kafka topic of Kafka Run Engine callback. The value can also be set using
-  ``--kafka-topic`` CLI parameter.
-
-- ``zmq_data_proxy_addr`` - address of ZMQ proxy used to publish data by ZMQ Run Engine callback.
-  The value can also be set using ``--zmq-data-proxy-addr`` CLI parameter.
-
-- ``databroker_config`` -  databroker configuration (e.g. ``'srx'``) used by Databroker
-  callback. The value can also be set using ``--databroker-config`` CLI parameter.
+- ``permitted_re_metadata_keys`` - list of metadata keys that are selected from ``RE.md`` and
+  returned by *re_metadata* API. The list must include at least one item. The list items can
+  include top level keys (e.g. ``/versions``) and nested keys (e.g. ``/versions/bluesky``).
+  If one of the items is ``/``, then all metadata is included. By default, only ``/scan_id``
+  and ``/versions`` are included. A list passed with the parameter overrides the default list.
+  The option can also be set using  ``--permitted-re-metadata-keys`` CLI parameter, 
+  or the ``QSERVER_PERMITTED_RE_METADATA_KEYS`` environment variable (colon-separated list of keys).
 
 
 Using Redis

@@ -1,28 +1,53 @@
 name: Unit Tests
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+    - id: set-matrix
+      env:
+        FULL_TESTS: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-tests') }}
+      run: |
+        if [[ "$FULL_TESTS" == "true" ]]; then
+          matrix='{
+            "use-ipykernel": [false, true],
+            "python-env": ["py311", "py312", "py313", "py314"],
+            "zmq-encoding": ["json", "msgpack"],
+            "splits": [3],
+            "group": [1, 2, 3],
+            "exclude": [
+              {"python-env": "py311", "zmq-encoding": "msgpack"},
+              {"python-env": "py312", "zmq-encoding": "msgpack"},
+              {"python-env": "py313", "zmq-encoding": "msgpack"}
+            ]
+          }'
+        else
+          matrix='{
+            "use-ipykernel": [true],
+            "python-env": ["py314"],
+            "zmq-encoding": ["json"],
+            "splits": [10],
+            "group": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+          }'
+        fi
+        echo "matrix=$(jq -c . <<< "$matrix")" >> "$GITHUB_OUTPUT"
 
+  build:
+    needs: config
     runs-on: ubuntu-latest
     strategy:
-      matrix:
-        use-ipykernel: [false, true]
-        python-env: ["py311", "py312", "py313", "py314"]
-        zmq-encoding: ["json", "msgpack"]
-        group: [1, 2, 3]
-        exclude:
-          - python-env: "py311"
-            zmq-encoding: "msgpack"
-          - python-env: "py312"
-            zmq-encoding: "msgpack"
-          - python-env: "py313"
-            zmq-encoding: "msgpack"
+      matrix: ${{ fromJSON(needs.config.outputs.matrix) }}
       fail-fast: false
 
     steps:
@@ -47,5 +72,5 @@ jobs:
         USE_ZMQ_ENCODING: ${{ matrix.zmq-encoding }}
       run: |
         # pytest -k test_ip_kernel_func -vvv
-        pixi run --environment=${{ matrix.python-env }} coverage run -m pytest -vv --splits 3 --group ${{ matrix.group }}
+        pixi run --environment=${{ matrix.python-env }} coverage run -m pytest -vv --splits ${{ matrix.splits }} --group ${{ matrix.group }}
         pixi run --environment=${{ matrix.python-env }} coverage report -m

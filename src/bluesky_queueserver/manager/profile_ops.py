@@ -3694,6 +3694,14 @@ _user_group_permission_schema = {
                         "type": "array",
                         "items": {"type": ["string", "null"]},
                     },
+                    "allowed_devices_read": {
+                        "type": "array",
+                        "items": {"type": ["string", "null"]},
+                    },
+                    "forbidden_devices_read": {
+                        "type": "array",
+                        "items": {"type": ["string", "null"]},
+                    },
                     "allowed_functions": {
                         "type": "array",
                         "items": {"type": ["string", "null"]},

@@ -22,7 +22,7 @@ jobs:
       run: |
         if [[ "$FULL_TESTS" == "true" ]]; then
           matrix='{
-            "use-ipykernel": [false, true],
+            "use-ipykernel": [true, false],
             "python-env": ["py311", "py312", "py313", "py314"],
             "zmq-encoding": ["json", "msgpack"],
             "splits": [3],
@@ -35,7 +35,7 @@ jobs:
           }'
         else
           matrix='{
-            "use-ipykernel": [true],
+            "use-ipykernel": [true, false],
             "python-env": ["py314"],
             "zmq-encoding": ["json"],
             "splits": [10],

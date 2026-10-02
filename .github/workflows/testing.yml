@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      full_tests:
+        description: "Run the full test suite"
+        type: boolean
+        default: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -18,7 +24,7 @@ jobs:
     steps:
     - id: set-matrix
       env:
-        FULL_TESTS: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-tests') }}
+        FULL_TESTS: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_tests) || contains(github.event.pull_request.labels.*.name, 'full-tests') }}
       run: |
         if [[ "$FULL_TESTS" == "true" ]]; then
           matrix='{

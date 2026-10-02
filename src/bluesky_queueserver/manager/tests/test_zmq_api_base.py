@@ -2277,6 +2277,43 @@ def test_zmq_api_script_upload_02(re_manager, scripts, updated_devs, updated_pla
         assert dev_name in devices_existing
         assert dev_name in devices_allowed
 
+
+_script_to_upload_enum = """
+import enum
+
+class UploadedMode(enum.IntEnum):
+    LOW = 1
+    HIGH = 2
+"""
+
+
+def test_zmq_api_script_upload_enum(re_manager):  # noqa: F811
+    """
+    'script_upload' API: load a script that defines an enumeration and make sure that the
+    enumeration is included in the list of existing enumerations and that 'enums_existing_uid'
+    is updated. The enumeration members and their real values must be preserved.
+    """
+    resp1, _ = zmq_request("environment_open")
+    assert resp1["success"] is True
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    status, _ = zmq_request("status")
+    enums_existing_uid = status["enums_existing_uid"]
+
+    resp2, _ = zmq_request("script_upload", params={"script": _script_to_upload_enum})
+    assert resp2["success"] is True, pprint.pformat(resp2)
+    result = wait_for_task_result(10, resp2["task_uid"])
+    assert result["return_value"] is None
+
+    status, _ = zmq_request("status")
+    assert status["enums_existing_uid"] != enums_existing_uid
+
+    resp3, _ = zmq_request("enums_existing")
+    assert resp3["success"] is True, resp3
+    enums_existing = resp3["enums_existing"]
+    assert "UploadedMode" in enums_existing
+    assert enums_existing["UploadedMode"]["items"] == {"LOW": 1, "HIGH": 2}
+
     resp6, _ = zmq_request("environment_close")
     assert resp6["success"] is True, f"resp={resp6}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)
@@ -3651,6 +3688,33 @@ def test_zmq_api_plans_existing_and_devices_existing_2_fail(re_manager):  # noqa
     assert "API request contains unsupported parameters: 'user_group'." in resp2["msg"]
     assert resp2["devices_existing"] == {}
     assert resp2["devices_existing_uid"] is None
+
+
+def test_zmq_api_enums_existing_1(re_manager):  # noqa F811
+    """
+    Basic call to the 'enums_existing' method.
+    """
+    resp, _ = zmq_request("enums_existing")
+    assert resp["success"] is True
+    assert resp["msg"] == ""
+    assert isinstance(resp["enums_existing"], dict)
+    assert isinstance(resp["enums_existing_uid"], str)
+
+    status, _ = zmq_request("status")
+    assert status["enums_existing_uid"] == resp["enums_existing_uid"]
+
+
+def test_zmq_api_enums_existing_2_fail(re_manager):  # noqa F811
+    """
+    Test that 'enums_existing' method fails if extra parameters are passed.
+    """
+    params = {"user_group": _user_group}  # 'user_group' is not supported by the method
+
+    resp, _ = zmq_request("enums_existing", params=params)
+    assert resp["success"] is False
+    assert "API request contains unsupported parameters: 'user_group'." in resp["msg"]
+    assert resp["enums_existing"] == {}
+    assert resp["enums_existing_uid"] is None
 
 
 # =======================================================================================

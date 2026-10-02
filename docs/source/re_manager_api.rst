@@ -244,6 +244,10 @@ Returns       **msg**: *str*
                  UID for the list of existing devices in RE Worker namespace. Similar to
                  **plans_allowed_uid**.
 
+              **enums_existing_uid**: *str*
+                 UID for the list of existing enumerations in RE Worker namespace. Similar to
+                 **plans_allowed_uid**.
+
               **'run_list_uid'** - UID of the list of the active runs. Monitor this UID and
                   load the updated list of active runs once the UID is changed.
 
@@ -504,6 +508,39 @@ Returns       **success**: *boolean*
 
               **devices_existing_uid**: *str* or *None*
                   UID of the list of existing devices, *None* if the request fails
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+
+.. _method_enums_existing:
+
+**'enums_existing'**
+^^^^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'enums_existing'**
+------------  -----------------------------------------------------------------------------------------
+Description   Returns a dictionary that contains information on the existing enumerations
+              (subclasses of ``enum.Enum``) in RE Worker namespace. Each enumeration description
+              contains the module name (*'module'*) and a dictionary that maps member names to
+              their values (*'items'*). Monitor *'enums_existing_uid'* status field and download
+              the list from the server only when the UID is changed.
+------------  -----------------------------------------------------------------------------------------
+Parameters    ---
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
+
+              **enums_existing**: *dict*
+                  the dictionary that contains information on the existing enumerations.
+                  Dictionary keys are enumeration names.
+
+              **enums_existing_uid**: *str* or *None*
+                  UID of the list of existing enumerations, *None* if the request fails
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================

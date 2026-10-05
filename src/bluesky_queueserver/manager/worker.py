@@ -500,7 +500,14 @@ class RunEngineWorker(Process):
             plan_func = plan_parsed["callable"]
             plan_args_parsed = plan_parsed["args"]
             plan_kwargs_parsed = plan_parsed["kwargs"]
-            plan_meta_parsed = {**plan_parsed["meta"], "queue_item_uid": plan_info["item_uid"]}
+            plan_meta_parsed = {**plan_parsed["meta"]}
+            submitted_queue_server_meta = plan_meta_parsed.get("queue_server")
+            if not isinstance(submitted_queue_server_meta, dict):
+                submitted_queue_server_meta = {}
+            plan_meta_parsed["queue_server"] = {
+                **submitted_queue_server_meta,
+                "queue_item_uid": plan_info["item_uid"],
+            }
 
             if self.re_state == "panicked":
                 raise RuntimeError(

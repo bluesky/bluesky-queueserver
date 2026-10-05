@@ -963,8 +963,17 @@ RE.subscribe(cb_save_start_docs)
     ([{"test_key1": 10}, {"test_key2": 20}], {"test_key1": 10, "test_key2": 20}),
     # ' meta' - array. Merging dictionaries with identical keys.
     ([{"test_key": 10}, {"test_key": 20}], {"test_key": 10}),
-    # Queue Server-assigned metadata overrides a conflicting value in submitted metadata.
+    # Queue Server-assigned metadata replaces a non-dict 'queue_server' value submitted in metadata.
     ({"queue_server": "submitted_value", "test_key": "test_value"}, {"test_key": "test_value"}),
+    # Queue Server-assigned metadata is merged into a submitted 'queue_server' dict: the conflicting
+    # 'queue_item_uid' is overridden, but other keys in the dict are preserved.
+    (
+        {
+            "queue_server": {"queue_item_uid": "submitted_item_uid", "custom_key": "custom_value"},
+            "test_key": "test_value",
+        },
+        {"test_key": "test_value"},
+    ),
 ])
 # fmt: on
 def test_zmq_api_queue_item_add_09(tmp_path, re_manager_cmd, meta_param, meta_saved):  # noqa: F811
@@ -1030,6 +1039,14 @@ def test_zmq_api_queue_item_add_09(tmp_path, re_manager_cmd, meta_param, meta_sa
     for key in meta_saved:
         assert key in start_docs[0], str(start_docs[0])
         assert meta_saved[key] == start_docs[0][key], str(start_docs[0])
+
+    # Other keys submitted in a nested 'queue_server' dict must survive the merge.
+    submitted_queue_server_meta = meta_param.get("queue_server") if isinstance(meta_param, dict) else None
+    if isinstance(submitted_queue_server_meta, dict):
+        for key, value in submitted_queue_server_meta.items():
+            if key == "queue_item_uid":
+                continue
+            assert start_docs[0]["queue_server"][key] == value, str(start_docs[0])
 
     # Close the environment.
     resp7, _ = zmq_request("environment_close")

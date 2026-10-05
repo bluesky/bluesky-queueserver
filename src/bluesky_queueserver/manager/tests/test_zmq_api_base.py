@@ -1032,8 +1032,8 @@ def test_zmq_api_queue_item_add_09(tmp_path, re_manager_cmd, meta_param, meta_sa
     assert start_docs[0]["scan_id"] == history[-1]["result"]["scan_ids"][0]
     assert start_docs[0]["queue_server"]["queue_item_uid"] == item_uid
     for key in meta_saved:
-        assert key in start_docs[0], str(start_docs[0])
-        assert meta_saved[key] == start_docs[0][key], str(start_docs[0])
+        assert key in start_docs[0], pprint.pformat(start_docs[0])
+        assert meta_saved[key] == start_docs[0][key], pprint.pformat(start_docs[0])
 
     # Other keys submitted in a nested 'queue_server' dict must survive the merge.
     submitted_queue_server_meta = meta_param.get("queue_server") if isinstance(meta_param, dict) else None
@@ -1041,7 +1041,7 @@ def test_zmq_api_queue_item_add_09(tmp_path, re_manager_cmd, meta_param, meta_sa
         for key, value in submitted_queue_server_meta.items():
             if key == "queue_item_uid":
                 continue
-            assert start_docs[0]["queue_server"][key] == value, str(start_docs[0])
+            assert start_docs[0]["queue_server"][key] == value, pprint.pformat(start_docs[0])
 
     # Close the environment.
     resp7, _ = zmq_request("environment_close")

@@ -963,8 +963,8 @@ RE.subscribe(cb_save_start_docs)
     ([{"test_key1": 10}, {"test_key2": 20}], {"test_key1": 10, "test_key2": 20}),
     # ' meta' - array. Merging dictionaries with identical keys.
     ([{"test_key": 10}, {"test_key": 20}], {"test_key": 10}),
-    # Queue Server-assigned item UID overrides a conflicting value in submitted metadata.
-    ({"queue_item_uid": "submitted_item_uid", "test_key": "test_value"}, {"test_key": "test_value"}),
+    # Queue Server-assigned metadata overrides a conflicting value in submitted metadata.
+    ({"queue_server": "submitted_value", "test_key": "test_value"}, {"test_key": "test_value"}),
 ])
 # fmt: on
 def test_zmq_api_queue_item_add_09(tmp_path, re_manager_cmd, meta_param, meta_saved):  # noqa: F811
@@ -1026,7 +1026,7 @@ def test_zmq_api_queue_item_add_09(tmp_path, re_manager_cmd, meta_param, meta_sa
     assert start_docs[0]["uid"] == uid
 
     assert start_docs[0]["scan_id"] == history[-1]["result"]["scan_ids"][0]
-    assert start_docs[0]["queue_item_uid"] == item_uid
+    assert start_docs[0]["queue_server"]["queue_item_uid"] == item_uid
     for key in meta_saved:
         assert key in start_docs[0], str(start_docs[0])
         assert meta_saved[key] == start_docs[0][key], str(start_docs[0])

@@ -964,7 +964,8 @@ RE.subscribe(cb_save_start_docs)
     # ' meta' - array. Merging dictionaries with identical keys.
     ([{"test_key": 10}, {"test_key": 20}], {"test_key": 10}),
     # Queue Server-assigned metadata replaces a non-dict 'queue_server' value submitted in metadata.
-    ({"queue_server": "submitted_value", "test_key": "test_value"}, {"test_key": "test_value"}),
+    ({"queue_server": "submitted_item_uid", "test_key": "test_value"}, {"test_key": "test_value"}),
+    ({"queue_server": {"queue_item_uid": 123}, "test_key": "test_value"}, {"test_key": "test_value"}),
     # Queue Server-assigned metadata is merged into a submitted 'queue_server' dict: the conflicting
     # 'queue_item_uid' is overridden, but other keys in the dict are preserved.
     (

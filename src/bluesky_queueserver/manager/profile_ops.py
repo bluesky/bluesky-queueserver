@@ -786,6 +786,67 @@ def devices_from_nspace(nspace):
     return devices
 
 
+def is_enum(obj: typing.Any) -> bool:
+    """
+    Returns ``True`` if the object is an enumeration (a subclass of ``enum.Enum``).
+    Standard base classes (``enum.Enum``, ``enum.IntEnum``, ``enum.Flag``, ``enum.IntFlag``)
+    and enumerations without members are not recognized as enumerations.
+    """
+    return (
+        inspect.isclass(obj)
+        and issubclass(obj, enum.Enum)
+        and obj not in (enum.Enum, enum.IntEnum, enum.Flag, enum.IntFlag, enum.StrEnum)
+        and len(obj.__members__) > 0
+    )
+
+
+def enums_from_nspace(nspace: dict[str, typing.Any]) -> dict[str, type[enum.Enum]]:
+    """
+    Extract enumerations (subclasses of ``enum.Enum``) from the namespace.
+
+    Parameters
+    ----------
+    nspace: dict
+        Namespace that may contain enumerations.
+
+    Returns
+    -------
+    dict(str: type[enum.Enum])
+        Dictionary that maps enumeration names to enumeration classes.
+    """
+    enums = {}
+    for name, obj in nspace.items():
+        if is_enum(obj):
+            enums[name] = obj
+
+    return enums
+
+
+def _enum_members_dict(enum_cls: type[enum.Enum]):
+    """
+    Return a dictionary that maps enumeration member names to their values. Values that are
+    not JSON/YAML-serializable primitives (``int``, ``float``, ``str``, ``bool`` or ``None``)
+    are converted to strings so that the result can be transmitted to clients and saved to disk.
+
+    Parameters
+    ----------
+    enum_cls: type
+        A subclass of ``enum.Enum``.
+
+    Returns
+    -------
+    dict
+        Dictionary that maps member names to serializable member values.
+    """
+    items = {}
+    for member in enum_cls:
+        value = member.value
+        if value is not None and not isinstance(value, (int, float, str, bool)):
+            value = str(value)
+        items[member.name] = value
+    return items
+
+
 def _get_nspace_object(object_name, *, objects_in_nspace, nspace=None):
     """
     Search for object in namespace by name (e.g. ``count`` or ``det1.val``).
@@ -1840,11 +1901,12 @@ def _expand_parameter_annotation(annotation, *, existing_devices, existing_plans
             item_list = sorted(item_list, key=lambda _: (_.upper(), _[0].islower()))
             annotation[section][k] = item_list
 
-    # Process enums: convert tuples to lists
+    # Process enums: convert tuples to lists (dicts that map member names to values are preserved)
     if "enums" in annotation:
         an_enums = annotation["enums"]
         for k in an_enums.keys():
-            an_enums[k] = list(an_enums[k])
+            if not isinstance(an_enums[k], dict):
+                an_enums[k] = list(an_enums[k])
 
     return annotation
 
@@ -2192,9 +2254,10 @@ def _process_annotation(encoded_annotation, *, ns=None):
         # Create types
         for item_name in items:
             # The dictionary value for the devices/plans may be a list(tuple) of items.
-            if not isinstance(items[item_name], (list, tuple)):
+            # The dictionary value for enums may also be a dict that maps member names to values.
+            if not isinstance(items[item_name], (list, tuple, dict)):
                 raise TypeError(
-                    f"The list of items ({item_name!r}: {items[item_name]!r}) must be a list of a tuple."
+                    f"The list of items ({item_name!r}: {items[item_name]!r}) must be a list, a tuple or a dict."
                 )
 
             if item_name not in annotation_type_str:
@@ -2213,14 +2276,15 @@ def _process_annotation(encoded_annotation, *, ns=None):
             # Replace all occurrences of the type name in the custom annotation.
             annotation_type_str = annotation_type_str.replace(item_name, type_name)
 
-            # Create temporary type as a subclass of enum.Enum, e.g.
-            # enum.Enum('Device', {'det1': 'det1', 'det2': 'det2', 'det3': 'det3'})
-            type_code = f"enum.Enum('{type_name}', {{"
-            for d in items[item_name]:
-                type_code += f"'{d}': '{d}',"
-            type_code += "})"
-
-            ns[type_name] = eval(type_code, ns, ns)
+            # Create temporary type as a subclass of enum.Enum. If the items are represented as
+            #   a list (or tuple), the member names and values are set equal to the item, e.g.
+            #   enum.Enum('Device', {'det1': 'det1', 'det2': 'det2', 'det3': 'det3'}). If the items
+            #   are represented as a dict, then the member names and real values are preserved, e.g.
+            #   enum.Enum('Mode', {'FAST': 1, 'SLOW': 2}).
+            if isinstance(items[item_name], dict):
+                ns[type_name] = enum.Enum(type_name, dict(items[item_name]))
+            else:
+                ns[type_name] = enum.Enum(type_name, {str(d): str(d) for d in items[item_name]})
 
         # Once all the types are created,  execute the code for annotation.
         annotation_type = eval(annotation_type_str, ns, ns)
@@ -3153,10 +3217,16 @@ def _process_plan(plan, *, existing_devices, existing_plans):
             if not desc and use_docstring and (p.name in doc_annotation["parameters"]):
                 desc = doc_annotation["parameters"][p.name].get("description", None)
             if not annotation and p.annotation is not inspect.Parameter.empty:
-                annotation = convert_annotation_to_string(p.annotation)
-                if annotation:
-                    # The case when annotation does exist (otherwise it is None)
-                    annotation = {"type": annotation}
+                if inspect.isclass(p.annotation) and issubclass(p.annotation, enum.Enum):
+                    # The parameter is annotated with an enumeration type. Encode the enumeration
+                    #   member names and their real values into the 'enums' section of the annotation.
+                    type_name = p.annotation.__name__
+                    annotation = {"type": type_name, "enums": {type_name: _enum_members_dict(p.annotation)}}
+                else:
+                    annotation = convert_annotation_to_string(p.annotation)
+                    if annotation:
+                        # The case when annotation does exist (otherwise it is None)
+                        annotation = {"type": annotation}
             if default and p.default is inspect.Parameter.empty:
                 # The default value in the decorator overrides the default value in the header,
                 #   not replace it. Therefore the default value is required in the header if
@@ -3167,8 +3237,11 @@ def _process_plan(plan, *, existing_devices, existing_plans):
                     f"there for a default value is required in the plan header."
                 )
             if not default and (p.default is not inspect.Parameter.empty):
+                # If the default value is an enumeration member, encode its value so that it can
+                #   be reconstructed during validation (the enumeration accepts the value).
+                default_value = p.default.value if isinstance(p.default, enum.Enum) else p.default
                 try:
-                    default = convert_expression_to_string(p.default, expression_role="default value")
+                    default = convert_expression_to_string(default_value, expression_role="default value")
                 except Exception as ex:
                     raise ValueError(f"Parameter '{p.name}': {ex}") from ex
 
@@ -3399,6 +3472,33 @@ def _prepare_devices(devices, *, max_depth=0, ignore_all_subdevices_if_one_fails
     return process_devices(max_depth=max_depth)
 
 
+def _prepare_enums(enums):
+    """
+    Prepare dictionary of existing enumerations for saving to a YAML file and sending to clients.
+    Each enumeration description preserves member names and their real values.
+
+    Parameters
+    ----------
+    enums: dict
+        Dictionary that maps enumeration names to enumeration classes
+        (as returned by ``enums_from_nspace``).
+
+    Returns
+    -------
+    dict
+        Dictionary that maps enumeration names to enumeration descriptions. Each description
+        is a dictionary with the keys ``module`` (the module where the enumeration is defined)
+        and ``items`` (a dictionary that maps member names to values).
+    """
+    prepared_enums = {}
+    for name, enum_cls in enums.items():
+        prepared_enums[name] = {
+            "module": getattr(enum_cls, "__module__", None),
+            "items": _enum_members_dict(enum_cls),
+        }
+    return prepared_enums
+
+
 def existing_plans_and_devices_from_nspace(*, nspace, max_depth=0, ignore_invalid_plans=False):
     """
     Generate lists of existing plans and devices from namespace. The namespace
@@ -3422,28 +3522,35 @@ def existing_plans_and_devices_from_nspace(*, nspace, max_depth=0, ignore_invali
         Dictionary of descriptions of existing plans
     existing_devices : dict
         Dictionary of descriptions of existing devices
+    existing_enums : dict
+        Dictionary of descriptions of existing enumerations
     plans_in_nspace : dict
         Dictionary of plans in namespace
     devices_in_nspace : dict
         Dictionary of devices in namespace
+    enums_in_nspace : dict
+        Dictionary of enumerations in namespace
     """
     logger.debug("Extracting existing plans and devices from the namespace ...")
 
     plans_in_nspace = plans_from_nspace(nspace)
     devices_in_nspace = devices_from_nspace(nspace)
+    enums_in_nspace = enums_from_nspace(nspace)
 
     existing_devices = _prepare_devices(devices_in_nspace, max_depth=max_depth)
     existing_plans = _prepare_plans(
         plans_in_nspace, existing_devices=existing_devices, ignore_invalid_plans=ignore_invalid_plans
     )
+    existing_enums = _prepare_enums(enums_in_nspace)
 
-    return existing_plans, existing_devices, plans_in_nspace, devices_in_nspace
+    return existing_plans, existing_devices, existing_enums, plans_in_nspace, devices_in_nspace, enums_in_nspace
 
 
 def save_existing_plans_and_devices(
     *,
     existing_plans,
     existing_devices,
+    existing_enums=None,
     file_dir=None,
     file_name=None,
     overwrite=False,
@@ -3458,6 +3565,9 @@ def save_existing_plans_and_devices(
         dictionary of existing plans (key - plan name, value - plan description)
     existing_devices : dict
         dictionary of existing devices (key - device name, value - device description)
+    existing_enums : dict or None
+        dictionary of existing enumerations (key - enumeration name, value - enumeration description).
+        If ``None``, then an empty dictionary is saved.
     startup_script_path : str or None
         name of the startup script
     file_dir : str or None
@@ -3471,6 +3581,7 @@ def save_existing_plans_and_devices(
     existing_plans_and_devices = {
         "existing_plans": existing_plans,
         "existing_devices": existing_devices,
+        "existing_enums": existing_enums or {},
     }
 
     file_path = os.path.join(file_dir, file_name)
@@ -3482,7 +3593,7 @@ def save_existing_plans_and_devices(
         yaml.dump(existing_plans_and_devices, stream)
 
 
-def load_existing_plans_and_devices(path_to_file=None):
+def load_existing_plans_and_devices(path_to_file=None, *, return_enums=False):
     """
     Load the lists of allowed plans and devices from YAML file. Returns empty lists
     if `path_to_file` is None or "" or the file does not exist or corrupt.
@@ -3491,20 +3602,31 @@ def load_existing_plans_and_devices(path_to_file=None):
     ----------
     path_to_file: str on None
         Full path to .yaml file that contains the lists.
+    return_enums: boolean
+        If ``True``, then the dictionary of existing enumerations is also returned as the third
+        element of the tuple. If ``False`` (default), then only the lists of existing plans and
+        devices are returned (for backward compatibility).
 
     Returns
     -------
-    (dict, dict)
-        List of allowed plans and list of allowed devices.
+    (dict, dict) or (dict, dict, dict)
+        List of existing plans and list of existing devices (and the dictionary of existing
+        enumerations if ``return_enums`` is ``True``).
     """
     msg = "List of plans and devices is not loaded."
+
+    def _return(existing_plans, existing_devices, existing_enums):
+        if return_enums:
+            return existing_plans, existing_devices, existing_enums
+        return existing_plans, existing_devices
+
     if not path_to_file:
         logger.warning("%s File path is not specified.", msg)
-        return {}, {}
+        return _return({}, {}, {})
 
     if not os.path.isfile(path_to_file):
         logger.warning("%s File '%s' does not exist.", msg, path_to_file)
-        return {}, {}
+        return _return({}, {}, {})
 
     with open(path_to_file) as stream:
         try:
@@ -3515,12 +3637,13 @@ def load_existing_plans_and_devices(path_to_file=None):
 
     if not isinstance(existing_plans_and_devices, dict):
         logger.warning("%s The file '%s' has invalid format or empty.", msg, path_to_file)
-        return {}, {}
+        return _return({}, {}, {})
 
     existing_plans = existing_plans_and_devices.get("existing_plans", {})
     existing_devices = existing_plans_and_devices.get("existing_devices", {})
+    existing_enums = existing_plans_and_devices.get("existing_enums", {})
 
-    return existing_plans, existing_devices
+    return _return(existing_plans, existing_devices, existing_enums)
 
 
 def compare_existing_plans_and_devices(
@@ -3529,6 +3652,8 @@ def compare_existing_plans_and_devices(
     existing_devices,
     existing_plans_ref,
     existing_devices_ref,
+    existing_enums=None,
+    existing_enums_ref=None,
 ):
     """
     Compares the lists of existing plans and devices with the reference lists. Returns ``False``
@@ -3545,6 +3670,10 @@ def compare_existing_plans_and_devices(
         The reference list (dictionary) of descriptions of the existing plans.
     existing_devices_ref : dict or None
         The reference list (dictionary) of descriptions of the existing devices.
+    existing_enums : dict or None
+        The updated list (dictionary) of descriptions of the existing enumerations.
+    existing_enums_ref : dict or None
+        The reference list (dictionary) of descriptions of the existing enumerations.
 
     Returns
     -------
@@ -3552,7 +3681,11 @@ def compare_existing_plans_and_devices(
         ``True`` - the lists are equal, ``False`` otherwise.
     """
     try:
-        lists_equal = (existing_plans == existing_plans_ref) and (existing_devices == existing_devices_ref)
+        lists_equal = (
+            (existing_plans == existing_plans_ref)
+            and (existing_devices == existing_devices_ref)
+            and ((existing_enums or {}) == (existing_enums_ref or {}))
+        )
     except Exception as ex:
         # If the lists (dictionaries) of plans and devices can not be compared, then save the new lists.
         #   This issue should be investigated if it is repeated regularly.
@@ -3566,8 +3699,10 @@ def update_existing_plans_and_devices(
     path_to_file,
     existing_plans,
     existing_devices,
+    existing_enums=None,
     existing_plans_ref=None,
     existing_devices_ref=None,
+    existing_enums_ref=None,
     always_save=False,
 ):
     """
@@ -3594,10 +3729,14 @@ def update_existing_plans_and_devices(
         The updated list (dictionary) of descriptions of the existing plans.
     existing_devices : dict
         The updated list (dictionary) of descriptions of the existing devices.
+    existing_enums : dict or None
+        The updated list (dictionary) of descriptions of the existing enumerations.
     existing_plans_ref : dict or None
         The reference list (dictionary) of descriptions of the existing plans.
     existing_devices_ref : dict or None
         The reference list (dictionary) of descriptions of the existing devices.
+    existing_enums_ref : dict or None
+        The reference list (dictionary) of descriptions of the existing enumerations.
     always_save : boolean
         If ``False`` then save lists of plans and devices only if it is different
         from reference lists. Always save the lists to disk if ``True``.
@@ -3609,18 +3748,22 @@ def update_existing_plans_and_devices(
         lists or if ``always_save`` is ``True``.
     """
     if not always_save:
-        if (existing_plans_ref is None) or (existing_devices_ref is None):
-            ep, ed = load_existing_plans_and_devices(path_to_file)
+        if (existing_plans_ref is None) or (existing_devices_ref is None) or (existing_enums_ref is None):
+            ep, ed, ee = load_existing_plans_and_devices(path_to_file, return_enums=True)
         if existing_plans_ref is not None:
             ep = existing_plans_ref
         if existing_devices_ref is not None:
             ed = existing_devices_ref
+        if existing_enums_ref is not None:
+            ee = existing_enums_ref
 
         changes_exist = not compare_existing_plans_and_devices(
             existing_plans=existing_plans,
             existing_devices=existing_devices,
+            existing_enums=existing_enums,
             existing_plans_ref=ep,
             existing_devices_ref=ed,
+            existing_enums_ref=ee,
         )
 
     else:
@@ -3655,6 +3798,7 @@ def update_existing_plans_and_devices(
                 save_existing_plans_and_devices(
                     existing_plans=existing_plans,
                     existing_devices=existing_devices,
+                    existing_enums=existing_enums,
                     file_dir=os.path.dirname(path_to_file),
                     file_name=os.path.basename(path_to_file),
                     overwrite=True,

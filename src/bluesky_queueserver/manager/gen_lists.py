@@ -215,13 +215,14 @@ class GenLists(multiprocessing.Process):
                     startup_script_path=startup_script_path,
                 )
 
-            existing_plans, existing_devices, _, _ = existing_plans_and_devices_from_nspace(
+            existing_plans, existing_devices, existing_enums, _, _, _ = existing_plans_and_devices_from_nspace(
                 nspace=nspace, ignore_invalid_plans=ignore_invalid_plans, max_depth=device_max_depth
             )
 
             save_existing_plans_and_devices(
                 existing_plans=existing_plans,
                 existing_devices=existing_devices,
+                existing_enums=existing_enums,
                 file_dir=file_dir,
                 file_name=file_name,
                 overwrite=overwrite,

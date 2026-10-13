@@ -37,6 +37,7 @@ from bluesky_queueserver.manager.profile_ops import (
     _get_nspace_object,
     _is_object_name_in_list,
     _prepare_devices,
+    _prepare_enums,
     _prepare_plans,
     _process_annotation,
     _process_default_value,
@@ -49,6 +50,7 @@ from bluesky_queueserver.manager.profile_ops import (
     clear_registered_items,
     construct_parameters,
     devices_from_nspace,
+    enums_from_nspace,
     existing_plans_and_devices_from_nspace,
     extract_script_root_path,
     format_text_descriptions,
@@ -3520,7 +3522,7 @@ def _create_schema_for_testing(annotation_type):
         ({"type": "str", "devices": {"Device1": []}}, str, False, False, False, False,
          r"Type 'Device1' is defined in the annotation, but not used"),
         ({"type": "Device1", "devices": {"Device1": None}}, str, False, False, False, False,
-         r"The list of items \('Device1': None\) must be a list of a tuple"),
+         r"The list of items \('Device1': None\) must be a list, a tuple or a dict"),
     ])
 # fmt: on
 def test_process_annotation_1(
@@ -5228,7 +5230,9 @@ def test_prepare_plan_5(plan, from_nspace):
     nspace = load_profile_collection(pc_path)
     exec(_script_test_plan_5, nspace, nspace)
 
-    existing_plans, existing_devices, plans, devices = existing_plans_and_devices_from_nspace(nspace=nspace)
+    existing_plans, existing_devices, existing_enums, plans, devices, enums = existing_plans_and_devices_from_nspace(
+        nspace=nspace
+    )
 
     nspace2 = load_profile_collection(pc_path)
     exec(_script_test_plan_5, nspace2, nspace2)
@@ -7181,6 +7185,107 @@ def test_validate_plan_2(allowed_plans, success):
     """
     success_out, errmsg_out = validate_plan({}, allowed_plans=allowed_plans, allowed_devices=None)
     assert success_out is success
+
+
+# fmt: off
+_enum_script = """
+import enum
+
+class ModeStr(enum.Enum):
+    FAST = "fast"
+    SLOW = "slow"
+
+class ModeInt(enum.IntEnum):
+    LOW = 1
+    HIGH = 2
+
+class _NotAnEnum:
+    pass
+"""
+# fmt: on
+
+
+def test_enums_from_nspace_1():
+    """
+    ``enums_from_nspace`` and ``_prepare_enums``: basic test.
+    """
+    nspace = {}
+    exec(_enum_script, nspace, nspace)
+
+    enums = enums_from_nspace(nspace)
+    assert set(enums.keys()) == {"ModeStr", "ModeInt"}
+
+    prepared = _prepare_enums(enums)
+    assert prepared["ModeStr"]["items"] == {"FAST": "fast", "SLOW": "slow"}
+    assert prepared["ModeInt"]["items"] == {"LOW": 1, "HIGH": 2}
+    assert "module" in prepared["ModeStr"]
+
+
+def test_existing_plans_and_devices_from_nspace_enums():
+    """
+    ``existing_plans_and_devices_from_nspace`` returns the dictionary of existing enumerations.
+    """
+    nspace = {}
+    exec(_enum_script, nspace, nspace)
+
+    _, _, existing_enums, _, _, enums_in_nspace = existing_plans_and_devices_from_nspace(nspace=nspace)
+    assert set(existing_enums.keys()) == {"ModeStr", "ModeInt"}
+    assert existing_enums["ModeInt"]["items"] == {"LOW": 1, "HIGH": 2}
+    assert set(enums_in_nspace.keys()) == {"ModeStr", "ModeInt"}
+
+
+class _PlanModeInt(enum.IntEnum):
+    LOW = 1
+    HIGH = 2
+
+
+class _PlanModeStr(enum.Enum):
+    FAST = "fast"
+    SLOW = "slow"
+
+
+# fmt: off
+@pytest.mark.parametrize("enum_cls, plan_value, success", [
+    (_PlanModeInt, 1, True),
+    (_PlanModeInt, 2, True),
+    (_PlanModeInt, 5, False),
+    (_PlanModeStr, "fast", True),
+    (_PlanModeStr, "slow", True),
+    (_PlanModeStr, "unknown", False),
+])
+# fmt: on
+def test_enum_typed_plan_argument(enum_cls, plan_value, success):
+    """
+    Enum-typed plan arguments are validated against the known enumeration (preserving real values).
+    """
+
+    def _enum_plan(mode: enum_cls):
+        yield from []
+
+    plan_info = _process_plan(_enum_plan, existing_devices={}, existing_plans={})
+
+    # The enumeration is encoded in the 'enums' section preserving member names and real values.
+    annotation = plan_info["parameters"][0]["annotation"]
+    assert enum_cls.__name__ in annotation["enums"]
+    assert annotation["enums"][enum_cls.__name__] == {m.name: m.value for m in enum_cls}
+
+    allowed_plans = {"existing": plan_info}
+    plan = {"name": "existing", "args": [], "kwargs": {"mode": plan_value}}
+    success_out, errmsg_out = validate_plan(plan, allowed_plans=allowed_plans, allowed_devices=None)
+    assert success_out is success, f"errmsg: {errmsg_out}"
+
+
+def test_enum_typed_plan_argument_default():
+    """
+    Enum-typed plan argument with an enumeration member as the default value.
+    """
+
+    def _enum_plan(mode: _PlanModeInt = _PlanModeInt.HIGH):
+        yield from []
+
+    plan_info = _process_plan(_enum_plan, existing_devices={}, existing_plans={})
+    # The default is encoded as the member value.
+    assert plan_info["parameters"][0]["default"] == repr(_PlanModeInt.HIGH.value)
 
 
 @parameter_annotation_decorator(

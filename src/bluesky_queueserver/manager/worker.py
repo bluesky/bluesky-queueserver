@@ -160,6 +160,7 @@ class RunEngineWorker(Process):
         self._config_dict = config or {}
         self._existing_plans_and_devices_changed = False
         self._existing_plans, self._existing_devices = {}, {}
+        self._existing_enums = {}
         self._allowed_plans, self._allowed_devices = {}, {}
 
         self._allowed_items_lock = None  # threading.Lock()
@@ -813,10 +814,12 @@ class RunEngineWorker(Process):
         if self._update_existing_plans_devices_on_disk in options:
             with self._existing_items_lock:
                 existing_plans, existing_devices = self._existing_plans, self._existing_devices
+                existing_enums = self._existing_enums
             update_existing_plans_and_devices(
                 path_to_file=path_pd,
                 existing_plans=existing_plans,
                 existing_devices=existing_devices,
+                existing_enums=existing_enums,
             )
 
     def _load_script_into_environment(self, *, script, update_lists, update_re):
@@ -863,13 +866,15 @@ class RunEngineWorker(Process):
                 ignore_invalid_plans=self._config_dict["ignore_invalid_plans"],
                 max_depth=self._config_dict["device_max_depth"],
             )
-            existing_plans, existing_devices, plans_in_nspace, devices_in_nspace = epd
+            existing_plans, existing_devices, existing_enums, plans_in_nspace, devices_in_nspace, _ = epd
 
             self._existing_plans_and_devices_changed = not compare_existing_plans_and_devices(
                 existing_plans=existing_plans,
                 existing_devices=existing_devices,
+                existing_enums=existing_enums,
                 existing_plans_ref=self._existing_plans,
                 existing_devices_ref=self._existing_devices,
+                existing_enums_ref=self._existing_enums,
             )
 
             # Dictionaries of references to plans and devices from the namespace (may change even
@@ -881,6 +886,7 @@ class RunEngineWorker(Process):
                 # Descriptions of existing plans and devices
                 with self._existing_items_lock:
                     self._existing_plans, self._existing_devices = existing_plans, existing_devices
+                    self._existing_enums = existing_enums
                 self._generate_lists_of_allowed_plans_and_devices()
                 self._update_existing_pd_file(options=("ALWAYS",))
 
@@ -1006,9 +1012,11 @@ class RunEngineWorker(Process):
         """
         with self._existing_items_lock:
             existing_plans, existing_devices = self._existing_plans, self._existing_devices
+            existing_enums = self._existing_enums
         msg_out = {
             "existing_plans": existing_plans,
             "existing_devices": existing_devices,
+            "existing_enums": existing_enums,
             "user_group_permissions": self._user_group_permissions,
         }
         self._existing_plans_and_devices_changed = False
@@ -1464,7 +1472,7 @@ class RunEngineWorker(Process):
                 ignore_invalid_plans=self._config_dict["ignore_invalid_plans"],
                 max_depth=self._config_dict["device_max_depth"],
             )
-            existing_plans, existing_devices, plans_in_nspace, devices_in_nspace = epd
+            existing_plans, existing_devices, existing_enums, plans_in_nspace, devices_in_nspace, _ = epd
 
             # self._existing_plans_and_devices_changed = not compare_existing_plans_and_devices(
             #     existing_plans = existing_plans,
@@ -1476,6 +1484,7 @@ class RunEngineWorker(Process):
             # Descriptions of existing plans and devices
             with self._existing_items_lock:
                 self._existing_plans, self._existing_devices = existing_plans, existing_devices
+                self._existing_enums = existing_enums
 
             # Dictionaries of references to plans and devices from the namespace
             self._plans_in_nspace = plans_in_nspace

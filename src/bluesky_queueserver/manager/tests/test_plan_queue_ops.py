@@ -1687,6 +1687,60 @@ def test_add_to_history_functions():
 
     asyncio.run(testing())
 
+# fmt: off
+@pytest.mark.parametrize("kwargs, expected", [
+    ({}, [{"name": "a"}, {"name": "b"}, {"name": "c"}, {"name": "d"}]),
+    ({"limit": 2}, [{"name": "a"}, {"name": "b"}]),
+    ({"offset": 1, "limit": 2}, [{"name": "b"}, {"name": "c"}]),
+    ({"offset": 3, "limit": 10}, [{"name": "d"}]),
+    ({"offset": 10, "limit": 2}, []),
+    ({"limit": 0}, []),
+    ({"order": "desc", "limit": 2}, [{"name": "d"}, {"name": "c"}]),
+    ({"order": "desc", "offset": 1, "limit": 2}, [{"name": "c"}, {"name": "b"}]),
+    ({"order": "desc", "offset": 3, "limit": 5}, [{"name": "a"}]),
+    ({"order": "desc", "offset": 4, "limit": 5}, []),
+])
+# fmt: on
+def test_get_history_page(kwargs, expected):
+    """
+    Test for ``PlanQueueOperations.get_history_page()`` method.
+    """
+
+    async def testing():
+        async with PQ() as pq:
+            plans = [{"name": "a"}, {"name": "b"}, {"name": "c"}, {"name": "d"}]
+            for plan in plans:
+                await pq._add_to_history(plan)
+
+            plan_history, plan_history_uid, items_in_history = await pq.get_history_page(**kwargs)
+
+            assert plan_history == expected
+            assert plan_history_uid == pq.plan_history_uid
+            assert items_in_history == len(plans)
+
+    asyncio.run(testing())
+
+
+# fmt: off
+@pytest.mark.parametrize("kwargs, error_msg", [
+    ({"offset": "1"}, "The 'offset' parameter must be an integer"),
+    ({"offset": -1}, "The 'offset' parameter must be non-negative"),
+    ({"limit": "2"}, "The 'limit' parameter must be an integer"),
+    ({"limit": -1}, "The 'limit' parameter must be non-negative"),
+    ({"order": "newest"}, "The 'order' parameter must be 'asc' or 'desc'"),
+])
+# fmt: on
+def test_get_history_page_failing(kwargs, error_msg):
+    """
+    Test parameter validation for ``PlanQueueOperations.get_history_page()``.
+    """
+
+    async def testing():
+        async with PQ() as pq:
+            with pytest.raises(ValueError, match=error_msg):
+                await pq.get_history_page(**kwargs)
+
+    asyncio.run(testing())
 
 # fmt: off
 @pytest.mark.parametrize("new_size, item_uid, exp_size, new_items", [

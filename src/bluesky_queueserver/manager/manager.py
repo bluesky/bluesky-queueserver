@@ -2823,16 +2823,33 @@ class RunEngineManager(Process):
         """
         logger.info("Returning plan history ...")
         try:
-            supported_param_names = []
+            supported_param_names = ["offset", "limit", "order"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
-            plan_history, plan_history_uid = await self._plan_queue.get_history()
+            offset = request.get("offset", 0)
+            limit = request.get("limit", None)
+            order = request.get("order", "asc")
+
+            plan_history, plan_history_uid, items_in_history = await self._plan_queue.get_history_page(
+                offset=offset, limit=limit, order=order
+            )
+
             success, msg = True, ""
         except Exception as ex:
             success, msg = False, f"Error: {ex}"
             plan_history, plan_history_uid = [], ""
+            items_in_history = 0
+            offset, limit, order = 0, None, "asc"
 
-        return {"success": success, "msg": msg, "items": plan_history, "plan_history_uid": plan_history_uid}
+        return {
+            "success": success,
+            "msg": msg,
+            "items": plan_history,
+            "plan_history_uid": plan_history_uid,
+            "items_in_history": items_in_history,
+            "offset": offset,
+            "limit": limit,
+            "order": order}
 
     async def _history_clear_handler(self, request):
         """

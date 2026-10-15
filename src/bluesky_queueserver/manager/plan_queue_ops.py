@@ -1506,6 +1506,49 @@ class PlanQueueOperations:
         all_plans_json = await self._r_pool.lrange(self._name_plan_history, 0, -1)
         return [json.loads(_) for _ in all_plans_json], self._plan_history_uid
 
+    async def _get_history_page(self, *, offset=0, limit=None, order="asc"):
+        history_size = await self._get_history_size()
+        self._history_size = history_size
+
+        if not isinstance(offset, int):
+            raise ValueError(f"The 'offset' parameter must be an integer: offset={offset!r}")
+
+        if offset < 0:
+            raise ValueError(f"The 'offset' parameter must be non-negative: offset={offset!r}")
+
+        if limit is not None:
+            if not isinstance(limit, int):
+                raise ValueError(f"The 'limit' parameter must be an integer: limit={limit!r}")
+            if limit < 0:
+                raise ValueError(f"The 'limit' parameter must be non-negative: limit={limit!r}")
+
+        if order not in ("asc", "desc"):
+            raise ValueError(f"The 'order' parameter must be 'asc' or 'desc': order={order!r}")
+
+        if limit == 0 or offset >= history_size:
+            return [], self._plan_history_uid, history_size
+
+        if order == "asc":
+            start = offset
+            end = -1 if limit is None else offset + limit - 1
+            reverse = False
+        else:
+            start = 0 if limit is None else max(history_size - offset - limit, 0)
+            end = history_size - offset - 1
+            reverse = True
+
+        plan_history_json = await self._r_pool.lrange(self._name_plan_history, start, end)
+        plan_history = [json.loads(_) for _ in plan_history_json]
+
+        if reverse:
+            plan_history.reverse()
+
+        return plan_history, self._plan_history_uid, history_size
+
+    async def get_history_page(self, *, offset=0, limit=None, order="asc"):
+        async with self._lock:
+            return await self._get_history_page(offset=offset, limit=limit, order=order)
+
     async def get_history(self):
         """
         Get the list of all items in the plan history. The first element of the list is

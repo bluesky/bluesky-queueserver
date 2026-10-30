@@ -78,7 +78,6 @@ from .common import (
     reset_sys_modules,  # noqa: F401
 )
 
-python_version = sys.version_info  # Can be compare to tuples (such as 'python_version >= (3, 9)')
 pydantic_version_major = version.parse(pydantic.__version__).major
 
 
@@ -5992,15 +5991,6 @@ def test_verify_default_profile_collection():
     #   If there is a mismatch, the printed difference is too large to be useful.
     assert len(plans) == len(existing_plans)
     for key in plans.keys():
-        if python_version < (3, 9) and key == "marked_up_count":
-            # The test will fail for Python 3.8 and earlier because of difference in representation
-            #   of 'typing.Union[float, NoneType]' and 'typing.Optional[float]'. Python 3.8 and
-            #   earlier converts 'typing.Optional[float]' to 'typing.Union[float, NoneType]' and
-            #   Python 3.9 is using 'typing.Optional[float]'. The condition may be removed
-            #   once there is no need to support Python 3.8 and earlier.
-            # NOTE: this limitation only affects this test, not functionality.
-            # TODO: remove this condition once Python 3.8 is not supported.
-            continue
         assert plans[key] == existing_plans[key]
 
     assert devices == existing_devices

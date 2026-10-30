@@ -9,14 +9,11 @@ version = "0.0.25"
 lint = "pre-commit run --all-files"
 
 [dependencies]
-python = "*"
+python = "<3.15"
 pip = "*"
 
 [pypi-dependencies]
 bluesky-queueserver = { path = ".", editable = true, extras = ["dev"] }
-
-#[feature.default.dependencies]
-#python = "3.14"
 
 [feature.py311.dependencies]
 python = "3.11.*"
@@ -36,4 +33,3 @@ py311 = { features = ["py311"] }
 py312 = { features = ["py312"] }
 py313 = { features = ["py313"] }
 py314 = { features = ["py314"] }
-

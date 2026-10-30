@@ -2250,7 +2250,7 @@ existing_plans:
         value: 1
       name: detectors
     - annotation:
-        type: typing.Union[__MOVABLE__, collections.abc.Sequence[typing.Any]]
+        type: __MOVABLE__ | collections.abc.Sequence[typing.Any]
       convert_device_names: true
       description: "For one dimension, ``motor, [point1, point2, ....]``.\nIn general:\n\
         \n.. code-block:: python\n\n    motor1, [point1, point2, ...],\n    motor2,\
@@ -2422,7 +2422,7 @@ existing_plans:
     name: mv
     parameters:
     - annotation:
-        type: typing.Union[__MOVABLE__, typing.Any]
+        type: __MOVABLE__ | typing.Any
       convert_device_names: true
       description: device1, value1, device2, value2, ...
       kind:
@@ -2461,7 +2461,7 @@ existing_plans:
     name: mvr
     parameters:
     - annotation:
-        type: typing.Union[__MOVABLE__, typing.Any]
+        type: __MOVABLE__ | typing.Any
       convert_device_names: true
       description: device1, value1, device2, value2, ...
       kind:

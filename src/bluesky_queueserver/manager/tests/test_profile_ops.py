@@ -1,3 +1,4 @@
+import ast
 import collections.abc
 import copy
 import enum
@@ -5962,6 +5963,53 @@ def test_update_existing_plans_and_devices_4(load_ref_from_file):
     assert changes_detected is True
 
 
+def _normalize_union_syntax(type_str):
+    """
+    Replace ``typing.Union[A, B]`` and ``typing.Optional[A]`` with ``A | B`` and ``A | None``.
+    Python 3.14+ represents all unions using ``|``, Python 3.13 and older use ``typing.Union``.
+
+    NOTE: remove this function once support for Python 3.13 is dropped.
+    """
+
+    class UnionTransformer(ast.NodeTransformer):
+        def visit_Subscript(self, node):
+            self.generic_visit(node)
+            v = node.value
+            is_union = (
+                isinstance(v, ast.Attribute)
+                and isinstance(v.value, ast.Name)
+                and v.value.id == "typing"
+                and v.attr in ("Union", "Optional")
+            )
+            if not is_union:
+                return node
+
+            args = list(node.slice.elts) if isinstance(node.slice, ast.Tuple) else [node.slice]
+            if v.attr == "Optional":
+                args.append(ast.Constant(None))
+            args = [ast.Constant(None) if isinstance(_, ast.Name) and _.id == "NoneType" else _ for _ in args]
+
+            expr = args[0]
+            for arg in args[1:]:
+                expr = ast.BinOp(left=expr, op=ast.BitOr(), right=arg)
+            return expr
+
+    return ast.unparse(UnionTransformer().visit(ast.parse(type_str, mode="eval")))
+
+
+def _normalize_plan_annotations(plan):
+    """
+    Returns a copy of the plan description with union syntax of parameter types normalized.
+
+    NOTE: remove this function once support for Python 3.13 is dropped.
+    """
+    plan = copy.deepcopy(plan)
+    for p in plan.get("parameters", []):
+        if "type" in p.get("annotation", {}):
+            p["annotation"]["type"] = _normalize_union_syntax(p["annotation"]["type"])
+    return plan
+
+
 def test_verify_default_profile_collection():
     """
     Verify if the list of existing plans and devices matches current default profile collection.
@@ -5991,7 +6039,7 @@ def test_verify_default_profile_collection():
     #   If there is a mismatch, the printed difference is too large to be useful.
     assert len(plans) == len(existing_plans)
     for key in plans.keys():
-        assert plans[key] == existing_plans[key]
+        assert _normalize_plan_annotations(plans[key]) == _normalize_plan_annotations(existing_plans[key])
 
     assert devices == existing_devices
 

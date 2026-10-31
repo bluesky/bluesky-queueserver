@@ -2,7 +2,12 @@ import uuid
 
 import pytest
 
-from bluesky_queueserver.manager.plan_monitoring import CallbackRegisterRun, RunList, WatcherStreamManager
+from bluesky_queueserver.manager.plan_monitoring import (
+    CallbackRegisterRun,
+    MsgHookStreamManager,
+    RunList,
+    WatcherStreamManager,
+)
 from bluesky_queueserver.manager.profile_ops import (
     get_default_startup_dir,
     load_profile_collection,
@@ -445,3 +450,127 @@ slow_motor.delay = 0.3
 
     # The target should be 1 (where we moved the motor)
     assert update["target"] == 1
+
+
+def _get_message_payloads(mock_queue):
+    """Extract only message payloads from the mock queue (info channel, 're_message' key)."""
+    results = []
+    for msg in mock_queue.messages:
+        if msg.get("channel") == "info" and isinstance(msg.get("msg"), dict):
+            payload = msg["msg"].get("re_message")
+            if isinstance(payload, dict):
+                results.append(payload)
+    return results
+
+
+class _MockMsg:
+    """A simple mock for a bluesky ``Msg`` namedtuple."""
+
+    def __init__(self, command, obj=None, args=(), kwargs=None, run=None):
+        self.command = command
+        self.obj = obj
+        self.args = args
+        self.kwargs = kwargs or {}
+        self.run = run
+
+
+class _MockDevice:
+    def __init__(self, name):
+        self.name = name
+
+    def __repr__(self):
+        return f"{type(self).__name__}(name={self.name!r})"
+
+
+def test_MsgHookStreamManager_basic():
+    """
+    MsgHookStreamManager serializes messages and publishes them to the queue.
+    """
+    mq = _MockQueue()
+    mhsm = MsgHookStreamManager(msg_queue=mq)
+
+    msg = _MockMsg("set", obj=_MockDevice("motor1"), args=(5,), kwargs={"group": "A"}, run=None)
+    mhsm(msg)
+
+    payloads = _get_message_payloads(mq)
+    assert len(payloads) == 1
+    p = payloads[0]
+    assert p["command"] == "set"
+    assert p["obj"] == "_MockDevice(name='motor1')"
+    assert p["args"] == [5]
+    assert p["kwargs"] == {"group": "A"}
+    assert p["run"] is None
+    assert isinstance(p["time"], float)
+
+
+def test_MsgHookStreamManager_serializes_nonjson():
+    """
+    Non-JSON-safe components are coerced to strings (or reprs for devices).
+    """
+    mq = _MockQueue()
+    mhsm = MsgHookStreamManager(msg_queue=mq)
+
+    obj = object()
+    msg = _MockMsg("read", obj=_MockDevice("det"), args=(_MockDevice("m2"), obj), kwargs={"k": _MockDevice("m3")})
+    mhsm(msg)
+
+    p = _get_message_payloads(mq)[0]
+    assert p["command"] == "read"
+    assert p["obj"] == "_MockDevice(name='det')"
+    assert p["args"][0] == "_MockDevice(name='m2')"
+    assert isinstance(p["args"][1], str)  # arbitrary object coerced to str
+    assert p["kwargs"] == {"k": "_MockDevice(name='m3')"}
+
+
+def test_MsgHookStreamManager_chains_existing_hook():
+    """
+    An existing ``msg_hook`` is preserved and called after streaming.
+    """
+    mq = _MockQueue()
+    mhsm = MsgHookStreamManager(msg_queue=mq)
+
+    received = []
+    mhsm.msg_hook = lambda m: received.append(m)
+
+    msg = _MockMsg("checkpoint")
+    mhsm(msg)
+
+    assert len(_get_message_payloads(mq)) == 1
+    assert received == [msg]
+
+
+def test_MsgHookStreamManager_sim_motor_move():
+    """
+    Integration test: attach MsgHookStreamManager to the RunEngine, run a plan,
+    and verify that serialized messages were published to the queue.
+    """
+    startup_dir = get_default_startup_dir()
+    nspace = load_profile_collection(startup_dir, patch_profiles=True)
+
+    RE = nspace["RE"]
+    motor = nspace["motor"]
+
+    mq = _MockQueue()
+    mhsm = MsgHookStreamManager(msg_queue=mq)
+    RE.msg_hook = mhsm
+
+    RE(nspace["mv"](motor, 1))
+
+    payloads = _get_message_payloads(mq)
+
+    # Every payload carries a float timestamp; strip it before exact comparison.
+    for p in payloads:
+        assert isinstance(p["time"], float)
+    payloads_no_time = [{k: v for k, v in p.items() if k != "time"} for p in payloads]
+
+    # The 'set' and 'wait' messages share the same auto-generated group id.
+    group = payloads_no_time[0]["kwargs"]["group"]
+
+    # The device is serialized via repr(), which includes its type and name.
+    obj_repr = payloads_no_time[0]["obj"]
+    assert isinstance(obj_repr, str) and "motor" in obj_repr
+
+    assert payloads_no_time == [
+        {"command": "set", "obj": obj_repr, "args": [1], "kwargs": {"group": group}, "run": None},
+        {"command": "wait", "obj": None, "args": [], "kwargs": {"group": group, "timeout": None}, "run": None},
+    ]

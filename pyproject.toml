@@ -14,7 +14,7 @@ classifiers = [
 ]
 description = "Server for queueing and executing Bluesky plans."
 dependencies = [
-    "bluesky>=1.7.0",
+    "bluesky>=1.16.0",
     "ipykernel",
     "jsonschema",
     "jupyter-client>=7.4.2",

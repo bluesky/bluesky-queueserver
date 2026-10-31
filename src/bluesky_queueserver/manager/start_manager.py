@@ -644,6 +644,17 @@ def start_manager():
     )
 
     group_console_output.add_argument(
+        "--zmq-stream-re-messages",
+        dest="zmq_stream_re_messages",
+        type=str,
+        choices=["ON", "OFF"],
+        default="OFF",
+        help="Enable (ON) or disable (OFF) publishing of optional RunEngine messages "
+        "(msg_hook updates, i.e. serialized plan messages with timestamps) to 0MQ. This parameter is "
+        "only effective when --zmq-publish-info=ON; it is ignored otherwise (default: %(default)s).",
+    )
+
+    group_console_output.add_argument(
         "--console-output",
         dest="console_output",
         type=str,
@@ -801,6 +812,7 @@ def start_manager():
     config_worker["ignore_invalid_plans"] = settings.ignore_invalid_plans
     config_worker["permitted_re_metadata_keys"] = settings.permitted_re_metadata_keys
     config_worker["zmq_stream_device_progress"] = settings.zmq_stream_device_progress and settings.zmq_publish_info
+    config_worker["zmq_stream_re_messages"] = settings.zmq_stream_re_messages and settings.zmq_publish_info
 
     existing_pd_path = settings.existing_plans_and_devices_path
     if not existing_pd_path:

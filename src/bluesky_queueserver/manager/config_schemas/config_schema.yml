@@ -25,6 +25,8 @@ properties:
         type: boolean
       zmq_stream_device_progress:
         type: boolean
+      zmq_stream_re_messages:
+        type: boolean
       redis_addr:
         type: string
       redis_name_prefix:

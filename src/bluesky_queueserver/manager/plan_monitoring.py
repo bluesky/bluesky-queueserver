@@ -1,15 +1,25 @@
 import copy
 import logging
+import multiprocessing
 import threading
 import time as ttime
+from collections.abc import Callable
 
+from bluesky import Msg
 from bluesky.callbacks.core import CallbackBase
+from bluesky.utils import msg_to_json_safe_dict
+
+try:
+    import numpy as np
+except ImportError:
+    np = None
 
 from .output_streaming import push_info_to_msg_queue
 
 logger = logging.getLogger(__name__)
 
 _device_progress_key = "device_progress"
+_messages_key = "re_message"
 
 
 class RunList:
@@ -374,3 +384,54 @@ class WatcherStreamManager:
             push_info_to_msg_queue(key=_device_progress_key, msg=payload, msg_queue=self._msg_queue)
         except Exception:
             logger.debug("Failed to push progress completion to msg_queue", exc_info=True)
+
+
+class MsgHookStreamManager:
+    """
+    RunEngine ``msg_hook``-compatible class. It serializes each ``Msg`` processed by the
+    RunEngine together with a timestamp and pushes it to ``msg_queue`` on the ``"info"``
+    channel (``QS_Info`` 0MQ topic) under the ``"re_message"`` key, so the plan messages are
+    published to 0MQ / websocket subscribers.
+
+    The RunEngine calls instances of this class with a single ``Msg`` object each time it
+    processes a message from the running plan.
+
+    Parameters
+    ----------
+    msg_queue : multiprocessing.Queue
+        Reference to the shared message queue used for publishing messages.
+    """
+
+    def __init__(self, *, msg_queue: multiprocessing.Queue):
+        self._msg_queue = msg_queue
+
+        # Reference to the callback that was already set at the Run Engine. The existing
+        # callback is replaced by the reference of MsgHookStreamManager class and is called
+        # after the message is streamed.
+        self._msg_hook = None
+
+    @property
+    def msg_hook(self) -> Callable[[Msg], None] | None:
+        return self._msg_hook
+
+    @msg_hook.setter
+    def msg_hook(self, v: Callable[[Msg], None] | None):
+        self._msg_hook = v or None
+
+    def __call__(self, msg: Msg):
+        """Called by the RunEngine with a single ``Msg`` object.
+
+        Parameters
+        ----------
+        msg : Msg
+            The message being processed by the RunEngine.
+        """
+        try:
+            serialized_msg = msg_to_json_safe_dict(msg)
+            serialized_msg["time"] = ttime.time()
+            push_info_to_msg_queue(key=_messages_key, msg=serialized_msg, msg_queue=self._msg_queue)
+        except Exception:
+            logger.debug("Failed to push RE message to msg_queue", exc_info=True)
+
+        if self.msg_hook:
+            self.msg_hook(msg)

@@ -7,7 +7,6 @@ from bluesky_queueserver.manager.plan_monitoring import (
     MsgHookStreamManager,
     RunList,
     WatcherStreamManager,
-    _serialize_msg_component,
 )
 from bluesky_queueserver.manager.profile_ops import (
     get_default_startup_dir,
@@ -521,80 +520,6 @@ def test_MsgHookStreamManager_serializes_nonjson():
     assert p["args"][0] == "_MockDevice(name='m2')"
     assert isinstance(p["args"][1], str)  # arbitrary object coerced to str
     assert p["kwargs"] == {"k": "_MockDevice(name='m3')"}
-
-
-def test_serialize_msg_component_enum():
-    """
-    Enum members are serialized by their value, regardless of the enum base class.
-    """
-    import enum
-
-    class Color(enum.Enum):
-        RED = "red_value"
-
-    class Speed(enum.IntEnum):
-        FAST = 3
-
-    class SColor(str, enum.Enum):
-        BLUE = "blue_value"
-
-    assert _serialize_msg_component(Color.RED) == "red_value"
-    assert _serialize_msg_component(Speed.FAST) == 3
-    assert type(_serialize_msg_component(Speed.FAST)) is int
-    assert _serialize_msg_component(SColor.BLUE) == "blue_value"
-    assert type(_serialize_msg_component(SColor.BLUE)) is str
-
-
-def test_serialize_msg_component_nonfinite_floats():
-    """
-    NaN is serialized to None and infinities to strings (JSON-safe).
-    """
-    assert _serialize_msg_component(float("nan")) is None
-    assert _serialize_msg_component(float("inf")) == "Infinity"
-    assert _serialize_msg_component(float("-inf")) == "-Infinity"
-    assert _serialize_msg_component(1.5) == 1.5
-
-
-def test_serialize_msg_component_numpy():
-    """
-    Numpy scalars and arrays are converted to native Python types (including non-finite
-    coercion inside arrays).
-    """
-    import numpy as np
-
-    assert _serialize_msg_component(np.float64(1.5)) == 1.5
-    assert type(_serialize_msg_component(np.float64(1.5))) is float
-    assert _serialize_msg_component(np.float64("nan")) is None
-    assert _serialize_msg_component(np.int64(7)) == 7
-    assert type(_serialize_msg_component(np.int64(7))) is int
-    assert _serialize_msg_component(np.bool_(True)) is True
-    assert _serialize_msg_component(np.array([1.0, float("nan"), 3.0])) == [1.0, None, 3.0]
-    assert _serialize_msg_component(np.array([[1, 2], [3, 4]])) == [[1, 2], [3, 4]]
-
-
-def test_serialize_msg_component_bytes_and_datetime():
-    """
-    Bytes and datetimes fall back to their string representation.
-    """
-    import datetime
-
-    assert _serialize_msg_component(b"abc") == "b'abc'"
-    assert _serialize_msg_component(datetime.datetime(2020, 1, 1)) == "2020-01-01 00:00:00"
-
-
-def test_serialize_msg_component_nested():
-    """
-    Enum, numpy and non-finite values are coerced recursively inside containers.
-    """
-    import enum
-
-    import numpy as np
-
-    class Color(enum.Enum):
-        RED = "red_value"
-
-    value = {"a": [np.int64(1), float("inf")], "b": Color.RED}
-    assert _serialize_msg_component(value) == {"a": [1, "Infinity"], "b": "red_value"}
 
 
 def test_MsgHookStreamManager_chains_existing_hook():

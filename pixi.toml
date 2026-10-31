@@ -36,4 +36,3 @@ py311 = { features = ["py311"] }
 py312 = { features = ["py312"] }
 py313 = { features = ["py313"] }
 py314 = { features = ["py314"] }
-

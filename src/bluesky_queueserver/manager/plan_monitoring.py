@@ -1,12 +1,13 @@
 import copy
-import enum
 import logging
-import math
+import multiprocessing
 import threading
 import time as ttime
+from collections.abc import Callable
 
 from bluesky import Msg
 from bluesky.callbacks.core import CallbackBase
+from bluesky.utils import msg_to_json_safe_dict
 
 try:
     import numpy as np
@@ -385,57 +386,6 @@ class WatcherStreamManager:
             logger.debug("Failed to push progress completion to msg_queue", exc_info=True)
 
 
-def _coerce_float(value):
-    """
-    Convert a float to a JSON-safe value: ``NaN`` becomes ``None`` and infinities become
-    the strings ``"Infinity"`` / ``"-Infinity"`` (default ``json.dumps`` would otherwise
-    emit bare ``NaN``/``Infinity`` tokens that are not valid JSON).
-    """
-    if math.isnan(value):
-        return None
-    if math.isinf(value):
-        return "Infinity" if value > 0 else "-Infinity"
-    return float(value)
-
-
-def _serialize_msg_component(value):
-    """
-    Coerce a ``Msg`` component (``obj``, elements of ``args``, values of ``kwargs`` or
-    ``run``) to a JSON-serializable representation. Enum members are represented by their
-    value, non-finite floats are made JSON-safe, numpy scalars/arrays are converted to
-    native Python types, devices and other objects with a ``name`` attribute are
-    represented by their ``repr()`` (which includes the type, making it nicer to read),
-    containers are serialized recursively, and anything else (e.g. bytes, datetimes)
-    falls back to ``str()`` (or ``None`` on failure).
-    """
-    if value is None:
-        return value
-    if isinstance(value, enum.Enum):
-        return _serialize_msg_component(value.value)
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, float):
-        return _coerce_float(value)
-    if isinstance(value, (int, str)):
-        return value
-    if np is not None:
-        if isinstance(value, np.generic):
-            return _serialize_msg_component(value.item())
-        if isinstance(value, np.ndarray):
-            return _serialize_msg_component(value.tolist())
-    name = getattr(value, "name", None)
-    if isinstance(name, str):
-        return repr(value)
-    if isinstance(value, (list, tuple, set)):
-        return [_serialize_msg_component(v) for v in value]
-    if isinstance(value, dict):
-        return {str(k): _serialize_msg_component(v) for k, v in value.items()}
-    try:
-        return str(value)
-    except Exception:
-        return None
-
-
 class MsgHookStreamManager:
     """
     RunEngine ``msg_hook``-compatible class. It serializes each ``Msg`` processed by the
@@ -452,7 +402,7 @@ class MsgHookStreamManager:
         Reference to the shared message queue used for publishing messages.
     """
 
-    def __init__(self, *, msg_queue):
+    def __init__(self, *, msg_queue: multiprocessing.Queue):
         self._msg_queue = msg_queue
 
         # Reference to the callback that was already set at the Run Engine. The existing
@@ -461,29 +411,25 @@ class MsgHookStreamManager:
         self._msg_hook = None
 
     @property
-    def msg_hook(self):
+    def msg_hook(self) -> Callable[[Msg], None] | None:
         return self._msg_hook
 
     @msg_hook.setter
-    def msg_hook(self, v):
+    def msg_hook(self, v: Callable[[Msg], None] | None):
         self._msg_hook = v or None
 
     def __call__(self, msg: Msg):
-        """
-        Called by the RunEngine with a single ``Msg`` object.
+        """Called by the RunEngine with a single ``Msg`` object.
+
+        Parameters
+        ----------
+        msg : Msg
+            The message being processed by the RunEngine.
         """
         try:
-            payload = {
-                "time": ttime.time(),
-                "command": getattr(msg, "command", None),
-                "obj": _serialize_msg_component(getattr(msg, "obj", None)),
-                "args": [_serialize_msg_component(_) for _ in getattr(msg, "args", ()) or ()],
-                "kwargs": {
-                    str(k): _serialize_msg_component(v) for k, v in (getattr(msg, "kwargs", {}) or {}).items()
-                },
-                "run": _serialize_msg_component(getattr(msg, "run", None)),
-            }
-            push_info_to_msg_queue(key=_messages_key, msg=payload, msg_queue=self._msg_queue)
+            serialized_msg = msg_to_json_safe_dict(msg)
+            serialized_msg["time"] = ttime.time()
+            push_info_to_msg_queue(key=_messages_key, msg=serialized_msg, msg_queue=self._msg_queue)
         except Exception:
             logger.debug("Failed to push RE message to msg_queue", exc_info=True)
 

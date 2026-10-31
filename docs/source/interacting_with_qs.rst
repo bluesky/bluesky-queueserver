@@ -112,11 +112,12 @@ RunEngine messages (optional)
 
 While a plan is running, RE Manager may also stream serialized RunEngine messages (RunEngine
 ``msg_hook`` updates) on the same socket under the ``re_message`` key. Each update contains the
-timestamp when the message was processed, the message ``command``, the name of the associated
-object (``obj``), and the message ``args``, ``kwargs`` and ``run`` key (all serialized to
-JSON-safe values)::
+message ``command``, the string representation of the associated object (``obj``, e.g. the
+``repr`` of an ophyd device), the message ``args``, ``kwargs`` and ``run`` key (all recursively
+converted to JSON-safe values), and the ``time`` when the message was processed by the RunEngine::
 
-  {"time": <timestamp>, "msg": {"re_message": <message-info>}}
+  {"time": <timestamp>, "msg": {"re_message": {"command": ..., "obj": ..., "args": [...],
+                                               "kwargs": {...}, "run": ..., "time": <timestamp>}}}
 
 Message streaming is disabled by default and can be enabled using the
 ``--zmq-stream-re-messages`` CLI parameter of ``start-re-manager`` or 

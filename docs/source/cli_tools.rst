@@ -86,16 +86,6 @@ created and configured using other means (e.g. by uploading and executing
 a script) before any operations that require Run Engine (e.g. running a plan)
 can be executed.
 
-.. note::
-
-  The built-in functionality that creates and configures ``RE`` was removed
-  from the code-base. This includes support for the parameters
-  ``--databroker-config``, ``--zmq-data-proxy-addr``, ``--kafka-server``,
-  ``--kafka-topic`` and ``--use-persistent-metadata``. The parameter
-  ``--keep-re`` is deprecated and ignored by RE Manager. Currently RE Manager
-  always behaves as if ``--keep-re`` is set.
-
-
 .. _update_existing_plans_devices:
 
 Updating the List of Existing Plans and Devices
@@ -209,10 +199,9 @@ Other Configuration Parameters
 
   $ start-re-manager -h
   usage: start-re-manager [-h] [--config CONFIG_PATH] [--zmq-control-addr ZMQ_CONTROL_ADDR]
-                          [--zmq-addr ZMQ_ADDR] [--zmq-encoding ZMQ_ENCODING]
-                          [--startup-profile STARTUP_PROFILE]
-                          [--startup-module STARTUP_MODULE | --startup-script STARTUP_SCRIPT |
-                           --startup-dir STARTUP_DIR]
+                          [--zmq-encoding ZMQ_ENCODING] [--startup-profile STARTUP_PROFILE]
+                          [--startup-module STARTUP_MODULE |
+                          --startup-script STARTUP_SCRIPT | --startup-dir STARTUP_DIR]
                           [--ignore-invalid-plans {ON,OFF}]
                           [--device-max-depth DEVICE_MAX_DEPTH]
                           [--existing-plans-devices EXISTING_PLANS_AND_DEVICES_PATH]
@@ -220,8 +209,7 @@ Other Configuration Parameters
                           [--user-group-permissions USER_GROUP_PERMISSIONS_PATH]
                           [--user-group-permissions-reload {NEVER,ON_REQUEST,ON_STARTUP}]
                           [--redis-addr REDIS_ADDR] [--redis-name-prefix REDIS_NAME_PREFIX]
-                          [--keep-re] [--use-ipython-kernel {ON,OFF}]
-                          [--ipython-dir IPYTHON_DIR]
+                          [--use-ipython-kernel {ON,OFF}] [--ipython-dir IPYTHON_DIR]
                           [--ipython-matplotlib IPYTHON_MATPLOTLIB]
                           [--ipython-kernel-ip IPYTHON_KERNEL_IP]
                           [--ipython-connection-file IPYTHON_CONNECTION_FILE]
@@ -231,15 +219,14 @@ Other Configuration Parameters
                           [--ipython-stdin-port IPYTHON_STDIN_PORT]
                           [--ipython-hb-port IPYTHON_HB_PORT]
                           [--ipython-control-port IPYTHON_CONTROL_PORT]
-                          [--permitted-re-metadata-keys PERMITTED_RE_METADATA_KEYS
-                           [PERMITTED_RE_METADATA_KEYS ...]]
-                          [--zmq-info-addr ZMQ_INFO_ADDR]
-                          [--zmq-publish-console-addr ZMQ_PUBLISH_CONSOLE_ADDR]
-                          [--zmq-publish-console {ON,OFF}] [--console-output {ON,OFF}]
-                          [--verbose | --quiet | --silent]
+                          [--permitted-re-metadata-keys PERMITTED_RE_METADATA_KEYS [PERMITTED_RE_METADATA_KEYS ...]]
+                          [--zmq-info-addr ZMQ_INFO_ADDR] [--zmq-publish-console {ON,OFF}]
+                          [--zmq-publish-info {ON,OFF}]
+                          [--zmq-stream-device-progress {ON,OFF}]
+                          [--console-output {ON,OFF}] [--verbose | --quiet | --silent]
 
   Start Run Engine (RE) Manager
-  bluesky-queueserver version 0.0.23
+  bluesky-queueserver version 0.0.27
 
   Encryption for ZeroMQ communication server may be enabled by setting the value of
   'QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER' environment variable to a valid private key
@@ -265,9 +252,6 @@ Other Configuration Parameters
                       QSERVER_ZMQ_CONTROL_ADDRESS_FOR_SERVER. The default address is used if
                       the parameter or the environment variable is not defined. Address
                       format: 'tcp://*:60615' (default: 'tcp://*:60615').
-    --zmq-addr ZMQ_ADDR
-                      The parameter is deprecated and will be removed in future releases.
-                      Use --zmq-control-addr instead.
     --zmq-encoding ZMQ_ENCODING
                       The encoding used for 0MQ communication. The encoding must match the
                       encoding used by RE Manager. The parameter value overrides the value
@@ -345,9 +329,6 @@ Other Configuration Parameters
     --redis-name-prefix REDIS_NAME_PREFIX
                       The prefix for the names of Redis keys used by RE Manager (default:
                       qs_default).
-    --keep-re         The parameter is deprecated. The value is ignored by the Queue Server.
-                      Run Engine instance must always be defined and configured in the
-                      startup code. The parameter will be removed in future releases.
     --permitted-re-metadata-keys PERMITTED_RE_METADATA_KEYS [PERMITTED_RE_METADATA_KEYS ...]
                       A list of permitted RE metadata keys. Keys are configured in the form
                       of unix paths, and recursively apply to all subkeys. For example, the
@@ -428,19 +409,23 @@ Other Configuration Parameters
     and enable/disable printing and/or publishing of the console output.
 
     --zmq-info-addr ZMQ_INFO_ADDR
-                      The address of ZMQ server socket used for publishing information on
-                      the state of RE Manager and currently running processes. Currently
-                      only the captured STDOUT and STDERR published in 'QS_Console' topic.
-                      The parameter overrides the address defined by the environment
-                      variable 'QSERVER_ZMQ_INFO_ADDRESS_FOR_SERVER'. The default address is
-                      used if the parameter or the environment variable is not defined.
-                      Address format: 'tcp://*:60625' (default: tcp://*:60625).
-    --zmq-publish-console-addr ZMQ_PUBLISH_CONSOLE_ADDR
-                      The parameter is deprecated and will be removed in future releases.
-                      Use --zmq-info-addr instead.
+                      The address of ZMQ PUB socket used for publishing console output,
+                      status info, and progress updates. The parameter overrides the address
+                      defined by the environment variable
+                      'QSERVER_ZMQ_INFO_ADDRESS_FOR_SERVER'. The default address is used if
+                      the parameter or the environment variable is not defined. Address
+                      format: 'tcp://*:60625' (default: tcp://*:60625).
     --zmq-publish-console {ON,OFF}
                       Enable (ON) or disable (OFF) publishing of console output to 0MQ
                       (default: OFF).
+    --zmq-publish-info {ON,OFF}
+                      Enable (ON) or disable (OFF) publishing of info/status updates to 0MQ
+                      (default: OFF).
+    --zmq-stream-device-progress {ON,OFF}
+                      Enable (ON) or disable (OFF) publishing of optional RunEngine device
+                      progress updates (waiting/watcher updates, e.g. motor position during
+                      motion) to 0MQ. This parameter is only effective when --zmq-publish-
+                      info=ON; it is ignored otherwise (default: OFF).
     --console-output {ON,OFF}
                       Enable (ON) or disable (OFF) printing of console output in the Re
                       Manager terminal. (default: ON)

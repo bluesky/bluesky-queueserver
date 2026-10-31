@@ -16,7 +16,7 @@ try:
 except Exception:
     pass
 
-RE = RunEngine({"metadata_key": "metadata_value"})
+RE = RunEngine()
 
 bec = BestEffortCallback()
 if not is_ipython_mode() or not ipython_matplotlib:

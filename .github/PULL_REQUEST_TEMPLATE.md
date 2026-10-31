@@ -30,3 +30,7 @@
 <!--
 ## Screenshots (if appropriate):
 -->
+
+> [!NOTE]
+> Only a reduced set of tests runs by default. Before merging non-trivial changes, make sure to run
+> the full test suite by adding the `full-tests` label to the PR and rerunning the tests.

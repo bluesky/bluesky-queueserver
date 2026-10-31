@@ -12,8 +12,10 @@ from datetime import datetime
 import msgpack
 import numpy as np
 import pytest
+import redis
 import yaml
 import zmq
+from redis_json_dict import RedisJSONDict
 
 import bluesky_queueserver
 from bluesky_queueserver import gen_list_of_plans_and_devices
@@ -36,6 +38,7 @@ from ..comms import (
     default_zmq_control_address,
 )
 from .common import (  # noqa: F401
+    _test_redis_name_prefix,
     _user,
     _user_group,
     append_code_to_last_startup_file,
@@ -960,6 +963,12 @@ RE.subscribe(cb_save_start_docs)
     ([{"test_key1": 10}, {"test_key2": 20}], {"test_key1": 10, "test_key2": 20}),
     # ' meta' - array. Merging dictionaries with identical keys.
     ([{"test_key": 10}, {"test_key": 20}], {"test_key": 10}),
+    # Queue Server-assigned metadata replaces a non-dict 'queue_server' value submitted in metadata.
+    ({"queue_server": "submitted_item_uid", "test_key": "test_value"}, {"test_key": "test_value"}),
+    # Queue Server-assigned metadata is merged into a submitted 'queue_server' dict: the conflicting
+    # 'queue_item_uid' is overridden, but other keys in the dict are preserved.
+    ({"queue_server": {"queue_item_uid": "submitted_item_uid", "custom_key": "custom_value"},
+      "test_key": "test_value"}, {"test_key": "test_value"}),
 ])
 # fmt: on
 def test_zmq_api_queue_item_add_09(tmp_path, re_manager_cmd, meta_param, meta_saved):  # noqa: F811
@@ -974,6 +983,7 @@ def test_zmq_api_queue_item_add_09(tmp_path, re_manager_cmd, meta_param, meta_sa
     params1 = {"item": plan, "user": _user, "user_group": _user_group}
     resp1, _ = zmq_request("queue_item_add", params1)
     assert resp1["success"] is True, f"resp={resp1}"
+    item_uid = resp1["item"]["item_uid"]
 
     resp2, _ = zmq_request("status")
     assert resp2["items_in_queue"] == 1
@@ -1000,6 +1010,7 @@ def test_zmq_api_queue_item_add_09(tmp_path, re_manager_cmd, meta_param, meta_sa
     resp6, _ = zmq_request("history_get")
     history = resp6["items"]
     assert len(history) == 1
+    assert history[0]["item_uid"] == item_uid
 
     # Load saved start documents
     func_item = {"name": "unit_test_get_start_docs", "item_type": "function"}
@@ -1019,9 +1030,18 @@ def test_zmq_api_queue_item_add_09(tmp_path, re_manager_cmd, meta_param, meta_sa
     assert start_docs[0]["uid"] == uid
 
     assert start_docs[0]["scan_id"] == history[-1]["result"]["scan_ids"][0]
+    assert start_docs[0]["queue_server"]["queue_item_uid"] == item_uid
     for key in meta_saved:
-        assert key in start_docs[0], str(start_docs[0])
-        assert meta_saved[key] == start_docs[0][key], str(start_docs[0])
+        assert key in start_docs[0], pprint.pformat(start_docs[0])
+        assert meta_saved[key] == start_docs[0][key], pprint.pformat(start_docs[0])
+
+    # Other keys submitted in a nested 'queue_server' dict must survive the merge.
+    submitted_queue_server_meta = meta_param.get("queue_server") if isinstance(meta_param, dict) else None
+    if isinstance(submitted_queue_server_meta, dict):
+        for key, value in submitted_queue_server_meta.items():
+            if key == "queue_item_uid":
+                continue
+            assert start_docs[0]["queue_server"][key] == value, pprint.pformat(start_docs[0])
 
     # Close the environment.
     resp7, _ = zmq_request("environment_close")
@@ -5976,7 +5996,7 @@ def test_zmq_api_re_runs_1(re_manager_pc_copy, tmp_path, test_with_manager_resta
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_re_metadata_1(re_manager_pc_copy, tmp_path):  # noqa: F811
+def test_zmq_api_re_metadata_01(re_manager_pc_copy, tmp_path):  # noqa: F811
     """
     Tests `re_metadata` functionality. First checks if the request correctly fails if the environment is not open.
     Then checks to make sure initial metadata could be retrieved. Then, executes a plan that adds `scan_id` and
@@ -5999,16 +6019,12 @@ def test_zmq_api_re_metadata_1(re_manager_pc_copy, tmp_path):  # noqa: F811
     assert resp["success"] is True, f"{resp =}"
 
     def check_initial_metadata(re_md):
-        """Function that checks if initial metadata matches what we expect"""
-
-        assert "metadata_key" in re_md, pprint.pformat(re_md)
-        assert re_md["metadata_key"] == "metadata_value"
         assert "versions" in re_md, pprint.pformat(re_md)
         assert "bluesky" in re_md["versions"], pprint.pformat(re_md)
 
     re_md = resp["re_metadata"]
     check_initial_metadata(re_md)
-    assert len(re_md) == 2, "Only two metadata keys should be present initially!"
+    assert len(re_md) == 1, "Only one metadata key should be present initially!"
 
     # Add the first 'count' plan
     resp, _ = zmq_request("queue_item_add", {"item": _plan1, "user": _user, "user_group": _user_group})
@@ -6042,33 +6058,29 @@ RE.md['date'] = datetime.now()
 """
 
 
-def test_zmq_api_re_metadata_2_non_serializable_md(re_manager_pc_copy, tmp_path):  # noqa: F811
+def test_zmq_api_re_metadata_02_non_serializable_md(re_manager_cmd, tmp_path):  # noqa: F811
 
-    _, pc_path = re_manager_pc_copy
-    # Add a non-serializable type to the runengine metadata
+
+    pc_path = copy_default_profile_collection(tmp_path)
     append_code_to_last_startup_file(pc_path, additional_code=_add_datetime_to_md)
 
-    encoding = use_zmq_encoding_for_tests()
+    re_manager_cmd(["--startup-dir", pc_path, "--permitted-re-metadata-keys", "/"])
 
     resp, _ = zmq_request("environment_open")
     assert resp["success"] is True, f"{resp =}"
     assert wait_for_condition(time=5, condition=condition_environment_created)
 
     resp, _ = zmq_request("re_metadata")
-    assert resp["success"] is False
+    assert resp["success"] is False, pprint.pformat(resp)
 
-    # Check that the error message is correct depending on encoding
-    if encoding == "json":
-        assert resp["msg"].startswith("Failed to serialize RE metadata with JSON:"), resp
-    elif encoding == "msgpack":
-        assert resp["msg"].startswith("Failed to serialize RE metadata with MSGPACK:"), resp
+    assert "is not JSON serializable" in resp["msg"], resp
 
     resp, _ = zmq_request("environment_close")
     assert resp["success"] is True, f"{resp =}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_re_metadata_3_no_re(re_manager_pc_copy, tmp_path):  # noqa: F811
+def test_zmq_api_re_metadata_03_no_re(re_manager_pc_copy, tmp_path):  # noqa: F811
     """
     Tests `re_metadata` functionality when Run Engine is not present in the environment.
     """
@@ -6089,7 +6101,7 @@ def test_zmq_api_re_metadata_3_no_re(re_manager_pc_copy, tmp_path):  # noqa: F81
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_re_metadata_4_no_md(re_manager_pc_copy, tmp_path):  # noqa: F811
+def test_zmq_api_re_metadata_04_no_md(re_manager_pc_copy, tmp_path):  # noqa: F811
     """
     Tests `re_metadata` functionality when Run Engine does not have 'md' attribute.
     """
@@ -6110,7 +6122,33 @@ def test_zmq_api_re_metadata_4_no_md(re_manager_pc_copy, tmp_path):  # noqa: F81
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_re_metadata_5_non_mapping_md(re_manager_pc_copy, tmp_path):  # noqa: F811
+def test_zmq_api_re_metadata_05_default_keys(re_manager_pc_copy, tmp_path):  # noqa: F811
+    """
+    Tests that `re_metadata` returns only the default keys and ignores additional keys.
+    """
+
+    _, pc_path = re_manager_pc_copy
+    append_code_to_last_startup_file(pc_path, additional_code="RE.md.update({'extra_key': '50'})")
+
+    resp, _ = zmq_request("environment_open")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_created)
+
+    resp, _ = zmq_request("re_metadata")
+    assert resp["success"] is True, f"{resp =}"
+
+    assert "re_metadata" in resp, pprint.pformat(resp)
+    re_md = resp["re_metadata"]
+    # assert "scan_id" in re_md, pprint.pformat(re_md)
+    assert "versions" in re_md, pprint.pformat(re_md)
+    assert "extra_key" not in re_md, pprint.pformat(re_md)
+
+    resp, _ = zmq_request("environment_close")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_re_metadata_06_non_mapping_md(re_manager_pc_copy, tmp_path):  # noqa: F811
     """
     Tests `re_metadata` functionality when Run Engine has non-mapping type as 'md' attribute.
     """
@@ -6131,13 +6169,18 @@ def test_zmq_api_re_metadata_5_non_mapping_md(re_manager_pc_copy, tmp_path):  # 
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_re_metadata_6_filtered_by_keys(re_manager_cmd, tmp_path):  # noqa: F811
+_add_metadata_key_to_md = """
+from datetime import datetime
+RE.md['metadata_key'] = 'metadata_value'
+"""
+
+def test_zmq_api_re_metadata_07_filtered_by_keys(re_manager_cmd, tmp_path):  # noqa: F811
     """
-    Tests `re_metadata` functionality with filtering by keys. Checks that the filtering works correctly and that
-    the error is returned if some of the requested keys are not present in the metadata.
+    Tests `re_metadata` functionality with filtering by keys. Checks that the filtering works correctly.
     """
 
     pc_path = copy_default_profile_collection(tmp_path)
+    append_code_to_last_startup_file(pc_path, _add_metadata_key_to_md)
     re_manager_cmd(["--startup-dir", pc_path, "--permitted-re-metadata-keys", "/metadata_key"])
 
     resp, _ = zmq_request("environment_open")
@@ -6156,7 +6199,7 @@ def test_zmq_api_re_metadata_6_filtered_by_keys(re_manager_cmd, tmp_path):  # no
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_re_metadata_7_filtered_by_keys_non_existent_key(re_manager_cmd, tmp_path):  # noqa: F811
+def test_zmq_api_re_metadata_08_filtered_by_keys_non_existent_key(re_manager_cmd, tmp_path):  # noqa: F811
     """
     Tests `re_metadata` functionality with filtering by keys.
     Checks that the error is returned if some of the requested keys are not present in the metadata.
@@ -6179,13 +6222,14 @@ def test_zmq_api_re_metadata_7_filtered_by_keys_non_existent_key(re_manager_cmd,
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
-def test_zmq_api_re_metadata_8_filtered_by_nested_key(re_manager_cmd, tmp_path):  # noqa: F811
+def test_zmq_api_re_metadata_09_filtered_by_nested_key(re_manager_cmd, tmp_path):  # noqa: F811
     """
     Tests `re_metadata` functionality with filtering by nested keys.
     Checks that the filtering works correctly for nested keys.
     """
 
     pc_path = copy_default_profile_collection(tmp_path)
+    append_code_to_last_startup_file(pc_path, _add_metadata_key_to_md)
     re_manager_cmd(
         ["--startup-dir", pc_path, "--permitted-re-metadata-keys", "/metadata_key", "/versions/bluesky"]
     )
@@ -6201,11 +6245,76 @@ def test_zmq_api_re_metadata_8_filtered_by_nested_key(re_manager_cmd, tmp_path):
     assert resp["re_metadata"]["metadata_key"] == "metadata_value", f"{resp =}"
     assert "versions" in resp["re_metadata"], f"{resp =}"
     assert "bluesky" in resp["re_metadata"]["versions"], f"{resp =}"
+    assert "ophyd" not in resp["re_metadata"]["versions"], f"{resp =}"
     assert len(resp["re_metadata"]) == 2, f"{resp =}"
 
     resp, _ = zmq_request("environment_close")
     assert resp["success"] is True, f"{resp =}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+_redis_json_dict_prefix = _test_redis_name_prefix + "_temp_dict_"
+
+@pytest.fixture()
+def redis_json_dict():
+    redis_client = redis.Redis(host="localhost")
+    prefix = _redis_json_dict_prefix
+
+    yield RedisJSONDict(redis_client, prefix=prefix)
+
+    keys = list(redis_client.scan_iter(match=f"{prefix}*"))
+    if keys:
+        redis_client.delete(*keys)
+
+
+_script_redis_json_dict = f"""
+import redis
+from redis_json_dict import RedisJSONDict
+
+redis_client = redis.Redis(host="localhost")
+prefix = "{_redis_json_dict_prefix}"
+
+_md = RE.md
+
+RE.md = RedisJSONDict(
+    redis_client=redis_client,
+    prefix=prefix,
+)
+
+RE.md.update(_md)
+
+RE.md["project_registry"] = {{
+    "project_a": ["subproject_1", "subproject_2"],
+}}
+"""
+
+def test_zmq_api_re_metadata_10_redis_json_dict(re_manager_cmd, tmp_path, redis_json_dict):  # noqa: F811
+    """
+    Tests `re_metadata` operation in case RE.md is redis_json_dict (RedisJSONDict) to
+    make sure the redis-based dictionary is properly converted to regular dictionary and
+    can be serialized.
+    """
+
+    pc_path = copy_default_profile_collection(tmp_path)
+    append_code_to_last_startup_file(pc_path, _script_redis_json_dict)
+    re_manager_cmd(["--startup-dir", pc_path, "--permitted-re-metadata-keys", "/"])
+
+    resp, _ = zmq_request("environment_open")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_created)
+
+    resp, _ = zmq_request("re_metadata")
+    assert resp["success"] is True, f"{resp =}"
+    assert resp["msg"] == "", f"{resp =}"
+    re_md = resp["re_metadata"]
+    assert isinstance(re_md, dict), f"{resp =}"
+    assert re_md.get("project_registry") == {'project_a': ['subproject_1', 'subproject_2']}, pprint.pformat(re_md)
+    assert "versions" in re_md, pprint.pformat(re_md)
+
+    resp, _ = zmq_request("environment_close")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
 
 
 # fmt: off

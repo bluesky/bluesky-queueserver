@@ -34,12 +34,6 @@ code files::
 
   $ start-re-manager --zmq-publish-console ON --startup-dir <path-to-directory-with-files>
 
-RE Manager automaticaly creates instances of Bluesky Run Engine (``RE``) and Data Broker (``db``).
-Production scripts typically create custom instances ``RE`` and ``db``. In this case, RE Manager
-must be called with the option ``--keep-re`` to prevent RE Manager from overriding ``RE`` and ``db``::
-
-  $ start-re-manager --zmq-publish-console ON --startup-dir <path-to-directory-with-files> --keep-re
-
 This is the minimum configuration of RE Manager sufficient for practical use of Queue Server for experimental
 control. Configuring RE Manager for a production system may require additiona settings. See :ref:`start_re_manager_cli`
 for detailed description of parameters.

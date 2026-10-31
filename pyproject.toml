@@ -61,6 +61,7 @@ dev = [
     "ophyd-async",
     "build",
     "twine",
+    "redis_json_dict",
 ]
 
 [project.scripts]

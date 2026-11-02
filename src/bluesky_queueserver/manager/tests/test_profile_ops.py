@@ -5997,6 +5997,43 @@ def _normalize_union_syntax(type_str):
     return ast.unparse(UnionTransformer().visit(ast.parse(type_str, mode="eval")))
 
 
+# fmt: off
+@pytest.mark.parametrize("type_str, expected", [
+    # Unions are converted
+    ("typing.Union[int, str]", "int | str"),
+    ("typing.Union[int, str, float]", "int | str | float"),
+    ("typing.Optional[float]", "float | None"),
+    ("typing.Union[int, NoneType, str]", "int | None | str"),
+    ("typing.Union[int, str, NoneType]", "int | str | None"),
+    ("typing.Optional[typing.Union[int, str]]", "int | str | None"),
+    ("typing.Union[__MOVABLE__, collections.abc.Sequence[typing.Any]]",
+     "__MOVABLE__ | collections.abc.Sequence[typing.Any]"),
+    ("typing.Union[__CALLABLE__, typing.List[__CALLABLE__]]", "__CALLABLE__ | typing.List[__CALLABLE__]"),
+    # Nested unions
+    ("typing.Tuple[typing.Union[float, int]]", "typing.Tuple[float | int]"),
+    ("typing.List[typing.Optional[int]]", "typing.List[int | None]"),
+    ("typing.Dict[str, typing.Union[int, str]]", "typing.Dict[str, int | str]"),
+    ("typing.Union[typing.List[typing.Union[int, str]], str]", "typing.List[int | str] | str"),
+    # Strings without 'typing.Union' or 'typing.Optional' are not changed
+    ("int", "int"),
+    ("__DEVICE__", "__DEVICE__"),
+    ("float | None", "float | None"),
+    ("typing.List[int]", "typing.List[int]"),
+    ("__DEVICE__ | list[__DEVICE__]", "__DEVICE__ | list[__DEVICE__]"),
+    ("collections.abc.Callable[[int, float], str]", "collections.abc.Callable[[int, float], str]"),
+    ("typing.Literal['a, b', 'c']", "typing.Literal['a, b', 'c']"),
+    # Only 'typing.Union' and 'typing.Optional' are converted
+    ("Union[int, str]", "Union[int, str]"),
+    ("other.Union[int, str]", "other.Union[int, str]"),
+])
+# fmt: on
+def test_normalize_union_syntax_1(type_str, expected):
+    """
+    ``_normalize_union_syntax``: basic tests
+    """
+    assert _normalize_union_syntax(type_str) == expected
+
+
 def _normalize_plan_annotations(plan):
     """
     Returns a copy of the plan description with union syntax of parameter types normalized.

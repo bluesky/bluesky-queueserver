@@ -174,6 +174,9 @@ device progress updates (RunEngine ``waiting_hook`` / watcher updates, such as m
 while moving) are also streamed on the same socket under the ``device_progress`` key. Progress
 streaming is disabled by default and can be enabled using the ``--zmq-stream-device-progress``
 parameter of ``start-re-manager`` or ``network/zmq_stream_device_progress`` parameter in the config
-file. The convenience classes ``ReceiveSystemInfo`` and ``ReceiveSystemInfoAsync`` can be used 
+file. Log messages from selected loggers in the worker environment may be streamed under
+the ``log_message`` key (see ``--zmq-stream-loggers`` parameter of ``start-re-manager`` or
+``network/zmq_stream_loggers`` parameter in the config file).
+The convenience classes ``ReceiveSystemInfo`` and ``ReceiveSystemInfoAsync`` can be used 
 to implement remote monitoring features in client applications. See :ref:`subscribing_to_system_info` 
 for more details.

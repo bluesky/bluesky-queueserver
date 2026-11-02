@@ -1,3 +1,4 @@
+import ast
 import collections.abc
 import copy
 import enum
@@ -78,7 +79,6 @@ from .common import (
     reset_sys_modules,  # noqa: F401
 )
 
-python_version = sys.version_info  # Can be compare to tuples (such as 'python_version >= (3, 9)')
 pydantic_version_major = version.parse(pydantic.__version__).major
 
 
@@ -5963,6 +5963,90 @@ def test_update_existing_plans_and_devices_4(load_ref_from_file):
     assert changes_detected is True
 
 
+def _normalize_union_syntax(type_str):
+    """
+    Replace ``typing.Union[A, B]`` and ``typing.Optional[A]`` with ``A | B`` and ``A | None``.
+    Python 3.14+ represents all unions using ``|``, Python 3.13 and older use ``typing.Union``.
+
+    NOTE: remove this function once support for Python 3.13 is dropped.
+    """
+
+    class UnionTransformer(ast.NodeTransformer):
+        def visit_Subscript(self, node):
+            self.generic_visit(node)
+            v = node.value
+            is_union = (
+                isinstance(v, ast.Attribute)
+                and isinstance(v.value, ast.Name)
+                and v.value.id == "typing"
+                and v.attr in ("Union", "Optional")
+            )
+            if not is_union:
+                return node
+
+            args = list(node.slice.elts) if isinstance(node.slice, ast.Tuple) else [node.slice]
+            if v.attr == "Optional":
+                args.append(ast.Constant(None))
+            args = [ast.Constant(None) if isinstance(_, ast.Name) and _.id == "NoneType" else _ for _ in args]
+
+            expr = args[0]
+            for arg in args[1:]:
+                expr = ast.BinOp(left=expr, op=ast.BitOr(), right=arg)
+            return expr
+
+    return ast.unparse(UnionTransformer().visit(ast.parse(type_str, mode="eval")))
+
+
+# fmt: off
+@pytest.mark.parametrize("type_str, expected", [
+    # Unions are converted
+    ("typing.Union[int, str]", "int | str"),
+    ("typing.Union[int, str, float]", "int | str | float"),
+    ("typing.Optional[float]", "float | None"),
+    ("typing.Union[int, NoneType, str]", "int | None | str"),
+    ("typing.Union[int, str, NoneType]", "int | str | None"),
+    ("typing.Optional[typing.Union[int, str]]", "int | str | None"),
+    ("typing.Union[__MOVABLE__, collections.abc.Sequence[typing.Any]]",
+     "__MOVABLE__ | collections.abc.Sequence[typing.Any]"),
+    ("typing.Union[__CALLABLE__, typing.List[__CALLABLE__]]", "__CALLABLE__ | typing.List[__CALLABLE__]"),
+    # Nested unions
+    ("typing.Tuple[typing.Union[float, int]]", "typing.Tuple[float | int]"),
+    ("typing.List[typing.Optional[int]]", "typing.List[int | None]"),
+    ("typing.Dict[str, typing.Union[int, str]]", "typing.Dict[str, int | str]"),
+    ("typing.Union[typing.List[typing.Union[int, str]], str]", "typing.List[int | str] | str"),
+    # Strings without 'typing.Union' or 'typing.Optional' are not changed
+    ("int", "int"),
+    ("__DEVICE__", "__DEVICE__"),
+    ("float | None", "float | None"),
+    ("typing.List[int]", "typing.List[int]"),
+    ("__DEVICE__ | list[__DEVICE__]", "__DEVICE__ | list[__DEVICE__]"),
+    ("collections.abc.Callable[[int, float], str]", "collections.abc.Callable[[int, float], str]"),
+    ("typing.Literal['a, b', 'c']", "typing.Literal['a, b', 'c']"),
+    # Only 'typing.Union' and 'typing.Optional' are converted
+    ("Union[int, str]", "Union[int, str]"),
+    ("other.Union[int, str]", "other.Union[int, str]"),
+])
+# fmt: on
+def test_normalize_union_syntax_1(type_str, expected):
+    """
+    ``_normalize_union_syntax``: basic tests
+    """
+    assert _normalize_union_syntax(type_str) == expected
+
+
+def _normalize_plan_annotations(plan):
+    """
+    Returns a copy of the plan description with union syntax of parameter types normalized.
+
+    NOTE: remove this function once support for Python 3.13 is dropped.
+    """
+    plan = copy.deepcopy(plan)
+    for p in plan.get("parameters", []):
+        if "type" in p.get("annotation", {}):
+            p["annotation"]["type"] = _normalize_union_syntax(p["annotation"]["type"])
+    return plan
+
+
 def test_verify_default_profile_collection():
     """
     Verify if the list of existing plans and devices matches current default profile collection.
@@ -5992,16 +6076,7 @@ def test_verify_default_profile_collection():
     #   If there is a mismatch, the printed difference is too large to be useful.
     assert len(plans) == len(existing_plans)
     for key in plans.keys():
-        if python_version < (3, 9) and key == "marked_up_count":
-            # The test will fail for Python 3.8 and earlier because of difference in representation
-            #   of 'typing.Union[float, NoneType]' and 'typing.Optional[float]'. Python 3.8 and
-            #   earlier converts 'typing.Optional[float]' to 'typing.Union[float, NoneType]' and
-            #   Python 3.9 is using 'typing.Optional[float]'. The condition may be removed
-            #   once there is no need to support Python 3.8 and earlier.
-            # NOTE: this limitation only affects this test, not functionality.
-            # TODO: remove this condition once Python 3.8 is not supported.
-            continue
-        assert plans[key] == existing_plans[key]
+        assert _normalize_plan_annotations(plans[key]) == _normalize_plan_annotations(existing_plans[key])
 
     assert devices == existing_devices
 

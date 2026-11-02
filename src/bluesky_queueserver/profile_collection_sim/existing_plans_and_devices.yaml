@@ -1848,7 +1848,7 @@ existing_plans:
         value: 1
       name: threshold
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       description: metadata
       kind:
@@ -1898,7 +1898,7 @@ existing_plans:
         value: 3
       name: per_shot
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       description: metadata
       kind:
@@ -2029,13 +2029,52 @@ existing_plans:
         value: 1
       name: flyers
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
-      description: metadata
+      description: Additional metadata to include in the run start document
       kind:
         name: KEYWORD_ONLY
         value: 3
       name: md
+    - annotation:
+        type: float | None
+      default: None
+      description: If set, will use `collect_while_completing` with the given flush
+        period
+      kind:
+        name: KEYWORD_ONLY
+        value: 3
+      name: collect_flush_period
+    - annotation:
+        type: str | None
+      default: None
+      description: If set, will declare a stream with the given name for all flyers
+      kind:
+        name: KEYWORD_ONLY
+        value: 3
+      name: stream_name
+    - annotation:
+        type: bool
+      default: 'False'
+      description: 'If set, declare the stream from the flyers'' `describe_collect`
+
+        rather than `describe`. Only used if `stream_name` is set.
+
+        Default is `False`.'
+      kind:
+        name: KEYWORD_ONLY
+        value: 3
+      name: collect
+    - annotation:
+        type: collections.abc.Sequence[str]
+      default: ()
+      description: 'Additional groups to monitor while collecting from flyers.
+
+        Will only be used if `collect_flush_period` is set.'
+      kind:
+        name: KEYWORD_ONLY
+        value: 3
+      name: watch
     properties:
       is_generator: true
   grid_scan:
@@ -2085,7 +2124,7 @@ existing_plans:
         value: 3
       name: per_step
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       description: metadata
       kind:
@@ -2124,7 +2163,7 @@ existing_plans:
         value: 3
       name: per_step
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       kind:
         name: KEYWORD_ONLY
@@ -2188,7 +2227,7 @@ existing_plans:
         value: 3
       name: per_step
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       description: metadata
       kind:
@@ -2211,7 +2250,7 @@ existing_plans:
         value: 1
       name: detectors
     - annotation:
-        type: tuple[__MOVABLE__ | typing.Any, list[typing.Any]]
+        type: __MOVABLE__ | collections.abc.Sequence[typing.Any]
       convert_device_names: true
       description: "For one dimension, ``motor, [point1, point2, ....]``.\nIn general:\n\
         \n.. code-block:: python\n\n    motor1, [point1, point2, ...],\n    motor2,\
@@ -2232,7 +2271,7 @@ existing_plans:
         value: 3
       name: per_step
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       description: metadata
       kind:
@@ -2406,7 +2445,9 @@ existing_plans:
         name: KEYWORD_ONLY
         value: 3
       name: timeout
-    - description: passed to obj.set()
+    - annotation:
+        type: typing.Any
+      description: passed to obj.set()
       kind:
         name: VAR_KEYWORD
         value: 4
@@ -2443,7 +2484,9 @@ existing_plans:
         name: KEYWORD_ONLY
         value: 3
       name: timeout
-    - description: passed to obj.set()
+    - annotation:
+        type: typing.Any
+      description: passed to obj.set()
       kind:
         name: VAR_KEYWORD
         value: 4
@@ -2543,7 +2586,7 @@ existing_plans:
         value: 1
       name: period
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       kind:
         name: POSITIONAL_OR_KEYWORD
@@ -2632,7 +2675,7 @@ existing_plans:
         value: 1
       name: threshold
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       description: metadata
       kind:
@@ -2691,7 +2734,7 @@ existing_plans:
         value: 3
       name: per_step
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       description: metadata
       kind:
@@ -2759,7 +2802,7 @@ existing_plans:
         value: 3
       name: per_step
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       description: metadata
       kind:
@@ -2802,7 +2845,7 @@ existing_plans:
         value: 3
       name: per_step
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       description: metadata
       kind:
@@ -2862,7 +2905,7 @@ existing_plans:
         value: 3
       name: per_step
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       description: metadata
       kind:
@@ -2912,7 +2955,7 @@ existing_plans:
         value: 3
       name: per_step
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       description: metadata
       kind:
@@ -3006,7 +3049,7 @@ existing_plans:
         value: 3
       name: per_step
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       description: metadata
       kind:
@@ -3101,7 +3144,7 @@ existing_plans:
         value: 3
       name: per_step
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       description: metadata
       kind:
@@ -3178,7 +3221,7 @@ existing_plans:
         value: 3
       name: per_step
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       description: metadata
       kind:
@@ -3217,7 +3260,7 @@ existing_plans:
         value: 3
       name: per_step
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       kind:
         name: KEYWORD_ONLY
@@ -3268,7 +3311,7 @@ existing_plans:
         value: 3
       name: per_step
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       description: metadata
       kind:
@@ -3305,7 +3348,7 @@ existing_plans:
         value: 3
       name: per_step
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       description: metadata
       kind:
@@ -3438,7 +3481,7 @@ existing_plans:
         value: 3
       name: per_step
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       description: metadata
       kind:
@@ -3547,7 +3590,7 @@ existing_plans:
         value: 3
       name: per_step
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       description: metadata
       kind:
@@ -3638,7 +3681,7 @@ existing_plans:
         value: 3
       name: per_step
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       description: metadata
       kind:
@@ -3724,7 +3767,7 @@ existing_plans:
         value: 1
       name: snake
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       description: metadata
       kind:
@@ -3767,7 +3810,7 @@ existing_plans:
         value: 1
       name: step
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       description: metadata
       kind:
@@ -3841,7 +3884,7 @@ existing_plans:
         value: 3
       name: per_step
     - annotation:
-        type: dict[str, typing.Any] | None
+        type: collections.abc.MutableMapping[str, typing.Any] | None
       default: None
       description: metadata
       kind:

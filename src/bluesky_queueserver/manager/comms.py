@@ -481,7 +481,7 @@ class PipeJsonRpcSendAsync:
                     response = None
                 return response
 
-            except asyncio.TimeoutError as ex:
+            except TimeoutError as ex:
                 raise CommTimeoutError(f"Timeout while waiting for response to message: \n{ppfl(msg)}") from ex
             except queue.Full as ex:
                 raise CommTimeoutError(f"The outgoing message buffer is full: \n{ppfl(msg)}") from ex

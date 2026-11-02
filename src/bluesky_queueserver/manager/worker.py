@@ -1432,7 +1432,7 @@ class RunEngineWorker(Process):
 
         from bluesky.run_engine import get_bluesky_event_loop
 
-        # Setting the default event loop is needed to make the code work with Python 3.8.
+        # Set the Bluesky event loop as the default loop for the worker process.
         loop = get_bluesky_event_loop() or asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 

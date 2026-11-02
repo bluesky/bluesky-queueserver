@@ -644,6 +644,18 @@ def start_manager():
     )
 
     group_console_output.add_argument(
+        "--zmq-stream-loggers",
+        dest="zmq_stream_loggers",
+        type=str,
+        nargs="+",
+        default=[],
+        help="Names of loggers in the worker environment, which messages are published to 0MQ "
+        "(info channel, 'log_message' key), e.g. '--zmq-stream-loggers bluesky ophyd'. Messages of "
+        "child loggers are included. Logger levels are not changed by RE Manager. "
+        "This parameter is only effective when --zmq-publish-info=ON; it is ignored otherwise.",
+    )
+
+    group_console_output.add_argument(
         "--console-output",
         dest="console_output",
         type=str,
@@ -801,6 +813,7 @@ def start_manager():
     config_worker["ignore_invalid_plans"] = settings.ignore_invalid_plans
     config_worker["permitted_re_metadata_keys"] = settings.permitted_re_metadata_keys
     config_worker["zmq_stream_device_progress"] = settings.zmq_stream_device_progress and settings.zmq_publish_info
+    config_worker["zmq_stream_loggers"] = settings.zmq_stream_loggers if settings.zmq_publish_info else []
 
     existing_pd_path = settings.existing_plans_and_devices_path
     if not existing_pd_path:

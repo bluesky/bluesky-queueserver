@@ -115,6 +115,62 @@ def push_info_to_msg_queue(*, key, msg, msg_queue):
     msg_queue.put(msg)
 
 
+_log_message_key = "log_message"
+
+
+class LogStreamHandler(logging.Handler):
+    """
+    Logging handler that publishes log records to the ``info`` channel under
+    the ``"log_message"`` key. The message is formatted as
+    ``{"name": <logger name>, "level": <level name>, "message": <text>, "time": <timestamp>,
+    "module": <module>, "lineno": <line number>}``.
+
+    Parameters
+    ----------
+    msg_queue : multiprocessing.Queue
+        Reference to the queue used for collecting messages.
+    """
+
+    def __init__(self, *, msg_queue):
+        super().__init__()
+        self._msg_queue = msg_queue
+
+    def emit(self, record):
+        try:
+            msg = {
+                "name": record.name,
+                "level": record.levelname,
+                "message": self.format(record),
+                "time": record.created,
+                "module": record.module,
+                "lineno": record.lineno,
+            }
+            push_info_to_msg_queue(key=_log_message_key, msg=msg, msg_queue=self._msg_queue)
+        except Exception:
+            self.handleError(record)
+
+
+def setup_log_streaming(*, loggers, msg_queue):
+    """
+    Attach ``LogStreamHandler`` to the selected loggers. Logger levels are not changed.
+
+    Parameters
+    ----------
+    loggers : list(str)
+        Names of the loggers. Messages of child loggers are also streamed.
+    msg_queue : multiprocessing.Queue
+        Reference to the queue used for collecting messages. Nothing is done if ``None``.
+    """
+    if not loggers or not msg_queue:
+        return
+
+    handler = LogStreamHandler(msg_queue=msg_queue)
+    for name in set(loggers):
+        # Children of selected loggers are already covered via propagation
+        if not any(name.startswith(_ + ".") for _ in loggers):
+            logging.getLogger(name).addHandler(handler)
+
+
 _default_zmq_console_topic = "QS_Console"
 _default_zmq_info_topic = "QS_Info"
 

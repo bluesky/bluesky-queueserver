@@ -7,24 +7,30 @@ import uuid
 
 import redis.asyncio
 
+from .sqlite_storage import SQLiteStorage
+
 logger = logging.getLogger(__name__)
 
 
 class PlanQueueOperations:
     """
-    The class supports operations with plan queue based on Redis. The public methods
+    The class supports operations with plan queue based on Redis or SQLite. The public methods
     of the class are protected with ``asyncio.Lock``.
 
     Parameters
     ----------
     redis_host: str
-        Address of Redis host.
+        Address of Redis host. Ignored if ``sqlite_path`` is set.
 
     name_prefix: str
         Prefix for the names of the keys used in Redis. The prefix is used to avoid conflicts
         with the keys used by other instances of Queue Server. For example, the prefix used
         for unit tests should be different from the prefix used in production. If the prefix
         is an empty string, then no prefix will be added (not recommended).
+
+    sqlite_path: str or None
+        Path to SQLite database file. If set, the data is stored in the SQLite database
+        instead of Redis. The file is created if it does not exist.
 
     Examples
     --------
@@ -70,8 +76,9 @@ class PlanQueueOperations:
         await pq.stop()
     """
 
-    def __init__(self, redis_host="localhost", name_prefix="qs_default"):
+    def __init__(self, redis_host="localhost", name_prefix="qs_default", sqlite_path=None):
         self._redis_host = redis_host
+        self._sqlite_path = sqlite_path
         self._uid_dict = dict()
         self._r_pool = None
 
@@ -260,20 +267,31 @@ class PlanQueueOperations:
         if not self._r_pool:  # Initialize only once
             self._lock = asyncio.Lock()
             async with self._lock:
-                try:
-                    if "://" not in self._redis_host:
-                        host = f"redis://{self._redis_host}"
-                    logger.debug("Connecting to Redis host at'%s'", host)
-                    self._r_pool = redis.asyncio.from_url(host, encoding="utf-8", decode_responses=True)
-                    await self._r_pool.ping()
-                except Exception as ex:
-                    error_msg = (
-                        f"Failed to create the Redis pool: "
-                        f"Redis server may not be available at '{self._redis_host}'. "
-                        f"Exception: {ex}"
-                    )
-                    logger.error(error_msg)
-                    raise OSError(error_msg) from ex
+                if self._sqlite_path:
+                    try:
+                        logger.debug("Opening SQLite database at '%s'", self._sqlite_path)
+                        self._r_pool = SQLiteStorage(self._sqlite_path)
+                        await self._r_pool.ping()
+                    except Exception as ex:
+                        error_msg = f"Failed to open SQLite database at '{self._sqlite_path}'. Exception: {ex}"
+                        logger.error(error_msg)
+                        raise OSError(error_msg) from ex
+                else:
+                    try:
+                        host = self._redis_host
+                        if "://" not in host:
+                            host = f"redis://{host}"
+                        logger.debug("Connecting to Redis host at'%s'", host)
+                        self._r_pool = redis.asyncio.from_url(host, encoding="utf-8", decode_responses=True)
+                        await self._r_pool.ping()
+                    except Exception as ex:
+                        error_msg = (
+                            f"Failed to create the Redis pool: "
+                            f"Redis server may not be available at '{self._redis_host}'. "
+                            f"Exception: {ex}"
+                        )
+                        logger.error(error_msg)
+                        raise OSError(error_msg) from ex
 
                 await self._queue_clean()
                 await self._uid_dict_initialize()

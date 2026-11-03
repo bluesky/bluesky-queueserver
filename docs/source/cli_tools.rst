@@ -188,6 +188,11 @@ Other Configuration Parameters
 - ``--redis-addr`` is the address of Redis server
   used by RE Manager as persistent storage.
 
+- ``--storage-backend`` selects the persistent storage backend: ``redis`` (default) or ``sqlite``.
+
+- ``--sqlite-path`` is the path to SQLite database file used if ``--storage-backend=sqlite``.
+  If not set, the database is created in the OS-specific user cache directory.
+
 - ``--verbose``, ``--quiet`` and ``--silent`` options modify logging verbosity
   level for RE Manager.
 

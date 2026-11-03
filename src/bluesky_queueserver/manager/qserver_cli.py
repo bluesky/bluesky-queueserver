@@ -28,6 +28,7 @@ from .comms import (
 )
 from .logging_setup import PPrintForLogging as ppfl
 from .plan_queue_ops import PlanQueueOperations
+from .sqlite_storage import get_default_sqlite_path
 
 logger = logging.getLogger(__name__)
 
@@ -1497,7 +1498,9 @@ def qserver_clear_lock():
         description="Bluesky-QServer: Clear RE Manager lock.\n"
         f"bluesky-queueserver version {qserver_version}\n\n"
         "Recover locked RE Manager if the lock key is lost. The utility requires access to Redis\n"
-        "used by RE Manager. Provide the address of Redis service using '--redis-addr' parameter.\n"
+        "or SQLite database used by RE Manager. Select the storage backend using '--storage-backend'\n"
+        "and provide the address of Redis service using '--redis-addr' parameter or the path\n"
+        "to SQLite database using '--sqlite-path' parameter.\n"
         "Restart the RE Manager service after clearing the lock.\n",
         formatter_class=formatter,
     )
@@ -1519,6 +1522,24 @@ def qserver_clear_lock():
         help="The prefix for the names of Redis keys used by RE Manager (default: %(default)s). ",
     )
 
+    parser.add_argument(
+        "--storage-backend",
+        dest="storage_backend",
+        type=str,
+        choices=["redis", "sqlite"],
+        default="redis",
+        help="Persistent storage backend used by RE Manager (default: %(default)s).",
+    )
+
+    parser.add_argument(
+        "--sqlite-path",
+        dest="sqlite_path",
+        type=str,
+        default=None,
+        help="Path to SQLite database file used by RE Manager if '--storage-backend=sqlite'. "
+        "If not set, the default database in the OS-specific user cache directory is used.",
+    )
+
     args = parser.parse_args()
 
     exit_code = 0
@@ -1526,7 +1547,12 @@ def qserver_clear_lock():
     async def remove_lock():
         nonlocal exit_code
         try:
-            pq = PlanQueueOperations(redis_host=args.redis_addr, name_prefix=args.redis_name_prefix)
+            sqlite_path = None
+            if args.storage_backend == "sqlite":
+                sqlite_path = args.sqlite_path or get_default_sqlite_path()
+            pq = PlanQueueOperations(
+                redis_host=args.redis_addr, name_prefix=args.redis_name_prefix, sqlite_path=sqlite_path
+            )
             await pq.start()
             lock_info = await pq.lock_info_retrieve()
             if lock_info is not None:

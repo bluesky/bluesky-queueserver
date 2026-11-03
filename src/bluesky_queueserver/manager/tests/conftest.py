@@ -5,6 +5,16 @@ import pytest
 
 from bluesky_queueserver.manager.profile_ops import clear_registered_items
 
+from .common import _test_sqlite_path
+
+
+@pytest.fixture(scope="session", autouse=True)
+def remove_test_sqlite_db():
+    yield
+    for path in (_test_sqlite_path, _test_sqlite_path + "-journal"):
+        if os.path.exists(path):
+            os.remove(path)
+
 
 @pytest.fixture(autouse=True)
 def setup_and_teardown_for_every_test():

@@ -29,6 +29,11 @@ properties:
         type: string
       redis_name_prefix:
         type: string
+      storage_backend:
+        type: string
+        enum: ["redis", "sqlite"]
+      sqlite_path:
+        type: string
   worker:
     type: object
     additionalProperties: false

@@ -1277,7 +1277,7 @@ class RunEngineManager(Process):
 
             try:
                 await asyncio.wait_for(self._queue_autostart_event.wait(), timeout=polling_period)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
 
             self._queue_autostart_event.clear()
@@ -1832,7 +1832,7 @@ class RunEngineManager(Process):
         try:
             response = await self._comm_to_watchdog.send_msg("is_worker_alive")
             worker_alive = response["worker_alive"]
-        except asyncio.TimeoutError:
+        except TimeoutError:
             worker_alive = False
         return worker_alive
 

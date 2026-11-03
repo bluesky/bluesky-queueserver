@@ -68,17 +68,21 @@ jobs:
       with:
         # Need this to get version number from last tag
         fetch-depth: 0
+
     - uses: shogo82148/actions-setup-redis@v1
       if: matrix.storage-backend == 'redis'
       with:
         redis-version: "7.x"
+
     - uses: prefix-dev/setup-pixi@v0.10.0
+      with:
+        environments: ${{ matrix.python-env }}
+
     - name: Install dependencies
       run: |
         pixi install --environment=${{ matrix.python-env }}
         pixi list --environment=${{ matrix.python-env }}
         pixi run --environment=${{ matrix.python-env }} pip list
-        pixi run --environment=${{ matrix.python-env }} conda list
 
     - name: Test with pytest
       env:

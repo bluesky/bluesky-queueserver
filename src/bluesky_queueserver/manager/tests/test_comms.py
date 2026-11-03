@@ -76,13 +76,11 @@ def test_CommJsonRpcError_3_fail():
     err_msg, err_code, err_type = "Some error occured", 25, "RuntimeError"
     ex = CommJsonRpcError(err_msg, err_code, err_type)
 
-    # The pattern 'can't set attribute': Python 3.10 and older
-    # The pattern 'object has no setter': Python 3.11
-    with pytest.raises(AttributeError, match="can't set attribute|object has no setter"):
+    with pytest.raises(AttributeError, match="object has no setter"):
         ex.message = err_msg
-    with pytest.raises(AttributeError, match="can't set attribute|object has no setter"):
+    with pytest.raises(AttributeError, match="object has no setter"):
         ex.error_code = err_code
-    with pytest.raises(AttributeError, match="can't set attribute|object has no setter"):
+    with pytest.raises(AttributeError, match="object has no setter"):
         ex.error_type = err_type
 
 

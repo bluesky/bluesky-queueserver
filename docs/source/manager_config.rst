@@ -133,6 +133,8 @@ most of the supported parameters:
       zmq_publish_console: true
       redis_addr: localhost:6379
       redis_name_prefix: qs_default
+      storage_backend: redis
+      sqlite_path: ~/.cache/bluesky-queueserver/qserver.sqlite
     startup:
       keep_re: true
       startup_dir: ~/.ipython/profile_collection/startup
@@ -214,6 +216,15 @@ Parameters that define for network settings used by RE Manager:
 - ``redis_name_prefix`` - the prefix is appended to the Redis keys to differentiate between keys
   created by different instances of RE Manager. The value may also be passed using
   ``--redis-name-prefix`` CLI parameter.
+
+- ``storage_backend`` - persistent storage backend used by RE Manager: ``redis`` (default) or
+  ``sqlite``. The value may also be passed using ``--storage-backend`` CLI parameter.
+
+- ``sqlite_path`` - path to SQLite database file used if ``storage_backend`` is ``sqlite``.
+  The file is created if it does not exist. If the path is not set, the database is created in
+  the OS-specific user cache directory (e.g. ``~/.cache/bluesky-queueserver/qserver.sqlite`` on Linux).
+  The keys are prefixed with ``redis_name_prefix``, so multiple instances of RE Manager may share
+  the same database file. The value may also be passed using ``--sqlite-path`` CLI parameter.
 
 startup
 +++++++

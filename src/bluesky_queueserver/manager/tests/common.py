@@ -7,6 +7,7 @@ import queue
 import shutil
 import subprocess
 import sys
+import tempfile
 import time as ttime
 from threading import Thread
 
@@ -24,6 +25,9 @@ logger = logging.Logger(__name__)
 _user, _user_group = "Testing Script", "primary"
 
 _test_redis_name_prefix = "qs_unit_tests"
+
+# SQLite database used by tests if USE_STORAGE_BACKEND=sqlite. Deleted at the end of the test session.
+_test_sqlite_path = os.path.join(tempfile.gettempdir(), f"qserver_unit_tests_{os.getpid()}.sqlite")
 
 # The name of the script in the simulated startup directory that configures Run Engine.
 _fln_run_engine_config = "05-run-engine.py"
@@ -44,6 +48,39 @@ def use_zmq_encoding_for_tests():
     Returns the encoding 'use_ipykernel_for_tests()' for 0MQ messages.
     """
     return os.environ.get("USE_ZMQ_ENCODING", "json")
+
+
+def use_storage_backend_for_tests():
+    """
+    Returns the persistent storage backend ('redis' or 'sqlite') used by tests. The backend is
+    selected using USE_STORAGE_BACKEND environment variable (default: 'redis').
+    """
+    backend = os.environ.get("USE_STORAGE_BACKEND", "redis").lower()
+    if backend not in ("redis", "sqlite"):
+        raise ValueError(f"Unsupported value of USE_STORAGE_BACKEND: {backend!r}. Supported: 'redis', 'sqlite'")
+    return backend
+
+
+requires_redis = pytest.mark.skipif(
+    use_storage_backend_for_tests() != "redis", reason="The test requires Redis storage backend"
+)
+
+
+def storage_backend_cli_params():
+    """
+    Returns the list of CLI parameters that select the storage backend used by tests.
+    """
+    if use_storage_backend_for_tests() == "sqlite":
+        return ["--storage-backend=sqlite", f"--sqlite-path={_test_sqlite_path}"]
+    return []
+
+
+def create_test_plan_queue(name_prefix=_test_redis_name_prefix):
+    """
+    Create ``PlanQueueOperations`` object that uses the storage backend selected for tests.
+    """
+    sqlite_path = _test_sqlite_path if use_storage_backend_for_tests() == "sqlite" else None
+    return PlanQueueOperations(name_prefix=name_prefix, sqlite_path=sqlite_path)
 
 
 def copy_default_profile_collection(tmp_path, *, copy_py=True, copy_yaml=True):
@@ -445,7 +482,7 @@ def wait_for_task_result(time, task_uid, *, encoding=None):
 
 def clear_redis_pool(redis_name_prefix=_test_redis_name_prefix):
     # Remove all Redis entries.
-    pq = PlanQueueOperations(name_prefix=redis_name_prefix)
+    pq = create_test_plan_queue(name_prefix=redis_name_prefix)
 
     async def run():
         await pq.start()
@@ -526,6 +563,10 @@ class ReManager:
         # Remove --zmq-encoding=0   # Do not pass the parameter at all
         if "--zmq-encoding=0" in params:
             params.remove("--zmq-encoding=0")
+
+        # Tests that select the backend explicitly are responsible for passing all storage parameters
+        if not any(_.startswith("--storage-backend") for _ in params):
+            params.extend(storage_backend_cli_params())
 
         # Set default name prefix for Redis keys
         name_prefix_params = [_ for _ in params if _.startswith("--redis-name-prefix")]

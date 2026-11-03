@@ -33,7 +33,9 @@ from .common import (  # noqa: F401
     re_manager_pc_copy,
     set_qserver_zmq_address,
     set_qserver_zmq_public_key,
+    storage_backend_cli_params,
     use_ipykernel_for_tests,
+    use_storage_backend_for_tests,
     use_zmq_encoding_for_tests,
     wait_for_condition,
     zmq_request,
@@ -1790,9 +1792,10 @@ def test_qserver_clear_lock_01(re_manager_cmd):  # noqa: F811
 
     # Redis name prefix is optional, but it must be used in the test to avoid changing other keys
     prefix = f"--redis-name-prefix={_test_redis_name_prefix}"
+    storage_params = storage_backend_cli_params()
 
     # Clear the lock in Redis
-    assert subprocess.call(["qserver-clear-lock", prefix]) == 0
+    assert subprocess.call(["qserver-clear-lock", prefix, *storage_params]) == 0
     check_state(True, False)
 
     # Restart the manager
@@ -1803,15 +1806,20 @@ def test_qserver_clear_lock_01(re_manager_cmd):  # noqa: F811
     check_state(False, False)
 
     # Now try to clear the lock repeatedly.
-    assert subprocess.call(["qserver-clear-lock", prefix]) == 0
-    assert subprocess.call(["qserver-clear-lock", prefix]) == 0
+    assert subprocess.call(["qserver-clear-lock", prefix, *storage_params]) == 0
+    assert subprocess.call(["qserver-clear-lock", prefix, *storage_params]) == 0
     check_state(False, False)
 
-    # Pass the Redis address (correct address, same as default)
-    assert subprocess.call(["qserver-clear-lock", "--redis-addr=localhost", prefix]) == 0
+    if use_storage_backend_for_tests() == "redis":
+        # Pass the Redis address (correct address, same as default)
+        assert subprocess.call(["qserver-clear-lock", "--redis-addr=localhost", prefix]) == 0
 
-    # Invalid address (incorrect port). The call fails.
-    assert subprocess.call(["qserver-clear-lock", "--redis-addr=localhost:9999", prefix]) == 1
+        # Invalid address (incorrect port). The call fails.
+        assert subprocess.call(["qserver-clear-lock", "--redis-addr=localhost:9999", prefix]) == 1
+    else:
+        # Invalid path (the directory does not exist). The call fails.
+        invalid_path = "--sqlite-path=/non_existing_dir/qserver.sqlite"
+        assert subprocess.call(["qserver-clear-lock", "--storage-backend=sqlite", invalid_path, prefix]) == 1
 
     # Unknown parameter
     assert subprocess.call(["qserver-clear-lock", "--unknown-param=value", prefix]) == 2

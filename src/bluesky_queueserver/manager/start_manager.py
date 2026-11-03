@@ -461,6 +461,25 @@ def start_manager():
         help="The prefix for the names of Redis keys used by RE Manager (default: %(default)s). ",
     )
 
+    parser.add_argument(
+        "--storage-backend",
+        dest="storage_backend",
+        type=str,
+        choices=["redis", "sqlite"],
+        default="redis",
+        help="Persistent storage backend used by RE Manager (default: %(default)s).",
+    )
+
+    parser.add_argument(
+        "--sqlite-path",
+        dest="sqlite_path",
+        type=str,
+        default=None,
+        help="Path to SQLite database file used as persistent storage if '--storage-backend=sqlite'. "
+        "The file is created if it does not exist. If not set, the database is created in "
+        "the OS-specific user cache directory. Keys are prefixed with '--redis-name-prefix'.",
+    )
+
     group_ip_kernel = parser.add_argument_group(
         "Configure IPython Kernel",
         "The parameters for configuring IPython kernel used by RE Worker. The IPython kernel is\n"
@@ -847,6 +866,7 @@ def start_manager():
 
     config_manager["redis_addr"] = settings.redis_addr
     config_manager["redis_name_prefix"] = settings.redis_name_prefix
+    config_manager["sqlite_path"] = settings.sqlite_path if settings.storage_backend == "sqlite" else None
 
     config_manager["use_ipython_kernel"] = settings.use_ipython_kernel
 

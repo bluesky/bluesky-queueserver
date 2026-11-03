@@ -13,6 +13,7 @@ from bluesky_queueserver.manager.config import default_existing_pd_fln, default_
 
 from .common import (
     _test_redis_name_prefix,
+    _test_sqlite_path,
     _user,
     _user_group,
     append_code_to_last_startup_file,
@@ -28,6 +29,7 @@ from .common import (
     set_qserver_zmq_encoding,
     set_qserver_zmq_public_key,
     use_ipykernel_for_tests,
+    use_storage_backend_for_tests,
     use_zmq_encoding_for_tests,
     wait_for_condition,
     wait_for_task_result,
@@ -461,6 +463,12 @@ def test_cli_parameters_zmq_server_address_1(monkeypatch, re_manager_cmd, test_m
         assert status is None, (status, msg)
 
 
+def _get_expected_storage_settings():
+    if use_storage_backend_for_tests() == "sqlite":
+        return {"storage_backend": "sqlite", "sqlite_path": _test_sqlite_path}
+    return {"storage_backend": "redis", "sqlite_path": None}
+
+
 def _get_expected_settings_default_1(_1, _2):
     use_ip_kernel = use_ipykernel_for_tests()
     username = getpass.getuser()
@@ -501,6 +509,7 @@ def _get_expected_settings_default_1(_1, _2):
         "print_console_output": True,
         "redis_addr": "localhost",
         "redis_name_prefix": _test_redis_name_prefix,  # We use it for unit tests
+        **_get_expected_storage_settings(),
         "startup_dir": startup_dir,
         "startup_module": None,
         "startup_profile": startup_profile,
@@ -608,6 +617,7 @@ def _get_expected_settings_config_2(file_dir, ip_con_dir):
         "print_console_output": True,
         "redis_addr": "localhost:6379",
         "redis_name_prefix": "qs_unit_tests2",  # Specific for this test
+        **_get_expected_storage_settings(),
         "startup_dir": startup_dir,
         "startup_module": None,
         "startup_profile": startup_profile,
@@ -706,6 +716,7 @@ def _get_expected_settings_params_3(file_dir, _):
         "print_console_output": False,
         "redis_addr": "localhost:6379",
         "redis_name_prefix": "qs_unit_tests3",  # Specific for this test
+        **_get_expected_storage_settings(),
         "startup_dir": startup_dir,
         "startup_module": None,
         "startup_profile": startup_profile,

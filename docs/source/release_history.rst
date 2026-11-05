@@ -5,10 +5,44 @@ Release History
 Unreleased
 ==========
 
+v0.0.26 (2026-11-05)
+====================
+
+Added
+-----
+
+- Implementation for streaming of device progress data.
+
+- Additional CLI parameter of ``start-re-manager``: ``--zmq-stream-device-progress`` and 
+  ``network/zmq_stream_device_progress`` config file equivalent.
+
+- Queue item UID is available in Bluesky start documents under the ``"queue_item_uid"`` key.
+
+Changed
+-------
+
+- Separate CLI parameter for controlling Info message publishing: ``--zmq_publish_info`` 
+  (``network/zmq_publish_info`` config file parameter).
+
+
 Removed
 -------
 
-- Support for Python 3.10. The minimum supported Python version is now 3.11.
+- Deprecated CLI flags for setting the ZMQ info address and for keeping the RE.
+
+- Support for Python 3.10 and older support code.
+
+Fixed
+-----
+
+- Prevent standard packages from being recognized as local imports.
+
+- The issue with serialization of RE metadata in case when the metadata is ``RedisJSONDict``.
+
+- Limit the default keys for ``re_metadata`` API (parameter ``--permitted-re-metadata-keys``) to 
+  ``/scan_id`` and ``/versions``. The keys may be added by setting the respective CLI parameter, 
+  configuration file parameter or environment variable. Adding ``/`` to the list of permissions 
+  selects all the keys.
 
 
 v0.0.25 (2026-07-16)

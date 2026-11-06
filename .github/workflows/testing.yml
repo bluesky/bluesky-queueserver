@@ -31,12 +31,17 @@ jobs:
             "use-ipykernel": [true, false],
             "python-env": ["py311", "py312", "py313", "py314"],
             "zmq-encoding": ["json", "msgpack"],
+            "storage-backend": ["redis", "sqlite"],
             "splits": [3],
             "group": [1, 2, 3],
             "exclude": [
               {"python-env": "py311", "zmq-encoding": "msgpack"},
               {"python-env": "py312", "zmq-encoding": "msgpack"},
-              {"python-env": "py313", "zmq-encoding": "msgpack"}
+              {"python-env": "py313", "zmq-encoding": "msgpack"},
+              {"python-env": "py311", "storage-backend": "sqlite"},
+              {"python-env": "py312", "storage-backend": "sqlite"},
+              {"python-env": "py313", "storage-backend": "sqlite"},
+              {"zmq-encoding": "msgpack", "storage-backend": "sqlite"}
             ]
           }'
         else
@@ -44,6 +49,7 @@ jobs:
             "use-ipykernel": [true, false],
             "python-env": ["py314"],
             "zmq-encoding": ["json"],
+            "storage-backend": ["redis"],
             "splits": [10],
             "group": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
           }'
@@ -64,6 +70,7 @@ jobs:
         fetch-depth: 0
 
     - uses: shogo82148/actions-setup-redis@v1
+      if: matrix.storage-backend == 'redis'
       with:
         redis-version: "7.x"
 
@@ -81,6 +88,7 @@ jobs:
       env:
         USE_IPYKERNEL: ${{ matrix.use-ipykernel }}
         USE_ZMQ_ENCODING: ${{ matrix.zmq-encoding }}
+        USE_STORAGE_BACKEND: ${{ matrix.storage-backend }}
       run: |
         # pytest -k test_ip_kernel_func -vvv
         pixi run --environment=${{ matrix.python-env }} coverage run -m pytest -vv --splits ${{ matrix.splits }} --group ${{ matrix.group }}

@@ -274,6 +274,8 @@ class RunEngineManager(Process):
         if config and ("redis_name_prefix" in config):
             self._redis_name_prefix = config["redis_name_prefix"]
 
+        self._sqlite_path = config.get("sqlite_path", None) if config else None
+
         self._plan_queue = None  # Object of class plan_queue_ops.PlanQueueOperations
 
         self._heartbeat_generator_task = None  # Task for heartbeat generator
@@ -3834,7 +3836,7 @@ class RunEngineManager(Process):
         self._worker_status_task = asyncio.ensure_future(self._periodic_worker_state_request(), loop=self._loop)
 
         self._plan_queue = PlanQueueOperations(
-            redis_host=self._ip_redis_server, name_prefix=self._redis_name_prefix
+            redis_host=self._ip_redis_server, name_prefix=self._redis_name_prefix, sqlite_path=self._sqlite_path
         )
         await self._plan_queue.start()
 

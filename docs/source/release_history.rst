@@ -5,6 +5,17 @@ Release History
 Unreleased
 ==========
 
+v0.0.27 (2026-11-16)
+====================
+
+Fixed
+-----
+
+- RE Manager could not connect to Redis servers older than 6.0, which do not support protocol 3,
+  when ``redis`` package version 8 or later was installed. RE Manager now always uses protocol 2
+  to communicate with Redis.
+
+
 v0.0.26 (2026-11-05)
 ====================
 

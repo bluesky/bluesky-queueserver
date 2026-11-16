@@ -264,7 +264,9 @@ class PlanQueueOperations:
                     if "://" not in self._redis_host:
                         host = f"redis://{self._redis_host}"
                     logger.debug("Connecting to Redis host at'%s'", host)
-                    self._r_pool = redis.asyncio.from_url(host, encoding="utf-8", decode_responses=True)
+                    self._r_pool = redis.asyncio.from_url(
+                        host, encoding="utf-8", decode_responses=True, protocol=2
+                    )
                     await self._r_pool.ping()
                 except Exception as ex:
                     error_msg = (

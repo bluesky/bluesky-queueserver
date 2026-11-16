@@ -27,7 +27,7 @@ dependencies = [
     "python-multipart",
     "pyyaml",
     "pyzmq",
-    "redis[hiredis]",
+    "redis[hiredis]>=5.0",
     "requests",
 ]
 dynamic = ["version"]

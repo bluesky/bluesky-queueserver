@@ -23,6 +23,7 @@ dependencies = [
     "openpyxl",
     "ophyd",
     "packaging",
+    "platformdirs",
     "pydantic",
     "python-multipart",
     "pyyaml",

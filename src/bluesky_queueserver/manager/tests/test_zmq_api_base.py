@@ -59,6 +59,7 @@ from .common import (  # noqa: F401
     re_manager_factory,
     re_manager_pc_copy,
     remove_run_engine_config_from_startup,
+    requires_redis,
     use_ipykernel_for_tests,
     use_zmq_encoding_for_tests,
     wait_for_condition,
@@ -6288,6 +6289,7 @@ RE.md["project_registry"] = {{
 }}
 """
 
+@requires_redis
 def test_zmq_api_re_metadata_10_redis_json_dict(re_manager_cmd, tmp_path, redis_json_dict):  # noqa: F811
     """
     Tests `re_metadata` operation in case RE.md is redis_json_dict (RedisJSONDict) to

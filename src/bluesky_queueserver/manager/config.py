@@ -23,6 +23,7 @@ from .config_schemas.loading import ConfigError, load_schema_from_yml
 from .logging_setup import setup_loggers
 from .output_streaming import default_zmq_info_address_for_server
 from .profile_ops import get_default_startup_dir, get_default_startup_profile
+from .sqlite_storage import get_default_sqlite_path
 from .utils import to_boolean
 
 logger = logging.getLogger(__name__)
@@ -189,6 +190,8 @@ _key_mapping = {
     "zmq_stream_device_progress": "network/zmq_stream_device_progress",
     "redis_addr": "network/redis_addr",
     "redis_name_prefix": "network/redis_name_prefix",
+    "storage_backend": "network/storage_backend",
+    "sqlite_path": "network/sqlite_path",
     "ignore_invalid_plans": "startup/ignore_invalid_plans",
     "existing_plans_and_devices_path": "startup/existing_plans_and_devices_path",
     "user_group_permissions_path": "startup/user_group_permissions_path",
@@ -384,6 +387,24 @@ class Settings:
         if not isinstance(redis_name_prefix, str):
             raise ConfigError(f"Redis name prefix must be a string: {redis_name_prefix!r}")
         self._settings["redis_name_prefix"] = redis_name_prefix
+
+        storage_backend = self._get_param(
+            value_default=self._args.storage_backend,
+            value_config=self._get_value_from_config("storage_backend"),
+            value_cli=self._args_existing("storage_backend"),
+        )
+        if storage_backend not in ("redis", "sqlite"):
+            raise ConfigError(f"Unsupported storage backend: {storage_backend!r}. Supported: 'redis', 'sqlite'")
+        self._settings["storage_backend"] = storage_backend
+
+        sqlite_path = self._get_param(
+            value_default=self._args.sqlite_path,
+            value_config=self._get_value_from_config("sqlite_path"),
+            value_cli=self._args_existing("sqlite_path"),
+        )
+        if storage_backend == "sqlite" and not sqlite_path:
+            sqlite_path = get_default_sqlite_path()
+        self._settings["sqlite_path"] = sqlite_path
 
         device_max_depth = self._get_param(
             value_default=self._args.device_max_depth,

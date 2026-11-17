@@ -16,6 +16,7 @@ from .common import (
     condition_queue_processing_finished,
     copy_default_profile_collection,
     re_manager_cmd,  # noqa: F401
+    requires_redis,
     wait_for_condition,
     zmq_request,
 )
@@ -119,6 +120,7 @@ def zmq_proxy():
     ("localhost:6379/0", True),
     ("localhost:6378", False)])  # Incorrect port.
 # fmt: on
+@requires_redis
 def test_manager_redis_addr_parameter(re_manager_cmd, redis_addr, success):  # noqa: F811
     if success:
         re_manager_cmd(["--redis-addr", redis_addr])

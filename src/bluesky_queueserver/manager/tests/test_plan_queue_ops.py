@@ -9,7 +9,7 @@ import pytest
 
 from bluesky_queueserver.manager.plan_queue_ops import PlanQueueOperations
 
-from .common import _test_redis_name_prefix
+from .common import _test_redis_name_prefix, create_test_plan_queue
 
 errmsg_wrong_plan_type = "Parameter 'item' should be a dictionary"
 
@@ -27,7 +27,7 @@ class PQ:
         """
         Returns initialized instance of plan queue.
         """
-        self._pq = PlanQueueOperations(name_prefix=_test_redis_name_prefix)
+        self._pq = create_test_plan_queue()
         await self._pq.start()
         # Clear any pool entries
         await self._pq.delete_pool_entries()
@@ -55,7 +55,7 @@ def test_pq_start_stop():
     """
 
     async def testing():
-        pq = PlanQueueOperations(name_prefix=_test_redis_name_prefix)
+        pq = create_test_plan_queue()
         await pq.start()
         await pq._r_pool.ping()
         await pq.stop()
@@ -236,7 +236,7 @@ def test_set_plan_queue_mode_1():
             queue_mode = {"loop": True, "ignore_failures": True}
             await pq.set_plan_queue_mode(queue_mode, update=False)
 
-            pq2 = PlanQueueOperations(name_prefix=_test_redis_name_prefix)
+            pq2 = create_test_plan_queue()
             await pq2.start()
             assert pq2.plan_queue_mode == queue_mode
 

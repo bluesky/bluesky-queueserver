@@ -49,9 +49,13 @@ jobs:
             "use-ipykernel": [true, false],
             "python-env": ["py314"],
             "zmq-encoding": ["json"],
-            "storage-backend": ["redis"],
+            "storage-backend": ["redis", "sqlite"],
             "splits": [10],
-            "group": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+            "group": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            "exclude": [
+              {"use-ipykernel": true, "storage-backend": "sqlite"},
+              {"use-ipykernel": false, "storage-backend": "redis"}
+            ]
           }'
         fi
         echo "matrix=$(jq -c . <<< "$matrix")" >> "$GITHUB_OUTPUT"

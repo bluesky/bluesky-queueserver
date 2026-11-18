@@ -515,6 +515,7 @@ def _get_expected_settings_default_1(_1, _2):
         "zmq_publish_console": False,
         "zmq_publish_info": False,
         "zmq_stream_device_progress": False,
+        "zmq_stream_loggers": [],
     }
 
 
@@ -532,6 +533,9 @@ network:
   zmq_publish_console: true
   zmq_publish_info: true
   zmq_stream_device_progress: true
+  zmq_stream_loggers:
+    - bluesky
+    - ophyd
   redis_addr: localhost:6379
   redis_name_prefix: qs_unit_tests2
 worker:
@@ -622,6 +626,7 @@ def _get_expected_settings_config_2(file_dir, ip_con_dir):
         "zmq_publish_console": True,
         "zmq_publish_info": True,
         "zmq_stream_device_progress": True,
+        "zmq_stream_loggers": ["bluesky", "ophyd"],
     }
 
 
@@ -662,6 +667,9 @@ def _get_cli_params_3(file_dir):
         "--zmq-publish-console=OFF",
         "--zmq-publish-info=OFF",
         "--zmq-stream-device-progress=OFF",
+        "--zmq-stream-loggers",
+        "bluesky.RE",
+        "caproto",
         "--console-output=OFF",
     ]
 
@@ -720,6 +728,7 @@ def _get_expected_settings_params_3(file_dir, _):
         "zmq_publish_console": False,
         "zmq_publish_info": False,
         "zmq_stream_device_progress": False,
+        "zmq_stream_loggers": ["bluesky.RE", "caproto"],
     }
 
 

@@ -25,6 +25,10 @@ properties:
         type: boolean
       zmq_stream_device_progress:
         type: boolean
+      zmq_stream_loggers:
+        type: array
+        items:
+          type: string
       redis_addr:
         type: string
       redis_name_prefix:

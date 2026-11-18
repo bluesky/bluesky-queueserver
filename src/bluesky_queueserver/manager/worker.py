@@ -18,7 +18,7 @@ from .comms import PipeJsonRpcReceive
 from .config import profile_name_to_startup_dir
 from .logging_setup import PPrintForLogging as ppfl
 from .logging_setup import setup_loggers
-from .output_streaming import setup_console_output_redirection
+from .output_streaming import setup_console_output_redirection, setup_log_streaming
 from .profile_ops import (
     compare_existing_plans_and_devices,
     existing_plans_and_devices_from_nspace,
@@ -1727,6 +1727,7 @@ class RunEngineWorker(Process):
 
         logging.basicConfig(level=max(logging.WARNING, self._log_level))
         setup_loggers(name="bluesky_queueserver", log_level=self._log_level)
+        setup_log_streaming(loggers=self._config_dict.get("zmq_stream_loggers", []), msg_queue=self._msg_queue)
 
         self._success_startup = True
         self._env_state = EState.INITIALIZING

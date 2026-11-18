@@ -300,6 +300,8 @@ class RunEngineManager(Process):
         self._existing_plans, self._existing_devices = {}, {}
         self._existing_plans_uid = _generate_uid()
         self._existing_devices_uid = _generate_uid()
+        self._existing_enums = {}
+        self._existing_enums_uid = _generate_uid()
         self._allowed_plans, self._allowed_devices = {}, {}
         self._allowed_plans_uid = _generate_uid()
         self._allowed_devices_uid = _generate_uid()
@@ -438,6 +440,7 @@ class RunEngineManager(Process):
             "plan_history_uid": self._plan_queue.plan_history_uid,
             "devices_existing_uid": self._existing_devices_uid,
             "plans_existing_uid": self._existing_plans_uid,
+            "enums_existing_uid": self._existing_enums_uid,
             "devices_allowed_uid": self._allowed_devices_uid,
             "plans_allowed_uid": self._allowed_plans_uid,
             "plan_queue_mode": self._plan_queue.plan_queue_mode,
@@ -902,10 +905,14 @@ class RunEngineManager(Process):
             self._re_run_list_uid = _generate_uid()
             self._status_update()
 
-    def _set_existing_plans_and_devices(self, *, existing_plans, existing_devices, always_update_uids=False):
+    def _set_existing_plans_and_devices(
+        self, *, existing_plans, existing_devices, existing_enums=None, always_update_uids=False
+    ):
         """
         Sets the lists of existing plans and devices and updates UIDs if necessary.
         """
+        existing_enums = existing_enums or {}
+
         # First update UIDs if necessary.
         try:
             if always_update_uids or (existing_plans != self._existing_plans):
@@ -921,9 +928,17 @@ class RunEngineManager(Process):
             logger.warning("Failed to compare lists of existing devices: %s", ex)
             self._existing_devices_uid = _generate_uid()
 
+        try:
+            if always_update_uids or (existing_enums != self._existing_enums):
+                self._existing_enums_uid = _generate_uid()
+        except Exception as ex:
+            logger.warning("Failed to compare lists of existing enumerations: %s", ex)
+            self._existing_enums_uid = _generate_uid()
+
         # Now update the references
         self._existing_plans = existing_plans
         self._existing_devices = existing_devices
+        self._existing_enums = existing_enums
 
     async def _load_existing_plans_and_devices_from_worker(self):
         """
@@ -942,6 +957,7 @@ class RunEngineManager(Process):
             self._set_existing_plans_and_devices(
                 existing_plans=plan_and_devices_list["existing_plans"],
                 existing_devices=plan_and_devices_list["existing_devices"],
+                existing_enums=plan_and_devices_list.get("existing_enums", {}),
             )
 
             try:
@@ -1483,10 +1499,13 @@ class RunEngineManager(Process):
         path_pd = self._config_dict["existing_plans_and_devices_path"]
         try:
             if restore_plans_devices:
-                existing_plans, existing_devices = load_existing_plans_and_devices(path_pd)
+                existing_plans, existing_devices, existing_enums = load_existing_plans_and_devices(
+                    path_pd, return_enums=True
+                )
                 self._set_existing_plans_and_devices(
                     existing_plans=existing_plans,
                     existing_devices=existing_devices,
+                    existing_enums=existing_enums,
                     always_update_uids=True,
                 )
             self._generate_lists_of_allowed_plans_and_devices(always_update_uids=True)
@@ -2031,6 +2050,30 @@ class RunEngineManager(Process):
             "msg": msg,
             "devices_existing": devices_existing,
             "devices_existing_uid": devices_existing_uid,
+        }
+
+    async def _enums_existing_handler(self, request):
+        """
+        Returns the list of existing enumerations.
+        """
+        logger.info("Returning the list of existing enumerations ...")
+
+        try:
+            supported_param_names = []
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            enums_existing = self._existing_enums
+            enums_existing_uid = self._existing_enums_uid
+            success, msg = True, ""
+        except Exception as ex:
+            enums_existing, enums_existing_uid = {}, None
+            success, msg = False, str(ex)
+
+        return {
+            "success": success,
+            "msg": msg,
+            "enums_existing": enums_existing,
+            "enums_existing_uid": enums_existing_uid,
         }
 
     async def _permissions_reload_handler(self, request):
@@ -3693,6 +3736,7 @@ class RunEngineManager(Process):
             "plans_existing": "_plans_existing_handler",
             "devices_allowed": "_devices_allowed_handler",
             "devices_existing": "_devices_existing_handler",
+            "enums_existing": "_enums_existing_handler",
             "permissions_reload": "_permissions_reload_handler",
             "permissions_get": "_permissions_get_handler",
             "permissions_set": "_permissions_set_handler",

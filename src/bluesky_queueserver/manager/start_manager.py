@@ -644,6 +644,19 @@ def start_manager():
     )
 
     group_console_output.add_argument(
+        "--zmq-stream-logs",
+        dest="zmq_stream_logs",
+        type=str,
+        choices=["ON", "OFF"],
+        default="OFF",
+        help="Enable (ON) or disable (OFF) publishing of log messages from the worker environment "
+        "to 0MQ (info channel, 'log_message' key). All messages reaching the root logger are "
+        "published; clients may filter messages by logger name or level. Logger levels are not "
+        "changed by RE Manager. This parameter is only effective when --zmq-publish-info=ON; "
+        "it is ignored otherwise (default: %(default)s).",
+    )
+
+    group_console_output.add_argument(
         "--console-output",
         dest="console_output",
         type=str,
@@ -801,6 +814,7 @@ def start_manager():
     config_worker["ignore_invalid_plans"] = settings.ignore_invalid_plans
     config_worker["permitted_re_metadata_keys"] = settings.permitted_re_metadata_keys
     config_worker["zmq_stream_device_progress"] = settings.zmq_stream_device_progress and settings.zmq_publish_info
+    config_worker["zmq_stream_logs"] = settings.zmq_stream_logs and settings.zmq_publish_info
 
     existing_pd_path = settings.existing_plans_and_devices_path
     if not existing_pd_path:

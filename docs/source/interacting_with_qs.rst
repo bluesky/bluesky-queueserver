@@ -106,6 +106,30 @@ Device progress streaming is disabled by default and can be enabled using the
 ``--zmq-stream-device-progress`` CLI parameter of ``start-re-manager`` or 
 ``network/zmq_stream_device_progress`` parameter in the config file.
 
+Log messages (optional)
++++++++++++++++++++++++
+
+Log messages produced in the worker environment can be streamed under the ``log_message`` key.
+Each message contains the logger name, level name, formatted message (including traceback,
+if any), timestamp, module name and line number::
+
+  {"time": <timestamp>, "msg": {"log_message": {"name": "bluesky", "level": "INFO",
+                                                "message": <text>, "time": <timestamp>,
+                                                "module": <module>, "lineno": <line>}}}
+
+Log streaming is disabled by default and can be enabled using the ``--zmq-stream-logs``
+CLI parameter of ``start-re-manager`` or ``network/zmq_stream_logs`` parameter in the config file::
+
+  network:
+    zmq_stream_logs: true
+
+If enabled, a handler is attached to the root logger of the worker environment and all
+messages that reach the root logger are streamed. Clients may filter the messages by logger
+name or level. RE Manager does not change logger levels: the levels configured in the worker
+environment (e.g. in startup code) determine which messages are streamed. Loggers that are not
+configured inherit the level of the root logger (typically ``WARNING``). Messages of loggers
+with ``propagate=False`` are not streamed. Log streaming requires ``--zmq-publish-info=ON``.
+
 
 The ``ReceiveSystemInfo`` class can be used in synchronous or thread-based applications to
 receive the streamed messages:

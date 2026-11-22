@@ -1056,9 +1056,11 @@ class RunEngineWorker(Process):
         if self.re_state == "running":
             raise RuntimeError("RE metadata can not be updated while Run Engine is running")
 
-        json.dumps(metadata)
-        md_updates = merge_dict_by_permitted_keys(self._RE.md, metadata, self._permitted_re_metadata_update_keys)
+        md_updates, updated_paths = merge_dict_by_permitted_keys(
+            self._RE.md, metadata, self._permitted_re_metadata_update_keys
+        )
         self._RE.md.update(md_updates)
+        logger.info("RE metadata was updated: %s", updated_paths)
         return {"success": True}
 
     def _command_close_env_handler(self):

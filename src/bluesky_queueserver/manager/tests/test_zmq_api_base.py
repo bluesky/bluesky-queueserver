@@ -6401,7 +6401,7 @@ def test_zmq_api_re_metadata_update_02_not_permitted(re_manager_pc_copy, tmp_pat
 def test_zmq_api_re_metadata_update_03_lock_and_running(re_manager_cmd, tmp_path):  # noqa: F811
     """
     ``re_metadata_update``: the API is disabled if the environment is locked, and metadata can not
-    be updated while a plan is running.
+    be updated while the queue is running or a plan is paused.
     """
     pc_path = copy_default_profile_collection(tmp_path)
     re_manager_cmd(["--startup-dir", pc_path, "--permitted-re-metadata-update-keys", "/scan_id"])
@@ -6433,8 +6433,19 @@ def test_zmq_api_re_metadata_update_03_lock_and_running(re_manager_cmd, tmp_path
 
     resp, _ = zmq_request("re_metadata_update", params={"metadata": {"scan_id": 200}})
     assert resp["success"] is False, f"{resp =}"
-    assert "can not be updated while Run Engine is running" in resp["msg"], f"{resp =}"
+    assert "can not be updated while the queue is running" in resp["msg"], f"{resp =}"
 
+    # Updating metadata is also rejected while the plan is paused
+    resp, _ = zmq_request("re_pause", params={"option": "immediate"})
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=10, condition=condition_manager_paused)
+
+    resp, _ = zmq_request("re_metadata_update", params={"metadata": {"scan_id": 200}})
+    assert resp["success"] is False, f"{resp =}"
+    assert "can not be updated while the queue is running" in resp["msg"], f"{resp =}"
+
+    resp, _ = zmq_request("re_resume")
+    assert resp["success"] is True, f"{resp =}"
     assert wait_for_condition(time=20, condition=condition_manager_idle)
 
     resp, _ = zmq_request("re_metadata")

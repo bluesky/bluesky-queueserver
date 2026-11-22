@@ -513,6 +513,11 @@ class Settings:
             value_cli=self._args_existing("permitted_re_metadata_update_keys"),
         )
 
+        for name in ("permitted_re_metadata_keys", "permitted_re_metadata_update_keys"):
+            invalid_keys = [_ for _ in self._settings[name] if not isinstance(_, str) or not _.startswith("/")]
+            if invalid_keys:
+                raise ConfigError(f"Invalid items in {name!r}: {invalid_keys}. Keys must start with '/'.")
+
         existing_plans_and_devices_path = self._get_param(
             value_default=args.existing_plans_and_devices_path,
             value_config=self._get_value_from_config("existing_plans_and_devices_path"),

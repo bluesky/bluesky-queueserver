@@ -41,28 +41,29 @@ def test_filter_dict_by_permitted_keys(d, permitted_keys, expected):
 
 
 # fmt: off
-@pytest.mark.parametrize("d, updates, permitted_keys, expected", [
-    ({"a": 1, "b": 2}, {"a": 10}, ["/"], {"a": 10}),
-    ({"a": 1, "b": 2}, {"a": 10}, ["/a"], {"a": 10}),
-    ({"a": 1, "b": 2}, {"a": 10}, ["/a/"], {"a": 10}),
-    ({"a": 1, "b": 2}, {"c": 10}, ["/c"], {"c": 10}),
-    ({"a": 1, "b": 2}, {"a": 10, "c": 3}, ["/a", "/c"], {"a": 10, "c": 3}),
-    ({"a": 1}, {}, ["/a"], {}),
+@pytest.mark.parametrize("d, updates, permitted_keys, expected, expected_paths", [
+    ({"a": 1, "b": 2}, {"a": 10}, ["/"], {"a": 10}, ["/a"]),
+    ({"a": 1, "b": 2}, {"a": 10}, ["/a"], {"a": 10}, ["/a"]),
+    ({"a": 1, "b": 2}, {"a": 10}, ["/a/"], {"a": 10}, ["/a"]),
+    ({"a": 1, "b": 2}, {"c": 10}, ["/c"], {"c": 10}, ["/c"]),
+    ({"a": 1, "b": 2}, {"a": 10, "c": 3}, ["/a", "/c"], {"a": 10, "c": 3}, ["/a", "/c"]),
+    ({"a": 1}, {}, ["/a"], {}, []),
     # Permitted path: the whole value is replaced
-    ({"a": {"b": 1, "c": 2}}, {"a": {"b": 10}}, ["/a"], {"a": {"b": 10}}),
+    ({"a": {"b": 1, "c": 2}}, {"a": {"b": 10}}, ["/a"], {"a": {"b": 10}}, ["/a"]),
     # Nested permitted path: nested dictionaries are merged
-    ({"a": {"b": 1, "c": 2}}, {"a": {"b": 10}}, ["/a/b"], {"a": {"b": 10, "c": 2}}),
-    ({"a": {"b": {"x": 1}, "c": 2}}, {"a": {"b": {"y": 2}}}, ["/a/b"], {"a": {"b": {"y": 2}, "c": 2}}),
-    ({"a": {"b": {"x": 1}, "c": 2}}, {"a": {"b": {"y": 2}}}, ["/a/b/y"], {"a": {"b": {"x": 1, "y": 2}, "c": 2}}),
-    ({}, {"a": {"b": 10}}, ["/a/b"], {"a": {"b": 10}}),
+    ({"a": {"b": 1, "c": 2}}, {"a": {"b": 10}}, ["/a/b"], {"a": {"b": 10, "c": 2}}, ["/a/b"]),
+    ({"a": {"b": {"x": 1}, "c": 2}}, {"a": {"b": {"y": 2}}}, ["/a/b"], {"a": {"b": {"y": 2}, "c": 2}}, ["/a/b"]),
+    ({"a": {"b": {"x": 1}, "c": 2}}, {"a": {"b": {"y": 2}}}, ["/a/b/y"],
+     {"a": {"b": {"x": 1, "y": 2}, "c": 2}}, ["/a/b/y"]),
+    ({}, {"a": {"b": 10}}, ["/a/b"], {"a": {"b": 10}}, ["/a/b"]),
 ])
 # fmt: on
-def test_merge_dict_by_permitted_keys_01(d, updates, permitted_keys, expected):
+def test_merge_dict_by_permitted_keys_01(d, updates, permitted_keys, expected, expected_paths):
     """
     ``merge_dict_by_permitted_keys``: successful updates. The original dictionary is not modified.
     """
     d_copy = copy.deepcopy(d)
-    assert merge_dict_by_permitted_keys(d, updates, permitted_keys) == expected
+    assert merge_dict_by_permitted_keys(d, updates, permitted_keys) == (expected, expected_paths)
     assert d == d_copy
 
 

@@ -1,4 +1,5 @@
 import copy
+from collections.abc import Mapping
 from typing import Any
 
 
@@ -92,14 +93,14 @@ def _is_path_permitted(path: str, permitted_keys: list[str]) -> bool:
 
 
 def merge_dict_by_permitted_keys(
-    d: dict[str, Any], updates: dict[str, Any], permitted_keys: list[str]
-) -> dict[str, Any]:
+    d: Mapping[str, Any], updates: dict[str, Any], permitted_keys: list[str]
+) -> tuple[dict[str, Any], list[str]]:
     """
     Merge ``updates`` into the mapping ``d`` and return a dictionary with new values of the top-level
-    keys of ``d`` that are modified. The mapping ``d`` is not modified. The values at permitted paths
-    are replaced. Nested dictionaries at non-permitted paths are merged recursively, so that only
-    permitted subkeys are changed. The keys in ``permitted_keys`` are specified as absolute paths
-    (e.g. ``"/key1/key2"``), ``"/"`` permits all keys.
+    keys of ``d`` that are modified and the list of updated paths. The mapping ``d`` is not modified.
+    The values at permitted paths are replaced. Nested dictionaries at non-permitted paths are merged
+    recursively, so that only permitted subkeys are changed. The keys in ``permitted_keys`` are specified
+    as absolute paths (e.g. ``"/key1/key2"``), ``"/"`` permits all keys.
 
     Raises
     ------
@@ -109,7 +110,7 @@ def merge_dict_by_permitted_keys(
     if not isinstance(updates, dict):
         raise ValueError(f"Metadata updates must be a dictionary: {updates!r}")
 
-    forbidden = []
+    forbidden, updated_paths = [], []
 
     def _merge(target: dict[str, Any], upd: dict[str, Any], prefix: str):
         for k, v in upd.items():
@@ -118,6 +119,7 @@ def merge_dict_by_permitted_keys(
             path = f"{prefix}/{k}"
             if _is_path_permitted(path, permitted_keys):
                 target[k] = copy.deepcopy(v)
+                updated_paths.append(path)
             elif isinstance(v, dict) and v and isinstance(target.get(k, {}), dict):
                 target.setdefault(k, {})
                 _merge(target[k], v, path)
@@ -131,4 +133,4 @@ def merge_dict_by_permitted_keys(
     if forbidden:
         raise ValueError(f"Updating metadata keys {forbidden} is not permitted")
 
-    return new_values
+    return new_values, updated_paths

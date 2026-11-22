@@ -1760,7 +1760,7 @@ Description   Update the Run Engine metadata dictionary (``RE.md``) in the worke
               ``/versions/custom`` is permitted, ``{"versions": {"custom": "1.0"}}`` adds
               ``"custom"`` key to ``RE.md["versions"]`` without changing other keys. The request is
               rejected and the metadata is not modified if any of the keys is not permitted.
-              Metadata can not be updated while Run Engine is running.
+              Metadata can not be updated while the queue is running or a plan is paused.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **metadata**: *dict*
                   Dictionary of metadata to update. The keys must be non-empty strings that

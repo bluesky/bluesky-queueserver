@@ -323,6 +323,10 @@ The parameters that define configuration of RE Worker.
   CLI parameter or the ``QSERVER_PERMITTED_RE_METADATA_UPDATE_KEYS`` environment variable
   (colon-separated list of keys).
 
+  The items of ``permitted_re_metadata_keys`` and ``permitted_re_metadata_update_keys`` must start
+  with ``/``. RE Manager fails to start if any of the items is invalid (e.g. an empty item
+  produced by a trailing colon in the value of the environment variable).
+
 
 Using Redis
 -----------

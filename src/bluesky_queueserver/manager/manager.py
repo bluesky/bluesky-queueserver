@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import enum
+import json
 import logging
 import time as ttime
 import uuid
@@ -3422,9 +3423,16 @@ class RunEngineManager(Process):
             metadata = request["metadata"]
             if not isinstance(metadata, dict):
                 raise TypeError(f"Parameter 'metadata' must be a dictionary: {metadata!r}")
+            try:
+                json.dumps(metadata)
+            except (TypeError, ValueError) as ex:
+                raise TypeError(f"Parameter 'metadata' must be JSON serializable: {ex}") from ex
 
             if not self._environment_exists:
                 raise RuntimeError("Environment does not exist. Cannot update RE metadata.")
+
+            if self._manager_state in (MState.STARTING_QUEUE, MState.EXECUTING_QUEUE, MState.PAUSED):
+                raise RuntimeError("RE metadata can not be updated while the queue is running.")
 
             success, msg = await self._worker_command_runengine_metadata_update(metadata)
 

@@ -223,7 +223,7 @@ Other Configuration Parameters
                           [--zmq-info-addr ZMQ_INFO_ADDR] [--zmq-publish-console {ON,OFF}]
                           [--zmq-publish-info {ON,OFF}]
                           [--zmq-stream-device-progress {ON,OFF}]
-                          [--zmq-stream-loggers ZMQ_STREAM_LOGGERS [ZMQ_STREAM_LOGGERS ...]]
+                          [--zmq-stream-logs {ON,OFF}]
                           [--console-output {ON,OFF}] [--verbose | --quiet | --silent]
 
   Start Run Engine (RE) Manager
@@ -427,12 +427,13 @@ Other Configuration Parameters
                       progress updates (waiting/watcher updates, e.g. motor position during
                       motion) to 0MQ. This parameter is only effective when --zmq-publish-
                       info=ON; it is ignored otherwise (default: OFF).
-    --zmq-stream-loggers ZMQ_STREAM_LOGGERS [ZMQ_STREAM_LOGGERS ...]
-                      Names of loggers in the worker environment, which messages are
-                      published to 0MQ (info channel, 'log_message' key), e.g. '--zmq-
-                      stream-loggers bluesky ophyd'. Messages of child loggers are included.
-                      Logger levels are not changed by RE Manager. This parameter is only
-                      effective when --zmq-publish-info=ON; it is ignored otherwise.
+    --zmq-stream-logs {ON,OFF}
+                      Enable (ON) or disable (OFF) publishing of log messages from the
+                      worker environment to 0MQ (info channel, 'log_message' key). All
+                      messages reaching the root logger are published; clients may filter
+                      messages by logger name or level. Logger levels are not changed by RE
+                      Manager. This parameter is only effective when --zmq-publish-info=ON;
+                      it is ignored otherwise (default: OFF).
     --console-output {ON,OFF}
                       Enable (ON) or disable (OFF) printing of console output in the Re
                       Manager terminal. (default: ON)

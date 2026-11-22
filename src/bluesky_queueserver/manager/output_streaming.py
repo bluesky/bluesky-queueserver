@@ -150,25 +150,20 @@ class LogStreamHandler(logging.Handler):
             self.handleError(record)
 
 
-def setup_log_streaming(*, loggers, msg_queue):
+def setup_log_streaming(*, msg_queue):
     """
-    Attach ``LogStreamHandler`` to the selected loggers. Logger levels are not changed.
+    Attach ``LogStreamHandler`` to the root logger, so that all messages propagated to
+    the root logger are streamed. Logger levels are not changed.
 
     Parameters
     ----------
-    loggers : list(str)
-        Names of the loggers. Messages of child loggers are also streamed.
     msg_queue : multiprocessing.Queue
         Reference to the queue used for collecting messages. Nothing is done if ``None``.
     """
-    if not loggers or not msg_queue:
+    if not msg_queue:
         return
 
-    handler = LogStreamHandler(msg_queue=msg_queue)
-    for name in set(loggers):
-        # Children of selected loggers are already covered via propagation
-        if not any(name.startswith(_ + ".") for _ in loggers):
-            logging.getLogger(name).addHandler(handler)
+    logging.getLogger().addHandler(LogStreamHandler(msg_queue=msg_queue))
 
 
 _default_zmq_console_topic = "QS_Console"

@@ -1727,7 +1727,8 @@ class RunEngineWorker(Process):
 
         logging.basicConfig(level=max(logging.WARNING, self._log_level))
         setup_loggers(name="bluesky_queueserver", log_level=self._log_level)
-        setup_log_streaming(loggers=self._config_dict.get("zmq_stream_loggers", []), msg_queue=self._msg_queue)
+        if self._config_dict.get("zmq_stream_logs", False):
+            setup_log_streaming(msg_queue=self._msg_queue)
 
         self._success_startup = True
         self._env_state = EState.INITIALIZING

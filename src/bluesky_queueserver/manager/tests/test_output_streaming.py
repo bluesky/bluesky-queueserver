@@ -480,19 +480,20 @@ def test_push_info_to_msg_queue_1(zmq_encoding):
 
 def test_setup_log_streaming_1():
     """
-    Test for ``setup_log_streaming``: logger levels configured in the environment are used and
-    not modified, messages of child loggers are published once (even if the child is also selected),
-    non-selected loggers are ignored.
+    Test for ``setup_log_streaming``: the handler is attached to the root logger, messages from
+    all loggers are published once, logger levels configured in the environment are used and
+    not modified.
     """
     names = ["qs_ls_test", "qs_ls_test.child", "qs_ls_test.child.sub", "qs_ls_test_other"]
     saved = {_: (logging.getLogger(_).level, list(logging.getLogger(_).handlers)) for _ in names}
+    root_handlers = list(logging.getLogger().handlers)
 
     msg_queue = queue.Queue()
     try:
         logging.getLogger("qs_ls_test").setLevel(logging.INFO)
         logging.getLogger("qs_ls_test.child").setLevel(logging.DEBUG)
 
-        setup_log_streaming(loggers=["qs_ls_test", "qs_ls_test.child"], msg_queue=msg_queue)
+        setup_log_streaming(msg_queue=msg_queue)
         assert logging.getLogger("qs_ls_test").level == logging.INFO
         assert logging.getLogger("qs_ls_test.child").level == logging.DEBUG
 
@@ -508,29 +509,31 @@ def test_setup_log_streaming_1():
 
         assert all(_["channel"] == "info" for _ in msgs)
         records = [_["msg"]["log_message"] for _ in msgs]
+        records = [_ for _ in records if _["name"] in names]
         assert [(_["name"], _["level"], _["message"]) for _ in records] == [
             ("qs_ls_test", "INFO", "msg-2 2"),
             ("qs_ls_test.child", "DEBUG", "msg-3"),
             ("qs_ls_test.child.sub", "INFO", "msg-4"),
+            ("qs_ls_test_other", "ERROR", "msg-5"),
         ]
         for r in records:
             assert isinstance(r["time"], float)
             assert r["module"] == "test_output_streaming"
             assert isinstance(r["lineno"], int)
     finally:
+        logging.getLogger().handlers[:] = root_handlers
         for name, (level, handlers) in saved.items():
             logging.getLogger(name).setLevel(level)
             logging.getLogger(name).handlers[:] = handlers
 
 
-@pytest.mark.parametrize("loggers, msg_queue", [([], queue.Queue()), (["qs_ls_test"], None)])
-def test_setup_log_streaming_2(loggers, msg_queue):
+def test_setup_log_streaming_2():
     """
-    ``setup_log_streaming``: no handlers are added if no loggers are selected or there is no queue.
+    ``setup_log_streaming``: no handlers are added if there is no queue.
     """
-    handlers = list(logging.getLogger("qs_ls_test").handlers)
-    setup_log_streaming(loggers=loggers, msg_queue=msg_queue)
-    assert logging.getLogger("qs_ls_test").handlers == handlers
+    handlers = list(logging.getLogger().handlers)
+    setup_log_streaming(msg_queue=None)
+    assert logging.getLogger().handlers == handlers
 
 
 @pytest.mark.parametrize("zmq_encoding", ["json", "msgpack", None])

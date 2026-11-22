@@ -1158,7 +1158,8 @@ def create_msg(params, *, lock_key):
                         metadata = ast.literal_eval(params[2])
                     except Exception as ex:
                         raise CommandParameterError(f"Error occurred while parsing metadata '{params[2]}'") from ex
-                    method, prms = f"{command}_{params[0]}_{params[1]}", {"metadata": metadata}
+                    method = f"{command}_{params[0]}_{params[1]}"
+                    prms = {"metadata": metadata, "user": default_user}
                 else:
                     raise CommandParameterError(
                         f"Unrecognized combination of parameters: {format_list_as_command(params)}"

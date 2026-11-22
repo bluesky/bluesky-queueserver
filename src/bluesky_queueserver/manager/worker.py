@@ -1060,8 +1060,7 @@ class RunEngineWorker(Process):
             self._RE.md, metadata, self._permitted_re_metadata_update_keys
         )
         self._RE.md.update(md_updates)
-        logger.info("RE metadata was updated: %s", updated_paths)
-        return {"success": True}
+        return {"success": True, "updated_paths": updated_paths}
 
     def _command_close_env_handler(self):
         """

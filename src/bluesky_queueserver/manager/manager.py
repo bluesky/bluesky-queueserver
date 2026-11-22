@@ -1601,11 +1601,13 @@ class RunEngineManager(Process):
 
     async def _worker_command_runengine_metadata_update(self, metadata):
         try:
-            await self._comm_to_worker.send_msg("command_runengine_metadata_update", {"metadata": metadata})
-            success, err_msg = True, ""
+            response = await self._comm_to_worker.send_msg(
+                "command_runengine_metadata_update", {"metadata": metadata}
+            )
+            success, err_msg, updated_paths = True, "", response["updated_paths"]
         except CommTimeoutError:
-            success, err_msg = False, "Timeout occurred while processing the request"
-        return success, err_msg
+            success, err_msg, updated_paths = False, "Timeout occurred while processing the request", []
+        return success, err_msg, updated_paths
 
     async def _worker_request_task_results(self):
         try:
@@ -1925,8 +1927,11 @@ class RunEngineManager(Process):
             else:
                 ip_connect_info = {}
 
+            cfg = self._config_dict
             config = {
                 "ip_connect_info": ip_connect_info,
+                "permitted_re_metadata_keys": cfg.get("permitted_re_metadata_keys", []),
+                "permitted_re_metadata_update_keys": cfg.get("permitted_re_metadata_update_keys", []),
             }
         except Exception as ex:
             success, msg, config = False, str(ex), {}
@@ -3413,16 +3418,22 @@ class RunEngineManager(Process):
 
         success, msg = True, ""
         try:
-            supported_param_names = ["metadata", "lock_key"]
+            supported_param_names = ["metadata", "user", "lock_key"]
             self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
 
             self._validate_lock_key(request.get("lock_key", None), check_environment=True)
+
+            user = request.get("user", None)
+            if user is not None and not isinstance(user, str):
+                raise TypeError(f"Parameter 'user' must be a string: {user!r}")
 
             if "metadata" not in request:
                 raise ValueError("Required 'metadata' parameter is missing in the API call")
             metadata = request["metadata"]
             if not isinstance(metadata, dict):
                 raise TypeError(f"Parameter 'metadata' must be a dictionary: {metadata!r}")
+            if not metadata:
+                raise ValueError("Parameter 'metadata' is an empty dictionary")
             try:
                 json.dumps(metadata)
             except (TypeError, ValueError) as ex:
@@ -3431,10 +3442,26 @@ class RunEngineManager(Process):
             if not self._environment_exists:
                 raise RuntimeError("Environment does not exist. Cannot update RE metadata.")
 
-            if self._manager_state in (MState.STARTING_QUEUE, MState.EXECUTING_QUEUE, MState.PAUSED):
-                raise RuntimeError("RE metadata can not be updated while the queue is running.")
+            if self._manager_state != MState.IDLE:
+                raise RuntimeError(
+                    "RE metadata can only be updated while RE Manager is idle. "
+                    f"Current state: '{self._manager_state.value}'"
+                )
+            if self._is_ipkernel_external_task():
+                raise RuntimeError("RE metadata can not be updated: IPython kernel (RE Worker) is busy.")
 
-            success, msg = await self._worker_command_runengine_metadata_update(metadata)
+            # Prevent other foreground operations (e.g. starting the queue) while waiting for the worker
+            self._manager_state = MState.EXECUTING_TASK
+            self._status_update()
+            try:
+                success, msg, updated_paths = await self._worker_command_runengine_metadata_update(metadata)
+            finally:
+                if self._manager_state == MState.EXECUTING_TASK:
+                    self._manager_state = MState.IDLE
+                    self._status_update()
+
+            if success:
+                logger.info("RE metadata was updated (user: %r): %s", user, updated_paths)
 
         except Exception as ex:
             success, msg = False, f"Error: {ex}"

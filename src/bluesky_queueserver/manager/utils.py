@@ -1,5 +1,5 @@
 import copy
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from typing import Any
 
 
@@ -37,14 +37,14 @@ def generate_random_port(ip=None):
     return port
 
 
-def filter_dict_by_permitted_keys(d: dict[str, Any], permitted_keys: list[str]) -> dict[str, Any]:
+def filter_dict_by_permitted_keys(d: Mapping[str, Any], permitted_keys: Collection[str]) -> dict[str, Any]:
     """
     Filter the dictionary `d` by the list of `permitted_keys`. The keys in the dictionary that are not in the list
     of permitted keys will be removed. The keys in the list of permitted keys can be specified as absolute paths
     (e.g. "/key1/key2").
     """
 
-    def _match_path(path: str, permitted_keys: list[str]) -> bool:
+    def _match_path(path: str, permitted_keys: Collection[str]) -> bool:
         # If root ("/") is in permitted_keys, always match
         if "/" in permitted_keys:
             return True
@@ -56,7 +56,7 @@ def filter_dict_by_permitted_keys(d: dict[str, Any], permitted_keys: list[str]) 
 
         return False
 
-    def _filter(d: dict[str, Any], permitted_keys: list[str], prefix: str = "") -> dict[str, Any]:
+    def _filter(d: Mapping[str, Any], permitted_keys: Collection[str], prefix: str = "") -> dict[str, Any]:
         filtered = {}
         for k, v in d.items():
             path = f"{prefix}/{k}" if prefix else f"/{k}"
@@ -77,7 +77,7 @@ def filter_dict_by_permitted_keys(d: dict[str, Any], permitted_keys: list[str]) 
     return _filter(d, permitted_keys)
 
 
-def _is_path_permitted(path: str, permitted_keys: list[str]) -> bool:
+def _is_path_permitted(path: str, permitted_keys: Collection[str]) -> bool:
     """
     Returns ``True`` if ``path`` (e.g. ``"/key1/key2"``) is equal to or nested under one of
     ``permitted_keys``. The key ``"/"`` permits all paths.
@@ -93,7 +93,7 @@ def _is_path_permitted(path: str, permitted_keys: list[str]) -> bool:
 
 
 def merge_dict_by_permitted_keys(
-    d: Mapping[str, Any], updates: dict[str, Any], permitted_keys: list[str]
+    d: Mapping[str, Any], updates: dict[str, Any], permitted_keys: Collection[str]
 ) -> tuple[dict[str, Any], list[str]]:
     """
     Merge ``updates`` into the mapping ``d`` and return a dictionary with new values of the top-level
@@ -126,8 +126,15 @@ def merge_dict_by_permitted_keys(
             else:
                 forbidden.append(path)
 
-    # Deep copies also convert nested mappings of RedisJSONDict to regular dictionaries
-    new_values = {k: copy.deepcopy(d[k]) for k in updates if isinstance(k, str) and k in d}
+    # Deep copies also convert nested mappings of RedisJSONDict to regular dictionaries.
+    #   Each key is read once: reads from RedisJSONDict are requests to Redis.
+    new_values = {}
+    for k in updates:
+        if isinstance(k, str):
+            try:
+                new_values[k] = copy.deepcopy(d[k])
+            except KeyError:
+                pass
     _merge(new_values, updates, "")
 
     if forbidden:

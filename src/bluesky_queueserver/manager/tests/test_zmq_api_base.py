@@ -6342,9 +6342,12 @@ def test_zmq_api_re_metadata_update_01(re_manager_cmd, tmp_path):  # noqa: F811
     md_initial = resp["re_metadata"]
 
     md_update = {"metadata_key": "new_value", "new_key": {"a": 1}, "versions": {"custom": "1.0"}}
-    resp, _ = zmq_request("re_metadata_update", params={"metadata": md_update})
+    resp, _ = zmq_request("re_metadata_update", params={"metadata": md_update, "user": _user})
     assert resp["success"] is True, f"{resp =}"
     assert resp["msg"] == "", f"{resp =}"
+
+    status = get_manager_status()
+    assert status["manager_state"] == "idle", pprint.pformat(status)
 
     resp, _ = zmq_request("re_metadata")
     assert resp["success"] is True, f"{resp =}"
@@ -6376,6 +6379,14 @@ def test_zmq_api_re_metadata_update_01(re_manager_cmd, tmp_path):  # noqa: F811
     assert resp["success"] is False, f"{resp =}"
     assert "Parameter 'metadata' must be a dictionary" in resp["msg"], f"{resp =}"
 
+    resp, _ = zmq_request("re_metadata_update", params={"metadata": {}})
+    assert resp["success"] is False, f"{resp =}"
+    assert "Parameter 'metadata' is an empty dictionary" in resp["msg"], f"{resp =}"
+
+    resp, _ = zmq_request("re_metadata_update", params={"metadata": {"metadata_key": "v"}, "user": 10})
+    assert resp["success"] is False, f"{resp =}"
+    assert "Parameter 'user' must be a string" in resp["msg"], f"{resp =}"
+
     resp, _ = zmq_request("environment_close")
     assert resp["success"] is True, f"{resp =}"
     assert wait_for_condition(time=5, condition=condition_environment_closed)
@@ -6400,8 +6411,8 @@ def test_zmq_api_re_metadata_update_02_not_permitted(re_manager_pc_copy, tmp_pat
 
 def test_zmq_api_re_metadata_update_03_lock_and_running(re_manager_cmd, tmp_path):  # noqa: F811
     """
-    ``re_metadata_update``: the API is disabled if the environment is locked, and metadata can not
-    be updated while the queue is running or a plan is paused.
+    ``re_metadata_update``: the API is disabled if the environment is locked, and metadata can only
+    be updated while RE Manager is idle.
     """
     pc_path = copy_default_profile_collection(tmp_path)
     re_manager_cmd(["--startup-dir", pc_path, "--permitted-re-metadata-update-keys", "/scan_id"])
@@ -6433,7 +6444,7 @@ def test_zmq_api_re_metadata_update_03_lock_and_running(re_manager_cmd, tmp_path
 
     resp, _ = zmq_request("re_metadata_update", params={"metadata": {"scan_id": 200}})
     assert resp["success"] is False, f"{resp =}"
-    assert "can not be updated while the queue is running" in resp["msg"], f"{resp =}"
+    assert "Current state: 'executing_queue'" in resp["msg"], f"{resp =}"
 
     # Updating metadata is also rejected while the plan is paused
     resp, _ = zmq_request("re_pause", params={"option": "immediate"})
@@ -6442,11 +6453,27 @@ def test_zmq_api_re_metadata_update_03_lock_and_running(re_manager_cmd, tmp_path
 
     resp, _ = zmq_request("re_metadata_update", params={"metadata": {"scan_id": 200}})
     assert resp["success"] is False, f"{resp =}"
-    assert "can not be updated while the queue is running" in resp["msg"], f"{resp =}"
+    assert "Current state: 'paused'" in resp["msg"], f"{resp =}"
 
     resp, _ = zmq_request("re_resume")
     assert resp["success"] is True, f"{resp =}"
     assert wait_for_condition(time=20, condition=condition_manager_idle)
+
+    resp, _ = zmq_request("re_metadata")
+    assert resp["re_metadata"]["scan_id"] == 101, f"{resp =}"
+
+    # Updating metadata is rejected while a foreground task is executed
+    func_item = {"name": "function_sleep", "args": [3], "item_type": "function"}
+    resp, _ = zmq_request(
+        "function_execute", params={"item": func_item, "user": _user, "user_group": _user_group}
+    )
+    assert resp["success"] is True, f"{resp =}"
+
+    resp, _ = zmq_request("re_metadata_update", params={"metadata": {"scan_id": 200}})
+    assert resp["success"] is False, f"{resp =}"
+    assert "Current state: 'executing_task'" in resp["msg"], f"{resp =}"
+
+    assert wait_for_condition(time=10, condition=condition_manager_idle)
 
     resp, _ = zmq_request("re_metadata")
     assert resp["re_metadata"]["scan_id"] == 101, f"{resp =}"
@@ -7042,6 +7069,8 @@ def test_zmq_api_config_get_01(re_manager):  # noqa: F811
     assert "config" in resp, pprint.pformat(resp)
     assert "ip_connect_info" in resp["config"], pprint.pformat(resp)
     assert resp["config"]["ip_connect_info"] == {}, pprint.pformat(resp)
+    assert resp["config"]["permitted_re_metadata_keys"] == ["/scan_id", "/versions"], pprint.pformat(resp)
+    assert resp["config"]["permitted_re_metadata_update_keys"] == [], pprint.pformat(resp)
 
     resp, _ = zmq_request("environment_open")
     assert resp["success"] is True

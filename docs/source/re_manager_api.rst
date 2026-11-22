@@ -379,6 +379,12 @@ Returns       **success**: *boolean*
                     The returned dictionary may be saved as JSON to create IPython kernel connection
                     file. The connection file may be passed to Jupyter Console with
                     **'--existing'** parameter.
+
+                  - **'permitted_re_metadata_keys'** (*list(str)*) - RE metadata keys returned by
+                    :ref:`method_re_metadata` API.
+
+                  - **'permitted_re_metadata_update_keys'** (*list(str)*) - RE metadata keys that
+                    may be updated using :ref:`method_re_metadata_update` API.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================
@@ -1760,11 +1766,17 @@ Description   Update the Run Engine metadata dictionary (``RE.md``) in the worke
               ``/versions/custom`` is permitted, ``{"versions": {"custom": "1.0"}}`` adds
               ``"custom"`` key to ``RE.md["versions"]`` without changing other keys. The request is
               rejected and the metadata is not modified if any of the keys is not permitted.
-              Metadata can not be updated while the queue is running or a plan is paused.
+              Metadata can only be updated while RE Manager is idle (the request is rejected if
+              the queue is running, a plan is paused or a foreground task is executed) and the IPython
+              kernel is not executing commands started by external clients. The updated paths are
+              logged by RE Manager.
 ------------  -----------------------------------------------------------------------------------------
 Parameters    **metadata**: *dict*
-                  Dictionary of metadata to update. The keys must be non-empty strings that
+                  Non-empty dictionary of metadata to update. The keys must be non-empty strings that
                   do not contain ``/``.
+
+              **user**: *str* (optional)
+                  Name of the user submitting the request. Used only for logging.
 
               **lock_key**: *str* (optional)
                   Lock key. The API fails if **the environment** is locked and no valid key is submitted

@@ -15,6 +15,8 @@ Added
 
 - New CLI command ``qserver re metadata update`` for updating Run Engine metadata.
 
+- ``config_get`` API returns the lists of permitted RE metadata keys for reading and updating.
+
 v0.0.27 (2026-11-16)
 ====================
 

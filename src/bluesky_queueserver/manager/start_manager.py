@@ -867,6 +867,9 @@ def start_manager():
 
     config_manager["lock_key_emergency"] = settings.emergency_lock_key
 
+    config_manager["permitted_re_metadata_keys"] = settings.permitted_re_metadata_keys
+    config_manager["permitted_re_metadata_update_keys"] = settings.permitted_re_metadata_update_keys
+
     wp = WatchdogProcess(
         config_worker=config_worker, config_manager=config_manager, msg_queue=msg_queue, log_level=log_level
     )

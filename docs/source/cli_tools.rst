@@ -193,6 +193,9 @@ Other Configuration Parameters
 
 - ``--permitted-re-metadata-keys`` specifies a list of permitted RE metadata keys.
 
+- ``--permitted-re-metadata-update-keys`` specifies a list of RE metadata keys that may be
+  updated using *re_metadata_update* API.
+
 ``start-re-manager -h`` displays help information:
 
 .. code-block::
@@ -220,6 +223,7 @@ Other Configuration Parameters
                           [--ipython-hb-port IPYTHON_HB_PORT]
                           [--ipython-control-port IPYTHON_CONTROL_PORT]
                           [--permitted-re-metadata-keys PERMITTED_RE_METADATA_KEYS [PERMITTED_RE_METADATA_KEYS ...]]
+                          [--permitted-re-metadata-update-keys PERMITTED_RE_METADATA_UPDATE_KEYS [PERMITTED_RE_METADATA_UPDATE_KEYS ...]]
                           [--zmq-info-addr ZMQ_INFO_ADDR] [--zmq-publish-console {ON,OFF}]
                           [--zmq-publish-info {ON,OFF}]
                           [--zmq-stream-device-progress {ON,OFF}]
@@ -339,6 +343,16 @@ Other Configuration Parameters
                       This paremeter can also be set using
                       QSERVER_PERMITTED_RE_METADATA_KEYS environment variable, where the
                       keys are separated by colons.
+    --permitted-re-metadata-update-keys PERMITTED_RE_METADATA_UPDATE_KEYS [PERMITTED_RE_METADATA_UPDATE_KEYS ...]
+                      A list of RE metadata keys that clients are permitted to update using
+                      're_metadata_update' API. Keys are configured in the form of unix
+                      paths, and recursively apply to all subkeys, e.g. '/key1' permits
+                      updating 'key1' and all its subkeys, '/key1/subkey' permits updating
+                      only 'subkey' of 'key1' and '/' permits updating all keys. By default,
+                      the list is empty and updating metadata is not permitted. This
+                      parameter can also be set using
+                      QSERVER_PERMITTED_RE_METADATA_UPDATE_KEYS environment variable, where
+                      the keys are separated by colons.
 
   Configure IPython Kernel:
     The parameters for configuring IPython kernel used by RE Worker. The IPython kernel is
@@ -611,6 +625,7 @@ periodically requests and displays the status of Queue Server.
   qserver re runs closed     # Get the list of closed runs (subset of active runs)
 
   qserver re metadata        # Get Run Engine metadata
+  qserver re metadata update '<metadata>'  # Update Run Engine metadata, e.g. '{"key": "value"}'
 
   qserver history get        # Request plan history
   qserver history clear      # Clear plan history

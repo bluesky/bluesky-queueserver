@@ -1273,6 +1273,35 @@ def test_qserver_re_runs(re_manager, option, exit_code):  # noqa: F811
     assert sp_call(["qserver", "re", "runs", *params]) == exit_code
 
 
+def test_qserver_re_metadata_update(re_manager_cmd):  # noqa: F811
+    """
+    Tests for ``qserver re metadata update``.
+    """
+    re_manager_cmd(["--permitted-re-metadata-keys", "/", "--permitted-re-metadata-update-keys", "/custom"])
+
+    assert sp_call(["qserver", "environment", "open"]) == SUCCESS
+    assert wait_for_condition(time=timeout_env_open, condition=condition_environment_created)
+
+    assert sp_call(["qserver", "re", "metadata", "update", "{'custom': {'a': 1}}"]) == SUCCESS
+    resp, _ = zmq_request("re_metadata")
+    assert resp["re_metadata"]["custom"] == {"a": 1}, pprint.pformat(resp)
+
+    # Non-permitted key
+    assert sp_call(["qserver", "re", "metadata", "update", "{'other': 1}"]) == REQ_FAILED
+    # Invalid parameters
+    assert sp_call(["qserver", "re", "metadata", "update"]) == PARAM_ERROR
+    assert sp_call(["qserver", "re", "metadata", "update", "{'custom':"]) == PARAM_ERROR
+    assert sp_call(["qserver", "re", "metadata", "update", "{'custom': 2}", "extra"]) == PARAM_ERROR
+    assert sp_call(["qserver", "re", "metadata", "unknown"]) == PARAM_ERROR
+
+    resp, _ = zmq_request("re_metadata")
+    assert resp["re_metadata"]["custom"] == {"a": 1}, pprint.pformat(resp)
+    assert "other" not in resp["re_metadata"], pprint.pformat(resp)
+
+    assert sp_call(["qserver", "environment", "close"]) == SUCCESS
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
 _script_to_upload_1 = """
 def count_modified(detectors, num=1, delay=None):
     yield from count(detectors=detectors, num=num, delay=delay)

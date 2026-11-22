@@ -498,6 +498,7 @@ def _get_expected_settings_default_1(_1, _2):
         "ipython_shell_port": None,
         "ipython_stdin_port": None,
         "permitted_re_metadata_keys": ["/scan_id", "/versions"],
+        "permitted_re_metadata_update_keys": [],
         "print_console_output": True,
         "redis_addr": "localhost",
         "redis_name_prefix": _test_redis_name_prefix,  # We use it for unit tests
@@ -549,6 +550,9 @@ worker:
     - /a/b
     - /c
     - /d/
+  permitted_re_metadata_update_keys:
+    - /e
+    - /f/g
 startup:
   device_max_depth: 2
   ignore_invalid_plans: true
@@ -605,6 +609,7 @@ def _get_expected_settings_config_2(file_dir, ip_con_dir):
         "ipython_shell_port": 60003,
         "ipython_stdin_port": 60004,
         "permitted_re_metadata_keys": ["/a/b", "/c", "/d/"],
+        "permitted_re_metadata_update_keys": ["/e", "/f/g"],
         "print_console_output": True,
         "redis_addr": "localhost:6379",
         "redis_name_prefix": "qs_unit_tests2",  # Specific for this test
@@ -658,6 +663,8 @@ def _get_cli_params_3(file_dir):
         "/a/b",
         "/c",
         "/d/",
+        "--permitted-re-metadata-update-keys",
+        "/h",
         "--zmq-info-addr=tcp://*:60629",
         "--zmq-publish-console=OFF",
         "--zmq-publish-info=OFF",
@@ -703,6 +710,7 @@ def _get_expected_settings_params_3(file_dir, _):
         "ipython_shell_port": 60103,
         "ipython_stdin_port": 60104,
         "permitted_re_metadata_keys": ["/a/b", "/c", "/d/"],
+        "permitted_re_metadata_update_keys": ["/h"],
         "print_console_output": False,
         "redis_addr": "localhost:6379",
         "redis_name_prefix": "qs_unit_tests3",  # Specific for this test

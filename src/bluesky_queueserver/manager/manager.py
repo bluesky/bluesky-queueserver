@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import enum
+import json
 import logging
 import time as ttime
 import uuid
@@ -1598,6 +1599,16 @@ class RunEngineManager(Process):
 
         return runengine_metadata, err_msg
 
+    async def _worker_command_runengine_metadata_update(self, metadata):
+        try:
+            response = await self._comm_to_worker.send_msg(
+                "command_runengine_metadata_update", {"metadata": metadata}
+            )
+            success, err_msg, updated_paths = True, "", response["updated_paths"]
+        except CommTimeoutError:
+            success, err_msg, updated_paths = False, "Timeout occurred while processing the request", []
+        return success, err_msg, updated_paths
+
     async def _worker_request_task_results(self):
         try:
             tt = self._comm_to_worker_timeout_long
@@ -1916,8 +1927,11 @@ class RunEngineManager(Process):
             else:
                 ip_connect_info = {}
 
+            cfg = self._config_dict
             config = {
                 "ip_connect_info": ip_connect_info,
+                "permitted_re_metadata_keys": cfg.get("permitted_re_metadata_keys", []),
+                "permitted_re_metadata_update_keys": cfg.get("permitted_re_metadata_update_keys", []),
             }
         except Exception as ex:
             success, msg, config = False, str(ex), {}
@@ -3395,6 +3409,65 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg, "re_metadata": re_metadata}
 
+    async def _re_metadata_update_handler(self, request):
+        """
+        Update Run Engine metadata (``RE.md``) in the worker environment. Only the keys permitted
+        by RE Manager configuration may be updated.
+        """
+        logger.info("Updating Run Engine metadata ...")
+
+        success, msg = True, ""
+        try:
+            supported_param_names = ["metadata", "user", "lock_key"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
+
+            user = request.get("user", None)
+            if user is not None and not isinstance(user, str):
+                raise TypeError(f"Parameter 'user' must be a string: {user!r}")
+
+            if "metadata" not in request:
+                raise ValueError("Required 'metadata' parameter is missing in the API call")
+            metadata = request["metadata"]
+            if not isinstance(metadata, dict):
+                raise TypeError(f"Parameter 'metadata' must be a dictionary: {metadata!r}")
+            if not metadata:
+                raise ValueError("Parameter 'metadata' is an empty dictionary")
+            try:
+                json.dumps(metadata)
+            except (TypeError, ValueError) as ex:
+                raise TypeError(f"Parameter 'metadata' must be JSON serializable: {ex}") from ex
+
+            if not self._environment_exists:
+                raise RuntimeError("Environment does not exist. Cannot update RE metadata.")
+
+            if self._manager_state != MState.IDLE:
+                raise RuntimeError(
+                    "RE metadata can only be updated while RE Manager is idle. "
+                    f"Current state: '{self._manager_state.value}'"
+                )
+            if self._is_ipkernel_external_task():
+                raise RuntimeError("RE metadata can not be updated: IPython kernel (RE Worker) is busy.")
+
+            # Prevent other foreground operations (e.g. starting the queue) while waiting for the worker
+            self._manager_state = MState.EXECUTING_TASK
+            self._status_update()
+            try:
+                success, msg, updated_paths = await self._worker_command_runengine_metadata_update(metadata)
+            finally:
+                if self._manager_state == MState.EXECUTING_TASK:
+                    self._manager_state = MState.IDLE
+                    self._status_update()
+
+            if success:
+                logger.info("RE metadata was updated (user: %r): %s", user, updated_paths)
+
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg}
+
     def _lock_key_invalid_msg(self):
         """
         Format error message, which reports an invalid lock key.
@@ -3729,6 +3802,7 @@ class RunEngineManager(Process):
             "re_halt": "_re_halt_handler",
             "re_runs": "_re_runs_handler",
             "re_metadata": "_re_metadata_handler",
+            "re_metadata_update": "_re_metadata_update_handler",
             "lock": "_lock_handler",
             "lock_info": "_lock_info_handler",
             "unlock": "_unlock_handler",

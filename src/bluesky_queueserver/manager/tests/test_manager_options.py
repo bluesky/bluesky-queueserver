@@ -131,3 +131,21 @@ def test_manager_redis_addr_parameter(re_manager_cmd, redis_addr, success):  # n
     else:
         with pytest.raises(TimeoutError, match="RE Manager failed to start"):
             re_manager_cmd(["--redis-addr", redis_addr])
+
+
+# fmt: off
+@pytest.mark.parametrize("params, env_vars", [
+    (["--permitted-re-metadata-keys", "scan_id"], {}),
+    (["--permitted-re-metadata-update-keys", "/scan_id", ""], {}),
+    ([], {"QSERVER_PERMITTED_RE_METADATA_UPDATE_KEYS": "/scan_id:"}),
+])
+# fmt: on
+def test_manager_permitted_re_metadata_keys_invalid(re_manager_cmd, monkeypatch, params, env_vars):  # noqa: F811
+    """
+    RE Manager fails to start if the lists of permitted RE metadata keys contain items
+    that do not start with '/'.
+    """
+    for k, v in env_vars.items():
+        monkeypatch.setenv(k, v)
+    with pytest.raises(TimeoutError, match="RE Manager failed to start"):
+        re_manager_cmd(params)

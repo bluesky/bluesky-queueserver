@@ -82,6 +82,9 @@ Several parameters can be passed to RE Manager using environment variables:
   - ``QSERVER_PERMITTED_RE_METADATA_KEYS`` - a list of permitted RE metadata keys separated by
     colons. Only the keys in the list are selected from ``RE.md`` and returned by *re_metadata* API.
 
+  - ``QSERVER_PERMITTED_RE_METADATA_UPDATE_KEYS`` - a list of RE metadata keys separated by
+    colons, which may be updated using *re_metadata_update* API.
+
   - ``QSERVER_USE_IPYTHON_KERNEL`` - tells RE Manager whether to start tbe worker in IPython mode
     (start IPython kernel) or use plain Python worker. Boolean value.
 
@@ -158,6 +161,8 @@ most of the supported parameters:
       permitted_re_metadata_keys:
         - "/versions"
         - "/scan_id"
+        - "/data_session"
+      permitted_re_metadata_update_keys:
         - "/data_session"
     run_engine:
       use_persistent_metadata: true
@@ -309,6 +314,18 @@ The parameters that define configuration of RE Worker.
   and ``/versions`` are included. A list passed with the parameter overrides the default list.
   The option can also be set using  ``--permitted-re-metadata-keys`` CLI parameter, 
   or the ``QSERVER_PERMITTED_RE_METADATA_KEYS`` environment variable (colon-separated list of keys).
+
+- ``permitted_re_metadata_update_keys`` - list of ``RE.md`` keys that clients are permitted to
+  update using *re_metadata_update* API. The format of the list items is the same as for
+  ``permitted_re_metadata_keys``: top level keys (e.g. ``/data_session``), nested keys
+  (e.g. ``/versions/custom``) or ``/`` (all keys). By default, the list is empty and updating
+  metadata is not permitted. The option can also be set using ``--permitted-re-metadata-update-keys``
+  CLI parameter or the ``QSERVER_PERMITTED_RE_METADATA_UPDATE_KEYS`` environment variable
+  (colon-separated list of keys).
+
+  The items of ``permitted_re_metadata_keys`` and ``permitted_re_metadata_update_keys`` must start
+  with ``/``. RE Manager fails to start if any of the items is invalid (e.g. an empty item
+  produced by a trailing colon in the value of the environment variable).
 
 
 Using Redis

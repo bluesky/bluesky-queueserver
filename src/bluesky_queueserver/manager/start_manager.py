@@ -595,6 +595,20 @@ def start_manager():
         "environment variable, where the keys are separated by colons.",
     )
 
+    parser.add_argument(
+        "--permitted-re-metadata-update-keys",
+        dest="permitted_re_metadata_update_keys",
+        type=str,
+        nargs="+",
+        default=[],
+        help="A list of RE metadata keys that clients are permitted to update using 're_metadata_update' API. "
+        "Keys are configured in the form of unix paths, and recursively apply to all subkeys, e.g. '/key1' "
+        "permits updating 'key1' and all its subkeys, '/key1/subkey' permits updating only 'subkey' of 'key1' "
+        "and '/' permits updating all keys. By default, the list is empty and updating metadata is not "
+        "permitted. This parameter can also be set using QSERVER_PERMITTED_RE_METADATA_UPDATE_KEYS "
+        "environment variable, where the keys are separated by colons.",
+    )
+
     group_console_output = parser.add_argument_group(
         "Configure console output",
         "The arguments allow to configure printing and publishing of the console output\n"
@@ -800,6 +814,7 @@ def start_manager():
     config_worker["ipython_control_port"] = settings.ipython_control_port
     config_worker["ignore_invalid_plans"] = settings.ignore_invalid_plans
     config_worker["permitted_re_metadata_keys"] = settings.permitted_re_metadata_keys
+    config_worker["permitted_re_metadata_update_keys"] = settings.permitted_re_metadata_update_keys
     config_worker["zmq_stream_device_progress"] = settings.zmq_stream_device_progress and settings.zmq_publish_info
 
     existing_pd_path = settings.existing_plans_and_devices_path

@@ -30,7 +30,7 @@ from .profile_ops import (
     prepare_plan,
     update_existing_plans_and_devices,
 )
-from .utils import filter_dict_by_permitted_keys
+from .utils import filter_dict_by_permitted_keys, merge_dict_by_permitted_keys
 
 logger = logging.getLogger(__name__)
 
@@ -207,6 +207,9 @@ class RunEngineWorker(Process):
 
         self._re_namespace, self._plans_in_nspace, self._devices_in_nspace = {}, {}, {}
         self._permitted_re_metadata_keys = set(self._config_dict.get("permitted_re_metadata_keys", []))
+        self._permitted_re_metadata_update_keys = set(
+            self._config_dict.get("permitted_re_metadata_update_keys", [])
+        )
 
         self._worker_shutdown_initiated = False  # Indicates if shutdown is initiated by request
         self._unexpected_shutdown = False  # Indicates if shutdown is in progress, but it was not requested
@@ -1036,6 +1039,28 @@ class RunEngineWorker(Process):
         except Exception as ex:
             raise RuntimeError(f"Failed to convert Run Engine metadata to dictionary: {ex}") from ex
 
+    def _command_runengine_metadata_update_handler(self, metadata):
+        """
+        Update Run Engine metadata (``RE.md``). Only the permitted keys may be updated. Nested
+        dictionaries are merged, so that only the keys present in ``metadata`` are changed.
+        """
+        if self._RE is None:
+            raise RuntimeError("Run Engine does not exist in worker environment")
+        elif not hasattr(self._RE, "md"):
+            raise AttributeError("Run Engine does not have a metadata attribute")
+
+        if not self._permitted_re_metadata_update_keys:
+            raise RuntimeError("Updating RE metadata is not permitted: the list of permitted keys is empty")
+
+        # RE reads 'RE.md' from a different thread while a plan is running
+        if self.re_state == "running":
+            raise RuntimeError("RE metadata can not be updated while Run Engine is running")
+
+        json.dumps(metadata)
+        md_updates = merge_dict_by_permitted_keys(self._RE.md, metadata, self._permitted_re_metadata_update_keys)
+        self._RE.md.update(md_updates)
+        return {"success": True}
+
     def _command_close_env_handler(self):
         """
         Close RE Worker environment in orderly way.
@@ -1401,6 +1426,9 @@ class RunEngineWorker(Process):
             self._request_plans_and_devices_list_handler, "request_plans_and_devices_list"
         )
         self._comm_to_manager.add_method(self._request_runengine_metadata_handler, "request_runengine_metadata")
+        self._comm_to_manager.add_method(
+            self._command_runengine_metadata_update_handler, "command_runengine_metadata_update"
+        )
         self._comm_to_manager.add_method(self._request_task_results_handler, "request_task_results")
         self._comm_to_manager.add_method(self._command_close_env_handler, "command_close_env")
         self._comm_to_manager.add_method(self._command_confirm_exit_handler, "command_confirm_exit")

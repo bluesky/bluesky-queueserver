@@ -1,3 +1,7 @@
+import copy
+from typing import Any
+
+
 def to_boolean(value):
     """
     Returns ``True`` or ``False`` if ``value`` is found in one of the lists of supported values.
@@ -32,7 +36,7 @@ def generate_random_port(ip=None):
     return port
 
 
-def filter_dict_by_permitted_keys(d, permitted_keys):
+def filter_dict_by_permitted_keys(d: dict[str, Any], permitted_keys: list[str]) -> dict[str, Any]:
     """
     Filter the dictionary `d` by the list of `permitted_keys`. The keys in the dictionary that are not in the list
     of permitted keys will be removed. The keys in the list of permitted keys can be specified as absolute paths
@@ -51,7 +55,7 @@ def filter_dict_by_permitted_keys(d, permitted_keys):
 
         return False
 
-    def _filter(d, permitted_keys, prefix=""):
+    def _filter(d: dict[str, Any], permitted_keys: list[str], prefix: str = "") -> dict[str, Any]:
         filtered = {}
         for k, v in d.items():
             path = f"{prefix}/{k}" if prefix else f"/{k}"
@@ -70,3 +74,61 @@ def filter_dict_by_permitted_keys(d, permitted_keys):
         return filtered
 
     return _filter(d, permitted_keys)
+
+
+def _is_path_permitted(path: str, permitted_keys: list[str]) -> bool:
+    """
+    Returns ``True`` if ``path`` (e.g. ``"/key1/key2"``) is equal to or nested under one of
+    ``permitted_keys``. The key ``"/"`` permits all paths.
+    """
+    for p in permitted_keys:
+        # Ignore malformed entries, e.g. '' from a trailing ':' in the env. variable, which would match all paths
+        if not p.startswith("/"):
+            continue
+        p = p.rstrip("/")
+        if not p or path == p or path.startswith(p + "/"):
+            return True
+    return False
+
+
+def merge_dict_by_permitted_keys(
+    d: dict[str, Any], updates: dict[str, Any], permitted_keys: list[str]
+) -> dict[str, Any]:
+    """
+    Merge ``updates`` into the mapping ``d`` and return a dictionary with new values of the top-level
+    keys of ``d`` that are modified. The mapping ``d`` is not modified. The values at permitted paths
+    are replaced. Nested dictionaries at non-permitted paths are merged recursively, so that only
+    permitted subkeys are changed. The keys in ``permitted_keys`` are specified as absolute paths
+    (e.g. ``"/key1/key2"``), ``"/"`` permits all keys.
+
+    Raises
+    ------
+    ValueError
+        ``updates`` contains invalid or non-permitted keys.
+    """
+    if not isinstance(updates, dict):
+        raise ValueError(f"Metadata updates must be a dictionary: {updates!r}")
+
+    forbidden = []
+
+    def _merge(target: dict[str, Any], upd: dict[str, Any], prefix: str):
+        for k, v in upd.items():
+            if not isinstance(k, str) or not k or "/" in k:
+                raise ValueError(f"Invalid metadata key {k!r}: keys must be non-empty strings without '/'")
+            path = f"{prefix}/{k}"
+            if _is_path_permitted(path, permitted_keys):
+                target[k] = copy.deepcopy(v)
+            elif isinstance(v, dict) and v and isinstance(target.get(k, {}), dict):
+                target.setdefault(k, {})
+                _merge(target[k], v, path)
+            else:
+                forbidden.append(path)
+
+    # Deep copies also convert nested mappings of RedisJSONDict to regular dictionaries
+    new_values = {k: copy.deepcopy(d[k]) for k in updates if isinstance(k, str) and k in d}
+    _merge(new_values, updates, "")
+
+    if forbidden:
+        raise ValueError(f"Updating metadata keys {forbidden} is not permitted")
+
+    return new_values

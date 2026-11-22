@@ -1598,6 +1598,14 @@ class RunEngineManager(Process):
 
         return runengine_metadata, err_msg
 
+    async def _worker_command_runengine_metadata_update(self, metadata):
+        try:
+            await self._comm_to_worker.send_msg("command_runengine_metadata_update", {"metadata": metadata})
+            success, err_msg = True, ""
+        except CommTimeoutError:
+            success, err_msg = False, "Timeout occurred while processing the request"
+        return success, err_msg
+
     async def _worker_request_task_results(self):
         try:
             tt = self._comm_to_worker_timeout_long
@@ -3395,6 +3403,36 @@ class RunEngineManager(Process):
 
         return {"success": success, "msg": msg, "re_metadata": re_metadata}
 
+    async def _re_metadata_update_handler(self, request):
+        """
+        Update Run Engine metadata (``RE.md``) in the worker environment. Only the keys permitted
+        by RE Manager configuration may be updated.
+        """
+        logger.info("Updating Run Engine metadata ...")
+
+        success, msg = True, ""
+        try:
+            supported_param_names = ["metadata", "lock_key"]
+            self._check_request_for_unsupported_params(request=request, param_names=supported_param_names)
+
+            self._validate_lock_key(request.get("lock_key", None), check_environment=True)
+
+            if "metadata" not in request:
+                raise ValueError("Required 'metadata' parameter is missing in the API call")
+            metadata = request["metadata"]
+            if not isinstance(metadata, dict):
+                raise TypeError(f"Parameter 'metadata' must be a dictionary: {metadata!r}")
+
+            if not self._environment_exists:
+                raise RuntimeError("Environment does not exist. Cannot update RE metadata.")
+
+            success, msg = await self._worker_command_runengine_metadata_update(metadata)
+
+        except Exception as ex:
+            success, msg = False, f"Error: {ex}"
+
+        return {"success": success, "msg": msg}
+
     def _lock_key_invalid_msg(self):
         """
         Format error message, which reports an invalid lock key.
@@ -3729,6 +3767,7 @@ class RunEngineManager(Process):
             "re_halt": "_re_halt_handler",
             "re_runs": "_re_runs_handler",
             "re_metadata": "_re_metadata_handler",
+            "re_metadata_update": "_re_metadata_update_handler",
             "lock": "_lock_handler",
             "lock_info": "_lock_info_handler",
             "unlock": "_unlock_handler",

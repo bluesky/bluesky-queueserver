@@ -245,6 +245,11 @@ all metadata keys are allowed.
 
   qserver re metadata        # Get the current runengine metadata dictionary
 
+The metadata may be updated if the keys are permitted by the manager configuration
+(see ``--permitted-re-metadata-update-keys``). Updating metadata is not permitted by default::
+
+  qserver re metadata update '{"data_session": "pass-123456"}'
+
 The queue can be stopped at any time. Stopping the queue is a safe operation. When the stopping
 sequence is initiated, the currently running plan is finished and the next plan is not be started.
 The stopping sequence can be cancelled if it was activated by mistake or decision was changed::

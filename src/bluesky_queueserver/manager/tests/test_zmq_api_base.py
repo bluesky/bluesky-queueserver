@@ -6316,6 +6316,166 @@ def test_zmq_api_re_metadata_10_redis_json_dict(re_manager_cmd, tmp_path, redis_
     assert wait_for_condition(time=5, condition=condition_environment_closed)
 
 
+def test_zmq_api_re_metadata_update_01(re_manager_cmd, tmp_path):  # noqa: F811
+    """
+    ``re_metadata_update``: basic functionality. Only permitted keys are updated, nested dictionaries
+    are merged, requests with non-permitted keys are rejected without modifying metadata.
+    """
+    pc_path = copy_default_profile_collection(tmp_path)
+    append_code_to_last_startup_file(pc_path, _add_metadata_key_to_md)
+    re_manager_cmd([
+        "--startup-dir", pc_path,
+        "--permitted-re-metadata-keys", "/",
+        "--permitted-re-metadata-update-keys", "/metadata_key", "/new_key", "/versions/custom",
+    ])
+
+    resp, _ = zmq_request("re_metadata_update", params={"metadata": {"metadata_key": "v"}})
+    assert resp["success"] is False, f"{resp =}"
+    assert "Environment does not exist" in resp["msg"], f"{resp =}"
+
+    resp, _ = zmq_request("environment_open")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_created)
+
+    resp, _ = zmq_request("re_metadata")
+    assert resp["success"] is True, f"{resp =}"
+    md_initial = resp["re_metadata"]
+
+    md_update = {"metadata_key": "new_value", "new_key": {"a": 1}, "versions": {"custom": "1.0"}}
+    resp, _ = zmq_request("re_metadata_update", params={"metadata": md_update})
+    assert resp["success"] is True, f"{resp =}"
+    assert resp["msg"] == "", f"{resp =}"
+
+    resp, _ = zmq_request("re_metadata")
+    assert resp["success"] is True, f"{resp =}"
+    re_md = resp["re_metadata"]
+    assert re_md["metadata_key"] == "new_value", pprint.pformat(re_md)
+    assert re_md["new_key"] == {"a": 1}, pprint.pformat(re_md)
+    assert re_md["versions"] == {**md_initial["versions"], "custom": "1.0"}, pprint.pformat(re_md)
+
+    # Requests with non-permitted keys are rejected and metadata is not changed
+    for md_update, msg in (
+        ({"metadata_key": "v", "versions": {"bluesky": "0.0"}}, "['/versions/bluesky'] is not permitted"),
+        ({"versions": "1.0"}, "['/versions'] is not permitted"),
+        ({"unknown_key": 1}, "['/unknown_key'] is not permitted"),
+    ):
+        resp, _ = zmq_request("re_metadata_update", params={"metadata": md_update})
+        assert resp["success"] is False, f"{resp =}"
+        assert msg in resp["msg"], f"{resp =}"
+
+    resp, _ = zmq_request("re_metadata")
+    assert resp["success"] is True, f"{resp =}"
+    assert resp["re_metadata"] == re_md, pprint.pformat(resp)
+
+    # Invalid parameters
+    resp, _ = zmq_request("re_metadata_update", params={})
+    assert resp["success"] is False, f"{resp =}"
+    assert "Required 'metadata' parameter is missing" in resp["msg"], f"{resp =}"
+
+    resp, _ = zmq_request("re_metadata_update", params={"metadata": [1, 2]})
+    assert resp["success"] is False, f"{resp =}"
+    assert "Parameter 'metadata' must be a dictionary" in resp["msg"], f"{resp =}"
+
+    resp, _ = zmq_request("environment_close")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_re_metadata_update_02_not_permitted(re_manager_pc_copy, tmp_path):  # noqa: F811
+    """
+    ``re_metadata_update``: updating metadata is not permitted by default.
+    """
+    resp, _ = zmq_request("environment_open")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_created)
+
+    resp, _ = zmq_request("re_metadata_update", params={"metadata": {"scan_id": 100}})
+    assert resp["success"] is False, f"{resp =}"
+    assert "Updating RE metadata is not permitted" in resp["msg"], f"{resp =}"
+
+    resp, _ = zmq_request("environment_close")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_re_metadata_update_03_lock_and_running(re_manager_cmd, tmp_path):  # noqa: F811
+    """
+    ``re_metadata_update``: the API is disabled if the environment is locked, and metadata can not
+    be updated while a plan is running.
+    """
+    pc_path = copy_default_profile_collection(tmp_path)
+    re_manager_cmd(["--startup-dir", pc_path, "--permitted-re-metadata-update-keys", "/scan_id"])
+
+    resp, _ = zmq_request("environment_open")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_created)
+
+    lock_key = "custom-key"
+    resp, _ = zmq_request("lock", params={"environment": True, "lock_key": lock_key, "user": _user})
+    assert resp["success"] is True, f"{resp =}"
+
+    resp, _ = zmq_request("re_metadata_update", params={"metadata": {"scan_id": 100}})
+    assert resp["success"] is False, f"{resp =}"
+    assert "Invalid lock key" in resp["msg"], f"{resp =}"
+
+    resp, _ = zmq_request("re_metadata_update", params={"metadata": {"scan_id": 100}, "lock_key": lock_key})
+    assert resp["success"] is True, f"{resp =}"
+
+    resp, _ = zmq_request("unlock", params={"lock_key": lock_key})
+    assert resp["success"] is True, f"{resp =}"
+
+    resp, _ = zmq_request("re_metadata")
+    assert resp["re_metadata"]["scan_id"] == 100, f"{resp =}"
+
+    resp, _ = zmq_request("queue_item_execute", {"item": _plan3, "user": _user, "user_group": _user_group})
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_worker_executing_plan)
+
+    resp, _ = zmq_request("re_metadata_update", params={"metadata": {"scan_id": 200}})
+    assert resp["success"] is False, f"{resp =}"
+    assert "can not be updated while Run Engine is running" in resp["msg"], f"{resp =}"
+
+    assert wait_for_condition(time=20, condition=condition_manager_idle)
+
+    resp, _ = zmq_request("re_metadata")
+    assert resp["re_metadata"]["scan_id"] == 101, f"{resp =}"
+
+    resp, _ = zmq_request("environment_close")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
+def test_zmq_api_re_metadata_update_04_redis_json_dict(re_manager_cmd, tmp_path, redis_json_dict):  # noqa: F811
+    """
+    ``re_metadata_update``: RE.md is RedisJSONDict. Nested dictionaries are merged and saved to Redis.
+    """
+    pc_path = copy_default_profile_collection(tmp_path)
+    append_code_to_last_startup_file(pc_path, _script_redis_json_dict)
+    re_manager_cmd([
+        "--startup-dir", pc_path,
+        "--permitted-re-metadata-keys", "/",
+        "--permitted-re-metadata-update-keys", "/project_registry/project_b",
+    ])
+
+    resp, _ = zmq_request("environment_open")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_created)
+
+    md_update = {"project_registry": {"project_b": ["subproject_3"]}}
+    resp, _ = zmq_request("re_metadata_update", params={"metadata": md_update})
+    assert resp["success"] is True, f"{resp =}"
+
+    expected = {"project_a": ["subproject_1", "subproject_2"], "project_b": ["subproject_3"]}
+    resp, _ = zmq_request("re_metadata")
+    assert resp["success"] is True, f"{resp =}"
+    assert resp["re_metadata"]["project_registry"] == expected, pprint.pformat(resp)
+    assert redis_json_dict["project_registry"] == expected
+
+    resp, _ = zmq_request("environment_close")
+    assert resp["success"] is True, f"{resp =}"
+    assert wait_for_condition(time=5, condition=condition_environment_closed)
+
+
 
 # fmt: off
 @pytest.mark.parametrize("em_lock_code", [False, True])

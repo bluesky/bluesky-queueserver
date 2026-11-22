@@ -58,6 +58,11 @@ properties:
         uniqueItems: true
         items:
           type: string
+      permitted_re_metadata_update_keys:
+        type: array
+        uniqueItems: true
+        items:
+          type: string
   startup:
     oneOf:
       - type: object

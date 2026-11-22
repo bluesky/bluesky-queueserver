@@ -127,9 +127,10 @@ Monitor the list of active runs:
 
 - :ref:`method_re_runs`
 
-Get Run Engine metadata:
+Get or update Run Engine metadata:
 
 - :ref:`method_re_metadata`
+- :ref:`method_re_metadata_update`
 
 Run tasks in RE Worker namespace:
 
@@ -1731,6 +1732,49 @@ Returns       **success**: *boolean*
 
               **re_metadata**: *dict*
                   The requested runengine metadata dictionary. If the request fails, the dictionary is empty.
+------------  -----------------------------------------------------------------------------------------
+Execution     Immediate: no follow-up requests are required.
+============  =========================================================================================
+
+
+.. _method_re_metadata_update:
+
+**'re_metadata_update'**
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+============  =========================================================================================
+Method        **'re_metadata_update'**
+------------  -----------------------------------------------------------------------------------------
+Description   Update the Run Engine metadata dictionary (``RE.md``) in the worker environment. Only
+              the keys permitted in RE Manager configuration may be updated. By default, the list of
+              permitted keys is empty and the request is rejected. The list can be set using
+              ``--permitted-re-metadata-update-keys`` CLI parameter,
+              ``QSERVER_PERMITTED_RE_METADATA_UPDATE_KEYS`` environment variable or
+              ``worker/permitted_re_metadata_update_keys`` config file parameter. The keys are
+              specified as paths, e.g. ``/key1`` permits updating ``RE.md["key1"]`` and all its
+              subkeys, ``/key1/subkey`` permits updating only ``RE.md["key1"]["subkey"]`` and ``/``
+              permits updating all keys.
+
+              Values at permitted paths are replaced. Nested dictionaries at non-permitted paths are
+              merged, so that only the keys included in the request are changed. For example, if
+              ``/versions/custom`` is permitted, ``{"versions": {"custom": "1.0"}}`` adds
+              ``"custom"`` key to ``RE.md["versions"]`` without changing other keys. The request is
+              rejected and the metadata is not modified if any of the keys is not permitted.
+              Metadata can not be updated while Run Engine is running.
+------------  -----------------------------------------------------------------------------------------
+Parameters    **metadata**: *dict*
+                  Dictionary of metadata to update. The keys must be non-empty strings that
+                  do not contain ``/``.
+
+              **lock_key**: *str* (optional)
+                  Lock key. The API fails if **the environment** is locked and no valid key is submitted
+                  with the request. See documentation on :ref:`method_lock` API for more information.
+------------  -----------------------------------------------------------------------------------------
+Returns       **success**: *boolean*
+                  indicates if the request was processed successfully.
+
+              **msg**: *str*
+                  error message in case of failure, empty string ('') otherwise.
 ------------  -----------------------------------------------------------------------------------------
 Execution     Immediate: no follow-up requests are required.
 ============  =========================================================================================

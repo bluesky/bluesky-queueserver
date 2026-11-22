@@ -5,6 +5,16 @@ Release History
 Unreleased
 ==========
 
+Added
+-----
+
+- New ``re_metadata_update`` manager API endpoint that allows clients to update Run Engine metadata.
+  The keys that may be updated are controlled by the new ``permitted_re_metadata_update_keys``
+  configuration parameter (CLI parameter ``--permitted-re-metadata-update-keys``, environment variable
+  ``QSERVER_PERMITTED_RE_METADATA_UPDATE_KEYS``). Updating metadata is not permitted by default.
+
+- New CLI command ``qserver re metadata update`` for updating Run Engine metadata.
+
 v0.0.27 (2026-11-16)
 ====================
 

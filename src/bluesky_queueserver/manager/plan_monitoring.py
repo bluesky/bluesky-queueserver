@@ -85,7 +85,7 @@ class RunList:
             self._run_list.clear()
             self._list_changed = True
 
-    def add_run(self, *, uid, scan_id):
+    def add_run(self, *, uid, scan_id, plan_name=None):
         """
         Add run to the end of the list. The run is labeled as 'open' (``is_open`` is set ``True``).
 
@@ -93,12 +93,20 @@ class RunList:
         ----------
         uid : str
             UID of the run.
+        scan_id : int or None
+            Scan ID of the run.
+        plan_name : str or None
+            Name of the plan (from the start document). Not included in the entry if ``None``.
         """
         if not self._enabled:
             return
 
+        run = {"uid": uid, "scan_id": scan_id, "is_open": True, "exit_status": None}
+        if plan_name is not None:
+            run["plan_name"] = plan_name
+
         with self._lock:
-            self._run_list.append({"uid": uid, "scan_id": scan_id, "is_open": True, "exit_status": None})
+            self._run_list.append(run)
             self._list_changed = True
 
     def set_run_closed(self, *, uid, exit_status):
@@ -191,7 +199,9 @@ class CallbackRegisterRun(CallbackBase):
                 except Exception:
                     scan_id = None
 
-            self._run_list.add_run(uid=uid, scan_id=scan_id)
+            plan_name = doc.get("plan_name", None)
+
+            self._run_list.add_run(uid=uid, scan_id=scan_id, plan_name=plan_name)
 
             logger.info("New run was open: %r", uid)
             logger.debug("Run list: %s", self._run_list.get_run_list())

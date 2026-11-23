@@ -142,6 +142,22 @@ def test_CallbackRegisterRun_1(scan_id):
     assert run_list.get_run_list() == [{"uid": uid, "is_open": False, "exit_status": "success", **param_expected}]
 
 
+@pytest.mark.parametrize("plan_name", ["count", None])
+def test_CallbackRegisterRun_2(plan_name):
+    """
+    ``CallbackRegisterRun``: ``plan_name`` is included in the run list only if present in the start doc.
+    """
+    run_list = RunList()
+    run_list.enable()
+    cb = CallbackRegisterRun(run_list=run_list)
+    uid = str(uuid.uuid4())
+
+    param = {"plan_name": plan_name} if plan_name is not None else {}
+    cb("start", {"uid": uid, "scan_id": 1, **param})
+    expected = {"uid": uid, "scan_id": 1, "is_open": True, "exit_status": None, **param}
+    assert run_list.get_run_list() == [expected]
+
+
 
 class _MockQueue:
     """A simple list-backed mock for multiprocessing.Queue."""

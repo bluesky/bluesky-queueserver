@@ -85,7 +85,7 @@ class RunList:
             self._run_list.clear()
             self._list_changed = True
 
-    def add_run(self, *, uid, scan_id, plan_name=None):
+    def add_run(self, *, uid: str, scan_id: int | None, plan_name: str | None):
         """
         Add run to the end of the list. The run is labeled as 'open' (``is_open`` is set ``True``).
 
@@ -96,17 +96,15 @@ class RunList:
         scan_id : int or None
             Scan ID of the run.
         plan_name : str or None
-            Name of the plan (from the start document). Not included in the entry if ``None``.
+            Name of the plan (from the start document).
         """
         if not self._enabled:
             return
 
-        run = {"uid": uid, "scan_id": scan_id, "is_open": True, "exit_status": None}
-        if plan_name is not None:
-            run["plan_name"] = plan_name
-
         with self._lock:
-            self._run_list.append(run)
+            self._run_list.append(
+                {"uid": uid, "scan_id": scan_id, "plan_name": plan_name, "is_open": True, "exit_status": None}
+            )
             self._list_changed = True
 
     def set_run_closed(self, *, uid, exit_status):

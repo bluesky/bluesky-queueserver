@@ -16,11 +16,12 @@ def test_RunList_1():
     """
     uids = [str(uuid.uuid4()) for _ in range(3)]
     scan_ids = list(range(1, 4))
+    plan_names = ["count", None, "scan"]
     is_open = [True] * 3
     exit_code = [None] * 3
     expected_run_list = [
-        {"uid": _[0], "scan_id": _[1], "is_open": _[2], "exit_status": _[3]}
-        for _ in zip(uids, scan_ids, is_open, exit_code)
+        {"uid": _[0], "scan_id": _[1], "plan_name": _[2], "is_open": _[3], "exit_status": _[4]}
+        for _ in zip(uids, scan_ids, plan_names, is_open, exit_code)
     ]
 
     # Create run list
@@ -31,7 +32,7 @@ def test_RunList_1():
     run_list.enable()
 
     # Add one object
-    run_list.add_run(uid=uids[0], scan_id=scan_ids[0])
+    run_list.add_run(uid=uids[0], scan_id=scan_ids[0], plan_name=plan_names[0])
     assert run_list.is_changed() is True
     assert run_list.get_run_list() == expected_run_list[0:1]
     assert run_list.is_changed() is True
@@ -39,8 +40,8 @@ def test_RunList_1():
     assert run_list.is_changed() is False
 
     # Add two more objects
-    run_list.add_run(uid=uids[1], scan_id=scan_ids[1])
-    run_list.add_run(uid=uids[2], scan_id=scan_ids[2])
+    run_list.add_run(uid=uids[1], scan_id=scan_ids[1], plan_name=plan_names[1])
+    run_list.add_run(uid=uids[2], scan_id=scan_ids[2], plan_name=plan_names[2])
     assert run_list.is_changed() is True
     assert run_list.get_run_list(clear_state=True) == expected_run_list
     assert run_list.is_changed() is False
@@ -85,7 +86,7 @@ def test_RunList_2():
     assert run_list.is_enabled() is True
 
     # List is enabled, add one run
-    run_list.add_run(uid=uids[0], scan_id=scan_ids[0])
+    run_list.add_run(uid=uids[0], scan_id=scan_ids[0], plan_name="count")
     assert run_list.is_changed() is True
     assert run_list.nruns == 1
     run_list.get_run_list(clear_state=True)
@@ -105,7 +106,7 @@ def test_RunList_2():
     assert run_list.is_changed() is False
 
     # But no plans can be added to the list
-    run_list.add_run(uid=uids[1], scan_id=scan_ids[1])
+    run_list.add_run(uid=uids[1], scan_id=scan_ids[1], plan_name="count")
     assert run_list.is_changed() is False
     assert run_list.nruns == 1
     run_list.get_run_list(clear_state=True)
@@ -137,15 +138,16 @@ def test_CallbackRegisterRun_1(scan_id):
     param = {"scan_id": scan_id} if scan_id is not None else {}
     param_expected = {"scan_id": scan_id} if isinstance(scan_id, int) else {"scan_id": None}
     cb("start", {"uid": uid, **param})
-    assert run_list.get_run_list() == [{"uid": uid, "is_open": True, "exit_status": None, **param_expected}]
+    expected = {"uid": uid, "plan_name": None, **param_expected}
+    assert run_list.get_run_list() == [{**expected, "is_open": True, "exit_status": None}]
     cb("stop", {"run_start": uid, "exit_status": "success"})
-    assert run_list.get_run_list() == [{"uid": uid, "is_open": False, "exit_status": "success", **param_expected}]
+    assert run_list.get_run_list() == [{**expected, "is_open": False, "exit_status": "success"}]
 
 
 @pytest.mark.parametrize("plan_name", ["count", None])
 def test_CallbackRegisterRun_2(plan_name):
     """
-    ``CallbackRegisterRun``: ``plan_name`` is included in the run list only if present in the start doc.
+    ``CallbackRegisterRun``: ``plan_name`` is taken from the start doc, ``None`` if missing.
     """
     run_list = RunList()
     run_list.enable()
@@ -154,7 +156,7 @@ def test_CallbackRegisterRun_2(plan_name):
 
     param = {"plan_name": plan_name} if plan_name is not None else {}
     cb("start", {"uid": uid, "scan_id": 1, **param})
-    expected = {"uid": uid, "scan_id": 1, "is_open": True, "exit_status": None, **param}
+    expected = {"uid": uid, "scan_id": 1, "plan_name": plan_name, "is_open": True, "exit_status": None}
     assert run_list.get_run_list() == [expected]
 
 

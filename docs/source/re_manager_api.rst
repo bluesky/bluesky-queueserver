@@ -1691,7 +1691,9 @@ Returns       **success**: *boolean*
 
               **run_list**: *list(dict)*
                   the requested list of runs, list items are dictionaries with keys 'uid' (str),
-                  'scan_id' (int), 'is_open' (boolean) and 'exit_status' (str or None).
+                  'scan_id' (int), 'plan_name' (str or None), 'is_open' (boolean) and
+                  'exit_status' (str or None). 'plan_name' is None if the start document
+                  does not contain 'plan_name'.
                   See Bluesky documentation for 'exit_status' values.
 
               **run_list_uid**: str
